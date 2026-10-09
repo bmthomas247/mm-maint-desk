@@ -155,7 +155,7 @@ const ICONS = {
 
 function shell(active, inner){
   app.innerHTML = `
-  <header class="top"><h1>Moose Maint.</h1><a class="who" href="#/password" style="text-decoration:none">${esc(S.me ? S.me.name.split(" ")[0] : "")}</a><button class="who" id="signout">Sign out</button></header>
+  <header class="top"><h1>Moose Maint.</h1>${S.me && S.me.role!=="viewer" ? `<a class="who" href="desk.html" style="text-decoration:none;font-weight:700">Full desk</a>` : ""}<a class="who" href="#/password" style="text-decoration:none" title="Set password">${esc(S.me ? S.me.name.split(" ")[0] : "")} · password</a><button class="who" id="signout">Sign out</button></header>
   <main id="main">${inner}</main>
   <nav class="tabs" aria-label="Pages">
     <a href="#/board" class="${active==="board"?"on":""}">${ICONS.board}<span>Board</span></a>
@@ -190,7 +190,7 @@ function loginView(msg){
   $("#link").onclick = async () => {
     const email = $("#em").value.trim(); if(!email) return $("#msg").textContent = "Type your email first.";
     localStorageSet("mm_email", email); $("#msg").textContent = "Sending…";
-    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname + "#/password" } });
+    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname + "?pw=1" } });
     $("#msg").textContent = error ? "Couldn't send the link: " + notListed(error.message) : "Link sent to " + email + ". Open it on this phone, then set your password.";
   };
 }
@@ -209,7 +209,9 @@ function passwordView(){
 }
 
 async function loadBasics(){
-  const { data: me } = await sb.from("allowed_users").select("id,name,role,email").ilike("email", S.user.email).maybeSingle();
+  const em = S.user.email.toLowerCase();
+  const { data: rows } = await sb.from("allowed_users").select("id,name,role,email,alt_email").or(`email.ilike.${em},alt_email.ilike.${em}`);
+  const me = (rows || [])[0] || null;
   S.me = me;
   if(!me) return;
   const [ppl, props] = await Promise.all([
@@ -554,9 +556,13 @@ async function pmView(){
 /* ---------- router ---------- */
 async function route(){
   const { data:{ session } } = await sb.auth.getSession();
+  if(new URLSearchParams(location.search).get("next") === "desk") localStorageSet("mm_next","desk");
   if(!session){ S.user = null; S.me = null; return loginView(); }
   if(!S.user || S.user.id !== session.user.id){ S.user = session.user; await loadBasics(); }
   if(!S.me){ app.innerHTML = `<div class="login"><h2>Not on the list</h2><p class="muted">${esc(S.user.email)} isn't set up for maintenance. Ask Brandon to add it.</p><button class="btn" id="so">Sign out</button></div>`; $("#so").onclick = async()=>{ await sb.auth.signOut(); route(); }; return; }
+  if(new URLSearchParams(location.search).get("next") === "desk") localStorageSet("mm_next","desk");
+  if(localStorageGet("mm_next") === "desk" && S.me && !/password/.test(location.hash)){ localStorageSet("mm_next",""); location.href = "desk.html"; return; }
+  if(new URLSearchParams(location.search).get("pw") === "1"){ history.replaceState(null, "", location.pathname + "#/password"); }
   const h = location.hash.replace(/^#/, "") || "/board";
   const [path, qs] = h.split("?"); const params = new URLSearchParams(qs||"");
   const parts = path.split("/").filter(Boolean);
@@ -572,7 +578,7 @@ async function route(){
   } catch(e){ fail(e, "Something went wrong"); }
 }
 window.addEventListener("hashchange", route);
-sb.auth.onAuthStateChange((ev) => { if(ev === "SIGNED_IN" || ev === "SIGNED_OUT") { if(ev==="SIGNED_IN" && /access_token/.test(location.hash)) history.replaceState(null,"",location.pathname+"#/board"); route(); } });
+sb.auth.onAuthStateChange((ev) => { if(ev === "SIGNED_IN" || ev === "SIGNED_OUT") { if(ev==="SIGNED_IN" && /access_token/.test(location.hash)) history.replaceState(null,"",location.pathname+location.search+"#/board"); route(); } });
 route();
 })();
 </script>
