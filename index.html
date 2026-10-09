@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d6b62">
+<title>Moose Maintenance</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --pine:#0d6b62; --pine-deep:#0a4f49; --pine-soft:#d7ebe8;
+  --ground:#f2f5f3; --card:#ffffff; --ink:#14201e; --ink-2:#3f4f4c; --muted:#6c7b78; --line:#d5dfdc;
+  --red:#c2352b; --red-soft:#f8e0dd; --amber:#b87a0c; --amber-soft:#f6ebd2; --blue:#2463a0; --blue-soft:#dde9f5;
+  --urgent:#c2352b; --high:#d17a14; --normal:#0d6b62; --low:#9aa8a5;
+  --radius:14px; --tap:48px;
+  font-family:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color:var(--ink); background:var(--ground);
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0f1716; --card:#172321; --ink:#e7efed; --ink-2:#b9c8c5; --muted:#8a9b98; --line:#26363a;
+  --pine-soft:#143632; --red-soft:#3a1916; --amber-soft:#33270f; --blue-soft:#13283d; --low:#5e6e6b; } }
+:root[data-theme="dark"]{ --ground:#0f1716; --card:#172321; --ink:#e7efed; --ink-2:#b9c8c5; --muted:#8a9b98; --line:#26363a;
+  --pine-soft:#143632; --red-soft:#3a1916; --amber-soft:#33270f; --blue-soft:#13283d; --low:#5e6e6b; }
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;min-height:100%}
+body{background:var(--ground);font-size:17px;line-height:1.45;-webkit-text-size-adjust:100%}
+a{color:var(--pine)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--pine);outline-offset:2px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--pine);color:#fff;
+  display:flex;align-items:center;gap:12px;padding:10px 16px}
+.top h1{font-size:18px;margin:0;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .who{font-size:13.5px;white-space:nowrap;opacity:.85;background:none;border:0;color:#fff;padding:6px 0;cursor:pointer}
+main{max-width:1180px;margin:0 auto;padding:14px 14px calc(96px + env(safe-area-inset-bottom,0px))}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(5,1fr);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
+.tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12.5px;color:var(--muted);text-decoration:none;padding:4px 0;min-height:var(--tap);justify-content:center}
+.tabs a svg{width:24px;height:24px}
+.tabs a.on{color:var(--pine);font-weight:700}
+.tabs a.new{color:#fff}
+.tabs a.new span.plus{width:52px;height:52px;border-radius:50%;background:var(--pine);display:grid;place-items:center;margin-top:-22px;box-shadow:0 3px 0 var(--pine-deep)}
+.tabs a.new span.plus svg{width:28px;height:28px}
+.tabs a.new b{color:var(--pine)}
+h2{font-size:23px;margin:4px 0 12px}
+h3{font-size:17px;margin:22px 0 8px;color:var(--ink-2)}
+.muted{color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{min-height:var(--tap);padding:0 18px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-weight:700}
+.btn.primary{background:var(--pine);border-color:var(--pine);color:#fff}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn.small{min-height:38px;padding:0 12px;font-size:15px}
+.btn:disabled{opacity:.5}
+.field{display:block;margin:0 0 14px}
+.field>span{display:block;font-weight:700;margin-bottom:5px}
+input[type=text],input[type=email],input[type=password],input[type=date],input[type=number],input[type=url],select,textarea{
+  width:100%;min-height:var(--tap);padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--card)}
+textarea{min-height:96px;resize:vertical}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{min-height:42px;padding:0 14px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-weight:700;font-size:15px}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.chip.p-urgent[aria-pressed=true]{background:var(--urgent);border-color:var(--urgent);color:#fff}
+.chip.p-high[aria-pressed=true]{background:var(--high);border-color:var(--high);color:#fff}
+.chip.p-normal[aria-pressed=true]{background:var(--normal);border-color:var(--normal);color:#fff}
+/* board */
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.filters #fp{grid-column:1 / -1}
+@media (min-width:700px){ .filters{grid-template-columns:2fr 1fr 1fr} .filters #fp{grid-column:auto} }
+.filters select{min-height:44px;font-size:15px;padding:6px 8px}
+.lanes{display:grid;gap:18px}
+@media (min-width:900px){ .lanes{grid-template-columns:repeat(4,minmax(0,1fr));align-items:start} }
+.lane h3{display:flex;justify-content:space-between;margin:6px 0 8px;font-size:15.5px}
+.lane h3 .n{color:var(--muted);font-weight:400}
+.card{display:block;text-decoration:none;color:inherit;background:var(--card);border-radius:var(--radius);
+  border:1px solid var(--line);border-left:6px solid var(--normal);padding:11px 13px;margin-bottom:9px}
+.card.urgent{border-left-color:var(--urgent)} .card.high{border-left-color:var(--high)} .card.low{border-left-color:var(--low)}
+.card .code{font-weight:700;font-size:14.5px;color:var(--pine)}
+.card .t{font-weight:700;margin:2px 0 4px}
+.card .meta{font-size:14px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+.flag{display:inline-flex;align-items:center;gap:4px;background:var(--red-soft);color:var(--red);font-weight:700;font-size:13.5px;padding:2px 8px;border-radius:8px}
+.tag{display:inline-block;font-size:13px;padding:1px 8px;border-radius:8px;background:var(--pine-soft);color:var(--pine-deep);font-weight:700}
+.tag.unv{background:var(--amber-soft);color:var(--amber)}
+.tag.err{background:var(--red-soft);color:var(--red)}
+.empty{padding:18px;border:1.5px dashed var(--line);border-radius:var(--radius);color:var(--muted);text-align:center}
+/* detail */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.status-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:15.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+.photos figure{margin:0;position:relative}
+.photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:var(--line);display:block;cursor:zoom-in}
+.photos figcaption{position:absolute;left:6px;bottom:6px;font-size:12px;background:rgba(0,0,0,.6);color:#fff;padding:1px 6px;border-radius:6px}
+.timeline{list-style:none;margin:0;padding:0}
+.timeline li{padding:9px 0 9px 18px;border-left:2px solid var(--line);margin-left:6px;position:relative;font-size:15.5px}
+.timeline li::before{content:"";position:absolute;left:-6px;top:15px;width:10px;height:10px;border-radius:50%;background:var(--pine)}
+.timeline li.note::before{background:var(--blue)}
+.timeline .when{font-size:13px;color:var(--muted)}
+.cost{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:15.5px}
+.list-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 2px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:50;display:grid;place-items:center}
+.viewer img{max-width:100%;max-height:100%}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--card);
+  padding:10px 16px;border-radius:12px;z-index:60;font-weight:700;max-width:90vw}
+.login{max-width:420px;margin:12vh auto 0;padding:0 18px}
+.login .mark{width:64px;height:64px;margin-bottom:14px}
+.photo-pick{display:flex;align-items:center;gap:10px;min-height:var(--tap);padding:10px 14px;border:1.5px dashed var(--line);border-radius:12px;background:var(--card);cursor:pointer;font-weight:700}
+.photo-pick input{display:none}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.thumbs img{width:72px;height:72px;object-fit:cover;border-radius:8px}
+@media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto!important} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const app = document.getElementById("app");
+const S = { user:null, me:null, people:[], props:[], propById:{}, filters:JSON.parse(localStorageGet("mm_f")||"{}") };
+const STATUSES = [["new","New"],["assigned","Assigned"],["in_progress","In progress"],["waiting_parts","Waiting on parts"],["done","Done"],["cancelled","Cancelled"]];
+const SL = Object.fromEntries(STATUSES);
+const PRI = [["urgent","Urgent"],["high","High"],["normal","Normal"],["low","Low"]];
+const SOURCES = [["guest","Guest"],["inspection","Inspection"],["owner","Owner"],["preventive","Preventive"],["staff","Staff"]];
+
+function localStorageGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function localStorageSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = (sel, el=document) => el.querySelector(sel);
+const isAdmin = () => S.me && S.me.role === "admin";
+const canEdit = () => S.me && (S.me.role === "admin" || S.me.role === "tech");
+function ago(ts){ if(!ts) return ""; const d=(Date.now()-new Date(ts))/36e5; if(d<1) return Math.max(1,Math.round(d*60))+" min ago"; if(d<24) return Math.round(d)+" h ago"; const days=Math.round(d/24); return days<60? days+" d ago" : new Date(ts).toLocaleDateString(); }
+function fmtDate(d){ if(!d) return ""; const x=new Date(d.length===10? d+"T12:00:00" : d); return x.toLocaleDateString(undefined,{month:"short",day:"numeric"}); }
+function fmtWhen(d){ return new Date(d).toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); }
+function money(n){ return "$"+Number(n||0).toFixed(2); }
+function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+function fail(e, what){ console.error(e); toast((what||"That didn't save")+": "+(e && e.message || e)); }
+
+const ICONS = {
+  board:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  pm:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  homes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+  mine:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg>'
+};
+
+function shell(active, inner){
+  app.innerHTML = `
+  <header class="top"><h1>Moose Maint.</h1><a class="who" href="#/password" style="text-decoration:none">${esc(S.me ? S.me.name.split(" ")[0] : "")}</a><button class="who" id="signout">Sign out</button></header>
+  <main id="main">${inner}</main>
+  <nav class="tabs" aria-label="Pages">
+    <a href="#/board" class="${active==="board"?"on":""}">${ICONS.board}<span>Board</span></a>
+    <a href="#/board?mine=1" class="${active==="mine"?"on":""}">${ICONS.mine}<span>Mine</span></a>
+    <a href="#/new" class="new"><span class="plus">${ICONS.plus}</span><b>New</b></a>
+    <a href="#/pm" class="${active==="pm"?"on":""}">${ICONS.pm}<span>PM</span></a>
+    <a href="#/homes" class="${active==="homes"?"on":""}">${ICONS.homes}<span>Homes</span></a>
+  </nav>`;
+  $("#signout").onclick = async () => { await sb.auth.signOut(); location.hash="#/"; route(); };
+}
+
+/* ---------- auth ---------- */
+function loginView(msg){
+  app.innerHTML = `<div class="login">
+    <img class="mark" src="icon.svg" alt="">
+    <h2>Moose Maintenance</h2>
+    <label class="field"><span>Email</span><input type="email" id="em" autocomplete="username" inputmode="email" value="${esc(localStorageGet("mm_email")||"")}"></label>
+    <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password"></label>
+    <button class="btn primary" id="go" style="width:100%">Sign in</button>
+    <p style="margin-top:16px"><button class="btn small" id="link">First time or forgot it? Email me a link</button></p>
+    <p id="msg" class="muted">${esc(msg||"")}</p></div>`;
+  const notListed = m => /not on the Moose|Database error|signups/i.test(m) ? "That email isn't on the maintenance list. Ask Brandon to add it." : m;
+  $("#pw").onkeydown = e => { if(e.key === "Enter") $("#go").click(); };
+  $("#go").onclick = async () => {
+    const email = $("#em").value.trim(), password = $("#pw").value; if(!email || !password) return;
+    localStorageSet("mm_email", email); $("#go").disabled = true; $("#msg").textContent = "Signing in…";
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    $("#go").disabled = false;
+    $("#msg").textContent = error ? (/invalid/i.test(error.message) ? "Wrong email or password. First time? Use the email link, then set a password." : notListed(error.message)) : "";
+    if(!error) route();
+  };
+  $("#link").onclick = async () => {
+    const email = $("#em").value.trim(); if(!email) return $("#msg").textContent = "Type your email first.";
+    localStorageSet("mm_email", email); $("#msg").textContent = "Sending…";
+    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname + "#/password" } });
+    $("#msg").textContent = error ? "Couldn't send the link: " + notListed(error.message) : "Link sent to " + email + ". Open it on this phone, then set your password.";
+  };
+}
+function passwordView(){
+  shell("", `<h2>Set your password</h2>
+    <p class="muted">You'll sign in with ${esc(S.user.email)} and this password from now on.</p>
+    <label class="field"><span>New password (10+ characters)</span><input type="password" id="p1" autocomplete="new-password"></label>
+    <label class="field"><span>Same again</span><input type="password" id="p2" autocomplete="new-password"></label>
+    <button class="btn primary" id="ps" style="width:100%">Save password</button>`);
+  $("#ps").onclick = async () => {
+    const a = $("#p1").value, b = $("#p2").value;
+    if(a.length < 10) return toast("Use at least 10 characters"); if(a !== b) return toast("Those don't match");
+    const { error } = await sb.auth.updateUser({ password: a });
+    if(error) return fail(error, "Password not saved"); toast("Password saved"); location.hash = "#/board";
+  };
+}
+
+async function loadBasics(){
+  const { data: me } = await sb.from("allowed_users").select("id,name,role,email").ilike("email", S.user.email).maybeSingle();
+  S.me = me;
+  if(!me) return;
+  const [ppl, props] = await Promise.all([
+    sb.rpc("people"),
+    sb.from("properties").select("id,code,name,area,kind,next_guest_checkin,active").eq("active", true).order("code")
+  ]);
+  S.people = ppl.data || [];
+  S.props = props.data || [];
+  S.propById = Object.fromEntries(S.props.map(p => [p.id, p]));
+}
+
+/* ---------- board ---------- */
+async function boardView(params){
+  const mine = params.get("mine") === "1";
+  shell(mine ? "mine" : "board", `<h2>${mine ? "My work" : "Open work"}</h2><div id="b" class="muted">Loading…</div>`);
+  const f = S.filters;
+  let q = sb.from("board").select("*").not("status","in","(done,cancelled)").order("created_at",{ascending:false}).limit(1000);
+  if(mine && S.me) q = q.eq("assigned_to", S.me.id);
+  const { data, error } = await q;
+  if(error) return fail(error, "Couldn't load the board");
+  const techs = S.people.filter(p => p.role !== "viewer");
+  const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur===v?"selected":""}>${esc(l)}</option>`;
+  const box = $("#b"); box.className = "";
+  box.innerHTML = `
+    <div class="filters">
+      <select id="fp" aria-label="Home">${opt("","All homes",f.p||"")}${S.props.map(p=>opt(p.id,p.code,f.p||"")).join("")}</select>
+      <select id="ft" aria-label="Tech" ${mine?"disabled":""}>${opt("","All techs",f.t||"")}${opt("none","Unassigned",f.t||"")}${techs.map(p=>opt(p.id,p.name,f.t||"")).join("")}</select>
+      <select id="fr" aria-label="Priority">${opt("","Any priority",f.r||"")}${PRI.map(([v,l])=>opt(v,l,f.r||"")).join("")}</select>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <button class="chip" id="fpm" aria-pressed="${f.pm?"true":"false"}">Show PM reminders</button>
+      <button class="chip" id="fg" aria-pressed="${f.g?"true":"false"}">🔴 Guest in 48 h only</button>
+    </div>
+    <div id="lanes"></div>`;
+  const draw = () => {
+    const rows = data.filter(w =>
+      (!f.p || w.property_id === f.p) &&
+      (mine || !f.t || (f.t==="none" ? !w.assigned_to : w.assigned_to === f.t)) &&
+      (!f.r || w.priority === f.r) &&
+      (f.pm || w.source !== "preventive" || w.assigned_to) &&
+      (!f.g || w.guest_flag));
+    const rank = {urgent:0,high:1,normal:2,low:3};
+    rows.sort((a,b) => (b.guest_flag - a.guest_flag) || (rank[a.priority]-rank[b.priority]) || (new Date(b.created_at)-new Date(a.created_at)));
+    const lanes = [["new","New"],["assigned","Assigned"],["in_progress","In progress"],["waiting_parts","Waiting on parts"]];
+    $("#lanes").className = "lanes";
+    $("#lanes").innerHTML = lanes.map(([s,l]) => {
+      const rs = rows.filter(w => w.status === s);
+      return `<section class="lane"><h3><span>${l}</span><span class="n">${rs.length}</span></h3>${
+        rs.length ? rs.map(cardHTML).join("") : `<div class="empty">Nothing ${l.toLowerCase()}.</div>`}</section>`;
+    }).join("");
+  };
+  const save = () => { localStorageSet("mm_f", JSON.stringify(f)); draw(); };
+  $("#fp").onchange = e => { f.p = e.target.value; save(); };
+  $("#ft").onchange = e => { f.t = e.target.value; save(); };
+  $("#fr").onchange = e => { f.r = e.target.value; save(); };
+  $("#fpm").onclick = e => { f.pm = !f.pm; e.target.setAttribute("aria-pressed", f.pm); save(); };
+  $("#fg").onclick = e => { f.g = !f.g; e.target.setAttribute("aria-pressed", f.g); save(); };
+  draw();
+}
+function cardHTML(w){
+  return `<a class="card ${w.priority}" href="#/wo/${w.id}">
+    <div class="row" style="justify-content:space-between"><span class="code">${esc(w.property_code)}</span>
+      ${w.guest_flag ? `<span class="flag" title="Guest checks in ${esc(fmtWhen(w.guest_checkin_next))}">🔴 Guest ${esc(fmtDate(w.guest_checkin_next))}</span>` : ""}</div>
+    <div class="t">${esc(w.title)}</div>
+    <div class="meta"><span>${esc(w.assigned_name || "Unassigned")}</span>${w.due_date?`<span>Due ${esc(fmtDate(w.due_date))}</span>`:""}<span>${esc(ago(w.created_at))}</span>${w.photo_count?`<span>📷 ${w.photo_count}</span>`:""}${w.priority!=="normal"?`<span>${esc(w.priority)}</span>`:""}${w.bw_sync_error?`<span class="tag err">Breezeway</span>`:""}</div>
+  </a>`;
+}
+
+/* ---------- photos ---------- */
+async function shrink(file){
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(img.src);
+  return await new Promise(res => c.toBlob(res, "image/jpeg", 0.82));
+}
+async function uploadPhoto(woId, file, phase){
+  let blob; try { blob = await shrink(file); } catch(e) { blob = file; }
+  const path = `${woId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
+  const up = await sb.storage.from("wo-photos").upload(path, blob, { contentType:"image/jpeg", upsert:false });
+  if(up.error) throw up.error;
+  const ins = await sb.from("photos").insert({ work_order_id: woId, storage_path: path, phase: phase || "before", uploaded_by: S.user.email }).select().single();
+  if(ins.error) throw ins.error;
+  return ins.data;
+}
+async function photoUrls(rows){
+  const own = rows.filter(p => !p.storage_path.startsWith("bw:"));
+  const out = {};
+  rows.filter(p => p.storage_path.startsWith("bw:")).forEach(p => out[p.id] = p.storage_path.slice(3));
+  if(own.length){
+    const { data } = await sb.storage.from("wo-photos").createSignedUrls(own.map(p => p.storage_path), 3600);
+    (data||[]).forEach((d,i) => { if(d.signedUrl) out[own[i].id] = d.signedUrl; });
+  }
+  return out;
+}
+function openViewer(src){ const v=document.createElement("div"); v.className="viewer"; v.innerHTML=`<img src="${esc(src)}" alt="">`; v.onclick=()=>v.remove(); document.body.appendChild(v); }
+
+/* ---------- work order detail ---------- */
+async function woView(id){
+  shell("board", `<div id="d" class="muted">Loading…</div>`);
+  const [w, ev, ph] = await Promise.all([
+    sb.from("work_orders").select("*").eq("id", id).maybeSingle(),
+    sb.from("work_order_events").select("*").eq("work_order_id", id).order("at",{ascending:false}),
+    sb.from("photos").select("*").eq("work_order_id", id).order("captured_at")
+  ]);
+  if(w.error || !w.data) return $("#d").textContent = "That work order wasn't found.";
+  const wo = w.data, p = S.propById[wo.property_id] || { code: wo.property_id };
+  const costs = isAdmin() ? (await sb.from("cost_lines").select("*").eq("work_order_id", id).order("created_at")).data || [] : [];
+  const urls = await photoUrls(ph.data || []);
+  const people = S.people.filter(x => x.role !== "viewer");
+  const name = uid => (S.people.find(x => x.id === uid) || {}).name || "Unassigned";
+  const guest = p.next_guest_checkin && wo.status!=="done" && wo.status!=="cancelled" && (new Date(p.next_guest_checkin)-Date.now()) < 48*36e5 && new Date(p.next_guest_checkin) > Date.now();
+  const nextBtns = {
+    new:[["in_progress","Start"],["waiting_parts","Waiting on parts"],["done","Done"]],
+    assigned:[["in_progress","Start"],["waiting_parts","Waiting on parts"],["done","Done"]],
+    in_progress:[["done","Done"],["waiting_parts","Waiting on parts"]],
+    waiting_parts:[["in_progress","Parts are here"],["done","Done"]],
+    done:[["in_progress","Reopen"]], cancelled:[["new","Reopen"]]
+  }[wo.status] || [];
+  const ed = canEdit();
+  const sum = (k) => costs.filter(c => c.kind===k).reduce((a,c)=>a+Number(c.amount),0);
+  $("#d").className = "";
+  $("#d").innerHTML = `
+    <div class="row" style="justify-content:space-between"><a href="#/home/${esc(wo.property_id)}" class="code" style="font-weight:700">${esc(p.code)}</a>
+      ${guest?`<span class="flag">🔴 Guest checks in ${esc(fmtWhen(p.next_guest_checkin))}</span>`:""}</div>
+    <h2 style="margin-top:4px">${esc(wo.title)}</h2>
+    <p class="row" style="margin:-4px 0 12px"><span class="tag">${esc(SL[wo.status])}</span><span class="muted">#${wo.id} · ${esc(wo.priority)} · ${esc(wo.source)}</span>
+      ${wo.bw_task_id ? `<a href="${esc(C.breezewayTaskUrl + wo.bw_task_id)}" target="_blank" rel="noopener">Breezeway task ↗</a>` : `<span class="muted">Not in Breezeway yet</span>`}
+      ${wo.bw_sync_error?`<span class="tag err" title="${esc(wo.bw_sync_error)}">Breezeway: ${esc(wo.bw_sync_error.slice(0,60))}</span>`:""}</p>
+    ${ed ? `<div class="status-bar panel">${nextBtns.map(([s,l]) => `<button class="btn ${s==="done"?"primary":""}" data-s="${s}">${l}</button>`).join("")}
+      ${wo.status!=="cancelled" && wo.status!=="done" ? `<button class="btn danger" data-s="cancelled">Cancel</button>`:""}</div>` : ""}
+    <div class="panel">
+      <dl class="kv">
+        <dt>Assigned</dt><dd>${ed ? `<select id="asg">${`<option value="">Unassigned</option>`}${people.map(x=>`<option value="${x.id}" ${x.id===wo.assigned_to?"selected":""}>${esc(x.name)}</option>`).join("")}</select>` : esc(name(wo.assigned_to))}</dd>
+        <dt>Priority</dt><dd>${ed ? `<select id="pri">${PRI.map(([v,l])=>`<option value="${v}" ${v===wo.priority?"selected":""}>${l}</option>`).join("")}</select>` : esc(wo.priority)}</dd>
+        <dt>Due</dt><dd>${ed ? `<input type="date" id="due" value="${esc(wo.due_date||"")}">` : esc(fmtDate(wo.due_date)||"—")}</dd>
+        <dt>Reported by</dt><dd>${esc(wo.reported_by || "—")}</dd>
+        <dt>Opened</dt><dd>${esc(fmtWhen(wo.created_at))}</dd>
+        ${wo.closed_at?`<dt>Closed</dt><dd>${esc(fmtWhen(wo.closed_at))}</dd>`:""}
+      </dl>
+      ${wo.description ? `<p style="white-space:pre-wrap;margin:12px 0 0">${esc(wo.description)}</p>` : ""}
+    </div>
+    <h3>Photos</h3>
+    <div class="photos">${(ph.data||[]).map(x => urls[x.id] ? `<figure><img src="${esc(urls[x.id])}" alt="${esc(x.phase)} photo" data-full="${esc(urls[x.id])}" loading="lazy"><figcaption>${esc(x.phase)}</figcaption></figure>` : "").join("") || `<div class="muted">No photos yet.</div>`}</div>
+    ${ed ? `<div class="row" style="margin-top:10px">
+      <label class="photo-pick">📷 Before<input type="file" accept="image/*" capture="environment" data-phase="before"></label>
+      <label class="photo-pick">📷 After<input type="file" accept="image/*" capture="environment" data-phase="after"></label>
+      ${isAdmin()?`<label class="photo-pick">🧾 Receipt<input type="file" accept="image/*" capture="environment" data-phase="receipt"></label>`:""}</div>` : ""}
+    ${ed ? `<h3>Add a note</h3><textarea id="note" placeholder="What happened, what's next"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn primary" id="addnote">Save note</button></div>` : ""}
+    ${isAdmin() ? `<h3>Costs <span class="muted" style="font-weight:400">(admin only)</span></h3>
+      <div class="panel">${costs.map(c => `<div class="cost"><span>${esc(c.kind)} · ${esc(c.description||"")}${c.vendor_name?` · ${esc(c.vendor_name)}`:""}
+          ${c.verified ? (c.invoice_url?` <a href="${esc(c.invoice_url)}" target="_blank" rel="noopener">receipt ↗</a>`:"") : ` <span class="tag unv">UNVERIFIED</span>`}</span><b>${money(c.amount)}</b></div>`).join("") || `<div class="muted">No costs yet.</div>`}
+        <div class="cost"><span>Parts ${money(sum("parts")+sum("vendor"))} · Labor ${money(sum("labor"))} · Fees ${money(sum("fee"))}</span><b>${money(costs.reduce((a,c)=>a+Number(c.amount),0))}</b></div>
+        <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:700">Add a cost</summary>
+          <div style="margin-top:10px">
+          <label class="field"><span>Kind</span><select id="ck"><option value="parts">Parts</option><option value="labor">Labor</option><option value="vendor">Vendor</option><option value="fee">Fee</option></select></label>
+          <label class="field"><span>Amount</span><input type="number" step="0.01" min="0" id="ca" inputmode="decimal"></label>
+          <label class="field"><span>What it was</span><input type="text" id="cd"></label>
+          <label class="field"><span>Receipt photo</span><select id="cr"><option value="">None</option>${(ph.data||[]).filter(x=>x.phase==="receipt"||x.phase==="other").map(x=>`<option value="${x.id}">${esc(x.phase)} photo · ${esc(fmtWhen(x.captured_at))}</option>`).join("")}</select></label>
+          <label class="field"><span>Or vendor invoice link</span><input type="url" id="ci" placeholder="https://"></label>
+          <label class="field"><span>Labor: time record link (Breezeway task or Hubstaff)</span><input type="url" id="cts" placeholder="https://"></label>
+          <button class="btn primary" id="addcost">Add cost</button>
+          <p class="muted" style="font-size:14px">Costs without a receipt photo or invoice link show as UNVERIFIED.</p></div>
+        </details></div>` : ""}
+    <h3>History</h3>
+    <ul class="timeline">${(ev.data||[]).map(eventHTML).join("")}</ul>`;
+  document.querySelectorAll("[data-full]").forEach(i => i.onclick = () => openViewer(i.dataset.full));
+  const upd = async (patch) => { const r = await sb.from("work_orders").update(patch).eq("id", id); if(r.error) return fail(r.error); route(); };
+  document.querySelectorAll("[data-s]").forEach(b => b.onclick = () => upd({ status: b.dataset.s }));
+  if(ed){
+    $("#asg").onchange = e => upd({ assigned_to: e.target.value || null });
+    $("#pri").onchange = e => upd({ priority: e.target.value });
+    $("#due").onchange = e => upd({ due_date: e.target.value || null });
+    $("#addnote").onclick = async () => {
+      const t = $("#note").value.trim(); if(!t) return;
+      const r = await sb.from("work_order_events").insert({ work_order_id: id, kind:"note", note: t, by_email: S.user.email });
+      if(r.error) return fail(r.error); toast("Note saved"); route();
+    };
+    document.querySelectorAll(".photo-pick input").forEach(inp => inp.onchange = async () => {
+      const files = [...inp.files]; if(!files.length) return;
+      toast("Uploading…");
+      try { for(const f of files) await uploadPhoto(id, f, inp.dataset.phase); toast("Photo saved"); route(); } catch(e){ fail(e, "Photo didn't upload"); }
+    });
+  }
+  if(isAdmin()) $("#addcost").onclick = async () => {
+    const amount = parseFloat($("#ca").value); if(!(amount >= 0)) return toast("Enter an amount");
+    const r = await sb.from("work_order_costs").insert({ work_order_id:id, property_id: wo.property_id, kind: $("#ck").value, amount,
+      description: $("#cd").value.trim() || null, receipt_photo_id: $("#cr").value ? Number($("#cr").value) : null,
+      invoice_url: $("#ci").value.trim() || null, time_source_url: $("#cts").value.trim() || null, spent_on: new Date().toISOString().slice(0,10), created_by: S.user.email });
+    if(r.error) return fail(r.error); toast("Cost added"); route();
+  };
+}
+function eventHTML(e){
+  const who = String(e.by_email || "").split("@")[0];
+  const txt = {
+    created: "Opened",
+    import: e.note || "Imported",
+    status: `Status: ${SL[e.from_value]||e.from_value||""} → ${SL[e.to_value]||e.to_value}`,
+    assign: `Assigned to ${e.to_value || "nobody"}${e.from_value?` (was ${e.from_value})`:""}`,
+    priority: `Priority: ${e.from_value} → ${e.to_value}`,
+    due: `Due date: ${e.to_value ? fmtDate(e.to_value) : "cleared"}`,
+    edit: "Details edited",
+    note: e.note,
+    photo: `Added a ${e.to_value || "photo"}`,
+    cost: e.note || "Cost changed",
+    sync: e.note ? `${e.note}${e.to_value?` (#${e.to_value})`:""}` : "Breezeway sync"
+  }[e.kind] || e.kind;
+  return `<li class="${e.kind==="note"?"note":""}"><div style="white-space:pre-wrap">${esc(txt)}</div><div class="when">${esc(fmtWhen(e.at))} · ${esc(who)}</div></li>`;
+}
+
+/* ---------- new ticket ---------- */
+function newView(){
+  if(!canEdit()){ shell("", `<h2>New ticket</h2><p class="muted">Viewers can't open tickets. Ask Brandon for tech access.</p>`); return; }
+  const last = localStorageGet("mm_lastprop") || "";
+  const people = S.people.filter(x => x.role !== "viewer");
+  shell("", `<h2>New ticket</h2>
+    <label class="field"><span>Home</span>
+      <input type="text" id="np" list="props" placeholder="Type a home code, e.g. BHV 5534" autocomplete="off" value="${esc((S.propById[last]||{}).code||"")}">
+      <datalist id="props">${S.props.map(p=>`<option value="${esc(p.code)}">${esc(p.name)}</option>`).join("")}</datalist></label>
+    <label class="field"><span>What's wrong</span><input type="text" id="nt" placeholder="e.g. Kitchen sink leaking under cabinet" maxlength="140"></label>
+    <div class="field"><span style="font-weight:700;display:block;margin-bottom:6px">Priority</span>
+      <div class="chips" id="npri">${PRI.map(([v,l])=>`<button type="button" class="chip p-${v}" data-v="${v}" aria-pressed="${v==="normal"}">${l}</button>`).join("")}</div></div>
+    <div class="field"><label class="photo-pick">📷 Add photo<input type="file" id="nph" accept="image/*" capture="environment" multiple></label><div class="thumbs" id="thumbs"></div></div>
+    <details class="field"><summary style="cursor:pointer;font-weight:700;min-height:40px">More (assign, source, details)</summary>
+      <label class="field" style="margin-top:10px"><span>Assign to</span><select id="na"><option value="">Unassigned</option>${people.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select></label>
+      <label class="field"><span>Came from</span><select id="ns">${SOURCES.map(([v,l])=>`<option value="${v}" ${v==="staff"?"selected":""}>${l}</option>`).join("")}</select></label>
+      <label class="field"><span>Details</span><textarea id="nd"></textarea></label>
+      <label class="field"><span>Due</span><input type="date" id="ndue"></label>
+    </details>
+    <button class="btn primary" id="nsave" style="width:100%">Create ticket</button>`);
+  let pri = "normal", files = [];
+  document.querySelectorAll("#npri .chip").forEach(b => b.onclick = () => { pri = b.dataset.v; document.querySelectorAll("#npri .chip").forEach(x => x.setAttribute("aria-pressed", x===b)); });
+  $("#nph").onchange = e => { files = files.concat([...e.target.files]); $("#thumbs").innerHTML = files.map(f => `<img src="${URL.createObjectURL(f)}" alt="">`).join(""); };
+  $("#nsave").onclick = async () => {
+    const code = $("#np").value.trim().toLowerCase();
+    const p = S.props.find(x => x.code.toLowerCase() === code) || S.props.find(x => x.code.toLowerCase().replace(/\s/g,"") === code.replace(/\s/g,""));
+    if(!p) return toast("Pick a home from the list");
+    const title = $("#nt").value.trim(); if(!title) return toast("Say what's wrong");
+    $("#nsave").disabled = true; $("#nsave").textContent = "Saving…";
+    const r = await sb.from("work_orders").insert({ property_id: p.id, title, priority: pri, source: $("#ns").value,
+      description: $("#nd").value.trim() || null, assigned_to: $("#na").value || null, due_date: $("#ndue").value || null,
+      reported_by: S.me.name, origin: "site", created_by: S.user.email }).select("id").single();
+    if(r.error){ $("#nsave").disabled = false; $("#nsave").textContent = "Create ticket"; return fail(r.error); }
+    localStorageSet("mm_lastprop", p.id);
+    try { for(const f of files) await uploadPhoto(r.data.id, f, "before"); } catch(e){ fail(e, "Ticket saved, but a photo didn't upload"); }
+    toast("Ticket created"); location.hash = "#/wo/" + r.data.id;
+  };
+}
+
+/* ---------- homes ---------- */
+async function homesView(){
+  shell("homes", `<h2>Homes</h2><input type="text" id="hs" placeholder="Search homes" style="margin-bottom:10px"><div id="hl" class="muted">Loading…</div>`);
+  const { data } = await sb.from("board").select("property_id,status").not("status","in","(done,cancelled)");
+  const open = {}; (data||[]).forEach(w => open[w.property_id] = (open[w.property_id]||0) + 1);
+  const draw = () => {
+    const t = $("#hs").value.trim().toLowerCase();
+    const rows = S.props.filter(p => !t || (p.code+" "+p.name).toLowerCase().includes(t));
+    $("#hl").className = "";
+    $("#hl").innerHTML = rows.map(p => `<a class="list-row" href="#/home/${esc(p.id)}"><span><b>${esc(p.code)}</b><br><span class="muted" style="font-size:14px">${esc(p.name)}</span></span>
+      <span class="muted">${open[p.id]?`${open[p.id]} open`:""}</span></a>`).join("") || `<div class="empty">No homes match.</div>`;
+  };
+  $("#hs").oninput = draw; draw();
+}
+async function homeView(id){
+  shell("homes", `<div id="h" class="muted">Loading…</div>`);
+  const today = new Date().toISOString().slice(0,10);
+  const in14 = new Date(Date.now()+14*864e5).toISOString().slice(0,10);
+  const [pr, as, wo, pm, sp] = await Promise.all([
+    sb.from("properties").select("*").eq("id", id).maybeSingle(),
+    sb.from("assets").select("*").eq("property_id", id).order("type"),
+    sb.from("board").select("*").eq("property_id", id).order("created_at",{ascending:false}).limit(200),
+    sb.from("pm_schedule").select("*").or(`property_id.eq.${id},property_ids.cs.{${id}}`).eq("active", true).lte("next_due", in14).order("next_due"),
+    isAdmin() ? sb.from("property_spend").select("*").eq("property_id", id).maybeSingle() : Promise.resolve({data:null})
+  ]);
+  const acc = canEdit() ? ((await sb.from("property_access").select("*").eq("property_id", id).maybeSingle()).data || { property_id:id }) : null;
+  const p = pr.data; if(!p) return $("#h").textContent = "That home wasn't found.";
+  const openW = (wo.data||[]).filter(w => w.status!=="done" && w.status!=="cancelled");
+  const doneW = (wo.data||[]).filter(w => w.status==="done").slice(0,10);
+  $("#h").className = "";
+  $("#h").innerHTML = `<h2>${esc(p.code)}</h2>
+    <div class="panel"><dl class="kv">
+      <dt>Name</dt><dd>${esc(p.name)}</dd>
+      <dt>Address</dt><dd>${esc(p.address||"—")}</dd>
+      <dt>Area</dt><dd>${esc(p.area||"—")}</dd>
+      <dt>Type</dt><dd>${esc({str:"Short-term rental",second_home:"Second home",lease:"Lease",company:"Moose company"}[p.kind]||p.kind)}</dd>
+      ${p.beds?`<dt>Bedrooms</dt><dd>${p.beds}</dd>`:""}
+      <dt>Access</dt><dd>${esc(p.access_notes||"—")}</dd>
+      <dt>Next guest</dt><dd>${p.next_guest_checkin?esc(fmtWhen(p.next_guest_checkin)):"—"}</dd>
+      ${sp.data?`<dt>Total spend</dt><dd><b>${money(sp.data.total)}</b>${Number(sp.data.unverified)>0?` <span class="tag unv">${money(sp.data.unverified)} UNVERIFIED</span>`:""}</dd>`:""}
+    </dl></div>
+    ${acc ? accessHTML(acc) : ""}
+    <div class="row"><a class="btn primary" href="#/new" id="newhere" style="display:inline-flex;align-items:center;text-decoration:none">New ticket here</a></div>
+    <h3>Open tickets (${openW.length})</h3>${openW.map(cardHTML).join("") || `<div class="empty">No open tickets.</div>`}
+    <h3>PM due in the next 2 weeks</h3>${(pm.data||[]).map(r => `<div class="list-row"><span>${esc(r.task)}</span><span class="muted">${esc(fmtDate(r.next_due))}</span></div>`).join("") || `<div class="muted">Nothing due.</div>`}
+    <h3>Equipment (${(as.data||[]).length})</h3>${(as.data||[]).map(a => `<div class="list-row"><span><b>${esc(a.type)}</b> ${esc([a.make,a.model].filter(Boolean).join(" "))}<br><span class="muted" style="font-size:14px">${esc(a.serial?("S/N "+a.serial):"")} ${esc(a.notes||"")}</span></span></div>`).join("") || `<div class="muted">No equipment recorded.</div>`}
+    <h3>Recently done</h3>${doneW.map(cardHTML).join("") || `<div class="muted">Nothing yet.</div>`}`;
+  $("#newhere").onclick = () => localStorageSet("mm_lastprop", id);
+  if(acc){
+    $("#acc-show").onclick = () => { document.querySelectorAll(".secret").forEach(x => x.textContent = x.dataset.v || "—"); $("#acc-show").remove(); };
+    $("#acc-edit").onclick = () => { $("#acc-form").hidden = false; $("#acc-edit").hidden = true; };
+    $("#acc-save").onclick = async () => {
+      const patch = { property_id: id }; ACCESS_FIELDS.forEach(([k]) => patch[k] = $("#a_"+k).value.trim() || null);
+      const r = await sb.from("property_access").upsert(patch, { onConflict:"property_id" });
+      if(r.error) return fail(r.error); toast("Access saved"); route();
+    };
+  }
+}
+const ACCESS_FIELDS = [["door_code","Door code"],["lockbox_code","Lockbox code"],["garage_code","Garage code"],["gate_code","Gate code"],["owner_closet","Owner closet"],["wifi_name","Wi-Fi name"],["wifi_password","Wi-Fi password"],["notes","Access notes"]];
+function accessHTML(a){
+  return `<h3>Access <span class="muted" style="font-weight:400">(crew only)</span></h3><div class="panel">
+    <dl class="kv">${ACCESS_FIELDS.filter(([k]) => a[k]).map(([k,l]) => `<dt>${l}</dt><dd>${k==="wifi_name"||k==="notes" ? esc(a[k]) : `<b class="secret" data-v="${esc(a[k])}">••••</b>`}</dd>`).join("") || `<dt>—</dt><dd class="muted">No codes yet.</dd>`}</dl>
+    <div class="row" style="margin-top:10px"><button class="btn small" id="acc-show">Show codes</button><button class="btn small" id="acc-edit">Edit</button></div>
+    <div id="acc-form" hidden style="margin-top:12px">${ACCESS_FIELDS.map(([k,l]) => `<label class="field"><span>${l}</span>${k==="notes"?`<textarea id="a_${k}">${esc(a[k]||"")}</textarea>`:`<input type="text" id="a_${k}" value="${esc(a[k]||"")}" autocomplete="off">`}</label>`).join("")}
+      <button class="btn primary" id="acc-save">Save access</button>
+      ${a.updated_at?`<p class="muted" style="font-size:14px">Last changed ${esc(fmtWhen(a.updated_at))} by ${esc(String(a.updated_by||"").split("@")[0])}. Every change is logged.</p>`:""}</div></div>`;
+}
+
+/* ---------- PM calendar ---------- */
+async function pmView(){
+  shell("pm", `<h2>Preventive maintenance</h2><div id="pmb" class="muted">Loading…</div>`);
+  const d = new Date(); const dow = (d.getDay()+6)%7;           // Monday start
+  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate()-dow);
+  const iso = x => x.toISOString().slice(0,10);
+  const endThis = new Date(mon.getTime()+6*864e5), endNext = new Date(mon.getTime()+13*864e5);
+  const { data, error } = await sb.from("pm_schedule").select("*").eq("active", true).eq("draft", false).lte("next_due", iso(endNext)).order("next_due").limit(2000);
+  if(error) return fail(error, "Couldn't load PM");
+  const rows = []; (data||[]).forEach(r => (r.property_ids || [r.property_id]).forEach(pid => { if(pid) rows.push(Object.assign({}, r, { pid })); }));
+  const group = (from, to, label, overdue) => {
+    const rs = rows.filter(r => overdue ? r.next_due < iso(from) : (r.next_due >= iso(from) && r.next_due <= iso(to)));
+    const byTask = {}; rs.forEach(r => (byTask[r.task] = byTask[r.task] || []).push(r));
+    return `<h3>${label} <span class="muted" style="font-weight:400">(${rs.length})</span></h3>` + (Object.keys(byTask).sort().map(t =>
+      `<details class="panel"><summary style="cursor:pointer"><b>${esc(t)}</b> <span class="muted">· ${byTask[t].length} home${byTask[t].length>1?"s":""}</span> ${byTask[t][0].push_to==="asana"?`<span class="tag">Asana</span>`:byTask[t][0].push_to==="breezeway"?`<span class="tag">Breezeway</span>`:`<span class="tag" style="background:var(--line);color:var(--ink-2)">Reminder</span>`}</summary>
+       ${byTask[t].map(r => `<div class="list-row"><a href="#/home/${esc(r.pid)}">${esc((S.propById[r.pid]||{}).code||r.pid)}</a><span class="muted">${esc(fmtDate(r.next_due))}${r.last_done?` · last ${esc(fmtDate(r.last_done))}`:""}</span></div>`).join("")}</details>`).join("") || `<div class="muted">Nothing.</div>`);
+  };
+  $("#pmb").className = "";
+  $("#pmb").innerHTML = group(mon, null, "Overdue", true) + group(mon, endThis, "This week", false) + group(new Date(endThis.getTime()+864e5), endNext, "Next week", false)
+    + `<p class="muted" style="font-size:14px">A work order is made each morning for anything due within 7 days. Breezeway items get a Breezeway task; reminders do once someone assigns them; trash stays in Asana.</p>`;
+}
+
+/* ---------- router ---------- */
+async function route(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ S.user = null; S.me = null; return loginView(); }
+  if(!S.user || S.user.id !== session.user.id){ S.user = session.user; await loadBasics(); }
+  if(!S.me){ app.innerHTML = `<div class="login"><h2>Not on the list</h2><p class="muted">${esc(S.user.email)} isn't set up for maintenance. Ask Brandon to add it.</p><button class="btn" id="so">Sign out</button></div>`; $("#so").onclick = async()=>{ await sb.auth.signOut(); route(); }; return; }
+  const h = location.hash.replace(/^#/, "") || "/board";
+  const [path, qs] = h.split("?"); const params = new URLSearchParams(qs||"");
+  const parts = path.split("/").filter(Boolean);
+  window.scrollTo(0,0);
+  try {
+    if(parts[0]==="wo" && parts[1]) return woView(Number(parts[1]));
+    if(parts[0]==="new") return newView();
+    if(parts[0]==="homes") return homesView();
+    if(parts[0]==="home" && parts[1]) return homeView(decodeURIComponent(parts[1]));
+    if(parts[0]==="pm") return pmView();
+    if(parts[0]==="password") return passwordView();
+    return boardView(params);
+  } catch(e){ fail(e, "Something went wrong"); }
+}
+window.addEventListener("hashchange", route);
+sb.auth.onAuthStateChange((ev) => { if(ev === "SIGNED_IN" || ev === "SIGNED_OUT") { if(ev==="SIGNED_IN" && /access_token/.test(location.hash)) history.replaceState(null,"",location.pathname+"#/board"); route(); } });
+route();
+})();
+</script>
+</body>
+</html>
