@@ -10,6 +10,7 @@ create extension if not exists pg_cron;
 create table if not exists allowed_users (
   id            uuid primary key default gen_random_uuid(),
   email         text,                        -- sign-in email (null = can be assigned, can't sign in yet)
+  alt_email     text,                        -- second sign-in email for the same person
   name          text not null unique,
   role          text not null default 'viewer' check (role in ('admin','tech','viewer')),
   bw_person_id  bigint unique,               -- Breezeway person id (assignment sync)
@@ -18,10 +19,11 @@ create table if not exists allowed_users (
   created_at    timestamptz not null default now()
 );
 create unique index if not exists allowed_users_email_lower on allowed_users (lower(email));
+alter table allowed_users add column if not exists alt_email text;
 
 create or replace function app_role() returns text
 language sql stable security definer set search_path = public as $$
-  select role from allowed_users where lower(email) = lower(auth.jwt()->>'email') and active
+  select role from allowed_users where active and lower(auth.jwt()->>'email') in (lower(email), lower(alt_email))
 $$;
 create or replace function actor() returns text
 language sql stable as $$
@@ -32,7 +34,7 @@ $$;
 create or replace function public.only_allowed_signups() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if not exists (select 1 from public.allowed_users where lower(email) = lower(new.email) and active) then
+  if not exists (select 1 from public.allowed_users where active and lower(new.email) in (lower(email), lower(alt_email))) then
     raise exception 'This email is not on the Moose maintenance list.';
   end if;
   return new;
@@ -412,7 +414,7 @@ end $$;
 
 drop policy if exists me_read on allowed_users;
 create policy me_read on allowed_users for select to authenticated
-  using (lower(email) = lower(auth.jwt()->>'email') or app_role() = 'admin');
+  using (lower(auth.jwt()->>'email') in (lower(email), lower(alt_email)) or app_role() = 'admin');
 drop policy if exists users_admin_ins on allowed_users;
 create policy users_admin_ins on allowed_users for insert to authenticated with check (app_role() = 'admin');
 drop policy if exists users_admin_upd on allowed_users;
@@ -503,7 +505,9 @@ begin
                                due_date, legacy_id, bw_task_id, created_at, closed_at, created_by)
       values (coalesce(pid,'moose-company'), left(coalesce(nullif(r->>'title',''),'(no title)'),300),
               concat_ws(E'\n', nullif(r->>'description',''), case when pid is null and r->>'property_code' is not null then 'Home: '||(r->>'property_code') end, nullif(r->>'link','')),
-              coalesce(r->>'priority','normal'), coalesce(r->>'status','new'), coalesce(r->>'source','staff'), coalesce(r->>'origin','breezeway'),
+              coalesce(r->>'priority','normal'),
+              case when r->>'status' = 'assigned' and uid is null then 'new' else coalesce(r->>'status','new') end,
+              coalesce(r->>'source','staff'), coalesce(r->>'origin','breezeway'),
               r->>'reported_by', uid, (r->>'due_date')::date, r->>'legacy_id', (r->>'bw_task_id')::bigint, cr,
               case when r->>'status' in ('done','cancelled') then coalesce((r->>'closed_at')::timestamptz, cr) end,
               coalesce(r->>'origin','sync'));
@@ -645,3 +649,101 @@ create or replace function pm_roll_asana() returns int language sql security def
 $$;
 do $$ begin perform cron.unschedule('pm-roll-asana'); exception when others then null; end $$;
 select cron.schedule('pm-roll-asana', '5 12 * * *', $$select public.pm_roll_asana()$$);
+
+-- =====================================================================
+-- FULL DESK: the original Maintenance Desk runs on this database too.
+-- desk_docs holds every desk collection (feeds, edits, projects, vendors, profiles, receipts, queues ...)
+-- exactly as the old desk stored them. Nothing is deleted; every overwrite keeps the old copy in desk_docs_log.
+-- =====================================================================
+alter table allowed_users add column if not exists initials text;     -- the desk's "by" (BT, CM, ...)
+
+create table if not exists desk_docs (
+  collection  text not null,
+  id          text not null,
+  data        jsonb not null,
+  updated_at  timestamptz not null default now(),
+  updated_by  text not null default actor(),
+  primary key (collection, id)
+);
+create table if not exists desk_docs_log (
+  log_id      bigint generated always as identity primary key,
+  collection  text not null,
+  id          text not null,
+  old_data    jsonb,
+  changed_at  timestamptz not null default now(),
+  changed_by  text not null default actor()
+);
+create index if not exists desk_docs_log_doc on desk_docs_log (collection, id, changed_at);
+
+create or replace function desk_docs_keep() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  new.updated_at := now(); new.updated_by := actor();
+  -- keep history for people's work; program feeds (big, rewritten every run) are not logged
+  if tg_op = 'UPDATE' and new.collection <> 'feeds' and new.data is distinct from old.data then
+    insert into desk_docs_log (collection, id, old_data) values (old.collection, old.id, old.data);
+  end if;
+  return new;
+end $$;
+drop trigger if exists desk_docs_keep on desk_docs;
+create trigger desk_docs_keep before insert or update on desk_docs for each row execute function desk_docs_keep();
+drop trigger if exists desk_docs_no_delete on desk_docs;
+create trigger desk_docs_no_delete before delete on desk_docs for each row execute function forbid_delete();
+drop trigger if exists desk_docs_log_no_change on desk_docs_log;
+create trigger desk_docs_log_no_change before update or delete on desk_docs_log for each row execute function forbid_change();
+
+-- Who sees what. Admin: everything. Tech + viewer: no money, pay, receipts or messages to the owners/Jeff.
+create or replace function desk_can_read(c text, i text) returns boolean language sql stable security definer set search_path = public as $$
+  select case app_role()
+    when 'admin' then true
+    when 'tech'  then not (c in ('expenses','taskbill','time','asks','slackq','bwq','config')
+                           or (c = 'feeds' and (i like 'bw-fees%' or i like 'hs-time%' or i like 'bw-rcpt-%' or i like 'bw-receipts%' or i = 'usage')))
+    when 'viewer' then not (c in ('expenses','taskbill','time','asks','slackq','bwq','config')
+                           or (c = 'feeds' and (i like 'bw-fees%' or i like 'hs-time%' or i like 'bw-rcpt-%' or i like 'bw-receipts%' or i = 'usage')))
+    else false end
+$$;
+create or replace function desk_can_write(c text) returns boolean language sql stable security definer set search_path = public as $$
+  select case app_role()
+    when 'admin' then true
+    when 'tech'  then c in ('edits','rlog','projedits','deskprojects','propedits','deskjobs','profiles','bwq','recurring','applimg')
+    else false end
+$$;
+
+alter table desk_docs enable row level security;
+alter table desk_docs_log enable row level security;
+drop policy if exists desk_read on desk_docs;
+create policy desk_read on desk_docs for select to authenticated using (desk_can_read(collection, id));
+drop policy if exists desk_ins on desk_docs;
+create policy desk_ins on desk_docs for insert to authenticated with check (desk_can_write(collection));
+drop policy if exists desk_upd on desk_docs;
+create policy desk_upd on desk_docs for update to authenticated using (desk_can_write(collection)) with check (desk_can_write(collection));
+drop policy if exists desk_log_admin on desk_docs_log;
+create policy desk_log_admin on desk_docs_log for select to authenticated using (app_role() = 'admin');
+
+-- live updates for the desk (same as the old desk's onSnapshot)
+do $$ begin
+  alter publication supabase_realtime add table desk_docs;
+exception when others then null; end $$;
+
+create or replace function my_desk_identity() returns table (name text, initials text, role text)
+language sql stable security definer set search_path = public as $$
+  select name, initials, role from allowed_users
+  where active and lower(auth.jwt()->>'email') in (lower(email), lower(alt_email)) limit 1
+$$;
+grant execute on function my_desk_identity() to authenticated;
+
+-- desk initials + the office team from the old desk roster (no email = can't sign in until Brandon adds one)
+update allowed_users set initials = v.i from (values ('Brandon Thomas','BT'),('Chris Robinson','CM'),('Dave Lanier','DV'),
+  ('Jordan Pineda','JP'),('Shelby Huffaker','SH'),('Klancey Huffaker','KH')) v(n,i) where name = v.n and initials is null;
+insert into allowed_users (name, role, initials) values
+  ('Victor','tech','VS'),('Janae','admin','JB'),('Pyper','admin','PB'),('Charmayne','admin','CH'),('Kimberley','admin','KB'),
+  ('Haylee','admin','HL'),('Keno','admin','KO'),('Cheree','admin','CE'),('Porsha','admin','PT'),('Sheryl','admin','SM')
+on conflict (name) do nothing;
+
+-- one-time tidy of the first import (safe to re-run; each change is logged as an event)
+do $$ begin
+  perform set_config('app.actor','import-cleanup',true);
+  update work_orders set status = 'new' where status = 'assigned' and assigned_to is null;
+  update work_orders set title = btrim(regexp_replace(regexp_replace(replace(replace(replace(title,'&amp;','&'),'&lt;','<'),'&gt;','>'),
+           '<#C[A-Z0-9]+\|([^>]+)>', '#\1', 'g'), '<#C[A-Z0-9]+>\s*-?\s*', '', 'g'))
+   where title ~ '(<#C[A-Z0-9]+|&amp;|&lt;|&gt;)';
+end $$;
