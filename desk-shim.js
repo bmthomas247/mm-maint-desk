@@ -82,6 +82,18 @@
     window.MM_ME = me;
     try{ localStorage.setItem("md_me", me.initials || ""); localStorage.setItem("md_seenhelp", "1"); }catch(e){}
     window.MMDB = { ready: function(){ return Promise.resolve(db); } };
+    // Slack from the desk goes out instantly through the slack-post function (admins only)
+    if(me.role === "admin"){
+      window.MM_SLK = { callTool: async function(server, tool, input){
+        if(server === "Slack" && tool === "slack_send_message"){
+          var r = await sb.functions.invoke("slack-post", { body:{ channel:input.channel_id, text:input.message, thread_ts:input.thread_ts || null } });
+          if(r.error || !r.data || !r.data.ok) throw new Error((r.data && r.data.error) || (r.error && r.error.message) || "slack failed");
+          return r.data;
+        }
+        if(server === "Dropbox") return { entries:[] };      // feeds arrive from the ThinkStation now
+        throw new Error("not available here");
+      } };
+    }
     // run the desk
     var code = document.getElementById("deskcode").textContent;
     var el = document.createElement("script"); el.textContent = code; document.body.appendChild(el);
