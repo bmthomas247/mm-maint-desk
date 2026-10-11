@@ -695,9 +695,9 @@ create trigger desk_docs_log_no_change before update or delete on desk_docs_log 
 create or replace function desk_can_read(c text, i text) returns boolean language sql stable security definer set search_path = public as $$
   select case app_role()
     when 'admin' then true
-    when 'tech'  then not (c in ('expenses','taskbill','time','asks','slackq','bwq','config')
+    when 'tech'  then not (c in ('expenses','taskbill','time','asks','slackq','bwq','config','raw')
                            or (c = 'feeds' and (i like 'bw-fees%' or i like 'hs-time%' or i like 'bw-rcpt-%' or i like 'bw-receipts%' or i = 'usage')))
-    when 'viewer' then not (c in ('expenses','taskbill','time','asks','slackq','bwq','config')
+    when 'viewer' then not (c in ('expenses','taskbill','time','asks','slackq','bwq','config','raw')
                            or (c = 'feeds' and (i like 'bw-fees%' or i like 'hs-time%' or i like 'bw-rcpt-%' or i like 'bw-receipts%' or i = 'usage')))
     else false end
 $$;
@@ -746,4 +746,137 @@ do $$ begin
   update work_orders set title = btrim(regexp_replace(regexp_replace(replace(replace(replace(title,'&amp;','&'),'&lt;','<'),'&gt;','>'),
            '<#C[A-Z0-9]+\|([^>]+)>', '#\1', 'g'), '<#C[A-Z0-9]+>\s*-?\s*', '', 'g'))
    where title ~ '(<#C[A-Z0-9]+|&amp;|&lt;|&gt;)';
+end $$;
+
+-- Next check-in per home straight from the desk's occupancy feed (Track reservations) - runs in the database every 15 min.
+create or replace function checkins_from_occupancy() returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  with occ as (
+    select u.key as code, min((s->>'in')::date) as nxt
+    from desk_docs d, jsonb_each(d.data->'units') u, jsonb_array_elements(u.value) s
+    where d.collection = 'feeds' and d.id = 'occupancy'
+      and (s->>'in')::date >= current_date
+      and coalesce(s->>'st','') !~* 'cancel'
+    group by u.key)
+  update properties p
+     set next_guest_checkin = (o.nxt::timestamp + interval '16 hours') at time zone 'America/Denver'
+    from occ o
+   where lower(p.code) = lower(o.code)
+     and p.next_guest_checkin is distinct from (o.nxt::timestamp + interval '16 hours') at time zone 'America/Denver';
+  get diagnostics n = row_count;
+  update properties set next_guest_checkin = null where next_guest_checkin < now() - interval '1 day';
+  return n;
+end $$;
+revoke all on function checkins_from_occupancy() from public, anon, authenticated;
+do $$ begin perform cron.unschedule('checkins'); exception when others then null; end $$;
+select cron.schedule('checkins', '*/15 * * * *', $$select public.checkins_from_occupancy()$$);
+
+-- =====================================================================
+-- INSTANT: Breezeway task webhook -> desk + work orders (no ThinkStation)
+-- The Edge Function "breezeway-hook" hands each event to bw_task_event().
+-- =====================================================================
+create table if not exists hook_log (
+  id bigint generated always as identity primary key,
+  source text not null, event text, at timestamptz not null default now(), ok boolean, note text, payload jsonb);
+alter table hook_log enable row level security;
+drop policy if exists hook_log_admin on hook_log;
+create policy hook_log_admin on hook_log for select to authenticated using (app_role() = 'admin');
+drop trigger if exists hook_log_no_delete on hook_log;
+create trigger hook_log_no_delete before delete on hook_log for each row execute function forbid_delete();
+
+-- one live doc the desk reads before the 2-hourly Breezeway parts (newest copy of a task wins)
+create or replace function feed_live_put(doc_id text, job jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare now_ms bigint := (extract(epoch from now()) * 1000)::bigint;
+begin
+  insert into desk_docs (collection, id, data) values ('feeds', doc_id, jsonb_build_object('jobs','[]'::jsonb,'src','live','updatedAt',now_ms))
+  on conflict (collection, id) do nothing;
+  update desk_docs set data = jsonb_build_object('src','live','updatedAt',now_ms,'jobs',
+      coalesce((select jsonb_agg(x) from jsonb_array_elements(data->'jobs') x
+                where x->>'id' <> job->>'id' and coalesce((x->>'liveAt')::bigint,0) > now_ms - 3*86400000), '[]'::jsonb)
+      || jsonb_build_array(job || jsonb_build_object('liveAt', now_ms)))
+  where collection = 'feeds' and id = doc_id;
+end $$;
+
+create or replace function bw_task_event(p jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare t jsonb := p->'task'; ev text := coalesce(p->>'event_type', p->>'event', '');
+        code text; bwname text; dept text; stcode text; done boolean; auto boolean; crew jsonb; job jsonb; who text;
+        mins int := 0; m text[];
+begin
+  if t is null then return 'no task'; end if;
+  select pr.code, pr.name into code, bwname from properties pr where pr.bw_home_id = (t->'home'->>'id')::bigint;
+  bwname := coalesce(t->'home'->>'name', bwname);
+  dept := lower(coalesce(t->'department'->>'code', t->'department'->>'name', ''));
+  stcode := lower(coalesce(t->'status'->>'code', t->'status'->>'name', ''));
+  done := (t->>'finished_at') is not null or stcode in ('finished','closed','approved');
+  auto := (t->'created_by') is null or (t->'created_by'->>'id') is null;
+  select coalesce(jsonb_agg(split_part(a->>'full_name',' ',1)), '[]'::jsonb) into crew
+    from jsonb_array_elements(coalesce(t->'assignments','[]'::jsonb)) a where coalesce(a->>'full_name','') <> '';
+  -- the desk's rule: Chris is on everything, so he counts only when he's alone
+  select coalesce((select x from jsonb_array_elements_text(crew) x where x <> 'Chris' limit 1),
+                  (select x from jsonb_array_elements_text(crew) x limit 1)) into who;
+  m := regexp_match(coalesce(t->>'total_time',''), '(\d+):(\d+):(\d+)');
+  if m is not null then mins := m[1]::int * 60 + m[2]::int; end if;
+  if dept not in ('maintenance','inspection') then return 'skipped dept ' || dept; end if;
+
+  job := jsonb_build_object(
+    'id', 'bw-' || (t->>'id'), 'src', 'breezeway', 'title', coalesce(t->>'name','task'),
+    'detail', left(coalesce(t->>'description',''), 2000), 'prop', coalesce(code,''), 'props', '[]'::jsonb,
+    'bwHome', coalesce(bwname,''), 'crew', crew, 'people', jsonb_array_length(crew), 'who', '',
+    'created', left(coalesce(t->>'created_at',''),10), 'due', left(coalesce(t->>'due_date',''),10),
+    'finished', left(coalesce(t->>'finished_at',''),10), 'updated', left(coalesce(t->>'updated_at', p->>'last_updated',''),10),
+    'doneByName', case when done then coalesce(t->'finished_by'->>'full_name','') else '' end,
+    'reportedBy', coalesce(t->'created_by'->>'full_name',''), 'auto', auto,
+    'kind', case when dept = 'inspection' then 'inspection' when auto then 'recurring' else 'repair' end,
+    'list', 'Breezeway · ' || case when dept = 'inspection' then 'Inspection' else 'Maintenance' end,
+    'minutes', mins, 'cost', coalesce((select round(sum((c->>'cost')::numeric),2) from jsonb_array_elements(coalesce(t->'costs','[]'::jsonb)) c where c->>'deleted_at' is null),0),
+    'chargedTo', case when t->>'bill_to' in ('owner','guest') then t->>'bill_to' else '' end,
+    'rk', coalesce(regexp_replace(coalesce(t->>'task_report_url',''), '^.*/', ''), ''),
+    'srcUrl', 'https://app.breezeway.io/task/' || (t->>'id'), 'links', '[]'::jsonb, 'comments', 0,
+    'officeTask', false, 'vendor', '', 'asg', '',
+    'status', case when (t->>'deleted_at') is not null then 'done' when done then 'done' else 'scheduled' end)
+    || case when stcode = 'closed' then jsonb_build_object('bwStatus','closed') else '{}'::jsonb end
+    || case when (t->>'deleted_at') is not null then jsonb_build_object('bwStatus','deleted') else '{}'::jsonb end;
+  perform feed_live_put('jobs-0-live', job);
+
+  -- the work-order board: repair tasks only (same rule as the import)
+  if dept = 'maintenance' and not auto then
+    perform sync_jobs(jsonb_build_array(jsonb_build_object(
+      'legacy_id', 'bw-' || (t->>'id'), 'bw_task_id', (t->>'id')::bigint, 'property_code', code,
+      'title', t->>'name', 'description', t->>'description', 'link', 'https://app.breezeway.io/task/' || (t->>'id'),
+      'status', case when done then 'done' when who is not null then 'assigned' else 'new' end,
+      'origin', 'breezeway', 'source', 'staff', 'priority', case when lower(coalesce(t->'priority'->>'code','')) in ('urgent','high','low') then lower(t->'priority'->>'code') else 'normal' end,
+      'reported_by', t->'created_by'->>'full_name', 'assignee', who, 'due_date', nullif(left(coalesce(t->>'due_date',''),10),''),
+      'created_at', t->>'created_at', 'closed_at', t->>'finished_at', 'closed_by', t->'finished_by'->>'full_name')), false);
+    if (t->>'deleted_at') is not null then
+      perform set_config('app.actor','breezeway',true);
+      update work_orders set status = 'cancelled' where bw_task_id = (t->>'id')::bigint and status not in ('done','cancelled');
+    end if;
+  end if;
+  return 'ok ' || ev;
+end $$;
+
+-- Freshdesk + Slack land on the desk the same way (their own live docs)
+create or replace function live_job(doc_id text, job jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare code text; txt text := lower(coalesce(job->>'title','') || ' ' || coalesce(job->>'detail',''));
+begin
+  if coalesce(job->>'prop','') = '' then      -- find a home code mentioned in the text
+    select pr.code into code from properties pr
+     where pr.kind <> 'company' and txt ~ ('\m' || regexp_replace(lower(regexp_replace(pr.code,'^(2h-|l-)','','i')),'([^a-z0-9 ])','\\\1','g') || '\M')
+     order by length(pr.code) desc limit 1;
+    job := job || jsonb_build_object('prop', coalesce(code,''));
+  end if;
+  perform feed_live_put(doc_id, job);
+  return 'ok';
+end $$;
+
+do $$ declare f text; begin
+  foreach f in array array['bw_task_event(jsonb)','feed_live_put(text,jsonb)','live_job(text,jsonb)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
 end $$;
