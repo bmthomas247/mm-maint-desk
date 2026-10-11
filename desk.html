@@ -412,7 +412,7 @@ function ownerHomes(x){ var t=(x.title||"")+" "+(x.detail||""), out={}, hs=Objec
   return Object.keys(out); }
 function derive(){
   var all=[];
-  Object.keys(S.feeds).forEach(function(k){ if(k.indexOf("jobs-")===0) (S.feeds[k].jobs||[]).forEach(function(j){ all.push(j); }); });
+  Object.keys(S.feeds).sort(function(a,b){ var r=function(k){ return k==="jobs-0-live"?0:(k.indexOf("jobs-0-live-")===0?2:1); }; return r(a)-r(b); }).forEach(function(k){ if(k.indexOf("jobs-")===0) (S.feeds[k].jobs||[]).forEach(function(j){ all.push(j); }); });
   /* bulk clean-ups: one person marking 40+ Breezeway tasks done on one day that they weren't on (e.g. Cheree's Sep 22 clear-out) is paperwork, not work */
   var bulkN={}, bk=function(j){ return j.src==="breezeway" && j.status==="done" && typeof j.doneByName==="string" && j.doneByName && typeof j.finished==="string" && j.finished ? j.doneByName.replace(/\s+/g," ").trim()+"|"+j.finished.slice(0,10) : ""; };
   all.forEach(function(j){ try{ var k=bk(j); if(k) bulkN[k]=(bulkN[k]||0)+1; }catch(e){} });
@@ -2542,7 +2542,7 @@ function fireDoc(code){ var f=fireInfo(code), st=dueState(f.exp);
 
 /* ================= SLACK — send right away from the desk (the viewer's Slack connector); the scheduled run is the fallback and reads replies every 2 hours ================= */
 var SLK=null;
-try{ if(window.claude&&window.claude.use) window.claude.use("mcp").then(function(m){ SLK=m||null; }).catch(function(){}); }catch(e){}
+try{ if(window.MM_SLK) SLK=window.MM_SLK; }catch(e){}
 /* the office five always come first in every "send to" list */
 var SLACK_CORE=["Charmayne","Janae","Jeff","Cheree","Chris"];
 function slackPeople(){ var all=Object.keys(((S.config.slack||{}).people)||{}); return SLACK_CORE.concat(all.filter(function(n){ return SLACK_CORE.indexOf(n)<0; }).sort()); }
