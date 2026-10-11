@@ -41,3 +41,11 @@ Status files (Claude reads these): Dropbox `12-TRACK Software\Maintenance Desk F
 - seed.sql from the old desk: 168 homes + Moose company, 696 appliances (inspection labels), 251 vendors, 816 PM schedules incl. 4 trash routes, 12 desk projects with notes, 38 receipts not tied to a job.
 - First `maint_sync.py --import` brings Breezeway/Slack/Asana/Freshdesk jobs with original dates, each logged as an `import` event, then applies staged desk notes, statuses, billing and receipt shares (`import_staging`).
 - Older than a year and not done → imported as done.
+
+## Instant (Edge Functions, Oct 9)
+- `breezeway-hook` — Breezeway task webhook (subscribed by deploy_maint.py). Every task change goes to `bw_task_event()`: the desk's `feeds/jobs-0-live` (read before the 2-hourly parts) and the work-order board. Log: `hook_log`.
+- `slack-post` — the desk's Slack buttons send instantly (admins only; bot token is a Supabase secret). The ThinkStation still sends anything left queued.
+- `slack-events` — new top-level posts in #maintenance_action_items / #maintenance_updates appear on the desk at once (`feeds/jobs-0-live-slack`). Needs `SLACK_SIGNING_SECRET` in desk.env and the Request URL set in the Slack app (see HOOK_URLS.txt). Threads/closing still come from slack_sync every 30 min.
+- `freshdesk-hook` — Freshdesk automation "Ticket is created → Trigger webhook" posts the ticket; it appears on the desk at once (`feeds/jobs-0-live-fd`). Brivo → Breezeway tasks still run in brivo_tasks.py.
+- In the database (pg_cron): PM work orders (daily), trash dates (daily), next guest check-in from the occupancy feed (every 15 min).
+- Still on the ThinkStation: full Breezeway/Asana/Slack/Freshdesk reads (backstop + history), Hubstaff, Brivo task creation, receipts, bill pushes (Chrome).
