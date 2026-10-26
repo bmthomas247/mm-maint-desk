@@ -196,12 +196,14 @@ create table if not exists lock_stays (
 create index if not exists lock_stays_prop on lock_stays (property_id, ends_at);
 
 -- Employee, vendor and backup codes (brought over from Brivo with the same numbers).
+-- (kinds: employee / vendor / backup / owner / hoa / county)
 -- Time rules: optional start/end dates, plus optional days of the week and hours (Mountain time).
 -- The lock itself has no clock rules, so the hub puts the code on at the start of each window and takes it off at the end.
 create table if not exists lock_staff_codes (
   id            bigint generated always as identity primary key,
-  property_ids  text[],                                   -- null = every home in our section
-  kind          text not null default 'employee' check (kind in ('employee','vendor','backup','owner')),
+  property_ids  text[],                                   -- homes picked (null + areas null = every home in our section)
+  areas         text[],                                   -- neighborhoods picked (Track area codes: RJ, BHV...); adds every home there
+  kind          text not null default 'employee' check (kind in ('employee','vendor','backup','owner','hoa','county')),
   label         text not null,                            -- "Shelby Huffaker", "A+ Carpet", "Spare - November"
   code          text not null check (code ~ '^[0-9]{4,8}$'),
   starts_at     timestamptz,
@@ -398,6 +400,17 @@ begin
 end $$;
 
 -- A code is "taken" at a home if another stay overlapping (with an hour either side) or an active crew code uses it.
+-- which homes a crew/vendor/owner code reaches: picked homes + every home in the picked neighborhoods; nothing picked = all
+create or replace function lock_code_covers(p_props text[], p_areas text[], p_prop text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select (p_props is null and p_areas is null) or p_prop = any(coalesce(p_props, '{}'))
+      or (select area from properties where id = p_prop) = any(coalesce(p_areas, '{}'))
+$$;
+create or replace function lock_code_homes(p_props text[], p_areas text[]) returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(id), '{}') from properties where lock_code_covers(p_props, p_areas, id)
+$$;
+
 create or replace function lock_code_taken(p_prop text, p_code text, p_from timestamptz, p_to timestamptz, p_res text)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from lock_stays s
@@ -405,7 +418,7 @@ returns boolean language sql stable security definer set search_path = public as
                    and s.status not in ('cancelled')
                    and s.starts_at < p_to + interval '4 days' and s.ends_at > p_from - interval '4 days')   -- codes sit on the lock up to 3 days early
       or exists (select 1 from lock_staff_codes c
-                 where c.active and c.code = p_code and (c.property_ids is null or c.property_ids && array(select lock_home_family(p_prop))))
+                 where c.active and c.code = p_code and exists (select 1 from lock_home_family(p_prop) f(pid) where lock_code_covers(c.property_ids, c.areas, f.pid)))
 $$;
 
 create or replace function lock_code_pick(p_prop text, p_last4 text, p_from timestamptz, p_to timestamptz, p_res text, out code text, out src text)
@@ -521,10 +534,11 @@ begin
     end if;
     -- crew / vendor / backup: with a schedule-capable lock the code stays on and the lock enforces days/hours;
     -- otherwise the code is added when its window opens and removed when it closes
-    insert into _want select 'staff', c.id::text, initcap(c.kind) || ': ' || c.label, c.code, true,
+    insert into _want select 'staff', c.id::text,
+           case c.kind when 'hoa' then 'HOA' when 'county' then 'County' else initcap(c.kind) end || ': ' || coalesce(c.person, c.company, c.label), c.code, true,
            case when l.schedules_ok then lock_staff_sched(c, c.ends_at) end
       from lock_staff_codes c
-     where c.active and (c.property_ids is null or l.property_id = any(c.property_ids))
+     where c.active and lock_code_covers(c.property_ids, c.areas, l.property_id)
        and case when l.schedules_ok
                 then (c.starts_at is null or now() >= c.starts_at - make_interval(days => l.preload_days))
                      and (c.ends_at is null or now() < c.ends_at)
@@ -1195,27 +1209,29 @@ end $$;
 -- add / change an employee, vendor or backup code. r = {id?, kind, label, code, property_ids?, starts_at?, ends_at?, days?, time_from?, time_to?, active?}
 create or replace function lock_staff_code(r jsonb) returns bigint
 language plpgsql security definer set search_path = public as $$
-declare rid bigint := (r->>'id')::bigint; props text[]; dys int[];
+declare rid bigint := (r->>'id')::bigint; props text[]; dys int[]; ars text[];
 begin
   if not lock_is_crew() then raise exception 'Only crew'; end if;
   if coalesce(r->>'code','') !~ '^[0-9]{4,8}$' then raise exception 'Codes are 4 to 8 digits'; end if;
   props := case when jsonb_typeof(r->'property_ids') = 'array' and jsonb_array_length(r->'property_ids') > 0
                 then array(select jsonb_array_elements_text(r->'property_ids')) end;
+  ars   := case when jsonb_typeof(r->'areas') = 'array' and jsonb_array_length(r->'areas') > 0
+                then array(select jsonb_array_elements_text(r->'areas')) end;
   dys   := case when jsonb_typeof(r->'days') = 'array' and jsonb_array_length(r->'days') > 0
                 then array(select jsonb_array_elements_text(r->'days')::int) end;
   if exists (select 1 from lock_staff_codes c where c.active and c.code = r->>'code' and c.id is distinct from rid
-               and (c.property_ids is null or props is null or c.property_ids && props)) then
+               and lock_code_homes(c.property_ids, c.areas) && lock_code_homes(props, ars)) then
     raise exception 'Someone else already has code % at one of those homes', r->>'code';
   end if;
   if rid is null then
-    insert into lock_staff_codes (property_ids, kind, label, code, starts_at, ends_at, days, time_from, time_to, person, company, role)
+    insert into lock_staff_codes (property_ids, kind, label, code, starts_at, ends_at, days, time_from, time_to, person, company, role, areas)
     values (props, coalesce(r->>'kind','employee'),
             coalesce(nullif(r->>'label',''), concat_ws(' - ', nullif(r->>'person',''), nullif(r->>'company',''))), r->>'code',
             (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, dys, (r->>'time_from')::time, (r->>'time_to')::time,
-            nullif(r->>'person',''), nullif(r->>'company',''), nullif(r->>'role',''))
+            nullif(r->>'person',''), nullif(r->>'company',''), nullif(r->>'role',''), ars)
     returning id into rid;
   else
-    update lock_staff_codes set property_ids = props, kind = coalesce(r->>'kind', kind), label = coalesce(r->>'label', label), code = r->>'code',
+    update lock_staff_codes set property_ids = props, areas = ars, kind = coalesce(r->>'kind', kind), label = coalesce(r->>'label', label), code = r->>'code',
            starts_at = (r->>'starts_at')::timestamptz, ends_at = (r->>'ends_at')::timestamptz, days = dys,
            time_from = (r->>'time_from')::time, time_to = (r->>'time_to')::time, active = coalesce((r->>'active')::boolean, active),
            person = case when r ? 'person' then nullif(r->>'person','') else person end,
@@ -1585,3 +1601,7 @@ language sql stable security definer set search_path = public as $$
   select p.id, p.code, s.door, s.master_code from lock_master_staging s join properties p on p.code = s.unit
    where lock_is_crew() and p.id in (select h.property_id from lock_homes h where h.section = 'ours')
 $$;
+
+-- new kinds on an existing table (the check above only applies to brand-new tables)
+alter table lock_staff_codes drop constraint if exists lock_staff_codes_kind_check;
+alter table lock_staff_codes add constraint lock_staff_codes_kind_check check (kind in ('employee','vendor','backup','owner','hoa','county'));
