@@ -216,11 +216,10 @@ function wireSync(){
     b.disabled = false; b.textContent = "Sync with Track now";
   };
 }
-// Field page: no code lists. A guest's code shows only while they're in the home or arriving within 24 h (lockout help), behind a tap.
+// Field page: no codes at all (guest, crew, vendor). Codes live on the office desk version.
 function stayCode(s){
   if(DESK) return `<div class="big" style="font-size:20px">${esc(s.code)}</div>`;
-  const soon = new Date(s.starts_at) - Date.now() < 864e5 && new Date(s.ends_at) > Date.now();
-  return soon ? `<span class="reveal" data-c="${esc(s.code)}">Show code</span>` : `<span class="muted" style="font-size:12.5px">code shows on arrival day</span>`;
+  return "";     // guest codes live on the office desk only
 }
 async function command(hubId, lockId, kind, args){ const id = await rpc("lock_command",{p_hub:hubId,p_lock:lockId,p_kind:kind,p_args:args||{}}); wake(hubId); return id; }
 async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
@@ -663,7 +662,7 @@ async function homeView(pid){
       const on = myAssign.find(a=>a.ref_kind==="stay"&&a.ref_id===s.res_id&&a.state==="verified");
       return `<div data-res="${esc(s.res_id)}"><div class="grow"><b>${esc(s.guest||"Guest")}</b> <span class="muted">${esc(s.kind)}</span><div class="muted">${when(s.starts_at)} → ${when(s.ends_at)}</div></div>
         <div style="text-align:right">${stayCode(s)}${on?'<span class="pill green">on lock</span>':'<span class="pill grey">later</span>'}
-        <div><button class="btn small" data-act="link">Guest link</button>${DESK?' <button class="btn small" data-act="code">Change</button>':""}</div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
+        ${DESK?'<div><button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></div>':""}</div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
   const bar = await syncBar();
