@@ -108,9 +108,9 @@ create table if not exists locks (
   last_battery_change timestamptz,                        -- spotted automatically when the battery jumps up
   battery_days  int,                                      -- learned: how long a set of batteries lasts in this lock
   staff_from    int not null default 2,
-  staff_to      int not null default 40,
-  guest_from    int not null default 41,
-  guest_to      int not null default 60,
+  staff_to      int not null default 120,
+  guest_from    int not null default 121,
+  guest_to      int not null default 150,
   active        boolean not null default true,
   created_at    timestamptz not null default now(),
   unique (hub_id, node_id)
@@ -155,6 +155,11 @@ create table if not exists sensors (
   created_at    timestamptz not null default now(),
   unique (hub_id, node_id)
 );
+
+-- Brivo has ~60 company-wide crew/vendor codes, so crew slots run 2-120 and guests 121-150 (Yale Assure holds 250)
+alter table locks alter column staff_to set default 120;
+alter table locks alter column guest_from set default 121;
+alter table locks alter column guest_to set default 150;
 
 create table if not exists lock_stays (
   res_id        text primary key,                         -- Track reservation id
