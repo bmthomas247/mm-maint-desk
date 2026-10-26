@@ -1283,6 +1283,17 @@ begin
 end $$;
 revoke all on function lock_guest_unlock(text, uuid) from public, anon, authenticated;
 
+-- ---------------------------------------------------------------- what Track's reservation "Door Code" should say (locks_sync.py writes it)
+-- Only for homes whose hub is installed (until then Brivo fills it), only once the agreement is back, until check-out.
+create or replace view lock_track_doorcodes as
+select distinct st.res_id, st.code
+  from lock_stays st
+ where st.status not in ('cancelled','checked_out') and st.ends_at > now() and lock_stay_cleared(st)
+   and exists (select 1 from lock_hubs b join lock_homes h on h.property_id = b.property_id and h.section = 'ours' and h.enabled
+                where b.active and b.claimed_at is not null
+                  and (b.property_id = st.property_id or b.property_id in (select child_id from lock_links_on where parent_id = st.property_id)));
+revoke all on lock_track_doorcodes from anon, authenticated;
+
 -- ---------------------------------------------------------------- scorecard (our section; Lynx/Brivo rows come from locks_scorecard.py)
 create or replace view lock_scorecard with (security_invoker = true) as
 with st as (
