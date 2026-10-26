@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#3c5f12">
 <title>Moose Locks</title>
-<link rel="icon" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="moose-logo.png">
+<link rel="apple-touch-icon" href="moose-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -143,6 +143,24 @@ nav.tabs .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(--
 .login{max-width:420px;margin:60px auto;padding:0 16px;text-align:center}
 .login .mark{width:64px;height:64px;border-radius:20px;background:var(--moose);display:grid;place-items:center;margin:0 auto 10px}
 .empty{text-align:center;padding:30px 10px;color:var(--muted)}
+/* ---- office desk version (locks-desk.html): wide, tabs on top, codes + stays */
+body.desk{padding-bottom:30px}
+.desk .top .bar,.desk main{max-width:1240px}
+.desk nav.tabs{position:sticky;top:76px;bottom:auto;z-index:5;max-width:none;margin:0;border:0;border-bottom:1px solid var(--line);background:var(--ground);backdrop-filter:none;gap:6px;padding:12px max(16px,calc((100vw - 1240px)/2 + 16px));flex-wrap:wrap}
+.desk nav.tabs a{flex:none;flex-direction:row;gap:8px;padding:9px 16px 9px 10px;font-size:14px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
+.desk nav.tabs a.on{background:var(--forest-2);color:#fff;border-color:var(--forest-2)}
+.desk nav.tabs a.on svg{background:transparent}
+.desk nav.tabs svg{width:22px;height:22px;padding:0}
+.desk nav.tabs .badge{position:static;margin-left:2px}
+.desk .tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.desk .tile-grid>.card{margin:0}
+.desk .cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
+.desk .stats{grid-template-columns:repeat(4,1fr)}
+.desk .toast{bottom:30px}
+@media (max-width:900px){ .desk .cols{grid-template-columns:1fr} }
+.tbl td,.tbl th{padding:10px 8px}.tbl tr:hover td{background:var(--ground)}
+.code-chip{font-weight:800;letter-spacing:2px;font-size:16px}
+.reveal{cursor:pointer;border:1px dashed var(--line-2);border-radius:9px;padding:3px 9px;font-weight:800;color:var(--ink-2);background:var(--ground)}
 </style>
 </head>
 <body>
@@ -156,6 +174,10 @@ const C = window.MM_CONFIG;
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
 const app = document.getElementById("app");
 const S = { me:null, homes:[], props:{}, timer:null };
+// Two versions of one page: locks.html = field (phone, no code lists) · locks-desk.html = office desk (codes, stays, scorecard)
+const DESK = /locks-desk\.html$/.test(location.pathname) || window.LOCKS_DESK === true;
+if(DESK) document.body.classList.add("desk");
+const SELF = DESK ? "locks-desk.html" : "locks.html";
 const $ = (s, el=document) => el.querySelector(s);
 const $$ = (s, el=document) => [...el.querySelectorAll(s)];
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -194,6 +216,12 @@ function wireSync(){
     b.disabled = false; b.textContent = "Sync with Track now";
   };
 }
+// Field page: no code lists. A guest's code shows only while they're in the home or arriving within 24 h (lockout help), behind a tap.
+function stayCode(s){
+  if(DESK) return `<div class="big" style="font-size:20px">${esc(s.code)}</div>`;
+  const soon = new Date(s.starts_at) - Date.now() < 864e5 && new Date(s.ends_at) > Date.now();
+  return soon ? `<span class="reveal" data-c="${esc(s.code)}">Show code</span>` : `<span class="muted" style="font-size:12.5px">code shows on arrival day</span>`;
+}
 async function command(hubId, lockId, kind, args){ const id = await rpc("lock_command",{p_hub:hubId,p_lock:lockId,p_kind:kind,p_args:args||{}}); wake(hubId); return id; }
 async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
 
@@ -214,14 +242,20 @@ function shell(active, inner, title, sub){
   app.innerHTML = `<header class="top"><div class="bar">
       <div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${ICON.lock}</span></div>
       <div class="grow"><h1>${esc(title||"Moose Locks")}</h1><div class="sub">${esc(sub||"Moose Management · lock system")}</div></div>
-      <a class="iconbtn" href="index.html" title="Maintenance site">${ICON.homes}</a></div></header>
+      <a class="iconbtn" href="${DESK?"desk.html":"index.html"}" title="${DESK?"Maintenance desk":"Maintenance site"}">${ICON.homes}</a></div></header>
+  ${DESK?navTabs(active):""}
   <main id="main">${inner}</main>
-  <nav class="tabs">
-    <a href="#/" class="${active==="homes"?"on":""}">${ICON.homes}<span>Homes</span></a>
-    <a href="#/install" class="${active==="install"?"on":""}">${ICON.install}<span>Install</span></a>
-    <a href="#/codes" class="${active==="codes"?"on":""}">${ICON.codes}<span>Codes</span></a>
-    <a href="#/alerts" class="${active==="alerts"?"on":""}">${ICON.alerts}<span>Alerts</span>${S.alertCount?`<span class="badge">${S.alertCount}</span>`:""}</a>
-    <a href="#/score" class="${active==="score"?"on":""}">${ICON.score}<span>Score</span></a>
+  ${DESK?"":navTabs(active)}`;
+}
+function navTabs(active){
+  const t = (k, href, icon, label, extra) => `<a href="${href}" class="${active===k?"on":""}">${icon}<span>${label}</span>${extra||""}</a>`;
+  return `<nav class="tabs">
+    ${t("homes","#/",ICON.homes,"Homes")}
+    ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : t("install","#/install",ICON.install,"Install")}
+    ${DESK ? t("codes","#/codes",ICON.codes,"Crew & vendor codes") : ""}
+    ${t("alerts","#/alerts",ICON.alerts,"Alerts", S.alertCount?`<span class="badge">${S.alertCount}</span>`:"")}
+    ${DESK ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
+    ${DESK ? t("install","#/install",ICON.install,"Install") : ""}
   </nav>`;
 }
 
@@ -255,6 +289,8 @@ async function homesView(){
     q("thermostats","id,property_id,name,temp,mode,heat_sp,cool_sp,online,active,last_seen",x=>x.eq("active",true)),
     q("lock_alerts","kind,property_id,detail",x=>x.is("closed_at",null)),
     q("lock_assign","lock_id,state,wanted",x=>x.neq("state","cleared"))]);
+  const arrivals = DESK ? (await q("lock_stays","property_id,starts_at",x=>x.gte("starts_at",new Date().toISOString()).lte("starts_at",new Date(Date.now()+7*864e5).toISOString()).neq("status","cancelled")))
+    .filter(s=>S.homes.some(h=>h.section==="ours"&&h.property_id===s.property_id)).length : 0;
   const sec = {ours:[],lynx:[],brivo:[]};
   S.homes.forEach(h=>sec[h.section].push(h));
   const ours = sec.ours.map(h=>h.property_id);
@@ -291,9 +327,10 @@ async function homesView(){
       <div class="stat"><div class="n">${hubOn}<span class="muted" style="font-size:15px">/${sec.ours.length}</span></div><div class="l">Hubs online</div></div>
       <div class="stat"><div class="n">${codesOn}</div><div class="l">Codes on locks</div></div>
       <div class="stat ${ourAlerts?"warn":""}"><div class="n">${ourAlerts}</div><div class="l">Open alerts</div></div>
+      ${DESK?`<a class="stat" href="#/stays" style="text-decoration:none;color:inherit"><div class="n">${arrivals}</div><div class="l">Arrivals next 7 days</div></a>`:""}
     </div>
     ${bar}
-    <h3>Homes on our system · ${sec.ours.length}</h3>${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}
+    <h3>Homes on our system · ${sec.ours.length}</h3><div class="tile-grid">${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}</div>
     ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
       <label class="field"><span>Home code (as in Track, e.g. RJ 811)</span><input id="nh"></label>
       <label class="field"><span>Section</span><select id="ns"><option value="ours">Our system</option></select></label>
@@ -388,12 +425,29 @@ function installProgress(h, facts){
 async function installView(){
   await loadBase();
   const ours = S.homes.filter(h=>h.section==="ours");
-  shell("install", `<h2>Install</h2><p class="muted" style="margin-top:-6px">Pick the home you're at. Each step checks itself off when the system sees it done.</p>
-    <button class="btn go wide" id="gps">📍 I'm at a home - find it</button><div id="near" style="margin:10px 0 4px"></div>
+  shell("install", `<h2>Install</h2>
+    <div class="card"><h3 style="margin-top:0">Set up a new home</h3>
+      <p class="muted" style="margin-top:-4px">Any home in Track. It joins our system and gets its own step-by-step checklist.</p>
+      <button class="btn go wide" id="gps">📍 I'm at the home - find it</button>
+      <label class="field"><span>…or type the home code or name</span><input id="findh" placeholder="RJ 13536, Black Rock…" autocomplete="off"></label>
+      <label class="row" style="margin:4px 0 0"><input type="checkbox" id="isnew"> <span>Brand-new home - never had Brivo</span></label>
+      <div id="near" style="margin-top:10px"></div></div>
+    <h3>Homes on our system</h3>
     ${ours.map(h=>{ const p = installProgress(h); return `<a class="card home ${h.installed_at?"ok":p.done?"todo":""}" href="#/install/${encodeURIComponent(h.property_id)}">
       <div class="row"><div class="grow"><div class="code">${esc(h.properties.code)}</div><div class="muted">${esc(h.properties.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill ${p.done?"amber":"grey"}">${p.done}/${p.total} steps</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*p.done/p.total)}%"></i></div></a>`; }).join("")}`, "Install", "Step-by-step at the home");
+  const start = async (pid, onOurs) => { try{ if(!onOurs){ await rpc("lock_setup_home",{p_property:pid,p_new:$("#isnew").checked}); await loadBase(); toast("Added - here's its checklist"); }
+      location.hash = "#/install/" + encodeURIComponent(pid); }catch(e){ fail(e); } };
+  let tmr; $("#findh").oninput = () => { clearTimeout(tmr); tmr = setTimeout(async () => {
+    const t = $("#findh").value.trim(); if(t.length < 2) return $("#near").innerHTML = "";
+    try{ const rows = await q("properties","id,code,name,address",x=>x.or(`code.ilike.*${t.replace(/[,()*]/g,"")}*,name.ilike.*${t.replace(/[,()*]/g,"")}*`).order("code").limit(8));
+      const onOurs = id => S.homes.some(h=>h.property_id===id && h.section==="ours");
+      $("#near").innerHTML = rows.length ? `<div class="list">${rows.map(r=>`<div><div class="grow"><b>${esc(r.code)}</b><div class="muted" style="font-size:12.5px">${esc(r.address||r.name)}</div></div>
+          <button class="btn small ${onOurs(r.id)?"":"go"}" data-pick="${esc(r.id)}" data-ours="${onOurs(r.id)?1:""}">${onOurs(r.id)?"Open":"Start setup"}</button></div>`).join("")}</div>`
+        : '<p class="muted">No home with that name. New homes show up here after they are added in Track and the next sync runs (or press Sync now on Homes).</p>';
+      $$("[data-pick]").forEach(b=>b.onclick=()=>start(b.dataset.pick, !!b.dataset.ours));
+    }catch(e){ fail(e); } }, 250); };
   $("#gps").onclick = () => {
     if(!navigator.geolocation) return toast("This phone can't share location");
     $("#near").innerHTML = '<p class="muted">Finding you…</p>';
@@ -402,10 +456,9 @@ async function installView(){
         const rows = await rpc("lock_nearby",{p_lat:pos.coords.latitude,p_lng:pos.coords.longitude});
         const fmt = m => m < 1000 ? m+" m away" : (m/1609).toFixed(1)+" mi away";
         $("#near").innerHTML = rows.length ? `<div class="card"><b>Closest homes</b><div class="list" style="margin-top:6px">${rows.map(r=>`<div><div class="grow"><b>${esc(r.code)}</b> <span class="muted">${fmt(r.meters)}</span><div class="muted" style="font-size:12.5px">${esc(r.address||r.name)}</div></div>
-            <button class="btn small ${r.section==="ours"?"":"go"}" data-here="${esc(r.property_id)}" data-ours="${r.section==="ours"?1:""}">${r.section==="ours"?"Open":"Add + install"}</button></div>`).join("")}</div></div>`
+            <button class="btn small ${r.section==="ours"?"":"go"}" data-here="${esc(r.property_id)}" data-ours="${r.section==="ours"?1:""}">${r.section==="ours"?"Open":"Start setup"}</button></div>`).join("")}</div></div>`
           : '<p class="muted">No homes found near you.</p>';
-        $$("[data-here]").forEach(b=>b.onclick=async()=>{ try{ if(!b.dataset.ours){ await rpc("lock_add_home_here",{p_property:b.dataset.here}); await loadBase(); toast("Added to our system"); }
-            location.hash = "#/install/" + encodeURIComponent(b.dataset.here); }catch(e){ fail(e); } });
+        $$("[data-here]").forEach(b=>b.onclick=()=>start(b.dataset.here, !!b.dataset.ours));
       }catch(e){ fail(e); }
     }, err => { $("#near").innerHTML = `<p class="muted">Couldn't get your location (${esc(err.message)}). Allow location for this site in your phone's settings.</p>`; }, {enableHighAccuracy:true, timeout:15000});
   };
@@ -473,7 +526,8 @@ async function installHome(pid){
       <label class="field"><span>Garage code</span><input id="gg" value="${esc(a.garage_code||"")}"></label></div>
       <div class="muted">Key box code: ${a.lockbox_code?"<b>on file</b> (from Track)":"<b style='color:var(--red)'>missing</b> - add it in Track → Security"}</div>
       <button class="btn primary wide" id="wsave" style="margin-top:10px">Save</button>`,
-    track: `<div class="muted">Office: Track → this unit → Security → Unit Lock Settings → System Type: switch off "Moose VR Brivo". After that the system fills each guest's Door Code automatically.</div>${mark(STEPS[8])}`,
+    track: `<div class="muted">${(h.install||{}).track ? "Done - Track no longer uses Brivo for this unit. The system fills each guest's Door Code."
+      : "Automatic. Once step 3 is ticked and every guest door passes its test code, the system switches this unit off Brivo in Track (within 30 min) and fills each guest's Door Code. Nothing to do in the office."}</div>${S.me.role==="admin"&&!(h.install||{}).track?mark(STEPS[8]):""}`,
   };
   const total = STEPS.filter(isDone).length;
   shell("install", `<p><a href="#/install">← All installs</a></p>
@@ -553,7 +607,8 @@ async function homeView(pid){
       <details style="margin-top:8px"><summary>Name, master code, test</summary>
         <div class="chips" style="margin:6px 0">${DOOR_NAMES.map(n=>`<span class="chip ${n===l.name?"on":""}" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>
         <label class="field"><span>Name</span><input data-f="name" value="${esc(l.name)}"></label>
-        <label class="field"><span>Master code (Yale master PIN)</span><input data-f="master" inputmode="numeric" value="${esc(l.master_code||"")}"></label>
+        ${DESK?`<label class="field"><span>Master code (Yale master PIN)</span><input data-f="master" inputmode="numeric" value="${esc(l.master_code||"")}"></label>`
+              :`<div class="muted" style="margin:6px 0">Master code: ${l.master_code?"on file (shown on the Install page)":"not set - add it on the desk"}</div>`}
         <div class="grid2"><label class="field"><span>Installed on</span><input type="date" data-f="installed" value="${esc(l.installed_on||"")}"></label>
         <label class="field"><span>Replace after (years)</span><input data-f="years" inputmode="numeric" value="${l.replace_years}"></label></div>
         <div class="muted">Batteries last changed: ${l.last_battery_change?when(l.last_battery_change):"not seen yet"}</div>
@@ -607,18 +662,21 @@ async function homeView(pid){
   const stayList = `<div class="card"><h3 style="margin-top:0">Next stays</h3><div class="list">${stays.map(s=>{
       const on = myAssign.find(a=>a.ref_kind==="stay"&&a.ref_id===s.res_id&&a.state==="verified");
       return `<div data-res="${esc(s.res_id)}"><div class="grow"><b>${esc(s.guest||"Guest")}</b> <span class="muted">${esc(s.kind)}</span><div class="muted">${when(s.starts_at)} → ${when(s.ends_at)}</div></div>
-        <div style="text-align:right"><div class="big" style="font-size:20px">${esc(s.code)}</div>${on?'<span class="pill green">on lock</span>':'<span class="pill grey">later</span>'}
-        <div><button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
+        <div style="text-align:right">${stayCode(s)}${on?'<span class="pill green">on lock</span>':'<span class="pill grey">later</span>'}
+        <div><button class="btn small" data-act="link">Guest link</button>${DESK?' <button class="btn small" data-act="code">Change</button>':""}</div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
   const bar = await syncBar();
   shell("homes", `<p><a href="#/">← Homes</a></p><h2>${esc(p.code)} <span class="muted" style="font-weight:400">${esc(p.name)}</span></h2>${bar}
     ${alerts.map(a=>`<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">${esc(a.kind.replace(/_/g," "))}</b><div>${esc(a.detail||"")}</div>${a.bw_task&&a.bw_task.startsWith("http")?`<a href="${esc(a.bw_task)}">Breezeway task</a>`:""}</div>`).join("")}
     ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
+    <div class="${DESK?"cols":""}"><div>
     ${locks.length?`<h3>Doors</h3>${locks.map(doorCard).join("")}`:""}
     ${thermos.length?`<h3>Thermostats</h3>${thermos.map(thermoCard).join("")}`:""}
     ${sensors.length?`<h3>Sensors</h3><div class="card list">${sensors.map(x=>`<div><span class="grow">${esc(x.name)}</span><span class="pill ${x.state==="wet"?"red":"grey"}">${esc(x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}</div>`).join("")}</div>`:""}
-    ${stayList}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${family}${rules}${hist}`, p.code, p.name);
+    </div><div>${DESK?"<h3>Guests</h3>":""}
+    ${stayList}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${DESK?family+rules:""}${hist}
+    </div></div>`, p.code, p.name);
   wireTools(hub, null);
   $("#lsave") && ($("#lsave").onclick = async () => {
     try{ const find = async c => c ? ((await q("properties","id",x=>x.eq("code",c)))[0]||{}).id : null;
@@ -657,7 +715,7 @@ async function homeView(pid){
     card.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const act = b.dataset.act;
       try{
         if(act==="unlock"||act==="lock"){ b.disabled=true; const r = await waitCmd(await command(null, id, act), 30); toast(r? (r.ok? (act==="unlock"?"Unlocked":"Locked") : "The lock didn't answer") : "No answer from the hub"); b.disabled=false; }
-        if(act==="save"){ const mc = $('[data-f="master"]',card).value.trim(); await rpc("lock_update",{p_lock:id,p_name:$('[data-f="name"]',card).value.trim(),p_for_guests:$('[data-f="guests"]',card).checked,p_active:true,p_master:mc||null,
+        if(act==="save"){ const mi = $('[data-f="master"]',card), mc = mi ? mi.value.trim() : ""; await rpc("lock_update",{p_lock:id,p_name:$('[data-f="name"]',card).value.trim(),p_for_guests:$('[data-f="guests"]',card).checked,p_active:true,p_master:mc||null,
           p_installed:$('[data-f="installed"]',card).value||null,p_replace_years:+$('[data-f="years"]',card).value||null,p_shared:$('[data-f="shared"]',card).checked}); toast("Saved"); homeView(pid); }
         if(act==="test"){ const code = String(Math.floor(1000+Math.random()*9000)); await command(null, id, "refresh", {code}); toast("Test code "+code+" is going on the lock (10 min)"); setTimeout(()=>homeView(pid), 15000); }
         if(act==="wipe"){ if(!confirm("Clear every code on this lock that isn't one of ours (old Brivo codes)? Our codes stay.")) return; await command(null, id, "wipe"); toast("Reading the lock… old codes will be cleared"); }
@@ -676,17 +734,52 @@ async function homeView(pid){
   $("#rsave") && ($("#rsave").onclick = async () => { const r = {}; $$("[data-r]").forEach(i=>{ r[i.dataset.r] = i.value===""?null:i.value; });
     try{ await rpc("lock_home_rules",{p_property:pid,r}); toast("Rules saved"); loadBase(); }catch(e){ fail(e); } });
   // stays
+  $$(".reveal").forEach(x => x.onclick = ev => { ev.stopPropagation(); x.outerHTML = `<div class="big" style="font-size:20px">${esc(x.dataset.c)}</div>`; });
   $$("[data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = stays.find(x=>x.res_id===row.dataset.res);
-    if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks\.html$/,"") + "stay.html#t=" + s.portal_token;
+    if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
       try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
     if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
       try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); homeView(pid); }catch(e){ fail(e); } } });
 }
 
+/* ------------------------------------------------ desk: every upcoming stay at our homes, with codes */
+async function staysView(){
+  if(!S.homes.length) await loadBase();
+  const ours = S.homes.filter(h=>h.section==="ours").map(h=>h.property_id);
+  const [stays, assigns, locks] = await Promise.all([
+    q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,portal_token",x=>x.in("property_id",ours).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(300)),
+    q("lock_assign","lock_id,ref_kind,ref_id,state,wanted",x=>x.eq("ref_kind","stay").neq("state","cleared")),
+    q("locks","id,property_id,name",x=>x.eq("active",true))]);
+  const cleared = s => s.kind!=="guest" || ["received","not-needed"].includes(s.agreement);
+  const onLock = s => { const a = assigns.filter(x=>x.ref_id===s.res_id && x.wanted); return !a.length ? null : a.every(x=>x.state==="verified") ? "on" : "sending"; };
+  const inHouse = stays.filter(s=>new Date(s.starts_at)<=Date.now()).length;
+  shell("stays", `<h2>Stays &amp; guest codes</h2>
+    <div class="stats"><div class="stat"><div class="n">${stays.length}</div><div class="l">Upcoming stays</div></div>
+      <div class="stat"><div class="n">${inHouse}</div><div class="l">In the home now</div></div>
+      <div class="stat ${stays.some(s=>!cleared(s))?"warn":""}"><div class="n">${stays.filter(s=>!cleared(s)).length}</div><div class="l">Agreement not back</div></div>
+      <div class="stat"><div class="n">${stays.filter(s=>onLock(s)==="on").length}</div><div class="l">Codes on the lock</div></div></div>
+    <div class="card" style="overflow-x:auto"><table class="tbl"><tr><th>Home</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Agreement</th><th>Code</th><th>Lock</th><th></th></tr>
+    ${stays.map(s=>{ const ol = onLock(s); return `<tr data-res="${esc(s.res_id)}"><td><a href="#/home/${encodeURIComponent(s.property_id)}"><b>${esc((S.props[s.property_id]||{}).code||"")}</b></a></td>
+      <td><b>${esc(s.guest||"Guest")}</b><div class="muted" style="font-size:12px">${esc(s.kind)} · ${esc(s.res_id)}</div></td>
+      <td>${when(s.starts_at)}</td><td>${when(s.ends_at)}</td>
+      <td>${cleared(s)?'<span class="pill green">OK</span>':`<span class="pill red">${esc(s.agreement||"not sent")}</span>`}</td>
+      <td><span class="code-chip">${esc(s.code)}</span><div class="muted" style="font-size:12px">${s.code_source==="phone"?"last 4 of phone":esc(s.code_source)}</div></td>
+      <td>${ol==="on"?'<span class="pill green">on lock</span>':ol==="sending"?'<span class="pill amber">sending</span>':'<span class="pill grey">later</span>'}</td>
+      <td style="white-space:nowrap;text-align:right"><button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></td></tr>`; }).join("")
+      || '<tr><td colspan="8" class="muted">No upcoming stays from Track.</td></tr>'}</table></div>
+    <p class="muted">Codes go live (lock, guest page, Track Door Code) once the rental agreement is back. Owner and lease stays don't need one.</p>`, "Moose Locks", "Office desk · stays and codes");
+  $$("[data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = stays.find(x=>x.res_id===row.dataset.res);
+    if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
+      try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
+    if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
+      try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); staysView(); }catch(e){ fail(e); } } });
+}
+
 /* ------------------------------------------------ employee / vendor / backup codes */
 async function codesView(){
   if(!S.homes.length) await loadBase();
-  const codes = await q("lock_staff_codes","*",x=>x.order("kind").order("label"));
+  const [codes, masters] = await Promise.all([q("lock_staff_codes","*",x=>x.order("kind").order("label")),
+    q("locks","property_id,name,master_code",x=>x.eq("active",true).order("property_id"))]);
   const ours = S.homes.filter(h=>h.section==="ours");
   const homeNames = ids => !ids ? "All our homes" : ids.map(i=>(S.props[i]||{}).code||i).join(", ");
   const timeTxt = c => [c.days&&c.days.length?c.days.map(d=>DAYS[d]).join(" "):"Every day", c.time_from?`${c.time_from.slice(0,5)}–${c.time_to.slice(0,5)}`:"all day",
@@ -695,9 +788,12 @@ async function codesView(){
   shell("codes", `<h2>Crew, vendor &amp; backup codes</h2>
     <button class="btn go wide" id="new">+ Add a code</button>
     <div id="form"></div>
-    ${Object.entries(groups).map(([k,t])=>{ const cs = codes.filter(c=>c.kind===k); return cs.length?`<h3>${t} (${cs.filter(c=>c.active).length})</h3>${cs.map(c=>`<div class="card row" data-id="${c.id}" style="${c.active?"":"opacity:.5"}">
+    ${Object.entries(groups).map(([k,t])=>{ const cs = codes.filter(c=>c.kind===k); return cs.length?`<h3>${t} (${cs.filter(c=>c.active).length})</h3><div class="tile-grid">${cs.map(c=>`<div class="card row" data-id="${c.id}" style="${c.active?"":"opacity:.5"}">
       <div class="grow"><b>${esc(c.label)}</b><div class="muted">${esc(homeNames(c.property_ids))}</div><div class="muted">${esc(timeTxt(c))}</div></div>
-      <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}`:""; }).join("")}`);
+      <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}</div>`:""; }).join("")}
+    <h3>Lock master codes</h3><div class="card"><table class="tbl"><tr><th>Home</th><th>Door</th><th>Master code</th></tr>
+      ${masters.filter(m=>ours.some(h=>h.property_id===m.property_id)).map(m=>`<tr><td><b>${esc((S.props[m.property_id]||{}).code||"")}</b></td><td>${esc(m.name)}</td><td>${m.master_code?`<span class="code-chip">${esc(m.master_code)}</span>`:'<span class="muted">not set</span>'}</td></tr>`).join("")
+        || '<tr><td colspan="3" class="muted">Locks show here once they are paired.</td></tr>'}</table></div>`, "Moose Locks", "Office desk · crew, vendor & backup codes");
   const form = c => {
     c = c || {kind:"employee",days:null};
     $("#form").innerHTML = `<div class="card">
@@ -799,12 +895,13 @@ async function route(){
     if(h.startsWith("home/")) await homeView(decodeURIComponent(h.slice(5)));
     else if(h.startsWith("install/")) await installHome(decodeURIComponent(h.slice(8)));
     else if(h==="install") await installView();
-    else if(h==="codes") await codesView();
+    else if(h==="codes" && DESK) await codesView();
+    else if(h==="stays" && DESK) await staysView();
     else if(h==="alerts") await alertsView();
-    else if(h==="score") await scoreView();
+    else if(h==="score" && DESK) await scoreView();
     else await homesView();
   }catch(e){ fail(e, "Couldn't load"); }
-  if(h.startsWith("home/") || h==="" ) S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]")) route(); }, 30000);
+  if(h.startsWith("home/") || h==="" || h==="stays") S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]")) route(); }, 30000);
 }
 window.addEventListener("hashchange", route);
 sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
