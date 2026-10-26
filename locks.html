@@ -3,74 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0d6b62">
+<meta name="theme-color" content="#3c5f12">
 <title>Moose Locks</title>
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --pine:#0d6b62; --pine-deep:#0a4f49; --pine-soft:#d7ebe8; --moose:#88B535; --moose-soft:#eef5e1;
-  --ground:#f2f5f3; --card:#fff; --ink:#14201e; --ink-2:#3f4f4c; --muted:#6c7b78; --line:#d5dfdc;
-  --red:#c2352b; --red-soft:#f8e0dd; --amber:#b87a0c; --amber-soft:#f6ebd2; --blue:#2463a0; --blue-soft:#dde9f5;
-  --radius:14px; --tap:48px;
-  font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --moose:#88B535; --moose-2:#A6CE39; --moose-ink:#2f4710; --moose-soft:#eef5e0;
+  --forest:#3c5f12; --forest-2:#5b8a1e; --pine:#4f7a18; --pine-soft:#eaf3da;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --radius:18px; --tap:48px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; font-feature-settings:"tnum" 1;
   color:var(--ink); background:var(--ground);
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --ground:#0f1716; --card:#172321; --ink:#e7efed; --ink-2:#b9c8c5; --muted:#8a9b98; --line:#26363a;
-  --pine-soft:#143632; --moose-soft:#1f2a12; --red-soft:#3a1916; --amber-soft:#33270f; --blue-soft:#13283d; } }
-:root[data-theme="dark"]{ --ground:#0f1716; --card:#172321; --ink:#e7efed; --ink-2:#b9c8c5; --muted:#8a9b98; --line:#26363a;
-  --pine-soft:#143632; --moose-soft:#1f2a12; --red-soft:#3a1916; --amber-soft:#33270f; --blue-soft:#13283d; }
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --pine-soft:#173026; --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d;
+  --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{ --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --pine-soft:#173026; --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
 *,*::before,*::after{box-sizing:border-box}
-body{margin:0;background:var(--ground);min-height:100vh;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
-header.top{position:sticky;top:0;z-index:5;background:var(--pine);color:#fff;display:flex;align-items:center;gap:10px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px))}
-header.top h1{font-size:18px;margin:0;flex:1}
-header.top a{color:#fff;font-size:14px}
-main{max-width:760px;margin:0 auto;padding:14px 16px}
-h2{font-size:20px;margin:6px 0 12px} h3{font-size:16px;margin:18px 0 8px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+body{margin:0;background:var(--ground);min-height:100vh;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px));-webkit-font-smoothing:antialiased}
+a{color:var(--pine)}
+/* header */
+header.top{position:sticky;top:0;z-index:6;color:#fff;background:linear-gradient(135deg,var(--forest),var(--forest-2));
+  padding:14px 16px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));box-shadow:0 2px 12px rgba(10,30,20,.18)}
+.top .bar{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.top .mark{width:38px;height:38px;border-radius:12px;background:var(--moose);display:grid;place-items:center;flex:none}
+.top .mark svg{width:22px;height:22px;color:#16220a}
+.top h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-.01em;line-height:1.15}
+.top .sub{font-size:13px;opacity:.75;font-weight:600}
+.top .grow{flex:1;min-width:0}
+.top .iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;display:grid;place-items:center;text-decoration:none}
+.top .iconbtn svg{width:20px;height:20px}
+main{max-width:760px;margin:0 auto;padding:16px}
+h2{font-size:22px;margin:4px 0 12px;font-weight:800;letter-spacing:-.02em}
+h3{font-size:13px;margin:22px 2px 10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .grow{flex:1;min-width:0}
 .muted{color:var(--muted);font-size:14px}
-.pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:700;background:var(--pine-soft);color:var(--pine)}
+b,strong{font-weight:800}
+/* chips */
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:800;background:var(--pine-soft);color:var(--pine);white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.9}
+.pill.plain::before{display:none}
 .pill.red{background:var(--red-soft);color:var(--red)} .pill.amber{background:var(--amber-soft);color:var(--amber)}
-.pill.green{background:var(--moose-soft);color:#4d7016} .pill.grey{background:var(--line);color:var(--ink-2)}
-@media (prefers-color-scheme: dark){ .pill.green{color:#b8dc7a} }
-.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;min-height:var(--tap);padding:0 16px;font:inherit;font-weight:700;font-size:16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
-.btn.primary{background:var(--pine);border-color:var(--pine);color:#fff}
+.pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.grey{background:var(--line);color:var(--ink-2)}
+@media (prefers-color-scheme: dark){ .pill{color:#c5e38a} }
+/* buttons */
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:14px;min-height:var(--tap);padding:0 16px;
+  font:inherit;font-weight:800;font-size:15.5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;transition:transform .05s, filter .15s}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff}
 .btn.go{background:var(--moose);border-color:var(--moose);color:#16220a}
-.btn.danger{color:var(--red)}
-.btn.small{min-height:38px;font-size:14px;padding:0 12px}
+.btn.danger{color:var(--red);border-color:var(--red-soft)}
+.btn.small{min-height:36px;font-size:13.5px;padding:0 12px;border-radius:11px}
 .btn.wide{width:100%}
 .btn:disabled{opacity:.5}
+.btn svg{width:18px;height:18px}
+/* forms */
 .field{display:block;margin:10px 0}
-.field span{display:block;font-size:14px;color:var(--ink-2);margin-bottom:4px;font-weight:700}
-input,select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
-input[type=checkbox]{width:22px;height:22px;min-height:0}
-.big{font-size:28px;letter-spacing:4px;font-weight:700;text-align:center}
+.field span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:700}
+input,select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line-2);border-radius:13px;padding:10px 13px;background:var(--card);color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:3px solid var(--moose-soft);border-color:var(--moose)}
+input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--forest-2)}
+.big{font-size:28px;letter-spacing:5px;font-weight:800;text-align:center}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.list>div{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.list>div{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line)}
 .list>div:first-child{border-top:0}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:700;font-size:14px;cursor:pointer;background:var(--card);user-select:none}
-.chip.on{background:var(--pine);color:#fff;border-color:var(--pine)}
-.step{display:flex;gap:12px;align-items:flex-start}
-.step .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--pine);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+.chip{border:1px solid var(--line-2);border-radius:999px;padding:8px 13px;font-weight:700;font-size:13.5px;cursor:pointer;background:var(--card);user-select:none}
+.chip.on{background:var(--forest-2);color:#fff;border-color:var(--forest-2)}
+details summary{cursor:pointer;font-weight:800;padding:4px 0;list-style:none;display:flex;align-items:center;gap:8px}
+details summary::-webkit-details-marker{display:none}
+details summary::after{content:"";margin-left:auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s}
+details[open] summary::after{transform:rotate(-135deg)}
+details[open] summary{margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;border-top:1px solid var(--line);text-align:left} th{color:var(--muted);font-weight:700}
+/* stat tiles */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow)}
+.stat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1}
+.stat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px}
+.stat.warn .n{color:var(--red)}
+/* home cards */
+.home{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px}
+.home::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--line-2)}
+.home.ok::before{background:var(--moose)} .home.bad::before{background:var(--red)} .home.todo::before{background:var(--amber)}
+.home .code{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.home .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.mini{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--ink-2);background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:4px 8px}
+.batt{display:inline-block;width:22px;height:10px;border:1.5px solid currentColor;border-radius:3px;position:relative}
+.batt i{position:absolute;left:1px;top:1px;bottom:1px;border-radius:1px;background:var(--moose)}
+.batt.low i{background:var(--red)}
+.progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--moose),var(--moose-2));border-radius:99px}
+/* doors */
+.door .state{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--moose-soft);color:var(--moose-ink)}
+.door .state.open{background:var(--amber-soft);color:var(--amber)} .door .state.off{background:var(--red-soft);color:var(--red)}
+.door .state svg{width:24px;height:24px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.temp{font-size:34px;font-weight:800;letter-spacing:-.03em}
+/* install stepper */
+.step{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
+.step:first-child{border-top:0;padding-top:4px}
+.step .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--line);color:var(--ink-2);display:grid;place-items:center;font-weight:800;font-size:14px}
 .step.done .n{background:var(--moose);color:#16220a}
-.temp{font-size:30px;font-weight:700}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
-nav.tabs a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 0;color:var(--muted);text-decoration:none;font-size:12px;font-weight:700;position:relative}
-nav.tabs a.on{color:var(--pine)}
-nav.tabs svg{width:24px;height:24px}
-nav.tabs .badge{position:absolute;top:4px;left:calc(50% + 6px);background:var(--red);color:#fff;border-radius:999px;font-size:11px;padding:1px 6px}
-.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--card);padding:12px 18px;border-radius:12px;font-weight:700;z-index:20;max-width:90vw}
-.login{max-width:420px;margin:40px auto;padding:0 16px;text-align:center}
-.login img{width:64px}
-details summary{cursor:pointer;font-weight:700;padding:6px 0}
-table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:8px 4px;border-top:1px solid var(--line);text-align:left} th{color:var(--muted)}
+.step.now .n{background:var(--forest-2);color:#fff;box-shadow:0 0 0 4px var(--pine-soft)}
+.step .t{font-weight:800}
+.step.done .t{color:var(--muted)}
+.step .body{margin-top:8px}
+.who{font-size:12px;color:var(--muted);font-weight:700}
+.check{display:flex;gap:10px;align-items:center;padding:6px 0;font-weight:600}
+.syncbar{display:flex;align-items:center;gap:12px}
+.syncbar .ic{width:40px;height:40px;border-radius:12px;background:var(--pine-soft);color:var(--pine);display:grid;place-items:center;flex:none}
+.syncbar .ic svg{width:20px;height:20px}
+/* nav */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(10px);
+  border-top:1px solid var(--line);display:flex;padding:4px 4px env(safe-area-inset-bottom,0px)}
+nav.tabs a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 9px;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:800;position:relative;border-radius:12px}
+nav.tabs a.on{color:var(--forest-2)}
+nav.tabs a.on svg{background:var(--moose-soft);border-radius:10px}
+nav.tabs svg{width:42px;height:28px;padding:3px 9px}
+nav.tabs .badge{position:absolute;top:3px;left:calc(50% + 8px);background:var(--red);color:#fff;border-radius:999px;font-size:11px;padding:1px 6px}
+@media (prefers-color-scheme: dark){ nav.tabs a.on{color:var(--moose)} }
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--card);padding:12px 18px;border-radius:14px;font-weight:800;z-index:20;max-width:90vw;box-shadow:var(--shadow)}
+.login{max-width:420px;margin:60px auto;padding:0 16px;text-align:center}
+.login .mark{width:64px;height:64px;border-radius:20px;background:var(--moose);display:grid;place-items:center;margin:0 auto 10px}
+.empty{text-align:center;padding:30px 10px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -104,8 +170,8 @@ async function syncBar(){
   const rows = await q("lock_settings","key,value",x=>x.in("key",["sync_last_run","sync_requested_at"]));
   const v = Object.fromEntries(rows.map(r=>[r.key,r.value]));
   const waiting = v.sync_requested_at && (!v.sync_last_run || new Date(v.sync_requested_at) > new Date(v.sync_last_run));
-  return `<div class="card row"><div class="grow"><b>Track sync</b><div class="muted">${waiting?"Sync asked for - running within a minute…":"Last synced "+ago(v.sync_last_run)}</div></div>
-    <button class="btn go" id="syncnow" ${waiting?"disabled":""}>Sync with Track now</button></div>`;
+  return `<div class="card syncbar"><div class="ic">${ICON.sync}</div><div class="grow"><b>Track sync</b><div class="muted">${waiting?"Running within a minute…":"Last synced "+ago(v.sync_last_run)}</div></div>
+    <button class="btn go small" id="syncnow" ${waiting?"disabled":""}>Sync now</button></div>`;
 }
 function wireSync(){
   const b = $("#syncnow"); if(!b) return;
@@ -127,24 +193,35 @@ async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); co
 
 const ICON = {
   homes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
-  codes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h.01M12 8h.01M15 8h.01M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01M15 16h.01" stroke-linecap="round" stroke-width="3"/></svg>',
+  install:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>',
+  codes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M9 8h.01M12 8h.01M15 8h.01M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01M15 16h.01" stroke-linecap="round" stroke-width="3"/></svg>',
   alerts:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01" stroke-linecap="round"/></svg>',
-  score:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke-linecap="round"/></svg>'
+  score:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke-linecap="round"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>',
+  unlock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/></svg>',
+  sync:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>',
+  temp:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/></svg>',
+  hub:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="7" width="18" height="10" rx="3"/><path d="M7 12h.01M11 12h.01"/></svg>'
 };
-function shell(active, inner, title){
-  app.innerHTML = `<header class="top"><h1>${esc(title||"Moose Locks")}</h1><a href="index.html">Maint. site</a></header>
+const batt = b => b==null ? "" : `<span class="batt ${b<=30?"low":""}"><i style="width:${Math.max(8,Math.min(100,b))*0.17}px"></i></span>`;
+function shell(active, inner, title, sub){
+  app.innerHTML = `<header class="top"><div class="bar">
+      <div class="mark">${ICON.lock}</div>
+      <div class="grow"><h1>${esc(title||"Moose Locks")}</h1><div class="sub">${esc(sub||"Moose Management · lock system")}</div></div>
+      <a class="iconbtn" href="index.html" title="Maintenance site">${ICON.homes}</a></div></header>
   <main id="main">${inner}</main>
   <nav class="tabs">
     <a href="#/" class="${active==="homes"?"on":""}">${ICON.homes}<span>Homes</span></a>
+    <a href="#/install" class="${active==="install"?"on":""}">${ICON.install}<span>Install</span></a>
     <a href="#/codes" class="${active==="codes"?"on":""}">${ICON.codes}<span>Codes</span></a>
     <a href="#/alerts" class="${active==="alerts"?"on":""}">${ICON.alerts}<span>Alerts</span>${S.alertCount?`<span class="badge">${S.alertCount}</span>`:""}</a>
-    <a href="#/score" class="${active==="score"?"on":""}">${ICON.score}<span>Scorecard</span></a>
+    <a href="#/score" class="${active==="score"?"on":""}">${ICON.score}<span>Score</span></a>
   </nav>`;
 }
 
 /* ------------------------------------------------ sign in (same accounts as the maintenance site) */
 function loginView(msg){
-  app.innerHTML = `<div class="login"><img src="icon.svg" alt=""><h2>Moose Locks</h2>
+  app.innerHTML = `<div class="login"><div class="mark">${ICON.lock}</div><h2>Moose Locks</h2>
     <label class="field"><span>Email</span><input type="email" id="em" autocomplete="username"></label>
     <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password"></label>
     <button class="btn primary wide" id="go">Sign in</button>
@@ -160,41 +237,194 @@ async function loadBase(){
   const homes = await q("lock_homes","*,properties(id,code,name,address,bw_home_id)");
   S.homes = homes.filter(h=>h.properties).sort((a,b)=>a.properties.code.localeCompare(b.properties.code));
   S.props = Object.fromEntries(S.homes.map(h=>[h.property_id,h.properties]));
-  const al = await q("lock_alerts","id",x=>x.is("closed_at",null));
-  S.alertCount = al.length;
+  const al = await q("lock_alerts","id,property_id",x=>x.is("closed_at",null));
+  const ours = new Set(S.homes.filter(h=>h.section==="ours").map(h=>h.property_id));
+  S.alertCount = al.filter(a=>ours.has(a.property_id)).length;
 }
 async function homesView(){
   await loadBase();
-  const [hubs, locks, thermos, alerts] = await Promise.all([
+  const [hubs, locks, thermos, alerts, assigns] = await Promise.all([
     q("lock_hubs","id,property_id,last_seen,active,claimed_at",x=>x.eq("active",true)),
     q("locks","id,property_id,name,battery,online,state,active",x=>x.eq("active",true)),
-    q("thermostats","id,property_id,name,temp,mode,active",x=>x.eq("active",true)),
-    q("lock_alerts","kind,property_id,detail",x=>x.is("closed_at",null))]);
+    q("thermostats","id,property_id,name,temp,mode,heat_sp,cool_sp,online,active,last_seen",x=>x.eq("active",true)),
+    q("lock_alerts","kind,property_id,detail",x=>x.is("closed_at",null)),
+    q("lock_assign","lock_id,state,wanted",x=>x.neq("state","cleared"))]);
   const sec = {ours:[],lynx:[],brivo:[]};
   S.homes.forEach(h=>sec[h.section].push(h));
+  const ours = sec.ours.map(h=>h.property_id);
+  const hubOn = hubs.filter(x=>ours.includes(x.property_id) && x.claimed_at && online(x)).length;
+  const ourLocks = new Set(locks.filter(l=>ours.includes(l.property_id)).map(l=>l.id));
+  const codesOn = assigns.filter(a=>ourLocks.has(a.lock_id) && a.wanted && a.state==="verified").length;
+  const ourAlerts = alerts.filter(a=>ours.includes(a.property_id)).length;
   const card = h => {
     const hub = hubs.find(x=>x.property_id===h.property_id && x.claimed_at);
     const ls = locks.filter(x=>x.property_id===h.property_id), ts = thermos.filter(x=>x.property_id===h.property_id);
     const as = alerts.filter(x=>x.property_id===h.property_id);
+    const steps = installProgress(h);
+    const cls = h.section!=="ours" ? "" : !hub ? "todo" : (!online(hub) || as.length) ? "bad" : "ok";
     const status = h.section!=="ours" ? `<span class="pill grey">${h.section==="lynx"?"Lynx":"Brivo"}</span>`
-      : !hub ? `<span class="pill amber">Needs setup</span>` : online(hub) ? `<span class="pill green">Online</span>` : `<span class="pill red">Hub offline</span>`;
-    return `<a class="card row" style="text-decoration:none;color:inherit" href="#/home/${encodeURIComponent(h.property_id)}">
-      <div class="grow"><b>${esc(h.properties.code)}</b><div class="muted">${esc(h.properties.name)}</div>
-      <div class="muted">${ls.length} lock${ls.length===1?"":"s"}${ls.map(l=>l.battery!=null?` · ${esc(l.name)} ${l.battery}%`:"").join("")}${ts.map(t=>t.temp!=null?` · ${Math.round(t.temp)}°`:"").join("")}</div></div>
-      <div style="text-align:right">${status}${as.length?`<div style="margin-top:4px"><span class="pill red">${as.length} alert${as.length>1?"s":""}</span></div>`:""}</div></a>`;
+      : !hub ? `<span class="pill amber">Not installed</span>` : online(hub) ? `<span class="pill green">Online</span>` : `<span class="pill red">Hub offline</span>`;
+    const temps = ts.filter(t=>t.temp!=null);
+    const tOn = ts.filter(t=>t.online!==false && hub && online(hub)).length;
+    return `<a class="card home ${cls}" href="#/home/${encodeURIComponent(h.property_id)}">
+      <div class="row"><div class="grow"><div class="code">${esc(h.properties.code)}</div><div class="muted">${esc(h.properties.name)}</div></div>
+        <div style="text-align:right;display:grid;gap:6px;justify-items:end">${status}${as.length?`<span class="pill red">${as.length} alert${as.length>1?"s":""}</span>`:""}</div></div>
+      <div class="meta">
+        ${hub?`<span class="mini">${ICON.hub} hub ${online(hub)?"online":"offline"}</span>`:""}
+        ${ls.map(l=>`<span class="mini">${esc(l.name)} ${batt(l.battery)} ${l.battery??"?"}%</span>`).join("")}
+        ${temps.length?`<span class="mini">${ICON.temp} ${temps.map(t=>Math.round(t.temp)+"°").join(" / ")}</span>`:""}
+        ${ts.length?`<span class="mini">${tOn}/${ts.length} thermostat${ts.length>1?"s":""} online</span>`:""}
+        ${!ls.length && !ts.length && h.section==="ours" ? `<span class="mini">Install ${steps.done}/${steps.total}</span>`:""}
+      </div>
+      ${h.section==="ours" && !h.installed_at ? `<div class="progress"><i style="width:${Math.round(100*steps.done/steps.total)}%"></i></div>`:""}
+    </a>`;
   };
   const bar = await syncBar();
-  shell("homes", `${bar}<h2>Our test homes (${sec.ours.length})</h2>${sec.ours.map(card).join("")||'<p class="muted">No homes yet.</p>'}
-    ${sec.lynx.length?`<h3>Lynx test (${sec.lynx.length})</h3>${sec.lynx.map(card).join("")}`:""}
-    ${sec.brivo.length?`<h3>Brivo (${sec.brivo.length})</h3>${sec.brivo.map(card).join("")}`:""}
+  shell("homes", `
+    <div class="stats">
+      <div class="stat"><div class="n">${hubOn}<span class="muted" style="font-size:15px">/${sec.ours.length}</span></div><div class="l">Hubs online</div></div>
+      <div class="stat"><div class="n">${codesOn}</div><div class="l">Codes on locks</div></div>
+      <div class="stat ${ourAlerts?"warn":""}"><div class="n">${ourAlerts}</div><div class="l">Open alerts</div></div>
+    </div>
+    ${bar}
+    <h3>Homes on our system · ${sec.ours.length}</h3>${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}
     ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
       <label class="field"><span>Home code (as in Track, e.g. RJ 811)</span><input id="nh"></label>
-      <label class="field"><span>Section</span><select id="ns"><option value="ours">Ours</option><option value="lynx">Lynx test</option><option value="brivo">Stays on Brivo</option></select></label>
-      <button class="btn primary wide" id="addh">Add</button></details>`:""}`);
+      <label class="field"><span>Section</span><select id="ns"><option value="ours">Our system</option></select></label>
+      <button class="btn primary wide" id="addh">Add</button></details>`:""}`, "Moose Locks", `${sec.ours.length} test homes · ${hubOn} online`);
   wireSync();
   const b = $("#addh"); if(b) b.onclick = async () => {
     try{ const p = (await q("properties","id",x=>x.eq("code",$("#nh").value.trim())))[0]; if(!p) return toast("No home with that code");
       await rpc("lock_home_set",{p_property:p.id,p_section:$("#ns").value,p_enabled:true}); toast("Added"); homesView(); }catch(e){ fail(e); } };
+}
+
+/* ------------------------------------------------ install: one guided checklist per home */
+const STEPS = [
+  {k:"prep",   t:"Before you go",            auto:null},
+  {k:"hub",    t:"Plug in the hub",          auto:"hub"},
+  {k:"brivo",  t:"Take the locks off Brivo", auto:null},
+  {k:"locks",  t:"Pair and name each door",  auto:"locks"},
+  {k:"climate",t:"Pair thermostats & sensors",auto:null},
+  {k:"test",   t:"Test every door",          auto:"test"},
+  {k:"wipe",   t:"Clear old Brivo codes",    auto:"wipe"},
+  {k:"guest",  t:"Check what guests see",    auto:"guest"},
+  {k:"track",  t:"Switch Track off Brivo",   auto:null},
+];
+function installProgress(h, facts){
+  const st = h.install || {};
+  const done = STEPS.filter(s => st[s.k] || (facts && facts[s.k])).length;
+  return { done: h.installed_at ? STEPS.length : done, total: STEPS.length };
+}
+async function installView(){
+  await loadBase();
+  const ours = S.homes.filter(h=>h.section==="ours");
+  shell("install", `<h2>Install</h2><p class="muted" style="margin-top:-6px">Pick the home you're at. Each step checks itself off when the system sees it done.</p>
+    ${ours.map(h=>{ const p = installProgress(h); return `<a class="card home ${h.installed_at?"ok":p.done?"todo":""}" href="#/install/${encodeURIComponent(h.property_id)}">
+      <div class="row"><div class="grow"><div class="code">${esc(h.properties.code)}</div><div class="muted">${esc(h.properties.name)}</div></div>
+      ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill ${p.done?"amber":"grey"}">${p.done}/${p.total} steps</span>`}</div>
+      <div class="progress"><i style="width:${Math.round(100*p.done/p.total)}%"></i></div></a>`; }).join("")}`, "Install", "Step-by-step at the home");
+}
+async function installHome(pid){
+  if(!S.homes.length) await loadBase();
+  const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("install","<p>Home not found.</p>");
+  const p = h.properties;
+  const [hubs, locks, thermos, sensors, assigns, cmds, access, stays, masters] = await Promise.all([
+    q("lock_hubs","id,name,last_seen,claimed_at",x=>x.eq("property_id",pid).eq("active",true)),
+    q("locks","*",x=>x.eq("property_id",pid).eq("active",true).order("node_id")),
+    q("thermostats","id,name,temp,mode,online",x=>x.eq("property_id",pid).eq("active",true)),
+    q("sensors","id,name,kind",x=>x.eq("property_id",pid).eq("active",true)),
+    q("lock_assign","lock_id,ref_kind,state,code,created_at",x=>x.eq("ref_kind","test").order("created_at",{ascending:false})),
+    q("lock_commands","lock_id,kind,ok,done_at",x=>x.eq("kind","wipe").eq("ok",true)),
+    q("property_access","wifi_name,wifi_password,gate_code,garage_code,lockbox_code",x=>x.eq("property_id",pid)),
+    q("lock_stays","guest,starts_at,ends_at,status",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(2)),
+    q("locks","name,master_code",x=>x.eq("property_id",pid))]);
+  const hub = hubs.find(x=>x.claimed_at);
+  const ids = new Set(locks.map(l=>l.id)), a = access[0]||{};
+  const named = locks.length && locks.every(l=>!/^New lock/.test(l.name));
+  const facts = {
+    hub: !!hub,
+    locks: named,
+    test: locks.length && locks.every(l=>assigns.some(x=>x.lock_id===l.id && x.state==="verified")),
+    wipe: locks.length && locks.every(l=>cmds.some(c=>c.lock_id===l.id)),
+    guest: !!(a.wifi_name && a.wifi_password),
+  };
+  const st = h.install || {};
+  const isDone = s => !!(st[s.k] || facts[s.auto]);
+  const firstOpen = STEPS.find(s=>!isDone(s));
+  const next = stays.find(s=>new Date(s.starts_at) > new Date()) ;
+  const inHome = stays.find(s=>new Date(s.starts_at) <= new Date());
+  const mark = s => s.auto ? "" : `<label class="check"><input type="checkbox" data-step="${s.k}" ${st[s.k]?"checked":""}> Done</label>`;
+  const who = s => st[s.k] ? `<div class="who">✓ ${esc(st[s.k].by||"")} · ${when(st[s.k].at)}</div>` : (s.auto && facts[s.auto] ? `<div class="who">✓ the system saw it</div>` : "");
+  const body = {
+    prep: `<div class="muted">${inHome?`<b style="color:var(--red)">Guests are in the home until ${when(inHome.ends_at)}.</b> Install on an empty day.`:next?`Next guest: <b>${when(next.starts_at)}</b>`:"No guests booked."}</div>
+      <div class="check">□ Hub, Z-Wave stick, USB extension cable, network cable</div>
+      <div class="check">□ Fresh AA batteries for each lock</div>
+      <div class="check">□ Phone charged, on the home's Wi-Fi once there</div>
+      ${masters.length?`<div class="muted" style="margin-top:6px">Master codes: ${masters.map(m=>`${esc(m.name)} <b>${esc(m.master_code||"?")}</b>`).join(" · ")}</div>`:""}${mark(STEPS[0])}`,
+    hub: hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span> <span class="muted">checked in ${ago(hub.last_seen)}</span>`
+      : `<div class="muted">Put the hub in the owner closet or utility room by the router. Network cable from the router, stick on the extension cable placed up high, then power. Wait 5 minutes.</div>
+         <button class="btn go wide" id="find" style="margin-top:10px">Find hub</button><div id="found"></div>
+         <details style="margin-top:8px"><summary>Doesn't show up? Type the 6-digit code</summary><div class="row"><input id="pc" inputmode="numeric" maxlength="6" class="grow"><button class="btn primary" id="claim">Add</button></div>
+         <p class="muted">The code is on the hub's Home Assistant page (http://homeassistant.local:8123 → Notifications).</p></details>`,
+    brivo: `<div class="muted">In Brivo: this home → Add/Remove Device → remove each lock. Or reset the lock's Z-Wave module. The lock keeps working on its keypad meanwhile.</div>${mark(STEPS[2])}`,
+    locks: `<label class="field"><span>5-digit PIN from the sticker on the lock's Z-Wave module</span><input id="pin" inputmode="numeric" maxlength="5"></label>
+      <button class="btn go wide" id="pair" ${hub?"":"disabled"}>Start pairing</button>
+      <div class="muted" style="margin-top:8px">On the keypad: <b>master code</b> → ✓ → <b>7</b> → ✓ → <b>1</b> → ✓</div><div id="pairmsg"></div>
+      ${locks.map(l=>`<div class="row" style="margin-top:10px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
+        <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}`,
+    climate: `<div class="muted">Same pairing button, PIN left blank, then use the thermostat's or sensor's Z-Wave "include" menu.</div>
+      <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>
+      ${thermos.length||sensors.length?`<div class="muted" style="margin-top:8px">Found: ${[...thermos.map(t=>esc(t.name)+(t.temp!=null?` ${Math.round(t.temp)}°`:"")), ...sensors.map(x=>esc(x.name))].join(" · ")}</div>`:""}${mark(STEPS[4])}`,
+    test: locks.map(l=>{ const t = assigns.find(x=>x.lock_id===l.id);
+      return `<div style="margin-top:10px"><div class="row"><b class="grow">${esc(l.name)}</b>
+        <button class="btn small" data-test="${l.id}">Test code</button><button class="btn small" data-unlock="${l.id}">Unlock</button></div>
+        ${t?`<div style="margin-top:6px"><span class="pill ${t.state==="verified"?"green":"amber"}">${t.state==="verified"?"Code "+esc(t.code)+" is on the lock - type it on the keypad":"Sending "+esc(t.code)+"…"}</span></div>`:""}</div>`; }).join("") || '<div class="muted">Pair a door first.</div>',
+    wipe: locks.map(l=>`<div class="row" style="margin-top:6px"><span class="grow"><b>${esc(l.name)}</b> ${cmds.some(c=>c.lock_id===l.id)?'<span class="pill green">cleared</span>':""}</span><button class="btn small" data-wipe="${l.id}">Clear old codes</button></div>`).join("") || '<div class="muted">Pair a door first.</div>',
+    guest: `<div class="grid2"><label class="field"><span>Wi-Fi name</span><input id="wn" value="${esc(a.wifi_name||"")}"></label>
+      <label class="field"><span>Wi-Fi password</span><input id="wp" value="${esc(a.wifi_password||"")}"></label>
+      <label class="field"><span>Building / gate code</span><input id="gc" value="${esc(a.gate_code||"")}"></label>
+      <label class="field"><span>Garage code</span><input id="gg" value="${esc(a.garage_code||"")}"></label></div>
+      <div class="muted">Key box code: ${a.lockbox_code?"<b>on file</b> (from Track)":"<b style='color:var(--red)'>missing</b> - add it in Track → Security"}</div>
+      <button class="btn primary wide" id="wsave" style="margin-top:10px">Save</button>`,
+    track: `<div class="muted">Office: Track → this unit → Security → Unit Lock Settings → System Type: switch off "Moose VR Brivo". After that the system fills each guest's Door Code automatically.</div>${mark(STEPS[8])}`,
+  };
+  const total = STEPS.filter(isDone).length;
+  shell("install", `<p><a href="#/install">← All installs</a></p>
+    <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(p.code)}</div><div class="muted">${esc(p.name)}</div></div>
+      ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill amber">${total}/${STEPS.length}</span>`}</div>
+      <div class="progress"><i style="width:${Math.round(100*total/STEPS.length)}%"></i></div></div>
+    <div class="card">${STEPS.map((s,i)=>`<div class="step ${isDone(s)?"done":s===firstOpen?"now":""}"><div class="n">${isDone(s)?"✓":i+1}</div>
+      <div class="grow"><div class="t">${s.t}</div>${who(s)}${(s===firstOpen || !isDone(s)) ? `<div class="body">${body[s.k]}</div>` : `<details><summary class="muted" style="font-size:13px">Show</summary><div class="body">${body[s.k]}</div></details>`}</div></div>`).join("")}</div>
+    ${!h.installed_at?`<button class="btn go wide" id="finish" ${total<STEPS.length?"disabled":""}>${total<STEPS.length?`Finish the ${STEPS.length-total} open step${STEPS.length-total>1?"s":""}`:"Mark this home installed"}</button>`:""}`,
+    "Install · "+p.code, next?"Next guest "+when(next.starts_at):"No guests booked");
+  const again = () => setTimeout(()=>installHome(pid), 1200);
+  $$("[data-step]").forEach(c=>c.onchange=async()=>{ try{ await rpc("lock_install_step",{p_property:pid,p_step:c.dataset.step,p_done:c.checked}); await loadBase(); again(); }catch(e){ fail(e); } });
+  const find = $("#find"); if(find) find.onclick = async () => {
+    try{ const hs = await rpc("lock_find_hubs"); $("#found").innerHTML = hs.length ? hs.map(x=>`<button class="btn primary wide" style="margin-top:8px" data-hub="${x.id}">Add the hub found here</button>`).join("")
+        : '<p class="muted">No new hub on this connection yet. Phone on the home\'s Wi-Fi (not cell)? Give it 5 minutes after plugging in.</p>';
+      $$("[data-hub]").forEach(b=>b.onclick=async()=>{ try{ await rpc("lock_claim_hub",{p_hub:b.dataset.hub,p_pair:null,p_property:pid,p_name:"Hub "+p.code}); toast("Hub added to "+p.code); again(); }catch(e){fail(e);} });
+    }catch(e){ fail(e); } };
+  const claim = $("#claim"); if(claim) claim.onclick = async () => { try{ await rpc("lock_claim_hub",{p_hub:null,p_pair:$("#pc").value.trim(),p_property:pid,p_name:"Hub "+p.code}); toast("Hub added"); again(); }catch(e){fail(e);} };
+  const pairBtn = (btn, msg, withPin) => { if(!btn) return; btn.onclick = async () => {
+    const pin = withPin ? $("#pin").value.trim() : ""; const m = $(msg);
+    if(withPin && pin.length!==5) return toast("Type the 5-digit PIN from the module sticker");
+    btn.disabled = true; m.innerHTML = '<p><b>Pairing is on for 5 minutes.</b> Put the device in join mode now…</p>';
+    try{ const id = await command(hub.id, null, "include", pin?{pin}:{}); const r = await waitCmd(id, 300);
+      m.innerHTML = r ? (r.ok? '<p class="pill green">Added</p>' : `<p class="pill red">${esc((r.result||{}).msg||"Didn't pair")}</p>`) : '<p class="muted">No answer yet - check again in a minute.</p>';
+      again(); }catch(e){ fail(e); } btn.disabled = false; }; };
+  pairBtn($("#pair"), "#pairmsg", true); pairBtn($("#pair2"), "#pairmsg2", false);
+  $$("[data-for]").forEach(box=>$$(".chip",box).forEach(c=>c.onclick=()=>{ $(`[data-lock="${box.dataset.for}"] input`).value = c.dataset.name; }));
+  $$("[data-lock]").forEach(r=>{ const btn = $("[data-act=name]", r); if(btn) btn.onclick = async () => {
+    try{ const l = locks.find(x=>x.id===r.dataset.lock); await rpc("lock_update",{p_lock:l.id,p_name:$("input",r).value.trim(),p_for_guests:l.for_guests,p_active:true}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
+  $$("[data-test]").forEach(b=>b.onclick=async()=>{ const code = String(Math.floor(1000+Math.random()*9000)); try{ await command(null, b.dataset.test, "refresh", {code}); toast("Test code "+code+" going on the lock (10 min)"); setTimeout(()=>installHome(pid), 15000); }catch(e){ fail(e); } });
+  $$("[data-unlock]").forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ const r = await waitCmd(await command(null, b.dataset.unlock, "unlock"), 30); toast(r? (r.ok?"Unlocked":"The lock didn't answer") : "No answer from the hub"); }catch(e){ fail(e); } b.disabled=false; });
+  $$("[data-wipe]").forEach(b=>b.onclick=async()=>{ if(!confirm("Clear every code on this lock that isn't ours (old Brivo codes)? Crew, vendor and guest codes from our system stay.")) return;
+    try{ await command(null, b.dataset.wipe, "wipe"); toast("Reading the lock - old codes will be cleared"); again(); }catch(e){ fail(e); } });
+  $("#wsave") && ($("#wsave").onclick = async () => {
+    const { error } = await sb.from("property_access").upsert({ property_id:pid, wifi_name:$("#wn").value.trim()||null, wifi_password:$("#wp").value.trim()||null,
+      gate_code:$("#gc").value.trim()||null, garage_code:$("#gg").value.trim()||null });
+    error ? fail(error) : (toast("Saved"), again()); });
+  $("#finish") && ($("#finish").onclick = async () => { try{ await rpc("lock_install_step",{p_property:pid,p_step:"installed",p_done:true}); toast(p.code+" is installed 🎉"); await loadBase(); location.hash="#/home/"+encodeURIComponent(pid); }catch(e){ fail(e); } });
 }
 
 /* ------------------------------------------------ one home */
@@ -220,34 +450,9 @@ async function homeView(pid){
   const wifi = access[0] || {};
   const setupDone = { hub: !!hub, lock: locks.length>0, test: myAssign.some(a=>a.ref_kind!=="foreign" && a.state==="verified"), wifi: !!wifi.wifi_name };
 
-  const setup = `<div class="card"><h3 style="margin-top:0">Set up this home</h3>
-    <div class="step ${setupDone.hub?"done":""}"><div class="n">${setupDone.hub?"✓":"1"}</div><div class="grow">
-      <b>Plug in the hub</b><div class="muted">Hub to the router with the network cable, then power. Wait 5 minutes. Then, with this phone on the home's Wi-Fi:</div>
-      ${hub? `<p>Hub ${online(hub)?'<span class="pill green">online</span>':'<span class="pill red">offline</span>'} <span class="muted">checked in ${ago(hub.last_seen)}</span></p>`
-           : `<p><button class="btn go wide" id="find">Find hub</button></p><div id="found"></div>
-              <details><summary>Doesn't show up? Type the 6-digit code</summary><div class="row"><input id="pc" inputmode="numeric" maxlength="6" class="grow"><button class="btn primary" id="claim">Add</button></div>
-              <p class="muted">The code shows on the hub's Home Assistant page (http://homeassistant.local:8123 → Notifications).</p></details>`}
-    </div></div>
-    <div class="step ${setupDone.lock?"done":""}" style="margin-top:12px"><div class="n">${setupDone.lock?"✓":"2"}</div><div class="grow">
-      <b>Add each lock, thermostat and sensor</b>
-      <div class="muted">First remove the lock from Brivo (Brivo → this home → Add/Remove Device → remove), or reset its Z-Wave module.</div>
-      <label class="field"><span>5-digit PIN from the sticker on the Z-Wave module (locks; leave blank for thermostats/sensors)</span><input id="pin" inputmode="numeric" maxlength="5"></label>
-      <button class="btn go wide" id="pair" ${hub?"":"disabled"}>Start pairing</button>
-      <div class="muted" style="margin-top:8px">Then on the lock keypad: <b>master code</b> → ✓ → <b>7</b> (network) → ✓ → <b>1</b> (join) → ✓. On a thermostat, use its Z-Wave "include" menu. ${locks.some(l=>l.master_code)?"Master codes are on each door below.":""}</div>
-      <div id="pairmsg"></div>
-    </div></div>
-    <div class="step ${setupDone.test?"done":""}" style="margin-top:12px"><div class="n">${setupDone.test?"✓":"3"}</div><div class="grow">
-      <b>Name each door, test it, clear the old Brivo codes</b><div class="muted">Use the buttons on each door below. A test code is put on the lock and read back; type it on the keypad to be sure.</div></div></div>
-    <div class="step ${setupDone.wifi?"done":""}" style="margin-top:12px"><div class="n">${setupDone.wifi?"✓":"4"}</div><div class="grow">
-      <b>Check what guests see</b><div class="muted">Shown on the guest's stay page from the day before check-in.</div>
-      <div class="grid2"><label class="field"><span>Wi-Fi name</span><input id="wn" value="${esc(wifi.wifi_name||"")}"></label>
-      <label class="field"><span>Wi-Fi password</span><input id="wp" value="${esc(wifi.wifi_password||"")}"></label>
-      <label class="field"><span>Building / gate code</span><input id="gc" value="${esc(wifi.gate_code||"")}"></label>
-      <label class="field"><span>Garage code</span><input id="gg" value="${esc(wifi.garage_code||"")}"></label></div>
-      <label class="field"><span>Getting in (parking, which entrance, front desk)</span><textarea id="an" rows="2">${esc(h.arrival_note||"")}</textarea></label>
-      <button class="btn primary wide" id="wsave">Save</button></div></div>
-  </div>`;
-
+  const ip = installProgress(h);
+  const setup = h.installed_at ? "" : `<a class="card home todo" href="#/install/${encodeURIComponent(pid)}"><div class="row"><div class="grow"><b>Install</b><div class="muted">${ip.done} of ${ip.total} steps done</div></div><span class="btn go small">Open install</span></div>
+    <div class="progress"><i style="width:${Math.round(100*ip.done/ip.total)}%"></i></div></a>`;
   const doorCard = l => {
     const as = myAssign.filter(a=>a.lock_id===l.id);
     return `<div class="card" data-lock="${l.id}">
@@ -323,7 +528,7 @@ async function homeView(pid){
     ${locks.length?`<h3>Doors</h3>${locks.map(doorCard).join("")}`:""}
     ${thermos.length?`<h3>Thermostats</h3>${thermos.map(thermoCard).join("")}`:""}
     ${sensors.length?`<h3>Sensors</h3><div class="card list">${sensors.map(x=>`<div><span class="grow">${esc(x.name)}</span><span class="pill ${x.state==="wet"?"red":"grey"}">${esc(x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}</div>`).join("")}</div>`:""}
-    ${stayList}${family}${rules}${hist}`, p.code);
+    ${stayList}${family}${rules}${hist}`, p.code, p.name);
   $("#lsave") && ($("#lsave").onclick = async () => {
     try{ const find = async c => c ? ((await q("properties","id",x=>x.eq("code",c)))[0]||{}).id : null;
       const kid = await find($("#kid").value.trim()), par = await find($("#par").value.trim());
@@ -440,7 +645,8 @@ async function codesView(){
 /* ------------------------------------------------ alerts */
 async function alertsView(){
   if(!S.homes.length) await loadBase();
-  const al = await q("lock_alerts","*",x=>x.is("closed_at",null).order("opened_at",{ascending:false}));
+  const ours = new Set(S.homes.filter(h=>h.section==="ours").map(h=>h.property_id));
+  const al = (await q("lock_alerts","*",x=>x.is("closed_at",null).order("opened_at",{ascending:false}))).filter(a=>ours.has(a.property_id));
   shell("alerts", `<h2>Open alerts (${al.length})</h2>${al.map(a=>`<a class="card" style="display:block;text-decoration:none;color:inherit" href="#/home/${encodeURIComponent(a.property_id||"")}">
     <div class="row"><b class="grow">${esc(a.kind.replace(/_/g," "))}</b><span class="muted">${ago(a.opened_at)}</span></div>
     <div>${esc((S.props[a.property_id]||{}).code||"")} · ${esc(a.detail||"")}</div>
@@ -475,6 +681,8 @@ async function route(){
   const h = location.hash.replace(/^#\/?/,"");
   try{
     if(h.startsWith("home/")) await homeView(decodeURIComponent(h.slice(5)));
+    else if(h.startsWith("install/")) await installHome(decodeURIComponent(h.slice(8)));
+    else if(h==="install") await installView();
     else if(h==="codes") await codesView();
     else if(h==="alerts") await alertsView();
     else if(h==="score") await scoreView();
