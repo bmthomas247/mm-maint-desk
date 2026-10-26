@@ -62,6 +62,12 @@ create table if not exists lock_home_links (
   check (parent_id <> child_id)
 );
 
+-- system settings (deploy_locks.py writes hub_version / hub_zip_url so hubs update themselves)
+create table if not exists lock_settings (key text primary key, value text, updated_at timestamptz not null default now());
+alter table lock_settings enable row level security;
+drop policy if exists lock_settings_read on lock_settings;
+create policy lock_settings_read on lock_settings for select to authenticated using (app_role() in ('admin','tech'));
+
 create or replace view lock_links_on with (security_invoker = true) as select parent_id, child_id from lock_home_links where active;
 
 create table if not exists lock_hubs (
@@ -100,6 +106,7 @@ create table if not exists locks (
   installed_on  date,                                     -- when this lock went on the door (for replacement planning)
   replace_years int not null default 7,                   -- plan to replace after this many years (change per lock)
   last_battery_change timestamptz,                        -- spotted automatically when the battery jumps up
+  battery_days  int,                                      -- learned: how long a set of batteries lasts in this lock
   staff_from    int not null default 2,
   staff_to      int not null default 40,
   guest_from    int not null default 41,
@@ -592,6 +599,39 @@ begin
 end $$;
 revoke all on function lock_auto_lock() from public, anon, authenticated;
 
+
+-- ---------------------------------------------------------------- the system tunes itself (daily, from lock_health)
+-- Codes late for a home in the last 30 days -> put codes on earlier there (up to 48 h).
+-- Lock that keeps dropping (3+ offline alerts in 14 days) -> say so in the alert so the crew adds a repeater, not just batteries.
+-- How long batteries last per lock (from the battery-change history) -> stored on the lock; low-battery tasks come early for short-lived ones.
+create or replace function lock_learn() returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare n_lead int; n_bat int;
+begin
+  with t as (
+    update lock_homes h set lead_hours = least(h.lead_hours + 6, 48),
+           notes = coalesce(h.notes || E'\n', '') || to_char(now(), 'YYYY-MM-DD') || ': codes were late here - now going on ' || least(h.lead_hours + 6, 48) || ' h before check-in'
+     where h.section = 'ours' and h.lead_hours < 48
+       and exists (select 1 from lock_alerts a where a.property_id = h.property_id and a.kind = 'code_not_ready' and a.opened_at > now() - interval '30 days'
+                     and a.opened_at > coalesce((select max(e.at) from lock_events e where e.property_id = h.property_id and e.kind = 'lead_tuned'), '-infinity'))
+    returning h.property_id, h.lead_hours)
+  insert into lock_events (property_id, kind, detail) select property_id, 'lead_tuned', jsonb_build_object('lead_hours', lead_hours) from t;
+  get diagnostics n_lead = row_count;
+  update locks k set battery_days = sub.days from (
+    select lock_id, round(avg(extract(epoch from at - prev_at) / 86400))::int as days
+      from (select lock_id, at, lag(at) over (partition by lock_id order by at) as prev_at from lock_events where kind = 'battery_changed') x
+     where prev_at is not null group by lock_id) sub
+   where sub.lock_id = k.id;
+  get diagnostics n_bat = row_count;
+  update lock_alerts a set detail = a.detail || ' - this lock has dropped off 3+ times in 2 weeks: move the hub closer or add a Z-Wave repeater'
+   where a.closed_at is null and a.kind = 'lock_offline' and a.detail not like '%repeater%'
+     and (select count(*) from lock_alerts b where b.lock_id = a.lock_id and b.kind = 'lock_offline' and b.opened_at > now() - interval '14 days') >= 3;
+  return jsonb_build_object('lead_tuned', n_lead, 'battery_learned', n_bat);
+end $$;
+revoke all on function lock_learn() from public, anon, authenticated;
+select cron.unschedule('lock-learn') where exists (select 1 from cron.job where jobname = 'lock-learn');
+select cron.schedule('lock-learn', '17 9 * * *', $$select public.lock_learn()$$);
+
 -- ---------------------------------------------------------------- health -> alerts (every 5 minutes)
 create or replace function lock_health() returns int
 language plpgsql security definer set search_path = public as $$
@@ -609,7 +649,7 @@ begin
    where k.active and k.online is false;
   insert into _cond select case when k.battery <= 5 then 'battery_dead' when k.battery <= 15 then 'battery_critical' else 'battery_low' end,
          k.property_id, k.hub_id, k.id, '', k.name || ' battery ' || k.battery || '%'
-    from locks k where k.active and k.battery is not null and k.battery <= 30;
+    from locks k where k.active and k.battery is not null and k.battery <= case when k.battery_days < 180 then 40 else 30 end;
   insert into _cond select case when t.battery <= 15 then 'battery_critical' else 'battery_low' end, t.property_id, t.hub_id, null, t.id::text,
          t.name || ' battery ' || t.battery || '%'
     from thermostats t where t.active and t.battery is not null and t.battery <= 30;
@@ -834,7 +874,9 @@ begin
                                                  'managed', coalesce((select jsonb_agg(node_id) from thermostats where hub_id = h.id and active and managed), '[]'))
                                            from lock_homes where property_id = h.property_id),
                             'assignments', out_assign, 'commands', out_cmds, 'locks', nodes,
-                            'audit_due', coalesce((p->'status'->>'last_audit')::timestamptz < now() - interval '20 hours', true));
+                            'audit_due', coalesce((p->'status'->>'last_audit')::timestamptz < now() - interval '20 hours', true),
+                            'latest', (select jsonb_build_object('version', max(value) filter (where key = 'hub_version'),
+                                                                 'url', max(value) filter (where key = 'hub_zip_url')) from lock_settings));
 end $$;
 revoke all on function lock_hub_sync(text, jsonb, text) from public, anon, authenticated;
 
