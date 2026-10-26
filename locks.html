@@ -272,7 +272,7 @@ function shell(active, inner, title, sub){
   app.innerHTML = `<header class="top"><div class="bar">
       <div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${ICON.lock}</span></div>
       <div class="grow"><h1>${esc(title||"Moose Locks")}</h1><div class="sub">${esc(sub||"Moose Management · lock system")}</div></div>
-      <a class="iconbtn" href="${DESK?"desk.html":"index.html"}" title="${DESK?"Maintenance desk":"Maintenance site"}">${ICON.homes}</a></div></header>
+      ${DESK?`<a class="iconbtn" href="desk.html" title="Maintenance desk">${ICON.homes}</a>`:""}</div></header>
   ${DESK?navTabs(active):""}
   <main id="main">${inner}</main>
   ${DESK?"":navTabs(active)}`;
@@ -282,7 +282,7 @@ function navTabs(active){
   return `<nav class="tabs">
     ${t("homes","#/",ICON.homes,"Homes")}
     ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : t("install","#/install",ICON.install,"Install")}
-    ${DESK ? t("codes","#/codes",ICON.codes,"Crew & vendor codes") : ""}
+    ${DESK ? t("codes","#/codes",ICON.codes,"Crew, vendor & owner codes") : ""}
     ${t("alerts","#/alerts",ICON.alerts,"Alerts", S.alertCount?`<span class="badge">${S.alertCount}</span>`:"")}
     ${DESK ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
     ${DESK ? t("install","#/install",ICON.install,"Install") : ""}
@@ -880,21 +880,43 @@ async function codesView(){
   const homeNames = ids => !ids ? "All our homes" : ids.map(i=>(S.props[i]||{}).code||i).join(", ");
   const timeTxt = c => [c.days&&c.days.length?c.days.map(d=>DAYS[d]).join(" "):"Every day", c.time_from?`${c.time_from.slice(0,5)}–${c.time_to.slice(0,5)}`:"all day",
     c.ends_at?"until "+new Date(c.ends_at).toLocaleDateString():""].filter(Boolean).join(" · ");
-  const groups = {employee:"Employees",vendor:"Vendors",backup:"Backup codes",owner:"Owners"};
-  shell("codes", `<h2>Crew, vendor &amp; backup codes</h2>
-    <button class="btn go wide" id="new">+ Add a code</button>
+  const groups = {employee:"Employees",backup:"Backup codes",vendor:"Vendors",owner:"Owners"};
+  const SHOW = {all:["employee","backup","vendor","owner"], crew:["employee","backup"], vendor:["vendor"], owner:["owner"]};
+  const HINT = {employee:"", backup:"", vendor:"Set days and hours so vendors only get in during their window.", owner:"Pick the owner's home(s). Owner codes work any time unless you set days or dates."};
+  shell("codes", `<h2>Crew, vendor &amp; owner codes</h2>
+    <div class="card row" style="gap:12px">
+      <div class="grow"><span class="muted" style="font-weight:700">Show</span><div class="chips" id="cshow" style="margin-top:6px">
+        ${[["all","All"],["crew","Crew"],["vendor","Vendors"],["owner","Owners"]].map(([k,t])=>`<span class="chip" data-show="${k}">${t} (${codes.filter(c=>c.active&&SHOW[k].includes(c.kind)).length})</span>`).join("")}</div></div>
+      <label class="field" style="margin:0;min-width:200px"><span>Sort</span><select id="csort"><option value="az">Name A → Z</option><option value="za">Name Z → A</option><option value="home">By home</option></select></label>
+      <label class="field" style="margin:0;min-width:200px"><span>Find</span><input id="cfind" placeholder="Name or code"></label>
+      <button class="btn go" id="new">+ Add a code</button></div>
     <div id="form"></div>
-    ${Object.entries(groups).map(([k,t])=>{ const cs = codes.filter(c=>c.kind===k); return cs.length?`<h3>${t} (${cs.filter(c=>c.active).length})</h3><div class="tile-grid">${cs.map(c=>`<div class="card row" data-id="${c.id}" style="${c.active?"":"opacity:.5"}">
-      <div class="grow"><b>${esc(c.label)}</b><div class="muted">${esc(homeNames(c.property_ids))}</div><div class="muted">${esc(timeTxt(c))}</div></div>
-      <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}</div>`:""; }).join("")}
+    <div id="clist"></div>
     <h3>Lock master codes</h3><div class="card"><table class="tbl"><tr><th>Home</th><th>Door</th><th>Master code</th></tr>
       ${masters.filter(m=>ours.some(h=>h.property_id===m.property_id)).map(m=>`<tr><td><b>${esc((S.props[m.property_id]||{}).code||"")}</b></td><td>${esc(m.name)}</td><td>${m.master_code?`<span class="code-chip">${esc(m.master_code)}</span>`:'<span class="muted">not set</span>'}</td></tr>`).join("")
-        || '<tr><td colspan="3" class="muted">Locks show here once they are paired.</td></tr>'}</table></div>`, "Moose Locks", "Office desk · crew, vendor & backup codes");
+        || '<tr><td colspan="3" class="muted">Locks show here once they are paired.</td></tr>'}</table></div>`, "Moose Locks", "Office · crew, vendor & owner codes");
+  const firstHome = c => c.property_ids && c.property_ids.length ? ((S.props[c.property_ids[0]]||{}).code||"") : "~";
+  const drawCodes = () => {
+    const show = pref("cshow") || "all", srt = $("#csort").value, t = $("#cfind").value.trim().toLowerCase();
+    pref("csort", srt);
+    $$("#cshow .chip").forEach(x=>x.classList.toggle("on", x.dataset.show===show));
+    const cmp = (a,b) => srt==="home" ? firstHome(a).localeCompare(firstHome(b), undefined, {numeric:true}) || a.label.localeCompare(b.label)
+      : (srt==="za"?-1:1) * a.label.localeCompare(b.label);
+    $("#clist").innerHTML = SHOW[show].map(k => { const cs = codes.filter(c=>c.kind===k && (!t || (c.label+" "+c.code).toLowerCase().includes(t))).sort(cmp);
+      return `<h3>${groups[k]} (${cs.filter(c=>c.active).length})</h3>${HINT[k]&&!cs.length?`<p class="muted">${HINT[k]}</p>`:""}
+        ${cs.length?`<div class="tile-grid">${cs.map(c=>`<div class="card row" data-id="${c.id}" style="cursor:pointer;${c.active?"":"opacity:.5"}">
+          <div class="grow"><b>${esc(c.label)}</b><div class="muted">${esc(homeNames(c.property_ids))}</div><div class="muted">${esc(timeTxt(c))}</div></div>
+          <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}</div>`:`<p class="muted">None yet${t?" matching":""}.</p>`}`; }).join("");
+    $$("#clist [data-id]").forEach(x=>x.onclick=()=>form(codes.find(c=>c.id==x.dataset.id)));
+  };
+  const ps = pref("csort"); if(ps) $("#csort").value = ps;
+  $$("#cshow .chip").forEach(x=>x.onclick=()=>{ pref("cshow", x.dataset.show); drawCodes(); });
+  $("#csort").onchange = drawCodes; $("#cfind").oninput = drawCodes;
   const form = c => {
     c = c || {kind:"employee",days:null};
     $("#form").innerHTML = `<div class="card">
       <div class="chips">${Object.entries(groups).map(([k,t])=>`<span class="chip ${c.kind===k?"on":""}" data-kind="${k}">${t.replace(/s$/,"").replace("Backup code","Backup")}</span>`).join("")}</div>
-      <label class="field"><span>Name</span><input id="f_label" value="${esc(c.label||"")}" placeholder="Shelby Huffaker / A+ Carpet / Spare - December"></label>
+      <label class="field"><span>Name</span><input id="f_label" value="${esc(c.label||"")}" placeholder="Shelby Huffaker / A+ Carpet / Smith family (owner)"></label>
       <label class="field"><span>Code (same as Brivo)</span><input id="f_code" inputmode="numeric" class="big" value="${esc(c.code||"")}"></label>
       <span class="muted"><b>Homes</b> (none picked = all our homes)</span>
       <div class="chips" style="margin:6px 0">${ours.map(h=>`<span class="chip ${(c.property_ids||[]).includes(h.property_id)?"on":""}" data-home="${esc(h.property_id)}">${esc(h.properties.code)}</span>`).join("")}</div>
@@ -916,13 +938,14 @@ async function codesView(){
         property_ids:$$("[data-home].on").map(x=>x.dataset.home), days:$$("[data-day].on").map(x=>+x.dataset.day),
         time_from:tf||null, time_to:tt||null, starts_at:day($("#f_sd").value), ends_at:day($("#f_ed").value,true), active };
       if(!r.label) return toast("Add a name");
+      if(kind==="owner" && !r.property_ids.length) return toast("Pick the owner's home(s)");
       try{ await rpc("lock_staff_code",{r}); toast("Saved - going on the locks"); codesView(); }catch(e){ fail(e); } };
     $("#f_save").onclick = () => save(c.id ? c.active : true);
     const off = $("#f_off"); if(off) off.onclick = () => save(!c.active);
     $("#form").scrollIntoView({behavior:"smooth"});
   };
   $("#new").onclick = () => form();
-  $$("[data-id]").forEach(x=>x.onclick=()=>form(codes.find(c=>c.id==x.dataset.id)));
+  drawCodes();
 }
 
 /* ------------------------------------------------ alerts */
