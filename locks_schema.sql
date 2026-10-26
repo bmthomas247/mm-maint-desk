@@ -310,9 +310,30 @@ create table if not exists lock_alerts (
 );
 create unique index if not exists lock_alerts_open on lock_alerts (kind, coalesce(hub_id::text,''), coalesce(lock_id::text,''), ref) where closed_at is null;
 
+-- Updates the hubs can take: Home Assistant (core / OS / supervisor), add-ons (Z-Wave JS), the Z-Wave stick, and lock /
+-- thermostat firmware. One row per hub + update + version. Home Assistant parts install themselves in a quiet window
+-- (2-5 am, nobody arriving), test hub first; firmware waits for an admin to press "Update now".
+create table if not exists lock_updates (
+  id            bigint generated always as identity primary key,
+  hub_id        uuid not null references lock_hubs(id),
+  entity        text not null,                            -- Home Assistant update entity (update.home_assistant_core_update ...)
+  kind          text not null,                            -- core / os / supervisor / addon / stick / device / other
+  title         text,
+  node_id       int,                                      -- for device firmware
+  from_ver      text,
+  to_ver        text not null,
+  first_seen    timestamptz not null default now(),
+  started_at    timestamptz,
+  started_by    text,                                     -- auto / name of the admin
+  done_at       timestamptz,
+  ok            boolean,
+  err           text,
+  unique (hub_id, entity, to_ver)
+);
+
 -- no deletes anywhere; history tables are append-only
 do $$ declare t text; begin
-  foreach t in array array['lock_homes','lock_home_links','lock_hubs','locks','thermostats','sensors','lock_stays','lock_staff_codes','lock_assign','lock_commands','lock_events','lock_alerts'] loop
+  foreach t in array array['lock_homes','lock_home_links','lock_hubs','locks','thermostats','sensors','lock_stays','lock_staff_codes','lock_assign','lock_commands','lock_events','lock_alerts','lock_updates'] loop
     execute format('drop trigger if exists %1$s_nodelete on %1$s', t);
     execute format('create trigger %1$s_nodelete before delete on %1$s for each row execute function forbid_delete()', t);
   end loop;
@@ -324,7 +345,7 @@ create trigger lock_events_noupdate before update on lock_events for each row ex
 -- Admin + tech see everything about locks (they already see door codes). Viewers see nothing here.
 -- Writes go through the functions below, not straight into the tables.
 do $$ declare t text; begin
-  foreach t in array array['lock_homes','lock_home_links','lock_hubs','locks','thermostats','sensors','lock_stays','lock_staff_codes','lock_assign','lock_commands','lock_events','lock_alerts'] loop
+  foreach t in array array['lock_homes','lock_home_links','lock_hubs','locks','thermostats','sensors','lock_stays','lock_staff_codes','lock_assign','lock_commands','lock_events','lock_alerts','lock_updates'] loop
     execute format('alter table %1$s enable row level security', t);
     execute format('drop policy if exists %1$s_crew_read on %1$s', t);
     execute format('create policy %1$s_crew_read on %1$s for select to authenticated using (app_role() in (''admin'',''tech''))', t);
@@ -767,6 +788,14 @@ begin
    where st.status not in ('cancelled','checked_out') and lock_stay_cleared(st) and st.starts_at < now() + interval '3 hours' and st.ends_at > now()
      and not exists (select 1 from lock_assign a where a.lock_id = k.id and a.ref_kind = 'stay' and a.ref_id = st.res_id
                       and a.wanted and a.state = 'verified');
+  -- updates that went wrong (shown on the desk; not a Breezeway task - the crew can't fix these)
+  update lock_updates set done_at = now(), ok = false, err = 'did not finish within 2 hours'
+   where started_at < now() - interval '2 hours' and done_at is null;
+  insert into _cond select 'update_failed', b.property_id, b.id, null, x.entity || ' ' || x.to_ver,
+         coalesce(x.title, x.entity) || ' ' || x.to_ver || ' did not install: ' || coalesce(x.err, '?') || '. Other hubs will skip this version.'
+    from lock_updates x join lock_hubs b on b.id = x.hub_id
+   where x.ok is false and x.done_at > now() - interval '7 days'
+     and not exists (select 1 from lock_updates y where y.hub_id = x.hub_id and y.entity = x.entity and y.ok and y.done_at > x.done_at);
   -- open new ones
   insert into lock_alerts (kind, property_id, hub_id, lock_id, ref, detail)
   select c.kind, c.property_id, c.hub_id, c.lock_id, c.ref, c.detail from _cond c
@@ -811,6 +840,50 @@ revoke all on function lock_hub_register(text, text, text, text) from public, an
 -- One round trip: the hub reports what it sees and what it did; gets back what to do.
 -- p = {status:{...}, locks:[{node_id,name,model,battery,online,state}], results:[{id,state,err}],
 --      cmd_results:[{id,ok,result}], events:[{at,node_id,kind,slot,detail}], audits:[{node_id, slots:[{slot,in_use,code}]}]}
+-- Which Home Assistant update (if any) this hub should install right now. One at a time, safest order.
+create or replace function lock_update_plan(h lock_hubs) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare canary uuid; wait_h int; new_d int; hr int; u lock_updates;
+begin
+  if coalesce((select value from lock_settings where key = 'auto_update'), 'on') <> 'on' then return '[]'; end if;
+  hr := extract(hour from now() at time zone 'America/Denver');
+  if hr not between 2 and 4 then return '[]'; end if;                       -- quiet window 2:00-4:59 am
+  -- nobody in the home or arriving in the next 6 hours (this home, its children and its parents)
+  if exists (select 1 from lock_stays st
+              where st.status not in ('cancelled','checked_out') and st.starts_at < now() + interval '6 hours' and st.ends_at > now()
+                and (st.property_id = h.property_id
+                     or st.property_id in (select child_id from lock_links_on where parent_id = h.property_id)
+                     or st.property_id in (select parent_id from lock_links_on where child_id = h.property_id))) then
+    return '[]';
+  end if;
+  -- the home has trouble right now (leak, cold, jam, code not ready): leave the hub alone
+  if exists (select 1 from lock_alerts a where a.closed_at is null and a.property_id = h.property_id
+              and a.kind in ('flood','too_cold','too_hot','jammed','code_not_ready','lock_offline')) then return '[]'; end if;
+  -- one at a time
+  if exists (select 1 from lock_updates x where x.hub_id = h.id and x.started_at is not null and x.done_at is null) then return '[]'; end if;
+  wait_h := coalesce((select value from lock_settings where key = 'update_wait_hours')::int, 72);
+  new_d  := coalesce((select value from lock_settings where key = 'update_new_days')::int, 3);
+  canary := coalesce((select b.id from lock_hubs b join properties p on p.id = b.property_id
+                       where b.active and b.claimed_at is not null
+                         and p.code = coalesce((select value from lock_settings where key = 'update_canary'), 'BHL 1206')
+                       order by b.created_at limit 1),
+                     (select b.id from lock_hubs b where b.active and b.claimed_at is not null order by b.created_at limit 1));
+  select x.* into u from lock_updates x
+   where x.hub_id = h.id and x.done_at is null and x.started_at is null and x.kind in ('supervisor','os','core','addon')
+     -- never a version that failed anywhere
+     and not exists (select 1 from lock_updates f where f.entity = x.entity and f.to_ver = x.to_ver and f.ok is false)
+     and case when h.id = canary
+              then x.first_seen < now() - make_interval(days => new_d)       -- test hub: let the release age a few days first
+              else exists (select 1 from lock_updates g where g.hub_id = canary and g.entity = x.entity and g.to_ver = x.to_ver
+                            and g.ok and g.done_at < now() - make_interval(hours => wait_h))   -- others: only after the test hub ran it
+         end
+   order by array_position(array['supervisor','os','core','addon'], x.kind), x.id
+   limit 1;
+  if not found then return '[]'; end if;
+  return jsonb_build_array(jsonb_build_object('entity', u.entity, 'to', u.to_ver, 'kind', u.kind));
+end $$;
+revoke all on function lock_update_plan(lock_hubs) from public, anon, authenticated;
+
 create or replace function lock_hub_sync(p_hash text, p jsonb, p_ip text) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare h lock_hubs; r jsonb; s jsonb; k locks; w record; a lock_assign; out_assign jsonb; out_cmds jsonb; nodes jsonb;
@@ -941,6 +1014,37 @@ begin
       from lock_commands c where c.id = (r->>'id')::bigint and c.kind = 'climate';
   end loop;
 
+  -- updates the hub can see (Home Assistant, add-ons, stick, device firmware)
+  if p ? 'updates' then
+    for r in select * from jsonb_array_elements(coalesce(p->'updates', '[]')) loop
+      if coalesce(r->>'latest','') <> '' and r->>'latest' is distinct from r->>'installed' then
+        insert into lock_updates (hub_id, entity, kind, title, node_id, from_ver, to_ver)
+        values (h.id, r->>'entity', coalesce(r->>'kind','other'), r->>'title', (r->>'node_id')::int, r->>'installed', r->>'latest')
+        on conflict (hub_id, entity, to_ver) do update set from_ver = coalesce(lock_updates.from_ver, excluded.from_ver), title = excluded.title;
+      end if;
+      -- it's on now (by us, by hand, or by Home Assistant itself): count it as done
+      update lock_updates set done_at = now(), ok = true, err = null
+       where hub_id = h.id and entity = r->>'entity' and done_at is null and to_ver = r->>'installed';
+      -- a newer version showed up before this one went in: the old row is no longer needed
+      update lock_updates set done_at = now(), ok = null, err = 'replaced by ' || (r->>'latest')
+       where hub_id = h.id and entity = r->>'entity' and done_at is null and started_at is null
+         and coalesce(r->>'latest','') <> '' and to_ver <> r->>'latest' and to_ver <> r->>'installed';
+    end loop;
+  end if;
+  for r in select * from jsonb_array_elements(coalesce(p->'update_results', '[]')) loop
+    if (r->>'started')::boolean then
+      update lock_updates set started_at = coalesce(started_at, now()), started_by = coalesce(r->>'by', 'auto')
+       where hub_id = h.id and entity = r->>'entity' and to_ver = r->>'to' and done_at is null;
+      insert into lock_events (property_id, hub_id, kind, who, detail)
+      values (h.property_id, h.id, 'update_started', coalesce(r->>'by','auto'), jsonb_build_object('entity', r->>'entity', 'to', r->>'to'));
+    elsif (r->>'ok')::boolean is false then
+      update lock_updates set done_at = now(), ok = false, err = left(r->>'err', 300)
+       where hub_id = h.id and entity = r->>'entity' and to_ver = r->>'to' and done_at is null;
+      insert into lock_events (property_id, hub_id, kind, detail)
+      values (h.property_id, h.id, 'update_failed', jsonb_build_object('entity', r->>'entity', 'to', r->>'to', 'err', r->>'err'));
+    end if;
+  end loop;
+
   perform lock_plan();
   perform lock_climate_plan();
 
@@ -967,6 +1071,7 @@ begin
                                            from lock_homes where property_id = h.property_id),
                             'assignments', out_assign, 'commands', out_cmds, 'locks', nodes,
                             'audit_due', coalesce((p->'status'->>'last_audit')::timestamptz < now() - interval '20 hours', true),
+                            'install_updates', lock_update_plan(h),
                             'latest', (select jsonb_build_object('version', max(value) filter (where key = 'hub_version'),
                                                                  'url', max(value) filter (where key = 'hub_zip_url')) from lock_settings));
 end $$;
@@ -1031,11 +1136,12 @@ declare cid bigint; hub uuid := p_hub;
 begin
   if not lock_is_crew() then raise exception 'Only crew'; end if;
   if p_lock is not null then select hub_id into hub from locks where id = p_lock; end if;
-  if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit','ping','heal','restart') then raise exception 'bad command'; end if;
+  if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit','ping','heal','restart','update') then raise exception 'bad command'; end if;
+  if p_kind = 'update' and app_role() is distinct from 'admin' then raise exception 'Only admins can start an update'; end if;
   if hub is null then raise exception 'pick a hub or a lock'; end if;
   insert into lock_commands (hub_id, lock_id, kind, args, source, expires_at)
-  values (hub, p_lock, p_kind, coalesce(p_args, '{}'), 'admin',
-          now() + case when p_kind in ('include','exclude') then interval '5 minutes' else interval '2 minutes' end)
+  values (hub, p_lock, p_kind, coalesce(p_args, '{}') || case when p_kind = 'update' then jsonb_build_object('by', actor()) else '{}' end, 'admin',
+          now() + case when p_kind in ('include','exclude') then interval '5 minutes' when p_kind = 'update' then interval '30 minutes' else interval '2 minutes' end)
   returning id into cid;
   if p_kind = 'refresh' and p_args ? 'code' then perform lock_plan(); end if;
   if p_kind in ('unlock','lock') then
@@ -1401,3 +1507,20 @@ select
   (select count(*) from lock_events where kind = 'phone_key_tap' and at > now() - interval '60 days') as phone_key_taps_60d
 from st;
 grant select on lock_scorecard to authenticated;
+
+-- admin switch for automatic updates (on / off) and which home's hub tries new versions first
+create or replace function lock_update_settings(p_auto boolean default null, p_canary text default null) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if app_role() is distinct from 'admin' then raise exception 'Only admins'; end if;
+  if p_auto is not null then
+    insert into lock_settings (key, value) values ('auto_update', case when p_auto then 'on' else 'off' end)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  end if;
+  if p_canary is not null then
+    if not exists (select 1 from properties where code = p_canary) then raise exception 'No home %', p_canary; end if;
+    insert into lock_settings (key, value) values ('update_canary', p_canary) on conflict (key) do update set value = excluded.value, updated_at = now();
+  end if;
+end $$;
+revoke all on function lock_update_settings(boolean, text) from public, anon;
+grant execute on function lock_update_settings(boolean, text) to authenticated;
