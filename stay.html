@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#88B535">
+<meta name="robots" content="noindex">
+<title>Your Stay · Moose Management</title>
+<link rel="icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--moose:#88B535;--moose-2:#A6CE39;--deep:#2f4410;--ground:#f5f7f1;--card:#fff;--ink:#17210d;--muted:#66705c;--line:#dfe5d6;--red:#c2352b;
+  font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--ground:#11160c;--card:#1b2313;--ink:#eef3e6;--muted:#a3ae95;--line:#2c3820;--deep:#d7ecaa} }
+:root[data-theme="dark"]{--ground:#11160c;--card:#1b2313;--ink:#eef3e6;--muted:#a3ae95;--line:#2c3820;--deep:#d7ecaa}
+*{box-sizing:border-box} body{margin:0;background:var(--ground);min-height:100vh}
+.hero{background:var(--moose);color:#16220a;padding:28px 16px 22px;padding-top:calc(28px + env(safe-area-inset-top,0px))}
+.hero .in,main{max-width:560px;margin:0 auto}
+.hero small{font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px}
+.hero h1{margin:6px 0 4px;font-size:26px} .hero p{margin:0}
+main{padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+.label{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.code{font-size:44px;font-weight:700;letter-spacing:10px;margin:6px 0;color:var(--deep)}
+.btn{appearance:none;border:0;border-radius:14px;min-height:58px;width:100%;font:inherit;font-size:18px;font-weight:700;background:var(--moose);color:#16220a;cursor:pointer;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.btn.ghost{background:transparent;border:2px solid var(--line);color:var(--ink);min-height:48px;font-size:16px}
+.btn:disabled{opacity:.6}
+.muted{color:var(--muted);font-size:15px}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.msg{margin-top:10px;font-weight:700} .msg.bad{color:var(--red)}
+.wifi b{font-size:20px;word-break:break-all}
+</style>
+</head>
+<body>
+<div id="app"><div class="hero"><div class="in"><small>Moose Management</small><h1>Loading your stay…</h1></div></div></div>
+<script src="config.js"></script>
+<script>
+(function(){
+"use strict";
+const C = window.MM_CONFIG, FN = C.url + "/functions/v1/lock-guest";
+const t = (location.hash.match(/t=([a-f0-9]+)/) || location.search.match(/t=([a-f0-9]+)/) || [])[1] || "";
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const app = document.getElementById("app");
+const day = d => new Date(d).toLocaleString(undefined,{weekday:"long",month:"long",day:"numeric"});
+const time = d => new Date(d).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit",timeZone:"America/Denver"});
+const H = { "content-type":"application/json", apikey:C.anonKey };
+
+function gone(){ app.innerHTML = `<div class="hero"><div class="in"><small>Moose Management</small><h1>This link has expired</h1>
+  <p>Please check your latest message from us for your current link.</p></div></div>`; }
+
+async function load(){
+  if(!t) return gone();
+  let s; try{ const r = await fetch(FN + "?t=" + t, { headers:H }); s = await r.json(); if(!r.ok || s.error) return gone(); }catch(e){ return gone(); }
+  const first = s.guest ? "Welcome, " + esc(s.guest) + "!" : "Welcome!";
+  app.innerHTML = `<div class="hero"><div class="in"><small>Moose Management</small><h1>${first}</h1><p><b>${esc(s.home)}</b></p>
+      ${s.address?`<p>${esc(s.address)}</p>`:""}</div></div>
+    <main>
+      <div class="card"><div class="row"><div><div class="label">Check-in</div><b>${esc(day(s.starts_at))}</b><div class="muted">from ${esc(time(s.starts_at))}</div></div>
+        <div style="text-align:right"><div class="label">Check-out</div><b>${esc(day(s.ends_at))}</b><div class="muted">by ${esc(time(s.ends_at))}</div></div></div></div>
+      <div class="card"><div class="label">Your door code</div>
+        ${s.code ? `<div class="code">${esc(s.code)}</div><div class="muted">Type it on the keypad, then press ✓ (or the Yale logo). It works from check-in until check-out.</div>`
+                 : `<p class="muted">Your code appears here 7 days before you arrive.</p>`}
+      </div>
+      ${(s.building_code||s.garage_code||s.arrival_note) ? `<div class="card"><div class="label">Getting to your door</div>
+        ${s.arrival_note?`<p>${esc(s.arrival_note)}</p>`:""}
+        ${s.building_code?`<div class="row"><span>Building / gate code</span><b style="font-size:24px;letter-spacing:3px">${esc(s.building_code)}</b></div>`:""}
+        ${s.garage_code?`<div class="row" style="margin-top:8px"><span>Garage code</span><b style="font-size:24px;letter-spacing:3px">${esc(s.garage_code)}</b></div>`:""}</div>` : ""}
+      ${s.doors && s.doors.length ? `<div class="card"><div class="label">Phone key</div>
+        ${s.phone_key ? s.doors.map(d=>`<button class="btn" data-door="${esc(d.id)}">🔓 Unlock ${esc(d.name)}</button>`).join("") + `<div id="km" class="msg"></div>`
+                      : `<p class="muted">Unlock buttons appear here at check-in time. Your door code always works too.</p>`}</div>` : ""}
+      ${s.wifi_name ? `<div class="card wifi"><div class="label">Wi-Fi</div><p>Network<br><b>${esc(s.wifi_name)}</b></p>
+        ${s.wifi_password?`<p>Password<br><b>${esc(s.wifi_password)}</b></p><button class="btn ghost" id="copyw">Copy password</button>`:""}</div>` : ""}
+      ${s.guide_url ? `<a class="btn ghost" href="${esc(s.guide_url)}" target="_blank" rel="noopener">📖 House guide</a>` : ""}
+      <p class="muted" style="text-align:center;margin-top:20px">Need help? Reply to your booking messages and our team will get right back to you.</p>
+    </main>`;
+  document.querySelectorAll("[data-door]").forEach(b => b.onclick = async () => {
+    const m = document.getElementById("km"); const label = b.textContent;
+    b.disabled = true; b.textContent = "Unlocking…"; m.className = "msg"; m.textContent = "";
+    try{
+      const r = await fetch(FN, { method:"POST", headers:H, body:JSON.stringify({ t, action:"unlock", door:b.dataset.door }) });
+      const j = await r.json();
+      if(j.ok){ m.textContent = "Unlocked. Come on in!"; }
+      else { m.className = "msg bad"; m.textContent = j.error || "That didn't work. Use your door code."; }
+    }catch(e){ m.className = "msg bad"; m.textContent = "No connection. Use your door code."; }
+    b.disabled = false; b.textContent = label;
+  });
+  const cw = document.getElementById("copyw");
+  if(cw) cw.onclick = async () => { try{ await navigator.clipboard.writeText(s.wifi_password); cw.textContent = "Copied ✓"; }catch(e){} };
+}
+load();
+})();
+</script>
+</body>
+</html>
