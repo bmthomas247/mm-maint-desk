@@ -72,6 +72,13 @@ async function load(){
                       : `<p class="muted">Unlock buttons appear here at check-in time. Your door code always works too.</p>`}</div>` : ""}
       ${s.wifi_name ? `<div class="card wifi"><div class="label">Wi-Fi</div><p>Network<br><b>${esc(s.wifi_name)}</b></p>
         ${s.wifi_password?`<p>Password<br><b>${esc(s.wifi_password)}</b></p><button class="btn ghost" id="copyw">Copy password</button>`:""}</div>` : ""}
+ ${s.extra_codes && s.extra_codes.length ? `<div class="card"><div class="label">Other codes</div>${s.extra_codes.map(c=>`<div class="row" style="margin-top:8px"><span>${esc(c.name)}</span><b style="font-size:22px;letter-spacing:3px">${esc(c.code)}</b></div>`).join("")}</div>` : ""}
+      ${s.help ? `<div class="card"><div class="label">Can't get in?</div>
+        <ol class="muted" style="padding-left:18px;margin:8px 0">
+          <li>Touch the keypad to wake it, type your code slowly, then press ✓ (or the Yale logo).</li>
+          <li>Wrong code 3 times locks the keypad for a minute - wait, then try again.</li>
+          <li>Try the phone key button above.</li></ol>
+        <button class="btn ghost" id="kb">Still can't get in - show the emergency key</button><div id="kbm" class="msg"></div></div>` : ""}
       ${s.guide_url ? `<a class="btn ghost" href="${esc(s.guide_url)}" target="_blank" rel="noopener">📖 House guide</a>` : ""}
       <p class="muted" style="text-align:center;margin-top:20px">Need help? Reply to your booking messages and our team will get right back to you.</p>
     </main>`;
@@ -86,6 +93,16 @@ async function load(){
     }catch(e){ m.className = "msg bad"; m.textContent = "No connection. Use your door code."; }
     b.disabled = false; b.textContent = label;
   });
+  const kb = document.getElementById("kb");
+  if(kb) kb.onclick = async () => {
+    if(!confirm("Show the emergency key box code? Our team will be told so we can check on you and the key.")) return;
+    const m = document.getElementById("kbm"); kb.disabled = true; m.className = "msg"; m.textContent = "One moment…";
+    try{
+      const r = await fetch(FN, { method:"POST", headers:H, body:JSON.stringify({ t, action:"keybox" }) }); const j = await r.json();
+      if(j.ok){ m.innerHTML = `Key box code: <span style="font-size:28px;letter-spacing:4px">${esc(j.code)}</span>${j.where?`<div class="muted" style="font-weight:400">${esc(j.where)}</div>`:""}<div class="muted" style="font-weight:400">Please put the key back in the box when you leave.</div>`; kb.style.display="none"; }
+      else { m.className = "msg bad"; m.textContent = j.error || "Please call us."; kb.disabled = false; }
+    }catch(e){ m.className = "msg bad"; m.textContent = "No connection. Please call us."; kb.disabled = false; }
+  };
   const cw = document.getElementById("copyw");
   if(cw) cw.onclick = async () => { try{ await navigator.clipboard.writeText(s.wifi_password); cw.textContent = "Copied ✓"; }catch(e){} };
 }
