@@ -1283,6 +1283,16 @@ begin
 end $$;
 revoke all on function lock_guest_unlock(text, uuid) from public, anon, authenticated;
 
+-- ---------------------------------------------------------------- "Sync with Track now" button (crew page) -> ThinkStation runs within a minute
+create or replace function lock_request_sync() returns timestamptz
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  insert into lock_settings (key, value) values ('sync_requested_at', now()::text), ('sync_requested_by', actor())
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return now();
+end $$;
+
 -- ---------------------------------------------------------------- what Track's reservation "Door Code" should say (locks_sync.py writes it)
 -- Only for homes whose hub is installed (until then Brivo fills it), only once the agreement is back, until check-out.
 create or replace view lock_track_doorcodes as
