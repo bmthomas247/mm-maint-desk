@@ -322,8 +322,29 @@ function toolsCard(hub, devices){
     </table>
     <p class="muted" style="font-size:12.5px">Weak signal (1 bar, or lots of dropped)? Move the stick higher / closer on its cable, or add a Z-Wave repeater between the hub and that door, then Rebuild routes.</p>
     <div class="grid3"><button class="btn small" id="t_heal">Rebuild routes</button><button class="btn small" id="t_add">Add mode</button><button class="btn small" id="t_remove">Remove mode</button></div>
+    ${updatesBlock(hub)}
     <button class="btn small danger wide" style="margin-top:8px" id="t_restart">Restart hub</button>
     <div id="t_out" class="muted" style="margin-top:8px"></div></details>`;
+}
+const UPD_AUTO = ["core","os","supervisor","addon"];
+function updatesBlock(hub){
+  const ups = hub._ups || [], admin = S.me && S.me.role === "admin";
+  const open = ups.filter(u=>!u.done_at), bad = ups.filter(u=>u.ok===false);
+  if(!open.length && !bad.length) return `<p style="margin:10px 0 0"><span class="pill green">Up to date</span> <span class="muted" style="font-size:12.5px">Home Assistant updates install themselves 2–5 am when nobody's arriving.</span></p>`;
+  const state = u => u.ok===false ? `<span class="pill red">Failed</span><div class="muted" style="font-size:12px">${esc(u.err||"")}</div>`
+    : u.started_at ? `<span class="pill amber">Installing…</span>`
+    : UPD_AUTO.includes(u.kind) ? `<span class="pill grey">Auto</span><div class="muted" style="font-size:12px">2–5 am, test hub first</div>`
+    : admin ? `<button class="btn small" data-upd="${esc(u.entity)}" data-to="${esc(u.to_ver)}">Update now</button>` : `<span class="pill grey">Admin</span>`;
+  return `<h4 style="margin:14px 0 4px">Updates</h4><table><tr><th>What</th><th>Version</th><th></th></tr>
+    ${[...open, ...bad.filter(b=>!open.includes(b))].map(u=>`<tr><td><b>${esc(u.title||u.entity)}</b><div class="muted" style="font-size:12px">${esc({core:"Home Assistant",os:"Hub system",supervisor:"Supervisor",addon:"Add-on",stick:"Z-Wave stick firmware",device:"Device firmware"}[u.kind]||u.kind)}</div></td>
+      <td>${esc(u.from_ver||"?")} → <b>${esc(u.to_ver)}</b></td><td style="text-align:right">${state(u)}</td></tr>`).join("")}</table>
+    ${open.some(u=>!UPD_AUTO.includes(u.kind))?'<p class="muted" style="font-size:12.5px">Firmware updates are never automatic. Run them when the home is empty: a lock can take 10–30 min and may need fresh batteries.</p>':""}`;
+}
+async function loadUpdates(hub){
+  if(!hub) return;
+  const wk = Date.now() - 7*864e5;
+  hub._ups = (await q("lock_updates","*",x=>x.eq("hub_id",hub.id).order("id",{ascending:false}).limit(40)))
+    .filter(u => !u.done_at || (u.ok===false && new Date(u.done_at) > wk));
 }
 function wireTools(hub, after){
   if(!hub || !$("#tools")) return;
@@ -337,6 +358,7 @@ function wireTools(hub, after){
   $("#t_heal").onclick = () => { if(confirm("Rebuild Z-Wave routes? Takes a few minutes; locks keep working.")) run("heal", null, {}, "Rebuilding routes"); };
   $("#t_add").onclick = () => run("include", null, {}, "Add mode on for 5 minutes - put the device in join mode");
   $("#t_remove").onclick = () => run("exclude", null, {}, "Remove mode on for 5 minutes - put the device in remove mode");
+  $$("[data-upd]").forEach(b=>b.onclick=()=>{ if(confirm("Start this update now? Only do this when the home is empty.")) run("update", null, {entity:b.dataset.upd, to:b.dataset.to}, "Starting update"); });
   $("#t_restart").onclick = () => { if(confirm("Restart the hub? It's back in about a minute; codes keep working on the locks.")) run("restart", null, {}, "Restarting"); };
 }
 
@@ -397,6 +419,7 @@ async function installHome(pid){
     q("lock_stays","guest,starts_at,ends_at,status",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(2)),
     q("locks","name,master_code",x=>x.eq("property_id",pid))]);
   const hub = hubs.find(x=>x.claimed_at);
+  await loadUpdates(hub);
   const ids = new Set(locks.map(l=>l.id)), a = access[0]||{};
   const named = locks.length && locks.every(l=>!/^New lock/.test(l.name));
   const facts = {
@@ -504,6 +527,7 @@ async function homeView(pid){
     q("property_access","wifi_name,wifi_password,door_code,gate_code,garage_code",x=>x.eq("property_id",pid)),
     q("lock_links_on","parent_id,child_id")]);
   const hub = hubs.find(x=>x.claimed_at);
+  await loadUpdates(hub);
   const lockIds = new Set(locks.map(l=>l.id));
   const myAssign = assigns.filter(a=>lockIds.has(a.lock_id));
   const lockName = id => (locks.find(l=>l.id===id)||{}).name || "";
@@ -729,7 +753,32 @@ async function scoreView(){
       const soon = by && by - Date.now() < 90*864e5;
       return `<tr><td>${esc((S.props[l.property_id]||{}).code||"")}</td><td>${esc(l.name)}</td><td>${l.installed_on?ageTxt(l.installed_on):"?"}</td>
         <td>${by?`<span class="pill ${soon?"red":"grey"}">${by.toLocaleDateString(undefined,{month:"short",year:"numeric"})}</span>`:"set install date"}</td></tr>`; }).join("")}</table></div>
-    <p class="muted">Lynx and Brivo columns come next: same measures, from their alerts and "can't get in" tickets per home.</p>`);
+    <p class="muted">Lynx and Brivo columns come next: same measures, from their alerts and "can't get in" tickets per home.</p>
+    ${await updatesCard()}`);
+  wireUpdates();
+}
+async function updatesCard(){
+  const [set, ups, hubs] = await Promise.all([
+    q("lock_settings","key,value",x=>x.in("key",["auto_update","update_canary","update_wait_hours"])),
+    q("lock_updates","hub_id,kind,title,entity,to_ver,started_at,done_at,ok,err",x=>x.order("id",{ascending:false}).limit(300)),
+    q("lock_hubs","id,property_id",x=>x.eq("active",true))]);
+  const v = Object.fromEntries(set.map(r=>[r.key,r.value])), on = (v.auto_update||"on")==="on", admin = S.me.role==="admin";
+  const home = id => esc((S.props[(hubs.find(b=>b.id===id)||{}).property_id]||{}).code||"?");
+  const open = ups.filter(u=>!u.done_at), bad = ups.filter(u=>u.ok===false && Date.now()-new Date(u.done_at) < 7*864e5);
+  const done = ups.filter(u=>u.ok && Date.now()-new Date(u.done_at) < 30*864e5);
+  return `<div class="card"><h3 style="margin-top:0">Hub updates</h3>
+    <div class="row"><div class="grow"><b>Automatic updates ${on?"on":"off"}</b><div class="muted" style="font-size:12.5px">Home Assistant, hub system and add-ons install 2–5 am when nobody is in or arriving within 6 h.
+      ${esc(v.update_canary||"BHL 1206")} goes first; the rest follow ${v.update_wait_hours||72} h later if it ran fine. A version that fails anywhere is skipped everywhere. Lock/thermostat firmware is never automatic.</div></div>
+      ${admin?`<button class="btn small ${on?"":"go"}" id="u_toggle">${on?"Turn off":"Turn on"}</button>`:""}</div>
+    <table style="margin-top:10px"><tr><th>Home</th><th>Update</th><th></th></tr>
+      ${[...open, ...bad].map(u=>`<tr><td>${home(u.hub_id)}</td><td>${esc(u.title||u.entity)} <b>${esc(u.to_ver)}</b></td>
+        <td style="text-align:right">${u.ok===false?`<span class="pill red" title="${esc(u.err||"")}">Failed</span>`:u.started_at?'<span class="pill amber">Installing</span>':UPD_AUTO.includes(u.kind)?'<span class="pill grey">Waiting</span>':'<span class="pill grey">Firmware</span>'}</td></tr>`).join("")
+        || '<tr><td colspan="3" class="muted">Every hub is up to date.</td></tr>'}
+    </table><p class="muted" style="font-size:12.5px">${done.length} update${done.length===1?"":"s"} installed in the last 30 days.</p></div>`;
+}
+function wireUpdates(){
+  const b = $("#u_toggle"); if(!b) return;
+  b.onclick = async () => { const on = b.textContent.includes("on"); try{ await rpc("lock_update_settings",{p_auto:on}); toast(on?"Automatic updates on":"Automatic updates off"); route(); }catch(e){ fail(e); } };
 }
 
 /* ------------------------------------------------ router */
