@@ -21,7 +21,8 @@ create table if not exists lock_homes (
   property_id    text primary key references properties(id),
   section        text not null default 'ours' check (section in ('ours','lynx','brivo')),
   enabled        boolean not null default true,          -- ours only: hub manages codes
-  lead_hours     int not null default 12,                -- code goes on the lock this long before check-in
+  lead_hours     int not null default 12,                -- (locks without schedules) code goes on this long before check-in
+  preload_days   int not null default 3,                 -- (locks with schedules) code + its time window go on this many days early
   grace_minutes  int not null default 60,                -- and comes off this long after check-out
   wipe_foreign   boolean not null default true,          -- clear codes we didn't put there (in our slot ranges)
   -- thermostats: warm the home up before guests arrive, set it back after they leave
@@ -101,7 +102,8 @@ create table if not exists locks (
   unlocked_since timestamptz,
   last_seen     timestamptz,
   for_guests    boolean not null default true,            -- false = garage/side door that only crew codes go on
-  shared        boolean not null default false,           -- true = shared door: guests of every child home get their code on it
+  shared        boolean not null default false,
+  schedules_ok  boolean not null default true,            -- lock keeps its own time windows (set false if it refuses them)           -- true = shared door: guests of every child home get their code on it
   master_code   text,                                     -- the lock's Yale master PIN (admin + tech only), for pairing / resets
   installed_on  date,                                     -- when this lock went on the door (for replacement planning)
   replace_years int not null default 7,                   -- plan to replace after this many years (change per lock)
@@ -207,6 +209,7 @@ create table if not exists lock_assign (
   ref_id        text not null,
   label         text,
   code          text,
+  sched         jsonb,                                    -- time window the lock itself enforces (null = any time)
   wanted        boolean not null default true,
   state         text not null default 'pending' check (state in ('pending','verified','failed','clearing','cleared')),
   tries         int not null default 0,
@@ -344,7 +347,7 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from lock_stays s
                  where s.property_id in (select lock_home_family(p_prop)) and s.code = p_code and s.res_id is distinct from p_res
                    and s.status not in ('cancelled')
-                   and s.starts_at < p_to + interval '1 hour' and s.ends_at > p_from - interval '1 hour')
+                   and s.starts_at < p_to + interval '4 days' and s.ends_at > p_from - interval '4 days')   -- codes sit on the lock up to 3 days early
       or exists (select 1 from lock_staff_codes c
                  where c.active and c.code = p_code and (c.property_ids is null or c.property_ids && array(select lock_home_family(p_prop))))
 $$;
@@ -412,41 +415,76 @@ end $$;
 revoke all on function lock_upsert_stays(jsonb) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------- the plan: what should be on every lock right now
+-- Locks that keep their own schedule (Yale Assure Z-Wave: Schedule Entry Lock): codes are loaded days early
+-- (preload_days) with a time window the LOCK enforces, so a late hub or internet outage never leaves a guest
+-- without a working code. Locks that can't take schedules fall back to adding the code lead_hours before check-in.
+-- Either way the code is also taken off after check-out.
+create or replace function lock_local(t timestamptz) returns text language sql immutable as $$
+  select to_char(t at time zone 'America/Denver', 'YYYY-MM-DD"T"HH24:MI')
+$$;
+create or replace function lock_staff_sched(c lock_staff_codes, p_ends timestamptz) returns jsonb language sql stable as $$
+  select case
+    when c.time_from is not null and c.time_to is not null then
+      jsonb_build_object('type', 'daily',
+        'weekdays', to_jsonb(coalesce(c.days, array[0,1,2,3,4,5,6])),
+        'start', to_char(c.time_from, 'HH24:MI'),
+        'minutes', (extract(epoch from (case when c.time_to > c.time_from then c.time_to - c.time_from
+                                              else c.time_to - c.time_from + interval '24 hours' end)) / 60)::int)
+    when c.days is not null and array_length(c.days, 1) > 0 then
+      jsonb_build_object('type', 'daily', 'weekdays', to_jsonb(c.days), 'start', '00:00', 'minutes', 1439)
+    when c.starts_at is not null or c.ends_at is not null then
+      jsonb_build_object('type', 'year', 'start', lock_local(coalesce(c.starts_at, now())),
+                                        'stop', lock_local(coalesce(c.ends_at, now() + interval '10 years')))
+  end
+$$;
+
 create or replace function lock_plan() returns int
 language plpgsql security definer set search_path = public as $$
 declare l record; d record; s int; n int := 0;
 begin
-  for l in select k.*, h.lead_hours, h.grace_minutes from locks k
+  for l in select k.*, h.lead_hours, h.grace_minutes, h.preload_days from locks k
            join lock_hubs b on b.id = k.hub_id and b.active and b.claimed_at is not null
            join lock_homes h on h.property_id = k.property_id and h.section = 'ours' and h.enabled
            where k.active loop
     -- 1) what should be there
-    create temp table if not exists _want (ref_kind text, ref_id text, label text, code text, staff boolean) on commit drop;
+    create temp table if not exists _want (ref_kind text, ref_id text, label text, code text, staff boolean, sched jsonb) on commit drop;
     truncate _want;
     if l.for_guests then
-      insert into _want select 'stay', st.res_id, coalesce(st.guest, 'Guest') || ' (' || st.kind || ')', st.code, false
+      insert into _want select 'stay', st.res_id, coalesce(st.guest, 'Guest') || ' (' || st.kind || ')', st.code, false,
+             case when l.schedules_ok then jsonb_build_object('type', 'year', 'start', lock_local(st.starts_at - interval '1 hour'),
+                                                              'stop', lock_local(st.ends_at + make_interval(mins => l.grace_minutes))) end
         from lock_stays st
        where (st.property_id in (select lock_home_up(l.property_id))
               or (l.shared and st.property_id in (select child_id from lock_links_on where parent_id = l.property_id)))
          and st.status not in ('cancelled','checked_out')
-         and now() >= st.starts_at - make_interval(hours => l.lead_hours)
+         and now() >= st.starts_at - case when l.schedules_ok then make_interval(days => l.preload_days)
+                                          else make_interval(hours => l.lead_hours) end
          and now() <  st.ends_at + make_interval(mins => l.grace_minutes);
     end if;
-    insert into _want select 'staff', c.id::text, initcap(c.kind) || ': ' || c.label, c.code, true from lock_staff_codes c
+    -- crew / vendor / backup: with a schedule-capable lock the code stays on and the lock enforces days/hours;
+    -- otherwise the code is added when its window opens and removed when it closes
+    insert into _want select 'staff', c.id::text, initcap(c.kind) || ': ' || c.label, c.code, true,
+           case when l.schedules_ok then lock_staff_sched(c, c.ends_at) end
+      from lock_staff_codes c
      where c.active and (c.property_ids is null or l.property_id = any(c.property_ids))
-       and lock_staff_window_open(c);
-    insert into _want select 'test', cm.id::text, 'Test code', cm.args->>'code', true from lock_commands cm
+       and case when l.schedules_ok
+                then (c.starts_at is null or now() >= c.starts_at - make_interval(days => l.preload_days))
+                     and (c.ends_at is null or now() < c.ends_at)
+                else lock_staff_window_open(c) end;
+    insert into _want select 'test', cm.id::text, 'Test code', cm.args->>'code', true, null from lock_commands cm
      where cm.lock_id = l.id and cm.kind = 'refresh' and cm.args ? 'code' and cm.created_at > now() - interval '10 minutes';
 
-    -- 2) anything live that shouldn't be (or whose code changed) gets cleared
+    -- 2) anything live that shouldn't be (or whose code / time window changed) gets cleared
     update lock_assign a set wanted = false, state = 'clearing', tries = 0, err = null, updated_at = now()
      where a.lock_id = l.id and a.wanted and a.state <> 'cleared'
-       and not exists (select 1 from _want w where w.ref_kind = a.ref_kind and w.ref_id = a.ref_id and w.code = a.code);
+       and not exists (select 1 from _want w where w.ref_kind = a.ref_kind and w.ref_id = a.ref_id and w.code = a.code
+                         and w.sched is not distinct from a.sched);
 
     -- 3) anything wanted that isn't live gets a free slot
     for d in select w.* from _want w
              where not exists (select 1 from lock_assign a where a.lock_id = l.id and a.wanted and a.state <> 'cleared'
-                               and a.ref_kind = w.ref_kind and a.ref_id = w.ref_id and a.code = w.code) loop
+                               and a.ref_kind = w.ref_kind and a.ref_id = w.ref_id and a.code = w.code
+                               and a.sched is not distinct from w.sched) loop
       select g into s from generate_series(case when d.staff then l.staff_from else l.guest_from end,
                                           case when d.staff then l.staff_to   else l.guest_to   end) g
        where not exists (select 1 from lock_assign a where a.lock_id = l.id and a.slot = g and a.state <> 'cleared')
@@ -457,7 +495,7 @@ begin
         on conflict do nothing;
         continue;
       end if;
-      insert into lock_assign (lock_id, slot, ref_kind, ref_id, label, code) values (l.id, s, d.ref_kind, d.ref_id, d.label, d.code);
+      insert into lock_assign (lock_id, slot, ref_kind, ref_id, label, code, sched) values (l.id, s, d.ref_kind, d.ref_id, d.label, d.code, d.sched);
       n := n + 1;
     end loop;
   end loop;
@@ -802,6 +840,12 @@ begin
       update lock_assign set state = 'cleared', cleared_at = now(), err = null, updated_at = now() where id = a.id;
       insert into lock_events (property_id, hub_id, lock_id, kind, slot, who_kind, who_id, who)
       values (h.property_id, h.id, a.lock_id, 'code_cleared', a.slot, a.ref_kind, a.ref_id, a.label);
+    elsif r->>'state' = 'failed' and r->>'err' = 'no_schedule' then
+      -- this lock won't take time windows: switch it to add/remove timing (the hub already took the early code off)
+      update locks set schedules_ok = false where id = a.lock_id;
+      update lock_assign set wanted = false, state = 'cleared', cleared_at = now(), err = 'lock has no schedules - using add/remove timing', updated_at = now()
+       where id = a.id;
+      insert into lock_events (property_id, hub_id, lock_id, kind, detail) values (h.property_id, h.id, a.lock_id, 'schedules_off', '{}');
     elsif r->>'state' = 'failed' then
       update lock_assign set tries = tries + 1, err = left(r->>'err', 300), updated_at = now(),
              state = case when wanted then 'failed' else 'clearing' end where id = a.id;
@@ -859,7 +903,7 @@ begin
 
   -- what the hub should do now
   select coalesce(jsonb_agg(jsonb_build_object('id', a2.id, 'node_id', k2.node_id, 'slot', a2.slot, 'code', a2.code,
-                                               'wanted', a2.wanted, 'state', a2.state, 'tries', a2.tries) order by a2.id), '[]')
+                                               'wanted', a2.wanted, 'state', a2.state, 'tries', a2.tries, 'sched', a2.sched) order by a2.id), '[]')
     into out_assign
     from lock_assign a2 join locks k2 on k2.id = a2.lock_id
    where k2.hub_id = h.id and a2.state <> 'cleared' and k2.active;
