@@ -178,6 +178,81 @@ const S = { me:null, homes:[], props:{}, timer:null };
 const DESK = /locks-desk\.html$/.test(location.pathname) || window.LOCKS_DESK === true;
 if(DESK) document.body.classList.add("desk");
 const SELF = DESK ? "locks-desk.html" : "locks.html";
+// Sample home (?demo=1): a fully installed home that lives only in this page, so the crew can see what "after install" looks like.
+const DEMO = /[?&]demo=1/.test(location.search);
+const DEMO_DATA = (() => {
+  const now = Date.now(), iso = ms => new Date(now + ms).toISOString(), H = 3600e3, D = 864e5, P = "demo-101", HUB = "demo-hub";
+  const day = d => new Date(now + d*D).toISOString().slice(0,10);
+  const at = (d, h) => { const x = new Date(now + d*D); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+  const prop = { id:P, code:"DEMO 101", name:"Sample Lodge 101", address:"101 Sample Trail, Park City", area:"DEMO", bw_home_id:null };
+  const L = (id, name, model, node, batt, guests, extra) => ({ id, hub_id:HUB, property_id:P, node_id:node, name, model, battery:batt, online:true, state:"locked",
+    for_guests:guests, shared:false, master_code:"246810", installed_on:day(-1), replace_years:7, active:true, last_battery_change:at(-1,10),
+    rssi:-58-node, rtt:40+node*6, dropped:0, schedules_ok:true, battery_days:null, ...(extra||{}) });
+  const stays = [
+    { res_id:"demo-r1", property_id:P, guest:"Jordan Miles", kind:"guest", status:"checked_in", starts_at:at(-1,16), ends_at:at(2,10), code:"4821", code_source:"phone", agreement:"received", portal_token:"demo-token-1" },
+    { res_id:"demo-r2", property_id:P, guest:"Avery Chen", kind:"guest", status:"confirmed", starts_at:at(3,16), ends_at:at(7,10), code:"7716", code_source:"phone", agreement:"received", portal_token:"demo-token-2" },
+    { res_id:"demo-r3", property_id:P, guest:"Owner stay", kind:"owner", status:"confirmed", starts_at:at(9,16), ends_at:at(12,10), code:"5150", code_source:"phone", agreement:null, portal_token:"demo-token-3" },
+    { res_id:"demo-r4", property_id:P, guest:"Sam Patel", kind:"guest", status:"confirmed", starts_at:at(14,16), ends_at:at(18,10), code:"3390", code_source:"phone", agreement:"sent", portal_token:"demo-token-4" }];
+  const A = (id, lock, slot, kind, ref, label, code, state, wanted) => ({ id, lock_id:lock, slot, ref_kind:kind, ref_id:ref, label, code, wanted:wanted!==false, state,
+    err:null, verified_at:state==="verified"?iso(-2*H):null, created_at:iso(-D), sched:null });
+  return {
+    properties:[prop],
+    lock_homes:[{ property_id:P, section:"ours", enabled:true, lead_hours:12, grace_minutes:60, preload_days:3, warm_to:68, warm_hours:3, vacant_heat:58, vacant_cool:80, cool_to:null,
+      heat_max:72, heat_min:55, cool_min:68, too_cold:50, too_hot:88, after_hours_from:"21:00:00", after_hours_to:"07:00:00", auto_lock_min:15, guide_url:null, arrival_note:"Park in the garage - the code works on the garage keypad too.",
+      notes:null, track_unit_id:null, installed_at:at(-1,15),
+      install:{ prep:{by:"Chris Robinson",at:at(-1,9)}, brivo:{by:"Chris Robinson",at:at(-1,9)}, climate:{by:"Chris Robinson",at:at(-1,11)}, guest:{by:"Chris Robinson",at:at(-1,13)}, track:{by:"System (automatic)",at:at(-1,14)} },
+      properties:prop }],
+    lock_hubs:[{ id:HUB, property_id:P, name:"Hub DEMO 101", last_seen:iso(-40e3), claimed_at:at(-1,9), active:true, version:"1.4.0",
+      status:{ version:"1.4.0", ha:"2026.10.3", zwave_fw:"7.22.2", zwave_sdk:"7.22.2", uptime_min:1710, nodes:7, last_audit:iso(-6*H) } }],
+    locks:[ L("demo-l1","Front door","Yale Assure Lock 2 (YRD450)",3,88,true), L("demo-l2","Garage door","Yale Assure Lever (YRL226)",4,71,true),
+            L("demo-l3","Owner closet","Yale Assure Lock (YRD256)",5,64,false) ],
+    thermostats:[ { id:"demo-t1", hub_id:HUB, property_id:P, node_id:6, name:"Living room", model:"Honeywell T6 Pro Z-Wave", temp:68, mode:"heat", heat_sp:68, cool_sp:null, managed:true, active:true, online:true, battery:null, last_seen:iso(-60e3), rssi:-63, dropped:0, applied:"occupied" },
+                  { id:"demo-t2", hub_id:HUB, property_id:P, node_id:7, name:"Upstairs", model:"Honeywell T6 Pro Z-Wave", temp:66, mode:"heat", heat_sp:67, cool_sp:null, managed:true, active:true, online:true, battery:null, last_seen:iso(-60e3), rssi:-71, dropped:1, applied:"occupied" } ],
+    sensors:[ { id:"demo-s1", hub_id:HUB, property_id:P, node_id:8, name:"Water heater leak sensor", kind:"leak", state:"dry", battery:96, online:true, active:true, rssi:-66 },
+              { id:"demo-s2", hub_id:HUB, property_id:P, node_id:9, name:"Kitchen sink leak sensor", kind:"leak", state:"dry", battery:94, online:true, active:true, rssi:-60 } ],
+    lock_assign:[
+      A(9001,"demo-l1",2,"staff","1","Employee: Shelby Huffaker","1363","verified"), A(9002,"demo-l1",3,"staff","2","Employee: Chris Robinson","2580","verified"),
+      A(9003,"demo-l1",4,"staff","3","Backup code","9017","verified"), A(9004,"demo-l1",5,"staff","4","Vendor: ABC Hot Tubs (Mon-Fri 8-6)","7788","verified"),
+      A(9005,"demo-l2",2,"staff","1","Employee: Shelby Huffaker","1363","verified"), A(9006,"demo-l2",3,"staff","2","Employee: Chris Robinson","2580","verified"),
+      A(9007,"demo-l3",2,"staff","2","Employee: Chris Robinson","2580","verified"),
+      A(9010,"demo-l1",121,"stay","demo-r1","Jordan Miles (guest)","4821","verified"), A(9011,"demo-l2",121,"stay","demo-r1","Jordan Miles (guest)","4821","verified"),
+      A(9012,"demo-l1",122,"stay","demo-r2","Avery Chen (guest)","7716","verified"), A(9013,"demo-l2",122,"stay","demo-r2","Avery Chen (guest)","7716","verified"),
+      A(9020,"demo-l1",150,"test","t1","Test code","5309","cleared",false), A(9021,"demo-l2",150,"test","t2","Test code","5309","cleared",false),
+      A(9022,"demo-l3",150,"test","t3","Test code","5309","cleared",false) ]
+      .map(a => a.ref_kind==="test" ? {...a, verified_at:at(-1,12)} : a),
+    lock_stays:stays,
+    lock_commands:[ { id:"demo-c1", hub_id:HUB, lock_id:"demo-l1", kind:"wipe", ok:true, done_at:at(-1,12) }, { id:"demo-c2", hub_id:HUB, lock_id:"demo-l2", kind:"wipe", ok:true, done_at:at(-1,12) },
+                    { id:"demo-c3", hub_id:HUB, lock_id:"demo-l3", kind:"wipe", ok:true, done_at:at(-1,12) } ],
+    lock_events:[
+      { at:iso(-25*60e3), property_id:P, kind:"unlock_code", who:"Jordan Miles (guest)", slot:121, lock_id:"demo-l1" },
+      { at:iso(-23*60e3), property_id:P, kind:"lock_auto", who:null, slot:null, lock_id:"demo-l1" },
+      { at:iso(-3*H), property_id:P, kind:"governor", who:null, slot:null, lock_id:null, detail:{tried:78,set_to:72} },
+      { at:iso(-5*H), property_id:P, kind:"unlock_code", who:"Employee: Shelby Huffaker", slot:2, lock_id:"demo-l2" },
+      { at:iso(-26*H), property_id:P, kind:"code_set", who:"Avery Chen (guest)", slot:122, lock_id:"demo-l1" },
+      { at:at(-1,13), property_id:P, kind:"climate_set", who:"warm-up for arrival", slot:null, lock_id:null },
+      { at:at(-1,14), property_id:P, kind:"track_switched", who:"system", slot:null, lock_id:null },
+      { at:at(-1,15), property_id:P, kind:"home_installed", who:"Chris Robinson", slot:null, lock_id:null } ],
+    lock_alerts:[],
+    lock_updates:[ { id:"demo-u1", hub_id:HUB, entity:"update.home_assistant_core_update", kind:"core", title:"Home Assistant Core", from_ver:"2026.10.3", to_ver:"2026.10.4",
+      first_seen:iso(-D), started_at:null, done_at:null, ok:null, err:null } ],
+    property_access:[ { property_id:P, wifi_name:"Moose Guest", wifi_password:"(sample)", door_code:null, gate_code:null, garage_code:"(guest code)", lockbox_code:"on file" } ],
+  };
+})();
+function demoRows(table, ops){
+  if(!DEMO || !DEMO_DATA[table]) return [];
+  let rows = DEMO_DATA[table].slice();
+  for(const [k,a] of ops){
+    const [c,v] = a;
+    if(k==="eq") rows = rows.filter(r => String(r[c]) === String(v));
+    else if(k==="neq") rows = rows.filter(r => String(r[c]) !== String(v));
+    else if(k==="in") rows = rows.filter(r => (v||[]).map(String).includes(String(r[c])));
+    else if(k==="is") rows = rows.filter(r => v===null ? r[c]==null : r[c]===v);
+    else if(k==="gte") rows = rows.filter(r => r[c]!=null && (isNaN(Date.parse(v)) ? r[c] >= v : new Date(r[c]) >= new Date(v)));
+    else if(k==="lte") rows = rows.filter(r => r[c]!=null && (isNaN(Date.parse(v)) ? r[c] <= v : new Date(r[c]) <= new Date(v)));
+    else if(k==="or") rows = [];
+  }
+  return rows;
+}
 const $ = (s, el=document) => el.querySelector(s);
 const $$ = (s, el=document) => [...el.querySelectorAll(s)];
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -190,8 +265,18 @@ function when(ts){ return ts? new Date(ts).toLocaleString(undefined,{weekday:"sh
 function ageTxt(d){ const y=(Date.now()-new Date(d+"T12:00:00"))/3.156e10; return y<1? Math.max(1,Math.round(y*12))+" mo" : y.toFixed(1)+" yr"; }
 const online = h => h && h.last_seen && (Date.now()-new Date(h.last_seen)) < 10*6e4;
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
-async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
-async function q(table, sel, f){ let x = sb.from(table).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data||[]; }
+async function rpc(fn, args){
+  if(DEMO && /demo-/.test(JSON.stringify(args||{}))){ toast("Sample home - nothing was sent"); return "demo"; }
+  const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
+async function q(table, sel, f){
+  if(!DEMO){ let x = sb.from(table).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data||[]; }
+  // sample-home mode: run the real query, record its filters, and add the matching sample rows
+  let real = sb.from(table).select(sel); const ops = [];
+  const rec = new Proxy({}, { get:(t,k) => (...a) => { ops.push([k,a]); real = real[k](...a); return rec; } });
+  if(f) f(rec);
+  const { data, error } = await real; if(error) throw error;
+  return [...demoRows(table, ops), ...(data||[])];
+}
 async function wake(hubId){ try{ await fetch(C.url+"/realtime/v1/api/broadcast",{method:"POST",headers:{"content-type":"application/json",apikey:C.anonKey,authorization:"Bearer "+((await sb.auth.getSession()).data.session||{}).access_token},body:JSON.stringify({messages:[{topic:"hub-"+hubId,event:"wake",payload:{}}]})}); }catch(e){} }
 /* "Sync with Track now": the ThinkStation picks it up within a minute (new last-minute booking, code change...) */
 async function syncBar(){
@@ -222,7 +307,7 @@ function stayCode(s){
   return "";     // guest codes live on the office desk only
 }
 async function command(hubId, lockId, kind, args){ const id = await rpc("lock_command",{p_hub:hubId,p_lock:lockId,p_kind:kind,p_args:args||{}}); wake(hubId); return id; }
-async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
+async function waitCmd(id, secs){ if(id==="demo"){ await sleep(600); return {done_at:new Date().toISOString(), ok:true, result:{msg:"Sample home - nothing was sent"}}; } for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
 
 const ICON = {
   homes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
@@ -243,7 +328,7 @@ function shell(active, inner, title, sub){
       <div class="grow"><h1>${esc(title||"Moose Locks")}</h1><div class="sub">${esc(sub||"Moose Management · lock system")}</div></div>
       <a class="iconbtn" href="${DESK?"desk.html":"index.html"}" title="${DESK?"Maintenance desk":"Maintenance site"}">${ICON.homes}</a></div></header>
   ${DESK?navTabs(active):""}
-  <main id="main">${inner}</main>
+  <main id="main">${DEMO?`<div class="card" style="background:var(--amber-soft);border-color:var(--amber);font-weight:700">Sample mode: <b>DEMO 101</b> is a pretend home that shows what a finished install looks like. Taps on it don't send anything. <a href="${SELF}">Leave sample mode</a></div>`:""}${inner}</main>
   ${DESK?"":navTabs(active)}`;
 }
 function navTabs(active){
@@ -273,13 +358,22 @@ function loginView(msg){
 
 /* ------------------------------------------------ homes list */
 async function loadBase(){
-  const homes = await q("lock_homes","*,properties(id,code,name,address,bw_home_id)");
+  const homes = await q("lock_homes","*,properties(id,code,name,address,area,bw_home_id)");
   S.homes = homes.filter(h=>h.properties).sort((a,b)=>a.properties.code.localeCompare(b.properties.code));
   S.props = Object.fromEntries(S.homes.map(h=>[h.property_id,h.properties]));
   const al = await q("lock_alerts","id,property_id",x=>x.is("closed_at",null));
   const ours = new Set(S.homes.filter(h=>h.section==="ours").map(h=>h.property_id));
   S.alertCount = al.filter(a=>ours.has(a.property_id)).length;
 }
+/* neighborhoods (office desk): Track area code (RJ, BHV...) + the name the homes share ("Retreat at Jordanelle") */
+const hoodOf = h => (h.properties && (h.properties.area || (h.properties.code||"").split(" ")[0])) || "Other";
+function hoodName(area){
+  const names = S.homes.filter(h=>hoodOf(h)===area).map(h=>String(h.properties.name||"")
+    .replace(/\s*\(.*\)\s*$/,"").replace(/\s+PF$/i,"").replace(/\s+(unit\s+)?#?[\w-]*\d[\w-]*$/i,"").trim()).filter(Boolean);
+  const top = Object.entries(names.reduce((m,n)=>(m[n]=(m[n]||0)+1,m),{})).sort((a,b)=>b[1]-a[1])[0];
+  return top ? top[0] : area;
+}
+function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("locks_"+k); localStorage.setItem("locks_"+k, v); }catch(e){ return null; } }
 async function homesView(){
   await loadBase();
   const [hubs, locks, thermos, alerts, assigns] = await Promise.all([
@@ -329,12 +423,38 @@ async function homesView(){
       ${DESK?`<a class="stat" href="#/stays" style="text-decoration:none;color:inherit"><div class="n">${arrivals}</div><div class="l">Arrivals next 7 days</div></a>`:""}
     </div>
     ${bar}
-    <h3>Homes on our system · ${sec.ours.length}</h3><div class="tile-grid">${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}</div>
+    ${DESK ? `<div class="card row" style="gap:12px">
+        <label class="field" style="margin:0;flex:1;min-width:200px"><span>Neighborhood</span><select id="hood"><option value="">All neighborhoods</option>
+          ${[...new Set(sec.ours.map(hoodOf))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b))).map(a=>`<option value="${esc(a)}">${esc(hoodName(a))} (${esc(a)})</option>`).join("")}</select></label>
+        <label class="field" style="margin:0;flex:1;min-width:200px"><span>Sort</span><select id="hsort">
+          <option value="az">A → Z</option><option value="za">Z → A</option><option value="attn">Needs attention first</option></select></label>
+        <label class="field" style="margin:0;flex:1;min-width:200px"><span>Find</span><input id="hfind" placeholder="Home code or name"></label></div>
+      <div id="hoodlist"></div>`
+    : `<h3>Homes on our system · ${sec.ours.length}</h3><div class="tile-grid">${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}</div>`}
     ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
       <label class="field"><span>Home code (as in Track, e.g. RJ 811)</span><input id="nh"></label>
       <label class="field"><span>Section</span><select id="ns"><option value="ours">Our system</option></select></label>
       <button class="btn primary wide" id="addh">Add</button></details>`:""}`, "Moose Locks", `${sec.ours.length} test homes · ${hubOn} online`);
   wireSync();
+  if(DESK){
+    const score = h => { const hub = hubs.find(x=>x.property_id===h.property_id && x.claimed_at); const n = alerts.filter(x=>x.property_id===h.property_id).length;
+      return n*10 + (hub && !online(hub) ? 5 : 0) + (!hub ? 1 : 0); };
+    const draw = () => {
+      const hood = $("#hood").value, srt = $("#hsort").value, t = $("#hfind").value.trim().toLowerCase();
+      pref("hood", hood); pref("sort", srt);
+      const cmp = (a,b) => srt==="attn" ? (score(b)-score(a)) || a.properties.code.localeCompare(b.properties.code, undefined, {numeric:true})
+        : (srt==="za" ? -1 : 1) * a.properties.code.localeCompare(b.properties.code, undefined, {numeric:true});
+      const list = sec.ours.filter(h => (!hood || hoodOf(h)===hood) && (!t || (h.properties.code+" "+h.properties.name).toLowerCase().includes(t)));
+      const groups = [...new Set(list.map(hoodOf))].sort((a,b)=>(srt==="za"?-1:1)*hoodName(a).localeCompare(hoodName(b)));
+      $("#hoodlist").innerHTML = groups.map(g => { const hs = list.filter(h=>hoodOf(h)===g).sort(cmp);
+          return `<h3>${esc(hoodName(g))} <span style="opacity:.7">· ${esc(g)} · ${hs.length} home${hs.length>1?"s":""}</span></h3><div class="tile-grid">${hs.map(card).join("")}</div>`; }).join("")
+        || '<div class="empty">No homes match.</div>';
+    };
+    const ph = pref("hood"), ps = pref("sort");
+    if(ph && [...$("#hood").options].some(o=>o.value===ph)) $("#hood").value = ph;
+    if(ps) $("#hsort").value = ps;
+    $("#hood").onchange = draw; $("#hsort").onchange = draw; $("#hfind").oninput = draw; draw();
+  }
   const b = $("#addh"); if(b) b.onclick = async () => {
     try{ const p = (await q("properties","id",x=>x.eq("code",$("#nh").value.trim())))[0]; if(!p) return toast("No home with that code");
       await rpc("lock_home_set",{p_property:p.id,p_section:$("#ns").value,p_enabled:true}); toast("Added"); homesView(); }catch(e){ fail(e); } };
@@ -471,7 +591,7 @@ async function installHome(pid){
     q("locks","*",x=>x.eq("property_id",pid).eq("active",true).order("node_id")),
     q("thermostats","id,node_id,name,temp,mode,online,rssi,dropped",x=>x.eq("property_id",pid).eq("active",true)),
     q("sensors","id,node_id,name,kind,online,rssi",x=>x.eq("property_id",pid).eq("active",true)),
-    q("lock_assign","lock_id,ref_kind,state,code,created_at",x=>x.eq("ref_kind","test").order("created_at",{ascending:false})),
+    q("lock_assign","lock_id,ref_kind,state,code,created_at,verified_at",x=>x.eq("ref_kind","test").order("created_at",{ascending:false})),
     q("lock_commands","lock_id,kind,ok,done_at",x=>x.eq("kind","wipe").eq("ok",true)),
     q("property_access","wifi_name,wifi_password,gate_code,garage_code,lockbox_code",x=>x.eq("property_id",pid)),
     q("lock_stays","guest,starts_at,ends_at,status",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(2)),
@@ -483,7 +603,7 @@ async function installHome(pid){
   const facts = {
     hub: !!hub,
     locks: named,
-    test: locks.length && locks.every(l=>assigns.some(x=>x.lock_id===l.id && x.state==="verified")),
+    test: locks.length && locks.every(l=>assigns.some(x=>x.lock_id===l.id && (x.state==="verified" || x.verified_at))),   // test codes clear themselves after 10 min - keep the step done
     wipe: locks.length && locks.every(l=>cmds.some(c=>c.lock_id===l.id)),
     guest: !!(a.wifi_name && a.wifi_password),
   };
@@ -563,6 +683,7 @@ async function installHome(pid){
   $$("[data-wipe]").forEach(b=>b.onclick=async()=>{ if(!confirm("Clear every code on this lock that isn't ours (old Brivo codes)? Crew, vendor and guest codes from our system stay.")) return;
     try{ await command(null, b.dataset.wipe, "wipe"); toast("Reading the lock - old codes will be cleared"); again(); }catch(e){ fail(e); } });
   $("#wsave") && ($("#wsave").onclick = async () => {
+    if(pid.startsWith("demo-")) return toast("Sample home - nothing was saved");
     const { error } = await sb.from("property_access").upsert({ property_id:pid, wifi_name:$("#wn").value.trim()||null, wifi_password:$("#wp").value.trim()||null,
       gate_code:$("#gc").value.trim()||null, garage_code:$("#gg").value.trim()||null });
     error ? fail(error) : (toast("Saved"), again()); });
@@ -704,6 +825,7 @@ async function homeView(pid){
     }catch(e){ fail(e); } pair.disabled = false; };
   // wifi
   $("#wsave") && ($("#wsave").onclick = async () => {
+    if(pid.startsWith("demo-")) return toast("Sample home - nothing was saved");
     const { error } = await sb.from("property_access").upsert({ property_id:pid, wifi_name:$("#wn").value.trim()||null, wifi_password:$("#wp").value.trim()||null,
       gate_code:$("#gc").value.trim()||null, garage_code:$("#gg").value.trim()||null });
     if(error) return fail(error);
