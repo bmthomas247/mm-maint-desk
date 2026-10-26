@@ -44,6 +44,8 @@ create table if not exists lock_homes (
   notes          text,
   guide_url      text,                                   -- TouchStay guide for this home (shown on the guest page)
   arrival_note   text,                                   -- guest-facing "getting in" note (parking, which entrance, front desk)
+  extra_codes    jsonb not null default '[]',            -- other public codes from Track (hot tub, side garage...): [{name, code}]
+  track_unit_id  bigint,                                 -- Track unit id (locks_sync fills it)
   added_by       text not null default actor(),
   created_at     timestamptz not null default now()
 );
@@ -737,10 +739,12 @@ begin
   get diagnostics n = row_count;
   -- close the ones that cleared up
   update lock_alerts a set closed_at = now()
-   where a.closed_at is null and a.kind not in ('slots_full','after_hours')
+   where a.closed_at is null and a.kind not in ('slots_full','after_hours','keybox_used')
      and not exists (select 1 from _cond c where c.kind = a.kind and c.hub_id is not distinct from a.hub_id
                      and c.lock_id is not distinct from a.lock_id and c.ref = a.ref);
   update lock_alerts a set closed_at = now() where a.closed_at is null and a.kind in ('slots_full','after_hours') and a.opened_at < now() - interval '12 hours';
+  update lock_alerts a set closed_at = now() where a.closed_at is null and a.kind = 'keybox_used' and a.bw_task is not null
+     and exists (select 1 from lock_stays st where st.res_id = a.ref and st.ends_at < now() - interval '1 day');
   return n;
 end $$;
 revoke all on function lock_health() from public, anon, authenticated;
@@ -1134,6 +1138,70 @@ begin
   perform lock_plan();
 end $$;
 
+
+-- ---------------------------------------------------------------- Track unit security codes -> guest page (service role only; locks_sync.py)
+-- rows: [{unit, track_unit_id, codes:[{type, code, public, start, end}]}]. Track is the source: garage, gate/building, key box,
+-- and any other public code (hot tub...) for the guest page. Front door codes (Brivo) are skipped - we make those.
+create or replace function lock_set_track_codes(rows jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare r jsonb; prop text; n int := 0; codes jsonb;
+begin
+  for r in select * from jsonb_array_elements(rows) loop
+    select id into prop from properties where code = r->>'unit';
+    if prop is null then continue; end if;
+    -- only codes in effect today
+    select coalesce(jsonb_agg(c), '[]') into codes from jsonb_array_elements(r->'codes') c
+     where (c->>'start' is null or (c->>'start')::date <= current_date) and (c->>'end' is null or (c->>'end')::date >= current_date);
+    insert into property_access (property_id) values (prop) on conflict (property_id) do nothing;
+    update property_access pa set
+      garage_code = coalesce((select x->>'code' from jsonb_array_elements(codes) x where x->>'type' ilike '%garage%' and (x->>'public')::boolean
+                               order by (x->>'type' ilike '%main%') desc limit 1), pa.garage_code),
+      gate_code = coalesce((select x->>'code' from jsonb_array_elements(codes) x
+                             where x->>'type' ~* '(gate|building|lobby|entry|community|front desk)' and x->>'type' !~* 'front door' limit 1), pa.gate_code),
+      lockbox_code = coalesce((select x->>'code' from jsonb_array_elements(codes) x where x->>'type' ~* '(key ?box|lock ?box)'
+                                order by x->>'start' desc nulls last limit 1), pa.lockbox_code)
+     where pa.property_id = prop;
+    update lock_homes set track_unit_id = (r->>'track_unit_id')::bigint,
+           extra_codes = (select coalesce(jsonb_agg(jsonb_build_object('name', x->>'type', 'code', x->>'code')), '[]')
+                            from jsonb_array_elements(codes) x
+                           where (x->>'public')::boolean and x->>'type' !~* '(front door|garage|gate|building|lobby|entry|community|key ?box|lock ?box)')
+     where property_id = prop;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function lock_set_track_codes(jsonb) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------- "I can't get in": emergency key box code for the guest
+-- Only during the stay. Logs it, opens a keybox_used alert (-> Breezeway task "check the key box" on check-out day),
+-- and the lock-guest function posts it to Slack for the office + maintenance.
+create or replace function lock_guest_keybox(p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare st lock_stays; p properties; pa property_access;
+begin
+  select * into st from lock_stays where portal_token = p_token;
+  if not found or st.status in ('cancelled','checked_out') or now() < st.starts_at - interval '1 hour' or now() >= st.ends_at then
+    return jsonb_build_object('error', 'The emergency key is only available during your stay. Please call us.');
+  end if;
+  select * into p from properties where id = st.property_id;
+  select * into pa from property_access where property_id = st.property_id;
+  if pa.lockbox_code is null then
+    select x.* into pa from property_access x where x.property_id in (select parent_id from lock_links_on where child_id = st.property_id)
+       and x.lockbox_code is not null limit 1;
+  end if;
+  if pa.lockbox_code is null then return jsonb_build_object('error', 'No key box at this home. Please call us right away.'); end if;
+  insert into lock_events (property_id, kind, who_kind, who_id, who) values (st.property_id, 'keybox_given', 'stay', st.res_id, st.guest);
+  insert into lock_alerts (kind, property_id, ref, detail)
+  values ('keybox_used', st.property_id, st.res_id,
+          coalesce(st.guest, 'Guest') || ' was given the key box code at ' || to_char(now() at time zone 'America/Denver', 'Mon DD HH12:MI am')
+          || '. Check the key is back after check-out (' || to_char(st.ends_at at time zone 'America/Denver', 'Mon DD HH12:MI am') || ').')
+  on conflict do nothing;
+  return jsonb_build_object('code', pa.lockbox_code, 'where', p.access_notes, 'home', p.code, 'guest', st.guest,
+                            'checkout', to_char(st.ends_at at time zone 'America/Denver', 'Mon DD HH12:MI am'),
+                            'slack', coalesce((select value from lock_settings where key = 'keybox_slack_channels'), 'C063B9NQJQY'));
+end $$;
+revoke all on function lock_guest_keybox(text) from public, anon, authenticated;
+
 -- ---------------------------------------------------------------- guest portal (called only by the lock-guest Edge Function)
 -- the doors a stay opens: its own home's guest doors, its children's (combo booking), and shared doors of its parents
 create or replace function lock_guest_doors(p_res text) returns setof uuid language sql stable security definer set search_path = public as $$
@@ -1169,6 +1237,8 @@ begin
     'garage_code', case when now() >= st.starts_at - interval '1 day' then coalesce(pa.garage_code,
         (select x.garage_code from property_access x where x.property_id in (select parent_id from lock_links_on where child_id = st.property_id) and x.garage_code is not null limit 1)) end,
     'arrival_note', (select arrival_note from lock_homes where property_id = st.property_id),
+    'extra_codes', case when now() >= st.starts_at - interval '1 day' then (select extra_codes from lock_homes where property_id = st.property_id) else '[]' end,
+    'help', now() >= st.starts_at - interval '1 hour' and now() < st.ends_at and st.status not in ('cancelled','checked_out'),
     'wifi_name', case when now() >= st.starts_at - interval '1 day' then pa.wifi_name end,
     'wifi_password', case when now() >= st.starts_at - interval '1 day' then pa.wifi_password end,
     'doors', coalesce((select jsonb_agg(jsonb_build_object('id', k.id, 'name', k.name) order by k.name)
