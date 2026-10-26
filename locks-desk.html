@@ -324,7 +324,7 @@ async function homesView(){
   await loadBase();
   const [hubs, locks, thermos, alerts, assigns] = await Promise.all([
     q("lock_hubs","id,property_id,last_seen,active,claimed_at",x=>x.eq("active",true)),
-    q("locks","id,hub_id,property_id,name,battery,online,state,active,rssi",x=>x.eq("active",true)),
+    q("locks","id,hub_id,property_id,name,battery,online,state,active,rssi,slots,slots_used",x=>x.eq("active",true)),
     q("thermostats","id,hub_id,property_id,name,temp,mode,heat_sp,cool_sp,online,active,last_seen,rssi,battery",x=>x.eq("active",true)),
     q("lock_alerts","kind,property_id,detail",x=>x.is("closed_at",null)),
     q("lock_assign","lock_id,state,wanted",x=>x.neq("state","cleared"))]);
@@ -352,7 +352,7 @@ async function homesView(){
         <div style="text-align:right;display:grid;gap:6px;justify-items:end">${status}${as.length?`<span class="pill red">${as.length} alert${as.length>1?"s":""}</span>`:""}</div></div>
       <div class="meta">
         ${hub?`<span class="mini">${ICON.hub} hub ${online(hub)?"online":"offline"}</span>`:""}
-        ${ls.map(l=>`<span class="mini">${esc(l.name)} ${batt(l.battery)} ${l.battery??"?"}% ${bars(l.rssi)}${l.state==="unlocked"?' <b style="color:var(--amber)">open</b>':""}</span>`).join("")}
+        ${ls.map(l=>`<span class="mini">${esc(l.name)} ${batt(l.battery)} ${l.battery??"?"}% ${bars(l.rssi)}${l.slots_used!=null?` 🔑${l.slots_used}/${l.slots||"?"}`:""}${l.state==="unlocked"?' <b style="color:var(--amber)">open</b>':""}</span>`).join("")}
         ${temps.length?`<span class="mini">${ICON.temp} ${temps.map(t=>Math.round(t.temp)+"°").join(" / ")}</span>`:""}
         ${ts.length?`<span class="mini">${tOn}/${ts.length} thermostat${ts.length>1?"s":""} online</span>`:""}
         ${!ls.length && !ts.length && h.section==="ours" ? `<span class="mini">Install ${steps.done}/${steps.total}</span>`:""}
@@ -372,10 +372,10 @@ async function homesView(){
       ${DESK?`<a class="stat" href="#/stays" style="text-decoration:none;color:inherit"><div class="n">${arrivals}</div><div class="l">Arrivals next 7 days</div></a>`:""}
     </div>
     ${bar}
-    ${DESK ? `<div class="card row" style="gap:12px">
+    ${true ? `<div class="card row" style="gap:12px">
         <label class="field" style="margin:0;flex:1;min-width:200px"><span>Neighborhood</span><select id="hood"><option value="">All neighborhoods</option>
           ${[...new Set(sec.ours.map(hoodOf))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b))).map(a=>`<option value="${esc(a)}">${esc(hoodName(a))} (${esc(a)})</option>`).join("")}</select></label>
-        <label class="field" style="margin:0;flex:1;min-width:200px"><span>Sort</span><select id="hsort">
+        <label class="field" style="margin:0;flex:1;min-width:200px;${DESK?"":"display:none"}"><span>Sort</span><select id="hsort">
           <option value="az">A → Z</option><option value="za">Z → A</option><option value="attn">Needs attention first</option></select></label>
         <label class="field" style="margin:0;flex:1;min-width:200px"><span>Find</span><input id="hfind" placeholder="Home code or name"></label></div>
       <div id="hoodlist"></div>`
@@ -396,7 +396,7 @@ async function homesView(){
     }catch(e){ fail(e); }
     b.disabled = false; setTimeout(()=>homesView(), 2500);
   }, { capture:true });
-  if(DESK){
+  {
     const score = h => { const hub = hubs.find(x=>x.property_id===h.property_id && x.claimed_at); const n = alerts.filter(x=>x.property_id===h.property_id).length;
       return n*10 + (hub && !online(hub) ? 5 : 0) + (!hub ? 1 : 0); };
     const draw = () => {
@@ -556,6 +556,7 @@ async function installHome(pid){
     q("property_access","wifi_name,wifi_password,gate_code,garage_code,lockbox_code",x=>x.eq("property_id",pid)),
     q("lock_stays","guest,starts_at,ends_at,status",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(2)),
     q("locks","name,master_code",x=>x.eq("property_id",pid))]);
+  const brivoM = (await rpc("lock_brivo_masters").catch(()=>[])||[]).filter(m=>m.property_id===pid);
   const hub = hubs.find(x=>x.claimed_at);
   await loadUpdates(hub);
   const ids = new Set(locks.map(l=>l.id)), a = access[0]||{};
@@ -579,7 +580,9 @@ async function installHome(pid){
       <div class="check">□ Hub, Z-Wave stick, USB extension cable, network cable</div>
       <div class="check">□ Fresh AA batteries for each lock</div>
       <div class="check">□ Phone charged, on the home's Wi-Fi once there</div>
-      ${masters.length?`<div class="muted" style="margin-top:6px">Master codes: ${masters.map(m=>`${esc(m.name)} <b>${esc(m.master_code||"?")}</b>`).join(" · ")}</div>`:""}${mark(STEPS[0])}`,
+      ${masters.some(m=>m.master_code)||brivoM.length?`<div class="muted" style="margin-top:6px">Master code: ${[...masters.filter(m=>m.master_code).map(m=>`${esc(m.name)} <b>${esc(m.master_code)}</b>`),
+          ...brivoM.filter(b=>!masters.some(m=>m.master_code===b.master_code)).map(b=>`<b>${esc(b.master_code)}</b> (from Brivo${b.door?" - "+esc(b.door):""})`)].join(" · ")}</div>`
+        :`<div class="muted" style="margin-top:6px">Master code: <b style="color:var(--red)">not on file</b> - get it from Brivo (home → Add/Remove Device) before you go.</div>`}${mark(STEPS[0])}`,
     hub: hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span> <span class="muted">checked in ${ago(hub.last_seen)}</span>`
       : `<div class="muted">Put the hub in the owner closet or utility room by the router. Network cable from the router, stick on the extension cable placed up high, then power. Wait 5 minutes.</div>
          <button class="btn go wide" id="find" style="margin-top:10px">Find hub</button><div id="found"></div>
@@ -681,7 +684,7 @@ async function homeView(pid){
     return `<div class="card" data-lock="${l.id}">
       <div class="row"><div class="grow" style="min-width:170px"><b>${esc(l.name)}</b><div class="muted">${esc(l.model||"")} · node ${l.node_id}${l.installed_on?` · ${ageTxt(l.installed_on)} old`:""}</div></div>
         <span class="pill ${l.online===false?"red":l.state==="unlocked"?"amber":"green"}">${l.online===false?"Not answering":esc(l.state||"?")}</span>
-        <span class="pill ${l.battery!=null&&l.battery<=30?"red":"grey"}">🔋 ${l.battery??"?"}%</span><span class="pill grey plain">${signal(l.rssi)}</span></div>
+        <span class="pill ${l.battery!=null&&l.battery<=30?"red":"grey"}">🔋 ${l.battery??"?"}%</span><span class="pill grey plain">${signal(l.rssi)}</span>${l.slots_used!=null?`<span class="pill ${l.slots&&l.slots_used/l.slots>.9?"red":"grey"} plain" title="Codes on this lock right now, out of how many it can hold">🔑 ${l.slots_used}/${l.slots||"?"} used</span>`:""}</div>
       <div class="grid2" style="margin-top:10px"><button class="btn primary" data-act="unlock">Unlock</button><button class="btn" data-act="lock">Lock</button></div>
       <details style="margin-top:8px"><summary>Name, master code, test</summary>
         <div class="chips" style="margin:6px 0">${DOOR_NAMES.map(n=>`<span class="chip ${n===l.name?"on":""}" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>
@@ -753,7 +756,8 @@ async function homeView(pid){
     ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
     <div class="${DESK?"cols":""}"><div>
     ${(locks.length||thermos.length) && hub ? `<div class="card" id="whole"><h3 style="margin-top:0">Whole home</h3>
-      ${locks.length?`<div class="muted" style="margin-bottom:8px">${locks.length} door${locks.length>1?"s":""} · ${locks.every(l=>l.state==="locked")?"all locked":locks.filter(l=>l.state!=="locked").map(l=>esc(l.name)+" "+esc(l.state||"?")).join(", ")}</div>
+      ${locks.length?`<div class="muted" style="margin-bottom:8px">${locks.length} door${locks.length>1?"s":""} · ${locks.every(l=>l.state==="locked")?"all locked":locks.filter(l=>l.state!=="locked").map(l=>esc(l.name)+" "+esc(l.state||"?")).join(", ")}
+        ${locks.some(l=>l.slots_used!=null)?` · codes on the doors: <b>${locks.reduce((n,l)=>n+(l.slots_used||0),0)}</b> of ${locks.reduce((n,l)=>n+(l.slots||0),0)||"?"} spaces`:""}</div>
         <div class="grid2"><button class="btn primary" data-all="lock">${ICON.lock} Lock all doors</button><button class="btn" data-all="unlock">Unlock all doors</button></div>`:""}
       ${thermos.length?`<div class="muted" style="margin:14px 0 6px">${thermos.map(t=>esc(t.name)+" "+(t.temp!=null?Math.round(t.temp)+"°":"?")).join(" · ")}</div>
         <div class="chips" id="wmode">${["heat","cool","off"].map(m=>`<span class="chip ${m==="heat"?"on":""}" data-m="${m}">${m}</span>`).join("")}</div>
@@ -874,13 +878,15 @@ async function staysView(){
 /* ------------------------------------------------ employee / vendor / backup codes */
 async function codesView(){
   if(!S.homes.length) await loadBase();
-  const [codes, masters] = await Promise.all([q("lock_staff_codes","*",x=>x.order("kind").order("label")),
-    q("locks","property_id,name,master_code",x=>x.eq("active",true).order("property_id"))]);
+  const [codes, masters, brivoM] = await Promise.all([q("lock_staff_codes","*",x=>x.order("kind").order("label")),
+    q("locks","property_id,name,master_code",x=>x.eq("active",true).order("property_id")), rpc("lock_brivo_masters").then(r=>r||[]).catch(()=>[])]);
   const ours = S.homes.filter(h=>h.section==="ours");
   const homeNames = ids => !ids ? "All our homes" : ids.map(i=>(S.props[i]||{}).code||i).join(", ");
   const timeTxt = c => [c.days&&c.days.length?c.days.map(d=>DAYS[d]).join(" "):"Every day", c.time_from?`${c.time_from.slice(0,5)}–${c.time_to.slice(0,5)}`:"all day",
     c.ends_at?"until "+new Date(c.ends_at).toLocaleDateString():""].filter(Boolean).join(" · ");
   const groups = {employee:"Employees",backup:"Backup codes",vendor:"Vendors",owner:"Owners"};
+  const topName = c => c.person || c.company || c.label;
+  const subName = c => [c.person && c.company ? c.company : null, c.role].filter(Boolean).join(" · ");
   const SHOW = {all:["employee","backup","vendor","owner"], crew:["employee","backup"], vendor:["vendor"], owner:["owner"]};
   const HINT = {employee:"", backup:"", vendor:"Set days and hours so vendors only get in during their window.", owner:"Pick the owner's home(s). Owner codes work any time unless you set days or dates."};
   shell("codes", `<h2>Crew, vendor &amp; owner codes</h2>
@@ -892,20 +898,24 @@ async function codesView(){
       <button class="btn go" id="new">+ Add a code</button></div>
     <div id="form"></div>
     <div id="clist"></div>
-    <h3>Lock master codes</h3><div class="card"><table class="tbl"><tr><th>Home</th><th>Door</th><th>Master code</th></tr>
-      ${masters.filter(m=>ours.some(h=>h.property_id===m.property_id)).map(m=>`<tr><td><b>${esc((S.props[m.property_id]||{}).code||"")}</b></td><td>${esc(m.name)}</td><td>${m.master_code?`<span class="code-chip">${esc(m.master_code)}</span>`:'<span class="muted">not set</span>'}</td></tr>`).join("")
-        || '<tr><td colspan="3" class="muted">Locks show here once they are paired.</td></tr>'}</table></div>`, "Moose Locks", "Office · crew, vendor & owner codes");
+    <h3>Lock master codes</h3><div class="card"><table class="tbl"><tr><th>Home</th><th>Door</th><th>Master code</th><th>From</th></tr>
+      ${ours.slice().sort((a,b)=>a.properties.code.localeCompare(b.properties.code,undefined,{numeric:true})).map(h => {
+          const ls = masters.filter(m=>m.property_id===h.property_id && m.master_code), bs = brivoM.filter(b=>b.property_id===h.property_id && !ls.some(m=>m.master_code===b.master_code));
+          const rows = [...ls.map(m=>[m.name, m.master_code, "Lock"]), ...bs.map(b=>[b.door||"Home", b.master_code, "Brivo"])];
+          return rows.length ? rows.map(r=>`<tr><td><b>${esc(h.properties.code)}</b></td><td>${esc(r[0])}</td><td><span class="code-chip">${esc(r[1])}</span></td><td class="muted">${r[2]}</td></tr>`).join("")
+            : `<tr><td><b>${esc(h.properties.code)}</b></td><td></td><td><span class="muted" style="color:var(--red)">not on file - get it from Brivo</span></td><td></td></tr>`; }).join("")}</table></div>`, "Moose Locks", "Office · crew, vendor & owner codes");
   const firstHome = c => c.property_ids && c.property_ids.length ? ((S.props[c.property_ids[0]]||{}).code||"") : "~";
   const drawCodes = () => {
     const show = pref("cshow") || "all", srt = $("#csort").value, t = $("#cfind").value.trim().toLowerCase();
     pref("csort", srt);
     $$("#cshow .chip").forEach(x=>x.classList.toggle("on", x.dataset.show===show));
-    const cmp = (a,b) => srt==="home" ? firstHome(a).localeCompare(firstHome(b), undefined, {numeric:true}) || a.label.localeCompare(b.label)
-      : (srt==="za"?-1:1) * a.label.localeCompare(b.label);
-    $("#clist").innerHTML = SHOW[show].map(k => { const cs = codes.filter(c=>c.kind===k && (!t || (c.label+" "+c.code).toLowerCase().includes(t))).sort(cmp);
+    const cmp = (a,b) => srt==="home" ? firstHome(a).localeCompare(firstHome(b), undefined, {numeric:true}) || topName(a).localeCompare(topName(b))
+      : (srt==="za"?-1:1) * topName(a).localeCompare(topName(b));
+    $("#clist").innerHTML = SHOW[show].map(k => { const cs = codes.filter(c=>c.kind===k && (!t || [c.label,c.person,c.company,c.role,c.code].join(" ").toLowerCase().includes(t))).sort(cmp);
       return `<h3>${groups[k]} (${cs.filter(c=>c.active).length})</h3>${HINT[k]&&!cs.length?`<p class="muted">${HINT[k]}</p>`:""}
         ${cs.length?`<div class="tile-grid">${cs.map(c=>`<div class="card row" data-id="${c.id}" style="cursor:pointer;${c.active?"":"opacity:.5"}">
-          <div class="grow"><b>${esc(c.label)}</b><div class="muted">${esc(homeNames(c.property_ids))}</div><div class="muted">${esc(timeTxt(c))}</div></div>
+          <div class="grow"><b style="font-size:16px">${esc(topName(c))}</b>${subName(c)?`<div style="font-weight:700;color:var(--ink-2);font-size:13.5px">${esc(subName(c))}</div>`:""}
+            <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(homeNames(c.property_ids))} · ${esc(timeTxt(c))}</div></div>
           <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}</div>`:`<p class="muted">None yet${t?" matching":""}.</p>`}`; }).join("");
     $$("#clist [data-id]").forEach(x=>x.onclick=()=>form(codes.find(c=>c.id==x.dataset.id)));
   };
@@ -916,7 +926,9 @@ async function codesView(){
     c = c || {kind:"employee",days:null};
     $("#form").innerHTML = `<div class="card">
       <div class="chips">${Object.entries(groups).map(([k,t])=>`<span class="chip ${c.kind===k?"on":""}" data-kind="${k}">${t.replace(/s$/,"").replace("Backup code","Backup")}</span>`).join("")}</div>
-      <label class="field"><span>Name</span><input id="f_label" value="${esc(c.label||"")}" placeholder="Shelby Huffaker / A+ Carpet / Smith family (owner)"></label>
+      <label class="field"><span>First and last name</span><input id="f_person" value="${esc(c.person||"")}" placeholder="Shelby Huffaker"></label>
+      <div class="grid2"><label class="field"><span>Company (vendors)</span><input id="f_company" value="${esc(c.company||"")}" placeholder="ABC Hot Tubs"></label>
+        <label class="field"><span>Trade / job</span><input id="f_role" value="${esc(c.role||"")}" placeholder="Hot tubs, Maintenance, Owner…"></label></div>
       <label class="field"><span>Code (same as Brivo)</span><input id="f_code" inputmode="numeric" class="big" value="${esc(c.code||"")}"></label>
       <span class="muted"><b>Homes</b> (none picked = all our homes)</span>
       <div class="chips" style="margin:6px 0">${ours.map(h=>`<span class="chip ${(c.property_ids||[]).includes(h.property_id)?"on":""}" data-home="${esc(h.property_id)}">${esc(h.properties.code)}</span>`).join("")}</div>
@@ -934,10 +946,11 @@ async function codesView(){
     const save = async active => {
       const tf=$("#f_tf").value, tt=$("#f_tt").value; if((tf&&!tt)||(!tf&&tt)) return toast("Set both times or neither");
       const day = (d, end) => d ? new Date(d+(end?"T23:59:00":"T00:00:00")).toISOString() : null;
-      const r = { id:c.id||null, kind, label:$("#f_label").value.trim(), code:$("#f_code").value.trim(),
+      const person = $("#f_person").value.trim(), company = $("#f_company").value.trim(), role = $("#f_role").value.trim();
+      const r = { id:c.id||null, kind, person, company, role, label:[role?role.toUpperCase():"", person, company?"("+company+")":""].filter(Boolean).join(" ") || c.label || "", code:$("#f_code").value.trim(),
         property_ids:$$("[data-home].on").map(x=>x.dataset.home), days:$$("[data-day].on").map(x=>+x.dataset.day),
         time_from:tf||null, time_to:tt||null, starts_at:day($("#f_sd").value), ends_at:day($("#f_ed").value,true), active };
-      if(!r.label) return toast("Add a name");
+      if(!person && !company) return toast("Add a name or a company");
       if(kind==="owner" && !r.property_ids.length) return toast("Pick the owner's home(s)");
       try{ await rpc("lock_staff_code",{r}); toast("Saved - going on the locks"); codesView(); }catch(e){ fail(e); } };
     $("#f_save").onclick = () => save(c.id ? c.active : true);
