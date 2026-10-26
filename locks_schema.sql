@@ -885,6 +885,31 @@ begin
 end $$;
 revoke all on function lock_hub_sync(text, jsonb, text) from public, anon, authenticated;
 
+-- ---------------------------------------------------------------- the hubs' door (free: plain database API, no Edge Function calls)
+-- Hubs call /rest/v1/rpc/lock_hub_api with the public key + their own secret. We only ever keep the secret's sha256.
+create or replace function lock_hub_api(p_secret text, p_action text, p jsonb default '{}') returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare h text; ip text := lock_caller_ip(); r jsonb;
+begin
+  if p_secret is null or length(p_secret) < 40 then return jsonb_build_object('error', 'bad secret'); end if;
+  h := encode(digest(p_secret, 'sha256'), 'hex');
+  if p_action = 'register' then
+    return lock_hub_register(h, coalesce(p->>'fingerprint',''), ip, coalesce(p->>'version',''));
+  elsif p_action = 'sync' then
+    r := lock_hub_sync(h, coalesce(p, '{}'), ip);
+    if r ? 'hub_id' then
+      r := r || jsonb_build_object('realtime', jsonb_build_object(
+        'url', (select replace(value, 'https://', 'wss://') from lock_settings where key = 'supabase_url') || '/realtime/v1/websocket',
+        'apikey', (select value from lock_settings where key = 'anon_key'),
+        'topic', 'hub-' || (r->>'hub_id')));
+    end if;
+    return r;
+  end if;
+  return jsonb_build_object('error', 'unknown action');
+end $$;
+revoke all on function lock_hub_api(text, text, jsonb) from public;
+grant execute on function lock_hub_api(text, text, jsonb) to anon, authenticated;
+
 -- ---------------------------------------------------------------- setup page (Chris): signed-in admin/tech only
 -- Hubs that just came online from the same internet connection as this phone.
 create or replace function lock_find_hubs() returns table (id uuid, created_at timestamptz, last_seen timestamptz, pair_code text)
