@@ -104,6 +104,8 @@ create table if not exists locks (
   online        boolean,
   state         text,                                     -- locked / unlocked / jammed / unknown
   unlocked_since timestamptz,
+  slots         int,                                      -- how many user codes the lock can hold (hub reports it)
+  slots_used    int,                                      -- how many codes are on the lock right now (ours + any left from Brivo)
   last_seen     timestamptz,
   for_guests    boolean not null default true,            -- false = garage/side door that only crew codes go on
   shared        boolean not null default false,
@@ -208,6 +210,9 @@ create table if not exists lock_staff_codes (
   time_from     time,                                     -- null = all day
   time_to       time,
   brivo_ref     text unique,                              -- Brivo user this came from
+  person        text,                                     -- first + last name ("Shelby Huffaker")
+  company       text,                                     -- vendor company ("ABC Hot Tubs")
+  role          text,                                     -- trade / job ("Hot tubs", "Maintenance", "Owner")
   active        boolean not null default true,
   added_by      text not null default actor(),
   created_at    timestamptz not null default now()
@@ -918,6 +923,7 @@ begin
       model = coalesce(excluded.model, locks.model), battery = coalesce(excluded.battery, locks.battery),
       online = excluded.online, state = coalesce(excluded.state, locks.state), last_seen = now(),
       rssi = (r->>'rssi')::int, rtt = (r->>'rtt')::int, dropped = (r->>'dropped')::int,
+      slots = coalesce((r->>'slots')::int, locks.slots), slots_used = coalesce((r->>'slots_used')::int, locks.slots_used),
       unlocked_since = case when coalesce(excluded.state, locks.state) = 'unlocked' then coalesce(locks.unlocked_since, now()) end,
       property_id = h.property_id;
   end loop;
@@ -1202,14 +1208,19 @@ begin
     raise exception 'Someone else already has code % at one of those homes', r->>'code';
   end if;
   if rid is null then
-    insert into lock_staff_codes (property_ids, kind, label, code, starts_at, ends_at, days, time_from, time_to)
-    values (props, coalesce(r->>'kind','employee'), r->>'label', r->>'code', (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz,
-            dys, (r->>'time_from')::time, (r->>'time_to')::time)
+    insert into lock_staff_codes (property_ids, kind, label, code, starts_at, ends_at, days, time_from, time_to, person, company, role)
+    values (props, coalesce(r->>'kind','employee'),
+            coalesce(nullif(r->>'label',''), concat_ws(' - ', nullif(r->>'person',''), nullif(r->>'company',''))), r->>'code',
+            (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, dys, (r->>'time_from')::time, (r->>'time_to')::time,
+            nullif(r->>'person',''), nullif(r->>'company',''), nullif(r->>'role',''))
     returning id into rid;
   else
     update lock_staff_codes set property_ids = props, kind = coalesce(r->>'kind', kind), label = coalesce(r->>'label', label), code = r->>'code',
            starts_at = (r->>'starts_at')::timestamptz, ends_at = (r->>'ends_at')::timestamptz, days = dys,
-           time_from = (r->>'time_from')::time, time_to = (r->>'time_to')::time, active = coalesce((r->>'active')::boolean, active)
+           time_from = (r->>'time_from')::time, time_to = (r->>'time_to')::time, active = coalesce((r->>'active')::boolean, active),
+           person = case when r ? 'person' then nullif(r->>'person','') else person end,
+           company = case when r ? 'company' then nullif(r->>'company','') else company end,
+           role = case when r ? 'role' then nullif(r->>'role','') else role end
      where id = rid;
   end if;
   perform lock_plan();
@@ -1567,3 +1578,10 @@ begin
   end if;
   insert into lock_events (property_id, kind, who, detail) values (p_property, 'home_added', actor(), jsonb_build_object('new_home', p_new));
 end $$;
+
+-- Brivo property master codes (from the Brivo master code report) for the crew page, per home on our system
+create or replace function lock_brivo_masters() returns table (property_id text, code text, door text, master_code text)
+language sql stable security definer set search_path = public as $$
+  select p.id, p.code, s.door, s.master_code from lock_master_staging s join properties p on p.code = s.unit
+   where lock_is_crew() and p.id in (select h.property_id from lock_homes h where h.section = 'ours')
+$$;
