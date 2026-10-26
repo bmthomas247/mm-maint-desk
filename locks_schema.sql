@@ -14,6 +14,7 @@
 --   lock_alerts     hub offline, lock offline, low battery, code not ready, jammed (open/close by themselves)
 
 create extension if not exists pgcrypto;
+create extension if not exists pg_net;
 create extension if not exists pg_cron;
 
 -- ---------------------------------------------------------------- tables
@@ -665,6 +666,67 @@ end $$;
 --   After hours use      -> alert when a crew/vendor/backup code opens a door between after_hours_from and after_hours_to
 --   Flood alert          -> alert the moment a leak sensor reports water
 --   Sensor open / close  -> kept as events on the home's history
+-- Slack messages waiting to go out (sent by the lock-notify Edge Function within seconds)
+create table if not exists lock_notify (
+  id            bigint generated always as identity primary key,
+  at            timestamptz not null default now(),
+  property_id   text,
+  code_id       bigint,
+  channel       text not null,
+  text          text not null,
+  sent_at       timestamptz,
+  tries         int not null default 0,
+  err           text
+);
+alter table lock_notify enable row level security;    -- service role only
+
+create or replace function lock_notify_kick() returns void
+language plpgsql security definer set search_path = public as $$
+declare u text := (select value from lock_settings where key = 'supabase_url');
+begin
+  if u is null then return; end if;
+  begin
+    perform net.http_post(url := u || '/functions/v1/lock-notify', body := '{}'::jsonb, headers := '{"content-type":"application/json"}'::jsonb);
+  exception when others then null;     -- pg_net missing: the 5-minute health check tries again
+  end;
+end $$;
+revoke all on function lock_notify_kick() from public, anon, authenticated;
+
+create or replace function lock_notify_visit(p_prop text, p_lock uuid, p_at timestamptz, p_code_id text) returns void
+language plpgsql security definer set search_path = public as $$
+declare c lock_staff_codes; ch text; p properties; door text; what text;
+begin
+  if p_code_id !~ '^[0-9]+$' then return; end if;
+  select * into c from lock_staff_codes where id = p_code_id::bigint;
+  if not found or c.kind not in ('vendor','county') then return; end if;
+  ch := case c.kind when 'vendor' then coalesce((select value from lock_settings where key = 'slack_vendor_channel'), 'C0BV3AUR422')
+                    else coalesce((select value from lock_settings where key = 'slack_county_channel'), 'C0630V0MN9X') end;
+  if ch = '' then return; end if;
+  if exists (select 1 from lock_notify n where n.code_id = c.id and n.property_id = p_prop and n.at > p_at - interval '2 hours') then return; end if;
+  select * into p from properties where id = p_prop;
+  select name into door from locks where id = p_lock;
+  what := concat_ws(' · ', coalesce(c.person, c.company, c.label), case when c.person is not null then c.company end, c.role);
+  insert into lock_notify (property_id, code_id, channel, text)
+  values (p_prop, c.id, ch,
+    case c.kind when 'vendor' then ':wrench: *Vendor in ' else ':clipboard: *County inspector in ' end || coalesce(p.code, p_prop) || '*'
+    || coalesce(' (' || p.name || ')', '') || E'\n' || what || ' - ' || coalesce(door, 'door') || ' at '
+    || to_char(p_at at time zone 'America/Denver', 'FMHH12:MI am, Dy Mon FMDD'));
+  perform lock_notify_kick();
+end $$;
+revoke all on function lock_notify_visit(text, uuid, timestamptz, text) from public, anon, authenticated;
+
+-- the Edge Function takes the waiting messages (service role) and marks them sent
+create or replace function lock_notify_take() returns setof lock_notify
+language sql security definer set search_path = public as $$
+  update lock_notify set tries = tries + 1 where id in (select id from lock_notify where sent_at is null and tries < 10 order by id limit 20) returning *
+$$;
+create or replace function lock_notify_done(p_id bigint, p_ok boolean, p_err text) returns void
+language sql security definer set search_path = public as $$
+  update lock_notify set sent_at = case when p_ok then now() end, err = p_err where id = p_id
+$$;
+revoke all on function lock_notify_take() from public, anon, authenticated;
+revoke all on function lock_notify_done(bigint, boolean, text) from public, anon, authenticated;
+
 create or replace function lock_event_rules(p_prop text, p_lock uuid, p_kind text, p_at timestamptz, p_who_kind text, p_who_id text, p_who text, p_node int, p_hub uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare hm lock_homes; t time := (p_at at time zone 'America/Denver')::time; late boolean;
@@ -673,6 +735,10 @@ begin
   if p_kind = 'unlock_code' and p_who_kind = 'stay'
      and not exists (select 1 from lock_events e where e.kind = 'guest_arrived' and e.who_id = p_who_id) then
     insert into lock_events (at, property_id, hub_id, lock_id, kind, who_kind, who_id, who) values (p_at, p_prop, p_hub, p_lock, 'guest_arrived', 'stay', p_who_id, p_who);
+  end if;
+  -- vendor / county inspector opened a door -> Slack (#maintenance_updates / #licensing), once per person per home per 2 hours
+  if p_kind = 'unlock_code' and p_who_kind = 'staff' then
+    perform lock_notify_visit(p_prop, p_lock, p_at, p_who_id);
   end if;
   if p_kind = 'unlock_code' and p_who_kind = 'staff' and hm.property_id is not null then
     late := case when hm.after_hours_from <= hm.after_hours_to then t >= hm.after_hours_from and t < hm.after_hours_to
@@ -755,6 +821,7 @@ begin
   perform lock_plan();
   perform lock_climate_plan();
   perform lock_auto_lock();
+  if exists (select 1 from lock_notify where sent_at is null and tries < 10) then perform lock_notify_kick(); end if;
   create temp table if not exists _cond (kind text, property_id text, hub_id uuid, lock_id uuid, ref text, detail text) on commit drop;
   truncate _cond;
   insert into _cond select 'hub_offline', b.property_id, b.id, null, '', 'Hub last checked in ' || coalesce(to_char(b.last_seen at time zone 'America/Denver', 'Mon DD HH12:MI am'), 'never')
