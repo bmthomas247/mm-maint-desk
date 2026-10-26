@@ -640,9 +640,9 @@ async function homeView(pid){
   const family = `<details class="card" ${parents.length||kids.length?"open":""}><summary>Parent / child homes</summary>
     ${parents.length?`<p>Part of: <b>${parents.map(pcode).map(esc).join(", ")}</b> <span class="muted">(bookings there get a code on this home's doors; this home's guests get the parent's shared doors)</span></p>`:""}
     ${kids.length?`<p>Units under this home: <b>${kids.map(pcode).map(esc).join(", ")}</b> <span class="muted">(a booking here gets a code on all of them; their guests get this home's shared doors)</span></p>`:""}
-    ${!parents.length&&!kids.length?'<p class="muted">Not linked. Use this for combo listings (ST 14 = ST 1 + ST 4) and buildings with a shared entry door.</p>':""}
-    ${S.me.role==="admin"?`<div class="grid2"><label class="field"><span>Add a unit under this home (code)</span><input id="kid" placeholder="ST 4"></label>
-      <label class="field"><span>…or make this a unit of (code)</span><input id="par" placeholder="ST 14"></label></div><button class="btn primary wide" id="lsave">Link</button>`:""}</details>`;
+    ${!parents.length&&!kids.length?'<p class="muted">Not linked. Use this for combo listings and buildings with a shared entry door.</p>':""}
+    ${S.me.role==="admin"?`<div class="grid2"><label class="field"><span>Parent home (code) - this home is part of it</span><input id="par"></label>
+      <label class="field"><span>Child unit (code) - part of this home</span><input id="kid"></label></div><button class="btn primary wide" id="lsave">Link</button>`:""}</details>`;
   const rules = `<details class="card"><summary>Rules for this home</summary>
     <div class="grid2">
       <label class="field"><span>Warm to (°F) for arrival</span><input data-r="warm_to" inputmode="numeric" value="${h.warm_to}"></label>
