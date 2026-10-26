@@ -46,6 +46,8 @@ create table if not exists lock_homes (
   arrival_note   text,                                   -- guest-facing "getting in" note (parking, which entrance, front desk)
   extra_codes    jsonb not null default '[]',            -- other public codes from Track (hot tub, side garage...): [{name, code}]
   track_unit_id  bigint,                                 -- Track unit id (locks_sync fills it)
+  install        jsonb not null default '{}',             -- install checklist: {step: {by, at}}
+  installed_at   timestamptz,
   added_by       text not null default actor(),
   created_at     timestamptz not null default now()
 );
@@ -1282,6 +1284,22 @@ begin
   return jsonb_build_object('command', cid, 'hub_id', k.hub_id);
 end $$;
 revoke all on function lock_guest_unlock(text, uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------- install checklist (crew page Install tab)
+create or replace function lock_install_step(p_property text, p_step text, p_done boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if p_step = 'installed' then
+    update lock_homes set installed_at = case when p_done then now() end where property_id = p_property;
+    insert into lock_events (property_id, kind, who) values (p_property, 'home_installed', actor());
+    return;
+  end if;
+  update lock_homes set install = case when p_done
+      then install || jsonb_build_object(p_step, jsonb_build_object('by', coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor()), 'at', now()))
+      else install - p_step end
+   where property_id = p_property;
+end $$;
 
 -- ---------------------------------------------------------------- "Sync with Track now" button (crew page) -> ThinkStation runs within a minute
 create or replace function lock_request_sync() returns timestamptz
