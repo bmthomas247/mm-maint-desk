@@ -99,6 +99,29 @@ const sleep = ms => new Promise(r=>setTimeout(r,ms));
 async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
 async function q(table, sel, f){ let x = sb.from(table).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data||[]; }
 async function wake(hubId){ try{ await fetch(C.url+"/realtime/v1/api/broadcast",{method:"POST",headers:{"content-type":"application/json",apikey:C.anonKey,authorization:"Bearer "+((await sb.auth.getSession()).data.session||{}).access_token},body:JSON.stringify({messages:[{topic:"hub-"+hubId,event:"wake",payload:{}}]})}); }catch(e){} }
+/* "Sync with Track now": the ThinkStation picks it up within a minute (new last-minute booking, code change...) */
+async function syncBar(){
+  const rows = await q("lock_settings","key,value",x=>x.in("key",["sync_last_run","sync_requested_at"]));
+  const v = Object.fromEntries(rows.map(r=>[r.key,r.value]));
+  const waiting = v.sync_requested_at && (!v.sync_last_run || new Date(v.sync_requested_at) > new Date(v.sync_last_run));
+  return `<div class="card row"><div class="grow"><b>Track sync</b><div class="muted">${waiting?"Sync asked for - running within a minute…":"Last synced "+ago(v.sync_last_run)}</div></div>
+    <button class="btn go" id="syncnow" ${waiting?"disabled":""}>Sync with Track now</button></div>`;
+}
+function wireSync(){
+  const b = $("#syncnow"); if(!b) return;
+  b.onclick = async () => {
+    b.disabled = true; b.textContent = "Asked…";
+    try{
+      const asked = new Date(await rpc("lock_request_sync"));
+      toast("Syncing with Track - about a minute");
+      for(let i=0;i<60;i++){ await sleep(5000);
+        const r = (await q("lock_settings","value",x=>x.eq("key","sync_last_run")))[0];
+        if(r && new Date(r.value) >= asked){ toast("Synced with Track ✓ - codes and Door Codes are updated"); return route(); } }
+      toast("Still running - the ThinkStation may be off. Check it.");
+    }catch(e){ fail(e); }
+    b.disabled = false; b.textContent = "Sync with Track now";
+  };
+}
 async function command(hubId, lockId, kind, args){ const id = await rpc("lock_command",{p_hub:hubId,p_lock:lockId,p_kind:kind,p_args:args||{}}); wake(hubId); return id; }
 async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
 
@@ -160,13 +183,15 @@ async function homesView(){
       <div class="muted">${ls.length} lock${ls.length===1?"":"s"}${ls.map(l=>l.battery!=null?` · ${esc(l.name)} ${l.battery}%`:"").join("")}${ts.map(t=>t.temp!=null?` · ${Math.round(t.temp)}°`:"").join("")}</div></div>
       <div style="text-align:right">${status}${as.length?`<div style="margin-top:4px"><span class="pill red">${as.length} alert${as.length>1?"s":""}</span></div>`:""}</div></a>`;
   };
-  shell("homes", `<h2>Our test homes (${sec.ours.length})</h2>${sec.ours.map(card).join("")||'<p class="muted">No homes yet.</p>'}
+  const bar = await syncBar();
+  shell("homes", `${bar}<h2>Our test homes (${sec.ours.length})</h2>${sec.ours.map(card).join("")||'<p class="muted">No homes yet.</p>'}
     ${sec.lynx.length?`<h3>Lynx test (${sec.lynx.length})</h3>${sec.lynx.map(card).join("")}`:""}
     ${sec.brivo.length?`<h3>Brivo (${sec.brivo.length})</h3>${sec.brivo.map(card).join("")}`:""}
     ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
       <label class="field"><span>Home code (as in Track, e.g. RJ 811)</span><input id="nh"></label>
       <label class="field"><span>Section</span><select id="ns"><option value="ours">Ours</option><option value="lynx">Lynx test</option><option value="brivo">Stays on Brivo</option></select></label>
       <button class="btn primary wide" id="addh">Add</button></details>`:""}`);
+  wireSync();
   const b = $("#addh"); if(b) b.onclick = async () => {
     try{ const p = (await q("properties","id",x=>x.eq("code",$("#nh").value.trim())))[0]; if(!p) return toast("No home with that code");
       await rpc("lock_home_set",{p_property:p.id,p_section:$("#ns").value,p_enabled:true}); toast("Added"); homesView(); }catch(e){ fail(e); } };
@@ -291,7 +316,8 @@ async function homeView(pid){
         <div><button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
-  shell("homes", `<p><a href="#/">← Homes</a></p><h2>${esc(p.code)} <span class="muted" style="font-weight:400">${esc(p.name)}</span></h2>
+  const bar = await syncBar();
+  shell("homes", `<p><a href="#/">← Homes</a></p><h2>${esc(p.code)} <span class="muted" style="font-weight:400">${esc(p.name)}</span></h2>${bar}
     ${alerts.map(a=>`<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">${esc(a.kind.replace(/_/g," "))}</b><div>${esc(a.detail||"")}</div>${a.bw_task&&a.bw_task.startsWith("http")?`<a href="${esc(a.bw_task)}">Breezeway task</a>`:""}</div>`).join("")}
     ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
     ${locks.length?`<h3>Doors</h3>${locks.map(doorCard).join("")}`:""}
@@ -306,6 +332,7 @@ async function homeView(pid){
       if(par){ await rpc("lock_home_link",{p_parent:par,p_child:pid,p_on:true}); }
       toast("Linked"); loadBase(); homeView(pid); }catch(e){ fail(e); } });
 
+  wireSync();
   // hub
   const find = $("#find"); if(find) find.onclick = async () => {
     try{ const hs = await rpc("lock_find_hubs"); $("#found").innerHTML = hs.length ? hs.map(x=>`<button class="btn primary wide" style="margin-top:8px" data-hub="${x.id}">Add the hub found here (seen ${ago(x.last_seen)})</button>`).join("")
