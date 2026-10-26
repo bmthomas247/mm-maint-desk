@@ -155,7 +155,7 @@ const ICONS = {
 
 function shell(active, inner){
   app.innerHTML = `
-  <header class="top"><h1>Moose Maint.</h1>${S.me && S.me.role!=="viewer" ? `<a class="who" href="desk.html" style="text-decoration:none;font-weight:700">Full desk</a>` : ""}<a class="who" href="#/password" style="text-decoration:none" title="Set password">${esc(S.me ? S.me.name.split(" ")[0] : "")} · password</a><button class="who" id="signout">Sign out</button></header>
+  <header class="top"><h1>Moose Maint.</h1>${S.me && S.me.role!=="viewer" ? `<a class="who" href="desk.html" style="text-decoration:none;font-weight:700">Full desk</a>` : ""}${S.me && S.me.role!=="viewer" ? `<a class="who" href="locks.html" style="text-decoration:none;font-weight:700">Locks</a>` : ""}<a class="who" href="#/password" style="text-decoration:none" title="Set password">${esc(S.me ? S.me.name.split(" ")[0] : "")} · password</a><button class="who" id="signout">Sign out</button></header>
   <main id="main">${inner}</main>
   <nav class="tabs" aria-label="Pages">
     <a href="#/board" class="${active==="board"?"on":""}">${ICONS.board}<span>Board</span></a>
