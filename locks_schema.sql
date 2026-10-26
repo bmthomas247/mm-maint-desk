@@ -175,6 +175,7 @@ create table if not exists lock_stays (
   starts_at     timestamptz not null,
   ends_at       timestamptz not null,
   phone_last4   text,
+  agreement     text,                                     -- Track agreementStatus: received / not-needed / sent / viewed / not-sent
   code          text not null,
   code_source   text not null default 'phone',            -- phone / random / manual
   portal_token  text unique not null default encode(gen_random_bytes(18),'hex'),
@@ -325,6 +326,12 @@ create or replace function lock_caller_ip() returns text language sql stable as 
     split_part((current_setting('request.headers', true)::json)->>'x-forwarded-for', ',', 1))), '')
 $$;
 
+-- A guest's code is only made live (lock, guest page, Track) once the rental agreement is back.
+-- Owner and lease stays don't need one. Track says 'received' (signed) or 'not-needed'.
+create or replace function lock_stay_cleared(st lock_stays) returns boolean language sql immutable as $$
+  select st.kind in ('owner','lease') or coalesce(st.agreement, '') in ('received','not-needed')
+$$;
+
 -- Is a crew / vendor / backup code allowed in right now? (dates, days of week, hours - Mountain time)
 create or replace function lock_staff_window_open(c lock_staff_codes) returns boolean
 language plpgsql stable as $$
@@ -396,18 +403,19 @@ begin
     select * into cur from lock_stays where res_id = r->>'res_id';
     if not found then
       select * into pick from lock_code_pick(prop, r->>'phone_last4', (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, r->>'res_id');
-      insert into lock_stays (res_id, property_id, unit, guest, kind, status, starts_at, ends_at, phone_last4, code, code_source)
+      insert into lock_stays (res_id, property_id, unit, guest, kind, status, starts_at, ends_at, phone_last4, agreement, code, code_source)
       values (r->>'res_id', prop, r->>'unit', r->>'guest', coalesce(r->>'kind','guest'), coalesce(r->>'status','confirmed'),
-              (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, r->>'phone_last4', pick.code, pick.src);
+              (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, r->>'phone_last4', r->>'agreement', pick.code, pick.src);
       n_new := n_new + 1;
     else
       -- the code never changes once made (the guest may already have it)
       update lock_stays set property_id = prop, unit = r->>'unit', guest = r->>'guest', kind = coalesce(r->>'kind', kind),
              status = coalesce(r->>'status', status), starts_at = (r->>'starts_at')::timestamptz, ends_at = (r->>'ends_at')::timestamptz,
-             phone_last4 = r->>'phone_last4', updated_at = now()
+             phone_last4 = r->>'phone_last4', agreement = coalesce(r->>'agreement', agreement), updated_at = now()
        where res_id = cur.res_id
-         and (status, starts_at, ends_at, guest, property_id) is distinct from
-             (coalesce(r->>'status', status), (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, r->>'guest', prop);
+         and (status, starts_at, ends_at, guest, property_id, agreement) is distinct from
+             (coalesce(r->>'status', status), (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, r->>'guest', prop,
+              coalesce(r->>'agreement', agreement));
       if found then n_upd := n_upd + 1; end if;
     end if;
   end loop;
@@ -459,6 +467,7 @@ begin
        where (st.property_id in (select lock_home_up(l.property_id))
               or (l.shared and st.property_id in (select child_id from lock_links_on where parent_id = l.property_id)))
          and st.status not in ('cancelled','checked_out')
+         and lock_stay_cleared(st)
          and now() >= st.starts_at - case when l.schedules_ok then make_interval(days => l.preload_days)
                                           else make_interval(hours => l.lead_hours) end
          and now() <  st.ends_at + make_interval(mins => l.grace_minutes);
@@ -722,13 +731,19 @@ begin
   insert into _cond select 'thermostat_offline', t.property_id, t.hub_id, null, t.id::text, t.name || ' is not answering the hub'
     from thermostats t join lock_hubs b on b.id = t.hub_id and b.last_seen > now() - interval '10 minutes'
    where t.active and t.online is false;
+  insert into _cond select distinct 'agreement_missing', st.property_id, null::uuid, null::uuid, st.res_id,
+         coalesce(st.guest,'Guest') || ' checks in ' || to_char(st.starts_at at time zone 'America/Denver', 'Mon DD HH12:MI am')
+         || ' and the rental agreement is not back (Track: ' || coalesce(st.agreement,'?') || '). No door code until it is.'
+    from lock_stays st join lock_homes h on h.property_id = st.property_id and h.section = 'ours' and h.enabled
+   where st.status not in ('cancelled','checked_out') and not lock_stay_cleared(st)
+     and st.starts_at < now() + interval '48 hours' and st.ends_at > now();
   insert into _cond select 'code_not_ready', st.property_id, k.hub_id, k.id, st.res_id,
          coalesce(st.guest,'Guest') || ' checks in ' || to_char(st.starts_at at time zone 'America/Denver', 'Mon DD HH12:MI am') || ' and the code is not confirmed on ' || k.name
     from lock_stays st join locks k on k.active and k.for_guests
           and (k.property_id = st.property_id or k.property_id in (select child_id from lock_links_on where parent_id = st.property_id)
                or (k.shared and k.property_id in (select parent_id from lock_links_on where child_id = st.property_id)))
     join lock_homes h on h.property_id = k.property_id and h.section = 'ours' and h.enabled
-   where st.status not in ('cancelled','checked_out') and st.starts_at < now() + interval '3 hours' and st.ends_at > now()
+   where st.status not in ('cancelled','checked_out') and lock_stay_cleared(st) and st.starts_at < now() + interval '3 hours' and st.ends_at > now()
      and not exists (select 1 from lock_assign a where a.lock_id = k.id and a.ref_kind = 'stay' and a.ref_id = st.res_id
                       and a.wanted and a.state = 'verified');
   -- open new ones
@@ -1221,12 +1236,13 @@ begin
   if not found or st.status = 'cancelled' or now() > st.ends_at + interval '1 day' then return jsonb_build_object('error', 'not_found'); end if;
   select * into p from properties where id = st.property_id;
   select * into pa from property_access where property_id = st.property_id;
-  can_code := now() >= st.starts_at - interval '7 days';
-  can_key  := now() >= st.starts_at and now() < st.ends_at and st.status not in ('checked_out');
+  can_code := now() >= st.starts_at - interval '7 days' and lock_stay_cleared(st);
+  can_key  := now() >= st.starts_at and now() < st.ends_at and st.status not in ('checked_out') and lock_stay_cleared(st);
   return jsonb_build_object(
     'home', p.name, 'code_name', p.code, 'address', p.address, 'guest', split_part(coalesce(st.guest,''), ' ', 1),
     'starts_at', st.starts_at, 'ends_at', st.ends_at, 'status', st.status,
     'code', case when can_code then st.code end,
+    'code_hold', case when not lock_stay_cleared(st) then 'agreement' end,
     'code_ready', exists (select 1 from lock_assign a where a.ref_kind = 'stay' and a.ref_id = st.res_id and a.state = 'verified'),
     'phone_key', can_key,
     'guide_url', (select guide_url from lock_homes where property_id = st.property_id),
@@ -1252,8 +1268,8 @@ language plpgsql security definer set search_path = public as $$
 declare st lock_stays; k locks; cid bigint; recent int;
 begin
   select * into st from lock_stays where portal_token = p_token;
-  if not found or st.status in ('cancelled','checked_out') or now() < st.starts_at or now() >= st.ends_at then
-    return jsonb_build_object('error', 'Your phone key works from check-in until check-out.');
+  if not found or st.status in ('cancelled','checked_out') or now() < st.starts_at or now() >= st.ends_at or not lock_stay_cleared(st) then
+    return jsonb_build_object('error', 'Your phone key works from check-in until check-out, once your rental agreement is signed.');
   end if;
   select * into k from locks where id = p_lock and id in (select lock_guest_doors(st.res_id));
   if not found then return jsonb_build_object('error', 'Door not found'); end if;
