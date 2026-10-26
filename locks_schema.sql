@@ -112,6 +112,9 @@ create table if not exists locks (
   installed_on  date,                                     -- when this lock went on the door (for replacement planning)
   replace_years int not null default 7,                   -- plan to replace after this many years (change per lock)
   last_battery_change timestamptz,                        -- spotted automatically when the battery jumps up
+  rssi          int,                                      -- Z-Wave signal at the hub (dBm, closer to 0 = stronger)
+  rtt           int,                                      -- round trip (ms)
+  dropped       int,                                      -- dropped messages since the hub started
   battery_days  int,                                      -- learned: how long a set of batteries lasts in this lock
   staff_from    int not null default 2,
   staff_to      int not null default 120,
@@ -137,6 +140,9 @@ create table if not exists thermostats (
   battery       int,
   last_seen     timestamptz,
   applied       text,                                     -- last automatic step done, e.g. 'warm:<res>' / 'vacant:<res>'
+  rssi          int,
+  rtt           int,
+  dropped       int,
   installed_on  date,
   replace_years int not null default 10,
   managed       boolean not null default true,            -- false = leave this one alone
@@ -153,6 +159,7 @@ create table if not exists sensors (
   node_id       int not null,
   name          text not null default 'Sensor',
   kind          text not null default 'other',            -- leak / contact / other
+  rssi          int,
   state         text,                                     -- wet / dry / open / closed
   battery       int,
   online        boolean,
@@ -260,6 +267,18 @@ create table if not exists lock_events (
   detail        jsonb not null default '{}'
 );
 create index if not exists lock_events_prop on lock_events (property_id, at desc);
+
+-- GPS for every unit (from Track), so an installer standing at a home can pick it by location
+create table if not exists lock_places (
+  property_id text primary key references properties(id),
+  lat         double precision not null,
+  lng         double precision not null,
+  address     text,
+  updated_at  timestamptz not null default now()
+);
+alter table lock_places enable row level security;
+drop policy if exists lock_places_read on lock_places;
+create policy lock_places_read on lock_places for select to authenticated using (app_role() in ('admin','tech'));
 
 -- Brivo's master code report, waiting for each lock to be paired and named (then copied onto locks.master_code)
 create table if not exists lock_master_staging (unit text, door text, master_code text, at timestamptz default now(), primary key (unit, door));
@@ -825,6 +844,7 @@ begin
     on conflict (hub_id, node_id) do update set
       model = coalesce(excluded.model, locks.model), battery = coalesce(excluded.battery, locks.battery),
       online = excluded.online, state = coalesce(excluded.state, locks.state), last_seen = now(),
+      rssi = (r->>'rssi')::int, rtt = (r->>'rtt')::int, dropped = (r->>'dropped')::int,
       unlocked_since = case when coalesce(excluded.state, locks.state) = 'unlocked' then coalesce(locks.unlocked_since, now()) end,
       property_id = h.property_id;
   end loop;
@@ -837,7 +857,8 @@ begin
     on conflict (hub_id, node_id) do update set
       model = coalesce(excluded.model, thermostats.model), temp = excluded.temp, mode = excluded.mode,
       heat_sp = excluded.heat_sp, cool_sp = excluded.cool_sp, online = excluded.online,
-      battery = coalesce(excluded.battery, thermostats.battery), last_seen = now(), property_id = h.property_id;
+      battery = coalesce(excluded.battery, thermostats.battery), last_seen = now(), property_id = h.property_id,
+      rssi = (r->>'rssi')::int, rtt = (r->>'rtt')::int, dropped = (r->>'dropped')::int;
   end loop;
 
   -- leak + door/window sensors
@@ -846,7 +867,8 @@ begin
     values (h.id, h.property_id, (r->>'node_id')::int, initcap(coalesce(r->>'kind','sensor')) || ' sensor (node ' || (r->>'node_id') || ')',
             coalesce(r->>'kind','other'), r->>'state', (r->>'battery')::int, (r->>'online')::boolean, now())
     on conflict (hub_id, node_id) do update set kind = excluded.kind, state = coalesce(excluded.state, sensors.state),
-      battery = coalesce(excluded.battery, sensors.battery), online = excluded.online, last_seen = now(), property_id = h.property_id;
+      battery = coalesce(excluded.battery, sensors.battery), online = excluded.online, last_seen = now(), property_id = h.property_id,
+      rssi = (r->>'rssi')::int;
   end loop;
 
   -- results of code writes / clears
@@ -1009,7 +1031,7 @@ declare cid bigint; hub uuid := p_hub;
 begin
   if not lock_is_crew() then raise exception 'Only crew'; end if;
   if p_lock is not null then select hub_id into hub from locks where id = p_lock; end if;
-  if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit') then raise exception 'bad command'; end if;
+  if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit','ping','heal','restart') then raise exception 'bad command'; end if;
   if hub is null then raise exception 'pick a hub or a lock'; end if;
   insert into lock_commands (hub_id, lock_id, kind, args, source, expires_at)
   values (hub, p_lock, p_kind, coalesce(p_args, '{}'), 'admin',
@@ -1284,6 +1306,44 @@ begin
   return jsonb_build_object('command', cid, 'hub_id', k.hub_id);
 end $$;
 revoke all on function lock_guest_unlock(text, uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------- "I'm at a home": nearest units to the installer's phone GPS
+create or replace function lock_set_places(rows jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare r jsonb; n int := 0;
+begin
+  for r in select * from jsonb_array_elements(rows) loop
+    insert into lock_places (property_id, lat, lng, address)
+    select p.id, (r->>'lat')::float8, (r->>'lng')::float8, r->>'address' from properties p where p.code = r->>'unit'
+    on conflict (property_id) do update set lat = excluded.lat, lng = excluded.lng, address = excluded.address, updated_at = now();
+    if found then n := n + 1; end if;
+  end loop;
+  return n;
+end $$;
+revoke all on function lock_set_places(jsonb) from public, anon, authenticated;
+
+create or replace function lock_nearby(p_lat float8, p_lng float8)
+returns table (property_id text, code text, name text, address text, meters int, section text)
+language sql stable security definer set search_path = public as $$
+  select p.id, p.code, p.name, pl.address,
+         round(6371000 * 2 * asin(sqrt(power(sin(radians(pl.lat - p_lat) / 2), 2)
+               + cos(radians(p_lat)) * cos(radians(pl.lat)) * power(sin(radians(pl.lng - p_lng) / 2), 2))))::int as meters,
+         h.section
+    from lock_places pl join properties p on p.id = pl.property_id and p.active
+    left join lock_homes h on h.property_id = p.id
+   where lock_is_crew()
+   order by 5 limit 6
+$$;
+
+-- crew can put the home they're standing at on our system
+create or replace function lock_add_home_here(p_property text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  insert into lock_homes (property_id, section, added_by) values (p_property, 'ours', actor())
+  on conflict (property_id) do update set section = 'ours', enabled = true;
+  insert into lock_events (property_id, kind, who) values (p_property, 'home_added', actor());
+end $$;
 
 -- ---------------------------------------------------------------- install checklist (crew page Install tab)
 create or replace function lock_install_step(p_property text, p_step text, p_done boolean) returns void
