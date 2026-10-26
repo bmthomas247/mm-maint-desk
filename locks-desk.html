@@ -282,7 +282,7 @@ function navTabs(active){
   return `<nav class="tabs">
     ${t("homes","#/",ICON.homes,"Homes")}
     ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : t("install","#/install",ICON.install,"Install")}
-    ${DESK ? t("codes","#/codes",ICON.codes,"Crew, vendor & owner codes") : ""}
+    ${DESK ? t("codes","#/codes",ICON.codes,"Access codes") : ""}
     ${t("alerts","#/alerts",ICON.alerts,"Alerts", S.alertCount?`<span class="badge">${S.alertCount}</span>`:"")}
     ${DESK ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
     ${DESK ? t("install","#/install",ICON.install,"Install") : ""}
@@ -881,18 +881,20 @@ async function codesView(){
   const [codes, masters, brivoM] = await Promise.all([q("lock_staff_codes","*",x=>x.order("kind").order("label")),
     q("locks","property_id,name,master_code",x=>x.eq("active",true).order("property_id")), rpc("lock_brivo_masters").then(r=>r||[]).catch(()=>[])]);
   const ours = S.homes.filter(h=>h.section==="ours");
-  const homeNames = ids => !ids ? "All our homes" : ids.map(i=>(S.props[i]||{}).code||i).join(", ");
+  const homeNames = (ids, areas) => (!ids || !ids.length) && (!areas || !areas.length) ? "All our homes"
+    : [...(areas||[]).map(a=>hoodName(a)+" (all)"), ...(ids||[]).map(i=>(S.props[i]||{}).code||i)].join(", ");
   const timeTxt = c => [c.days&&c.days.length?c.days.map(d=>DAYS[d]).join(" "):"Every day", c.time_from?`${c.time_from.slice(0,5)}–${c.time_to.slice(0,5)}`:"all day",
     c.ends_at?"until "+new Date(c.ends_at).toLocaleDateString():""].filter(Boolean).join(" · ");
-  const groups = {employee:"Employees",backup:"Backup codes",vendor:"Vendors",owner:"Owners"};
+  const groups = {employee:"Employees",vendor:"Vendors",owner:"Owners",hoa:"HOA contacts",county:"County officials",backup:"Backup codes"};   // backup last: they rotate
   const topName = c => c.person || c.company || c.label;
   const subName = c => [c.person && c.company ? c.company : null, c.role].filter(Boolean).join(" · ");
-  const SHOW = {all:["employee","backup","vendor","owner"], crew:["employee","backup"], vendor:["vendor"], owner:["owner"]};
-  const HINT = {employee:"", backup:"", vendor:"Set days and hours so vendors only get in during their window.", owner:"Pick the owner's home(s). Owner codes work any time unless you set days or dates."};
-  shell("codes", `<h2>Crew, vendor &amp; owner codes</h2>
+  const SHOW = {all:["employee","vendor","owner","hoa","county","backup"], crew:["employee"], backup:["backup"], vendor:["vendor"], owner:["owner"], hoa:["hoa"], county:["county"]};
+  const HINT = {employee:"", backup:"Spare codes that rotate (e.g. a new one each month). Set an end date so the old one comes off by itself.", vendor:"Set days and hours so vendors only get in during their window.", owner:"Pick the owner's home(s). Owner codes work any time unless you set days or dates.",
+    hoa:"HOA managers and board contacts - usually just their neighborhood.", county:"Health department and other county inspectors."};
+  shell("codes", `<h2>Access codes</h2>
     <div class="card row" style="gap:12px">
       <div class="grow"><span class="muted" style="font-weight:700">Show</span><div class="chips" id="cshow" style="margin-top:6px">
-        ${[["all","All"],["crew","Crew"],["vendor","Vendors"],["owner","Owners"]].map(([k,t])=>`<span class="chip" data-show="${k}">${t} (${codes.filter(c=>c.active&&SHOW[k].includes(c.kind)).length})</span>`).join("")}</div></div>
+        ${[["all","All"],["crew","Crew"],["vendor","Vendors"],["owner","Owners"],["hoa","HOA"],["county","County"],["backup","Backup"]].map(([k,t])=>`<span class="chip" data-show="${k}">${t} (${codes.filter(c=>c.active&&SHOW[k].includes(c.kind)).length})</span>`).join("")}</div></div>
       <label class="field" style="margin:0;min-width:200px"><span>Sort</span><select id="csort"><option value="az">Name A → Z</option><option value="za">Name Z → A</option><option value="home">By home</option></select></label>
       <label class="field" style="margin:0;min-width:200px"><span>Find</span><input id="cfind" placeholder="Name or code"></label>
       <button class="btn go" id="new">+ Add a code</button></div>
@@ -903,7 +905,7 @@ async function codesView(){
           const ls = masters.filter(m=>m.property_id===h.property_id && m.master_code), bs = brivoM.filter(b=>b.property_id===h.property_id && !ls.some(m=>m.master_code===b.master_code));
           const rows = [...ls.map(m=>[m.name, m.master_code, "Lock"]), ...bs.map(b=>[b.door||"Home", b.master_code, "Brivo"])];
           return rows.length ? rows.map(r=>`<tr><td><b>${esc(h.properties.code)}</b></td><td>${esc(r[0])}</td><td><span class="code-chip">${esc(r[1])}</span></td><td class="muted">${r[2]}</td></tr>`).join("")
-            : `<tr><td><b>${esc(h.properties.code)}</b></td><td></td><td><span class="muted" style="color:var(--red)">not on file - get it from Brivo</span></td><td></td></tr>`; }).join("")}</table></div>`, "Moose Locks", "Office · crew, vendor & owner codes");
+            : `<tr><td><b>${esc(h.properties.code)}</b></td><td></td><td><span class="muted" style="color:var(--red)">not on file - get it from Brivo</span></td><td></td></tr>`; }).join("")}</table></div>`, "Moose Locks", "Office · access codes");
   const firstHome = c => c.property_ids && c.property_ids.length ? ((S.props[c.property_ids[0]]||{}).code||"") : "~";
   const drawCodes = () => {
     const show = pref("cshow") || "all", srt = $("#csort").value, t = $("#cfind").value.trim().toLowerCase();
@@ -915,7 +917,7 @@ async function codesView(){
       return `<h3>${groups[k]} (${cs.filter(c=>c.active).length})</h3>${HINT[k]&&!cs.length?`<p class="muted">${HINT[k]}</p>`:""}
         ${cs.length?`<div class="tile-grid">${cs.map(c=>`<div class="card row" data-id="${c.id}" style="cursor:pointer;${c.active?"":"opacity:.5"}">
           <div class="grow"><b style="font-size:16px">${esc(topName(c))}</b>${subName(c)?`<div style="font-weight:700;color:var(--ink-2);font-size:13.5px">${esc(subName(c))}</div>`:""}
-            <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(homeNames(c.property_ids))} · ${esc(timeTxt(c))}</div></div>
+            <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(homeNames(c.property_ids, c.areas))} · ${esc(timeTxt(c))}</div></div>
           <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}</div>`:`<p class="muted">None yet${t?" matching":""}.</p>`}`; }).join("");
     $$("#clist [data-id]").forEach(x=>x.onclick=()=>form(codes.find(c=>c.id==x.dataset.id)));
   };
@@ -925,13 +927,23 @@ async function codesView(){
   const form = c => {
     c = c || {kind:"employee",days:null};
     $("#form").innerHTML = `<div class="card">
-      <div class="chips">${Object.entries(groups).map(([k,t])=>`<span class="chip ${c.kind===k?"on":""}" data-kind="${k}">${t.replace(/s$/,"").replace("Backup code","Backup")}</span>`).join("")}</div>
+      <div class="chips">${Object.entries(groups).map(([k,t])=>`<span class="chip ${c.kind===k?"on":""}" data-kind="${k}">${({employee:"Employee",backup:"Backup",vendor:"Vendor",owner:"Owner",hoa:"HOA",county:"County"})[k]}</span>`).join("")}</div>
       <label class="field"><span>First and last name</span><input id="f_person" value="${esc(c.person||"")}" placeholder="Shelby Huffaker"></label>
       <div class="grid2"><label class="field"><span>Company (vendors)</span><input id="f_company" value="${esc(c.company||"")}" placeholder="ABC Hot Tubs"></label>
         <label class="field"><span>Trade / job</span><input id="f_role" value="${esc(c.role||"")}" placeholder="Hot tubs, Maintenance, Owner…"></label></div>
       <label class="field"><span>Code (same as Brivo)</span><input id="f_code" inputmode="numeric" class="big" value="${esc(c.code||"")}"></label>
-      <span class="muted"><b>Homes</b> (none picked = all our homes)</span>
-      <div class="chips" style="margin:6px 0">${ours.map(h=>`<span class="chip ${(c.property_ids||[]).includes(h.property_id)?"on":""}" data-home="${esc(h.property_id)}">${esc(h.properties.code)}</span>`).join("")}</div>
+      <span class="muted"><b>Where can they get in?</b></span>
+      <div class="chips" style="margin:6px 0" id="f_scope">
+        <span class="chip ${!(c.property_ids||[]).length && !(c.areas||[]).length ? "on":""}" data-scope="all">All properties</span>
+        <span class="chip ${(c.property_ids||[]).length || (c.areas||[]).length ? "on":""}" data-scope="pick">Pick neighborhoods / homes</span></div>
+      <div id="f_pick" style="${(c.property_ids||[]).length || (c.areas||[]).length ? "" : "display:none"}">
+        <span class="muted">Neighborhoods <span style="font-size:12px">(every home there, including ones added later)</span></span>
+        <div class="chips" style="margin:6px 0">${[...new Set(S.homes.map(hoodOf))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b))).map(a=>`<span class="chip ${(c.areas||[]).includes(a)?"on":""}" data-area="${esc(a)}">${esc(hoodName(a))}</span>`).join("")}</div>
+        <span class="muted">Homes</span>
+        <input id="f_hfind" placeholder="Find a home" style="margin:6px 0">
+        <div class="chips" style="margin:6px 0;max-height:220px;overflow:auto" id="f_homes">${S.homes.filter(h=>h.section==="ours" || (c.property_ids||[]).includes(h.property_id))
+          .sort((a,b)=>a.properties.code.localeCompare(b.properties.code,undefined,{numeric:true}))
+          .map(h=>`<span class="chip ${(c.property_ids||[]).includes(h.property_id)?"on":""}" data-home="${esc(h.property_id)}">${esc(h.properties.code)}</span>`).join("")}</div></div>
       <span class="muted"><b>Days</b> (none picked = every day)</span>
       <div class="chips" style="margin:6px 0">${DAYS.map((d,i)=>`<span class="chip ${(c.days||[]).includes(i)?"on":""}" data-day="${i}">${d}</span>`).join("")}</div>
       <div class="grid2"><label class="field"><span>From (time)</span><input type="time" id="f_tf" value="${c.time_from?c.time_from.slice(0,5):""}"></label>
@@ -942,15 +954,19 @@ async function codesView(){
       ${c.id?`<button class="btn danger wide" style="margin-top:8px" id="f_off">${c.active?"Turn off":"Turn back on"}</button>`:""}</div>`;
     let kind = c.kind;
     $$("[data-kind]").forEach(x=>x.onclick=()=>{ kind=x.dataset.kind; $$("[data-kind]").forEach(y=>y.classList.toggle("on",y===x)); });
-    $$("[data-home],[data-day]").forEach(x=>x.onclick=()=>x.classList.toggle("on"));
+    $$("[data-home],[data-day],[data-area]").forEach(x=>x.onclick=()=>x.classList.toggle("on"));
+    $$("[data-scope]").forEach(x=>x.onclick=()=>{ $$("[data-scope]").forEach(y=>y.classList.toggle("on",y===x)); $("#f_pick").style.display = x.dataset.scope==="pick" ? "" : "none"; });
+    $("#f_hfind").oninput = () => { const t = $("#f_hfind").value.trim().toLowerCase(); $$("#f_homes [data-home]").forEach(x=>x.style.display = !t || x.textContent.toLowerCase().includes(t) ? "" : "none"); };
     const save = async active => {
       const tf=$("#f_tf").value, tt=$("#f_tt").value; if((tf&&!tt)||(!tf&&tt)) return toast("Set both times or neither");
       const day = (d, end) => d ? new Date(d+(end?"T23:59:00":"T00:00:00")).toISOString() : null;
       const person = $("#f_person").value.trim(), company = $("#f_company").value.trim(), role = $("#f_role").value.trim();
       const r = { id:c.id||null, kind, person, company, role, label:[role?role.toUpperCase():"", person, company?"("+company+")":""].filter(Boolean).join(" ") || c.label || "", code:$("#f_code").value.trim(),
-        property_ids:$$("[data-home].on").map(x=>x.dataset.home), days:$$("[data-day].on").map(x=>+x.dataset.day),
+        property_ids: $("[data-scope='pick']").classList.contains("on") ? $$("[data-home].on").map(x=>x.dataset.home) : [],
+        areas: $("[data-scope='pick']").classList.contains("on") ? $$("[data-area].on").map(x=>x.dataset.area) : [], days:$$("[data-day].on").map(x=>+x.dataset.day),
         time_from:tf||null, time_to:tt||null, starts_at:day($("#f_sd").value), ends_at:day($("#f_ed").value,true), active };
       if(!person && !company) return toast("Add a name or a company");
+      if($("[data-scope='pick']").classList.contains("on") && !r.property_ids.length && !r.areas.length) return toast("Pick at least one neighborhood or home - or choose All properties");
       if(kind==="owner" && !r.property_ids.length) return toast("Pick the owner's home(s)");
       try{ await rpc("lock_staff_code",{r}); toast("Saved - going on the locks"); codesView(); }catch(e){ fail(e); } };
     $("#f_save").onclick = () => save(c.id ? c.active : true);
