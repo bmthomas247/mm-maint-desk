@@ -1288,7 +1288,7 @@ create or replace function lock_request_sync() returns timestamptz
 language plpgsql security definer set search_path = public as $$
 begin
   if not lock_is_crew() then raise exception 'Only crew'; end if;
-  insert into lock_settings (key, value) values ('sync_requested_at', now()::text), ('sync_requested_by', actor())
+  insert into lock_settings (key, value) values ('sync_requested_at', to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"')), ('sync_requested_by', actor())
   on conflict (key) do update set value = excluded.value, updated_at = now();
   return now();
 end $$;
