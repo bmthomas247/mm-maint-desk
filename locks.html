@@ -298,6 +298,48 @@ async function homesView(){
       await rpc("lock_home_set",{p_property:p.id,p_section:$("#ns").value,p_enabled:true}); toast("Added"); homesView(); }catch(e){ fail(e); } };
 }
 
+/* ------------------------------------------------ installer tools (like Brivo's): hub info, signal per device, ping, rebuild routes */
+function signal(rssi){
+  if(rssi==null || rssi===127) return '<span class="muted">-</span>';
+  const bars = rssi >= -65 ? 4 : rssi >= -75 ? 3 : rssi >= -85 ? 2 : 1;
+  const col = bars>=3 ? "var(--moose)" : bars===2 ? "var(--amber)" : "var(--red)";
+  return `<span title="${rssi} dBm" style="display:inline-flex;gap:2px;align-items:flex-end;vertical-align:middle">${[1,2,3,4].map(i=>`<i style="width:4px;height:${4+i*3}px;border-radius:1px;background:${i<=bars?col:"var(--line-2)"}"></i>`).join("")}</span> <span class="muted" style="font-size:12px">${rssi}</span>`;
+}
+function toolsCard(hub, devices){
+  if(!hub) return "";
+  const st = hub.status || {};
+  return `<details class="card" id="tools"><summary>Installer tools</summary>
+    <div class="grid2" style="font-size:13.5px">
+      <div><span class="muted">Hub</span><br><b>${online(hub)?"Online":"Offline"}</b> · ${ago(hub.last_seen)}</div>
+      <div><span class="muted">Software</span><br><b>${esc(st.version||"?")}</b> · HA ${esc(st.ha||"?")}</div>
+      <div><span class="muted">Z-Wave stick</span><br><b>${esc(st.zwave_fw||"?")}</b> (SDK ${esc(st.zwave_sdk||"?")})</div>
+      <div><span class="muted">Up for</span><br><b>${st.uptime_min!=null?(st.uptime_min>1440?Math.round(st.uptime_min/1440)+" d":st.uptime_min>60?Math.round(st.uptime_min/60)+" h":st.uptime_min+" min"):"?"}</b> · ${st.nodes??"?"} devices</div>
+    </div>
+    <table style="margin-top:10px"><tr><th>Device</th><th>Signal</th><th>Dropped</th><th></th></tr>
+      ${devices.map(d=>`<tr><td><b>${esc(d.name)}</b><div class="muted" style="font-size:12px">node ${d.node_id}${d.online===false?' · <span style="color:var(--red)">not answering</span>':""}</div></td>
+        <td>${signal(d.rssi)}</td><td>${d.dropped??"-"}</td>
+        <td style="text-align:right"><button class="btn small" data-ping="${d.node_id}">Ping</button></td></tr>`).join("") || '<tr><td colspan="4" class="muted">No devices paired yet.</td></tr>'}
+    </table>
+    <p class="muted" style="font-size:12.5px">Weak signal (1 bar, or lots of dropped)? Move the stick higher / closer on its cable, or add a Z-Wave repeater between the hub and that door, then Rebuild routes.</p>
+    <div class="grid3"><button class="btn small" id="t_heal">Rebuild routes</button><button class="btn small" id="t_add">Add mode</button><button class="btn small" id="t_remove">Remove mode</button></div>
+    <button class="btn small danger wide" style="margin-top:8px" id="t_restart">Restart hub</button>
+    <div id="t_out" class="muted" style="margin-top:8px"></div></details>`;
+}
+function wireTools(hub, after){
+  if(!hub || !$("#tools")) return;
+  const out = m => { $("#t_out").textContent = m; };
+  const run = async (kind, lock, args, label) => {
+    out(label + "…");
+    try{ const r = await waitCmd(await command(hub.id, lock, kind, args||{}), kind==="include"||kind==="exclude" ? 300 : 40);
+      out(r ? ((r.ok?"✓ ":"✗ ") + ((r.result||{}).msg || (r.ok?"done":"failed"))) : "No answer from the hub yet."); if(after) setTimeout(after, 1500);
+    }catch(e){ fail(e); } };
+  $$("[data-ping]").forEach(b=>b.onclick=()=>run("ping", null, {node:+b.dataset.ping}, "Pinging node "+b.dataset.ping));
+  $("#t_heal").onclick = () => { if(confirm("Rebuild Z-Wave routes? Takes a few minutes; locks keep working.")) run("heal", null, {}, "Rebuilding routes"); };
+  $("#t_add").onclick = () => run("include", null, {}, "Add mode on for 5 minutes - put the device in join mode");
+  $("#t_remove").onclick = () => run("exclude", null, {}, "Remove mode on for 5 minutes - put the device in remove mode");
+  $("#t_restart").onclick = () => { if(confirm("Restart the hub? It's back in about a minute; codes keep working on the locks.")) run("restart", null, {}, "Restarting"); };
+}
+
 /* ------------------------------------------------ install: one guided checklist per home */
 const STEPS = [
   {k:"prep",   t:"Before you go",            auto:null},
@@ -319,20 +361,36 @@ async function installView(){
   await loadBase();
   const ours = S.homes.filter(h=>h.section==="ours");
   shell("install", `<h2>Install</h2><p class="muted" style="margin-top:-6px">Pick the home you're at. Each step checks itself off when the system sees it done.</p>
+    <button class="btn go wide" id="gps">📍 I'm at a home - find it</button><div id="near" style="margin:10px 0 4px"></div>
     ${ours.map(h=>{ const p = installProgress(h); return `<a class="card home ${h.installed_at?"ok":p.done?"todo":""}" href="#/install/${encodeURIComponent(h.property_id)}">
       <div class="row"><div class="grow"><div class="code">${esc(h.properties.code)}</div><div class="muted">${esc(h.properties.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill ${p.done?"amber":"grey"}">${p.done}/${p.total} steps</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*p.done/p.total)}%"></i></div></a>`; }).join("")}`, "Install", "Step-by-step at the home");
+  $("#gps").onclick = () => {
+    if(!navigator.geolocation) return toast("This phone can't share location");
+    $("#near").innerHTML = '<p class="muted">Finding you…</p>';
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try{
+        const rows = await rpc("lock_nearby",{p_lat:pos.coords.latitude,p_lng:pos.coords.longitude});
+        const fmt = m => m < 1000 ? m+" m away" : (m/1609).toFixed(1)+" mi away";
+        $("#near").innerHTML = rows.length ? `<div class="card"><b>Closest homes</b><div class="list" style="margin-top:6px">${rows.map(r=>`<div><div class="grow"><b>${esc(r.code)}</b> <span class="muted">${fmt(r.meters)}</span><div class="muted" style="font-size:12.5px">${esc(r.address||r.name)}</div></div>
+            <button class="btn small ${r.section==="ours"?"":"go"}" data-here="${esc(r.property_id)}" data-ours="${r.section==="ours"?1:""}">${r.section==="ours"?"Open":"Add + install"}</button></div>`).join("")}</div></div>`
+          : '<p class="muted">No homes found near you.</p>';
+        $$("[data-here]").forEach(b=>b.onclick=async()=>{ try{ if(!b.dataset.ours){ await rpc("lock_add_home_here",{p_property:b.dataset.here}); await loadBase(); toast("Added to our system"); }
+            location.hash = "#/install/" + encodeURIComponent(b.dataset.here); }catch(e){ fail(e); } });
+      }catch(e){ fail(e); }
+    }, err => { $("#near").innerHTML = `<p class="muted">Couldn't get your location (${esc(err.message)}). Allow location for this site in your phone's settings.</p>`; }, {enableHighAccuracy:true, timeout:15000});
+  };
 }
 async function installHome(pid){
   if(!S.homes.length) await loadBase();
   const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("install","<p>Home not found.</p>");
   const p = h.properties;
   const [hubs, locks, thermos, sensors, assigns, cmds, access, stays, masters] = await Promise.all([
-    q("lock_hubs","id,name,last_seen,claimed_at",x=>x.eq("property_id",pid).eq("active",true)),
+    q("lock_hubs","id,name,last_seen,claimed_at,status",x=>x.eq("property_id",pid).eq("active",true)),
     q("locks","*",x=>x.eq("property_id",pid).eq("active",true).order("node_id")),
-    q("thermostats","id,name,temp,mode,online",x=>x.eq("property_id",pid).eq("active",true)),
-    q("sensors","id,name,kind",x=>x.eq("property_id",pid).eq("active",true)),
+    q("thermostats","id,node_id,name,temp,mode,online,rssi,dropped",x=>x.eq("property_id",pid).eq("active",true)),
+    q("sensors","id,node_id,name,kind,online,rssi",x=>x.eq("property_id",pid).eq("active",true)),
     q("lock_assign","lock_id,ref_kind,state,code,created_at",x=>x.eq("ref_kind","test").order("created_at",{ascending:false})),
     q("lock_commands","lock_id,kind,ok,done_at",x=>x.eq("kind","wipe").eq("ok",true)),
     q("property_access","wifi_name,wifi_password,gate_code,garage_code,lockbox_code",x=>x.eq("property_id",pid)),
@@ -395,9 +453,11 @@ async function installHome(pid){
       <div class="progress"><i style="width:${Math.round(100*total/STEPS.length)}%"></i></div></div>
     <div class="card">${STEPS.map((s,i)=>`<div class="step ${isDone(s)?"done":s===firstOpen?"now":""}"><div class="n">${isDone(s)?"✓":i+1}</div>
       <div class="grow"><div class="t">${s.t}</div>${who(s)}${(s===firstOpen || !isDone(s)) ? `<div class="body">${body[s.k]}</div>` : `<details><summary class="muted" style="font-size:13px">Show</summary><div class="body">${body[s.k]}</div></details>`}</div></div>`).join("")}</div>
+    ${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}
     ${!h.installed_at?`<button class="btn go wide" id="finish" ${total<STEPS.length?"disabled":""}>${total<STEPS.length?`Finish the ${STEPS.length-total} open step${STEPS.length-total>1?"s":""}`:"Mark this home installed"}</button>`:""}`,
     "Install · "+p.code, next?"Next guest "+when(next.starts_at):"No guests booked");
   const again = () => setTimeout(()=>installHome(pid), 1200);
+  wireTools(hub, null);
   $$("[data-step]").forEach(c=>c.onchange=async()=>{ try{ await rpc("lock_install_step",{p_property:pid,p_step:c.dataset.step,p_done:c.checked}); await loadBase(); again(); }catch(e){ fail(e); } });
   const find = $("#find"); if(find) find.onclick = async () => {
     try{ const hs = await rpc("lock_find_hubs"); $("#found").innerHTML = hs.length ? hs.map(x=>`<button class="btn primary wide" style="margin-top:8px" data-hub="${x.id}">Add the hub found here</button>`).join("")
@@ -528,7 +588,8 @@ async function homeView(pid){
     ${locks.length?`<h3>Doors</h3>${locks.map(doorCard).join("")}`:""}
     ${thermos.length?`<h3>Thermostats</h3>${thermos.map(thermoCard).join("")}`:""}
     ${sensors.length?`<h3>Sensors</h3><div class="card list">${sensors.map(x=>`<div><span class="grow">${esc(x.name)}</span><span class="pill ${x.state==="wet"?"red":"grey"}">${esc(x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}</div>`).join("")}</div>`:""}
-    ${stayList}${family}${rules}${hist}`, p.code, p.name);
+    ${stayList}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${family}${rules}${hist}`, p.code, p.name);
+  wireTools(hub, null);
   $("#lsave") && ($("#lsave").onclick = async () => {
     try{ const find = async c => c ? ((await q("properties","id",x=>x.eq("code",c)))[0]||{}).id : null;
       const kid = await find($("#kid").value.trim()), par = await find($("#par").value.trim());
