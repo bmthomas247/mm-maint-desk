@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d6b62">
+<title>Moose Locks</title>
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --pine:#0d6b62; --pine-deep:#0a4f49; --pine-soft:#d7ebe8; --moose:#88B535; --moose-soft:#eef5e1;
+  --ground:#f2f5f3; --card:#fff; --ink:#14201e; --ink-2:#3f4f4c; --muted:#6c7b78; --line:#d5dfdc;
+  --red:#c2352b; --red-soft:#f8e0dd; --amber:#b87a0c; --amber-soft:#f6ebd2; --blue:#2463a0; --blue-soft:#dde9f5;
+  --radius:14px; --tap:48px;
+  font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0f1716; --card:#172321; --ink:#e7efed; --ink-2:#b9c8c5; --muted:#8a9b98; --line:#26363a;
+  --pine-soft:#143632; --moose-soft:#1f2a12; --red-soft:#3a1916; --amber-soft:#33270f; --blue-soft:#13283d; } }
+:root[data-theme="dark"]{ --ground:#0f1716; --card:#172321; --ink:#e7efed; --ink-2:#b9c8c5; --muted:#8a9b98; --line:#26363a;
+  --pine-soft:#143632; --moose-soft:#1f2a12; --red-soft:#3a1916; --amber-soft:#33270f; --blue-soft:#13283d; }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);min-height:100vh;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+header.top{position:sticky;top:0;z-index:5;background:var(--pine);color:#fff;display:flex;align-items:center;gap:10px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px))}
+header.top h1{font-size:18px;margin:0;flex:1}
+header.top a{color:#fff;font-size:14px}
+main{max-width:760px;margin:0 auto;padding:14px 16px}
+h2{font-size:20px;margin:6px 0 12px} h3{font-size:16px;margin:18px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.muted{color:var(--muted);font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:700;background:var(--pine-soft);color:var(--pine)}
+.pill.red{background:var(--red-soft);color:var(--red)} .pill.amber{background:var(--amber-soft);color:var(--amber)}
+.pill.green{background:var(--moose-soft);color:#4d7016} .pill.grey{background:var(--line);color:var(--ink-2)}
+@media (prefers-color-scheme: dark){ .pill.green{color:#b8dc7a} }
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;min-height:var(--tap);padding:0 16px;font:inherit;font-weight:700;font-size:16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn.primary{background:var(--pine);border-color:var(--pine);color:#fff}
+.btn.go{background:var(--moose);border-color:var(--moose);color:#16220a}
+.btn.danger{color:var(--red)}
+.btn.small{min-height:38px;font-size:14px;padding:0 12px}
+.btn.wide{width:100%}
+.btn:disabled{opacity:.5}
+.field{display:block;margin:10px 0}
+.field span{display:block;font-size:14px;color:var(--ink-2);margin-bottom:4px;font-weight:700}
+input,select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
+input[type=checkbox]{width:22px;height:22px;min-height:0}
+.big{font-size:28px;letter-spacing:4px;font-weight:700;text-align:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.list>div{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.list>div:first-child{border-top:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:700;font-size:14px;cursor:pointer;background:var(--card);user-select:none}
+.chip.on{background:var(--pine);color:#fff;border-color:var(--pine)}
+.step{display:flex;gap:12px;align-items:flex-start}
+.step .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--pine);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+.step.done .n{background:var(--moose);color:#16220a}
+.temp{font-size:30px;font-weight:700}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 0;color:var(--muted);text-decoration:none;font-size:12px;font-weight:700;position:relative}
+nav.tabs a.on{color:var(--pine)}
+nav.tabs svg{width:24px;height:24px}
+nav.tabs .badge{position:absolute;top:4px;left:calc(50% + 6px);background:var(--red);color:#fff;border-radius:999px;font-size:11px;padding:1px 6px}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--card);padding:12px 18px;border-radius:12px;font-weight:700;z-index:20;max-width:90vw}
+.login{max-width:420px;margin:40px auto;padding:0 16px;text-align:center}
+.login img{width:64px}
+details summary{cursor:pointer;font-weight:700;padding:6px 0}
+table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:8px 4px;border-top:1px solid var(--line);text-align:left} th{color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const app = document.getElementById("app");
+const S = { me:null, homes:[], props:{}, timer:null };
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DOOR_NAMES = ["Front door","Garage door","Side door","Back door","Lockoff door","Owner closet"];
+function toast(m){ const t=document.createElement("div"); t.className="toast"; t.textContent=m; document.body.appendChild(t); setTimeout(()=>t.remove(),2800); }
+function fail(e,w){ console.error(e); toast((w||"Didn't work")+": "+(e&&e.message||e)); }
+function ago(ts){ if(!ts) return "never"; const m=(Date.now()-new Date(ts))/6e4; if(m<1) return "just now"; if(m<60) return Math.round(m)+" min ago"; if(m<1440) return Math.round(m/60)+" h ago"; return Math.round(m/1440)+" d ago"; }
+function when(ts){ return ts? new Date(ts).toLocaleString(undefined,{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}) : ""; }
+function ageTxt(d){ const y=(Date.now()-new Date(d+"T12:00:00"))/3.156e10; return y<1? Math.max(1,Math.round(y*12))+" mo" : y.toFixed(1)+" yr"; }
+const online = h => h && h.last_seen && (Date.now()-new Date(h.last_seen)) < 10*6e4;
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
+async function q(table, sel, f){ let x = sb.from(table).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data||[]; }
+async function wake(hubId){ try{ await fetch(C.url+"/realtime/v1/api/broadcast",{method:"POST",headers:{"content-type":"application/json",apikey:C.anonKey,authorization:"Bearer "+((await sb.auth.getSession()).data.session||{}).access_token},body:JSON.stringify({messages:[{topic:"hub-"+hubId,event:"wake",payload:{}}]})}); }catch(e){} }
+async function command(hubId, lockId, kind, args){ const id = await rpc("lock_command",{p_hub:hubId,p_lock:lockId,p_kind:kind,p_args:args||{}}); wake(hubId); return id; }
+async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
+
+const ICON = {
+  homes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+  codes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h.01M12 8h.01M15 8h.01M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01M15 16h.01" stroke-linecap="round" stroke-width="3"/></svg>',
+  alerts:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01" stroke-linecap="round"/></svg>',
+  score:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke-linecap="round"/></svg>'
+};
+function shell(active, inner, title){
+  app.innerHTML = `<header class="top"><h1>${esc(title||"Moose Locks")}</h1><a href="index.html">Maint. site</a></header>
+  <main id="main">${inner}</main>
+  <nav class="tabs">
+    <a href="#/" class="${active==="homes"?"on":""}">${ICON.homes}<span>Homes</span></a>
+    <a href="#/codes" class="${active==="codes"?"on":""}">${ICON.codes}<span>Codes</span></a>
+    <a href="#/alerts" class="${active==="alerts"?"on":""}">${ICON.alerts}<span>Alerts</span>${S.alertCount?`<span class="badge">${S.alertCount}</span>`:""}</a>
+    <a href="#/score" class="${active==="score"?"on":""}">${ICON.score}<span>Scorecard</span></a>
+  </nav>`;
+}
+
+/* ------------------------------------------------ sign in (same accounts as the maintenance site) */
+function loginView(msg){
+  app.innerHTML = `<div class="login"><img src="icon.svg" alt=""><h2>Moose Locks</h2>
+    <label class="field"><span>Email</span><input type="email" id="em" autocomplete="username"></label>
+    <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password"></label>
+    <button class="btn primary wide" id="go">Sign in</button>
+    <p class="muted">First time? Set your password on the <a href="index.html">maintenance site</a>.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
+  $("#go").onclick = async () => {
+    const { error } = await sb.auth.signInWithPassword({ email:$("#em").value.trim(), password:$("#pw").value });
+    if(error) $("#msg").textContent = "Wrong email or password."; else route();
+  };
+}
+
+/* ------------------------------------------------ homes list */
+async function loadBase(){
+  const homes = await q("lock_homes","*,properties(id,code,name,address,bw_home_id)");
+  S.homes = homes.filter(h=>h.properties).sort((a,b)=>a.properties.code.localeCompare(b.properties.code));
+  S.props = Object.fromEntries(S.homes.map(h=>[h.property_id,h.properties]));
+  const al = await q("lock_alerts","id",x=>x.is("closed_at",null));
+  S.alertCount = al.length;
+}
+async function homesView(){
+  await loadBase();
+  const [hubs, locks, thermos, alerts] = await Promise.all([
+    q("lock_hubs","id,property_id,last_seen,active,claimed_at",x=>x.eq("active",true)),
+    q("locks","id,property_id,name,battery,online,state,active",x=>x.eq("active",true)),
+    q("thermostats","id,property_id,name,temp,mode,active",x=>x.eq("active",true)),
+    q("lock_alerts","kind,property_id,detail",x=>x.is("closed_at",null))]);
+  const sec = {ours:[],lynx:[],brivo:[]};
+  S.homes.forEach(h=>sec[h.section].push(h));
+  const card = h => {
+    const hub = hubs.find(x=>x.property_id===h.property_id && x.claimed_at);
+    const ls = locks.filter(x=>x.property_id===h.property_id), ts = thermos.filter(x=>x.property_id===h.property_id);
+    const as = alerts.filter(x=>x.property_id===h.property_id);
+    const status = h.section!=="ours" ? `<span class="pill grey">${h.section==="lynx"?"Lynx":"Brivo"}</span>`
+      : !hub ? `<span class="pill amber">Needs setup</span>` : online(hub) ? `<span class="pill green">Online</span>` : `<span class="pill red">Hub offline</span>`;
+    return `<a class="card row" style="text-decoration:none;color:inherit" href="#/home/${encodeURIComponent(h.property_id)}">
+      <div class="grow"><b>${esc(h.properties.code)}</b><div class="muted">${esc(h.properties.name)}</div>
+      <div class="muted">${ls.length} lock${ls.length===1?"":"s"}${ls.map(l=>l.battery!=null?` · ${esc(l.name)} ${l.battery}%`:"").join("")}${ts.map(t=>t.temp!=null?` · ${Math.round(t.temp)}°`:"").join("")}</div></div>
+      <div style="text-align:right">${status}${as.length?`<div style="margin-top:4px"><span class="pill red">${as.length} alert${as.length>1?"s":""}</span></div>`:""}</div></a>`;
+  };
+  shell("homes", `<h2>Our test homes (${sec.ours.length})</h2>${sec.ours.map(card).join("")||'<p class="muted">No homes yet.</p>'}
+    ${sec.lynx.length?`<h3>Lynx test (${sec.lynx.length})</h3>${sec.lynx.map(card).join("")}`:""}
+    ${sec.brivo.length?`<h3>Brivo (${sec.brivo.length})</h3>${sec.brivo.map(card).join("")}`:""}
+    ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
+      <label class="field"><span>Home code (as in Track, e.g. RJ 811)</span><input id="nh"></label>
+      <label class="field"><span>Section</span><select id="ns"><option value="ours">Ours</option><option value="lynx">Lynx test</option><option value="brivo">Stays on Brivo</option></select></label>
+      <button class="btn primary wide" id="addh">Add</button></details>`:""}`);
+  const b = $("#addh"); if(b) b.onclick = async () => {
+    try{ const p = (await q("properties","id",x=>x.eq("code",$("#nh").value.trim())))[0]; if(!p) return toast("No home with that code");
+      await rpc("lock_home_set",{p_property:p.id,p_section:$("#ns").value,p_enabled:true}); toast("Added"); homesView(); }catch(e){ fail(e); } };
+}
+
+/* ------------------------------------------------ one home */
+async function homeView(pid){
+  if(!S.homes.length) await loadBase();
+  const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("homes","<p>Home not found.</p>");
+  const p = h.properties;
+  const [hubs, locks, thermos, sensors, assigns, stays, alerts, events, access, links] = await Promise.all([
+    q("lock_hubs","id,name,last_seen,claimed_at,version,status",x=>x.eq("property_id",pid).eq("active",true)),
+    q("locks","*",x=>x.eq("property_id",pid).eq("active",true).order("name")),
+    q("thermostats","*",x=>x.eq("property_id",pid).eq("active",true).order("name")),
+    q("sensors","*",x=>x.eq("property_id",pid).eq("active",true)),
+    q("lock_assign","id,lock_id,slot,ref_kind,ref_id,label,code,wanted,state,err,verified_at",x=>x.neq("state","cleared").order("slot")),
+    q("lock_stays","res_id,guest,kind,status,starts_at,ends_at,code,code_source,portal_token",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(8)),
+    q("lock_alerts","kind,detail,opened_at,bw_task",x=>x.eq("property_id",pid).is("closed_at",null)),
+    q("lock_events","at,kind,who,slot,detail,lock_id",x=>x.eq("property_id",pid).order("at",{ascending:false}).limit(40)),
+    q("property_access","wifi_name,wifi_password,door_code,gate_code,garage_code",x=>x.eq("property_id",pid)),
+    q("lock_links_on","parent_id,child_id")]);
+  const hub = hubs.find(x=>x.claimed_at);
+  const lockIds = new Set(locks.map(l=>l.id));
+  const myAssign = assigns.filter(a=>lockIds.has(a.lock_id));
+  const lockName = id => (locks.find(l=>l.id===id)||{}).name || "";
+  const wifi = access[0] || {};
+  const setupDone = { hub: !!hub, lock: locks.length>0, test: myAssign.some(a=>a.ref_kind!=="foreign" && a.state==="verified"), wifi: !!wifi.wifi_name };
+
+  const setup = `<div class="card"><h3 style="margin-top:0">Set up this home</h3>
+    <div class="step ${setupDone.hub?"done":""}"><div class="n">${setupDone.hub?"✓":"1"}</div><div class="grow">
+      <b>Plug in the hub</b><div class="muted">Hub to the router with the network cable, then power. Wait 5 minutes. Then, with this phone on the home's Wi-Fi:</div>
+      ${hub? `<p>Hub ${online(hub)?'<span class="pill green">online</span>':'<span class="pill red">offline</span>'} <span class="muted">checked in ${ago(hub.last_seen)}</span></p>`
+           : `<p><button class="btn go wide" id="find">Find hub</button></p><div id="found"></div>
+              <details><summary>Doesn't show up? Type the 6-digit code</summary><div class="row"><input id="pc" inputmode="numeric" maxlength="6" class="grow"><button class="btn primary" id="claim">Add</button></div>
+              <p class="muted">The code shows on the hub's Home Assistant page (http://homeassistant.local:8123 → Notifications).</p></details>`}
+    </div></div>
+    <div class="step ${setupDone.lock?"done":""}" style="margin-top:12px"><div class="n">${setupDone.lock?"✓":"2"}</div><div class="grow">
+      <b>Add each lock, thermostat and sensor</b>
+      <div class="muted">First remove the lock from Brivo (Brivo → this home → Add/Remove Device → remove), or reset its Z-Wave module.</div>
+      <label class="field"><span>5-digit PIN from the sticker on the Z-Wave module (locks; leave blank for thermostats/sensors)</span><input id="pin" inputmode="numeric" maxlength="5"></label>
+      <button class="btn go wide" id="pair" ${hub?"":"disabled"}>Start pairing</button>
+      <div class="muted" style="margin-top:8px">Then on the lock keypad: <b>master code</b> → ✓ → <b>7</b> (network) → ✓ → <b>1</b> (join) → ✓. On a thermostat, use its Z-Wave "include" menu. ${locks.some(l=>l.master_code)?"Master codes are on each door below.":""}</div>
+      <div id="pairmsg"></div>
+    </div></div>
+    <div class="step ${setupDone.test?"done":""}" style="margin-top:12px"><div class="n">${setupDone.test?"✓":"3"}</div><div class="grow">
+      <b>Name each door, test it, clear the old Brivo codes</b><div class="muted">Use the buttons on each door below. A test code is put on the lock and read back; type it on the keypad to be sure.</div></div></div>
+    <div class="step ${setupDone.wifi?"done":""}" style="margin-top:12px"><div class="n">${setupDone.wifi?"✓":"4"}</div><div class="grow">
+      <b>Check what guests see</b><div class="muted">Shown on the guest's stay page from the day before check-in.</div>
+      <div class="grid2"><label class="field"><span>Wi-Fi name</span><input id="wn" value="${esc(wifi.wifi_name||"")}"></label>
+      <label class="field"><span>Wi-Fi password</span><input id="wp" value="${esc(wifi.wifi_password||"")}"></label>
+      <label class="field"><span>Building / gate code</span><input id="gc" value="${esc(wifi.gate_code||"")}"></label>
+      <label class="field"><span>Garage code</span><input id="gg" value="${esc(wifi.garage_code||"")}"></label></div>
+      <label class="field"><span>Getting in (parking, which entrance, front desk)</span><textarea id="an" rows="2">${esc(h.arrival_note||"")}</textarea></label>
+      <button class="btn primary wide" id="wsave">Save</button></div></div>
+  </div>`;
+
+  const doorCard = l => {
+    const as = myAssign.filter(a=>a.lock_id===l.id);
+    return `<div class="card" data-lock="${l.id}">
+      <div class="row"><div class="grow"><b>${esc(l.name)}</b><div class="muted">${esc(l.model||"")} · node ${l.node_id}${l.installed_on?` · ${ageTxt(l.installed_on)} old`:""}</div></div>
+        <span class="pill ${l.online===false?"red":l.state==="unlocked"?"amber":"green"}">${l.online===false?"Not answering":esc(l.state||"?")}</span>
+        <span class="pill ${l.battery!=null&&l.battery<=30?"red":"grey"}">🔋 ${l.battery??"?"}%</span></div>
+      <div class="grid2" style="margin-top:10px"><button class="btn primary" data-act="unlock">Unlock</button><button class="btn" data-act="lock">Lock</button></div>
+      <details style="margin-top:8px"><summary>Name, master code, test</summary>
+        <div class="chips" style="margin:6px 0">${DOOR_NAMES.map(n=>`<span class="chip ${n===l.name?"on":""}" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>
+        <label class="field"><span>Name</span><input data-f="name" value="${esc(l.name)}"></label>
+        <label class="field"><span>Master code (Yale master PIN)</span><input data-f="master" inputmode="numeric" value="${esc(l.master_code||"")}"></label>
+        <div class="grid2"><label class="field"><span>Installed on</span><input type="date" data-f="installed" value="${esc(l.installed_on||"")}"></label>
+        <label class="field"><span>Replace after (years)</span><input data-f="years" inputmode="numeric" value="${l.replace_years}"></label></div>
+        <div class="muted">Batteries last changed: ${l.last_battery_change?when(l.last_battery_change):"not seen yet"}</div>
+        <label class="row" style="margin:8px 0"><input type="checkbox" data-f="guests" ${l.for_guests?"checked":""}> <span>Guest codes go on this door</span></label>
+        <label class="row" style="margin:8px 0"><input type="checkbox" data-f="shared" ${l.shared?"checked":""}> <span>Shared door - guests of every unit under this home use it</span></label>
+        <button class="btn primary wide" data-act="save">Save</button>
+        <div class="grid2" style="margin-top:8px"><button class="btn" data-act="test">Test code</button><button class="btn" data-act="wipe">Clear old codes</button></div>
+        <button class="btn danger wide" style="margin-top:8px" data-act="remove">Remove from hub</button>
+      </details>
+      <details><summary>Codes on this lock (${as.filter(a=>a.state==="verified").length} confirmed)</summary><div class="list">
+        ${as.map(a=>`<div><span class="grow">${esc(a.label||a.ref_id)} <span class="muted">slot ${a.slot}</span></span>
+          <span class="pill ${a.state==="verified"?"green":a.state==="failed"?"red":"amber"}">${a.state==="verified"?"✓ on lock":a.state==="clearing"?"removing":a.state==="failed"?"retrying":"sending"}</span></div>`).join("")||'<div class="muted">None yet</div>'}
+      </div></details></div>`;
+  };
+  const thermoCard = t => `<div class="card" data-th="${t.id}">
+    <div class="row"><div class="grow"><b>${esc(t.name)}</b><div class="muted">${esc(t.model||"")} ${t.managed?"":"· not managed"}</div></div>
+      <div class="temp">${t.temp!=null?Math.round(t.temp)+"°":"?"}</div></div>
+    <div class="muted">${esc(t.mode||"?")} · heat ${t.heat_sp!=null?Math.round(t.heat_sp)+"°":"-"} · cool ${t.cool_sp!=null?Math.round(t.cool_sp)+"°":"-"}</div>
+    <details><summary>Change</summary>
+      <div class="chips" style="margin:6px 0">${["heat","cool","auto","off"].map(m=>`<span class="chip ${t.mode===m?"on":""}" data-mode="${m}">${m}</span>`).join("")}</div>
+      <div class="grid2"><label class="field"><span>Heat to</span><input data-f="heat" inputmode="numeric" value="${t.heat_sp!=null?Math.round(t.heat_sp):""}"></label>
+      <label class="field"><span>Cool to</span><input data-f="cool" inputmode="numeric" value="${t.cool_sp!=null?Math.round(t.cool_sp):""}"></label></div>
+      <button class="btn primary wide" data-act="set">Send to thermostat</button>
+      <label class="field"><span>Name</span><input data-f="name" value="${esc(t.name)}"></label>
+      <label class="row"><input type="checkbox" data-f="managed" ${t.managed?"checked":""}> <span>Follow the home's rules (warm-up, set-back, limits)</span></label>
+      <button class="btn wide" style="margin-top:8px" data-act="tsave">Save</button></details></div>`;
+  const pcode = id => (S.props[id]||{}).code || id;
+  const parents = links.filter(x=>x.child_id===pid).map(x=>x.parent_id), kids = links.filter(x=>x.parent_id===pid).map(x=>x.child_id);
+  const family = `<details class="card" ${parents.length||kids.length?"open":""}><summary>Parent / child homes</summary>
+    ${parents.length?`<p>Part of: <b>${parents.map(pcode).map(esc).join(", ")}</b> <span class="muted">(bookings there get a code on this home's doors; this home's guests get the parent's shared doors)</span></p>`:""}
+    ${kids.length?`<p>Units under this home: <b>${kids.map(pcode).map(esc).join(", ")}</b> <span class="muted">(a booking here gets a code on all of them; their guests get this home's shared doors)</span></p>`:""}
+    ${!parents.length&&!kids.length?'<p class="muted">Not linked. Use this for combo listings (ST 14 = ST 1 + ST 4) and buildings with a shared entry door.</p>':""}
+    ${S.me.role==="admin"?`<div class="grid2"><label class="field"><span>Add a unit under this home (code)</span><input id="kid" placeholder="ST 4"></label>
+      <label class="field"><span>…or make this a unit of (code)</span><input id="par" placeholder="ST 14"></label></div><button class="btn primary wide" id="lsave">Link</button>`:""}</details>`;
+  const rules = `<details class="card"><summary>Rules for this home</summary>
+    <div class="grid2">
+      <label class="field"><span>Warm to (°F) for arrival</span><input data-r="warm_to" inputmode="numeric" value="${h.warm_to}"></label>
+      <label class="field"><span>Start warming (hours before)</span><input data-r="warm_hours" inputmode="numeric" value="${h.warm_hours}"></label>
+      <label class="field"><span>Empty home: heat to</span><input data-r="vacant_heat" inputmode="numeric" value="${h.vacant_heat}"></label>
+      <label class="field"><span>Empty home: AC to</span><input data-r="vacant_cool" inputmode="numeric" value="${h.vacant_cool??""}"></label>
+      <label class="field"><span>Arrival AC to (summer)</span><input data-r="cool_to" inputmode="numeric" value="${h.cool_to??""}"></label>
+      <label class="field"><span>Limit: heat no higher than</span><input data-r="heat_max" inputmode="numeric" value="${h.heat_max??""}"></label>
+      <label class="field"><span>Limit: heat no lower than</span><input data-r="heat_min" inputmode="numeric" value="${h.heat_min??""}"></label>
+      <label class="field"><span>Limit: AC no lower than</span><input data-r="cool_min" inputmode="numeric" value="${h.cool_min??""}"></label>
+      <label class="field"><span>Alert below (°F)</span><input data-r="too_cold" inputmode="numeric" value="${h.too_cold}"></label>
+      <label class="field"><span>Alert above (°F)</span><input data-r="too_hot" inputmode="numeric" value="${h.too_hot}"></label>
+      <label class="field"><span>After-hours from</span><input type="time" data-r="after_hours_from" value="${String(h.after_hours_from).slice(0,5)}"></label>
+      <label class="field"><span>After-hours to</span><input type="time" data-r="after_hours_to" value="${String(h.after_hours_to).slice(0,5)}"></label>
+      <label class="field"><span>Auto-lock empty home after (min, blank = off)</span><input data-r="auto_lock_min" inputmode="numeric" value="${h.auto_lock_min??""}"></label>
+    </div><label class="field"><span>TouchStay guide link (shown to guests)</span><input data-r="guide_url" value="${esc(h.guide_url||"")}"></label><button class="btn primary wide" id="rsave">Save rules</button></details>`;
+  const stayList = `<div class="card"><h3 style="margin-top:0">Next stays</h3><div class="list">${stays.map(s=>{
+      const on = myAssign.find(a=>a.ref_kind==="stay"&&a.ref_id===s.res_id&&a.state==="verified");
+      return `<div data-res="${esc(s.res_id)}"><div class="grow"><b>${esc(s.guest||"Guest")}</b> <span class="muted">${esc(s.kind)}</span><div class="muted">${when(s.starts_at)} → ${when(s.ends_at)}</div></div>
+        <div style="text-align:right"><div class="big" style="font-size:20px">${esc(s.code)}</div>${on?'<span class="pill green">on lock</span>':'<span class="pill grey">later</span>'}
+        <div><button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
+  const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
+
+  shell("homes", `<p><a href="#/">← Homes</a></p><h2>${esc(p.code)} <span class="muted" style="font-weight:400">${esc(p.name)}</span></h2>
+    ${alerts.map(a=>`<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">${esc(a.kind.replace(/_/g," "))}</b><div>${esc(a.detail||"")}</div>${a.bw_task&&a.bw_task.startsWith("http")?`<a href="${esc(a.bw_task)}">Breezeway task</a>`:""}</div>`).join("")}
+    ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
+    ${locks.length?`<h3>Doors</h3>${locks.map(doorCard).join("")}`:""}
+    ${thermos.length?`<h3>Thermostats</h3>${thermos.map(thermoCard).join("")}`:""}
+    ${sensors.length?`<h3>Sensors</h3><div class="card list">${sensors.map(x=>`<div><span class="grow">${esc(x.name)}</span><span class="pill ${x.state==="wet"?"red":"grey"}">${esc(x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}</div>`).join("")}</div>`:""}
+    ${stayList}${family}${rules}${hist}`, p.code);
+  $("#lsave") && ($("#lsave").onclick = async () => {
+    try{ const find = async c => c ? ((await q("properties","id",x=>x.eq("code",c)))[0]||{}).id : null;
+      const kid = await find($("#kid").value.trim()), par = await find($("#par").value.trim());
+      if(!kid && !par) return toast("Type a home code");
+      if(kid) await rpc("lock_home_link",{p_parent:pid,p_child:kid,p_on:true});
+      if(par){ await rpc("lock_home_link",{p_parent:par,p_child:pid,p_on:true}); }
+      toast("Linked"); loadBase(); homeView(pid); }catch(e){ fail(e); } });
+
+  // hub
+  const find = $("#find"); if(find) find.onclick = async () => {
+    try{ const hs = await rpc("lock_find_hubs"); $("#found").innerHTML = hs.length ? hs.map(x=>`<button class="btn primary wide" style="margin-top:8px" data-hub="${x.id}">Add the hub found here (seen ${ago(x.last_seen)})</button>`).join("")
+        : '<p class="muted">No new hub on this connection yet. Is the phone on the home\'s Wi-Fi (not cell data)? Give the hub 5 minutes after plugging in.</p>';
+      $$("[data-hub]").forEach(b=>b.onclick=async()=>{ try{ await rpc("lock_claim_hub",{p_hub:b.dataset.hub,p_pair:null,p_property:pid,p_name:"Hub "+p.code}); toast("Hub added to "+p.code); homeView(pid);}catch(e){fail(e);} });
+    }catch(e){ fail(e); } };
+  const claim = $("#claim"); if(claim) claim.onclick = async () => { try{ await rpc("lock_claim_hub",{p_hub:null,p_pair:$("#pc").value.trim(),p_property:pid,p_name:"Hub "+p.code}); toast("Hub added"); homeView(pid);}catch(e){fail(e);} };
+  // pairing
+  const pair = $("#pair"); if(pair) pair.onclick = async () => {
+    const pin = $("#pin").value.trim(); const m = $("#pairmsg");
+    pair.disabled = true; m.innerHTML = '<p><b>Pairing is on for 5 minutes.</b> Put the lock or thermostat in join mode now…</p><button class="btn small" id="stop">Stop</button>';
+    $("#stop").onclick = () => command(hub.id, null, "stop");
+    try{ const id = await command(hub.id, null, "include", pin?{pin}:{}); const r = await waitCmd(id, 300);
+      m.innerHTML = r ? (r.ok? '<p class="pill green">Added. Name it below.</p>' : `<p class="pill red">${esc((r.result||{}).msg||"Didn't pair")}</p>`) : '<p class="muted">No answer yet. Check the door list in a minute.</p>';
+      setTimeout(()=>homeView(pid), 4000);
+    }catch(e){ fail(e); } pair.disabled = false; };
+  // wifi
+  $("#wsave") && ($("#wsave").onclick = async () => {
+    const { error } = await sb.from("property_access").upsert({ property_id:pid, wifi_name:$("#wn").value.trim()||null, wifi_password:$("#wp").value.trim()||null,
+      gate_code:$("#gc").value.trim()||null, garage_code:$("#gg").value.trim()||null });
+    if(error) return fail(error);
+    try{ await rpc("lock_home_rules",{p_property:pid,r:{arrival_note:$("#an").value.trim()}}); toast("Saved"); }catch(e){ fail(e); } });
+  // doors
+  $$("[data-lock]").forEach(card => { const id = card.dataset.lock, l = locks.find(x=>x.id===id);
+    $$(".chip[data-name]", card).forEach(c=>c.onclick=()=>{ $('[data-f="name"]',card).value=c.dataset.name; $$(".chip[data-name]",card).forEach(x=>x.classList.toggle("on",x===c)); });
+    card.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const act = b.dataset.act;
+      try{
+        if(act==="unlock"||act==="lock"){ b.disabled=true; const r = await waitCmd(await command(null, id, act), 30); toast(r? (r.ok? (act==="unlock"?"Unlocked":"Locked") : "The lock didn't answer") : "No answer from the hub"); b.disabled=false; }
+        if(act==="save"){ const mc = $('[data-f="master"]',card).value.trim(); await rpc("lock_update",{p_lock:id,p_name:$('[data-f="name"]',card).value.trim(),p_for_guests:$('[data-f="guests"]',card).checked,p_active:true,p_master:mc||null,
+          p_installed:$('[data-f="installed"]',card).value||null,p_replace_years:+$('[data-f="years"]',card).value||null,p_shared:$('[data-f="shared"]',card).checked}); toast("Saved"); homeView(pid); }
+        if(act==="test"){ const code = String(Math.floor(1000+Math.random()*9000)); await command(null, id, "refresh", {code}); toast("Test code "+code+" is going on the lock (10 min)"); setTimeout(()=>homeView(pid), 15000); }
+        if(act==="wipe"){ if(!confirm("Clear every code on this lock that isn't one of ours (old Brivo codes)? Our codes stay.")) return; await command(null, id, "wipe"); toast("Reading the lock… old codes will be cleared"); }
+        if(act==="remove"){ if(!confirm("Remove "+l.name+" from the hub? Put the lock in remove mode after you tap OK.")) return; await command(hub.id, id, "exclude"); toast("Remove mode on for 5 minutes"); }
+      }catch(e){ fail(e); } }; });
+  // thermostats
+  $$("[data-th]").forEach(card => { const id = card.dataset.th; let mode = (thermos.find(t=>t.id===id)||{}).mode;
+    $$(".chip[data-mode]",card).forEach(c=>c.onclick=()=>{ mode=c.dataset.mode; $$(".chip[data-mode]",card).forEach(x=>x.classList.toggle("on",x===c)); });
+    card.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return;
+      try{
+        if(b.dataset.act==="set"){ const h2=$('[data-f="heat"]',card).value, c2=$('[data-f="cool"]',card).value;
+          await rpc("lock_climate",{p_thermostat:id,p_mode:mode||"heat",p_heat:h2?+h2:null,p_cool:c2?+c2:null}); hub && wake(hub.id); toast("Sent"); }
+        if(b.dataset.act==="tsave"){ await rpc("lock_thermostat_update",{p_thermostat:id,p_name:$('[data-f="name"]',card).value,p_managed:$('[data-f="managed"]',card).checked}); toast("Saved"); }
+      }catch(e){ fail(e); } }; });
+  // rules
+  $("#rsave") && ($("#rsave").onclick = async () => { const r = {}; $$("[data-r]").forEach(i=>{ r[i.dataset.r] = i.value===""?null:i.value; });
+    try{ await rpc("lock_home_rules",{p_property:pid,r}); toast("Rules saved"); loadBase(); }catch(e){ fail(e); } });
+  // stays
+  $$("[data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = stays.find(x=>x.res_id===row.dataset.res);
+    if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks\.html$/,"") + "stay.html#t=" + s.portal_token;
+      try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
+    if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
+      try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); homeView(pid); }catch(e){ fail(e); } } });
+}
+
+/* ------------------------------------------------ employee / vendor / backup codes */
+async function codesView(){
+  if(!S.homes.length) await loadBase();
+  const codes = await q("lock_staff_codes","*",x=>x.order("kind").order("label"));
+  const ours = S.homes.filter(h=>h.section==="ours");
+  const homeNames = ids => !ids ? "All our homes" : ids.map(i=>(S.props[i]||{}).code||i).join(", ");
+  const timeTxt = c => [c.days&&c.days.length?c.days.map(d=>DAYS[d]).join(" "):"Every day", c.time_from?`${c.time_from.slice(0,5)}–${c.time_to.slice(0,5)}`:"all day",
+    c.ends_at?"until "+new Date(c.ends_at).toLocaleDateString():""].filter(Boolean).join(" · ");
+  const groups = {employee:"Employees",vendor:"Vendors",backup:"Backup codes",owner:"Owners"};
+  shell("codes", `<h2>Crew, vendor &amp; backup codes</h2>
+    <button class="btn go wide" id="new">+ Add a code</button>
+    <div id="form"></div>
+    ${Object.entries(groups).map(([k,t])=>{ const cs = codes.filter(c=>c.kind===k); return cs.length?`<h3>${t} (${cs.filter(c=>c.active).length})</h3>${cs.map(c=>`<div class="card row" data-id="${c.id}" style="${c.active?"":"opacity:.5"}">
+      <div class="grow"><b>${esc(c.label)}</b><div class="muted">${esc(homeNames(c.property_ids))}</div><div class="muted">${esc(timeTxt(c))}</div></div>
+      <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}`:""; }).join("")}`);
+  const form = c => {
+    c = c || {kind:"employee",days:null};
+    $("#form").innerHTML = `<div class="card">
+      <div class="chips">${Object.entries(groups).map(([k,t])=>`<span class="chip ${c.kind===k?"on":""}" data-kind="${k}">${t.replace(/s$/,"").replace("Backup code","Backup")}</span>`).join("")}</div>
+      <label class="field"><span>Name</span><input id="f_label" value="${esc(c.label||"")}" placeholder="Shelby Huffaker / A+ Carpet / Spare - December"></label>
+      <label class="field"><span>Code (same as Brivo)</span><input id="f_code" inputmode="numeric" class="big" value="${esc(c.code||"")}"></label>
+      <span class="muted"><b>Homes</b> (none picked = all our homes)</span>
+      <div class="chips" style="margin:6px 0">${ours.map(h=>`<span class="chip ${(c.property_ids||[]).includes(h.property_id)?"on":""}" data-home="${esc(h.property_id)}">${esc(h.properties.code)}</span>`).join("")}</div>
+      <span class="muted"><b>Days</b> (none picked = every day)</span>
+      <div class="chips" style="margin:6px 0">${DAYS.map((d,i)=>`<span class="chip ${(c.days||[]).includes(i)?"on":""}" data-day="${i}">${d}</span>`).join("")}</div>
+      <div class="grid2"><label class="field"><span>From (time)</span><input type="time" id="f_tf" value="${c.time_from?c.time_from.slice(0,5):""}"></label>
+      <label class="field"><span>To (time)</span><input type="time" id="f_tt" value="${c.time_to?c.time_to.slice(0,5):""}"></label>
+      <label class="field"><span>Start date</span><input type="date" id="f_sd" value="${c.starts_at?c.starts_at.slice(0,10):""}"></label>
+      <label class="field"><span>End date</span><input type="date" id="f_ed" value="${c.ends_at?c.ends_at.slice(0,10):""}"></label></div>
+      <button class="btn primary wide" id="f_save">Save</button>
+      ${c.id?`<button class="btn danger wide" style="margin-top:8px" id="f_off">${c.active?"Turn off":"Turn back on"}</button>`:""}</div>`;
+    let kind = c.kind;
+    $$("[data-kind]").forEach(x=>x.onclick=()=>{ kind=x.dataset.kind; $$("[data-kind]").forEach(y=>y.classList.toggle("on",y===x)); });
+    $$("[data-home],[data-day]").forEach(x=>x.onclick=()=>x.classList.toggle("on"));
+    const save = async active => {
+      const tf=$("#f_tf").value, tt=$("#f_tt").value; if((tf&&!tt)||(!tf&&tt)) return toast("Set both times or neither");
+      const day = (d, end) => d ? new Date(d+(end?"T23:59:00":"T00:00:00")).toISOString() : null;
+      const r = { id:c.id||null, kind, label:$("#f_label").value.trim(), code:$("#f_code").value.trim(),
+        property_ids:$$("[data-home].on").map(x=>x.dataset.home), days:$$("[data-day].on").map(x=>+x.dataset.day),
+        time_from:tf||null, time_to:tt||null, starts_at:day($("#f_sd").value), ends_at:day($("#f_ed").value,true), active };
+      if(!r.label) return toast("Add a name");
+      try{ await rpc("lock_staff_code",{r}); toast("Saved - going on the locks"); codesView(); }catch(e){ fail(e); } };
+    $("#f_save").onclick = () => save(c.id ? c.active : true);
+    const off = $("#f_off"); if(off) off.onclick = () => save(!c.active);
+    $("#form").scrollIntoView({behavior:"smooth"});
+  };
+  $("#new").onclick = () => form();
+  $$("[data-id]").forEach(x=>x.onclick=()=>form(codes.find(c=>c.id==x.dataset.id)));
+}
+
+/* ------------------------------------------------ alerts */
+async function alertsView(){
+  if(!S.homes.length) await loadBase();
+  const al = await q("lock_alerts","*",x=>x.is("closed_at",null).order("opened_at",{ascending:false}));
+  shell("alerts", `<h2>Open alerts (${al.length})</h2>${al.map(a=>`<a class="card" style="display:block;text-decoration:none;color:inherit" href="#/home/${encodeURIComponent(a.property_id||"")}">
+    <div class="row"><b class="grow">${esc(a.kind.replace(/_/g," "))}</b><span class="muted">${ago(a.opened_at)}</span></div>
+    <div>${esc((S.props[a.property_id]||{}).code||"")} · ${esc(a.detail||"")}</div>
+    ${a.bw_task&&a.bw_task.startsWith("http")?'<span class="pill">Breezeway task made</span>':""}</a>`).join("")||'<p class="muted">All clear.</p>'}`);
+}
+
+/* ------------------------------------------------ scorecard: ours vs Lynx vs Brivo */
+async function scoreView(){
+  if(!S.homes.length) await loadBase();
+  const [s] = await q("lock_scorecard","*");
+  const ages = await q("locks","property_id,name,model,installed_on,replace_years,last_battery_change",x=>x.eq("active",true).order("installed_on"));
+  const row = (k,v) => `<tr><td>${k}</td><td><b>${v??"-"}</b></td></tr>`;
+  shell("score", `<h2>Scorecard (last 60 days)</h2><div class="card"><h3 style="margin-top:0">Ours</h3><table>
+    ${row("Homes",s&&s.homes)}${row("Arrivals",s&&s.arrivals_60d)}${row("Code on the lock before check-in",s?`${s.code_ready_on_time} (${s.pct_ready_on_time??"-"}%)`:"-")}
+    ${row("Hub offline alerts",s&&s.hub_offline_alerts_60d)}${row("Hours hubs were offline",s&&s.hub_offline_hours_60d)}${row("Lock offline alerts",s&&s.lock_offline_alerts_60d)}
+    ${row("Keypad unlocks",s&&s.code_unlocks_60d)}${row("Phone-key taps",s&&s.phone_key_taps_60d)}</table></div>
+    <div class="card"><h3 style="margin-top:0">Lock ages</h3><table><tr><th>Home</th><th>Door</th><th>Age</th><th>Replace by</th></tr>
+    ${ages.map(l=>{ const by = l.installed_on? new Date(new Date(l.installed_on+"T12:00:00").setFullYear(+l.installed_on.slice(0,4)+l.replace_years)) : null;
+      const soon = by && by - Date.now() < 90*864e5;
+      return `<tr><td>${esc((S.props[l.property_id]||{}).code||"")}</td><td>${esc(l.name)}</td><td>${l.installed_on?ageTxt(l.installed_on):"?"}</td>
+        <td>${by?`<span class="pill ${soon?"red":"grey"}">${by.toLocaleDateString(undefined,{month:"short",year:"numeric"})}</span>`:"set install date"}</td></tr>`; }).join("")}</table></div>
+    <p class="muted">Lynx and Brivo numbers are added by the ThinkStation scorecard job (alerts and "can't get in" tickets per home) so all three sections are measured the same way.</p>`);
+}
+
+/* ------------------------------------------------ router */
+async function route(){
+  clearTimeout(S.timer);
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session) return loginView();
+  if(!S.me){ const me = (await sb.rpc("my_desk_identity")).data; S.me = me && me[0]; }
+  if(!S.me || !["admin","tech"].includes(S.me.role)) return shell("homes","<p>Lock setup is for the maintenance crew. Ask Brandon to add you.</p>");
+  const h = location.hash.replace(/^#\/?/,"");
+  try{
+    if(h.startsWith("home/")) await homeView(decodeURIComponent(h.slice(5)));
+    else if(h==="codes") await codesView();
+    else if(h==="alerts") await alertsView();
+    else if(h==="score") await scoreView();
+    else await homesView();
+  }catch(e){ fail(e, "Couldn't load"); }
+  if(h.startsWith("home/") || h==="" ) S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]")) route(); }, 30000);
+}
+window.addEventListener("hashchange", route);
+sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
+route();
+})();
+</script>
+</body>
+</html>
