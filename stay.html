@@ -61,6 +61,7 @@ async function load(){
         <div style="text-align:right"><div class="label">Check-out</div><b>${esc(day(s.ends_at))}</b><div class="muted">by ${esc(time(s.ends_at))}</div></div></div></div>
       <div class="card"><div class="label">Your door code</div>
         ${s.code ? `<div class="code">${esc(s.code)}</div><div class="muted">Type it on the keypad, then press ✓ (or the Yale logo). It works from check-in until check-out.</div>`
+                 : s.code_hold === "agreement" ? `<p class="muted">Your code appears here once your rental agreement is signed. Check your email for the agreement from us.</p>`
                  : `<p class="muted">Your code appears here 7 days before you arrive.</p>`}
       </div>
       ${(s.building_code||s.garage_code||s.arrival_note) ? `<div class="card"><div class="label">Getting to your door</div>
