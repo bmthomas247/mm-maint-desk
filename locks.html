@@ -435,7 +435,7 @@ async function scoreView(){
       const soon = by && by - Date.now() < 90*864e5;
       return `<tr><td>${esc((S.props[l.property_id]||{}).code||"")}</td><td>${esc(l.name)}</td><td>${l.installed_on?ageTxt(l.installed_on):"?"}</td>
         <td>${by?`<span class="pill ${soon?"red":"grey"}">${by.toLocaleDateString(undefined,{month:"short",year:"numeric"})}</span>`:"set install date"}</td></tr>`; }).join("")}</table></div>
-    <p class="muted">Lynx and Brivo numbers are added by the ThinkStation scorecard job (alerts and "can't get in" tickets per home) so all three sections are measured the same way.</p>`);
+    <p class="muted">Lynx and Brivo columns come next: same measures, from their alerts and "can't get in" tickets per home.</p>`);
 }
 
 /* ------------------------------------------------ router */
