@@ -1001,10 +1001,11 @@ end $$;
 -- Brivo users -> our crew/vendor/backup codes, same numbers (service role only; run by brivo_import.py)
 create or replace function lock_import_staff(rows jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare r jsonb; n_new int := 0; n_upd int := 0;
+declare r jsonb; n_new int := 0; n_upd int := 0; was_new boolean;
 begin
   for r in select * from jsonb_array_elements(rows) loop
     if coalesce(r->>'code','') !~ '^[0-9]{4,8}$' then continue; end if;
+    was_new := not exists (select 1 from lock_staff_codes where brivo_ref = r->>'brivo_ref');
     insert into lock_staff_codes (brivo_ref, kind, label, code, property_ids, starts_at, ends_at, days, time_from, time_to, added_by)
     values (r->>'brivo_ref', coalesce(r->>'kind','employee'), r->>'label', r->>'code',
             case when jsonb_typeof(r->'property_ids') = 'array' then array(select jsonb_array_elements_text(r->'property_ids')) end,
@@ -1014,7 +1015,7 @@ begin
     on conflict (brivo_ref) do update set label = excluded.label, code = excluded.code, kind = excluded.kind,
            starts_at = excluded.starts_at, ends_at = excluded.ends_at, property_ids = excluded.property_ids,
            days = excluded.days, time_from = excluded.time_from, time_to = excluded.time_to;
-    if xmax = 0 then n_new := n_new + 1; else n_upd := n_upd + 1; end if;
+    if was_new then n_new := n_new + 1; else n_upd := n_upd + 1; end if;
   end loop;
   perform lock_plan();
   return jsonb_build_object('new', n_new, 'updated', n_upd);
