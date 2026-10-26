@@ -204,7 +204,7 @@ create table if not exists lock_staff_codes (
   id            bigint generated always as identity primary key,
   property_ids  text[],                                   -- homes picked (null + areas null = every home in our section)
   areas         text[],                                   -- neighborhoods picked (Track area codes: RJ, BHV...); adds every home there
-  kind          text not null default 'employee' check (kind in ('employee','vendor','backup','owner','hoa','county')),
+  kind          text not null default 'employee' check (kind in ('employee','vendor','backup','owner','hoa','county','housekeeping')),
   label         text not null,                            -- "Shelby Huffaker", "A+ Carpet", "Spare - November"
   code          text not null check (code ~ '^[0-9]{4,8}$'),
   starts_at     timestamptz,
@@ -536,7 +536,7 @@ begin
     -- crew / vendor / backup: with a schedule-capable lock the code stays on and the lock enforces days/hours;
     -- otherwise the code is added when its window opens and removed when it closes
     insert into _want select 'staff', c.id::text,
-           case c.kind when 'hoa' then 'HOA' when 'county' then 'County' else initcap(c.kind) end || ': ' || coalesce(c.person, c.company, c.label), c.code, true,
+           case c.kind when 'hoa' then 'HOA' when 'county' then 'County' when 'housekeeping' then 'Housekeeping' else initcap(c.kind) end || ': ' || coalesce(c.person, c.company, c.label), c.code, true,
            case when l.schedules_ok then lock_staff_sched(c, c.ends_at) end
       from lock_staff_codes c
      where c.active and lock_code_covers(c.property_ids, c.areas, l.property_id)
@@ -1671,4 +1671,4 @@ $$;
 
 -- new kinds on an existing table (the check above only applies to brand-new tables)
 alter table lock_staff_codes drop constraint if exists lock_staff_codes_kind_check;
-alter table lock_staff_codes add constraint lock_staff_codes_kind_check check (kind in ('employee','vendor','backup','owner','hoa','county'));
+alter table lock_staff_codes add constraint lock_staff_codes_kind_check check (kind in ('employee','vendor','backup','owner','hoa','county','housekeeping'));
