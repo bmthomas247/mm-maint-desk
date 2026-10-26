@@ -240,6 +240,18 @@ async function setHomeTemp(ts, mode, heat, cool){
   hubsSeen.forEach(h=>wake(h));
   toast(`Sent to ${ts.length} thermostat${ts.length>1?"s":""} ✓ (the home's limits still apply)`);
 }
+/* stays: Track links + what the lock pill means */
+const TRACK = "https://moosemanagement.trackhs.com";
+const folioLink = s => `<a class="btn small" href="${TRACK}/pms/guest-folio/view/?id=${encodeURIComponent(s.res_id)}" target="_blank" rel="noopener" title="Open this stay's folio in Track">Folio ↗</a>`;
+const resLink = s => `${TRACK}/pms/reservations/view/${encodeURIComponent(s.res_id)}`;
+function stayPill(s, state, home){
+  const pre = (home && home.preload_days) || 3, goes = new Date(new Date(s.starts_at) - pre*864e5);
+  if(state==="on") return `<span class="pill green" title="The code is on the door now. It works from 1 hour before check-in to 1 hour after check-out.">on lock</span>`;
+  if(s.kind==="guest" && !["received","not-needed"].includes(s.agreement)) return `<span class="pill red" title="The code goes on the door once the rental agreement is back in Track (now: ${esc(s.agreement||"not sent")}).">needs agreement</span>`;
+  if(goes > Date.now()) return `<span class="pill grey" title="The code goes on the door on ${goes.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})} (${pre} days before check-in). The door only accepts it from 1 hour before check-in.">on ${goes.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span>`;
+  return `<span class="pill amber" title="The hub is putting the code on the door now.">sending</span>`;
+}
+const STAY_KEY = `<div class="muted" style="font-size:12.5px;margin:-4px 0 8px"><b>on lock</b> = code is on the door now · <b>on (date)</b> = goes on that day (3 days before check-in) · <b>needs agreement</b> = waiting on the rental agreement in Track · <b>sending</b> = going on now</div>`;
 async function command(hubId, lockId, kind, args){ const id = await rpc("lock_command",{p_hub:hubId,p_lock:lockId,p_kind:kind,p_args:args||{}}); wake(hubId); return id; }
 async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
 
@@ -648,7 +660,7 @@ async function homeView(pid){
     q("thermostats","*",x=>x.eq("property_id",pid).eq("active",true).order("name")),
     q("sensors","*",x=>x.eq("property_id",pid).eq("active",true)),
     q("lock_assign","id,lock_id,slot,ref_kind,ref_id,label,code,wanted,state,err,verified_at",x=>x.neq("state","cleared").order("slot")),
-    q("lock_stays","res_id,guest,kind,status,starts_at,ends_at,code,code_source,portal_token",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(8)),
+    q("lock_stays","res_id,guest,kind,status,starts_at,ends_at,code,code_source,portal_token,agreement",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(8)),
     q("lock_alerts","kind,detail,opened_at,bw_task",x=>x.eq("property_id",pid).is("closed_at",null)),
     q("lock_events","at,kind,who,slot,detail,lock_id",x=>x.eq("property_id",pid).order("at",{ascending:false}).limit(40)),
     q("property_access","wifi_name,wifi_password,door_code,gate_code,garage_code",x=>x.eq("property_id",pid)),
@@ -727,11 +739,12 @@ async function homeView(pid){
       <label class="field"><span>After-hours to</span><input type="time" data-r="after_hours_to" value="${String(h.after_hours_to).slice(0,5)}"></label>
       <label class="field"><span>Auto-lock empty home after (min, blank = off)</span><input data-r="auto_lock_min" inputmode="numeric" value="${h.auto_lock_min??""}"></label>
     </div><label class="field"><span>TouchStay guide link (shown to guests)</span><input data-r="guide_url" value="${esc(h.guide_url||"")}"></label><button class="btn primary wide" id="rsave">Save rules</button></details>`;
-  const stayList = `<div class="card"><h3 style="margin-top:0">Next stays</h3><div class="list">${stays.map(s=>{
-      const on = myAssign.find(a=>a.ref_kind==="stay"&&a.ref_id===s.res_id&&a.state==="verified");
-      return `<div data-res="${esc(s.res_id)}"><div class="grow"><b>${esc(s.guest||"Guest")}</b> <span class="muted">${esc(s.kind)}</span><div class="muted">${when(s.starts_at)} → ${when(s.ends_at)}</div></div>
-        <div style="text-align:right">${stayCode(s)}${on?'<span class="pill green">on lock</span>':'<span class="pill grey">later</span>'}
-        ${DESK?'<div><button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></div>':""}</div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
+  const stayList = `<div class="card"><h3 style="margin-top:0">Next stays</h3>${stays.length?STAY_KEY:""}<div class="list">${stays.map(s=>{
+      const as2 = myAssign.filter(a=>a.ref_kind==="stay"&&a.ref_id===s.res_id&&a.wanted);
+      const state = as2.length && as2.every(a=>a.state==="verified") ? "on" : as2.length ? "sending" : null;
+      return `<div data-res="${esc(s.res_id)}"><div class="grow"><b><a href="${resLink(s)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.guest||"Guest")}</a></b> <span class="muted">${esc(s.kind)}</span><div class="muted">${when(s.starts_at)} → ${when(s.ends_at)}</div></div>
+        <div style="text-align:right;display:grid;gap:6px;justify-items:end">${stayCode(s)}${stayPill(s, state, h)}
+        <div>${folioLink(s)}${DESK?' <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button>':""}</div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
   const bar = await syncBar();
@@ -841,14 +854,14 @@ async function staysView(){
       <div class="stat"><div class="n">${inHouse}</div><div class="l">In the home now</div></div>
       <div class="stat ${stays.some(s=>!cleared(s))?"warn":""}"><div class="n">${stays.filter(s=>!cleared(s)).length}</div><div class="l">Agreement not back</div></div>
       <div class="stat"><div class="n">${stays.filter(s=>onLock(s)==="on").length}</div><div class="l">Codes on the lock</div></div></div>
-    <div class="card" style="overflow-x:auto"><table class="tbl"><tr><th>Home</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Agreement</th><th>Code</th><th>Lock</th><th></th></tr>
+    ${STAY_KEY}<div class="card" style="overflow-x:auto"><table class="tbl"><tr><th>Home</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Agreement</th><th>Code</th><th>Lock</th><th></th></tr>
     ${stays.map(s=>{ const ol = onLock(s); return `<tr data-res="${esc(s.res_id)}"><td><a href="#/home/${encodeURIComponent(s.property_id)}"><b>${esc((S.props[s.property_id]||{}).code||"")}</b></a></td>
-      <td><b>${esc(s.guest||"Guest")}</b><div class="muted" style="font-size:12px">${esc(s.kind)} · ${esc(s.res_id)}</div></td>
+      <td><b><a href="${resLink(s)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.guest||"Guest")}</a></b><div class="muted" style="font-size:12px">${esc(s.kind)} · ${esc(s.res_id)}</div></td>
       <td>${when(s.starts_at)}</td><td>${when(s.ends_at)}</td>
       <td>${cleared(s)?'<span class="pill green">OK</span>':`<span class="pill red">${esc(s.agreement||"not sent")}</span>`}</td>
       <td><span class="code-chip">${esc(s.code)}</span><div class="muted" style="font-size:12px">${s.code_source==="phone"?"last 4 of phone":esc(s.code_source)}</div></td>
-      <td>${ol==="on"?'<span class="pill green">on lock</span>':ol==="sending"?'<span class="pill amber">sending</span>':'<span class="pill grey">later</span>'}</td>
-      <td style="white-space:nowrap;text-align:right"><button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></td></tr>`; }).join("")
+      <td>${stayPill(s, ol, S.homes.find(x=>x.property_id===s.property_id))}</td>
+      <td style="white-space:nowrap;text-align:right">${folioLink(s)} <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></td></tr>`; }).join("")
       || '<tr><td colspan="8" class="muted">No upcoming stays from Track.</td></tr>'}</table></div>
     <p class="muted">Codes go live (lock, guest page, Track Door Code) once the rental agreement is back. Owner and lease stays don't need one.</p>`, "Moose Locks", "Office desk · stays and codes");
   $$("[data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = stays.find(x=>x.res_id===row.dataset.res);
