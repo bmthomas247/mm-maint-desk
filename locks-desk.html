@@ -178,81 +178,6 @@ const S = { me:null, homes:[], props:{}, timer:null };
 const DESK = /locks-desk\.html$/.test(location.pathname) || window.LOCKS_DESK === true;
 if(DESK) document.body.classList.add("desk");
 const SELF = DESK ? "locks-desk.html" : "locks.html";
-// Sample home (?demo=1): a fully installed home that lives only in this page, so the crew can see what "after install" looks like.
-const DEMO = /[?&]demo=1/.test(location.search);
-const DEMO_DATA = (() => {
-  const now = Date.now(), iso = ms => new Date(now + ms).toISOString(), H = 3600e3, D = 864e5, P = "demo-101", HUB = "demo-hub";
-  const day = d => new Date(now + d*D).toISOString().slice(0,10);
-  const at = (d, h) => { const x = new Date(now + d*D); x.setHours(h, 0, 0, 0); return x.toISOString(); };
-  const prop = { id:P, code:"DEMO 101", name:"Sample Lodge 101", address:"101 Sample Trail, Park City", area:"DEMO", bw_home_id:null };
-  const L = (id, name, model, node, batt, guests, extra) => ({ id, hub_id:HUB, property_id:P, node_id:node, name, model, battery:batt, online:true, state:"locked",
-    for_guests:guests, shared:false, master_code:"246810", installed_on:day(-1), replace_years:7, active:true, last_battery_change:at(-1,10),
-    rssi:-58-node, rtt:40+node*6, dropped:0, schedules_ok:true, battery_days:null, ...(extra||{}) });
-  const stays = [
-    { res_id:"demo-r1", property_id:P, guest:"Jordan Miles", kind:"guest", status:"checked_in", starts_at:at(-1,16), ends_at:at(2,10), code:"4821", code_source:"phone", agreement:"received", portal_token:"demo-token-1" },
-    { res_id:"demo-r2", property_id:P, guest:"Avery Chen", kind:"guest", status:"confirmed", starts_at:at(3,16), ends_at:at(7,10), code:"7716", code_source:"phone", agreement:"received", portal_token:"demo-token-2" },
-    { res_id:"demo-r3", property_id:P, guest:"Owner stay", kind:"owner", status:"confirmed", starts_at:at(9,16), ends_at:at(12,10), code:"5150", code_source:"phone", agreement:null, portal_token:"demo-token-3" },
-    { res_id:"demo-r4", property_id:P, guest:"Sam Patel", kind:"guest", status:"confirmed", starts_at:at(14,16), ends_at:at(18,10), code:"3390", code_source:"phone", agreement:"sent", portal_token:"demo-token-4" }];
-  const A = (id, lock, slot, kind, ref, label, code, state, wanted) => ({ id, lock_id:lock, slot, ref_kind:kind, ref_id:ref, label, code, wanted:wanted!==false, state,
-    err:null, verified_at:state==="verified"?iso(-2*H):null, created_at:iso(-D), sched:null });
-  return {
-    properties:[prop],
-    lock_homes:[{ property_id:P, section:"ours", enabled:true, lead_hours:12, grace_minutes:60, preload_days:3, warm_to:68, warm_hours:3, vacant_heat:58, vacant_cool:80, cool_to:null,
-      heat_max:72, heat_min:55, cool_min:68, too_cold:50, too_hot:88, after_hours_from:"21:00:00", after_hours_to:"07:00:00", auto_lock_min:15, guide_url:null, arrival_note:"Park in the garage - the code works on the garage keypad too.",
-      notes:null, track_unit_id:null, installed_at:at(-1,15),
-      install:{ prep:{by:"Chris Robinson",at:at(-1,9)}, brivo:{by:"Chris Robinson",at:at(-1,9)}, climate:{by:"Chris Robinson",at:at(-1,11)}, guest:{by:"Chris Robinson",at:at(-1,13)}, track:{by:"System (automatic)",at:at(-1,14)} },
-      properties:prop }],
-    lock_hubs:[{ id:HUB, property_id:P, name:"Hub DEMO 101", last_seen:iso(-40e3), claimed_at:at(-1,9), active:true, version:"1.4.0",
-      status:{ version:"1.4.0", ha:"2026.10.3", zwave_fw:"7.22.2", zwave_sdk:"7.22.2", uptime_min:1710, nodes:7, last_audit:iso(-6*H) } }],
-    locks:[ L("demo-l1","Front door","Yale Assure Lock 2 (YRD450)",3,88,true), L("demo-l2","Garage door","Yale Assure Lever (YRL226)",4,71,true),
-            L("demo-l3","Owner closet","Yale Assure Lock (YRD256)",5,64,false) ],
-    thermostats:[ { id:"demo-t1", hub_id:HUB, property_id:P, node_id:6, name:"Living room", model:"Honeywell T6 Pro Z-Wave", temp:68, mode:"heat", heat_sp:68, cool_sp:null, managed:true, active:true, online:true, battery:null, last_seen:iso(-60e3), rssi:-63, dropped:0, applied:"occupied" },
-                  { id:"demo-t2", hub_id:HUB, property_id:P, node_id:7, name:"Upstairs", model:"Honeywell T6 Pro Z-Wave", temp:66, mode:"heat", heat_sp:67, cool_sp:null, managed:true, active:true, online:true, battery:null, last_seen:iso(-60e3), rssi:-71, dropped:1, applied:"occupied" } ],
-    sensors:[ { id:"demo-s1", hub_id:HUB, property_id:P, node_id:8, name:"Water heater leak sensor", kind:"leak", state:"dry", battery:96, online:true, active:true, rssi:-66 },
-              { id:"demo-s2", hub_id:HUB, property_id:P, node_id:9, name:"Kitchen sink leak sensor", kind:"leak", state:"dry", battery:94, online:true, active:true, rssi:-60 } ],
-    lock_assign:[
-      A(9001,"demo-l1",2,"staff","1","Employee: Shelby Huffaker","1363","verified"), A(9002,"demo-l1",3,"staff","2","Employee: Chris Robinson","2580","verified"),
-      A(9003,"demo-l1",4,"staff","3","Backup code","9017","verified"), A(9004,"demo-l1",5,"staff","4","Vendor: ABC Hot Tubs (Mon-Fri 8-6)","7788","verified"),
-      A(9005,"demo-l2",2,"staff","1","Employee: Shelby Huffaker","1363","verified"), A(9006,"demo-l2",3,"staff","2","Employee: Chris Robinson","2580","verified"),
-      A(9007,"demo-l3",2,"staff","2","Employee: Chris Robinson","2580","verified"),
-      A(9010,"demo-l1",121,"stay","demo-r1","Jordan Miles (guest)","4821","verified"), A(9011,"demo-l2",121,"stay","demo-r1","Jordan Miles (guest)","4821","verified"),
-      A(9012,"demo-l1",122,"stay","demo-r2","Avery Chen (guest)","7716","verified"), A(9013,"demo-l2",122,"stay","demo-r2","Avery Chen (guest)","7716","verified"),
-      A(9020,"demo-l1",150,"test","t1","Test code","5309","cleared",false), A(9021,"demo-l2",150,"test","t2","Test code","5309","cleared",false),
-      A(9022,"demo-l3",150,"test","t3","Test code","5309","cleared",false) ]
-      .map(a => a.ref_kind==="test" ? {...a, verified_at:at(-1,12)} : a),
-    lock_stays:stays,
-    lock_commands:[ { id:"demo-c1", hub_id:HUB, lock_id:"demo-l1", kind:"wipe", ok:true, done_at:at(-1,12) }, { id:"demo-c2", hub_id:HUB, lock_id:"demo-l2", kind:"wipe", ok:true, done_at:at(-1,12) },
-                    { id:"demo-c3", hub_id:HUB, lock_id:"demo-l3", kind:"wipe", ok:true, done_at:at(-1,12) } ],
-    lock_events:[
-      { at:iso(-25*60e3), property_id:P, kind:"unlock_code", who:"Jordan Miles (guest)", slot:121, lock_id:"demo-l1" },
-      { at:iso(-23*60e3), property_id:P, kind:"lock_auto", who:null, slot:null, lock_id:"demo-l1" },
-      { at:iso(-3*H), property_id:P, kind:"governor", who:null, slot:null, lock_id:null, detail:{tried:78,set_to:72} },
-      { at:iso(-5*H), property_id:P, kind:"unlock_code", who:"Employee: Shelby Huffaker", slot:2, lock_id:"demo-l2" },
-      { at:iso(-26*H), property_id:P, kind:"code_set", who:"Avery Chen (guest)", slot:122, lock_id:"demo-l1" },
-      { at:at(-1,13), property_id:P, kind:"climate_set", who:"warm-up for arrival", slot:null, lock_id:null },
-      { at:at(-1,14), property_id:P, kind:"track_switched", who:"system", slot:null, lock_id:null },
-      { at:at(-1,15), property_id:P, kind:"home_installed", who:"Chris Robinson", slot:null, lock_id:null } ],
-    lock_alerts:[],
-    lock_updates:[ { id:"demo-u1", hub_id:HUB, entity:"update.home_assistant_core_update", kind:"core", title:"Home Assistant Core", from_ver:"2026.10.3", to_ver:"2026.10.4",
-      first_seen:iso(-D), started_at:null, done_at:null, ok:null, err:null } ],
-    property_access:[ { property_id:P, wifi_name:"Moose Guest", wifi_password:"(sample)", door_code:null, gate_code:null, garage_code:"(guest code)", lockbox_code:"on file" } ],
-  };
-})();
-function demoRows(table, ops){
-  if(!DEMO || !DEMO_DATA[table]) return [];
-  let rows = DEMO_DATA[table].slice();
-  for(const [k,a] of ops){
-    const [c,v] = a;
-    if(k==="eq") rows = rows.filter(r => String(r[c]) === String(v));
-    else if(k==="neq") rows = rows.filter(r => String(r[c]) !== String(v));
-    else if(k==="in") rows = rows.filter(r => (v||[]).map(String).includes(String(r[c])));
-    else if(k==="is") rows = rows.filter(r => v===null ? r[c]==null : r[c]===v);
-    else if(k==="gte") rows = rows.filter(r => r[c]!=null && (isNaN(Date.parse(v)) ? r[c] >= v : new Date(r[c]) >= new Date(v)));
-    else if(k==="lte") rows = rows.filter(r => r[c]!=null && (isNaN(Date.parse(v)) ? r[c] <= v : new Date(r[c]) <= new Date(v)));
-    else if(k==="or") rows = [];
-  }
-  return rows;
-}
 const $ = (s, el=document) => el.querySelector(s);
 const $$ = (s, el=document) => [...el.querySelectorAll(s)];
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -265,18 +190,8 @@ function when(ts){ return ts? new Date(ts).toLocaleString(undefined,{weekday:"sh
 function ageTxt(d){ const y=(Date.now()-new Date(d+"T12:00:00"))/3.156e10; return y<1? Math.max(1,Math.round(y*12))+" mo" : y.toFixed(1)+" yr"; }
 const online = h => h && h.last_seen && (Date.now()-new Date(h.last_seen)) < 10*6e4;
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
-async function rpc(fn, args){
-  if(DEMO && /demo-/.test(JSON.stringify(args||{}))){ toast("Sample home - nothing was sent"); return "demo"; }
-  const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
-async function q(table, sel, f){
-  if(!DEMO){ let x = sb.from(table).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data||[]; }
-  // sample-home mode: run the real query, record its filters, and add the matching sample rows
-  let real = sb.from(table).select(sel); const ops = [];
-  const rec = new Proxy({}, { get:(t,k) => (...a) => { ops.push([k,a]); real = real[k](...a); return rec; } });
-  if(f) f(rec);
-  const { data, error } = await real; if(error) throw error;
-  return [...demoRows(table, ops), ...(data||[])];
-}
+async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
+async function q(table, sel, f){ let x = sb.from(table).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data||[]; }
 async function wake(hubId){ try{ await fetch(C.url+"/realtime/v1/api/broadcast",{method:"POST",headers:{"content-type":"application/json",apikey:C.anonKey,authorization:"Bearer "+((await sb.auth.getSession()).data.session||{}).access_token},body:JSON.stringify({messages:[{topic:"hub-"+hubId,event:"wake",payload:{}}]})}); }catch(e){} }
 /* "Sync with Track now": the ThinkStation picks it up within a minute (new last-minute booking, code change...) */
 async function syncBar(){
@@ -306,8 +221,27 @@ function stayCode(s){
   if(DESK) return `<div class="big" style="font-size:20px">${esc(s.code)}</div>`;
   return "";     // guest codes live on the office desk only
 }
+/* whole-home controls: every door at once, every thermostat at once */
+const bars = rssi => rssi==null || rssi===127 ? "" : (() => { const n = rssi >= -65 ? 4 : rssi >= -75 ? 3 : rssi >= -85 ? 2 : 1, c = n>=3 ? "var(--moose)" : n===2 ? "var(--amber)" : "var(--red)";
+  return `<span title="Signal ${rssi} dBm" style="display:inline-flex;gap:1.5px;align-items:flex-end;vertical-align:middle">${[1,2,3,4].map(i=>`<i style="width:3px;height:${3+i*2.5}px;border-radius:1px;background:${i<=n?c:"var(--line-2)"}"></i>`).join("")}</span>`; })();
+async function allDoors(ls, act, code){
+  if(!ls.length) return toast("No doors paired here yet");
+  if(act==="unlock" && !confirm(`Unlock all ${ls.length} door${ls.length>1?"s":""} at ${code}? Only do this when someone is there or about to be.`)) return;
+  toast((act==="lock"?"Locking ":"Unlocking ") + ls.length + " door" + (ls.length>1?"s":"") + "…");
+  const ids = await Promise.all(ls.map(l => command(l.hub_id, l.id, act)));
+  const res = await Promise.all(ids.map(id => waitCmd(id, 40)));
+  const ok = res.filter(r => r && r.ok).length, bad = ls.filter((l,i) => !(res[i] && res[i].ok)).map(l=>l.name);
+  toast(ok === ls.length ? (act==="lock" ? "All doors locked ✓" : "All doors unlocked ✓") : `${ok} of ${ls.length} done - no answer from ${bad.join(", ")}`);
+}
+async function setHomeTemp(ts, mode, heat, cool){
+  if(!ts.length) return toast("No thermostats paired here yet");
+  const hubsSeen = new Set();
+  for(const t of ts){ await rpc("lock_climate",{p_thermostat:t.id,p_mode:mode,p_heat:heat,p_cool:cool}); if(t.hub_id) hubsSeen.add(t.hub_id); }
+  hubsSeen.forEach(h=>wake(h));
+  toast(`Sent to ${ts.length} thermostat${ts.length>1?"s":""} ✓ (the home's limits still apply)`);
+}
 async function command(hubId, lockId, kind, args){ const id = await rpc("lock_command",{p_hub:hubId,p_lock:lockId,p_kind:kind,p_args:args||{}}); wake(hubId); return id; }
-async function waitCmd(id, secs){ if(id==="demo"){ await sleep(600); return {done_at:new Date().toISOString(), ok:true, result:{msg:"Sample home - nothing was sent"}}; } for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
+async function waitCmd(id, secs){ for(let i=0;i<secs;i++){ await sleep(1000); const r = (await q("lock_commands","done_at,ok,result",x=>x.eq("id",id)))[0]; if(r && r.done_at) return r; } return null; }
 
 const ICON = {
   homes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
@@ -328,7 +262,7 @@ function shell(active, inner, title, sub){
       <div class="grow"><h1>${esc(title||"Moose Locks")}</h1><div class="sub">${esc(sub||"Moose Management · lock system")}</div></div>
       <a class="iconbtn" href="${DESK?"desk.html":"index.html"}" title="${DESK?"Maintenance desk":"Maintenance site"}">${ICON.homes}</a></div></header>
   ${DESK?navTabs(active):""}
-  <main id="main">${DEMO?`<div class="card" style="background:var(--amber-soft);border-color:var(--amber);font-weight:700">Sample mode: <b>DEMO 101</b> is a pretend home that shows what a finished install looks like. Taps on it don't send anything. <a href="${SELF}">Leave sample mode</a></div>`:""}${inner}</main>
+  <main id="main">${inner}</main>
   ${DESK?"":navTabs(active)}`;
 }
 function navTabs(active){
@@ -378,8 +312,8 @@ async function homesView(){
   await loadBase();
   const [hubs, locks, thermos, alerts, assigns] = await Promise.all([
     q("lock_hubs","id,property_id,last_seen,active,claimed_at",x=>x.eq("active",true)),
-    q("locks","id,property_id,name,battery,online,state,active",x=>x.eq("active",true)),
-    q("thermostats","id,property_id,name,temp,mode,heat_sp,cool_sp,online,active,last_seen",x=>x.eq("active",true)),
+    q("locks","id,hub_id,property_id,name,battery,online,state,active,rssi",x=>x.eq("active",true)),
+    q("thermostats","id,hub_id,property_id,name,temp,mode,heat_sp,cool_sp,online,active,last_seen,rssi,battery",x=>x.eq("active",true)),
     q("lock_alerts","kind,property_id,detail",x=>x.is("closed_at",null)),
     q("lock_assign","lock_id,state,wanted",x=>x.neq("state","cleared"))]);
   const arrivals = DESK ? (await q("lock_stays","property_id,starts_at",x=>x.gte("starts_at",new Date().toISOString()).lte("starts_at",new Date(Date.now()+7*864e5).toISOString()).neq("status","cancelled")))
@@ -406,12 +340,15 @@ async function homesView(){
         <div style="text-align:right;display:grid;gap:6px;justify-items:end">${status}${as.length?`<span class="pill red">${as.length} alert${as.length>1?"s":""}</span>`:""}</div></div>
       <div class="meta">
         ${hub?`<span class="mini">${ICON.hub} hub ${online(hub)?"online":"offline"}</span>`:""}
-        ${ls.map(l=>`<span class="mini">${esc(l.name)} ${batt(l.battery)} ${l.battery??"?"}%</span>`).join("")}
+        ${ls.map(l=>`<span class="mini">${esc(l.name)} ${batt(l.battery)} ${l.battery??"?"}% ${bars(l.rssi)}${l.state==="unlocked"?' <b style="color:var(--amber)">open</b>':""}</span>`).join("")}
         ${temps.length?`<span class="mini">${ICON.temp} ${temps.map(t=>Math.round(t.temp)+"°").join(" / ")}</span>`:""}
         ${ts.length?`<span class="mini">${tOn}/${ts.length} thermostat${ts.length>1?"s":""} online</span>`:""}
         ${!ls.length && !ts.length && h.section==="ours" ? `<span class="mini">Install ${steps.done}/${steps.total}</span>`:""}
       </div>
       ${h.section==="ours" && !h.installed_at ? `<div class="progress"><i style="width:${Math.round(100*steps.done/steps.total)}%"></i></div>`:""}
+      ${hub && (ls.length || ts.length) ? `<div class="row" style="margin-top:10px;gap:6px">
+        ${ls.length?`<button class="btn small" data-hact="lock" data-pid="${esc(h.property_id)}">${ICON.lock} Lock all</button><button class="btn small" data-hact="unlock" data-pid="${esc(h.property_id)}">Unlock all</button>`:""}
+        ${ts.length?`<button class="btn small" data-hact="temp" data-pid="${esc(h.property_id)}">${ICON.temp} Set temp</button>`:""}</div>`:""}
     </a>`;
   };
   const bar = await syncBar();
@@ -436,6 +373,17 @@ async function homesView(){
       <label class="field"><span>Section</span><select id="ns"><option value="ours">Our system</option></select></label>
       <button class="btn primary wide" id="addh">Add</button></details>`:""}`, "Moose Locks", `${sec.ours.length} test homes · ${hubOn} online`);
   wireSync();
+  $("#main").addEventListener("click", async ev => { const b = ev.target.closest("[data-hact]"); if(!b) return; ev.preventDefault(); ev.stopPropagation();
+    const pid = b.dataset.pid, code = (S.props[pid]||{}).code || "";
+    const ls = locks.filter(x=>x.property_id===pid), ts = thermos.filter(x=>x.property_id===pid);
+    b.disabled = true;
+    try{
+      if(b.dataset.hact==="temp"){ const cur = ts.find(t=>t.heat_sp!=null); const v = prompt("Heat every thermostat at "+code+" to (°F):", cur?Math.round(cur.heat_sp):68);
+        if(v && +v) await setHomeTemp(ts, "heat", +v, null); }
+      else await allDoors(ls, b.dataset.hact, code);
+    }catch(e){ fail(e); }
+    b.disabled = false; setTimeout(()=>homesView(), 2500);
+  }, { capture:true });
   if(DESK){
     const score = h => { const hub = hubs.find(x=>x.property_id===h.property_id && x.claimed_at); const n = alerts.filter(x=>x.property_id===h.property_id).length;
       return n*10 + (hub && !online(hub) ? 5 : 0) + (!hub ? 1 : 0); };
@@ -683,7 +631,6 @@ async function installHome(pid){
   $$("[data-wipe]").forEach(b=>b.onclick=async()=>{ if(!confirm("Clear every code on this lock that isn't ours (old Brivo codes)? Crew, vendor and guest codes from our system stay.")) return;
     try{ await command(null, b.dataset.wipe, "wipe"); toast("Reading the lock - old codes will be cleared"); again(); }catch(e){ fail(e); } });
   $("#wsave") && ($("#wsave").onclick = async () => {
-    if(pid.startsWith("demo-")) return toast("Sample home - nothing was saved");
     const { error } = await sb.from("property_access").upsert({ property_id:pid, wifi_name:$("#wn").value.trim()||null, wifi_password:$("#wp").value.trim()||null,
       gate_code:$("#gc").value.trim()||null, garage_code:$("#gg").value.trim()||null });
     error ? fail(error) : (toast("Saved"), again()); });
@@ -720,9 +667,9 @@ async function homeView(pid){
   const doorCard = l => {
     const as = myAssign.filter(a=>a.lock_id===l.id);
     return `<div class="card" data-lock="${l.id}">
-      <div class="row"><div class="grow"><b>${esc(l.name)}</b><div class="muted">${esc(l.model||"")} · node ${l.node_id}${l.installed_on?` · ${ageTxt(l.installed_on)} old`:""}</div></div>
+      <div class="row"><div class="grow" style="min-width:170px"><b>${esc(l.name)}</b><div class="muted">${esc(l.model||"")} · node ${l.node_id}${l.installed_on?` · ${ageTxt(l.installed_on)} old`:""}</div></div>
         <span class="pill ${l.online===false?"red":l.state==="unlocked"?"amber":"green"}">${l.online===false?"Not answering":esc(l.state||"?")}</span>
-        <span class="pill ${l.battery!=null&&l.battery<=30?"red":"grey"}">🔋 ${l.battery??"?"}%</span></div>
+        <span class="pill ${l.battery!=null&&l.battery<=30?"red":"grey"}">🔋 ${l.battery??"?"}%</span><span class="pill grey plain">${signal(l.rssi)}</span></div>
       <div class="grid2" style="margin-top:10px"><button class="btn primary" data-act="unlock">Unlock</button><button class="btn" data-act="lock">Lock</button></div>
       <details style="margin-top:8px"><summary>Name, master code, test</summary>
         <div class="chips" style="margin:6px 0">${DOOR_NAMES.map(n=>`<span class="chip ${n===l.name?"on":""}" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>
@@ -747,6 +694,7 @@ async function homeView(pid){
     <div class="row"><div class="grow"><b>${esc(t.name)}</b><div class="muted">${esc(t.model||"")} ${t.managed?"":"· not managed"}</div></div>
       <div class="temp">${t.temp!=null?Math.round(t.temp)+"°":"?"}</div></div>
     <div class="muted">${esc(t.mode||"?")} · heat ${t.heat_sp!=null?Math.round(t.heat_sp)+"°":"-"} · cool ${t.cool_sp!=null?Math.round(t.cool_sp)+"°":"-"}</div>
+    <div class="chips" style="margin-top:6px"><span class="pill grey plain">${signal(t.rssi)}</span>${t.battery!=null?`<span class="pill ${t.battery<=30?"red":"grey"}">🔋 ${t.battery}%</span>`:'<span class="pill grey plain">wired power</span>'}${t.online===false?'<span class="pill red">Not answering</span>':""}</div>
     <details><summary>Change</summary>
       <div class="chips" style="margin:6px 0">${["heat","cool","auto","off"].map(m=>`<span class="chip ${t.mode===m?"on":""}" data-mode="${m}">${m}</span>`).join("")}</div>
       <div class="grid2"><label class="field"><span>Heat to</span><input data-f="heat" inputmode="numeric" value="${t.heat_sp!=null?Math.round(t.heat_sp):""}"></label>
@@ -791,6 +739,16 @@ async function homeView(pid){
     ${alerts.map(a=>`<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">${esc(a.kind.replace(/_/g," "))}</b><div>${esc(a.detail||"")}</div>${a.bw_task&&a.bw_task.startsWith("http")?`<a href="${esc(a.bw_task)}">Breezeway task</a>`:""}</div>`).join("")}
     ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
     <div class="${DESK?"cols":""}"><div>
+    ${(locks.length||thermos.length) && hub ? `<div class="card" id="whole"><h3 style="margin-top:0">Whole home</h3>
+      ${locks.length?`<div class="muted" style="margin-bottom:8px">${locks.length} door${locks.length>1?"s":""} · ${locks.every(l=>l.state==="locked")?"all locked":locks.filter(l=>l.state!=="locked").map(l=>esc(l.name)+" "+esc(l.state||"?")).join(", ")}</div>
+        <div class="grid2"><button class="btn primary" data-all="lock">${ICON.lock} Lock all doors</button><button class="btn" data-all="unlock">Unlock all doors</button></div>`:""}
+      ${thermos.length?`<div class="muted" style="margin:14px 0 6px">${thermos.map(t=>esc(t.name)+" "+(t.temp!=null?Math.round(t.temp)+"°":"?")).join(" · ")}</div>
+        <div class="chips" id="wmode">${["heat","cool","off"].map(m=>`<span class="chip ${m==="heat"?"on":""}" data-m="${m}">${m}</span>`).join("")}</div>
+        <div class="grid2"><label class="field"><span>Heat to (°F)</span><input id="wheat" inputmode="numeric" value="${(thermos.find(t=>t.heat_sp!=null)||{}).heat_sp!=null?Math.round(thermos.find(t=>t.heat_sp!=null).heat_sp):68}"></label>
+          <label class="field"><span>Cool to (°F)</span><input id="wcool" inputmode="numeric" value="${(thermos.find(t=>t.cool_sp!=null)||{}).cool_sp!=null?Math.round(thermos.find(t=>t.cool_sp!=null).cool_sp):""}"></label></div>
+        <button class="btn primary wide" id="wset">Set all ${thermos.length} thermostat${thermos.length>1?"s":""}</button>
+        <div class="muted" style="font-size:12.5px;margin-top:6px">The home's limits still apply, and the automatic warm-up / set-back takes over again at the next arrival or check-out.</div>`:""}
+    </div>`:""}
     ${locks.length?`<h3>Doors</h3>${locks.map(doorCard).join("")}`:""}
     ${thermos.length?`<h3>Thermostats</h3>${thermos.map(thermoCard).join("")}`:""}
     ${sensors.length?`<h3>Sensors</h3><div class="card list">${sensors.map(x=>`<div><span class="grow">${esc(x.name)}</span><span class="pill ${x.state==="wet"?"red":"grey"}">${esc(x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}</div>`).join("")}</div>`:""}
@@ -798,6 +756,11 @@ async function homeView(pid){
     ${stayList}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${DESK?family+rules:""}${hist}
     </div></div>`, p.code, p.name);
   wireTools(hub, null);
+  $$("[data-all]").forEach(b => b.onclick = async () => { b.disabled = true; try{ await allDoors(locks.map(l=>({...l, hub_id:l.hub_id||(hub&&hub.id)})), b.dataset.all, p.code); }catch(e){ fail(e); } b.disabled = false; setTimeout(()=>homeView(pid), 2000); });
+  let wmode = "heat";
+  $$("#wmode .chip").forEach(c => c.onclick = () => { wmode = c.dataset.m; $$("#wmode .chip").forEach(x=>x.classList.toggle("on", x===c)); });
+  $("#wset") && ($("#wset").onclick = async () => { const h2 = $("#wheat").value, c2 = $("#wcool").value;
+    try{ await setHomeTemp(thermos, wmode, h2?+h2:null, c2?+c2:null); }catch(e){ fail(e); } });
   $("#lsave") && ($("#lsave").onclick = async () => {
     try{ const find = async c => c ? ((await q("properties","id",x=>x.eq("code",c)))[0]||{}).id : null;
       const kid = await find($("#kid").value.trim()), par = await find($("#par").value.trim());
@@ -825,7 +788,6 @@ async function homeView(pid){
     }catch(e){ fail(e); } pair.disabled = false; };
   // wifi
   $("#wsave") && ($("#wsave").onclick = async () => {
-    if(pid.startsWith("demo-")) return toast("Sample home - nothing was saved");
     const { error } = await sb.from("property_access").upsert({ property_id:pid, wifi_name:$("#wn").value.trim()||null, wifi_password:$("#wp").value.trim()||null,
       gate_code:$("#gc").value.trim()||null, garage_code:$("#gg").value.trim()||null });
     if(error) return fail(error);
@@ -835,7 +797,7 @@ async function homeView(pid){
     $$(".chip[data-name]", card).forEach(c=>c.onclick=()=>{ $('[data-f="name"]',card).value=c.dataset.name; $$(".chip[data-name]",card).forEach(x=>x.classList.toggle("on",x===c)); });
     card.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const act = b.dataset.act;
       try{
-        if(act==="unlock"||act==="lock"){ b.disabled=true; const r = await waitCmd(await command(null, id, act), 30); toast(r? (r.ok? (act==="unlock"?"Unlocked":"Locked") : "The lock didn't answer") : "No answer from the hub"); b.disabled=false; }
+        if(act==="unlock"||act==="lock"){ b.disabled=true; const r = await waitCmd(await command(l.hub_id||(hub&&hub.id), id, act), 30); toast(r? (r.ok? (act==="unlock"?"Unlocked":"Locked") : "The lock didn't answer") : "No answer from the hub"); b.disabled=false; }
         if(act==="save"){ const mi = $('[data-f="master"]',card), mc = mi ? mi.value.trim() : ""; await rpc("lock_update",{p_lock:id,p_name:$('[data-f="name"]',card).value.trim(),p_for_guests:$('[data-f="guests"]',card).checked,p_active:true,p_master:mc||null,
           p_installed:$('[data-f="installed"]',card).value||null,p_replace_years:+$('[data-f="years"]',card).value||null,p_shared:$('[data-f="shared"]',card).checked}); toast("Saved"); homeView(pid); }
         if(act==="test"){ const code = String(Math.floor(1000+Math.random()*9000)); await command(null, id, "refresh", {code}); toast("Test code "+code+" is going on the lock (10 min)"); setTimeout(()=>homeView(pid), 15000); }
