@@ -1524,3 +1524,46 @@ begin
 end $$;
 revoke all on function lock_update_settings(boolean, text) from public, anon;
 grant execute on function lock_update_settings(boolean, text) to authenticated;
+
+-- ---------------------------------------------------------------- install step 9 by itself: switch the Track unit off Brivo
+-- Due when: hub added, every guest door paired, every guest door passed its test code, and the installer ticked
+-- "Take the locks off Brivo". locks_sync.py then clears the unit's lock system in Track (PATCH /api/pms/units/{id})
+-- and calls lock_track_switched().
+create or replace view lock_track_switch_due as
+select h.property_id, h.track_unit_id, p.code
+  from lock_homes h join properties p on p.id = h.property_id
+ where h.section = 'ours' and h.enabled and h.track_unit_id is not null
+   and not (h.install ? 'track') and (h.install ? 'brivo')
+   and exists (select 1 from lock_hubs b where b.property_id = h.property_id and b.active and b.claimed_at is not null)
+   and exists (select 1 from locks k where k.property_id = h.property_id and k.active and k.for_guests)
+   and not exists (select 1 from locks k where k.property_id = h.property_id and k.active and k.for_guests
+                     and not exists (select 1 from lock_assign a where a.lock_id = k.id and a.ref_kind = 'test' and a.verified_at is not null));
+revoke all on lock_track_switch_due from public, anon, authenticated;
+
+create or replace function lock_track_switched(p_property text, p_ok boolean, p_detail text default null) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_ok then
+    update lock_homes set install = install || jsonb_build_object('track', jsonb_build_object('by', 'System (automatic)', 'at', now()))
+     where property_id = p_property;
+  end if;
+  insert into lock_events (property_id, kind, who, detail)
+  values (p_property, case when p_ok then 'track_switched' else 'track_switch_failed' end, 'system', jsonb_build_object('detail', p_detail));
+end $$;
+revoke all on function lock_track_switched(text, boolean, text) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------- set up a new home on our system (Install tab)
+-- p_new = brand-new home that never had Brivo: the "Take the locks off Brivo" step is ticked for them.
+create or replace function lock_setup_home(p_property text, p_new boolean default false) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not exists (select 1 from properties where id = p_property) then raise exception 'Home not found'; end if;
+  insert into lock_homes (property_id, section, added_by) values (p_property, 'ours', actor())
+  on conflict (property_id) do update set section = 'ours', enabled = true;
+  if p_new then
+    update lock_homes set install = install || jsonb_build_object('brivo', jsonb_build_object('by', 'New home - never on Brivo', 'at', now()))
+     where property_id = p_property and not (install ? 'brivo');
+  end if;
+  insert into lock_events (property_id, kind, who, detail) values (p_property, 'home_added', actor(), jsonb_build_object('new_home', p_new));
+end $$;
