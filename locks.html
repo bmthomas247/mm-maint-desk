@@ -1012,11 +1012,11 @@ async function codesView(){
   const subName = c => [c.person && c.company ? c.company : null, c.role].filter(Boolean).join(" · ");
   const SHOW = {all:["employee","housekeeping","vendor","owner","hoa","county","backup"], crew:["employee"], housekeeping:["housekeeping"], backup:["backup"], vendor:["vendor"], owner:["owner"], hoa:["hoa"], county:["county"]};
   const HINT = {employee:"", backup:"Spare codes that rotate (e.g. a new one each month). Set an end date so the old one comes off by itself.", vendor:"Set days and hours so vendors only get in during their window.", owner:"Pick the owner's home(s). Owner codes work any time unless you set days or dates.",
-    hoa:"HOA managers and board contacts - usually just their neighborhood.", housekeeping:"Our housekeeping team and outside cleaners.", county:"Health department and other county inspectors."};
+    hoa:"HOA managers and board contacts - usually just their neighborhood.", housekeeping:"Outside cleaners. Our own housekeeping staff are under Employees.", county:"Health department and other county inspectors."};
   shell("codes", `<h2>Access codes</h2>
     <div class="card row" style="gap:12px">
       <div class="grow"><span class="muted" style="font-weight:700">Show</span><div class="chips" id="cshow" style="margin-top:6px">
-        ${[["all","All"],["crew","Crew"],["housekeeping","Housekeepers"],["vendor","Vendors"],["owner","Owners"],["hoa","HOA"],["county","County"],["backup","Backup"]].map(([k,t])=>`<span class="chip" data-show="${k}">${t} (${codes.filter(c=>c.active&&SHOW[k].includes(c.kind)).length})</span>`).join("")}</div></div>
+        ${[["all","All"],["crew","Crew"],["housekeeping","Housekeepers"],["vendor","Vendors"],["owner","Owners"],["hoa","HOA"],["county","County"],["backup","Backup"]].map(([k,t])=>`<span class="chip" data-show="${k}">${t} (${codes.filter(c=>c.active&&!c.removed_at&&SHOW[k].includes(c.kind)).length})</span>`).join("")}</div></div>
       <label class="field" style="margin:0;min-width:200px"><span>Sort</span><select id="csort"><option value="az">Name A → Z</option><option value="za">Name Z → A</option><option value="home">By home</option></select></label>
       <label class="field" style="margin:0;min-width:200px"><span>Find</span><input id="cfind" placeholder="Name or code"></label>
       <button class="btn go" id="new">+ Add a code</button></div>
@@ -1035,13 +1035,18 @@ async function codesView(){
     $$("#cshow .chip").forEach(x=>x.classList.toggle("on", x.dataset.show===show));
     const cmp = (a,b) => srt==="home" ? firstHome(a).localeCompare(firstHome(b), undefined, {numeric:true}) || topName(a).localeCompare(topName(b))
       : (srt==="za"?-1:1) * topName(a).localeCompare(topName(b));
-    $("#clist").innerHTML = SHOW[show].map(k => { const cs = codes.filter(c=>c.kind===k && (!t || [c.label,c.person,c.company,c.role,c.code].join(" ").toLowerCase().includes(t))).sort(cmp);
+    const removed = codes.filter(c=>c.removed_at && (!t || [c.label,c.person,c.company,c.role,c.code].join(" ").toLowerCase().includes(t)));
+    $("#clist").innerHTML = SHOW[show].map(k => { const cs = codes.filter(c=>c.kind===k && !c.removed_at && (!t || [c.label,c.person,c.company,c.role,c.code].join(" ").toLowerCase().includes(t))).sort(cmp);
       const shut = (pref("closed")||"").split(",").includes(k);
       return `<details class="sect" data-sect="${k}" ${shut?"":"open"}><summary><h3 style="margin:0">${groups[k]} (${cs.filter(c=>c.active).length})</h3></summary>${HINT[k]&&!cs.length?`<p class="muted">${HINT[k]}</p>`:""}
         ${cs.length?`<div class="tile-grid">${cs.map(c=>`<div class="card row" data-id="${c.id}" style="cursor:pointer;${c.active?"":"opacity:.5"}">
           <div class="grow"><b style="font-size:16px">${esc(topName(c))}</b>${subName(c)?`<div style="font-weight:700;color:var(--ink-2);font-size:13.5px">${esc(subName(c))}</div>`:""}
             <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(homeNames(c.property_ids, c.areas))} · ${esc(timeTxt(c))}</div></div>
-          <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}</div>`:`<p class="muted">None yet${t?" matching":""}.</p>`}</details>`; }).join("");
+          <div class="big" style="font-size:20px">${esc(c.code)}</div></div>`).join("")}</div>`:`<p class="muted">None yet${t?" matching":""}.</p>`}</details>`; }).join("")
+      + (removed.length ? `<details class="sect"><summary><h3 style="margin:0">Removed (${removed.length})</h3></summary><div class="list card">${removed.map(c=>`<div><div class="grow"><b>${esc(topName(c))}</b>
+          <div class="muted" style="font-size:12.5px">${esc(groups[c.kind]||c.kind)} · removed ${when(c.removed_at)}${c.removed_by?" by "+esc(c.removed_by):""}</div></div>
+          <button class="btn small" data-back="${c.id}">Bring back</button></div>`).join("")}</div></details>` : "");
+    $$("[data-back]").forEach(b=>b.onclick=async()=>{ try{ await rpc("lock_staff_remove",{p_id:+b.dataset.back,p_remove:false}); toast("Back on the list - code going back on the locks"); codesView(); }catch(e){ fail(e); } });
     $$("#clist details.sect").forEach(d => d.addEventListener("toggle", () => {
       const closed = new Set((pref("closed")||"").split(",").filter(Boolean)); d.open ? closed.delete(d.dataset.sect) : closed.add(d.dataset.sect); pref("closed", [...closed].join(",")); }));
     $$("#clist [data-id]").forEach(x=>x.onclick=()=>form(codes.find(c=>c.id==x.dataset.id)));
@@ -1076,7 +1081,8 @@ async function codesView(){
       <label class="field"><span>Start date</span><input type="date" id="f_sd" value="${c.starts_at?c.starts_at.slice(0,10):""}"></label>
       <label class="field"><span>End date</span><input type="date" id="f_ed" value="${c.ends_at?c.ends_at.slice(0,10):""}"></label></div>
       <button class="btn primary wide" id="f_save">Save</button>
-      ${c.id?`<button class="btn danger wide" style="margin-top:8px" id="f_off">${c.active?"Turn off":"Turn back on"}</button>`:""}</div>`;
+      ${c.id?`<div class="grid2" style="margin-top:8px"><button class="btn wide" id="f_off">${c.active?"Turn code off for now":"Turn code back on"}</button>
+        <button class="btn danger wide" id="f_rm">Remove ${esc(topName(c))}</button></div>`:""}</div>`;
     let kind = c.kind;
     $$("[data-kind]").forEach(x=>x.onclick=()=>{ kind=x.dataset.kind; $$("[data-kind]").forEach(y=>y.classList.toggle("on",y===x)); });
     $$("[data-home],[data-day],[data-area]").forEach(x=>x.onclick=()=>x.classList.toggle("on"));
@@ -1096,6 +1102,8 @@ async function codesView(){
       try{ await rpc("lock_staff_code",{r}); toast("Saved - going on the locks"); codesView(); }catch(e){ fail(e); } };
     $("#f_save").onclick = () => save(c.id ? c.active : true);
     const off = $("#f_off"); if(off) off.onclick = () => save(!c.active);
+    const rm = $("#f_rm"); if(rm) rm.onclick = async () => { if(!confirm(`Remove ${topName(c)}? Their code comes off every lock. You can bring them back from "Removed" at the bottom.`)) return;
+      try{ await rpc("lock_staff_remove",{p_id:c.id,p_remove:true}); toast("Removed - code coming off the locks"); codesView(); }catch(e){ fail(e); } };
     $("#form").scrollIntoView({behavior:"smooth"});
   };
   $("#new").onclick = () => form();
