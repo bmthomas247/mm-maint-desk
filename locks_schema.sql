@@ -89,6 +89,10 @@ create or replace function lock_is_crew() returns boolean language sql stable se
   select coalesce(lock_role() in ('admin','tech','office'), false) and lock_aal_ok()
 $$;
 create or replace function lock_can_work() returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(lock_role() in ('admin','tech','office'), false) and lock_aal_ok()
+$$;
+-- master codes: admins + techs only (office staff never see or change them)
+create or replace function lock_can_master() returns boolean language sql stable security definer set search_path = public as $$
   select coalesce(lock_role() in ('admin','tech'), false) and lock_aal_ok()
 $$;
 create or replace function lock_is_admin() returns boolean language sql stable security definer set search_path = public as $$
@@ -1439,6 +1443,7 @@ create or replace function lock_update(p_lock uuid, p_name text, p_for_guests bo
 language plpgsql security definer set search_path = public as $$
 begin
   if not lock_can_work() then raise exception 'Only crew'; end if;
+  if p_master is not null and not lock_can_master() then raise exception 'Only admins and techs can change master codes'; end if;
   if p_master is not null and p_master !~ '^[0-9]{4,8}$' then raise exception 'Master codes are 4 to 8 digits'; end if;
   update locks set name = coalesce(nullif(p_name,''), name), for_guests = coalesce(p_for_guests, for_guests),
          active = coalesce(p_active, active), master_code = coalesce(p_master, master_code),
@@ -1868,7 +1873,7 @@ end $$;
 create or replace function lock_brivo_masters() returns table (property_id text, code text, door text, master_code text)
 language sql stable security definer set search_path = public as $$
   select p.id, p.code, s.door, s.master_code from lock_master_staging s join properties p on p.code = s.unit
-   where lock_is_crew() and p.id in (select h.property_id from lock_homes h where h.section = 'ours')
+   where lock_can_master() and p.id in (select h.property_id from lock_homes h where h.section = 'ours')
 $$;
 
 -- new kinds on an existing table (the check above only applies to brand-new tables)
@@ -1957,7 +1962,7 @@ create or replace function lock_master_new(p_property text, p_replace boolean de
 language plpgsql security definer set search_path = public as $$
 declare c text; tries int := 0; cur text;
 begin
-  if not lock_can_work() then raise exception 'Only crew'; end if;
+  if not lock_can_master() then raise exception 'Only crew'; end if;
   select master_code into cur from lock_homes where property_id = p_property;
   if cur is not null and not p_replace then return cur; end if;
   loop
@@ -2435,7 +2440,7 @@ create or replace function lock_master_change(p_property text, p_step text) retu
 language plpgsql security definer set search_path = public as $$
 declare c text; old text;
 begin
-  if not lock_can_work() then raise exception 'Only crew'; end if;
+  if not lock_can_master() then raise exception 'Only crew'; end if;
   if p_step = 'new' then
     loop
       c := lpad((floor(random() * 1000000))::int::text, 6, '0');
