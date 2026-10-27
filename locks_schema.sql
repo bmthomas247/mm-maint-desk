@@ -79,8 +79,20 @@ create or replace function lock_aal_ok() returns boolean language sql stable sec
   select coalesce(auth.jwt()->>'aal', 'aal1') = 'aal2'
       or not exists (select 1 from auth.mfa_factors f where f.user_id = auth.uid() and f.status = 'verified')
 $$;
+-- lock_role: admin (everything), tech (field + install), office (guest support: stays, guest/backup codes, alerts, reports)
+alter table allowed_users add column if not exists lock_role text;
+create or replace function lock_role() returns text language sql stable security definer set search_path = public as $$
+  select case when lock_role in ('admin','tech','office') then lock_role when lock_role is null and role = 'tech' then 'tech' end
+    from allowed_users where active and lower(auth.jwt()->>'email') in (lower(email), lower(alt_email)) limit 1
+$$;
 create or replace function lock_is_crew() returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce(app_role() in ('admin','tech'), false) and lock_aal_ok()
+  select coalesce(lock_role() in ('admin','tech','office'), false) and lock_aal_ok()
+$$;
+create or replace function lock_can_work() returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(lock_role() in ('admin','tech'), false) and lock_aal_ok()
+$$;
+create or replace function lock_is_admin() returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(lock_role() = 'admin', false) and lock_aal_ok()
 $$;
 
 create table if not exists lock_settings (key text primary key, value text, updated_at timestamptz not null default now());
@@ -681,7 +693,7 @@ create or replace function lock_climate(p_thermostat uuid, p_mode text, p_heat n
 language plpgsql security definer set search_path = public as $$
 declare t thermostats; cid bigint;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   select * into t from thermostats where id = p_thermostat;
   if p_mode not in ('off','heat','cool','auto') then raise exception 'mode must be off, heat, cool or auto'; end if;
   insert into lock_commands (hub_id, thermostat_id, kind, args, source)
@@ -694,7 +706,7 @@ drop function if exists lock_thermostat_update(uuid, text, boolean);
 create or replace function lock_thermostat_update(p_thermostat uuid, p_name text, p_managed boolean, p_installed date default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   update thermostats set name = coalesce(nullif(p_name,''), name), managed = coalesce(p_managed, managed),
          installed_on = coalesce(p_installed, installed_on) where id = p_thermostat;
 end $$;
@@ -722,7 +734,7 @@ revoke all on function lock_apply_rules(text, jsonb) from public, anon, authenti
 create or replace function lock_home_rules(p_property text, r jsonb) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   perform lock_apply_rules(p_property, r);
   if (r - 'arrival_note' - 'guide_url') <> '{}'::jsonb then
     update lock_homes set own_rules = true where property_id = p_property;
@@ -1385,7 +1397,7 @@ create or replace function lock_claim_hub(p_hub uuid, p_pair text, p_property te
 language plpgsql security definer set search_path = public as $$
 declare h lock_hubs;
 begin
-  if not lock_is_crew() then raise exception 'Only crew can add hubs'; end if;
+  if not lock_can_work() then raise exception 'Only crew can add hubs'; end if;
   select * into h from lock_hubs where active and claimed_at is null
      and ((p_hub is not null and id = p_hub and public_ip = lock_caller_ip()) or (p_pair is not null and pair_code = p_pair));
   if not found then raise exception 'Hub not found. Make sure your phone is on the home''s Wi-Fi, or type the 6-digit code.'; end if;
@@ -1403,10 +1415,10 @@ create or replace function lock_command(p_hub uuid, p_lock uuid, p_kind text, p_
 language plpgsql security definer set search_path = public as $$
 declare cid bigint; hub uuid := p_hub;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if p_lock is not null then select hub_id into hub from locks where id = p_lock; end if;
   if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit','ping','heal','restart','update','tv') then raise exception 'bad command'; end if;
-  if p_kind = 'update' and app_role() is distinct from 'admin' then raise exception 'Only admins can start an update'; end if;
+  if p_kind = 'update' and not lock_is_admin() then raise exception 'Only admins can start an update'; end if;
   if hub is null then raise exception 'pick a hub or a lock'; end if;
   insert into lock_commands (hub_id, lock_id, kind, args, source, expires_at)
   values (hub, p_lock, p_kind, coalesce(p_args, '{}') || case when p_kind = 'update' then jsonb_build_object('by', actor()) else '{}' end, 'admin',
@@ -1426,7 +1438,7 @@ create or replace function lock_update(p_lock uuid, p_name text, p_for_guests bo
                                        p_installed date default null, p_replace_years int default null, p_shared boolean default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if p_master is not null and p_master !~ '^[0-9]{4,8}$' then raise exception 'Master codes are 4 to 8 digits'; end if;
   update locks set name = coalesce(nullif(p_name,''), name), for_guests = coalesce(p_for_guests, for_guests),
          active = coalesce(p_active, active), master_code = coalesce(p_master, master_code),
@@ -1440,7 +1452,7 @@ end $$;
 create or replace function lock_home_link(p_parent text, p_child text, p_on boolean) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if app_role() is distinct from 'admin' then raise exception 'Only admins'; end if;
+  if not lock_is_admin() then raise exception 'Only admins'; end if;
   insert into lock_home_links (parent_id, child_id, active) values (p_parent, p_child, p_on)
   on conflict (parent_id, child_id) do update set active = p_on;
   perform lock_plan();
@@ -1449,7 +1461,7 @@ end $$;
 create or replace function lock_home_set(p_property text, p_section text, p_enabled boolean, p_notes text default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if app_role() is distinct from 'admin' then raise exception 'Only admins'; end if;
+  if not lock_is_admin() then raise exception 'Only admins'; end if;
   insert into lock_homes (property_id, section, enabled, notes) values (p_property, p_section, coalesce(p_enabled, true), p_notes)
   on conflict (property_id) do update set section = excluded.section, enabled = excluded.enabled, notes = coalesce(excluded.notes, lock_homes.notes);
   perform lock_plan();
@@ -1460,7 +1472,7 @@ create or replace function lock_staff_code(r jsonb) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare rid bigint := (r->>'id')::bigint; props text[]; dys int[]; ars text[];
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if coalesce(r->>'code','') !~ '^[0-9]{4,8}$' then raise exception 'Codes are 4 to 8 digits'; end if;
   props := case when jsonb_typeof(r->'property_ids') = 'array' and jsonb_array_length(r->'property_ids') > 0
                 then array(select jsonb_array_elements_text(r->'property_ids')) end;
@@ -1727,7 +1739,7 @@ $$;
 create or replace function lock_add_home_here(p_property text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   insert into lock_homes (property_id, section, added_by) values (p_property, 'ours', actor())
   on conflict (property_id) do update set section = 'ours', enabled = true;
   insert into lock_events (property_id, kind, who) values (p_property, 'home_added', actor());
@@ -1738,7 +1750,7 @@ drop function if exists lock_install_step(text, text, boolean);
 create or replace function lock_install_step(p_property text, p_step text, p_done boolean, p_note text default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if p_step = 'installed' then
     update lock_homes set installed_at = case when p_done then now() end where property_id = p_property;
     insert into lock_events (property_id, kind, who) values (p_property, 'home_installed', actor());
@@ -1795,7 +1807,7 @@ grant select on lock_scorecard to authenticated;
 create or replace function lock_update_settings(p_auto boolean default null, p_canary text default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if app_role() is distinct from 'admin' then raise exception 'Only admins'; end if;
+  if not lock_is_admin() then raise exception 'Only admins'; end if;
   if p_auto is not null then
     insert into lock_settings (key, value) values ('auto_update', case when p_auto then 'on' else 'off' end)
     on conflict (key) do update set value = excluded.value, updated_at = now();
@@ -1841,7 +1853,7 @@ revoke all on function lock_track_switched(text, boolean, text) from public, ano
 create or replace function lock_setup_home(p_property text, p_new boolean default false) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if not exists (select 1 from properties where id = p_property) then raise exception 'Home not found'; end if;
   insert into lock_homes (property_id, section, added_by) values (p_property, 'ours', actor())
   on conflict (property_id) do update set section = 'ours', enabled = true;
@@ -1866,7 +1878,7 @@ alter table lock_staff_codes add constraint lock_staff_codes_kind_check check (k
 create or replace function lock_tv_update(p_tv uuid, p_name text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   update lock_tvs set name = coalesce(nullif(p_name,''), name) where id = p_tv;
 end $$;
 
@@ -1892,7 +1904,7 @@ create or replace function lock_create_home(r jsonb) returns text
 language plpgsql security definer set search_path = public as $$
 declare pid text; c text := upper(trim(coalesce(r->>'code','')));
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if c !~ '^[A-Z0-9][A-Z0-9 -]{1,20}$' then raise exception 'Home code looks wrong (example: RJ 13536)'; end if;
   select id into pid from properties where upper(code) = c;
   if pid is null then
@@ -1926,7 +1938,7 @@ $$;
 create or replace function lock_staff_remove(p_id bigint, p_remove boolean default true) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   update lock_staff_codes set removed_at = case when p_remove then now() end, removed_by = case when p_remove then actor() end,
          active = not p_remove
    where id = p_id;
@@ -1945,7 +1957,7 @@ create or replace function lock_master_new(p_property text, p_replace boolean de
 language plpgsql security definer set search_path = public as $$
 declare c text; tries int := 0; cur text;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   select master_code into cur from lock_homes where property_id = p_property;
   if cur is not null and not p_replace then return cur; end if;
   loop
@@ -1994,7 +2006,7 @@ create or replace function lock_create_home(r jsonb) returns text
 language plpgsql security definer set search_path = public as $$
 declare pid text; c text := upper(trim(coalesce(r->>'code',''))); nm text := nullif(trim(coalesce(r->>'name','')), '');
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if c = '' and nm is null then raise exception 'Type a home code or a home name'; end if;
   if c = '' then c := upper(left(trim(regexp_replace(nm, '[^A-Za-z0-9 -]+', '', 'g')), 20)); end if;
   if c !~ '^[A-Z0-9][A-Z0-9 -]{1,20}$' then raise exception 'Home code looks wrong (example: RJ 13536)'; end if;
@@ -2038,7 +2050,7 @@ create or replace function lock_spot_save(p_property text, p_kind text, r jsonb)
 language plpgsql security definer set search_path = public as $$
 declare who text; its text[] := array(select jsonb_array_elements_text(coalesce(r->'items','[]'::jsonb)));
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if p_kind = 'keybox' and coalesce(trim(r->>'code'),'') !~ '^[0-9A-Za-z]{3,10}$' then raise exception 'Key box code should be 3 to 10 numbers/letters'; end if;
   who := coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor());
   insert into lock_spots (property_id, kind, spot, photo, code, items, other, set_by, set_at)
@@ -2060,7 +2072,7 @@ create or replace function lock_heat_test(p_property text, p_step text) returns 
 language plpgsql security definer set search_path = public as $$
 declare t record; h lock_homes; sp int; who text; n int := 0;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   select * into h from lock_homes where property_id = p_property;
   who := coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor());
   if p_step = 'start' then
@@ -2106,7 +2118,7 @@ create or replace function lock_company_rules_save(r jsonb, p_everyone boolean d
 language plpgsql security definer set search_path = public as $$
 declare h record; n int := 0;
 begin
-  if app_role() <> 'admin' then raise exception 'Only admins can change company-wide rules'; end if;
+  if not lock_is_admin() then raise exception 'Only admins can change company-wide rules'; end if;
   insert into lock_settings (key, value, updated_at) values ('company_rules', r::text, now())
   on conflict (key) do update set value = excluded.value, updated_at = now();
   insert into lock_settings (key, value, updated_at) values ('company_rules_by', actor(), now())
@@ -2124,7 +2136,7 @@ create or replace function lock_home_rules_reset(p_property text) returns void
 language plpgsql security definer set search_path = public as $$
 declare r jsonb;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   select value::jsonb into r from lock_settings where key = 'company_rules';
   update lock_homes set own_rules = false where property_id = p_property;
   if r is not null then perform lock_apply_rules(p_property, r); end if;
@@ -2380,7 +2392,7 @@ revoke all on function lock_door_opened(text, uuid, int, uuid, timestamptz) from
 create or replace function lock_sensor_update(p_sensor uuid, p_name text, p_active boolean default true) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   update sensors set name = coalesce(nullif(trim(p_name), ''), name), active = coalesce(p_active, active) where id = p_sensor;
 end $$;
 drop trigger if exists lock_audit_sensors on sensors;
@@ -2395,7 +2407,7 @@ create or replace function lock_codes_resend(p_property text) returns int
 language plpgsql security definer set search_path = public as $$
 declare n int;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   update lock_assign a set state = 'pending', tries = 0, err = 'resend requested', updated_at = now()
     from locks k where k.id = a.lock_id and k.property_id = p_property and k.active and a.wanted and a.state in ('verified','failed');
   get diagnostics n = row_count;
@@ -2408,7 +2420,7 @@ create or replace function lock_backup_reset(p_property text) returns int
 language plpgsql security definer set search_path = public as $$
 declare n int;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   update lock_stays set backup_code = null, backup_given_at = null, backup_given_by = null
    where property_id in (select lock_home_family(p_property)) and status <> 'cancelled' and ends_at > now();
   get diagnostics n = row_count;
@@ -2423,7 +2435,7 @@ create or replace function lock_master_change(p_property text, p_step text) retu
 language plpgsql security definer set search_path = public as $$
 declare c text; old text;
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if not lock_can_work() then raise exception 'Only crew'; end if;
   if p_step = 'new' then
     loop
       c := lpad((floor(random() * 1000000))::int::text, 6, '0');
@@ -2446,4 +2458,33 @@ begin
     return null;
   end if;
   raise exception 'bad step';
+end $$;
+
+
+-- ---------------------------------------------------------------- people (admins only): roles, sign-in emails, 2-step reset
+create or replace function lock_my_role() returns text language sql stable security definer set search_path = public as $$ select lock_role() $$;
+create or replace function lock_people() returns table (id uuid, name text, email text, alt_email text, desk_role text, lock_role text, two_step boolean, last_sign_in timestamptz)
+language sql stable security definer set search_path = public, auth as $$
+  select u.id, u.name, u.email, u.alt_email, u.role, u.lock_role,
+         exists (select 1 from auth.users a join auth.mfa_factors f on f.user_id = a.id and f.status = 'verified' where lower(a.email) in (lower(u.email), lower(u.alt_email))),
+         (select max(a.last_sign_in_at) from auth.users a where lower(a.email) in (lower(u.email), lower(u.alt_email)))
+    from allowed_users u where lock_is_admin() and u.active order by u.lock_role nulls last, u.name
+$$;
+create or replace function lock_person_set(p_id uuid, p_lock_role text, p_email text default null) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_admin() then raise exception 'Only admins'; end if;
+  if p_lock_role is not null and p_lock_role not in ('admin','tech','office','none') then raise exception 'Unknown role'; end if;
+  update allowed_users set lock_role = case when p_lock_role = 'none' then 'none' else coalesce(p_lock_role, lock_role) end,
+         email = coalesce(nullif(lower(trim(p_email)),''), email) where id = p_id;
+end $$;
+create or replace function lock_person_2step_reset(p_id uuid) returns int
+language plpgsql security definer set search_path = public, auth as $$
+declare n int;
+begin
+  if not lock_is_admin() then raise exception 'Only admins'; end if;
+  delete from auth.mfa_factors f using auth.users a, allowed_users u
+   where u.id = p_id and f.user_id = a.id and lower(a.email) in (lower(u.email), lower(u.alt_email));
+  get diagnostics n = row_count;
+  return n;
 end $$;
