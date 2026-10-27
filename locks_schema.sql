@@ -1415,7 +1415,7 @@ create or replace function lock_command(p_hub uuid, p_lock uuid, p_kind text, p_
 language plpgsql security definer set search_path = public as $$
 declare cid bigint; hub uuid := p_hub;
 begin
-  if not lock_can_work() then raise exception 'Only crew'; end if;
+  if not (lock_can_work() or (lock_is_crew() and p_kind in ('unlock','lock') and p_lock is not null)) then raise exception 'Only crew'; end if;
   if p_lock is not null then select hub_id into hub from locks where id = p_lock; end if;
   if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit','ping','heal','restart','update','tv') then raise exception 'bad command'; end if;
   if p_kind = 'update' and not lock_is_admin() then raise exception 'Only admins can start an update'; end if;
