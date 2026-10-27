@@ -2379,3 +2379,64 @@ end $$;
 drop trigger if exists lock_audit_sensors on sensors;
 create trigger lock_audit_sensors after update on sensors for each row
   execute function lock_audit_row('id', 'property_id', 'name', 'active');
+
+-- ---------------------------------------------------------------- per-home "Reset codes" section
+alter table lock_homes add column if not exists master_pending text;   -- new master made, waiting for the tech to change it on every door
+
+-- write every one of our codes to this home's doors again (lock lost them, batteries swapped, etc.)
+create or replace function lock_codes_resend(p_property text) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  update lock_assign a set state = 'pending', tries = 0, err = 'resend requested', updated_at = now()
+    from locks k where k.id = a.lock_id and k.property_id = p_property and k.active and a.wanted and a.state in ('verified','failed');
+  get diagnostics n = row_count;
+  insert into lock_events (property_id, kind, who_kind, who, detail) values (p_property, 'codes_resend', 'crew', actor(), jsonb_build_object('codes', n));
+  return n;
+end $$;
+
+-- new backup codes for every upcoming stay at this home (old ones come off the doors, new ones go on)
+create or replace function lock_backup_reset(p_property text) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  update lock_stays set backup_code = null, backup_given_at = null, backup_given_by = null
+   where property_id in (select lock_home_family(p_property)) and status <> 'cancelled' and ends_at > now();
+  get diagnostics n = row_count;
+  perform lock_backup_fill();
+  perform lock_plan();
+  insert into lock_events (property_id, kind, who_kind, who, detail) values (p_property, 'backup_reset', 'crew', actor(), jsonb_build_object('stays', n));
+  return n;
+end $$;
+
+-- change the master code: step 1 makes a new one (pending), step 2 the tech confirms it's set on every door
+create or replace function lock_master_change(p_property text, p_step text) returns text
+language plpgsql security definer set search_path = public as $$
+declare c text; old text;
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if p_step = 'new' then
+    loop
+      c := lpad((floor(random() * 1000000))::int::text, 6, '0');
+      exit when not (c ~ '(.)\1\1' or position(c in '0123456789012345') > 0 or position(c in '9876543210987654') > 0
+                     or exists (select 1 from locks where master_code = c) or exists (select 1 from lock_homes where master_code = c or master_pending = c)
+                     or exists (select 1 from lock_master_staging where master_code = c) or exists (select 1 from lock_staff_codes where code = c));
+    end loop;
+    update lock_homes set master_pending = c where property_id = p_property;
+    insert into lock_events (property_id, kind, who_kind, who, detail) values (p_property, 'master_change_started', 'crew', actor(), '{}');
+    return c;
+  elsif p_step = 'done' then
+    select master_pending into c from lock_homes where property_id = p_property;
+    if c is null then raise exception 'No new master code waiting'; end if;
+    update lock_homes set master_code = c, master_pending = null where property_id = p_property;
+    update locks set master_code = c where property_id = p_property and active;
+    insert into lock_events (property_id, kind, who_kind, who, detail) values (p_property, 'master_changed', 'crew', actor(), '{}');
+    return c;
+  elsif p_step = 'cancel' then
+    update lock_homes set master_pending = null where property_id = p_property;
+    return null;
+  end if;
+  raise exception 'bad step';
+end $$;
