@@ -349,7 +349,7 @@ function shell(active, inner, title, sub){
 }
 function navTabs(active){
   const t = (k, href, icon, label, extra) => `<a href="${href}" class="${active===k?"on":""}">${icon}<span>${label}</span>${extra||""}</a>`;
-  const off = OFFICE(), adm = S.me && S.me.role === "admin";
+  const off = OFFICE(), adm = ADM();
   return `<nav class="tabs">
     ${t("homes","#/",ICON.homes,"Homes")}
     ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : off ? "" : t("install","#/install",ICON.install,"Install")}
@@ -496,7 +496,7 @@ async function homesView(){
         <label class="field" style="margin:0;flex:1;min-width:200px"><span>Find</span><input id="hfind" placeholder="Home code or name"></label></div>
       <div id="hoodlist"></div>`
     : `<h3>Homes on our system · ${sec.ours.length}</h3><div class="tile-grid">${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}</div>`}
-    ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
+    ${ADM()?`<details class="card"><summary>Add a home to the test</summary>
       <label class="field"><span>Home code - start typing (e.g. bhv)</span><input id="nh" list="nh_list" autocomplete="off" placeholder="Type letters or numbers…"></label>
       <datalist id="nh_list">${(S.allProps||[]).filter(x=>!S.homes.some(h=>h.property_id===x.id && h.section==="ours")).sort((a,b)=>ck(a.code).localeCompare(ck(b.code),undefined,{numeric:true})).map(x=>`<option value="${esc(dc(x.code))}">${esc(x.name||"")}</option>`).join("")}</datalist>
       <label class="field"><span>Section</span><select id="ns"><option value="ours">Our system</option></select></label>
@@ -585,7 +585,7 @@ function toolsCard(hub, devices){
 }
 const UPD_AUTO = ["core","os","supervisor","addon"];
 function updatesBlock(hub){
-  const ups = hub._ups || [], admin = S.me && S.me.role === "admin";
+  const ups = hub._ups || [], admin = ADM();
   const open = ups.filter(u=>!u.done_at), bad = ups.filter(u=>u.ok===false);
   if(!open.length && !bad.length) return `<p style="margin:10px 0 0"><span class="pill green">Up to date</span> <span class="muted" style="font-size:12.5px">Home Assistant updates install themselves 2–5 am when nobody's arriving.</span></p>`;
   const state = u => u.ok===false ? `<span class="pill red">Failed</span><div class="muted" style="font-size:12px">${esc(u.err||"")}</div>`
@@ -1200,7 +1200,7 @@ async function homeView(pid){
     ${parents.length?`<p>Part of: <b>${parents.map(pcode).map(esc).join(", ")}</b> <span class="muted">(bookings there get a code on this home's doors; this home's guests get the parent's shared doors)</span></p>`:""}
     ${kids.length?`<p>Units under this home: <b>${kids.map(pcode).map(esc).join(", ")}</b> <span class="muted">(a booking here gets a code on all of them; their guests get this home's shared doors)</span></p>`:""}
     ${!parents.length&&!kids.length?'<p class="muted">Not linked. Use this for combo listings and buildings with a shared entry door.</p>':""}
-    ${S.me.role==="admin"?`<div class="grid2"><label class="field"><span>Parent home (code) - this home is part of it</span><input id="par"></label>
+    ${ADM()?`<div class="grid2"><label class="field"><span>Parent home (code) - this home is part of it</span><input id="par"></label>
       <label class="field"><span>Child unit (code) - part of this home</span><input id="kid"></label></div><button class="btn primary wide" id="lsave">Link</button>`:""}</details>`;
   const rules = `<details class="card"><summary>Rules for this home ${h.own_rules?'<span class="pill amber">Own rules</span>':'<span class="pill green">Company-wide rules</span>'}</summary>
     <p class="muted" style="margin-top:0">${h.own_rules?`This home has its own rules. ${DESK?'<a href="#" id="rfollow">Go back to the company-wide rules</a>':""}`:`Follows the <a href="#/rules">company-wide rules</a>. Changing anything here gives this home its own rules.`}</p>
@@ -1652,7 +1652,7 @@ async function rulesView(){
   const ours = S.homes.filter(h=>h.section==="ours"), own = ours.filter(h=>h.own_rules);
   if(!row){ const h0 = ours[0] || {}; RULE_FIELDS.forEach(([k])=>{ if(h0[k]!=null) r[k] = h0[k]; }); }   // first time: start from what the homes use now
   const val = (k,t) => r[k]==null ? "" : t==="time" ? String(r[k]).slice(0,5) : r[k];
-  const admin = S.me.role==="admin";
+  const admin = ADM();
   shell("rules", `<h2>Company-wide rules</h2>
     <p class="muted">Every home on our system follows these, unless a home has its own rules (set on that home's page).${row?` Last changed ${when(row.updated_at)}${by?" by "+esc(by):""}.`:" Not saved yet - these are today's values."}</p>
     <div class="card"><div class="grid2">${RULE_FIELDS.map(([k,l,t])=>`<label class="field"><span>${esc(l)}</span><input data-cr="${k}" ${t==="time"?'type="time"':'inputmode="numeric"'} value="${esc(val(k,t))}" ${admin?"":"disabled"}></label>`).join("")}</div>
@@ -1830,7 +1830,7 @@ async function updatesCard(){
     q("lock_settings","key,value",x=>x.in("key",["auto_update","update_canary","update_wait_hours"])),
     q("lock_updates","hub_id,kind,title,entity,to_ver,started_at,done_at,ok,err",x=>x.order("id",{ascending:false}).limit(300)),
     q("lock_hubs","id,property_id",x=>x.eq("active",true))]);
-  const v = Object.fromEntries(set.map(r=>[r.key,r.value])), on = (v.auto_update||"on")==="on", admin = S.me.role==="admin";
+  const v = Object.fromEntries(set.map(r=>[r.key,r.value])), on = (v.auto_update||"on")==="on", admin = ADM();
   const home = id => esc((S.props[(hubs.find(b=>b.id===id)||{}).property_id]||{}).code||"?");
   const open = ups.filter(u=>!u.done_at), bad = ups.filter(u=>u.ok===false && Date.now()-new Date(u.done_at) < 7*864e5);
   const done = ups.filter(u=>u.ok && Date.now()-new Date(u.done_at) < 30*864e5);
@@ -1851,6 +1851,7 @@ function wireUpdates(){
 
 /* ------------------------------------------------ office staff: simple home page (no master codes, staff codes or hardware) */
 const OFFICE = () => !!(S.me && S.me.role === "office");
+const ADM = () => !!(S.me && ["admin","manager"].includes(S.me.role));
 async function officeHomeView(pid){
   if(!S.homes.length) await loadBase();
   const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("homes","<p>Home not found.</p>");
@@ -1878,18 +1879,19 @@ async function officeHomeView(pid){
 async function peopleView(){
   const ppl = await rpc("lock_people");
   const ago = t => !t ? "never" : new Date(t).toLocaleDateString([], { month:"short", day:"numeric", year:"numeric" });
-  const roleSel = (id, r) => `<select data-role="${id}">${[["admin","Admin - everything"],["office","Office - stays, guest codes, alerts, reports"],["tech","Tech - field app + install"],["none","No access"]].map(([v,l])=>`<option value="${v}" ${(r||"none")===v?"selected":""}>${l}</option>`).join("")}</select>`;
+  const owner = S.me.role === "admin";
+  const roleSel = (id, r) => `<select data-role="${id}" ${!owner && r==="admin"?"disabled":""}>${[["admin","Admin - everything (Brandon, Kim)"],["manager","Manager - everything, can't change admins"],["office","Office - everything but master codes + install"],["tech","Tech - field app + install"],["none","No access"]].filter(([v])=>owner || v!=="admin" || r==="admin").map(([v,l])=>`<option value="${v}" ${(r||"none")===v?"selected":""}>${l}</option>`).join("")}</select>`;
   shell("people", `<h2>People</h2>
     <p class="muted">Who can sign in to Moose Locks and what they can do. Only admins see this page.</p>
     ${ppl.map(u=>`<div class="card" data-id="${u.id}">
       <div class="row"><div class="grow"><b>${esc(u.name||"")}</b><div class="muted">2-step: ${u.two_step?"✓ set up":"not yet"} · last sign-in: ${ago(u.last_sign_in)}</div></div></div>
-      <div class="grid2"><label class="field"><span>Email</span><input data-email="${u.id}" type="email" value="${esc(u.email||"")}" placeholder="Example: name@moosemanagement.com"></label>
+      <div class="grid2"><label class="field"><span>Email</span><input data-email="${u.id}" type="email" ${!owner && u.lock_role==="admin"?"disabled":""} value="${esc(u.email||"")}" placeholder="Example: name@moosemanagement.com"></label>
         <label class="field"><span>Access</span>${roleSel(u.id, u.lock_role)}</label></div>
-      <div class="row" style="gap:8px;flex-wrap:wrap">
+      ${!owner && u.lock_role==="admin" ? `<div class="muted">Only Brandon or Kim can change an admin.</div>` : `<div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn small primary" data-save="${u.id}">Save</button>
         <button class="btn small" data-mail="${u.id}" ${u.email?"":"disabled"}>Email a sign-in code</button>
         <button class="btn small" data-2fa="${u.id}" ${u.two_step?"":"disabled"}>Reset 2-step (new phone)</button>
-        <span class="muted" data-msg="${u.id}"></span></div></div>`).join("")}`, "People");
+        <span class="muted" data-msg="${u.id}"></span></div>`}</div>`).join("")}`, "People");
   const msg = (id, t) => { const m = document.querySelector(`[data-msg="${id}"]`); if(m) m.textContent = t; };
   document.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const id = b.dataset.save;
     try{ await rpc("lock_person_set", { p_id:id, p_lock_role: document.querySelector(`[data-role="${id}"]`).value, p_email: document.querySelector(`[data-email="${id}"]`).value }); toast("Saved"); route(); }catch(e){ fail(e); } });
@@ -1911,7 +1913,7 @@ async function route(){
     return loginView(le ? "That email link didn't work (" + le + "). Links work once and expire after an hour - send a new one." : ""); }
   if(!S.me){ const me = (await sb.rpc("my_desk_identity")).data; S.me = me && me[0];
     if(S.me){ S.me.deskRole = S.me.role; S.me.role = (await sb.rpc("lock_my_role")).data || null; } }
-  if(!S.me || !["admin","tech","office"].includes(S.me.role)) return shell("homes","<p>You don't have access to Moose Locks yet. Ask an admin (Brandon, Kim or Janae) to add you.</p>");
+  if(!S.me || !["admin","manager","tech","office"].includes(S.me.role)) return shell("homes","<p>You don't have access to Moose Locks yet. Ask Brandon, Kim or a manager to add you.</p>");
   // 2-step sign-in (authenticator app): required for everyone on the lock sites
   if(!S.aal2){ try{ const { data } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
       if(data.currentLevel === "aal2") S.aal2 = true;
@@ -1920,7 +1922,7 @@ async function route(){
   const h = location.hash.replace(/^#\/?/,"");
   try{
     if(OFFICE() && /^(install|people)/.test(h)){ location.hash = "#/"; return; }
-    if(h==="people" && S.me.role!=="admin"){ location.hash = "#/"; return; }
+    if(h==="people" && !ADM()){ location.hash = "#/"; return; }
     if(h.startsWith("home/")) await homeView(decodeURIComponent(h.slice(5)));
     else if(h==="people") await peopleView();
     else if(h.startsWith("install/")) await installHome(decodeURIComponent(h.slice(8)));
