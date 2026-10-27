@@ -49,6 +49,10 @@ create table if not exists lock_homes (
   track_unit_id  bigint,                                 -- Track unit id (locks_sync fills it)
   install        jsonb not null default '{}',             -- install checklist: {step: {by, at}}
   installed_at   timestamptz,
+  noise_limit    int not null default 80,                 -- dB: alert when louder than this ...
+  noise_minutes  int not null default 10,                 -- ... for this many minutes during quiet hours (3x as long during the day)
+  quiet_from     time not null default '22:00',
+  quiet_to       time not null default '08:00',
   added_by       text not null default actor(),
   created_at     timestamptz not null default now()
 );
@@ -169,7 +173,28 @@ create table if not exists sensors (
   last_seen     timestamptz,
   active        boolean not null default true,
   created_at    timestamptz not null default now(),
+  entity        text,                                     -- Home Assistant entity for Wi-Fi sensors (noise)
+  value         numeric,                                  -- noise: sound level (dB)
+  over_since    timestamptz,                              -- noise: loud since
   unique (hub_id, node_id)
+);
+
+-- TVs the hub can see (Roku, Google TV / Android TV, Fire TV, Samsung, LG - whatever Home Assistant finds on the Wi-Fi)
+create table if not exists lock_tvs (
+  id            uuid primary key default gen_random_uuid(),
+  hub_id        uuid not null references lock_hubs(id),
+  property_id   text references properties(id),
+  entity        text not null,
+  name          text not null default 'TV',
+  platform      text,
+  state         text,                                     -- on / off / playing / idle / unavailable
+  app           text,
+  volume        numeric,
+  muted         boolean,
+  last_seen     timestamptz,
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  unique (hub_id, entity)
 );
 
 -- Brivo has ~60 company-wide crew/vendor codes, so crew slots run 2-120 and guests 121-150 (Yale Assure holds 250)
@@ -191,6 +216,8 @@ create table if not exists lock_stays (
   code          text not null,
   code_source   text not null default 'phone',            -- phone / random / manual
   portal_token  text unique not null default encode(gen_random_bytes(18),'hex'),
+  out_at        timestamptz,                              -- guest has left (door locked from outside on check-out day, Track checked out, or check-out time)
+  out_how       text,
   updated_at    timestamptz not null default now(),
   created_at    timestamptz not null default now()
 );
@@ -353,7 +380,7 @@ create trigger lock_events_noupdate before update on lock_events for each row ex
 -- Admin + tech see everything about locks (they already see door codes). Viewers see nothing here.
 -- Writes go through the functions below, not straight into the tables.
 do $$ declare t text; begin
-  foreach t in array array['lock_homes','lock_home_links','lock_hubs','locks','thermostats','sensors','lock_stays','lock_staff_codes','lock_assign','lock_commands','lock_events','lock_alerts','lock_updates'] loop
+  foreach t in array array['lock_homes','lock_home_links','lock_hubs','locks','thermostats','sensors','lock_stays','lock_staff_codes','lock_assign','lock_commands','lock_events','lock_alerts','lock_updates','lock_tvs'] loop
     execute format('alter table %1$s enable row level security', t);
     execute format('drop policy if exists %1$s_crew_read on %1$s', t);
     execute format('create policy %1$s_crew_read on %1$s for select to authenticated using (app_role() in (''admin'',''tech''))', t);
@@ -592,7 +619,7 @@ begin
     step := null;
     -- someone arriving soon (or here now)?
     select * into nxt from lock_stays s where s.property_id in (select lock_home_up(t.property_id)) and s.status not in ('cancelled','checked_out')
-       and s.starts_at <= now() + make_interval(hours => t.warm_hours) and s.ends_at > now()
+       and s.starts_at <= now() + make_interval(hours => t.warm_hours) and s.ends_at > now() and s.out_at is null
      order by s.starts_at limit 1;
     if found then
       step := 'warm:' || nxt.res_id;
@@ -602,7 +629,8 @@ begin
     else
       -- last stay ended and nobody is in the home
       select * into st from lock_stays s where s.property_id in (select lock_home_up(t.property_id)) and s.status <> 'cancelled'
-         and s.ends_at + make_interval(mins => t.grace_minutes) <= now() order by s.ends_at desc limit 1;
+         and (s.ends_at + make_interval(mins => t.grace_minutes) <= now() or s.out_at <= now() - interval '15 minutes')
+       order by least(s.ends_at, coalesce(s.out_at, s.ends_at)) desc limit 1;
       if found and st.ends_at > now() - interval '3 days' then
         step := 'vacant:' || st.res_id;
         args := case when t.mode = 'cool' then case when t.vacant_cool is not null then jsonb_build_object('cool', t.vacant_cool) end
@@ -656,7 +684,9 @@ begin
     after_hours_from = coalesce((r->>'after_hours_from')::time, after_hours_from), after_hours_to = coalesce((r->>'after_hours_to')::time, after_hours_to),
     auto_lock_min = case when r ? 'auto_lock_min' then (r->>'auto_lock_min')::int else auto_lock_min end,
     guide_url = coalesce(nullif(r->>'guide_url',''), guide_url),
-    arrival_note = case when r ? 'arrival_note' then nullif(r->>'arrival_note','') else arrival_note end
+    arrival_note = case when r ? 'arrival_note' then nullif(r->>'arrival_note','') else arrival_note end,
+    noise_limit = coalesce((r->>'noise_limit')::int, noise_limit), noise_minutes = coalesce((r->>'noise_minutes')::int, noise_minutes),
+    quiet_from = coalesce((r->>'quiet_from')::time, quiet_from), quiet_to = coalesce((r->>'quiet_to')::time, quiet_to)
    where property_id = p_property;
 end $$;
 
@@ -666,6 +696,38 @@ end $$;
 --   After hours use      -> alert when a crew/vendor/backup code opens a door between after_hours_from and after_hours_to
 --   Flood alert          -> alert the moment a leak sensor reports water
 --   Sensor open / close  -> kept as events on the home's history
+-- Guest is out -> mark the stay, tell housekeeping in Slack, turn the TVs off. Runs once per stay.
+create or replace function lock_guest_out(p_res text, p_at timestamptz, p_how text) returns void
+language plpgsql security definer set search_path = public as $$
+declare st lock_stays; p properties; nxt lock_stays; ch text; early text;
+begin
+  update lock_stays set out_at = p_at, out_how = p_how where res_id = p_res and out_at is null returning * into st;
+  if not found then return; end if;
+  select * into p from properties where id = st.property_id;
+  insert into lock_events (at, property_id, kind, who_kind, who_id, who, detail)
+  values (p_at, st.property_id, 'guest_out', 'stay', st.res_id, st.guest, jsonb_build_object('how', p_how));
+  select * into nxt from lock_stays s where s.property_id in (select lock_home_up(st.property_id)) and s.status <> 'cancelled'
+     and s.starts_at > p_at order by s.starts_at limit 1;
+  early := case when st.ends_at - p_at > interval '15 minutes'
+                then ', ' || case when st.ends_at - p_at >= interval '1 hour' then floor(extract(epoch from st.ends_at - p_at) / 3600)::int || ' h ' else '' end
+                     || (floor(extract(epoch from st.ends_at - p_at) / 60)::int % 60) || ' min before check-out' else '' end;
+  ch := coalesce((select value from lock_settings where key = 'slack_housekeeping_channel'), 'C062SK5DUMQ');
+  if ch <> '' and st.kind = 'guest' and p_how <> 'check-out time' then
+    insert into lock_notify (property_id, channel, text)
+    values (st.property_id, ch, ':broom: *Guest out - ' || coalesce(p.code, st.property_id) || ' is ready to clean*' || coalesce(' (' || p.name || ')', '')
+      || E'\n' || coalesce(st.guest, 'Guest') || ' left at ' || to_char(p_at at time zone 'America/Denver', 'FMHH12:MI am') || early || ' - ' || p_how || '.'
+      || coalesce(E'\nNext arrival: ' || to_char(nxt.starts_at at time zone 'America/Denver', 'Dy Mon FMDD FMHH12:MI am'), E'\nNo next arrival booked.'));
+    perform lock_notify_kick();
+  end if;
+  -- TVs off (only if nobody else is checking in right now)
+  if nxt.starts_at is null or nxt.starts_at > p_at + interval '1 hour' then
+    insert into lock_commands (hub_id, kind, args, source, created_by, expires_at)
+    select tv.hub_id, 'tv', jsonb_build_object('entity', tv.entity, 'action', 'off'), 'system', 'guest out', now() + interval '30 minutes'
+      from lock_tvs tv where tv.active and tv.property_id in (select lock_home_family(st.property_id)) and coalesce(tv.state,'') not in ('off','unavailable');
+  end if;
+end $$;
+revoke all on function lock_guest_out(text, timestamptz, text) from public, anon, authenticated;
+
 -- Slack messages waiting to go out (sent by the lock-notify Edge Function within seconds)
 create table if not exists lock_notify (
   id            bigint generated always as identity primary key,
@@ -735,6 +797,20 @@ begin
   if p_kind = 'unlock_code' and p_who_kind = 'stay'
      and not exists (select 1 from lock_events e where e.kind = 'guest_arrived' and e.who_id = p_who_id) then
     insert into lock_events (at, property_id, hub_id, lock_id, kind, who_kind, who_id, who) values (p_at, p_prop, p_hub, p_lock, 'guest_arrived', 'stay', p_who_id, p_who);
+  end if;
+  -- guest left: on check-out day the guest door is locked from the outside keypad (Yale lock button) -> "guest out, ready to clean"
+  if p_kind = 'lock_keypad' then
+    perform lock_guest_out(st.res_id, p_at, 'door locked from outside')
+       from lock_stays st
+      where st.property_id in (select lock_home_up(p_prop)) and st.status not in ('cancelled') and st.out_at is null
+        and st.starts_at < p_at and st.ends_at > p_at - interval '2 hours'
+        and (st.ends_at at time zone 'America/Denver')::date = (p_at at time zone 'America/Denver')::date
+        and (p_at at time zone 'America/Denver')::time >= '06:00'
+        and exists (select 1 from locks k where k.id = p_lock and k.for_guests);
+  end if;
+  -- they came back in with their code: not out after all
+  if p_kind = 'unlock_code' and p_who_kind = 'stay' then
+    update lock_stays set out_at = null, out_how = null where res_id = p_who_id and out_at is not null and out_at > p_at - interval '3 hours' and ends_at > p_at;
   end if;
   -- vendor / county inspector opened a door -> Slack (#maintenance_updates / #licensing), once per person per home per 2 hours
   if p_kind = 'unlock_code' and p_who_kind = 'staff' then
@@ -837,6 +913,14 @@ begin
     from thermostats t where t.active and t.battery is not null and t.battery <= 30;
   insert into _cond select 'flood', x.property_id, x.hub_id, null, x.id::text, x.name || ' is wet'
     from sensors x where x.active and x.kind = 'leak' and x.state = 'wet';
+  -- noise: loud for N minutes in quiet hours, 3x as long during the day
+  insert into _cond select 'noise', x.property_id, x.hub_id, null, x.id::text,
+         x.name || ' has been loud (' || round(x.value) || ' dB, limit ' || h.noise_limit || ') since ' || to_char(x.over_since at time zone 'America/Denver', 'FMHH12:MI am')
+    from sensors x join lock_homes h on h.property_id = x.property_id
+   where x.active and x.kind = 'noise' and x.over_since is not null and x.last_seen > now() - interval '15 minutes'
+     and x.over_since < now() - make_interval(mins => h.noise_minutes *
+           case when (case when h.quiet_from > h.quiet_to then (now() at time zone 'America/Denver')::time >= h.quiet_from or (now() at time zone 'America/Denver')::time < h.quiet_to
+                           else (now() at time zone 'America/Denver')::time between h.quiet_from and h.quiet_to end) then 1 else 3 end);
   insert into _cond select 'replace_soon', k.property_id, k.hub_id, k.id, '',
          k.name || ' went in ' || to_char(k.installed_on, 'Mon YYYY') || ' - plan to replace by ' || to_char(k.installed_on + make_interval(years => k.replace_years), 'Mon YYYY')
     from locks k where k.active and k.installed_on is not null and k.installed_on + make_interval(years => k.replace_years) < now() + interval '90 days';
@@ -882,12 +966,25 @@ begin
     from lock_updates x join lock_hubs b on b.id = x.hub_id
    where x.ok is false and x.done_at > now() - interval '7 days'
      and not exists (select 1 from lock_updates y where y.hub_id = x.hub_id and y.entity = x.entity and y.ok and y.done_at > x.done_at);
+  -- guests still marked in after their check-out time (or checked out in Track) -> out
+  perform lock_guest_out(st.res_id, case when st.status = 'checked_out' and st.ends_at > now() then now() else st.ends_at end,
+                         case when st.status = 'checked_out' and st.ends_at > now() then 'checked out in Track' else 'check-out time' end)
+     from lock_stays st join lock_homes hh on hh.property_id = st.property_id and hh.section = 'ours'
+    where st.out_at is null and st.status <> 'cancelled' and st.starts_at < now()
+      and (st.ends_at <= now() or st.status = 'checked_out') and st.ends_at > now() - interval '2 days';
   -- open new ones
   insert into lock_alerts (kind, property_id, hub_id, lock_id, ref, detail)
   select c.kind, c.property_id, c.hub_id, c.lock_id, c.ref, c.detail from _cond c
    where not exists (select 1 from lock_alerts a where a.closed_at is null and a.kind = c.kind
                      and a.hub_id is not distinct from c.hub_id and a.lock_id is not distinct from c.lock_id and a.ref = c.ref);
   get diagnostics n = row_count;
+  insert into lock_notify (property_id, channel, text)
+  select a.property_id, (select value from lock_settings where key = 'slack_noise_channel'),
+         ':loud_sound: *Noise at ' || coalesce(p.code, a.property_id) || '* - ' || coalesce(a.detail, 'loud')
+    from lock_alerts a left join properties p on p.id = a.property_id
+   where a.kind = 'noise' and a.closed_at is null and a.opened_at > now() - interval '6 minutes'
+     and coalesce((select value from lock_settings where key = 'slack_noise_channel'), '') <> ''
+     and not exists (select 1 from lock_notify n where n.property_id = a.property_id and n.text like ':loud_sound:%' and n.at > now() - interval '1 hour');
   -- close the ones that cleared up
   update lock_alerts a set closed_at = now()
    where a.closed_at is null and a.kind not in ('slots_full','after_hours','keybox_used')
@@ -1023,12 +1120,26 @@ begin
 
   -- leak + door/window sensors
   for r in select * from jsonb_array_elements(coalesce(p->'sensors', '[]')) loop
-    insert into sensors (hub_id, property_id, node_id, name, kind, state, battery, online, last_seen)
-    values (h.id, h.property_id, (r->>'node_id')::int, initcap(coalesce(r->>'kind','sensor')) || ' sensor (node ' || (r->>'node_id') || ')',
-            coalesce(r->>'kind','other'), r->>'state', (r->>'battery')::int, (r->>'online')::boolean, now())
+    insert into sensors (hub_id, property_id, node_id, name, kind, state, battery, online, last_seen, entity, value, over_since)
+    values (h.id, h.property_id, (r->>'node_id')::int,
+            coalesce(nullif(r->>'name',''), initcap(coalesce(r->>'kind','sensor')) || ' sensor (node ' || (r->>'node_id') || ')'),
+            coalesce(r->>'kind','other'), r->>'state', (r->>'battery')::int, (r->>'online')::boolean, now(), r->>'entity', (r->>'value')::numeric,
+            case when r->>'kind' = 'noise' and (r->>'value')::numeric > coalesce((select noise_limit from lock_homes where property_id = h.property_id), 80) then now() end)
     on conflict (hub_id, node_id) do update set kind = excluded.kind, state = coalesce(excluded.state, sensors.state),
       battery = coalesce(excluded.battery, sensors.battery), online = excluded.online, last_seen = now(), property_id = h.property_id,
-      rssi = (r->>'rssi')::int;
+      rssi = (r->>'rssi')::int, entity = coalesce(r->>'entity', sensors.entity), value = (r->>'value')::numeric,
+      over_since = case when r->>'kind' = 'noise' and (r->>'value')::numeric >
+                          coalesce((select noise_limit from lock_homes where property_id = h.property_id), 80)
+                        then coalesce(sensors.over_since, now()) end;
+  end loop;
+
+  -- TVs
+  for r in select * from jsonb_array_elements(coalesce(p->'tvs', '[]')) loop
+    insert into lock_tvs (hub_id, property_id, entity, name, platform, state, app, volume, muted, last_seen)
+    values (h.id, h.property_id, r->>'entity', coalesce(r->>'name','TV'), r->>'platform', r->>'state', r->>'app', (r->>'volume')::numeric, (r->>'muted')::boolean, now())
+    on conflict (hub_id, entity) do update set property_id = h.property_id, platform = excluded.platform, state = excluded.state, app = excluded.app,
+      volume = excluded.volume, muted = excluded.muted, last_seen = now(),
+      name = case when lock_tvs.name = 'TV' or lock_tvs.name is null then excluded.name else lock_tvs.name end;
   end loop;
 
   -- results of code writes / clears
@@ -1223,7 +1334,7 @@ declare cid bigint; hub uuid := p_hub;
 begin
   if not lock_is_crew() then raise exception 'Only crew'; end if;
   if p_lock is not null then select hub_id into hub from locks where id = p_lock; end if;
-  if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit','ping','heal','restart','update') then raise exception 'bad command'; end if;
+  if p_kind not in ('unlock','lock','include','exclude','stop','wipe','refresh','audit','ping','heal','restart','update','tv') then raise exception 'bad command'; end if;
   if p_kind = 'update' and app_role() is distinct from 'admin' then raise exception 'Only admins can start an update'; end if;
   if hub is null then raise exception 'pick a hub or a lock'; end if;
   insert into lock_commands (hub_id, lock_id, kind, args, source, expires_at)
@@ -1672,3 +1783,10 @@ $$;
 -- new kinds on an existing table (the check above only applies to brand-new tables)
 alter table lock_staff_codes drop constraint if exists lock_staff_codes_kind_check;
 alter table lock_staff_codes add constraint lock_staff_codes_kind_check check (kind in ('employee','vendor','backup','owner','hoa','county','housekeeping'));
+
+create or replace function lock_tv_update(p_tv uuid, p_name text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  update lock_tvs set name = coalesce(nullif(p_name,''), name) where id = p_tv;
+end $$;
