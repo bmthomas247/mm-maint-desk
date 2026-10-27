@@ -48,6 +48,8 @@ header.top{position:sticky;top:0;z-index:6;color:#fff;background:linear-gradient
 .top .iconbtn svg{width:20px;height:20px}
 .top .deskbtn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;text-decoration:none;font-weight:800;font-size:14px;white-space:nowrap}
 .top .deskbtn svg{width:18px;height:18px}
+.top .bar{gap:8px}
+@media (max-width:560px){ .top .hide-sm{display:none} }
 main{max-width:760px;margin:0 auto;padding:16px}
 h2{font-size:22px;margin:4px 0 12px;font-weight:800;letter-spacing:-.02em}
 h3{font-size:13px;margin:22px 2px 10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
@@ -331,6 +333,7 @@ function shell(active, inner, title, sub){
   app.innerHTML = `<header class="top"><div class="bar">
       <div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${ICON.lock}</span></div>
       <div class="grow"><h1>${esc(title||"Moose Locks")}</h1><div class="sub">${esc(sub||"Moose Management · lock system")}</div></div>
+      <a class="deskbtn" href="#/account" title="My account - change password">👤<span class="hide-sm">${esc(((S.me||{}).name||"Account").split(" ")[0])}</span></a>
       ${DESK?`<a class="deskbtn" href="desk.html" title="Go to the Maintenance Desk">${ICON.homes}<span>Maintenance Desk</span></a>`:""}</div></header>
   ${DESK?navTabs(active):""}
   <main id="main">${inner}</main>
@@ -359,10 +362,10 @@ function loginView(msg){
     <button class="btn wide" id="link" style="margin-top:8px">First time or forgot it? Email me a link</button>
     <p class="muted">The link signs you in here. To set a password, use the <a href="index.html">maintenance site</a>.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
   $("#go").onclick = async () => {
-    const { error } = await sb.auth.signInWithPassword({ email:$("#em").value.trim(), password:$("#pw").value });
+    const { error } = await sb.auth.signInWithPassword({ email:$("#em").value.trim().toLowerCase(), password:$("#pw").value });
     if(error) $("#msg").textContent = "Wrong email or password."; else route();
   };
-  $("#link").onclick = async () => { const email = $("#em").value.trim(); if(!email) return $("#msg").textContent = "Type your email first.";
+  $("#link").onclick = async () => { const email = $("#em").value.trim().toLowerCase(); if(!email) return $("#msg").textContent = "Type your email first.";
     $("#msg").textContent = "Sending…";
     const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname + location.hash } });
     $("#msg").textContent = error ? "Couldn't send the link - ask Brandon to add " + email + "." : "Link sent to " + email + ". Open it on this device."; };
@@ -1539,6 +1542,27 @@ async function alertsView(){
 
 /* ------------------------------------------------ scorecard: ours vs Lynx vs Brivo */
 
+/* ------------------------------------------------ my account: change password, sign out */
+async function accountView(){
+  const { data:{ user } } = await sb.auth.getUser();
+  shell("", `<h2>My account</h2>
+    <div class="card"><div class="muted">Signed in as</div><div style="font-size:18px;font-weight:800">${esc((user||{}).email||"")}</div>
+      <div class="muted">${esc((S.me||{}).name||"")} · ${esc((S.me||{}).role||"")}</div></div>
+    <div class="card"><b>Change password</b>
+      <label class="field" style="margin-top:8px"><span>New password <span class="muted">(at least 10 characters)</span></span><input type="password" id="np1" autocomplete="new-password"></label>
+      <label class="field"><span>Type it again</span><input type="password" id="np2" autocomplete="new-password"></label>
+      <button class="btn primary wide" id="npsave">Save new password</button><p id="npmsg" class="muted"></p></div>
+    <div class="card"><b>Forgot your password?</b><div class="muted" style="margin:4px 0 8px">Sign out, type your email on the sign-in page and tap "Email me a link".</div>
+      <button class="btn wide" id="signout">Sign out</button></div>`, "My account", "Password and sign-in");
+  $("#npsave").onclick = async () => { const a = $("#np1").value, b = $("#np2").value;
+    if(a.length < 10) return $("#npmsg").textContent = "Use at least 10 characters.";
+    if(a !== b) return $("#npmsg").textContent = "The two passwords don't match.";
+    const { error } = await sb.auth.updateUser({ password: a });
+    $("#npmsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Use the new password next time you sign in.";
+    if(!error){ $("#np1").value = $("#np2").value = ""; } };
+  $("#signout").onclick = async () => { await sb.auth.signOut(); location.hash = "#/"; route(); };
+}
+
 /* ------------------------------------------------ office: company-wide rules (every home follows them unless it has its own) */
 const RULE_FIELDS = [
   ["warm_to","Warm to (°F) for arrival","num"],["warm_hours","Start warming (hours before)","num"],["vacant_heat","Empty home: heat to","num"],
@@ -1771,6 +1795,7 @@ async function route(){
     else if(h==="alerts") await alertsView();
     else if(h==="score" && DESK) await scoreView();
     else if(h==="reports" && DESK) await reportsView();
+    else if(h==="account") await accountView();
     else if(h==="rules" && DESK) await rulesView();
     else await homesView();
   }catch(e){ fail(e, "Couldn't load"); }
