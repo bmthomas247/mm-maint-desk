@@ -374,16 +374,20 @@ function loginView(msg){
       <button class="btn primary wide" id="otpgo">Sign in with code</button></div>
     <p class="muted">Then set your password under 👤 My account.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
   $("#go").onclick = async () => {
-    const { error } = await sb.auth.signInWithPassword({ email:$("#em").value.trim().toLowerCase(), password:$("#pw").value });
+    const { error } = await sb.auth.signInWithPassword({ email:fixEm(), password:$("#pw").value });
     if(error) $("#msg").textContent = "Wrong email or password."; else route();
   };
-  $("#link").onclick = async () => { const email = $("#em").value.trim().toLowerCase(); if(!email) return $("#msg").textContent = "Type your email first.";
+  const fixEm = () => { let e = $("#em").value.trim().toLowerCase().replace(/\s+/g,"");
+    e = e.replace(/@m[o0]+s[e]?m[a-z]*ment\.c[o0]m?$/, "@moosemanagement.com").replace(/@moosemanagement\.co$/, "@moosemanagement.com");
+    $("#em").value = e; return e; };
+  $("#em").addEventListener("blur", fixEm);
+  $("#link").onclick = async () => { const email = fixEm(); if(!email) return $("#msg").textContent = "Type your email first.";
     $("#msg").textContent = "Sending…";
     const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname } });
     if(!error){ $("#codebox").style.display = "block"; $("#otp").focus(); }
     $("#msg").textContent = !error ? "Code sent to " + email + ". Type it above (or tap the button in the email)."
       : /rate|limit|seconds|429/i.test((error.message||"") + (error.status||"")) ? "Too many emails sent in the last hour. Use the newest code you already got, or wait a minute and try again."
-      : /signup|not allowed|not found/i.test(error.message||"") ? "Couldn't send the link - ask Brandon to add " + email + "."
+      : /signup|not allowed|not found|saving new user/i.test(error.message||"") ? "We don't have " + email + " on the list. Check the spelling - it should be name@moosemanagement.com."
       : "Couldn't send the link (" + error.message + ")."; };
   $("#otpgo").onclick = async () => { const email = $("#em").value.trim().toLowerCase(), token = $("#otp").value.replace(/\D/g,"");
     if(!email || token.length < 6) return $("#msg").textContent = "Type your email and the code from the email.";
