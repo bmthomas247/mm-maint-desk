@@ -1118,7 +1118,8 @@ begin
       model = coalesce(excluded.model, thermostats.model), temp = excluded.temp, mode = excluded.mode,
       heat_sp = excluded.heat_sp, cool_sp = excluded.cool_sp, online = excluded.online,
       battery = coalesce(excluded.battery, thermostats.battery), last_seen = now(), property_id = h.property_id,
-      rssi = (r->>'rssi')::int, rtt = (r->>'rtt')::int, dropped = (r->>'dropped')::int;
+      rssi = (r->>'rssi')::int, rtt = (r->>'rtt')::int, dropped = (r->>'dropped')::int,
+      action = r->>'action', heating_at = case when r->>'action' = 'heating' then now() else thermostats.heating_at end;
   end loop;
 
   -- leak + door/window sensors
@@ -1661,7 +1662,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- install checklist (crew page Install tab)
-create or replace function lock_install_step(p_property text, p_step text, p_done boolean) returns void
+drop function if exists lock_install_step(text, text, boolean);
+create or replace function lock_install_step(p_property text, p_step text, p_done boolean, p_note text default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not lock_is_crew() then raise exception 'Only crew'; end if;
@@ -1671,7 +1673,7 @@ begin
     return;
   end if;
   update lock_homes set install = case when p_done
-      then install || jsonb_build_object(p_step, jsonb_build_object('by', coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor()), 'at', now()))
+      then install || jsonb_build_object(p_step, jsonb_build_object('by', coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor()), 'at', now(), 'note', p_note))
       else install - p_step end
    where property_id = p_property;
 end $$;
@@ -1742,7 +1744,8 @@ create or replace view lock_track_switch_due as
 select h.property_id, h.track_unit_id, p.code
   from lock_homes h join properties p on p.id = h.property_id
  where h.section = 'ours' and h.enabled and h.track_unit_id is not null
-   and not (h.install ? 'track') and (h.install ? 'brivo')
+   and not (h.install ? 'track')
+   and ((h.install ? 'brivo') or not exists (select 1 from locks k where k.property_id = h.property_id and k.active and k.name like 'New lock%'))   -- doors joined our hub = off Brivo
    and exists (select 1 from lock_hubs b where b.property_id = h.property_id and b.active and b.claimed_at is not null)
    and exists (select 1 from locks k where k.property_id = h.property_id and k.active and k.for_guests)
    and not exists (select 1 from locks k where k.property_id = h.property_id and k.active and k.for_guests
@@ -1856,4 +1859,163 @@ begin
          active = not p_remove
    where id = p_id;
   perform lock_plan();
+end $$;
+
+
+-- ---------------------------------------------------------------- master codes made by the app (new homes, never on Brivo)
+alter table lock_homes add column if not exists master_code text;
+alter table properties add column if not exists city text;
+alter table properties add column if not exists state text;
+
+-- a 6-digit master PIN that's hard to guess and not already used by anyone on our system
+create or replace function lock_master_new(p_property text, p_replace boolean default false) returns text
+language plpgsql security definer set search_path = public as $$
+declare c text; tries int := 0; cur text;
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  select master_code into cur from lock_homes where property_id = p_property;
+  if cur is not null and not p_replace then return cur; end if;
+  loop
+    tries := tries + 1;
+    c := lpad((floor(random() * 1000000))::int::text, 6, '0');
+    exit when tries > 200;
+    continue when c ~ '^(.)\1+$'                                   -- 111111
+      or position(c in '0123456789012345') > 0 or position(c in '9876543210987654') > 0   -- 123456 / 654321
+      or c ~ '(.)\1\1'                                            -- three in a row
+      or c ~ '^(19|20)[0-9]{2}'                                    -- looks like a year
+      or exists (select 1 from locks where master_code = c)
+      or exists (select 1 from lock_homes where master_code = c)
+      or exists (select 1 from lock_master_staging where master_code = c)
+      or exists (select 1 from lock_staff_codes where code = c);
+    exit;
+  end loop;
+  update lock_homes set master_code = c where property_id = p_property;
+  insert into lock_events (property_id, kind, who, detail) values (p_property, 'master_made', actor(), jsonb_build_object('note', 'App made a new master code'));
+  return c;
+end $$;
+
+-- once a lock is paired, it also picks up the app-made master code for its home
+create or replace function lock_apply_masters() returns int
+language plpgsql security definer set search_path = public as $$
+declare n int; m int;
+begin
+  update locks k set master_code = s.master_code
+    from properties p, lock_master_staging s
+   where p.id = k.property_id and k.master_code is null and s.unit = p.code
+     and (s.door = '' or lower(s.door) = lower(k.name)
+          or (select count(*) from lock_master_staging s2 where s2.unit = p.code) = 1);
+  get diagnostics n = row_count;
+  update locks k set master_code = h.master_code from lock_homes h
+   where h.property_id = k.property_id and k.master_code is null and h.master_code is not null;
+  get diagnostics m = row_count;
+  return n + m;
+end $$;
+revoke all on function lock_apply_masters() from public, anon, authenticated;
+
+-- new home: code OR name (not neither); city/state; app makes the master code when Brivo never had one
+create or replace function lock_create_home(r jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare pid text; c text := upper(trim(coalesce(r->>'code',''))); nm text := nullif(trim(coalesce(r->>'name','')), '');
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if c = '' and nm is null then raise exception 'Type a home code or a home name'; end if;
+  if c = '' then c := upper(left(trim(regexp_replace(nm, '[^A-Za-z0-9 -]+', '', 'g')), 20)); end if;
+  if c !~ '^[A-Z0-9][A-Z0-9 -]{1,20}$' then raise exception 'Home code looks wrong (example: RJ 13536)'; end if;
+  select id into pid from properties where upper(code) = c;
+  if pid is null then
+    pid := lower(regexp_replace(c, '[^A-Za-z0-9]+', '-', 'g'));
+    if exists (select 1 from properties where id = pid) then pid := pid || '-' || substr(md5(random()::text), 1, 4); end if;
+    insert into properties (id, code, name, address, city, state, area, kind, active)
+    values (pid, c, coalesce(nm, c), nullif(trim(r->>'address'),''), nullif(trim(r->>'city'),''), nullif(upper(trim(r->>'state')),''),
+            nullif(upper(trim(r->>'area')),''), coalesce(nullif(r->>'kind',''), 'str'), true);
+  end if;
+  if (r->>'lat') is not null and (r->>'lng') is not null then
+    insert into lock_places (property_id, lat, lng, address) values (pid, (r->>'lat')::float8, (r->>'lng')::float8, nullif(trim(r->>'address'),''))
+    on conflict (property_id) do nothing;
+  end if;
+  perform lock_setup_home(pid, true);
+  if not exists (select 1 from lock_master_staging s join properties p on p.code = s.unit where p.id = pid) then
+    perform lock_master_new(pid);
+  end if;
+  return pid;
+end $$;
+
+-- ---------------------------------------------------------------- install spots: where the hub, the key box and the owner's old hardware went (photo + words)
+create table if not exists lock_spots (
+  property_id text not null references properties(id),
+  kind        text not null check (kind in ('hub','keybox','oldhw')),
+  spot        text,                                   -- where, in words
+  photo       text check (photo is null or length(photo) < 900000),   -- small JPEG (data URL)
+  code        text,                                   -- key box only: the code set on it (admin + tech only)
+  items       text[],                                 -- key box: keys left in it / old hardware: what was stored
+  other       text,                                   -- what "Other" is
+  set_by      text,
+  set_at      timestamptz not null default now(),
+  primary key (property_id, kind)
+);
+alter table lock_spots enable row level security;
+drop policy if exists lock_spots_crew_read on lock_spots;
+create policy lock_spots_crew_read on lock_spots for select to authenticated using (app_role() in ('admin','tech'));
+
+create or replace function lock_spot_save(p_property text, p_kind text, r jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare who text; its text[] := array(select jsonb_array_elements_text(coalesce(r->'items','[]'::jsonb)));
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if p_kind = 'keybox' and coalesce(trim(r->>'code'),'') !~ '^[0-9A-Za-z]{3,10}$' then raise exception 'Key box code should be 3 to 10 numbers/letters'; end if;
+  who := coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor());
+  insert into lock_spots (property_id, kind, spot, photo, code, items, other, set_by, set_at)
+  values (p_property, p_kind, nullif(trim(r->>'spot'),''), nullif(r->>'photo',''), case when p_kind = 'keybox' then trim(r->>'code') end,
+          its, nullif(trim(r->>'other'),''), who, now())
+  on conflict (property_id, kind) do update set spot = excluded.spot, photo = coalesce(excluded.photo, lock_spots.photo), code = excluded.code,
+     items = excluded.items, other = excluded.other, set_by = excluded.set_by, set_at = now();
+  insert into lock_events (property_id, kind, who, detail)
+  values (p_property, p_kind || '_spot', actor(), jsonb_build_object('spot', r->>'spot', 'items', to_jsonb(its)));
+end $$;
+
+
+-- ---------------------------------------------------------------- heat test before the installer leaves
+alter table thermostats add column if not exists action text;             -- idle / heating / cooling / fan (from the thermostat)
+alter table thermostats add column if not exists heating_at timestamptz;  -- last time the thermostat said the furnace was running
+
+-- start: turn the heat up a few degrees on every thermostat. pass / fail: the installer's answer (or the system saw it heating).
+create or replace function lock_heat_test(p_property text, p_step text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare t record; h lock_homes; sp int; who text; n int := 0;
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  select * into h from lock_homes where property_id = p_property;
+  who := coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor());
+  if p_step = 'start' then
+    for t in select * from thermostats where property_id = p_property and active loop
+      sp := least(greatest(coalesce(round(t.temp)::int, 62) + 4, 66), coalesce(h.heat_max, 72));
+      insert into lock_commands (hub_id, thermostat_id, kind, args, source, expires_at)
+      values (t.hub_id, t.id, 'climate', jsonb_build_object('mode', 'heat', 'heat', sp, 'step', 'heat_test'), 'admin', now() + interval '10 minutes');
+      n := n + 1;
+    end loop;
+    if n = 0 then raise exception 'No thermostat on this home yet - pair it first'; end if;
+    update lock_homes set install = (install - 'heat') || jsonb_build_object('heat_start', jsonb_build_object('by', who, 'at', now()))
+     where property_id = p_property;
+    return jsonb_build_object('thermostats', n);
+  end if;
+  if p_step in ('pass','fail') then
+    update lock_homes set install = (install || jsonb_build_object(case when p_step = 'pass' then 'heat' else 'heat_fail' end,
+           jsonb_build_object('by', who, 'at', now()))) - (case when p_step = 'pass' then 'heat_fail' else 'heat' end)
+     where property_id = p_property;
+    if p_step = 'fail' then
+      insert into lock_alerts (kind, property_id, ref, detail)
+      values ('no_heat', p_property, 'install', 'Heat test failed at install - no heat came on (' || who || ')')
+      on conflict do nothing;
+    else
+      update lock_alerts set closed_at = now() where kind = 'no_heat' and property_id = p_property and closed_at is null;
+    end if;
+    -- back to the normal setback; the climate plan takes over from here
+    for t in select * from thermostats where property_id = p_property and active loop
+      insert into lock_commands (hub_id, thermostat_id, kind, args, source, expires_at)
+      values (t.hub_id, t.id, 'climate', jsonb_build_object('mode', 'heat', 'heat', coalesce(h.vacant_heat, 60), 'step', 'heat_test_done'), 'admin', now() + interval '10 minutes');
+    end loop;
+    insert into lock_events (property_id, kind, who, detail) values (p_property, 'heat_test_' || p_step, actor(), '{}');
+    return jsonb_build_object('ok', true);
+  end if;
+  raise exception 'bad step';
 end $$;
