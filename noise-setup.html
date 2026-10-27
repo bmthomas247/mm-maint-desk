@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Noise Sensor Setup</title><link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<script type="module" src="https://unpkg.com/esp-web-tools@10.0.1/dist/web/install-button.js?module"></script>
+<style>
+:root{--forest:#3c5f12;--forest-2:#5b8a1e;--moose:#88B535;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--muted:#6b776f;--line:#e1e7de}
+@media (prefers-color-scheme: dark){:root{--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--muted:#8a998f;--line:#223028}}
+body{margin:0;font-family:Manrope,system-ui,sans-serif;background:var(--ground);color:var(--ink)}
+header{background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;padding:16px}
+header .bar{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px}
+header img{width:46px;height:46px;border-radius:50%;background:#fff}
+header h1{margin:0;font-size:19px} header div div{opacity:.8;font-size:13px;font-weight:700}
+main{max-width:760px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:12px}
+ol{padding-left:22px;line-height:1.6} li{margin:8px 0}
+.muted{color:var(--muted);font-size:14px}
+esp-web-install-button button,button.go{font:inherit;font-weight:800;font-size:16px;background:var(--moose);color:#16220a;border:0;border-radius:14px;padding:14px 22px;cursor:pointer}
+.ok{background:#eef5e0;color:#2f4710;border-radius:12px;padding:10px 12px;font-weight:700}
+</style></head>
+<body>
+<header><div class="bar"><img src="moose-logo.png" alt="Moose Management"><div><h1>Noise sensor setup</h1><div>M5Stack Atom Echo · decibels only</div></div></div></header>
+<main>
+  <div class="card ok">This sensor only ever sends one number: how loud the room is (dB). Sound is measured inside the chip and thrown away - nothing is recorded, streamed or listened to. It can't be changed over the internet.</div>
+  <div class="card">
+    <h2 style="margin-top:0">At the office (Chrome or Edge on a computer)</h2>
+    <ol>
+      <li>Plug the Atom Echo into this computer with a USB-C cable that carries data (not a charge-only cable).</li>
+      <li>Click <b>Install</b>, pick the port that appears (usually "USB JTAG" or "CP210x"), and let it finish - about a minute.</li>
+      <li>When it asks for Wi-Fi, type <b>the home's Wi-Fi name and password</b> (the same network as the Moose hub). You'll find them on the home's Install page.</li>
+    </ol>
+    <esp-web-install-button manifest="noise/manifest.json">
+      <span slot="unsupported">This browser can't do it - open this page in Chrome or Edge on a computer.</span>
+      <span slot="not-allowed">Open this page from the normal https link (not a saved file).</span>
+    </esp-web-install-button>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">At the home</h2>
+    <ol>
+      <li>Plug it into a USB-C phone charger in the main living area, at least 6 ft from the TV and speakers, not in a bedroom.</li>
+      <li>Within a few minutes it shows on the home's page under <b>Sensors</b> as "🔊 Noise - 45 dB" or so.</li>
+      <li>First one only: open a free sound meter app on your phone next to it and tell Brandon both numbers, so the reading can be matched.</li>
+      <li>Add "noise monitor (decibel level only, no audio)" to the listing's house rules / safety devices on Airbnb and VRBO.</li>
+    </ol>
+    <p class="muted">Alerts: louder than the home's limit (80 dB to start) for 10 minutes in quiet hours (10 pm–8 am), or 30 minutes in the day. Change it under the home's "Rules for this home".</p>
+  </div>
+</main></body></html>
