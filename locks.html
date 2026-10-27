@@ -610,6 +610,7 @@ const STEPS = [
   {k:"heat",   t:"Test the heat",            auto:null, must:true},
   {k:"noise",  t:"Noise sensor",             auto:"noise", skip:"No noise sensor in this home"},
   {k:"tv",     t:"TVs (coming soon)",        auto:null, skip:"No TVs / skip for now"},
+  {k:"routes", t:"Rebuild routes",           auto:"routes", must:true},
   {k:"test",   t:"Test every door",          auto:"test", must:true},
   {k:"wipe",   t:"Clear old Brivo codes",    auto:"wipe"},
   {k:"keybox", t:"Key box with spare key",   auto:"keybox"},
@@ -778,6 +779,7 @@ async function installHome(pid){
   const sp = k => spots.find(x=>x.kind===k) || null, kb = sp("keybox");
   const brivoM = (await rpc("lock_brivo_masters").catch(()=>[])||[]).filter(m=>m.property_id===pid);
   const hub = hubs.find(x=>x.claimed_at);
+  const heals = hub ? await q("lock_commands","ok,done_at",x=>x.eq("hub_id",hub.id).eq("kind","heal").eq("ok",true).order("done_at",{ascending:false}).limit(1)).catch(()=>[]) : [];
   await loadUpdates(hub);
   const ids = new Set(locks.map(l=>l.id)), a = access[0]||{};
   const ourA = locks.length ? await q("lock_assign","lock_id,wanted,state",x=>x.in("lock_id",[...ids]).eq("wanted",true)).catch(()=>[]) : [];
@@ -795,6 +797,7 @@ async function installHome(pid){
     noise: sensors.some(x=>x.kind==="noise"),
     brivo: named,   // every paired door named; a Z-Wave lock can only be on one network: if it joined our hub, it's off Brivo
     thermo: thermos.length > 0,
+    routes: heals.length > 0,
     keybox: !!(kb && kb.code && kb.photo && (kb.items||[]).length),
     oldhw: !!(sp("oldhw") && sp("oldhw").photo && sp("oldhw").spot),
   };
@@ -862,14 +865,15 @@ async function installHome(pid){
       ${keyHow([["📱","Type the 5-digit PIN from the sticker on the lock's wireless module, then tap <b>Start pairing</b> above. The hub listens for 5 minutes."],["master","At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["1","Picks <b>Join network</b> - joins our hub."],["⚙","Confirm. Wait about a minute - the door shows up below."]],
         'One door at a time, closest door to the hub first. Then tap the door name that matches (Front, Garage…).')}<div id="pairmsg"></div>
       ${locks.map(l=>`<div class="row" style="margin-top:10px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
-        <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}${locks.length?`<div class="card" style="margin-top:10px;background:var(--ground)"><div class="row"><div class="grow"><b>📶 Rebuild routes</b><div class="muted" style="font-size:13px">Tap once after the last device is paired, or after adding a repeater. Takes a few minutes - doors keep working.</div></div>
-        <button class="btn primary" data-heal ${hub&&online(hub)?"":"disabled"}>Rebuild</button></div><div data-healmsg></div></div>`:""}`,
+        <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}${locks.length?`<div class="muted" style="margin-top:8px">Last door paired? Rebuild routes is the next step after thermostats.</div>`:""}`,
     thermo: `<div style="margin-bottom:6px;padding:8px 10px;border-radius:10px;background:var(--red-soft);color:var(--red);font-weight:800">⚡ Replacing a thermostat? Turn OFF the power to the HVAC system first (furnace / air-handler switch or breaker), make sure the old thermostat's screen is dead, and photo the wiring before you disconnect it.</div>
       ${keyHow([["📱","Tap <b>Start pairing (no PIN)</b> below. The hub listens for 5 minutes."],["🌡️","On the thermostat, open its Z-Wave menu and choose <b>Include</b> (sometimes called Add or Join) - check the thermostat's paper guide for where that menu is."],["⏳","Wait about a minute - it shows up below."]])}
       <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>
       ${thermos.length?`<div class="muted" style="margin-top:8px">Found: ${thermos.map(t=>esc(t.name)+(t.temp!=null?` ${Math.round(t.temp)}°`:"")).join(" · ")}</div>`:""}<div class="muted" style="margin-top:6px">${thermos.length?"✓ Ticks itself once a thermostat shows up.":"Every home needs its thermostat(s) on the system - this ticks itself once one shows up."}</div>`,
     noise: `${keyHow([["🏢","At the office first: plug the sensor into a computer with its USB cable and open the <a href=\"noise-setup.html\" target=\"_blank\">noise sensor setup page</a> in Chrome. Pick this home's Wi-Fi."],["🔌","At the home: plug it in in the living area, chest height, 6 ft+ from TVs, speakers, the fridge and vents."],["⏳","Wait a few minutes - it shows up here by itself and this step ticks."]])}
       ${sensors.some(x=>x.kind==="noise")?`<div class="muted" style="margin-top:8px">Found: ${sensors.filter(x=>x.kind==="noise").map(x=>esc(x.name)+(x.value!=null?" "+Math.round(x.value)+" dB":"")).join(" · ")}</div>`:""}${mark(STEPS.find(x=>x.k==="noise"))}`,
+    routes: `<div class="muted">Do this <b>after the last device is paired</b> (doors, thermostats, any repeater) and <b>before</b> testing the doors. The hub works out the best path to every device. Once is enough - not again and again.</div>
+      ${heals[0]?`<div class="pill green" style="margin-top:8px">✓ Rebuilt ${when(heals[0].done_at)}</div>`:""}${hub?healCard(hub):'<div class="muted" style="margin-top:6px">Plug in the hub first (step 2).</div>'}`,
     heat: (()=>{ const hs = st.heat_start, hf = st.heat_fail, since = hs ? new Date(hs.at) : null;
       const seen = since && thermos.some(t=>t.heating_at && new Date(t.heating_at) >= since);
       const head = `<div class="muted">Before you leave, make sure the heat really comes on. No heat after an install = frozen pipes.</div>`;
@@ -893,6 +897,7 @@ async function installHome(pid){
     test: `${(()=>{ const up = hub && online(hub), on = locks.filter(l=>l.online!==false);
         const [ok, why] = !hub ? [false,"plug in the hub first (step 2)"] : !up ? [false,"the hub is offline - check its power and network cable"]
           : !locks.length ? [false,"pair a door first (step 4)"] : on.length < locks.length ? [false, locks.filter(l=>l.online===false).map(l=>l.name).join(", ")+" not answering - stand by it, press Ping"]
+          : !heals.length ? [false,"rebuild routes first (step above) so every door uses its best path"]
           : [true, locks.length+" door"+(locks.length>1?"s":"")+" connected"];
         return `<div style="margin:2px 0 8px"><span class="pill ${ok?"green":"red"}" style="font-size:14px;padding:6px 12px">${ok?"✓ Ready for testing":"✗ Not ready for testing"}</span> <span class="muted">${esc(why)}</span></div>`; })()}` + locks.map(l=>{ const t = assigns.find(x=>x.lock_id===l.id);
       return `<div style="margin-top:10px"><div class="row"><b class="grow">${esc(l.name)}</b>
