@@ -503,6 +503,17 @@ function signal(rssi){
   const col = bars>=3 ? "var(--moose)" : bars===2 ? "var(--amber)" : "var(--red)";
   return `<span title="${rssi} dBm" style="display:inline-flex;gap:2px;align-items:flex-end;vertical-align:middle">${[1,2,3,4].map(i=>`<i style="width:4px;height:${4+i*3}px;border-radius:1px;background:${i<=bars?col:"var(--line-2)"}"></i>`).join("")}</span> <span class="muted" style="font-size:12px">${rssi}</span>`;
 }
+function wireHeal(hub){
+  $$("[data-heal]").forEach(b=>b.onclick=async()=>{ if(!confirm("Rebuild Z-Wave routes? Takes a few minutes; doors keep working. Do it once - not again and again.")) return;
+    const box = $("[data-healmsg]", b.closest(".card")); b.disabled = true;
+    try{ const id = await command(hub.id, null, "heal"); box.innerHTML = '<div class="pill amber" style="margin-top:8px">⏳ Rebuilding… stay nearby</div>';
+      const r = await waitCmd(id, 240);
+      box.innerHTML = r && r.ok ? '<div class="pill green" style="margin-top:8px">✓ Routes rebuilt - check the signal bars again</div>'
+        : `<div class="pill red" style="margin-top:8px">✗ ${esc((r&&r.result&&r.result.msg)||"No answer from the hub yet - it may still be working")}</div>`;
+    }catch(e){ fail(e); } b.disabled = false; });
+}
+function healCard(hub){ return `<div class="card" style="margin-top:10px;background:var(--ground)"><div class="row"><div class="grow"><b>📶 Rebuild routes</b><div class="muted" style="font-size:13px">Tap once after the last device is paired, or after adding a repeater. Takes a few minutes - doors keep working.</div></div>
+        <button class="btn primary" data-heal ${hub&&online(hub)?"":"disabled"}>Rebuild</button></div><div data-healmsg></div></div>`; }
 function toolsCard(hub, devices){
   if(!hub) return "";
   const st = hub.status || {};
@@ -653,18 +664,18 @@ async function installView(){
       <button class="btn primary wide" id="nf_gps" style="margin:8px 0;font-size:17px;padding:14px">📍 Fill it in from where I'm standing</button>
       <div id="nf_msg" class="muted" style="margin:0 0 8px">${g.msg||"Stand inside the home and tap the blue button. Then check each box - fix anything that's wrong."}</div>
       <label class="field"><span><b>1.</b> Home code <span class="muted">- like RJ 13536 (put 2H- in front for a second home, L- for a lease)</span></span>
-        <input id="nf_code" style="font-size:18px;padding:12px;text-transform:uppercase" value="${esc(g.code||"")}" placeholder="RJ 13536" autocapitalize="characters" autocomplete="off"></label>
+        <input id="nf_code" style="font-size:18px;padding:12px;text-transform:uppercase" value="${esc(g.code||"")}" placeholder="Example: RJ 13536" autocapitalize="characters" autocomplete="off"></label>
       <div id="nf_hit"></div>
       <label class="field"><span><b>2.</b> Home name <span class="muted">- what we call it. Need a code <i>or</i> a name.</span></span>
-        <input id="nf_name" ${big} value="${esc(g.name||"")}" placeholder="Retreat at Jordanelle 13536"></label>
-      <label class="field"><span><b>3.</b> Street address</span><input id="nf_addr" ${big} value="${esc(g.address||"")}" placeholder="13536 N Bucks Cir"></label>
-      <div class="grid2"><label class="field"><span>City</span><input id="nf_city" ${big} value="${esc(g.city||"")}" placeholder="Park City"></label>
-        <label class="field"><span>State</span><input id="nf_state" ${big} value="${esc(g.state||"")}" placeholder="UT" maxlength="2" autocapitalize="characters"></label></div>
+        <input id="nf_name" ${big} value="${esc(g.name||"")}" placeholder="Example: Retreat at Jordanelle 13536"></label>
+      <label class="field"><span><b>3.</b> Street address</span><input id="nf_addr" ${big} value="${esc(g.address||"")}" placeholder="Example: 13536 N Bucks Cir"></label>
+      <div class="grid2"><label class="field"><span>City</span><input id="nf_city" ${big} value="${esc(g.city||"")}" placeholder="Example: Park City"></label>
+        <label class="field"><span>State</span><input id="nf_state" ${big} value="${esc(g.state||"")}" placeholder="e.g. UT" maxlength="2" autocapitalize="characters"></label></div>
       <label class="field"><span><b>4.</b> Neighborhood <span class="muted">- start typing, pick from the list</span></span>
-        <input id="nf_area" ${big} list="nf_areas" value="${esc(g.area?areaLabel(g.area):"")}" placeholder="Retreat at Jordanelle" autocomplete="off">
+        <input id="nf_area" ${big} list="nf_areas" value="${esc(g.area?areaLabel(g.area):"")}" placeholder="Example: Retreat at Jordanelle" autocomplete="off">
         <datalist id="nf_areas">${AREAS.map(a=>`<option value="${esc(areaLabel(a))}"></option>`).join("")}</datalist></label>
       <div id="nf_newarea" style="display:none" class="card"><b>New neighborhood</b> <span class="muted">- not on our list yet. Give it a short code:</span>
-        <input id="nf_area2" ${big} maxlength="6" autocapitalize="characters" placeholder="e.g. PCM"></div>
+        <input id="nf_area2" ${big} maxlength="6" autocapitalize="characters" placeholder="Example: PCM"></div>
       <label class="field"><span><b>5.</b> Type</span><select id="nf_kind" ${big}><option value="str">Vacation rental</option><option value="second_home" ${g.kind==="second_home"?"selected":""}>Second home (2H)</option><option value="lease" ${g.kind==="lease"?"selected":""}>Lease (L)</option></select></label>
       <button class="btn go wide" id="nf_go" style="font-size:18px;padding:16px;margin-top:6px">✓ Create home &amp; start setup</button>
       <div class="muted" style="font-size:12.5px;margin-top:6px">The app makes the home's master code for you - you'll see it on the next screen.</div></div>`;
@@ -804,12 +815,12 @@ async function installHome(pid){
       <label class="field" style="margin-top:8px"><span>📷 Photo <span class="muted">(needed)</span></span>
         ${v.photo?`<img src="${v.photo}" alt="" style="width:100%;max-width:360px;border-radius:12px;display:block;margin:6px 0">`:""}
         <input type="file" data-photo accept="image/*" capture="environment"></label>
-      <label class="field"><span>${o.where}</span><input data-sp="spot" value="${esc(v.spot||"")}" placeholder="${esc(o.ph||"")}"></label>
+      <label class="field"><span>${o.where}</span><input data-sp="spot" value="${esc(v.spot||"")}" placeholder="${o.ph?"Example: "+esc(o.ph):""}"></label>
       ${o.picks?`<div class="chips" style="margin:-2px 0 6px">${o.picks.map(x=>`<span class="chip" data-pickspot="${esc(x)}">${esc(x)}</span>`).join("")}</div>`:""}
       ${o.code?`<label class="field"><span>Code you set on the key box <span class="muted">- most homes use <b>${KB_DEFAULT}</b></span></span><input data-sp="code" inputmode="numeric" value="${esc(v.code||KB_DEFAULT)}" style="font-size:18px;padding:12px"></label>`:""}
       ${o.items?`<div class="field"><span>${o.itemsLabel} <span class="muted">(tap all that apply)</span></span>
         <div class="chips" style="margin-top:6px">${o.items.map(x=>`<span class="chip ${its.includes(x)?"on":""}" data-item="${esc(x)}">${esc(x)}</span>`).join("")}</div></div>
-        <label class="field" data-otherw style="${its.includes("Other")?"":"display:none"}"><span>Other - what is it?</span><input data-sp="other" value="${esc(v.other||"")}" placeholder="${esc(o.otherPh||"")}"></label>`:""}
+        <label class="field" data-otherw style="${its.includes("Other")?"":"display:none"}"><span>Other - what is it?</span><input data-sp="other" value="${esc(v.other||"")}" placeholder="${o.otherPh?"Example: "+esc(o.otherPh):""}"></label>`:""}
       <button class="btn primary wide" data-spotsave style="margin-top:8px">Save</button>
       ${v.set_at?`<div class="who">Saved by ${esc(v.set_by||"")} · ${when(v.set_at)}</div>`:""}</div>`; };
   const who = s => st[s.k] ? `<div class="who">${st[s.k].note?"N/A ("+esc(st[s.k].note)+")":"✓"} ${esc(st[s.k].by||"")} · ${when(st[s.k].at)}${st[s.k].note?` <a href="#" data-undo="${s.k}">undo</a>`:""}</div>` : (s.auto && facts[s.auto] ? `<div class="who">✓ the system saw it</div>` : "");
@@ -851,7 +862,8 @@ async function installHome(pid){
       ${keyHow([["📱","Type the 5-digit PIN from the sticker on the lock's wireless module, then tap <b>Start pairing</b> above. The hub listens for 5 minutes."],["master","At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["1","Picks <b>Join network</b> - joins our hub."],["⚙","Confirm. Wait about a minute - the door shows up below."]],
         'One door at a time, closest door to the hub first. Then tap the door name that matches (Front, Garage…).')}<div id="pairmsg"></div>
       ${locks.map(l=>`<div class="row" style="margin-top:10px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
-        <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}`,
+        <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}${locks.length?`<div class="card" style="margin-top:10px;background:var(--ground)"><div class="row"><div class="grow"><b>📶 Rebuild routes</b><div class="muted" style="font-size:13px">Tap once after the last device is paired, or after adding a repeater. Takes a few minutes - doors keep working.</div></div>
+        <button class="btn primary" data-heal ${hub&&online(hub)?"":"disabled"}>Rebuild</button></div><div data-healmsg></div></div>`:""}`,
     thermo: `<div style="margin-bottom:6px;padding:8px 10px;border-radius:10px;background:var(--red-soft);color:var(--red);font-weight:800">⚡ Replacing a thermostat? Turn OFF the power to the HVAC system first (furnace / air-handler switch or breaker), make sure the old thermostat's screen is dead, and photo the wiring before you disconnect it.</div>
       ${keyHow([["📱","Tap <b>Start pairing (no PIN)</b> below. The hub listens for 5 minutes."],["🌡️","On the thermostat, open its Z-Wave menu and choose <b>Include</b> (sometimes called Add or Join) - check the thermostat's paper guide for where that menu is."],["⏳","Wait about a minute - it shows up below."]])}
       <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>
@@ -967,6 +979,7 @@ async function installHome(pid){
     if(homeMaster && !confirm("Make a NEW master code for "+dc(p.code)+"?\n\nThe old one ("+homeMaster+") stops being the one on file. If you already typed the old one into a lock, change it on that lock too: old code ⚙ 1 ⚙, then the new code.")) return;
     try{ const c = await rpc("lock_master_new",{p_property:pid,p_replace:!!homeMaster}); await loadBase(); toast("New master code: "+c); again(); }catch(e){ fail(e); } });
   const mk = $("#mkmaster"); if(mk) mk.onclick = async () => { try{ const c = await rpc("lock_master_new",{p_property:pid}); await loadBase(); toast("Master code "+c+" made for "+dc(p.code)); again(); }catch(e){ fail(e); } };
+  wireHeal(hub);
   const hg = $("#heatgo"); if(hg) hg.onclick = async () => { try{ const r = await rpc("lock_heat_test",{p_property:pid,p_step:"start"}); hub && wake(hub.id); toast("Heat turned up on "+r.thermostats+" thermostat"+(r.thermostats>1?"s":"")); again(); }catch(e){ fail(e); } };
   $$("[data-heat]").forEach(b=>b.onclick=async()=>{ if(b.dataset.heat==="fail" && !confirm("No warm air at all? This alerts the office.")) return;
     try{ await rpc("lock_heat_test",{p_property:pid,p_step:b.dataset.heat}); hub && wake(hub.id); toast(b.dataset.heat==="pass"?"Heat works - set back to normal":"Office alerted - don't leave yet"); await loadBase(); again(); }catch(e){ fail(e); } });
@@ -1151,9 +1164,9 @@ async function homeView(pid){
         <div class="chips">${[["on","On"],["off","Off"],["volume_down","Vol −"],["volume_up","Vol +"],[t.muted?"unmute":"mute",t.muted?"Unmute":"Mute"]].map(([a,l])=>`<button class="btn small" data-tvact="${a}">${l}</button>`).join("")}
           <button class="btn small" data-tvact="rename">Rename</button></div></div>`).join("")}</div></div>`:""}
     </div><div>${DESK?"<h3>Guests</h3>":""}
-    ${stayList}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${DESK?family+rules:""}${hist}
+    ${stayList}${hub?healCard(hub):""}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${DESK?family+rules:""}${hist}
     </div></div>`, p.code, p.name);
-  wireTools(hub, null);
+  wireTools(hub, null); wireHeal(hub);
   const tvCmd = async (tv, action, value) => { const id = await command(tv.hub_id, null, "tv", {entity:tv.entity, action, value}); return waitCmd(id, 20); };
   $$("[data-tv]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-tvact]"); if(!b) return; const tv = tvs.find(t=>t.id===row.dataset.tv);
     try{ if(b.dataset.tvact==="rename"){ const n = prompt("Name for this TV", tv.name); if(n){ await rpc("lock_tv_update",{p_tv:tv.id,p_name:n}); homeView(pid); } return; }
