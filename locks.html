@@ -1856,18 +1856,22 @@ async function officeHomeView(pid){
   const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("homes","<p>Home not found.</p>");
   const p = h.properties;
   const [locks, stays, alerts] = await Promise.all([
-    q("locks","id,name,state,online,battery",x=>x.eq("property_id",pid).eq("active",true).order("name")),
+    q("locks","id,name,state,online,battery,hub_id",x=>x.eq("property_id",pid).eq("active",true).order("name")),
     q("lock_stays","res_id,guest,kind,status,starts_at,ends_at,code",x=>x.eq("property_id",pid).gte("ends_at",new Date(Date.now()-864e5).toISOString()).neq("status","cancelled").order("starts_at").limit(6)),
     q("lock_alerts","kind,detail,opened_at",x=>x.eq("property_id",pid).is("closed_at",null))]);
   const d = t => new Date(t).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
   shell("homes", `<p><a href="#/">← All homes</a></p>
     <div class="card"><h2 style="margin:0">${esc(p.code)} <span class="muted">${esc(p.name||"")}</span></h2><div class="muted">${esc(p.address||"")}</div></div>
     <h3>Doors</h3>${locks.length ? locks.map(l=>`<div class="card"><div class="row"><b class="grow">${esc(l.name)}</b>${batt(l.battery)}
-      <span class="pill ${l.online===false?"red":l.state==="unlocked"?"amber":"green"}">${l.online===false?"Not answering":esc(l.state||"?")}</span></div></div>`).join("") : `<p class="muted">No Moose Locks doors at this home yet.</p>`}
+      <span class="pill ${l.online===false?"red":l.state==="unlocked"?"amber":"green"}">${l.online===false?"Not answering":esc(l.state||"?")}</span></div>
+      <div class="grid2" style="margin-top:10px"><button class="btn primary" data-oact="unlock" data-lid="${l.id}">Unlock</button><button class="btn" data-oact="lock" data-lid="${l.id}">${ICON.lock} Lock</button></div></div>`).join("") : `<p class="muted">No Moose Locks doors at this home yet.</p>`}
     ${alerts.length ? `<h3>Open alerts</h3>${alerts.map(a=>`<div class="card"><b>${esc(a.kind.replace(/_/g," "))}</b><div class="muted">${esc(a.detail||"")} · ${d(a.opened_at)}</div></div>`).join("")}` : ""}
     <h3>Stays</h3>${stays.length ? stays.map(st=>`<div class="card"><div class="row"><div class="grow"><b>${esc(st.guest||st.kind||"Stay")}</b><div class="muted">${d(st.starts_at)} → ${d(st.ends_at)}</div></div>
       ${st.code?`<span class="code" style="font-size:20px;font-weight:800;letter-spacing:4px">${esc(st.code)}</span>`:`<span class="muted">No code yet</span>`}</div></div>`).join("") : `<p class="muted">No stays coming up.</p>`}
     <p class="muted">Need a backup code for a guest? Use <a href="#/stays">Stays & guest codes</a>.</p>`, p.code);
+  document.querySelectorAll("[data-oact]").forEach(b => b.onclick = async () => { const act = b.dataset.oact, l = locks.find(x=>x.id===b.dataset.lid);
+    if(act==="unlock" && !confirm(`Unlock ${l.name} at ${p.code}? Only do this when someone is there or about to be.`)) return;
+    b.disabled = true; try{ const r = await waitCmd(await command(l.hub_id, l.id, act), 30); toast(r ? (r.ok ? (act==="unlock"?"Unlocked":"Locked") : "The lock didn't answer") : "No answer from the hub"); }catch(e){ fail(e); } b.disabled = false; });
 }
 
 /* ------------------------------------------------ people (admins only): who can use Moose Locks */
