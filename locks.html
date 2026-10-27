@@ -1577,7 +1577,7 @@ async function mfaSetupView(){
     $("#mfabox").innerHTML = `<ol class="how" style="text-align:left">
         <li><span class="key">1</span><span>Install <b>Google Authenticator</b> or <b>Microsoft Authenticator</b> from the App Store / Google Play.</span></li>
         <li><span class="key">2</span><span>In the app tap <b>+</b> → <b>Scan a QR code</b> and scan this:</span></li></ol>
-      <img src="${data.totp.qr_code}" alt="QR code" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:12px;margin:6px auto;display:block">
+      <img src="${(q=>{ const i=q.indexOf(","); return q.startsWith("data:") && i>0 && !/;base64,/.test(q.slice(0,i+1)) ? "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(q.slice(i+1)) : q; })(data.totp.qr_code)}" alt="QR code" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:12px;margin:6px auto;display:block">
       <details style="margin:6px 0"><summary class="muted">Can't scan? Type this key instead</summary><code style="word-break:break-all">${esc(data.totp.secret)}</code></details>
       <ol class="how" start="3" style="text-align:left"><li><span class="key">3</span><span>Type the 6-digit code the app shows:</span></li></ol>
       <input id="mfac" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="font-size:24px;letter-spacing:6px;text-align:center;width:100%">
