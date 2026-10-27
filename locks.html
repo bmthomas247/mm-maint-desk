@@ -356,11 +356,16 @@ function loginView(msg){
     <label class="field"><span>Email</span><input type="email" id="em" autocomplete="username"></label>
     <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password"></label>
     <button class="btn primary wide" id="go">Sign in</button>
-    <p class="muted">First time? Set your password on the <a href="index.html">maintenance site</a>.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
+    <button class="btn wide" id="link" style="margin-top:8px">First time or forgot it? Email me a link</button>
+    <p class="muted">The link signs you in here. To set a password, use the <a href="index.html">maintenance site</a>.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
   $("#go").onclick = async () => {
     const { error } = await sb.auth.signInWithPassword({ email:$("#em").value.trim(), password:$("#pw").value });
     if(error) $("#msg").textContent = "Wrong email or password."; else route();
   };
+  $("#link").onclick = async () => { const email = $("#em").value.trim(); if(!email) return $("#msg").textContent = "Type your email first.";
+    $("#msg").textContent = "Sending…";
+    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname + location.hash } });
+    $("#msg").textContent = error ? "Couldn't send the link - ask Brandon to add " + email + "." : "Link sent to " + email + ". Open it on this device."; };
 }
 
 /* ------------------------------------------------ homes list */
