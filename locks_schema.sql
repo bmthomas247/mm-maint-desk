@@ -243,6 +243,7 @@ create table if not exists lock_staff_codes (
   person        text,                                     -- first + last name ("Shelby Huffaker")
   company       text,                                     -- vendor company ("ABC Hot Tubs")
   role          text,                                     -- trade / job ("Hot tubs", "Maintenance", "Owner")
+  note          text,                                     -- e.g. "Business code - his team uses it too"
   removed_at    timestamptz,                              -- removed from the list (kept for history; code comes off every lock)
   removed_by    text,
   active        boolean not null default true,
@@ -1404,11 +1405,11 @@ begin
     raise exception 'Someone else already has code % at one of those homes', r->>'code';
   end if;
   if rid is null then
-    insert into lock_staff_codes (property_ids, kind, label, code, starts_at, ends_at, days, time_from, time_to, person, company, role, areas)
+    insert into lock_staff_codes (property_ids, kind, label, code, starts_at, ends_at, days, time_from, time_to, person, company, role, areas, note)
     values (props, coalesce(r->>'kind','employee'),
             coalesce(nullif(r->>'label',''), concat_ws(' - ', nullif(r->>'person',''), nullif(r->>'company',''))), r->>'code',
             (r->>'starts_at')::timestamptz, (r->>'ends_at')::timestamptz, dys, (r->>'time_from')::time, (r->>'time_to')::time,
-            nullif(r->>'person',''), nullif(r->>'company',''), nullif(r->>'role',''), ars)
+            nullif(r->>'person',''), nullif(r->>'company',''), nullif(r->>'role',''), ars, nullif(r->>'note',''))
     returning id into rid;
   else
     update lock_staff_codes set property_ids = props, areas = ars, kind = coalesce(r->>'kind', kind), label = coalesce(r->>'label', label), code = r->>'code',
@@ -1416,7 +1417,8 @@ begin
            time_from = (r->>'time_from')::time, time_to = (r->>'time_to')::time, active = coalesce((r->>'active')::boolean, active),
            person = case when r ? 'person' then nullif(r->>'person','') else person end,
            company = case when r ? 'company' then nullif(r->>'company','') else company end,
-           role = case when r ? 'role' then nullif(r->>'role','') else role end
+           role = case when r ? 'role' then nullif(r->>'role','') else role end,
+           note = case when r ? 'note' then nullif(r->>'note','') else note end
      where id = rid;
   end if;
   perform lock_plan();
