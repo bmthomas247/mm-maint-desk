@@ -82,20 +82,24 @@ $$;
 -- lock_role: admin (everything), tech (field + install), office (guest support: stays, guest/backup codes, alerts, reports)
 alter table allowed_users add column if not exists lock_role text;
 create or replace function lock_role() returns text language sql stable security definer set search_path = public as $$
-  select case when lock_role in ('admin','tech','office') then lock_role when lock_role is null and role = 'tech' then 'tech' end
+  select case when lock_role in ('admin','manager','tech','office') then lock_role when lock_role is null and role = 'tech' then 'tech' end
     from allowed_users where active and lower(auth.jwt()->>'email') in (lower(email), lower(alt_email)) limit 1
 $$;
 create or replace function lock_is_crew() returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce(lock_role() in ('admin','tech','office'), false) and lock_aal_ok()
+  select coalesce(lock_role() in ('admin','manager','tech','office'), false) and lock_aal_ok()
 $$;
 create or replace function lock_can_work() returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce(lock_role() in ('admin','tech','office'), false) and lock_aal_ok()
+  select coalesce(lock_role() in ('admin','manager','tech','office'), false) and lock_aal_ok()
 $$;
 -- master codes: admins + techs only (office staff never see or change them)
 create or replace function lock_can_master() returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce(lock_role() in ('admin','tech'), false) and lock_aal_ok()
+  select coalesce(lock_role() in ('admin','manager','tech'), false) and lock_aal_ok()
 $$;
+-- admins (Brandon, Kim) and managers run the system; only admins can change an admin or make someone an admin
 create or replace function lock_is_admin() returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(lock_role() in ('admin','manager'), false) and lock_aal_ok()
+$$;
+create or replace function lock_is_owner() returns boolean language sql stable security definer set search_path = public as $$
   select coalesce(lock_role() = 'admin', false) and lock_aal_ok()
 $$;
 
@@ -2479,7 +2483,9 @@ create or replace function lock_person_set(p_id uuid, p_lock_role text, p_email 
 language plpgsql security definer set search_path = public as $$
 begin
   if not lock_is_admin() then raise exception 'Only admins'; end if;
-  if p_lock_role is not null and p_lock_role not in ('admin','tech','office','none') then raise exception 'Unknown role'; end if;
+  if p_lock_role is not null and p_lock_role not in ('admin','manager','tech','office','none') then raise exception 'Unknown role'; end if;
+  if not lock_is_owner() and (p_lock_role = 'admin' or exists (select 1 from allowed_users where id = p_id and lock_role = 'admin')) then
+    raise exception 'Only Brandon or Kim can change an admin'; end if;
   update allowed_users set lock_role = case when p_lock_role = 'none' then 'none' else coalesce(p_lock_role, lock_role) end,
          email = coalesce(nullif(lower(trim(p_email)),''), email) where id = p_id;
 end $$;
@@ -2488,6 +2494,7 @@ language plpgsql security definer set search_path = public, auth as $$
 declare n int;
 begin
   if not lock_is_admin() then raise exception 'Only admins'; end if;
+  if not lock_is_owner() and exists (select 1 from allowed_users where id = p_id and lock_role = 'admin') then raise exception 'Only Brandon or Kim can change an admin'; end if;
   delete from auth.mfa_factors f using auth.users a, allowed_users u
    where u.id = p_id and f.user_id = a.id and lower(a.email) in (lower(u.email), lower(u.alt_email));
   get diagnostics n = row_count;
