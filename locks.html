@@ -811,7 +811,7 @@ async function installHome(pid){
   const na = s => s.must || s.k==="prep" || s.k==="track" || isDone(s) ? "" : `<button class="btn small" data-skip="${s.k}" style="margin-top:8px">N/A${s.skip?" - "+esc(s.skip):" - not needed here"} → next</button>`;
   const keyHow = (keys, what) => `<ol class="how">${keys.map(([k,m])=>`<li><span class="key">${k}</span><span>${m}</span></li>`).join("")}</ol>${what?`<div class="muted">${what}</div>`:""}`;
   const homeMaster = h.master_code;
-  const isNewHome = !brivoM.length;   // never on Brivo: the app owns the master code
+  const isNewHome = /never on Brivo/.test(((h.install||{}).brivo||{}).by||"") || (!brivoM.length && !h.track_unit_id);   // never on Brivo: the app owns the master code
   const newMasterBtn = isNewHome && homeMaster ? `<button class="btn wide" data-newmaster style="margin-top:8px">🔄 Make a new master code</button>` : "";
   const spotForm = (k, o) => { const v = sp(k) || {}, its = v.items || [];
     return `<div class="spot" data-spot="${k}">
@@ -847,15 +847,24 @@ async function installHome(pid){
           'Lock already has a different master code? Type the old one, ⚙, <b>1</b> (= "Master PIN code setting"), ⚙, then follow the voice to enter the new one.')}</details>` : ""}
       ${newMasterBtn}${mark(STEPS[0])}`,
     hub: (hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span> <span class="muted">checked in ${ago(hub.last_seen)}</span>`
-      : `<div class="muted">Put the hub in the owner closet or utility room by the router. Network cable from the router, stick on the extension cable placed up high, then power. Wait 5 minutes.</div>
+      : `<div class="muted">Put the hub in the owner closet or utility room by the router. Ethernet cable from the router, stick on the extension cable placed up high, then power. It takes about 5 minutes to warm up.</div>
+         <div class="card" style="margin-top:8px;border-color:var(--amber)"><b>⏳ Hub warming up? Do these meanwhile:</b>
+           <ul style="margin:6px 0 0 18px;padding:0">${isNewHome
+             ? "<li>Install the lock hardware on each door (fresh batteries in)</li><li>Hang the key box with the spare key (code "+KB_DEFAULT+")</li><li>Photo where the hub is</li>"
+             : "<li>Take the locks, thermostats and sensors off Brivo (next step) - Brivo hub stays plugged in until they're all off</li><li>Fresh batteries in each lock</li><li>Hang the key box with the spare key (code "+KB_DEFAULT+")</li><li>Photo where the hub is</li>"}</ul></div>
          <button class="btn go wide" id="find" style="margin-top:10px">Find hub</button><div id="found"></div>
          <details style="margin-top:8px"><summary>Doesn't show up? Type the 6-digit code</summary><div class="row"><input id="pc" inputmode="numeric" maxlength="6" class="grow"><button class="btn primary" id="claim">Add</button></div>
          <p class="muted">The code is on the hub's Home Assistant page (http://homeassistant.local:8123 → Notifications).</p></details>`)
       + `<div style="margin-top:10px"><b>Where is the hub?</b> <span class="muted">So the next tech can find it.</span>${spotForm("hub", {where:"Where is it? (short)", ph:"Owner closet by the router, top shelf", picks:["Owner closet","Furnace room","Utility room"]})}</div>`,
-    brivo: `<div class="muted">Each lock is still "married" to Brivo's old hub. Undo that first, one lock at a time - the lock keeps opening with its keypad the whole time.</div>
-      <button class="btn primary wide" id="unbrivo" style="margin-top:8px" ${hub?"":"disabled"}>${hub?"1. Tap here - the hub listens for 5 minutes":"Plug in the hub first (step 2)"}</button><div id="unbrivomsg"></div>${(st.brivo_n||{}).note?`<div class="muted" style="margin-top:4px">✓ ${esc(st.brivo_n.note)} lock(s) confirmed off Brivo so far</div>`:""}
-      ${keyHow([["master","2. At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["3","Picks <b>Leave network</b> - it forgets Brivo."],["⚙","Confirm. The lock beeps when it's done."]],
-        'Do every door, tapping the blue button again before each one. If pressing 7 does nothing, the wireless module is loose or the lock has no master code yet. This step ticks itself once a door pairs in step 4.')}
+    brivo: `<div class="muted">Every lock, thermostat and sensor is still "married" to Brivo's old hub. They must leave Brivo before they can join ours. <b>Do this while the new hub warms up.</b></div>
+      <div class="card" style="margin-top:8px;border-color:var(--moose)"><b>1. Keep the Brivo hub plugged in.</b> In the Brivo dashboard: this home → <b>Add/Remove Device</b> → remove.
+        ${keyHow([["master","At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["3","Picks <b>Leave network</b> - it forgets Brivo."],["⚙","Confirm. The lock beeps when it's done."]],
+          'Do every door. Then do the same for each <b>thermostat and sensor</b> - Brivo remove, then the device\'s own Z-Wave "Exclude" / "Remove" (check its paper guide).')}
+        <div style="margin-top:6px"><b>2. Only when everything is off:</b> unplug the Brivo hub and put it in the old-hardware bag (Store the owner's old hardware step).</div></div>
+      <details style="margin-top:8px"><summary><b>Brivo hub already gone or dead?</b> Use our hub instead</summary>
+        <div class="muted" style="margin:6px 0">Our hub can take any device off its old network once it's online. Tap, then do the same keypad steps at the lock (or the device's Exclude).</div>
+        <button class="btn primary wide" id="unbrivo" ${hub?"":"disabled"}>${hub?"Tap here - our hub listens for 5 minutes":"Wait for our hub to come online (step 2)"}</button><div id="unbrivomsg"></div>${(st.brivo_n||{}).note?`<div class="muted" style="margin-top:4px">✓ ${esc(st.brivo_n.note)} device(s) confirmed off Brivo so far</div>`:""}</details>
+      <div class="muted" style="margin-top:6px">If 7 does nothing, the wireless module is loose or the lock has no master code yet. This step ticks itself once the doors pair in the next step.</div>
       ${mark(STEPS.find(x=>x.k==="brivo"))}`,
     locks: `${isNewHome ? (homeMaster ? `<div class="master" style="margin:0 0 6px">Master code: <b>${esc(homeMaster)}</b></div>${newMasterBtn}`
         : `<button class="btn primary wide" data-newmaster style="margin-bottom:8px">Make a master code for this home</button>`) : ""}<label class="field"><span>5-digit PIN from the sticker on the lock's wireless (Z-Wave) module</span><input id="pin" inputmode="numeric" maxlength="5" style="font-size:20px;padding:12px;letter-spacing:4px"></label>
