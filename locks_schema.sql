@@ -1890,7 +1890,11 @@ begin
     exit;
   end loop;
   update lock_homes set master_code = c where property_id = p_property;
-  insert into lock_events (property_id, kind, who, detail) values (p_property, 'master_made', actor(), jsonb_build_object('note', 'App made a new master code'));
+  if cur is not null then   -- replaced: doors that had the old app code get the new one (installer sets it on each lock)
+    update locks set master_code = c where property_id = p_property and master_code = cur;
+  end if;
+  insert into lock_events (property_id, kind, who, detail) values (p_property, 'master_made', actor(),
+    jsonb_build_object('note', case when cur is null then 'App made a master code' else 'App made a new master code (replaced the old one)' end));
   return c;
 end $$;
 
