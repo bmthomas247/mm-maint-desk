@@ -863,7 +863,12 @@ begin
   elsif p_kind = 'leak_clear' then
     update sensors set state = 'dry' where hub_id = p_hub and node_id = p_node;
   elsif p_kind in ('door_open','door_closed') then
-    update sensors set state = case when p_kind = 'door_open' then 'open' else 'closed' end where hub_id = p_hub and node_id = p_node;
+    update sensors set state = case when p_kind = 'door_open' then 'open' else 'closed' end,
+                       open_since = case when p_kind = 'door_open' then coalesce(open_since, p_at) end
+     where hub_id = p_hub and node_id = p_node;
+    if p_kind = 'door_open' then perform lock_door_opened(p_prop, p_hub, p_node, p_lock, p_at); end if;
+  elsif p_kind = 'tamper' then
+    update sensors set tamper_at = p_at where hub_id = p_hub and node_id = p_node;
   end if;
 end $$;
 revoke all on function lock_event_rules(text, uuid, text, timestamptz, text, text, text, int, uuid) from public, anon, authenticated;
@@ -946,6 +951,22 @@ begin
     from thermostats t where t.active and t.battery is not null and t.battery <= 30;
   insert into _cond select 'flood', x.property_id, x.hub_id, null, x.id::text, x.name || ' is wet'
     from sensors x where x.active and x.kind = 'leak' and x.state = 'wet';
+  -- door / window sensors: left open with nobody there, open while the heat runs, pulled off, cold home
+  insert into _cond select 'door_left_open', x.property_id, x.hub_id, null, x.id::text,
+         x.name || ' has been open since ' || to_char(x.open_since at time zone 'America/Denver', 'Mon DD FMHH12:MI am') || ' and nobody is staying'
+    from sensors x where x.active and x.kind = 'contact' and x.state = 'open' and x.open_since < now() - interval '15 minutes'
+     and not lock_home_expected(x.property_id, now());
+  insert into _cond select 'open_with_heat', x.property_id, x.hub_id, null, x.id::text,
+         x.name || ' has been open ' || round(extract(epoch from now() - x.open_since) / 60) || ' min while the heat is on'
+    from sensors x where x.active and x.kind = 'contact' and x.state = 'open' and x.open_since < now() - interval '30 minutes'
+     and exists (select 1 from thermostats t where t.property_id = x.property_id and t.active and t.mode = 'heat'
+                   and (t.action = 'heating' or t.action is null) and t.temp is not null and t.temp < coalesce(t.heat_sp, 68) + 2);
+  insert into _cond select 'sensor_tamper', x.property_id, x.hub_id, null, x.id::text,
+         x.name || ' was pulled off or opened up at ' || to_char(x.tamper_at at time zone 'America/Denver', 'Mon DD FMHH12:MI am')
+    from sensors x where x.active and x.tamper_at > now() - interval '24 hours';
+  insert into _cond select 'too_cold', x.property_id, x.hub_id, null, x.id::text, x.name || ' reads ' || round(x.temp) || '°F'
+    from sensors x join lock_homes h on h.property_id = x.property_id
+   where x.active and x.temp is not null and x.temp < h.too_cold and x.last_seen > now() - interval '2 hours';
   -- noise: loud for N minutes in quiet hours, 3x as long during the day
   insert into _cond select 'noise', x.property_id, x.hub_id, null, x.id::text,
          x.name || ' has been loud (' || round(x.value) || ' dB, limit ' || h.noise_limit || ') since ' || to_char(x.over_since at time zone 'America/Denver', 'FMHH12:MI am')
@@ -1156,14 +1177,17 @@ begin
 
   -- leak + door/window sensors
   for r in select * from jsonb_array_elements(coalesce(p->'sensors', '[]')) loop
-    insert into sensors (hub_id, property_id, node_id, name, kind, state, battery, online, last_seen, entity, value, over_since)
+    insert into sensors (hub_id, property_id, node_id, name, kind, state, battery, online, last_seen, entity, value, temp, humidity, model, open_since, over_since)
     values (h.id, h.property_id, (r->>'node_id')::int,
-            coalesce(nullif(r->>'name',''), initcap(coalesce(r->>'kind','sensor')) || ' sensor (node ' || (r->>'node_id') || ')'),
+            coalesce(nullif(r->>'name',''), case r->>'kind' when 'contact' then 'Door/window' else initcap(coalesce(r->>'kind','sensor')) end || ' sensor (node ' || (r->>'node_id') || ')'),
             coalesce(r->>'kind','other'), r->>'state', (r->>'battery')::int, (r->>'online')::boolean, now(), r->>'entity', (r->>'value')::numeric,
+            (r->>'temp')::numeric, (r->>'humidity')::numeric, r->>'model', case when r->>'state' = 'open' then now() end,
             case when r->>'kind' = 'noise' and (r->>'value')::numeric > coalesce((select noise_limit from lock_homes where property_id = h.property_id), 80) then now() end)
     on conflict (hub_id, node_id) do update set kind = excluded.kind, state = coalesce(excluded.state, sensors.state),
       battery = coalesce(excluded.battery, sensors.battery), online = excluded.online, last_seen = now(), property_id = h.property_id,
       rssi = (r->>'rssi')::int, entity = coalesce(r->>'entity', sensors.entity), value = (r->>'value')::numeric,
+      temp = (r->>'temp')::numeric, humidity = (r->>'humidity')::numeric, model = coalesce(r->>'model', sensors.model),
+      open_since = case when coalesce(excluded.state, sensors.state) = 'open' then coalesce(sensors.open_since, now()) end,
       over_since = case when r->>'kind' = 'noise' and (r->>'value')::numeric >
                           coalesce((select noise_limit from lock_homes where property_id = h.property_id), 80)
                         then coalesce(sensors.over_since, now()) end;
@@ -1232,7 +1256,8 @@ begin
     select * into w from lock_who(k.id, (r->>'slot')::int, coalesce((r->>'at')::timestamptz, now()));
     insert into lock_events (at, property_id, hub_id, lock_id, kind, slot, who_kind, who_id, who, detail)
     values (coalesce((r->>'at')::timestamptz, now()), h.property_id, h.id, k.id, r->>'kind', (r->>'slot')::int,
-            w.who_kind, w.who_id, w.who, coalesce(r->'detail', '{}'));
+            w.who_kind, w.who_id, w.who, coalesce(r->'detail', '{}') || case when k.id is null then jsonb_build_object('node_id', (r->>'node_id')::int,
+              'sensor', (select x.name from sensors x where x.hub_id = h.id and x.node_id = (r->>'node_id')::int)) else '{}'::jsonb end);
     if r->>'kind' = 'jammed' and k.id is not null then update locks set state = 'jammed' where id = k.id; end if;
     perform lock_event_rules(h.property_id, k.id, r->>'kind', coalesce((r->>'at')::timestamptz, now()), w.who_kind, w.who_id, w.who, (r->>'node_id')::int, h.id);
   end loop;
@@ -2298,3 +2323,56 @@ create trigger lock_audit_access after insert or update on property_access for e
 -- the office can read which Slack messages went out (CYA log)
 drop policy if exists lock_notify_read on lock_notify;
 create policy lock_notify_read on lock_notify for select to authenticated using (app_role() in ('admin','tech'));
+
+
+-- ---------------------------------------------------------------- door & window sensors (Aeotec Door Window Sensor 8 etc.)
+alter table sensors add column if not exists open_since timestamptz;
+alter table sensors add column if not exists temp numeric;
+alter table sensors add column if not exists humidity numeric;
+alter table sensors add column if not exists tamper_at timestamptz;
+alter table sensors add column if not exists model text;
+
+-- is anyone supposed to be in this home at this moment? (a stay in progress, or someone used a code / phone key recently)
+create or replace function lock_home_expected(p_prop text, p_at timestamptz) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from lock_stays s
+                  where s.property_id in (select lock_home_family(p_prop)) and s.status not in ('cancelled')
+                    and s.starts_at - interval '2 hours' <= p_at and p_at <= s.ends_at + interval '1 hour'
+                    and (s.out_at is null or s.out_at > p_at))
+      or exists (select 1 from lock_events e
+                  where e.property_id in (select lock_home_family(p_prop)) and e.at between p_at - interval '30 minutes' and p_at + interval '2 minutes'
+                    and e.kind in ('unlock_code','unlock_phone','unlock_remote','unlock_manual','remote_unlock_sent'))
+$$;
+
+-- a door or window opened: if nobody is booked and no code was used, that's a possible break-in -> alert + Slack now
+create or replace function lock_door_opened(p_prop text, p_hub uuid, p_node int, p_lock uuid, p_at timestamptz) returns void
+language plpgsql security definer set search_path = public as $$
+declare nm text; p properties; ch text;
+begin
+  if lock_home_expected(p_prop, p_at) then return; end if;
+  select coalesce((select x.name from sensors x where x.hub_id = p_hub and x.node_id = p_node), (select k.name from locks k where k.id = p_lock), 'A door') into nm;
+  select * into p from properties where id = p_prop;
+  insert into lock_alerts (kind, property_id, hub_id, lock_id, ref, detail)
+  values ('opened_empty', p_prop, p_hub, p_lock, coalesce(p_node::text, '') || '@' || to_char(p_at, 'YYYYMMDDHH24'),
+          nm || ' opened at ' || to_char(p_at at time zone 'America/Denver', 'Mon DD FMHH12:MI am') || ' - nobody is booked and no code was used')
+  on conflict do nothing;
+  if found then
+    ch := coalesce((select value from lock_settings where key = 'slack_alert_channel'), 'C063B9NQJQY');
+    insert into lock_notify (property_id, channel, text)
+    values (p_prop, ch, ':rotating_light: *' || coalesce(p.code, p_prop) || '*: ' || nm || ' opened at ' || to_char(p_at at time zone 'America/Denver', 'FMHH12:MI am')
+            || ' - nobody is booked and no code was used. Check the home (crew without a code? break-in?).');
+    perform lock_notify_kick();
+  end if;
+end $$;
+revoke all on function lock_door_opened(text, uuid, int, uuid, timestamptz) from public, anon, authenticated;
+
+-- rename a sensor (door / window / leak / noise)
+create or replace function lock_sensor_update(p_sensor uuid, p_name text, p_active boolean default true) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  update sensors set name = coalesce(nullif(trim(p_name), ''), name), active = coalesce(p_active, active) where id = p_sensor;
+end $$;
+drop trigger if exists lock_audit_sensors on sensors;
+create trigger lock_audit_sensors after update on sensors for each row
+  execute function lock_audit_row('id', 'property_id', 'name', 'active');
