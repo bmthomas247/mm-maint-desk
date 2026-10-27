@@ -797,6 +797,8 @@ async function installHome(pid){
   const na = s => s.must || s.k==="prep" || s.k==="track" || isDone(s) ? "" : `<button class="btn small" data-skip="${s.k}" style="margin-top:8px">N/A${s.skip?" - "+esc(s.skip):" - not needed here"} → next</button>`;
   const keyHow = (keys, what) => `<ol class="how">${keys.map(([k,m])=>`<li><span class="key">${k}</span><span>${m}</span></li>`).join("")}</ol>${what?`<div class="muted">${what}</div>`:""}`;
   const homeMaster = h.master_code;
+  const isNewHome = !brivoM.length;   // never on Brivo: the app owns the master code
+  const newMasterBtn = isNewHome && homeMaster ? `<button class="btn wide" data-newmaster style="margin-top:8px">🔄 Make a new master code</button>` : "";
   const spotForm = (k, o) => { const v = sp(k) || {}, its = v.items || [];
     return `<div class="spot" data-spot="${k}">
       <label class="field" style="margin-top:8px"><span>📷 Photo <span class="muted">(needed)</span></span>
@@ -828,7 +830,8 @@ async function installHome(pid){
           <button class="btn primary wide" id="mkmaster" style="margin-top:6px">Make a master code for this home</button>`}
       ${homeMaster && !masters.some(m=>m.master_code) && !brivoM.length ? `<details style="margin-top:6px"><summary><b>How to put it on a new lock</b></summary>
         ${keyHow([["🔋","Put the batteries in. The screen lights up and the lock asks you to register a master code."],["⚙","Press the gear key (⚙). On some keypads it's #."],[esc(homeMaster),"Type the master code above."],["⚙","Press the gear key again to save it."]],
-          'Lock already has a different master code? Type the old one, ⚙, <b>1</b> (= "Master PIN code setting"), ⚙, then follow the voice to enter the new one.')}</details>` : ""}${mark(STEPS[0])}`,
+          'Lock already has a different master code? Type the old one, ⚙, <b>1</b> (= "Master PIN code setting"), ⚙, then follow the voice to enter the new one.')}</details>` : ""}
+      ${newMasterBtn}${mark(STEPS[0])}`,
     hub: (hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span> <span class="muted">checked in ${ago(hub.last_seen)}</span>`
       : `<div class="muted">Put the hub in the owner closet or utility room by the router. Network cable from the router, stick on the extension cable placed up high, then power. Wait 5 minutes.</div>
          <button class="btn go wide" id="find" style="margin-top:10px">Find hub</button><div id="found"></div>
@@ -840,7 +843,8 @@ async function installHome(pid){
       ${keyHow([["master","2. At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["3","Picks <b>Leave network</b> - it forgets Brivo."],["⚙","Confirm. The lock beeps when it's done."]],
         'Do every door, tapping the blue button again before each one. If pressing 7 does nothing, the wireless module is loose or the lock has no master code yet. This step ticks itself once a door pairs in step 4.')}
       ${mark(STEPS.find(x=>x.k==="brivo"))}`,
-    locks: `<label class="field"><span>5-digit PIN from the sticker on the lock's wireless (Z-Wave) module</span><input id="pin" inputmode="numeric" maxlength="5" style="font-size:20px;padding:12px;letter-spacing:4px"></label>
+    locks: `${isNewHome ? (homeMaster ? `<div class="master" style="margin:0 0 6px">Master code: <b>${esc(homeMaster)}</b></div>${newMasterBtn}`
+        : `<button class="btn primary wide" data-newmaster style="margin-bottom:8px">Make a master code for this home</button>`) : ""}<label class="field"><span>5-digit PIN from the sticker on the lock's wireless (Z-Wave) module</span><input id="pin" inputmode="numeric" maxlength="5" style="font-size:20px;padding:12px;letter-spacing:4px"></label>
       <details style="margin:-4px 0 8px"><summary><b>📍 Where's the sticker?</b></summary>
         <div class="muted">Take the battery cover off the inside of the lock. The wireless module sits above the batteries. Its sticker has a QR code and a long number (the DSK). The PIN is the <b>first 5 digits</b> - usually underlined.</div>${STICKER_SVG}</details>
       <button class="btn go wide" id="pair" ${hub?"":"disabled"}>Start pairing</button>
@@ -959,6 +963,9 @@ async function installHome(pid){
       if($("[data-item]", box) && !items.length) return toast("Tap what's in there");
       if(items.includes("Other") && !r.other) return toast("Say what the Other item is");
       try{ await rpc("lock_spot_save",{p_property:pid,p_kind:k,r}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
+  $$("[data-newmaster]").forEach(b=>b.onclick=async()=>{
+    if(homeMaster && !confirm("Make a NEW master code for "+dc(p.code)+"?\n\nThe old one ("+homeMaster+") stops being the one on file. If you already typed the old one into a lock, change it on that lock too: old code ⚙ 1 ⚙, then the new code.")) return;
+    try{ const c = await rpc("lock_master_new",{p_property:pid,p_replace:!!homeMaster}); await loadBase(); toast("New master code: "+c); again(); }catch(e){ fail(e); } });
   const mk = $("#mkmaster"); if(mk) mk.onclick = async () => { try{ const c = await rpc("lock_master_new",{p_property:pid}); await loadBase(); toast("Master code "+c+" made for "+dc(p.code)); again(); }catch(e){ fail(e); } };
   const hg = $("#heatgo"); if(hg) hg.onclick = async () => { try{ const r = await rpc("lock_heat_test",{p_property:pid,p_step:"start"}); hub && wake(hub.id); toast("Heat turned up on "+r.thermostats+" thermostat"+(r.thermostats>1?"s":"")); again(); }catch(e){ fail(e); } };
   $$("[data-heat]").forEach(b=>b.onclick=async()=>{ if(b.dataset.heat==="fail" && !confirm("No warm air at all? This alerts the office.")) return;
