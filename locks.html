@@ -376,7 +376,10 @@ function loginView(msg){
   $("#link").onclick = async () => { const email = $("#em").value.trim().toLowerCase(); if(!email) return $("#msg").textContent = "Type your email first.";
     $("#msg").textContent = "Sending…";
     const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname } });
-    $("#msg").textContent = error ? "Couldn't send the link - ask Brandon to add " + email + "." : "Link sent to " + email + ". Open it on this device."; };
+    $("#msg").textContent = !error ? "Link sent to " + email + ". Open it on this device."
+      : /rate|limit|seconds|429/i.test((error.message||"") + (error.status||"")) ? "Too many email links sent in the last hour. Use the newest link you already got, or wait and try again."
+      : /signup|not allowed|not found/i.test(error.message||"") ? "Couldn't send the link - ask Brandon to add " + email + "."
+      : "Couldn't send the link (" + error.message + ")."; };
 }
 
 /* ------------------------------------------------ homes list */
