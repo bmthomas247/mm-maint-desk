@@ -21,11 +21,29 @@ ul{margin:0;padding-left:20px} li{margin:5px 0}
 .muted{color:var(--muted);font-size:13.5px}
 .printbtn{font:inherit;font-weight:800;background:var(--moose);color:#16220a;border:0;border-radius:12px;padding:10px 16px;cursor:pointer}
 @media print{header{background:none;color:#000;border-bottom:2px solid #000} .printbtn,.noprint{display:none} body{background:#fff} .card{border-color:#999}}
+.pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.pic{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:10px;border:1px solid #dfe5da;border-radius:14px;background:#fff}.pic b{font-size:14px}.pic span{font-size:12.5px;color:#5b6656;line-height:1.3}
 </style></head>
 <body>
 <header><div class="bar"><img src="moose-logo.png" alt="Moose Management"><div><h1>Moose Locks · Install guide</h1><div class="s">Read before every install · where things go and how far apart</div></div></div></header>
 <main>
   <p class="noprint"><button class="printbtn" onclick="print()">Print this sheet</button> <a href="locks.html#/install" style="margin-left:10px">Back to Install</a></p>
+
+  <div class="card">
+    <h2><span class="ic">🧰</span>What to bring</h2>
+    <ul>
+      <li>Hub, Z-Wave stick, USB extension cable.</li>
+      <li><b>An Ethernet (network) cable, 6 ft or longer.</b> The hub plugs into the router with it - don't count on finding one at the home.</li>
+      <li>Fresh AA batteries for every lock. The home's master code (on the Install page - the app makes one for brand-new homes).</li>
+      <li>Key box + the spare key. Most key boxes get code <b>1358</b>.</li>
+      <li>A bag for the owner's old locks, thermostat and Brivo parts. Phone charged - you'll take photos.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="ic">👀</span>What each thing looks like</h2>
+    <p class="muted" style="margin:0 0 10px">Simple drawings - the real thing may look a little different.</p>
+    <div class="pics"><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="18" y="22" width="64" height="58" rx="12" fill="#d9ddd6" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="51" r="4" fill="#7bb342"/><rect x="34" y="80" width="12" height="7" fill="#3c4a36"/><rect x="54" y="80" width="12" height="7" fill="#3c4a36"/></svg><b>Hub (gateway)</b><span>Small gray box. Power + Ethernet cable.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="38" y="14" width="24" height="56" rx="6" fill="#2f3a4a" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><rect x="42" y="70" width="16" height="16" fill="#c8ccd0" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="28" r="3" fill="#59c1ff"/></svg><b>Z-Wave stick</b><span>USB stick - the antenna. Goes on the extension cable.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="10" y="40" width="16" height="20" rx="3" fill="#c8ccd0" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M26 50 C 45 20, 55 80, 74 50" fill="none" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><rect x="74" y="38" width="18" height="24" rx="3" fill="#555" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg><b>USB extension cable</b><span>Lets the stick sit 3 ft+ from the hub.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="12" y="36" width="20" height="26" rx="3" fill="#e9eef7" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M16 62v6h12v-6" fill="none" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M32 49 C 50 20, 60 80, 78 49" fill="none" stroke="#2d6cdf" stroke-width="5"/><rect x="74" y="36" width="20" height="26" rx="3" fill="#e9eef7" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg><b>Ethernet cable</b><span>Network cable. Bring your own - 6 ft+.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="30" y="8" width="40" height="84" rx="10" fill="#4a4f55" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="40" cy="26" r="3" fill="#e8f0ff"/><circle cx="50" cy="26" r="3" fill="#e8f0ff"/><circle cx="60" cy="26" r="3" fill="#e8f0ff"/><circle cx="40" cy="38" r="3" fill="#e8f0ff"/><circle cx="50" cy="38" r="3" fill="#e8f0ff"/><circle cx="60" cy="38" r="3" fill="#e8f0ff"/><circle cx="40" cy="50" r="3" fill="#e8f0ff"/><circle cx="50" cy="50" r="3" fill="#e8f0ff"/><circle cx="60" cy="50" r="3" fill="#e8f0ff"/><circle cx="40" cy="62" r="3" fill="#e8f0ff"/><circle cx="50" cy="62" r="3" fill="#e8f0ff"/><circle cx="60" cy="62" r="3" fill="#e8f0ff"/><text x="50" y="84" text-anchor="middle" font-size="11" fill="#e8f0ff">⚙</text></svg><b>Door lock (keypad)</b><span>Yale keypad deadbolt. Wireless module inside, above the batteries.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="20" y="20" width="60" height="60" rx="14" fill="#f4f4f2" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><text x="50" y="58" text-anchor="middle" font-size="22" font-weight="800" fill="#3c4a36">68°</text></svg><b>Thermostat</b><span>On the wall. Turn HVAC power OFF before swapping.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="30" y="30" width="40" height="40" rx="8" fill="#2b2b2b" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="50" r="9" fill="#6b6b6b"/><rect x="44" y="70" width="12" height="10" fill="#c8ccd0" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg><b>Noise sensor</b><span>Tiny cube (Atom Echo). Hears loudness only - no recording.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="28" y="20" width="44" height="56" rx="10" fill="#f4f4f2" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M42 76v12M58 76v12" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="40" r="4" fill="#7bb342"/></svg><b>Plug-in repeater</b><span>Only if a door has 1-2 bars. Plugs into an outlet halfway.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="22" y="26" width="22" height="56" rx="5" fill="#d4b35a" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><rect x="29" y="20" width="8" height="6" fill="#3c4a36"/><rect x="56" y="26" width="22" height="56" rx="5" fill="#d4b35a" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><rect x="63" y="20" width="8" height="6" fill="#3c4a36"/></svg><b>AA batteries</b><span>Fresh ones in every lock.</span></div><div class="pic"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><path d="M36 34v-10a14 14 0 0 1 28 0v10" fill="none" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><rect x="24" y="34" width="52" height="52" rx="8" fill="#2b2b2b" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><rect x="32" y="52" width="7" height="16" rx="2" fill="#d9ddd6"/><rect x="42" y="52" width="7" height="16" rx="2" fill="#d9ddd6"/><rect x="52" y="52" width="7" height="16" rx="2" fill="#d9ddd6"/><rect x="62" y="52" width="7" height="16" rx="2" fill="#d9ddd6"/></svg><b>Key box</b><span>Spare key inside. Code is usually 1358.</span></div></div>
+  </div>
 
   <div class="card">
     <h2><span class="ic">📏</span>Distances at a glance</h2>
@@ -39,16 +57,17 @@ ul{margin:0;padding-left:20px} li{margin:5px 0}
   </div>
 
   <div class="card">
-    <h2><span class="ic">📦</span>1 · Hub (gateway) - Home Assistant Green</h2>
+    <h2><span class="ic">📦</span>1 · Hub (gateway) - Home Assistant Green</h2><div style="float:right;margin:0 0 6px 10px"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="18" y="22" width="64" height="58" rx="12" fill="#d9ddd6" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="51" r="4" fill="#7bb342"/><rect x="34" y="80" width="12" height="7" fill="#3c4a36"/><rect x="54" y="80" width="12" height="7" fill="#3c4a36"/></svg></div>
     <ul>
-      <li>Next to the router: power + the Ethernet cable into the router. The hub never uses Wi-Fi.</li>
+      <li>Next to the router: power + <b>the Ethernet cable you brought</b> into the router. The hub never uses Wi-Fi.</li>
+      <li>Take a <b>photo</b> of where it is and type the spot on the Install page, so the next tech can find it.</li>
       <li>Owner closet / utility room, as central in the home as the router allows. On a shelf, not the floor. Not inside a metal cabinet or behind the water heater / furnace.</li>
       <li>Wait for the <b>Hub</b> light on the Install page to go green before pairing anything.</li>
     </ul>
   </div>
 
   <div class="card">
-    <h2><span class="ic">📡</span>2 · Z-Wave stick (the antenna)</h2>
+    <h2><span class="ic">📡</span>2 · Z-Wave stick (the antenna)</h2><div style="float:right;margin:0 0 6px 10px"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="38" y="14" width="24" height="56" rx="6" fill="#2f3a4a" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><rect x="42" y="70" width="16" height="16" fill="#c8ccd0" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="28" r="3" fill="#59c1ff"/></svg></div>
     <ul>
       <li>Always on the USB extension cable - never plugged straight into the hub (it picks up interference).</li>
       <li>At least 3 ft from the hub and router, standing up, as high and central as the cable reaches. Tape or clip it in place.</li>
@@ -57,9 +76,18 @@ ul{margin:0;padding-left:20px} li{margin:5px 0}
   </div>
 
   <div class="card">
-    <h2><span class="ic">🔒</span>3 · Door locks</h2>
+    <h2><span class="ic">🔒</span>3 · Door locks</h2><div style="float:right;margin:0 0 6px 10px"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="30" y="8" width="40" height="84" rx="10" fill="#4a4f55" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="40" cy="26" r="3" fill="#e8f0ff"/><circle cx="50" cy="26" r="3" fill="#e8f0ff"/><circle cx="60" cy="26" r="3" fill="#e8f0ff"/><circle cx="40" cy="38" r="3" fill="#e8f0ff"/><circle cx="50" cy="38" r="3" fill="#e8f0ff"/><circle cx="60" cy="38" r="3" fill="#e8f0ff"/><circle cx="40" cy="50" r="3" fill="#e8f0ff"/><circle cx="50" cy="50" r="3" fill="#e8f0ff"/><circle cx="60" cy="50" r="3" fill="#e8f0ff"/><circle cx="40" cy="62" r="3" fill="#e8f0ff"/><circle cx="50" cy="62" r="3" fill="#e8f0ff"/><circle cx="60" cy="62" r="3" fill="#e8f0ff"/><text x="50" y="84" text-anchor="middle" font-size="11" fill="#e8f0ff">⚙</text></svg></div>
     <ul>
       <li>Pair the <b>closest door first</b>, then work outward.</li>
+      <li><b>What the keypad buttons do</b> (tap Start pairing on the phone first):
+        <b>master code</b> = unlocks the lock's settings ·
+        <b>⚙</b> (gear; # on some keypads) = enter / confirm ·
+        <b>7</b> = Network module (the lock's wireless part) ·
+        <b>1</b> = Join network (pair to our hub) ·
+        <b>3</b> = Leave network (take it off Brivo).
+        So pairing is: master code ⚙ 7 ⚙ 1 ⚙. Taking it off Brivo: master code ⚙ 7 ⚙ 3 ⚙.</li>
+      <li>Brand-new lock: put the batteries in - it asks for a master code. Press ⚙, type the home's master code, press ⚙.</li>
+      <li>7 does nothing? The wireless module is loose, or the lock has no master code yet.</li>
       <li>Pair at the door with the lock in its final place (door closed when you test).</li>
       <li>Each lock needs <span class="bars"><i style="height:7px"></i><i style="height:10px"></i><i style="height:13px"></i><i style="height:16px;background:#cfd8cb"></i></span><b>3 bars or more</b> and few dropped messages on the Install page. Press <b>Ping</b> - it should answer in under a second.</li>
       <li>1–2 bars, a garage / basement door, or more than 2 walls or 1 floor away: plug a <b>Z-Wave plug-in repeater</b> into an outlet about halfway between the stick and the door, then press <b>Rebuild routes</b> once.</li>
@@ -68,7 +96,7 @@ ul{margin:0;padding-left:20px} li{margin:5px 0}
   </div>
 
   <div class="card">
-    <h2><span class="ic">🌡️</span>4 · Thermostats</h2>
+    <h2><span class="ic">🌡️</span>4 · Thermostats</h2><div style="float:right;margin:0 0 6px 10px"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="20" y="20" width="60" height="60" rx="14" fill="#f4f4f2" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><text x="50" y="58" text-anchor="middle" font-size="22" font-weight="800" fill="#3c4a36">68°</text></svg></div>
     <p style="margin:0 0 8px;padding:10px 12px;border-radius:12px;background:#fbe7e4;color:#8a1f15;font-weight:800">⚡ Changing out a thermostat? Turn OFF the power to the HVAC system first - the furnace / air-handler switch or its breaker. Check the old thermostat's screen is dead before touching any wires. Take a photo of the wiring before you disconnect it.</p>
     <ul>
       <li>Stay where they are on the wall - don't move them for signal.</li>
@@ -78,7 +106,7 @@ ul{margin:0;padding-left:20px} li{margin:5px 0}
   </div>
 
   <div class="card">
-    <h2><span class="ic">🔊</span>5 · Noise sensor (Atom Echo)</h2>
+    <h2><span class="ic">🔊</span>5 · Noise sensor (Atom Echo)</h2><div style="float:right;margin:0 0 6px 10px"><svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true"><rect x="30" y="30" width="40" height="40" rx="8" fill="#2b2b2b" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="50" r="9" fill="#6b6b6b"/><rect x="44" y="70" width="12" height="10" fill="#c8ccd0" stroke="#3c4a36" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
     <ul>
       <li>Set it up at the office first on the noise sensor setup page with this home's Wi-Fi.</li>
       <li>Main living area, plugged into a USB-C charger, about chest height (a shelf is great). Not in a bedroom.</li>
@@ -91,9 +119,14 @@ ul{margin:0;padding-left:20px} li{margin:5px 0}
     <h2><span class="ic">✅</span>Before you leave</h2>
     <ul>
       <li>Install page header says <b>🟢 Everything is connected</b>.</li>
+      <li><b>🔥 Heat test passed:</b> tap Start heat test, wait a few minutes, feel warm air at a vent, tap Yes. No heat = don't leave - call Chris.</li>
       <li>Every door: 3+ bars, Ping answers, the test code opened it.</li>
       <li>Press <b>Rebuild routes</b> once after the last device (not again and again - it slows the doors for a few minutes).</li>
       <li>Nothing moved after pairing: stick, repeaters, hub.</li>
+      <li>Key box hung with the spare key, code set (usually 1358) - photo + which keys are in it saved on the Install page.</li>
+      <li>Owner's old hardware bagged and put in the owner closet or furnace room - never where guests can find it. Photo saved.</li>
+      <li>TVs: coming soon - nothing to set up yet.</li>
+      <li>Anything that doesn't apply to this home: tap <b>N/A</b> on that step.</li>
     </ul>
   </div>
 
