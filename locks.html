@@ -700,7 +700,8 @@ async function installHome(pid){
       <div class="muted" style="margin-top:8px">On the keypad: <b>master code</b> → ✓ → <b>7</b> → ✓ → <b>1</b> → ✓</div><div id="pairmsg"></div>
       ${locks.map(l=>`<div class="row" style="margin-top:10px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
         <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}`,
-    climate: `<div class="muted">Same pairing button, PIN left blank, then use the thermostat's or sensor's Z-Wave "include" menu.
+    climate: `<div style="margin-bottom:6px;padding:8px 10px;border-radius:10px;background:var(--red-soft);color:var(--red);font-weight:800">⚡ Replacing a thermostat? Turn OFF the power to the HVAC system first (furnace / air-handler switch or breaker), make sure the old thermostat's screen is dead, and photo the wiring before you disconnect it.</div>
+      <div class="muted">Same pairing button, PIN left blank, then use the thermostat's or sensor's Z-Wave "include" menu.
       <br><b>Noise sensor:</b> set it up at the office first on the <a href="noise-setup.html" target="_blank">noise sensor setup page</a> (Chrome, USB cable, this home's Wi-Fi).
       <br><b>TVs and noise sensor:</b> they show up on their own once they're on the home's Wi-Fi (same network as the hub). Samsung / LG TVs pop up "Allow?" on screen the first time - press Allow. Roku: Settings → System → Advanced → Control by mobile apps → Network access = Permissive.</div>
       <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>
@@ -728,7 +729,19 @@ async function installHome(pid){
     : ctype === "cellular" ? `<div class="card" style="border-color:var(--amber)"><b>📱 You're on cell data</b><div class="muted">Join the home's Wi-Fi first - the system finds the hub through the home's internet. Then type the Wi-Fi name and password in the Guest info step.</div></div>`
     : `<div class="card" style="border-color:var(--amber)"><b>📶 Join the home's Wi-Fi first</b><div class="muted">Once you're on it and the hub is plugged in (Ethernet cable to the router - the hub itself never needs Wi-Fi), this turns green. Phones don't share the Wi-Fi name with websites, so type it in the Guest info step.</div></div>`;
   const tvsI = await q("lock_tvs","name,state,last_seen",x=>x.eq("property_id",pid).eq("active",true)).catch(()=>[]);
-  shell("install", `<p><a href="#/install">← All installs</a></p>${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI})}
+  shell("install", `<p><a href="#/install">← All installs</a></p>
+    <details class="card guide" open style="border-color:var(--moose)"><summary>📏 Install guide - read every time</summary>
+      <div class="list" style="font-size:14px">
+        <div>📦 <span class="grow"><b>Hub</b> next to the router, Ethernet cable, on a shelf - not the floor or a metal cabinet.</span></div>
+        <div>📡 <span class="grow"><b>Z-Wave stick</b> on the extension cable, <b>3 ft+</b> from the hub and router, high and central. Final spot before pairing - <b>never move it after</b>.</span></div>
+        <div>🔒 <span class="grow"><b>Locks</b>: closest door first. Need <b>3+ bars</b>. More than <b>2 walls or 1 floor</b> away, or 1–2 bars → plug-in repeater halfway, then Rebuild routes.</span></div>
+        <div>🌡️ <span class="grow"><b>Thermostats</b> stay on the wall; wired ones help as repeaters - pair them before the far doors.
+          <b style="color:var(--red)">⚡ Changing one out? Turn OFF the HVAC power (furnace switch or breaker) first, check the old screen is dead, photo the wiring.</b></span></div>
+        <div>🔊 <span class="grow"><b>Noise sensor</b>: living area, chest height, <b>6 ft+</b> from TVs, speakers, fridge, vents. Good Wi-Fi.</span></div>
+        <div>✅ <span class="grow">Leave only when the lights say <b>Everything is connected</b>.</span></div>
+      </div>
+      <a class="btn small" href="install-guide.html" target="_blank" style="margin-top:8px">Full guide / print</a></details>
+    ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI})}
     <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(p.code)}</div><div class="muted">${esc(p.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill amber">${total}/${STEPS.length}</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*total/STEPS.length)}%"></i></div></div>
@@ -1222,7 +1235,7 @@ async function route(){
     else if(h==="score" && DESK) await scoreView();
     else await homesView();
   }catch(e){ fail(e, "Couldn't load"); }
-  if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
+  if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]:not(.guide):not(.sect)")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
 }
 window.addEventListener("hashchange", route);
 sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
