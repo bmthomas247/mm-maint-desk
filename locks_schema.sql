@@ -543,15 +543,16 @@ create or replace function lock_plan() returns int
 language plpgsql security definer set search_path = public as $$
 declare l record; d record; s int; n int := 0;
 begin
-  for l in select k.*, h.lead_hours, h.grace_minutes, h.preload_days from locks k
+  perform lock_backup_fill();
+  for l in select k.*, h.lead_hours, h.grace_minutes, h.preload_days, h.backup_days from locks k
            join lock_hubs b on b.id = k.hub_id and b.active and b.claimed_at is not null
            join lock_homes h on h.property_id = k.property_id and h.section = 'ours' and h.enabled
            where k.active loop
     -- 1) what should be there
-    create temp table if not exists _want (ref_kind text, ref_id text, label text, code text, staff boolean, sched jsonb) on commit drop;
+    create temp table if not exists _want (ref_kind text, ref_id text, label text, code text, staff boolean, sched jsonb, pool text) on commit drop;
     truncate _want;
     if l.for_guests then
-      insert into _want select 'stay', st.res_id, coalesce(st.guest, 'Guest') || ' (' || st.kind || ')', st.code, false,
+      insert into _want (ref_kind, ref_id, label, code, staff, sched) select 'stay', st.res_id, coalesce(st.guest, 'Guest') || ' (' || st.kind || ')', st.code, false,
              case when l.schedules_ok then jsonb_build_object('type', 'year', 'start', lock_local(st.starts_at - interval '1 hour'),
                                                               'stop', lock_local(st.ends_at + make_interval(mins => l.grace_minutes))) end
         from lock_stays st
@@ -562,10 +563,24 @@ begin
          and now() >= st.starts_at - case when l.schedules_ok then make_interval(days => l.preload_days)
                                           else make_interval(hours => l.lead_hours) end
          and now() <  st.ends_at + make_interval(mins => l.grace_minutes);
+      -- backup (emergency) code for every stay in the next backup_days: on the lock early, only works check-in -> check-out
+      -- (the lock enforces the dates itself), so the office can still let a guest in if the lock or hub goes offline
+      if l.schedules_ok then
+        insert into _want (ref_kind, ref_id, label, code, staff, sched, pool)
+        select 'backup', st.res_id, coalesce(st.guest, 'Guest') || ' (backup code)', st.backup_code, false,
+               jsonb_build_object('type', 'year', 'start', lock_local(st.starts_at - interval '1 hour'),
+                                  'stop', lock_local(st.ends_at + make_interval(mins => l.grace_minutes))), 'backup'
+          from lock_stays st
+         where (st.property_id in (select lock_home_up(l.property_id))
+                or (l.shared and st.property_id in (select child_id from lock_links_on where parent_id = l.property_id)))
+           and st.status not in ('cancelled','checked_out') and st.backup_code is not null
+           and st.starts_at < now() + make_interval(days => coalesce(l.backup_days, 60))
+           and now() < st.ends_at + make_interval(mins => l.grace_minutes);
+      end if;
     end if;
     -- crew / vendor / backup: with a schedule-capable lock the code stays on and the lock enforces days/hours;
     -- otherwise the code is added when its window opens and removed when it closes
-    insert into _want select 'staff', c.id::text,
+    insert into _want (ref_kind, ref_id, label, code, staff, sched) select 'staff', c.id::text,
            case c.kind when 'hoa' then 'HOA' when 'county' then 'County' when 'housekeeping' then 'Housekeeping' else initcap(c.kind) end || ': ' || coalesce(c.person, c.company, c.label), c.code, true,
            case when l.schedules_ok then lock_staff_sched(c, c.ends_at) end
       from lock_staff_codes c
@@ -574,7 +589,7 @@ begin
                 then (c.starts_at is null or now() >= c.starts_at - make_interval(days => l.preload_days))
                      and (c.ends_at is null or now() < c.ends_at)
                 else lock_staff_window_open(c) end;
-    insert into _want select 'test', cm.id::text, 'Test code', cm.args->>'code', true, null from lock_commands cm
+    insert into _want (ref_kind, ref_id, label, code, staff, sched) select 'test', cm.id::text, 'Test code', cm.args->>'code', true, null from lock_commands cm
      where cm.lock_id = l.id and cm.kind = 'refresh' and cm.args ? 'code' and cm.created_at > now() - interval '10 minutes';
 
     -- 2) anything live that shouldn't be (or whose code / time window changed) gets cleared
@@ -588,8 +603,9 @@ begin
              where not exists (select 1 from lock_assign a where a.lock_id = l.id and a.wanted and a.state <> 'cleared'
                                and a.ref_kind = w.ref_kind and a.ref_id = w.ref_id and a.code = w.code
                                and a.sched is not distinct from w.sched) loop
-      select g into s from generate_series(case when d.staff then l.staff_from else l.guest_from end,
-                                          case when d.staff then l.staff_to   else l.guest_to   end) g
+      select g into s from generate_series(case when d.pool = 'backup' then l.backup_from when d.staff then l.staff_from else l.guest_from end,
+                                          case when d.pool = 'backup' then least(l.backup_to, coalesce(l.slots, l.backup_to))
+                                               when d.staff then l.staff_to else l.guest_to end) g
        where not exists (select 1 from lock_assign a where a.lock_id = l.id and a.slot = g and a.state <> 'cleared')
        order by g limit 1;
       if s is null then
@@ -808,7 +824,10 @@ language plpgsql security definer set search_path = public as $$
 declare hm lock_homes; t time := (p_at at time zone 'America/Denver')::time; late boolean;
 begin
   select * into hm from lock_homes where property_id = p_prop;
-  if p_kind = 'unlock_code' and p_who_kind = 'stay'
+  if p_kind = 'unlock_code' and p_who_kind = 'backup' then   -- a stay's backup (emergency) code was used: note it on the stay
+    update lock_stays set backup_used_at = coalesce(backup_used_at, p_at) where res_id = p_who_id;
+  end if;
+  if p_kind = 'unlock_code' and p_who_kind in ('stay','backup')
      and not exists (select 1 from lock_events e where e.kind = 'guest_arrived' and e.who_id = p_who_id) then
     insert into lock_events (at, property_id, hub_id, lock_id, kind, who_kind, who_id, who) values (p_at, p_prop, p_hub, p_lock, 'guest_arrived', 'stay', p_who_id, p_who);
   end if;
@@ -823,7 +842,7 @@ begin
         and exists (select 1 from locks k where k.id = p_lock and k.for_guests);
   end if;
   -- they came back in with their code: not out after all
-  if p_kind = 'unlock_code' and p_who_kind = 'stay' then
+  if p_kind = 'unlock_code' and p_who_kind in ('stay','backup') then
     update lock_stays set out_at = null, out_how = null where res_id = p_who_id and out_at is not null and out_at > p_at - interval '3 hours' and ends_at > p_at;
   end if;
   -- vendor / county inspector opened a door -> Slack (#maintenance_updates / #licensing), once per person per home per 2 hours
@@ -965,6 +984,8 @@ begin
      and st.starts_at < now() + interval '48 hours' and st.ends_at > now();
   insert into _cond select 'code_not_ready', st.property_id, k.hub_id, k.id, st.res_id,
          coalesce(st.guest,'Guest') || ' checks in ' || to_char(st.starts_at at time zone 'America/Denver', 'Mon DD HH12:MI am') || ' and the code is not confirmed on ' || k.name
+         || case when exists (select 1 from lock_assign a where a.lock_id = k.id and a.ref_kind = 'backup' and a.ref_id = st.res_id and a.wanted and a.state = 'verified')
+                 then '. Their BACKUP code is already on this door - give it from Stays & guest codes (Backup code).' else '' end
     from lock_stays st join locks k on k.active and k.for_guests
           and (k.property_id = st.property_id or k.property_id in (select child_id from lock_links_on where parent_id = st.property_id)
                or (k.shared and k.property_id in (select parent_id from lock_links_on where child_id = st.property_id)))
@@ -1197,6 +1218,7 @@ begin
         end if;
       elsif (s->>'in_use')::boolean and coalesce((select wipe_foreign from lock_homes where property_id = k.property_id), true)
             and (((s->>'slot')::int between k.staff_from and k.staff_to) or ((s->>'slot')::int between k.guest_from and k.guest_to)
+                 or ((s->>'slot')::int between k.backup_from and k.backup_to)
                  or coalesce((r->>'wipe_all')::boolean, false)) then
         insert into lock_assign (lock_id, slot, ref_kind, ref_id, label, code, wanted, state)
         values (k.id, (s->>'slot')::int, 'foreign', 'slot-' || (s->>'slot'), 'Old code (not ours)', null, false, 'clearing');
@@ -1589,6 +1611,11 @@ begin
   select * into pa from property_access where property_id = st.property_id;
   can_code := now() >= st.starts_at - interval '7 days' and lock_stay_cleared(st);
   can_key  := now() >= st.starts_at and now() < st.ends_at and st.status not in ('checked_out') and lock_stay_cleared(st);
+  -- CYA: the guest opened their link (and whether the code was showing), at most once an hour
+  if not exists (select 1 from lock_events e where e.kind = 'guest_opened_link' and e.who_id = st.res_id and e.at > now() - interval '1 hour') then
+    insert into lock_events (property_id, kind, who_kind, who_id, who, detail)
+    values (st.property_id, 'guest_opened_link', 'stay', st.res_id, st.guest, jsonb_build_object('code_shown', can_code, 'held_for', case when not lock_stay_cleared(st) then 'agreement' end));
+  end if;
   return jsonb_build_object(
     'home', p.name, 'code_name', p.code, 'address', p.address, 'guest', split_part(coalesce(st.guest,''), ' ', 1),
     'starts_at', st.starts_at, 'ends_at', st.ends_at, 'status', st.status,
@@ -2121,3 +2148,153 @@ begin
 end $$;
 drop trigger if exists lock_thermo_log on thermostats;
 create trigger lock_thermo_log after insert or update on thermostats for each row execute function lock_thermo_log();
+
+
+-- ---------------------------------------------------------------- backup (emergency) codes per stay (Kim + Brandon, Oct 27)
+-- Every stay in the next 60 days gets its own 6-digit backup code, loaded on the guest doors early with the stay's
+-- check-in -> check-out window (the lock enforces it). If a lock or hub goes offline the office gives the guest that code.
+alter table lock_stays add column if not exists backup_code text;
+alter table lock_stays add column if not exists backup_given_at timestamptz;
+alter table lock_stays add column if not exists backup_given_by text;
+alter table lock_stays add column if not exists backup_used_at timestamptz;
+alter table locks add column if not exists backup_from int not null default 151;
+alter table locks add column if not exists backup_to int not null default 230;
+alter table lock_homes add column if not exists backup_days int not null default 60;
+alter table lock_assign drop constraint if exists lock_assign_ref_kind_check;
+alter table lock_assign add constraint lock_assign_ref_kind_check check (ref_kind in ('stay','staff','test','foreign','backup'));
+
+-- a 6-digit code no one else at this home (or its parent / children) uses
+create or replace function lock_backup_pick(p_prop text) returns text
+language plpgsql security definer set search_path = public as $$
+declare c text; i int := 0;
+begin
+  loop
+    i := i + 1; c := lpad((floor(random() * 900000) + 100000)::int::text, 6, '0');
+    exit when i > 300;
+    continue when c ~ '(.)\1\1' or position(c in '0123456789012345') > 0 or position(c in '9876543210987654') > 0;
+    continue when exists (select 1 from lock_stays s where s.property_id in (select lock_home_family(p_prop))
+                            and (s.backup_code = c or s.code = c) and s.status <> 'cancelled' and s.ends_at > now() - interval '1 day');
+    continue when exists (select 1 from lock_staff_codes k where k.active and k.code = c);
+    continue when exists (select 1 from locks k where k.master_code = c) or exists (select 1 from lock_homes h where h.master_code = c);
+    return c;
+  end loop;
+  raise exception 'no free backup code';
+end $$;
+
+-- give every upcoming stay (on our homes) its backup code
+create or replace function lock_backup_fill() returns int
+language plpgsql security definer set search_path = public as $$
+declare st record; n int := 0;
+begin
+  for st in select s.res_id, s.property_id from lock_stays s
+             join lock_homes h on h.property_id in (select lock_home_family(s.property_id)) and h.section = 'ours' and h.enabled
+            where s.backup_code is null and s.status not in ('cancelled','checked_out')
+              and s.starts_at < now() + make_interval(days => h.backup_days) and s.ends_at > now()
+            group by s.res_id, s.property_id loop
+    update lock_stays set backup_code = lock_backup_pick(st.property_id) where res_id = st.res_id and backup_code is null;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function lock_backup_fill() from public, anon, authenticated;
+revoke all on function lock_backup_pick(text) from public, anon, authenticated;
+
+-- office: show a stay's backup code (logged), and whether it's on every guest door yet
+create or replace function lock_backup_give(p_res text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare st lock_stays; who text; doors jsonb;
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  select * into st from lock_stays where res_id = p_res;
+  if not found then raise exception 'Stay not found'; end if;
+  if st.backup_code is null then raise exception 'No backup code yet - it is made within 60 days of check-in'; end if;
+  who := coalesce((select name from allowed_users where lower(email) = lower(actor()) limit 1), actor());
+  select coalesce(jsonb_agg(jsonb_build_object('door', k.name,
+           'on', exists (select 1 from lock_assign a where a.lock_id = k.id and a.ref_kind = 'backup' and a.ref_id = p_res and a.wanted and a.state = 'verified'))
+           order by k.name), '[]'::jsonb)
+    into doors from locks k
+   where k.active and k.for_guests and (k.property_id in (select lock_home_up(st.property_id))
+         or (k.shared and st.property_id in (select child_id from lock_links_on where parent_id = k.property_id)));
+  update lock_stays set backup_given_at = now(), backup_given_by = who where res_id = p_res;
+  insert into lock_events (property_id, kind, who_kind, who_id, who, detail)
+  values (st.property_id, 'backup_given', 'stay', p_res, coalesce(st.guest, 'Guest'), jsonb_build_object('by', who));
+  return jsonb_build_object('code', st.backup_code, 'starts_at', st.starts_at, 'ends_at', st.ends_at, 'doors', doors);
+end $$;
+
+
+-- ---------------------------------------------------------------- CYA audit log: who changed what, when (append-only)
+create table if not exists lock_audit (
+  id          bigint generated always as identity primary key,
+  at          timestamptz not null default now(),
+  property_id text,
+  tbl         text not null,
+  op          text not null,          -- insert / update / delete
+  ref         text,                   -- row id (reservation, code id, lock id...)
+  who         text,                   -- person (office / crew) or 'system'
+  changes     jsonb                   -- {field: [old, new]}
+);
+create index if not exists lock_audit_prop on lock_audit (property_id, at desc);
+create index if not exists lock_audit_at on lock_audit (at desc);
+alter table lock_audit enable row level security;
+drop policy if exists lock_audit_read on lock_audit;
+create policy lock_audit_read on lock_audit for select to authenticated using (app_role() in ('admin','tech'));
+drop trigger if exists lock_audit_nodelete on lock_audit;
+create trigger lock_audit_nodelete before delete on lock_audit for each row execute function forbid_delete();
+drop trigger if exists lock_audit_noupdate on lock_audit;
+create trigger lock_audit_noupdate before update on lock_audit for each row execute function forbid_change();
+-- the climate history is evidence too
+do $$ begin
+  drop trigger if exists lock_climate_log_nodelete on lock_climate_log;
+  create trigger lock_climate_log_nodelete before delete on lock_climate_log for each row execute function forbid_delete();
+  drop trigger if exists lock_climate_log_noupdate on lock_climate_log;
+  create trigger lock_climate_log_noupdate before update on lock_climate_log for each row execute function forbid_change();
+end $$;
+
+-- TG_ARGV[0] = key column, TG_ARGV[1] = property column ('' if none), TG_ARGV[2..] = columns to watch (none = all but noise)
+create or replace function lock_audit_row() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare o jsonb := case when tg_op = 'INSERT' then '{}'::jsonb else to_jsonb(old) end;
+        n jsonb := case when tg_op = 'DELETE' then '{}'::jsonb else to_jsonb(new) end;
+        d jsonb := '{}'; k text; watch text[] := tg_argv[2:]; who text;
+begin
+  for k in select jsonb_object_keys(o || n) loop
+    continue when k in ('updated_at','last_seen','created_at','tries','err','portal_token');
+    continue when array_length(watch, 1) > 0 and not (k = any(watch));
+    if coalesce(o -> k, 'null'::jsonb) is distinct from coalesce(n -> k, 'null'::jsonb) then d := d || jsonb_build_object(k, jsonb_build_array(o -> k, n -> k)); end if;
+  end loop;
+  if d = '{}'::jsonb then return null; end if;
+  begin who := actor(); exception when others then who := null; end;
+  insert into lock_audit (property_id, tbl, op, ref, who, changes)
+  values (case when tg_argv[1] <> '' then coalesce(n ->> tg_argv[1], o ->> tg_argv[1]) end, tg_table_name, lower(tg_op),
+          coalesce(n ->> tg_argv[0], o ->> tg_argv[0]), coalesce(nullif(who, ''), 'system'), d);
+  return null;
+end $$;
+
+drop trigger if exists lock_audit_stays on lock_stays;
+create trigger lock_audit_stays after insert or update on lock_stays for each row
+  execute function lock_audit_row('res_id', 'property_id', 'code', 'status', 'starts_at', 'ends_at', 'agreement', 'guest', 'out_at', 'backup_code', 'backup_given_at', 'backup_used_at');
+drop trigger if exists lock_audit_staff on lock_staff_codes;
+create trigger lock_audit_staff after insert or update on lock_staff_codes for each row
+  execute function lock_audit_row('id', '', 'code', 'kind', 'label', 'person', 'company', 'role', 'property_ids', 'areas', 'active', 'removed_at', 'starts_at', 'ends_at', 'days', 'time_from', 'time_to', 'note');
+drop trigger if exists lock_audit_homes on lock_homes;
+create trigger lock_audit_homes after insert or update on lock_homes for each row
+  execute function lock_audit_row('property_id', 'property_id', 'section', 'enabled', 'warm_to', 'warm_hours', 'vacant_heat', 'vacant_cool', 'cool_to',
+    'heat_max', 'heat_min', 'cool_min', 'too_cold', 'too_hot', 'after_hours_from', 'after_hours_to', 'auto_lock_min', 'noise_limit', 'noise_minutes',
+    'quiet_from', 'quiet_to', 'own_rules', 'installed_at', 'master_code', 'arrival_note', 'guide_url', 'backup_days');
+drop trigger if exists lock_audit_locks on locks;
+create trigger lock_audit_locks after insert or update on locks for each row
+  execute function lock_audit_row('id', 'property_id', 'name', 'master_code', 'for_guests', 'active', 'shared', 'schedules_ok');
+drop trigger if exists lock_audit_settings on lock_settings;
+create trigger lock_audit_settings after insert or update on lock_settings for each row
+  when (new.key not like 'sync_%' and new.key not like '%_last_%')
+  execute function lock_audit_row('key', '', 'value');
+drop trigger if exists lock_audit_commands on lock_commands;
+create trigger lock_audit_commands after insert on lock_commands for each row
+  when (new.source <> 'system' and new.kind not in ('ping','refresh'))
+  execute function lock_audit_row('id', '', 'kind', 'lock_id', 'thermostat_id', 'args', 'source', 'created_by');
+drop trigger if exists lock_audit_access on property_access;
+create trigger lock_audit_access after insert or update on property_access for each row
+  execute function lock_audit_row('property_id', 'property_id', 'wifi_name', 'gate_code', 'garage_code');
+-- the office can read which Slack messages went out (CYA log)
+drop policy if exists lock_notify_read on lock_notify;
+create policy lock_notify_read on lock_notify for select to authenticated using (app_role() in ('admin','tech'));
