@@ -243,6 +243,8 @@ create table if not exists lock_staff_codes (
   person        text,                                     -- first + last name ("Shelby Huffaker")
   company       text,                                     -- vendor company ("ABC Hot Tubs")
   role          text,                                     -- trade / job ("Hot tubs", "Maintenance", "Owner")
+  removed_at    timestamptz,                              -- removed from the list (kept for history; code comes off every lock)
+  removed_by    text,
   active        boolean not null default true,
   added_by      text not null default actor(),
   created_at    timestamptz not null default now()
@@ -1842,3 +1844,14 @@ language sql stable security definer set search_path = public as $$
                     where b.active and b.claimed_at is not null and b.property_id <> p_property and b.public_ip = lock_caller_ip() limit 1))
   where lock_is_crew()
 $$;
+
+-- remove a person from Access codes (or bring them back). Their code comes off every lock; history stays.
+create or replace function lock_staff_remove(p_id bigint, p_remove boolean default true) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  update lock_staff_codes set removed_at = case when p_remove then now() end, removed_by = case when p_remove then actor() end,
+         active = not p_remove
+   where id = p_id;
+  perform lock_plan();
+end $$;
