@@ -1549,14 +1549,21 @@ async function accountView(){
     <div class="card"><div class="muted">Signed in as</div><div style="font-size:18px;font-weight:800">${esc((user||{}).email||"")}</div>
       <div class="muted">${esc((S.me||{}).name||"")} · ${esc((S.me||{}).role||"")}</div></div>
     <div class="card"><b>Change password</b>
-      <label class="field" style="margin-top:8px"><span>New password <span class="muted">(at least 10 characters)</span></span><input type="password" id="np1" autocomplete="new-password"></label>
+      <label class="field" style="margin-top:8px"><span>Current password <span class="muted">(leave blank only if you just signed in with an email link and never set one)</span></span><input type="password" id="np0" autocomplete="current-password"></label>
+      <label class="field"><span>New password <span class="muted">(at least 10 characters)</span></span><input type="password" id="np1" autocomplete="new-password"></label>
       <label class="field"><span>Type it again</span><input type="password" id="np2" autocomplete="new-password"></label>
       <button class="btn primary wide" id="npsave">Save new password</button><p id="npmsg" class="muted"></p></div>
     <div class="card"><b>Forgot your password?</b><div class="muted" style="margin:4px 0 8px">Sign out, type your email on the sign-in page and tap "Email me a link".</div>
       <button class="btn wide" id="signout">Sign out</button></div>`, "My account", "Password and sign-in");
-  $("#npsave").onclick = async () => { const a = $("#np1").value, b = $("#np2").value;
+  $("#npsave").onclick = async () => { const old = $("#np0").value, a = $("#np1").value, b = $("#np2").value;
     if(a.length < 10) return $("#npmsg").textContent = "Use at least 10 characters.";
     if(a !== b) return $("#npmsg").textContent = "The two passwords don't match.";
+    if(old){ const { error:e0 } = await sb.auth.signInWithPassword({ email:(user||{}).email, password:old });
+      if(e0) return $("#npmsg").textContent = "Your current password isn't right."; }
+    else { // no current password: only right after signing in with an email link (within 15 minutes)
+      let ok = false; try{ const tok = (await sb.auth.getSession()).data.session.access_token, pl = JSON.parse(atob(tok.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
+        ok = (pl.amr||[]).some(m => ["otp","magiclink","recovery"].includes(m.method) && Date.now()/1000 - m.timestamp < 900); }catch(e){}
+      if(!ok) return $("#npmsg").textContent = "Type your current password. Forgot it? Sign out and use \"Email me a link\", then come back here within 15 minutes."; }
     const { error } = await sb.auth.updateUser({ password: a });
     $("#npmsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Use the new password next time you sign in.";
     if(!error){ $("#np1").value = $("#np2").value = ""; } };
