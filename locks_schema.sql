@@ -73,10 +73,20 @@ create table if not exists lock_home_links (
 );
 
 -- system settings (deploy_locks.py writes hub_version / hub_zip_url so hubs update themselves)
+-- ---------------------------------------------------------------- who may see lock data: crew (admin/tech) who passed 2-step sign-in
+-- 2-step (authenticator app): once a person has set it up, their session must be aal2 to see anything.
+create or replace function lock_aal_ok() returns boolean language sql stable security definer set search_path = public, auth as $$
+  select coalesce(auth.jwt()->>'aal', 'aal1') = 'aal2'
+      or not exists (select 1 from auth.mfa_factors f where f.user_id = auth.uid() and f.status = 'verified')
+$$;
+create or replace function lock_is_crew() returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(app_role() in ('admin','tech'), false) and lock_aal_ok()
+$$;
+
 create table if not exists lock_settings (key text primary key, value text, updated_at timestamptz not null default now());
 alter table lock_settings enable row level security;
 drop policy if exists lock_settings_read on lock_settings;
-create policy lock_settings_read on lock_settings for select to authenticated using (app_role() in ('admin','tech'));
+create policy lock_settings_read on lock_settings for select to authenticated using (lock_is_crew());
 
 create or replace view lock_links_on with (security_invoker = true) as select parent_id, child_id from lock_home_links where active;
 
@@ -316,7 +326,7 @@ create table if not exists lock_places (
 );
 alter table lock_places enable row level security;
 drop policy if exists lock_places_read on lock_places;
-create policy lock_places_read on lock_places for select to authenticated using (app_role() in ('admin','tech'));
+create policy lock_places_read on lock_places for select to authenticated using (lock_is_crew());
 
 -- Brivo's master code report, waiting for each lock to be paired and named (then copied onto locks.master_code)
 create table if not exists lock_master_staging (unit text, door text, master_code text, at timestamptz default now(), primary key (unit, door));
@@ -386,7 +396,7 @@ do $$ declare t text; begin
   foreach t in array array['lock_homes','lock_home_links','lock_hubs','locks','thermostats','sensors','lock_stays','lock_staff_codes','lock_assign','lock_commands','lock_events','lock_alerts','lock_updates','lock_tvs'] loop
     execute format('alter table %1$s enable row level security', t);
     execute format('drop policy if exists %1$s_crew_read on %1$s', t);
-    execute format('create policy %1$s_crew_read on %1$s for select to authenticated using (app_role() in (''admin'',''tech''))', t);
+    execute format('create policy %1$s_crew_read on %1$s for select to authenticated using (lock_is_crew())', t);
   end loop;
 end $$;
 -- the hub secret hash is never readable from the browser
@@ -395,9 +405,6 @@ grant select (id, property_id, name, fingerprint, pair_code, public_ip, version,
   on lock_hubs to authenticated;
 
 -- ---------------------------------------------------------------- helpers
-create or replace function lock_is_crew() returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce(app_role() in ('admin','tech'), false)
-$$;
 
 create or replace function lock_caller_ip() returns text language sql stable as $$
   select nullif(trim(coalesce(
@@ -2025,7 +2032,7 @@ create table if not exists lock_spots (
 );
 alter table lock_spots enable row level security;
 drop policy if exists lock_spots_crew_read on lock_spots;
-create policy lock_spots_crew_read on lock_spots for select to authenticated using (app_role() in ('admin','tech'));
+create policy lock_spots_crew_read on lock_spots for select to authenticated using (lock_is_crew());
 
 create or replace function lock_spot_save(p_property text, p_kind text, r jsonb) returns void
 language plpgsql security definer set search_path = public as $$
@@ -2152,7 +2159,7 @@ create table if not exists lock_climate_log (
 create index if not exists lock_climate_log_prop on lock_climate_log (property_id, at desc);
 alter table lock_climate_log enable row level security;
 drop policy if exists lock_climate_log_read on lock_climate_log;
-create policy lock_climate_log_read on lock_climate_log for select to authenticated using (app_role() in ('admin','tech'));
+create policy lock_climate_log_read on lock_climate_log for select to authenticated using (lock_is_crew());
 
 create or replace function lock_thermo_log() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -2265,7 +2272,7 @@ create index if not exists lock_audit_prop on lock_audit (property_id, at desc);
 create index if not exists lock_audit_at on lock_audit (at desc);
 alter table lock_audit enable row level security;
 drop policy if exists lock_audit_read on lock_audit;
-create policy lock_audit_read on lock_audit for select to authenticated using (app_role() in ('admin','tech'));
+create policy lock_audit_read on lock_audit for select to authenticated using (lock_is_crew());
 drop trigger if exists lock_audit_nodelete on lock_audit;
 create trigger lock_audit_nodelete before delete on lock_audit for each row execute function forbid_delete();
 drop trigger if exists lock_audit_noupdate on lock_audit;
@@ -2325,7 +2332,7 @@ create trigger lock_audit_access after insert or update on property_access for e
   execute function lock_audit_row('property_id', 'property_id', 'wifi_name', 'gate_code', 'garage_code');
 -- the office can read which Slack messages went out (CYA log)
 drop policy if exists lock_notify_read on lock_notify;
-create policy lock_notify_read on lock_notify for select to authenticated using (app_role() in ('admin','tech'));
+create policy lock_notify_read on lock_notify for select to authenticated using (lock_is_crew());
 
 
 -- ---------------------------------------------------------------- door & window sensors (Aeotec Door Window Sensor 8 etc.)
