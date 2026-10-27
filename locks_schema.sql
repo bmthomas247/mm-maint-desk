@@ -675,10 +675,9 @@ begin
 end $$;
 
 -- r = {warm_to, warm_hours, vacant_heat, cool_to, too_cold, too_hot, heat_max, heat_min, cool_min, after_hours_from, after_hours_to, auto_lock_min}
-create or replace function lock_home_rules(p_property text, r jsonb) returns void
+create or replace function lock_apply_rules(p_property text, r jsonb) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not lock_is_crew() then raise exception 'Only crew'; end if;
   update lock_homes set
     warm_to = coalesce((r->>'warm_to')::int, warm_to), warm_hours = coalesce((r->>'warm_hours')::int, warm_hours),
     vacant_heat = coalesce((r->>'vacant_heat')::int, vacant_heat), cool_to = case when r ? 'cool_to' then (r->>'cool_to')::int else cool_to end, vacant_cool = case when r ? 'vacant_cool' then (r->>'vacant_cool')::int else vacant_cool end,
@@ -691,6 +690,18 @@ begin
     noise_limit = coalesce((r->>'noise_limit')::int, noise_limit), noise_minutes = coalesce((r->>'noise_minutes')::int, noise_minutes),
     quiet_from = coalesce((r->>'quiet_from')::time, quiet_from), quiet_to = coalesce((r->>'quiet_to')::time, quiet_to)
    where property_id = p_property;
+end $$;
+revoke all on function lock_apply_rules(text, jsonb) from public, anon, authenticated;
+
+-- one home's own rules (it stops following the company-wide rules for the fields you change)
+create or replace function lock_home_rules(p_property text, r jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  perform lock_apply_rules(p_property, r);
+  if (r - 'arrival_note' - 'guide_url') <> '{}'::jsonb then
+    update lock_homes set own_rules = true where property_id = p_property;
+  end if;
 end $$;
 
 
@@ -2023,3 +2034,90 @@ begin
   end if;
   raise exception 'bad step';
 end $$;
+
+
+-- ---------------------------------------------------------------- company-wide rules (office "Company-wide rules")
+-- Stored in lock_settings('company_rules') as JSON. Every home follows them unless it has its own rules (own_rules).
+alter table lock_homes add column if not exists own_rules boolean not null default false;
+
+create or replace function lock_company_rules_save(r jsonb, p_everyone boolean default false) returns int
+language plpgsql security definer set search_path = public as $$
+declare h record; n int := 0;
+begin
+  if app_role() <> 'admin' then raise exception 'Only admins can change company-wide rules'; end if;
+  insert into lock_settings (key, value, updated_at) values ('company_rules', r::text, now())
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  insert into lock_settings (key, value, updated_at) values ('company_rules_by', actor(), now())
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  for h in select property_id from lock_homes where section = 'ours' and (p_everyone or not own_rules) loop
+    perform lock_apply_rules(h.property_id, r);
+    n := n + 1;
+  end loop;
+  if p_everyone then update lock_homes set own_rules = false where section = 'ours'; end if;
+  return n;
+end $$;
+
+-- a home goes back to following the company-wide rules
+create or replace function lock_home_rules_reset(p_property text) returns void
+language plpgsql security definer set search_path = public as $$
+declare r jsonb;
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  select value::jsonb into r from lock_settings where key = 'company_rules';
+  update lock_homes set own_rules = false where property_id = p_property;
+  if r is not null then perform lock_apply_rules(p_property, r); end if;
+end $$;
+
+-- new homes start on the company-wide rules
+create or replace function lock_homes_company_rules() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare r jsonb;
+begin
+  select value::jsonb into r from lock_settings where key = 'company_rules';
+  if r is not null then perform lock_apply_rules(new.property_id, r); end if;
+  return new;
+end $$;
+drop trigger if exists lock_homes_company_rules on lock_homes;
+create trigger lock_homes_company_rules after insert on lock_homes for each row execute function lock_homes_company_rules();
+
+-- ---------------------------------------------------------------- heating & cooling history (office Reports)
+-- One row each time a thermostat's temperature (1°+), mode, setpoints or running state changes.
+create table if not exists lock_climate_log (
+  id            bigint generated always as identity primary key,
+  at            timestamptz not null default now(),
+  property_id   text,
+  thermostat_id uuid,
+  temp          numeric,
+  mode          text,
+  heat_sp       numeric,
+  cool_sp       numeric,
+  action        text,          -- heating / cooling / idle / fan (from the thermostat)
+  changed_by    text           -- what changed the setting: arrival / vacant / heat_test / manual / governor... or 'at the thermostat'
+);
+create index if not exists lock_climate_log_prop on lock_climate_log (property_id, at desc);
+alter table lock_climate_log enable row level security;
+drop policy if exists lock_climate_log_read on lock_climate_log;
+create policy lock_climate_log_read on lock_climate_log for select to authenticated using (app_role() in ('admin','tech'));
+
+create or replace function lock_thermo_log() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare who text;
+begin
+  if tg_op = 'UPDATE'
+     and new.mode is not distinct from old.mode and new.heat_sp is not distinct from old.heat_sp
+     and new.cool_sp is not distinct from old.cool_sp and new.action is not distinct from old.action
+     and (new.temp is null or old.temp is null or abs(new.temp - old.temp) < 1) then
+    return new;
+  end if;
+  if tg_op = 'INSERT' or new.mode is distinct from old.mode or new.heat_sp is distinct from old.heat_sp or new.cool_sp is distinct from old.cool_sp then
+    select coalesce(c.args->>'step', c.source) into who from lock_commands c
+     where c.thermostat_id = new.id and c.kind = 'climate' and c.created_at > now() - interval '10 minutes'
+     order by c.created_at desc limit 1;
+    who := coalesce(who, case when tg_op = 'INSERT' then 'first seen' else 'at the thermostat' end);
+  end if;
+  insert into lock_climate_log (property_id, thermostat_id, temp, mode, heat_sp, cool_sp, action, changed_by)
+  values (new.property_id, new.id, new.temp, new.mode, new.heat_sp, new.cool_sp, new.action, who);
+  return new;
+end $$;
+drop trigger if exists lock_thermo_log on thermostats;
+create trigger lock_thermo_log after insert or update on thermostats for each row execute function lock_thermo_log();
