@@ -123,6 +123,8 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;
 .how li{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.35}
 .how .key{flex:0 0 auto;min-width:44px;text-align:center;padding:6px 8px;border-radius:10px;background:var(--card,#fff);border:2px solid var(--line);font-weight:900;font-size:16px}
 .master{font-size:18px;margin-top:8px}
+@media print{ .tabs,header,nav,#rgo,#rcsv,#rprint,.chips{display:none!important} .card{box-shadow:none!important;border:1px solid #ccc} }
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;padding:16px;overflow:auto}
 .hoodpick{position:relative}.hoodpick input{width:100%;padding-right:48px!important}
 .hp-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:22px;padding:6px 10px;cursor:pointer;color:var(--ink,#222)}
 .hp-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;max-height:300px;overflow:auto;background:var(--card,#fff);border:2px solid var(--moose);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
@@ -254,6 +256,9 @@ function statusLights(o){
   if(!hub) L.push([o.net && o.net.new_hub_here ? "wait" : "off", "Hub", o.net && o.net.new_hub_here ? "found on this internet - add it in step 2" : "not added yet (plug it in: power + Ethernet cable to the router)"]);
   else { const m = age(hub.last_seen);
     L.push(m < 3 ? ["ok","Hub","online · checked in "+ago(hub.last_seen)] : m < 10 ? ["wait","Hub","checking in… last "+ago(hub.last_seen)] : ["bad","Hub","offline since "+ago(hub.last_seen)+" - check power and the router cable"]);
+    const nk = (hub.status||{}).net;
+    if(m < 10 && nk) L.push(nk==="ethernet" ? ["ok","Hub internet","Ethernet cable ✓"] : ["wait","Hub internet","on Wi-Fi - plug in the Ethernet cable to the router (more reliable)"]);
+
     const st = hub.status || {};
     L.push(st.zwave==="ok" && m < 10 ? ["ok","Z-Wave stick","working"+(st.zwave_fw?" · firmware "+st.zwave_fw:"")] : m < 10 ? ["bad","Z-Wave stick","not answering - check it's plugged into the extension cable"] : ["off","Z-Wave stick","waiting for the hub"]); }
   const grp = (list, name, none, ok) => { if(!list.length){ L.push(["off", name, none]); return; }
@@ -394,7 +399,7 @@ function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("locks_"
 async function homesView(){
   await loadBase();
   const [hubs, locks, thermos, alerts, assigns] = await Promise.all([
-    q("lock_hubs","id,property_id,last_seen,active,claimed_at",x=>x.eq("active",true)),
+    q("lock_hubs","id,property_id,last_seen,active,claimed_at,status",x=>x.eq("active",true)),
     q("locks","id,hub_id,property_id,name,battery,online,state,active,rssi,slots,slots_used",x=>x.eq("active",true)),
     q("thermostats","id,hub_id,property_id,name,temp,mode,heat_sp,cool_sp,online,active,last_seen,rssi,battery",x=>x.eq("active",true)),
     q("lock_alerts","kind,property_id,detail",x=>x.is("closed_at",null)),
@@ -423,7 +428,7 @@ async function homesView(){
     const steps = installProgress(h);
     const cls = h.section!=="ours" ? "" : !hub ? "todo" : (!online(hub) || as.length) ? "bad" : "ok";
     const status = h.section!=="ours" ? `<span class="pill grey">${h.section==="lynx"?"Lynx":"Brivo"}</span>`
-      : !hub ? `<span class="pill amber">Not installed</span>` : online(hub) ? `<span class="pill green">Online</span>` : `<span class="pill red">Hub offline</span>`;
+      : !hub ? `<span class="pill amber">Not installed</span>` : online(hub) ? `<span class="pill green">Online</span>${netPill(hub)}` : `<span class="pill red">Hub offline</span>`;
     const temps = ts.filter(t=>t.temp!=null);
     const tOn = ts.filter(t=>t.online!==false && hub && online(hub)).length;
     return `<a class="card home ${cls}" href="#/home/${encodeURIComponent(h.property_id)}">
@@ -521,12 +526,16 @@ function wireHeal(hub){
 }
 function healCard(hub){ return `<div class="card" style="margin-top:10px;background:var(--ground)"><div class="row"><div class="grow"><b>📶 Rebuild routes</b><div class="muted" style="font-size:13px">Tap once after the last device is paired, or after adding a repeater. Takes a few minutes - doors keep working.</div></div>
         <button class="btn primary" data-heal ${hub&&online(hub)?"":"disabled"}>Rebuild</button></div><div data-healmsg></div></div>`; }
+/* how the hub reaches the internet (hub 1.5.2+) */
+function netPill(hub){ const n = ((hub||{}).status||{}).net;
+  return n==="ethernet" ? ' <span class="pill grey plain" title="Hub is plugged into the router with a cable">🔌 Ethernet</span>'
+    : n==="wifi" ? ' <span class="pill amber" title="Hub is on Wi-Fi - plug in the Ethernet cable for the most reliable connection">📶 Wi-Fi</span>' : ""; }
 function toolsCard(hub, devices){
   if(!hub) return "";
   const st = hub.status || {};
   return `<details class="card" id="tools"><summary>Installer tools</summary>
     <div class="grid2" style="font-size:13.5px">
-      <div><span class="muted">Hub</span><br><b>${online(hub)?"Online":"Offline"}</b> · ${ago(hub.last_seen)}</div>
+      <div><span class="muted">Hub</span><br><b>${online(hub)?"Online":"Offline"}</b> · ${ago(hub.last_seen)}${netPill(hub)}</div>
       <div><span class="muted">Software</span><br><b>${esc(st.version||"?")}</b> · HA ${esc(st.ha||"?")}</div>
       <div><span class="muted">Z-Wave stick</span><br><b>${esc(st.zwave_fw||"?")}</b> (SDK ${esc(st.zwave_sdk||"?")})</div>
       <div><span class="muted">Up for</span><br><b>${st.uptime_min!=null?(st.uptime_min>1440?Math.round(st.uptime_min/1440)+" d":st.uptime_min>60?Math.round(st.uptime_min/60)+" h":st.uptime_min+" min"):"?"}</b> · ${st.nodes??"?"} devices</div>
@@ -867,7 +876,7 @@ async function installHome(pid){
         ${keyHow([["🔋","Put the batteries in. The screen lights up and the lock asks you to register a master code."],["⚙","Press the gear key (⚙). On some keypads it's #."],[esc(homeMaster),"Type the master code above."],["⚙","Press the gear key again to save it."]],
           'Lock already has a different master code? Type the old one, ⚙, <b>1</b> (= "Master PIN code setting"), ⚙, then follow the voice to enter the new one.')}</details>` : ""}
       ${newMasterBtn}${mark(STEPS[0])}`,
-    hub: (hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span> <span class="muted">checked in ${ago(hub.last_seen)}</span>`
+    hub: (hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span>${netPill(hub)} <span class="muted">checked in ${ago(hub.last_seen)}</span>`
       : `<div class="muted">Put the hub in the owner closet or utility room by the router. Ethernet cable from the router, stick on the extension cable placed up high, then power. It takes about 5 minutes to warm up.</div>
          <div class="card" style="margin-top:8px;border-color:var(--amber)"><b>⏳ Hub warming up? Do these meanwhile:</b>
            <ul style="margin:6px 0 0 18px;padding:0">${isNewHome
@@ -987,7 +996,7 @@ async function installHome(pid){
       <details style="margin-top:8px"><summary><b>👀 What each thing looks like</b></summary><p class="muted" style="margin:4px 0 8px">Simple drawings - the real thing may look a little different.</p>
         <div class="pics">${Object.values(PICS).map(v=>`<div class="pic">${v.svg}<b>${esc(v.t)}</b><span>${esc(v.d)}</span></div>`).join("")}</div></details>
       <a class="btn small" href="install-guide.html" target="_blank" style="margin-top:8px">Full guide / print</a></details>
-    ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI, go:{"Your phone":"hub","Hub":"hub","Z-Wave stick":"hub","Doors":"locks","Thermostats":"thermo","Leak / door sensors":"thermo","Noise sensor (Wi-Fi)":"noise","TVs (Wi-Fi)":"tv"}})}
+    ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI, go:{"Your phone":"hub","Hub":"hub","Hub internet":"hub","Z-Wave stick":"hub","Doors":"locks","Thermostats":"thermo","Leak / door sensors":"thermo","Noise sensor (Wi-Fi)":"noise","TVs (Wi-Fi)":"tv"}})}
     <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(dc(p.code))}</div><div class="muted">${esc(p.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill amber">${total}/${STEPS.length}</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*total/STEPS.length)}%"></i></div></div>
@@ -1175,7 +1184,7 @@ async function homeView(pid){
       const state = as2.length && as2.every(a=>a.state==="verified") ? "on" : as2.length ? "sending" : null;
       return `<div data-res="${esc(s.res_id)}"><div class="grow"><b><a href="${resLink(s)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.guest||"Guest")}</a></b> <span class="muted">${esc(s.kind)}</span><div class="muted">${when(s.starts_at)} → ${when(s.ends_at)}</div>${s.out_at?`<div style="font-weight:700;color:var(--moose-ink);font-size:13px">✓ Left ${when(s.out_at)} - ${esc(s.out_how||"")}</div>`:""}</div>
         <div style="text-align:right;display:grid;gap:6px;justify-items:end">${stayCode(s)}${stayPill(s, state, h)}
-        <div>${folioLink(s)}${DESK?' <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button>':""}</div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
+        <div>${folioLink(s)}${DESK?' <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button> <button class="btn small" data-act="backup">🆘 Backup</button>':""}</div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
   const bar = await syncBar();
@@ -1283,15 +1292,30 @@ async function homeView(pid){
     if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
       try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
     if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
-      try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); homeView(pid); }catch(e){ fail(e); } } });
+      try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); homeView(pid); }catch(e){ fail(e); } }
+    if(b.dataset.act==="backup") showBackup(s); });
 }
+
+/* backup (emergency) code: already on the guest doors for this stay's dates - give it when the lock/hub is offline */
+async function showBackup(s){
+  if(!confirm("Show the BACKUP code for "+(s.guest||"this guest")+"?\n\nUse it only when their normal code isn't working (lock or hub offline). This is logged.")) return;
+  try{ const r = await rpc("lock_backup_give",{p_res:s.res_id}); const d = document.createElement("div"); d.className = "modal";
+    const ok = (r.doors||[]).filter(x=>x.on).length, n = (r.doors||[]).length;
+    d.innerHTML = `<div class="card" style="max-width:440px;margin:12vh auto;padding:20px"><b>🆘 Backup code - ${esc(s.guest||"Guest")}</b>
+      <div style="font-size:40px;font-weight:900;letter-spacing:6px;margin:10px 0">${esc(r.code)}</div>
+      <div class="muted">Works ${esc(when(r.starts_at))} → ${esc(when(r.ends_at))} only - the lock enforces the dates itself, even offline.</div>
+      <div style="margin-top:8px">${(r.doors||[]).map(x=>`<span class="pill ${x.on?"green":"amber"}" style="margin:2px">${esc(x.door)}: ${x.on?"on the lock ✓":"not loaded yet"}</span>`).join("") || '<span class="muted">No guest doors yet.</span>'}</div>
+      ${n && ok<n?'<div class="muted" style="margin-top:6px;color:var(--red)">Not on every door yet - it loads while the lock is online (up to 60 days before check-in).</div>':""}
+      <button class="btn primary wide" style="margin-top:12px" data-close>Close</button></div>`;
+    document.body.appendChild(d); d.onclick = e => { if(e.target===d || e.target.closest("[data-close]")) d.remove(); };
+  }catch(e){ fail(e); } }
 
 /* ------------------------------------------------ desk: every upcoming stay at our homes, with codes */
 async function staysView(){
   if(!S.homes.length) await loadBase();
   const oursH = S.homes.filter(h=>h.section==="ours"), ours = oursH.map(h=>h.property_id);
   const [all, assigns] = await Promise.all([
-    q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,portal_token,out_at",x=>x.in("property_id",ours).gte("ends_at",new Date(Date.now()-120*864e5).toISOString()).neq("status","cancelled").order("starts_at").limit(3000)),
+    q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,portal_token,out_at,backup_given_at,backup_used_at",x=>x.in("property_id",ours).gte("ends_at",new Date(Date.now()-120*864e5).toISOString()).neq("status","cancelled").order("starts_at").limit(3000)),
     q("lock_assign","lock_id,ref_kind,ref_id,state,wanted",x=>x.eq("ref_kind","stay").neq("state","cleared"))]);
   const cleared = s => s.kind!=="guest" || ["received","not-needed"].includes(s.agreement);
   const onLock = s => { const a = assigns.filter(x=>x.ref_id===s.res_id && x.wanted); return !a.length ? null : a.every(x=>x.state==="verified") ? "on" : "sending"; };
@@ -1331,13 +1355,14 @@ async function staysView(){
       <td>${cleared(s)?'<span class="pill green">OK</span>':`<span class="pill red">${esc(s.agreement||"not sent")}</span>`}</td>
       <td><span class="code-chip">${esc(s.code)}</span><div class="muted" style="font-size:12px">${s.code_source==="phone"?"last 4 of phone":esc(s.code_source)}</div></td>
       <td>${past?'<span class="pill grey">over</span>':stayPill(s, ol, S.homes.find(x=>x.property_id===s.property_id))}</td>
-      <td style="white-space:nowrap;text-align:right">${folioLink(s)}${past?"":` <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button>`}</td></tr>`; }).join("")
+      <td style="white-space:nowrap;text-align:right">${folioLink(s)}${past?"":` <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button> <button class="btn small" data-act="backup" title="Emergency code already on the lock for this stay's dates">🆘 Backup${s.backup_used_at?" (used)":s.backup_given_at?" (given)":""}</button>`}</td></tr>`; }).join("")
       || `<tr><td colspan="8" class="muted">${t||hd||hm?"No stays match.":"No upcoming stays from Track."}</td></tr>`}</table>`;
     $$("#stable [data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = all.find(x=>x.res_id===row.dataset.res);
       if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
         try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
       if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
-        try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); staysView(); }catch(e){ fail(e); } } });
+        try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); staysView(); }catch(e){ fail(e); } }
+      if(b.dataset.act==="backup") showBackup(s); });
   };
   const ph = pref("shood"); if(ph && hoods.includes(ph)) $("#shood").value = ph;
   homeOpts(); const pm = pref("shome"); if(pm && [...$("#shome").options].some(o=>o.value===pm)) $("#shome").value = pm;
@@ -1521,15 +1546,17 @@ async function reportsView(){
   const d0 = new Date(Date.now()-7*864e5).toISOString().slice(0,10), d1 = new Date().toISOString().slice(0,10);
   const tab = pref("rtab") || "entries";
   shell("reports", `<h2>Reports</h2>
-    <div class="chips" style="margin-bottom:10px"><span class="chip ${tab==="entries"?"on":""}" data-rtab="entries">🚪 Entries &amp; exits</span><span class="chip ${tab==="climate"?"on":""}" data-rtab="climate">🌡️ Heating &amp; cooling</span></div>
+    <div class="chips" style="margin-bottom:10px"><span class="chip ${tab==="entries"?"on":""}" data-rtab="entries">🚪 Entries &amp; exits</span><span class="chip ${tab==="climate"?"on":""}" data-rtab="climate">🌡️ Heating &amp; cooling</span><span class="chip ${tab==="cya"?"on":""}" data-rtab="cya">🛡️ CYA log</span></div>
+    ${tab==="cya"?'<p class="muted" style="margin:-4px 0 8px">Everything that happened, in order: doors, codes (made, confirmed on the lock, changed), guest opened their link, backup codes given, office changes and who made them, alerts, Slack messages, heat/AC changes. Nothing here can be edited or deleted. Type a guest name or reservation # in Who for a full stay report.</p>':""}
     <div class="card row" style="gap:12px;flex-wrap:wrap">
       <label class="field" style="margin:0;min-width:150px"><span>From</span><input type="date" id="rf" value="${d0}"></label>
       <label class="field" style="margin:0;min-width:150px"><span>To</span><input type="date" id="rt" value="${d1}"></label>
       <label class="field" style="margin:0;flex:1;min-width:170px"><span>Neighborhood</span><select id="rh"><option value="">All neighborhoods</option>${hoods.map(a=>`<option value="${esc(a)}">${esc(hoodName(a))}</option>`).join("")}</select></label>
       <label class="field" style="margin:0;flex:1;min-width:150px"><span>Home</span><select id="rp"></select></label>
+      ${tab==="cya"?`<label class="field" style="margin:0;flex:2;min-width:200px"><span>Who / reservation</span><input id="rw" placeholder="Example: Pat Smith or 320982"></label>`:""}
       ${tab==="entries"?`<label class="field" style="margin:0;flex:1;min-width:150px"><span>Show</span><select id="rk"><option value="io">Entries &amp; exits</option><option value="all">Every door event</option></select></label>
         <label class="field" style="margin:0;flex:2;min-width:180px"><span>Who</span><input id="rw" placeholder="Example: Shelby, ABC Hot Tubs, guest name"></label>`:""}
-      <button class="btn primary" id="rgo" style="align-self:flex-end">Show</button><button class="btn" id="rcsv" style="align-self:flex-end">⬇ CSV</button></div>
+      <button class="btn primary" id="rgo" style="align-self:flex-end">Show</button><button class="btn" id="rcsv" style="align-self:flex-end">⬇ CSV</button>${tab==="cya"?'<button class="btn" id="rprint" style="align-self:flex-end">🖨 Print</button>':""}</div>
     <div id="rout"><p class="muted">Loading…</p></div>`, "Reports", "Entries, exits, heating & cooling");
   const fillHomes = () => { const hd = $("#rh").value, cur = $("#rp").value;
     $("#rp").innerHTML = `<option value="">All homes</option>` + oursH.filter(h=>!hd || hoodOf(h)===hd).sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code),undefined,{numeric:true}))
@@ -1542,6 +1569,7 @@ async function reportsView(){
   let csv = [];
   const run = async () => { const [a,b] = range(), ids = pids(); $("#rout").innerHTML = '<p class="muted">Loading…</p>';
     if(!ids.length) return $("#rout").innerHTML = '<p class="muted">No homes.</p>';
+    if(tab==="cya") return cya(a, b, ids);
     if(tab==="entries"){
       const kinds = $("#rk").value==="io" ? ["unlock_code","unlock_phone","unlock_remote","lock_keypad","guest_arrived","guest_out"] : Object.keys(ENTRY_KINDS);
       const [ev, lk] = await Promise.all([q("lock_events","at,property_id,lock_id,kind,who,who_kind",x=>x.in("property_id",ids).in("kind",kinds).gte("at",a).lte("at",b).order("at",{ascending:false}).limit(3000)),
@@ -1577,10 +1605,70 @@ async function reportsView(){
         ${changes.slice(0,500).map(r=>`<tr><td>${esc(when(r.at))}</td><td>${esc(code(r.property_id))}</td><td>${esc(tname(r.thermostat_id))}</td><td>${esc(r.mode||"")}</td><td>${r.heat_sp!=null?Math.round(r.heat_sp)+"°":""}</td><td>${r.cool_sp!=null?Math.round(r.cool_sp)+"°":""}</td><td>${r.temp!=null?Math.round(r.temp)+"°":""}</td><td>${esc(CLIMATE_BY(r.changed_by))}</td></tr>`).join("")
           || '<tr><td colspan="8" class="muted">No changes in this range.</td></tr>'}</table></div>`;
     } };
+  const cya = async (a, b, ids) => {
+    const t = ($("#rw").value||"").trim(), tl = t.toLowerCase(), all = !$("#rp").value && !$("#rh").value;
+    // a stay report when Who matches a reservation
+    let stay = null;
+    if(t){ const ss = await q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,backup_code,backup_given_at,backup_given_by,backup_used_at,out_at,out_how,created_at",
+        x=>x.in("property_id",ids).or(`res_id.eq.${t.replace(/[^\w-]/g,"")},guest.ilike.*${t.replace(/[,()*]/g,"")}*`).order("starts_at",{ascending:false}).limit(1)).catch(()=>[]); stay = ss[0]||null; }
+    const A = stay ? new Date(new Date(stay.created_at).getTime()-864e5).toISOString() : a, B = stay ? new Date(new Date(stay.ends_at).getTime()+2*864e5).toISOString() : b;
+    const pidList = stay ? [stay.property_id] : ids;
+    const [ev, au, al, cl, nt, lk, as] = await Promise.all([
+      q("lock_events","at,property_id,lock_id,kind,who,who_kind,who_id,slot,detail",x=>x.in("property_id",pidList).gte("at",A).lte("at",B).order("at").limit(5000)).catch(()=>[]),
+      q("lock_audit","at,property_id,tbl,op,ref,who,changes",x=>(all&&!stay ? x : x.in("property_id",pidList)).gte("at",A).lte("at",B).order("at").limit(5000)).catch(()=>[]),
+      q("lock_alerts","kind,property_id,lock_id,opened_at,closed_at,detail,bw_task",x=>x.in("property_id",pidList).lte("opened_at",B).or(`closed_at.is.null,closed_at.gte.${A}`).limit(2000)).catch(()=>[]),
+      q("lock_climate_log","at,property_id,temp,mode,heat_sp,cool_sp,action,changed_by",x=>x.in("property_id",pidList).gte("at",A).lte("at",B).not("changed_by","is",null).order("at").limit(3000)).catch(()=>[]),
+      q("lock_notify","at,property_id,channel,text,sent_at,err",x=>x.in("property_id",pidList).gte("at",A).lte("at",B).limit(2000)).catch(()=>[]),
+      q("locks","id,name,property_id",x=>x.in("property_id",pidList)).catch(()=>[]),
+      stay ? q("lock_assign","lock_id,ref_kind,ref_id,slot,code,state,created_at,set_at,verified_at,cleared_at",x=>x.eq("ref_id",stay.res_id).in("ref_kind",["stay","backup"])).catch(()=>[]) : Promise.resolve([])]);
+    const door = id => ((lk.find(l=>l.id===id)||{}).name)||"", R = [];
+    const add = (at, pid, cat, what, who) => { if(at) R.push({at, pid, cat, what, who: who||""}); };
+    const words = e => ({unlock_code:"Opened with a code", unlock_phone:"Opened with the guest's phone key", unlock_remote:"Unlocked from the app", unlock_manual:"Unlocked from inside",
+      lock_keypad:"Locked from outside (left)", lock_manual:"Locked from inside", lock_remote:"Locked from the app", lock_auto:"Auto-locked", jammed:"Lock JAMMED",
+      code_set:"Code put on the lock", code_cleared:"Code taken off the lock", code_failed:"Code FAILED to go on the lock", guest_arrived:"Guest arrived (first use of their code)",
+      guest_out:"Guest left / ready to clean", guest_opened_link:"Guest opened their link", backup_given:"BACKUP code shown to the office", hub_online:"Hub back online", hub_offline:"Hub OFFLINE",
+      remote_unlock_sent:"Remote unlock sent", remote_lock_sent:"Remote lock sent", master_made:"Master code made", keybox_spot:"Key box recorded", heat_test_pass:"Heat test passed", heat_test_fail:"Heat test FAILED"}[e.kind] || e.kind.replace(/_/g," "));
+    ev.forEach(e => { if(tl && !stay && !String(e.who||"").toLowerCase().includes(tl)) return;
+      if(stay && e.who_id && e.who_id!==stay.res_id && /guest|stay|backup/.test(e.who_kind||"")) return;
+      const extra = e.kind==="guest_opened_link" ? ((e.detail||{}).code_shown ? " - code was showing" : " - code NOT showing yet"+((e.detail||{}).held_for?" (waiting on the agreement)":"")) : e.kind==="backup_given" ? " by "+((e.detail||{}).by||"") : "";
+      add(e.at, e.property_id, /code_|backup/.test(e.kind) ? "Codes" : /guest_/.test(e.kind) ? "Guest" : /hub_/.test(e.kind) ? "System" : "Door", words(e)+(e.lock_id?" - "+door(e.lock_id):"")+extra, e.who); });
+    const lbl = {lock_stays:"Stay", lock_staff_codes:"Access code", lock_homes:"Home settings", locks:"Lock", lock_settings:"Company setting", lock_commands:"Command", property_access:"Guest info"};
+    au.forEach(x => { if(stay && x.tbl!=="lock_stays" && x.tbl!=="lock_homes" && x.tbl!=="locks") return; if(stay && x.tbl==="lock_stays" && x.ref!==stay.res_id) return;
+      if(tl && !stay && !(String(x.who).toLowerCase().includes(tl) || JSON.stringify(x.changes).toLowerCase().includes(tl))) return;
+      const ch = Object.entries(x.changes||{}).map(([k,[o,n]]) => x.op==="insert" ? `${k}: ${n==null?"-":typeof n==="object"?JSON.stringify(n):n}` : `${k}: ${o==null?"-":typeof o==="object"?JSON.stringify(o):o} → ${n==null?"-":typeof n==="object"?JSON.stringify(n):n}`).join("; ");
+      add(x.at, x.property_id, "Office / system change", `${lbl[x.tbl]||x.tbl} ${x.op==="insert"?"created":"changed"} (${x.ref}) - ${ch}`, x.who); });
+    al.forEach(x => { add(x.opened_at, x.property_id, "Alert", "Alert opened: "+(x.detail||x.kind)+(x.bw_task?" (Breezeway task made)":""), "system");
+      if(x.closed_at) add(x.closed_at, x.property_id, "Alert", "Alert closed: "+(x.detail||x.kind), "system"); });
+    cl.forEach(x => add(x.at, x.property_id, "Heat / AC", `Thermostat set: ${x.mode||""} heat ${x.heat_sp??"-"}° / AC ${x.cool_sp??"-"}° (temp then ${x.temp!=null?Math.round(x.temp)+"°":"?"})`, CLIMATE_BY(x.changed_by)));
+    nt.forEach(x => add(x.sent_at||x.at, x.property_id, "Slack", `${x.sent_at?"Sent":"NOT sent"} to #${x.channel}: ${x.text}${x.err?" ("+x.err+")":""}`, "system"));
+    as.forEach(x => { add(x.verified_at, stay.property_id, "Codes", `${x.ref_kind==="backup"?"Backup":"Guest"} code ${x.code} CONFIRMED on ${door(x.lock_id)} (slot ${x.slot})`, "lock");
+      if(x.cleared_at) add(x.cleared_at, stay.property_id, "Codes", `${x.ref_kind==="backup"?"Backup":"Guest"} code taken off ${door(x.lock_id)}`, "lock"); });
+    R.sort((x,y)=>new Date(x.at)-new Date(y.at));
+    csv = [["When","Home","Type","What happened","Who"], ...R.map(r=>[new Date(r.at).toLocaleString(), code(r.pid), r.cat, r.what, r.who])];
+    let head = "";
+    if(stay){ const vs = as.filter(x=>x.ref_kind==="stay" && x.verified_at).map(x=>new Date(x.verified_at)), first = vs.length ? new Date(Math.min(...vs)) : null;
+      const opened = ev.find(e=>e.kind==="guest_opened_link" && e.who_id===stay.res_id), inn = ev.find(e=>(e.kind==="guest_arrived") && e.who_id===stay.res_id);
+      const temps = (await q("lock_climate_log","temp",x=>x.eq("property_id",stay.property_id).gte("at",stay.starts_at).lte("at",stay.ends_at).limit(5000)).catch(()=>[])).map(r=>+r.temp).filter(x=>!isNaN(x));
+      const line = (k,v,bad) => `<div class="row" style="padding:4px 0;border-top:1px solid var(--line)"><span class="grow muted">${k}</span><b style="${bad?"color:var(--red)":""}">${v}</b></div>`;
+      head = `<div class="card"><b style="font-size:17px">Stay report - ${esc(stay.guest||"Guest")} · ${esc(code(stay.property_id))} · #${esc(stay.res_id)}</b>
+        ${line("Stay", esc(when(stay.starts_at))+" → "+esc(when(stay.ends_at))+" ("+esc(stay.status)+")")}
+        ${line("Guest code", esc(stay.code)+" ("+esc(stay.code_source)+")")}
+        ${line("Rental agreement", esc(stay.agreement||"not sent"), !["received","not-needed"].includes(stay.agreement) && stay.kind==="guest")}
+        ${line("Code confirmed on the lock", first ? esc(when(first))+(first < new Date(stay.starts_at) ? " ✓ before check-in" : " - AFTER check-in") : "never confirmed", !first || first >= new Date(stay.starts_at))}
+        ${line("Backup code", stay.backup_code ? esc(stay.backup_code)+(as.some(x=>x.ref_kind==="backup"&&x.verified_at)?" (on the lock)":"")+(stay.backup_given_at?" · shown to "+esc(stay.backup_given_by||"office")+" "+esc(when(stay.backup_given_at)):"")+(stay.backup_used_at?" · USED "+esc(when(stay.backup_used_at)):"") : "-")}
+        ${line("Guest opened their link", opened ? esc(when(opened.at)) : "not seen")}
+        ${line("First entry", inn ? esc(when(inn.at)) : "no code entry recorded")}
+        ${line("Left", stay.out_at ? esc(when(stay.out_at))+" ("+esc(stay.out_how||"")+")" : "-")}
+        ${line("Inside temperature during the stay", temps.length ? Math.round(Math.min(...temps))+"° - "+Math.round(Math.max(...temps))+"°" : "no readings")}</div>`; }
+    $("#rout").innerHTML = head + `<div class="card" style="overflow-x:auto"><table class="tbl"><tr><th>When</th><th>Home</th><th>Type</th><th>What happened</th><th>Who</th></tr>
+      ${R.slice(-2000).reverse().map(r=>`<tr><td style="white-space:nowrap">${esc(when(r.at))}</td><td>${esc(code(r.pid))}</td><td>${esc(r.cat)}</td><td>${esc(r.what)}</td><td>${esc(r.who)}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">Nothing in this range.</td></tr>'}</table>
+      ${R.length>2000?'<p class="muted">Showing the latest 2,000 - use CSV for all.</p>':""}</div>`;
+  };
   $("#rgo").onclick = run; $("#rp").onchange = run; $("#rf").onchange = run; $("#rt").onchange = run;
   if($("#rk")) $("#rk").onchange = run;
   if($("#rw")){ let tm; $("#rw").oninput = () => { clearTimeout(tm); tm = setTimeout(run, 300); }; }
-  $("#rcsv").onclick = () => { if(!csv.length) return toast("Press Show first"); csvDownload(`moose-${tab==="entries"?"entries":"heating-cooling"}-${$("#rf").value}-to-${$("#rt").value}.csv`, csv); };
+  if($("#rprint")) $("#rprint").onclick = () => window.print();
+  $("#rcsv").onclick = () => { if(!csv.length) return toast("Press Show first"); csvDownload(`moose-${tab==="entries"?"entries":tab==="cya"?"cya-log":"heating-cooling"}-${$("#rf").value}-to-${$("#rt").value}.csv`, csv); };
   run();
 }
 async function scoreView(){
