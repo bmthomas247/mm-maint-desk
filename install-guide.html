@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Guide</title><link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#3c5f12;--forest-2:#5b8a1e;--moose:#88B535;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--muted:#5d6a62;--line:#dfe6db;--red:#c8382b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--muted:#8a998f;--line:#223028}}
+*{box-sizing:border-box} body{margin:0;font-family:Manrope,system-ui,sans-serif;background:var(--ground);color:var(--ink);line-height:1.45}
+header{background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;padding:14px 16px}
+header .bar{max-width:820px;margin:0 auto;display:flex;align-items:center;gap:12px}
+header img{width:46px;height:46px;border-radius:50%;background:#fff} header h1{margin:0;font-size:20px} header .s{opacity:.8;font-size:13px;font-weight:700}
+main{max-width:820px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:12px;break-inside:avoid}
+h2{font-size:17px;margin:0 0 8px;display:flex;gap:10px;align-items:center} h2 .ic{font-size:22px}
+ul{margin:0;padding-left:20px} li{margin:5px 0}
+.dist{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:10px}
+.dist div{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center} .dist b{display:block;font-size:20px;color:var(--forest-2)}
+.dist span{font-size:13px;color:var(--muted)}
+.bars{display:inline-flex;gap:2px;align-items:flex-end;vertical-align:middle;margin-right:4px} .bars i{width:4px;border-radius:1px;background:#3fb24a}
+.warn{border-color:var(--red)} .warn h2{color:var(--red)}
+.muted{color:var(--muted);font-size:13.5px}
+.printbtn{font:inherit;font-weight:800;background:var(--moose);color:#16220a;border:0;border-radius:12px;padding:10px 16px;cursor:pointer}
+@media print{header{background:none;color:#000;border-bottom:2px solid #000} .printbtn,.noprint{display:none} body{background:#fff} .card{border-color:#999}}
+</style></head>
+<body>
+<header><div class="bar"><img src="moose-logo.png" alt="Moose Management"><div><h1>Moose Locks · Install guide</h1><div class="s">Read before every install · where things go and how far apart</div></div></div></header>
+<main>
+  <p class="noprint"><button class="printbtn" onclick="print()">Print this sheet</button> <a href="locks.html#/install" style="margin-left:10px">Back to Install</a></p>
+
+  <div class="card">
+    <h2><span class="ic">📏</span>Distances at a glance</h2>
+    <div class="dist">
+      <div><b>3 ft+</b><span>Z-Wave stick away from the hub and the router (use the USB extension cable)</span></div>
+      <div><b>≤ 2 walls</b><span>between the stick and each door lock - or 1 floor. More than that: add a repeater</span></div>
+      <div><b>3–4 bars</b><span>signal every lock needs on the Install page (−75 dBm or better)</span></div>
+      <div><b>6 ft+</b><span>noise sensor away from TVs, speakers and the fridge / dishwasher</span></div>
+    </div>
+    <p class="muted" style="margin:10px 0 0">Walls and floors matter more than feet. Brick, stone, concrete, mirrors, metal doors and appliances block the signal the most. The Install page's signal bars are the real test - always check them.</p>
+  </div>
+
+  <div class="card">
+    <h2><span class="ic">📦</span>1 · Hub (gateway) - Home Assistant Green</h2>
+    <ul>
+      <li>Next to the router: power + the Ethernet cable into the router. The hub never uses Wi-Fi.</li>
+      <li>Owner closet / utility room, as central in the home as the router allows. On a shelf, not the floor. Not inside a metal cabinet or behind the water heater / furnace.</li>
+      <li>Wait for the <b>Hub</b> light on the Install page to go green before pairing anything.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="ic">📡</span>2 · Z-Wave stick (the antenna)</h2>
+    <ul>
+      <li>Always on the USB extension cable - never plugged straight into the hub (it picks up interference).</li>
+      <li>At least 3 ft from the hub and router, standing up, as high and central as the cable reaches. Tape or clip it in place.</li>
+      <li><b>Put it in its final spot before pairing, then don't move it.</b> Moving it later breaks the routes to the doors.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="ic">🔒</span>3 · Door locks</h2>
+    <ul>
+      <li>Pair the <b>closest door first</b>, then work outward.</li>
+      <li>Pair at the door with the lock in its final place (door closed when you test).</li>
+      <li>Each lock needs <span class="bars"><i style="height:7px"></i><i style="height:10px"></i><i style="height:13px"></i><i style="height:16px;background:#cfd8cb"></i></span><b>3 bars or more</b> and few dropped messages on the Install page. Press <b>Ping</b> - it should answer in under a second.</li>
+      <li>1–2 bars, a garage / basement door, or more than 2 walls or 1 floor away: plug a <b>Z-Wave plug-in repeater</b> into an outlet about halfway between the stick and the door, then press <b>Rebuild routes</b> once.</li>
+      <li>Battery devices (locks, battery sensors) don't pass the signal on. Plugged-in / wired devices do - that's what a repeater is.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="ic">🌡️</span>4 · Thermostats</h2>
+    <p style="margin:0 0 8px;padding:10px 12px;border-radius:12px;background:#fbe7e4;color:#8a1f15;font-weight:800">⚡ Changing out a thermostat? Turn OFF the power to the HVAC system first - the furnace / air-handler switch or its breaker. Check the old thermostat's screen is dead before touching any wires. Take a photo of the wiring before you disconnect it.</p>
+    <ul>
+      <li>Stay where they are on the wall - don't move them for signal.</li>
+      <li>Wired (C-wire) Z-Wave thermostats also act as repeaters, so pair them <b>before</b> the farthest doors - they can help a weak lock.</li>
+      <li>Same 3-bars rule. Leak sensors: under the water heater / sinks; they're battery, so same rule.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="ic">🔊</span>5 · Noise sensor (Atom Echo)</h2>
+    <ul>
+      <li>Set it up at the office first on the noise sensor setup page with this home's Wi-Fi.</li>
+      <li>Main living area, plugged into a USB-C charger, about chest height (a shelf is great). Not in a bedroom.</li>
+      <li>At least 6 ft from the TV, speakers, fridge, dishwasher and HVAC vents - they make it read loud when nobody's there.</li>
+      <li>It uses Wi-Fi, not Z-Wave: keep it where the home's Wi-Fi is strong. It shows on the Install page within a few minutes.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="ic">✅</span>Before you leave</h2>
+    <ul>
+      <li>Install page header says <b>🟢 Everything is connected</b>.</li>
+      <li>Every door: 3+ bars, Ping answers, the test code opened it.</li>
+      <li>Press <b>Rebuild routes</b> once after the last device (not again and again - it slows the doors for a few minutes).</li>
+      <li>Nothing moved after pairing: stick, repeaters, hub.</li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h2><span class="ic">⚠️</span>Signal problems</h2>
+    <ul>
+      <li>Weak lock: move a repeater (not the stick) closer to that door → Rebuild routes → check bars.</li>
+      <li>Everything red at once: hub power or router cable, then the stick's extension cable.</li>
+      <li>Still stuck: call Brandon from the home - don't leave a door that isn't green.</li>
+    </ul>
+  </div>
+  <p class="muted">Sources for the stick rules: Home Assistant Z-Wave docs (extension cable, don't move the adapter, rebuild routes sparingly) and Vesternet (only mains-powered devices repeat). Distances are our starting rules - the signal bars decide.</p>
+</main></body></html>
