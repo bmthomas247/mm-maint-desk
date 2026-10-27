@@ -1570,7 +1570,7 @@ async function alertsView(){
 
 /* ------------------------------------------------ 2-step sign-in with an authenticator app (free, built into Supabase) */
 function mfaShell(inner){ app.innerHTML = `<div class="login" style="max-width:440px"><div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${ICON.lock}</span></div>${inner}
-  <p class="muted" style="margin-top:14px"><a href="#" id="mfaout">Sign out</a></p></div>`; $("#mfaout").onclick = async e => { e.preventDefault(); await sb.auth.signOut(); S.me = null; S.aal2 = false; route(); }; }
+  <p class="muted" style="margin-top:14px"><a href="#" id="mfaout">Sign out</a></p></div>`; $("#mfaout").onclick = async e => { e.preventDefault(); await sb.auth.signOut(); S.me = null; S.aal2 = false; S.mustChange = undefined; route(); }; }
 async function mfaCodeView(){
   mfaShell(`<h2>Enter your 6-digit code</h2><p class="muted">Open your authenticator app (Google or Microsoft Authenticator) and type the code for <b>Moose Locks</b>.</p>
     <label class="field"><span>Code</span><input id="mfac" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="font-size:24px;letter-spacing:6px;text-align:center"></label>
@@ -1632,7 +1632,7 @@ async function accountView(){
     const { error } = await sb.auth.updateUser({ password: a });
     $("#npmsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Use the new password next time you sign in.";
     if(!error){ $("#np1").value = $("#np2").value = ""; } };
-  $("#signout").onclick = async () => { await sb.auth.signOut(); S.me = null; S.aal2 = false; location.hash = "#/"; route(); };
+  $("#signout").onclick = async () => { await sb.auth.signOut(); S.me = null; S.aal2 = false; S.mustChange = undefined; location.hash = "#/"; route(); };
   $("#mfareset").onclick = async () => { if(!confirm("Remove 2-step from your old phone? You'll set it up again right away.")) return;
     try{ const { data:f } = await sb.auth.mfa.listFactors(); for(const x of (f.all||[])) await sb.auth.mfa.unenroll({ factorId: x.id });
       S.aal2 = false; await sb.auth.refreshSession(); mfaSetupView(); }catch(e){ fail(e); } };
@@ -1879,6 +1879,23 @@ async function officeHomeView(pid){
     b.disabled = true; try{ const r = await waitCmd(await command(l.hub_id, l.id, act), 30); toast(r ? (r.ok ? (act==="unlock"?"Unlocked":"Locked") : "The lock didn't answer") : "No answer from the hub"); }catch(e){ fail(e); } b.disabled = false; });
 }
 
+/* ------------------------------------------------ temporary password: must pick their own before anything else */
+function mustChangeView(){
+  mfaShell(`<h2>Pick your own password</h2><p class="muted">You signed in with a temporary password. Choose your own now - only you will know it.</p>
+    <label class="field"><span>New password <span class="muted">(at least 10 characters)</span></span><input type="password" id="mc1" autocomplete="new-password"></label>
+    <label class="field"><span>Type it again</span><input type="password" id="mc2" autocomplete="new-password"></label>
+    <button class="btn primary wide" id="mcgo">Save my password</button><p id="mcmsg" class="muted"></p>`);
+  $("#mcgo").onclick = async () => { const a = $("#mc1").value, b2 = $("#mc2").value;
+    if(a.length < 10) return $("#mcmsg").textContent = "At least 10 characters.";
+    if(a !== b2) return $("#mcmsg").textContent = "The two don't match.";
+    if(/^moose-/i.test(a)) return $("#mcmsg").textContent = "Pick something different from the temporary one.";
+    $("#mcmsg").textContent = "Saving…";
+    const { error } = await sb.auth.updateUser({ password:a });
+    if(error) return $("#mcmsg").textContent = "Couldn't save (" + error.message + ").";
+    try{ await rpc("lock_pw_changed"); }catch(e){}
+    S.mustChange = false; toast("Password saved"); route(); };
+}
+
 /* ------------------------------------------------ people (admins only): who can use Moose Locks */
 async function peopleView(){
   const ppl = await rpc("lock_people");
@@ -1894,6 +1911,7 @@ async function peopleView(){
       ${!owner && u.lock_role==="admin" ? `<div class="muted">Only Brandon or Kim can change an admin.</div>` : `<div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn small primary" data-save="${u.id}">Save</button>
         <button class="btn small" data-mail="${u.id}" ${u.email?"":"disabled"}>Email a sign-in code</button>
+        <button class="btn small" data-temp="${u.id}">Temporary password</button>
         <button class="btn small" data-2fa="${u.id}" ${u.two_step?"":"disabled"}>Reset 2-step (new phone)</button>
         <span class="muted" data-msg="${u.id}"></span></div>`}</div>`).join("")}`, "People");
   const msg = (id, t) => { const m = document.querySelector(`[data-msg="${id}"]`); if(m) m.textContent = t; };
@@ -1903,6 +1921,12 @@ async function peopleView(){
     msg(id, "Sending…");
     const { error } = await sb.auth.signInWithOtp({ email: u.email.toLowerCase(), options:{ emailRedirectTo: location.origin + location.pathname } });
     msg(id, error ? "Couldn't send (" + error.message + ")" : "Sent. They type the code, then set a new password under 👤 My account."); });
+  document.querySelectorAll("[data-temp]").forEach(b => b.onclick = async () => { const id = b.dataset.temp, u = ppl.find(x=>x.id===id);
+    if(!confirm("Make a temporary password for " + u.name + "? Their old password stops working. They must pick a new one when they sign in.")) return;
+    try{ const pw = await rpc("lock_person_temp_password", { p_id:id });
+      const m = document.querySelector(`[data-msg="${id}"]`);
+      m.innerHTML = `Temporary password: <b style="font-size:18px;letter-spacing:1px;user-select:all">${esc(pw)}</b> - give it to ${esc(u.name)} (shown once). They sign in with ${esc(u.email)} + this, then must set their own.`;
+    }catch(e){ fail(e); } });
   document.querySelectorAll("[data-2fa]").forEach(b => b.onclick = async () => { const id = b.dataset["2fa"], u = ppl.find(x=>x.id===id);
     if(!confirm("Reset 2-step for " + u.name + "? They'll scan a new QR code next time they sign in.")) return;
     try{ await rpc("lock_person_2step_reset", { p_id:id }); toast("2-step reset for " + u.name); route(); }catch(e){ fail(e); } });
@@ -1923,6 +1947,8 @@ async function route(){
       if(data.currentLevel === "aal2") S.aal2 = true;
       else if(data.nextLevel === "aal2") return mfaCodeView();
       else return mfaSetupView(); }catch(e){ return mfaSetupView(); } }
+  if(S.mustChange === undefined){ try{ S.mustChange = !!(await rpc("lock_must_change_pw")); }catch(e){ S.mustChange = false; } }
+  if(S.mustChange) return mustChangeView();
   const h = location.hash.replace(/^#\/?/,"");
   try{
     if(OFFICE() && /^(install|people)/.test(h)){ location.hash = "#/"; return; }
