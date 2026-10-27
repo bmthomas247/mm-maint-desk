@@ -123,6 +123,11 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;
 .how li{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.35}
 .how .key{flex:0 0 auto;min-width:44px;text-align:center;padding:6px 8px;border-radius:10px;background:var(--card,#fff);border:2px solid var(--line);font-weight:900;font-size:16px}
 .master{font-size:18px;margin-top:8px}
+.hoodpick{position:relative}.hoodpick input{width:100%;padding-right:48px!important}
+.hp-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:22px;padding:6px 10px;cursor:pointer;color:var(--ink,#222)}
+.hp-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;max-height:300px;overflow:auto;background:var(--card,#fff);border:2px solid var(--moose);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.hp-row{display:flex;flex-direction:column;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:16px}.hp-row:last-child{border-bottom:0}
+.hp-row:hover,.hp-row:active{background:var(--pine-soft)}.hp-row .muted{font-size:13px}.hp-new b{color:var(--pine)}
 .pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.pic{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:10px;border:1px solid #dfe5da;border-radius:14px;background:var(--card,#fff)}.pic b{font-size:14px}.pic span{font-size:12.5px;color:#5b6656;line-height:1.3}
 .step.flash{background:var(--pine-soft);border-radius:12px;transition:background .4s}
 .step{scroll-margin-top:80px}
@@ -213,8 +218,8 @@ async function syncBar(){
   const rows = await q("lock_settings","key,value",x=>x.in("key",["sync_last_run","sync_requested_at"]));
   const v = Object.fromEntries(rows.map(r=>[r.key,r.value]));
   const waiting = v.sync_requested_at && (!v.sync_last_run || new Date(v.sync_requested_at) > new Date(v.sync_last_run));
-  return `<div class="card syncbar"><div class="ic">${ICON.sync}</div><div class="grow"><b>Track sync</b><div class="muted">${waiting?"Running within a minute…":"Last synced "+ago(v.sync_last_run)}</div></div>
-    <button class="btn go small" id="syncnow" ${waiting?"disabled":""}>Sync now</button></div>`;
+  return `<div class="card syncbar"><div class="ic">${ICON.sync}</div><div class="grow"><b>Track sync</b><div class="muted">${waiting?"Running within a minute…":"Last synced "+ago(v.sync_last_run)+" · runs by itself every 30 min (6 am-10 pm): new bookings, check-in / check-out time changes, cancellations, agreements"}</div></div>
+    <button class="btn go small" id="syncnow" ${waiting?"disabled":""}>🔄 Resync with Track</button></div>`;
 }
 function wireSync(){
   const b = $("#syncnow"); if(!b) return;
@@ -226,9 +231,9 @@ function wireSync(){
       for(let i=0;i<60;i++){ await sleep(5000);
         const r = (await q("lock_settings","value",x=>x.eq("key","sync_last_run")))[0];
         if(r && new Date(r.value) >= asked){ toast("Synced with Track ✓ - codes and Door Codes are updated"); return route(); } }
-      toast("Still running - the ThinkStation may be off. Check it.");
+      toast("The office computer hasn't picked it up yet - the 30-min sync will. (If this keeps happening: double-click install_locks_now.bat on the ThinkStation once.)");
     }catch(e){ fail(e); }
-    b.disabled = false; b.textContent = "Sync with Track now";
+    b.disabled = false; b.textContent = "🔄 Resync with Track";
   };
 }
 // Field page: no codes at all (guest, crew, vendor). Codes live on the office desk version.
@@ -332,6 +337,8 @@ function navTabs(active){
     ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : t("install","#/install",ICON.install,"Install")}
     ${DESK ? t("codes","#/codes",ICON.codes,"Access codes") : ""}
     ${t("alerts","#/alerts",ICON.alerts,"Alerts", S.alertCount?`<span class="badge">${S.alertCount}</span>`:"")}
+    ${DESK ? t("reports","#/reports",ICON.score,"Reports") : ""}
+    ${DESK ? t("rules","#/rules",ICON.homes,"Company rules") : ""}
     ${DESK ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
     ${DESK ? t("install","#/install",ICON.install,"Install") : ""}
   </nav>`;
@@ -673,8 +680,8 @@ async function installView(){
       <div class="grid2"><label class="field"><span>City</span><input id="nf_city" ${big} value="${esc(g.city||"")}" placeholder="Example: Park City"></label>
         <label class="field"><span>State</span><input id="nf_state" ${big} value="${esc(g.state||"")}" placeholder="e.g. UT" maxlength="2" autocapitalize="characters"></label></div>
       <label class="field"><span><b>4.</b> Neighborhood <span class="muted">- start typing, pick from the list</span></span>
-        <input id="nf_area" ${big} list="nf_areas" value="${esc(g.area?areaLabel(g.area):"")}" placeholder="Example: Retreat at Jordanelle" autocomplete="off">
-        <datalist id="nf_areas">${AREAS.map(a=>`<option value="${esc(areaLabel(a))}"></option>`).join("")}</datalist></label>
+        <div class="hoodpick"><input id="nf_area" ${big} value="${esc(g.area?areaLabel(g.area):"")}" placeholder="Example: Retreat at Jordanelle" autocomplete="off"><button type="button" class="hp-btn" id="nf_aopen" aria-label="Show all neighborhoods">▾</button>
+        <div class="hp-list" id="nf_alist" hidden></div></div></label>
       <div id="nf_newarea" style="display:none" class="card"><b>New neighborhood</b> <span class="muted">- not on our list yet. Give it a short code:</span>
         <input id="nf_area2" ${big} maxlength="6" autocapitalize="characters" placeholder="Example: PCM"></div>
       <label class="field"><span><b>5.</b> Type</span><select id="nf_kind" ${big}><option value="str">Vacation rental</option><option value="second_home" ${g.kind==="second_home"?"selected":""}>Second home (2H)</option><option value="lease" ${g.kind==="lease"?"selected":""}>Lease (L)</option></select></label>
@@ -710,7 +717,21 @@ async function installView(){
     };
     $("#nf_code").oninput = () => codeTyped(true);
     $("#nf_name").oninput = () => $("#nf_name").dataset.typed = $("#nf_name").value ? 1 : "";
-    $("#nf_area").oninput = () => { showNewArea(); suggest(); };
+    // neighborhood picker: big tappable list, filters while typing, "add new" at the bottom
+    const homesIn = a => (S.allProps||[]).filter(x=>hoodOf({properties:x})===a).length;
+    const drawAreas = (all) => { const v = all ? "" : $("#nf_area").value.trim().toLowerCase(), box = $("#nf_alist");
+      const hits = AREAS.filter(a => !v || hoodName(a).toLowerCase().includes(v) || a.toLowerCase().includes(v) || areaLabel(a).toLowerCase()===v);
+      const typed = $("#nf_area").value.trim(), exact = findArea(typed);
+      box.innerHTML = hits.map(a=>`<div class="hp-row" data-area="${esc(a)}"><b>${esc(hoodName(a))}</b><span class="muted">${esc(a)} · ${homesIn(a)} home${homesIn(a)===1?"":"s"}</span></div>`).join("")
+        + (typed && !exact && !all ? `<div class="hp-row hp-new" data-newarea="1"><b>+ Add "${esc(typed)}" as a new neighborhood</b></div>` : "")
+        + (!hits.length && !typed ? '<div class="hp-row muted">No neighborhoods yet</div>' : "");
+      box.hidden = false;
+      $$("[data-area]", box).forEach(r=>r.onmousedown = e => { e.preventDefault(); $("#nf_area").value = areaLabel(r.dataset.area); box.hidden = true; showNewArea(); suggest(); });
+      const nw = $("[data-newarea]", box); if(nw) nw.onmousedown = e => { e.preventDefault(); box.hidden = true; showNewArea(); suggest(); $("#nf_area2").focus(); }; };
+    $("#nf_area").oninput = () => { drawAreas(false); showNewArea(); suggest(); };
+    $("#nf_area").onfocus = () => drawAreas(!$("#nf_area").value || !!findArea($("#nf_area").value));
+    $("#nf_area").onblur = () => setTimeout(()=>{ const b = $("#nf_alist"); if(b) b.hidden = true; }, 150);
+    $("#nf_aopen").onmousedown = e => { e.preventDefault(); const b = $("#nf_alist"); if(!b.hidden) return b.hidden = true; drawAreas(true); $("#nf_area").focus(); };
     $("#nf_area2").oninput = () => { $("#nf_area2").dataset.typed = 1; suggest(); };
     $("#nf_addr").oninput = suggest;
     $("#nf_gps").onclick = () => locate();
@@ -1128,7 +1149,8 @@ async function homeView(pid){
     ${!parents.length&&!kids.length?'<p class="muted">Not linked. Use this for combo listings and buildings with a shared entry door.</p>':""}
     ${S.me.role==="admin"?`<div class="grid2"><label class="field"><span>Parent home (code) - this home is part of it</span><input id="par"></label>
       <label class="field"><span>Child unit (code) - part of this home</span><input id="kid"></label></div><button class="btn primary wide" id="lsave">Link</button>`:""}</details>`;
-  const rules = `<details class="card"><summary>Rules for this home</summary>
+  const rules = `<details class="card"><summary>Rules for this home ${h.own_rules?'<span class="pill amber">Own rules</span>':'<span class="pill green">Company-wide rules</span>'}</summary>
+    <p class="muted" style="margin-top:0">${h.own_rules?`This home has its own rules. ${DESK?'<a href="#" id="rfollow">Go back to the company-wide rules</a>':""}`:`Follows the <a href="#/rules">company-wide rules</a>. Changing anything here gives this home its own rules.`}</p>
     <div class="grid2">
       <label class="field"><span>Warm to (°F) for arrival</span><input data-r="warm_to" inputmode="numeric" value="${h.warm_to}"></label>
       <label class="field"><span>Start warming (hours before)</span><input data-r="warm_hours" inputmode="numeric" value="${h.warm_hours}"></label>
@@ -1252,6 +1274,7 @@ async function homeView(pid){
         if(b.dataset.act==="tsave"){ await rpc("lock_thermostat_update",{p_thermostat:id,p_name:$('[data-f="name"]',card).value,p_managed:$('[data-f="managed"]',card).checked}); toast("Saved"); }
       }catch(e){ fail(e); } }; });
   // rules
+  $("#rfollow") && ($("#rfollow").onclick = async ev => { ev.preventDefault(); try{ await rpc("lock_home_rules_reset",{p_property:pid}); toast("Back on the company-wide rules"); await loadBase(); homeView(pid); }catch(e){ fail(e); } });
   $("#rsave") && ($("#rsave").onclick = async () => { const r = {}; $$("[data-r]").forEach(i=>{ r[i.dataset.r] = i.value===""?null:i.value; });
     try{ await rpc("lock_home_rules",{p_property:pid,r}); toast("Rules saved"); loadBase(); }catch(e){ fail(e); } });
   // stays
@@ -1280,11 +1303,12 @@ async function staysView(){
       <label class="field" style="margin:0;flex:1;min-width:160px"><span>Home</span><select id="shome"></select></label>
       <label class="field" style="margin:0;flex:1;min-width:150px"><span>From</span><input type="date" id="sfrom"></label>
       <label class="field" style="margin:0;flex:1;min-width:150px"><span>To</span><input type="date" id="sto"></label></div>
-    <div id="sstats"></div>${STAY_KEY}<div class="card" style="overflow-x:auto" id="stable"></div>
+    ${await syncBar()}<div id="sstats"></div>${STAY_KEY}<div class="card" style="overflow-x:auto" id="stable"></div>
     <p class="muted">Codes go live (lock, guest page, Track Door Code) once the rental agreement is back. Owner and lease stays don't need one.</p>`, "Moose Locks", "Office desk · stays and codes");
   const homeOpts = () => { const hd = $("#shood").value, cur = $("#shome").value;
     $("#shome").innerHTML = `<option value="">All homes</option>` + oursH.filter(h=>!hd || hoodOf(h)===hd).sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code),undefined,{numeric:true}))
       .map(h=>`<option value="${esc(h.property_id)}" ${h.property_id===cur?"selected":""}>${esc(dc(h.properties.code))}</option>`).join(""); };
+  wireSync();
   const draw = () => {
     const t = $("#sfind").value.trim().toLowerCase(), hd = $("#shood").value, hm = $("#shome").value;
     pref("shood", hd); pref("shome", hm);
@@ -1448,6 +1472,117 @@ async function alertsView(){
 }
 
 /* ------------------------------------------------ scorecard: ours vs Lynx vs Brivo */
+
+/* ------------------------------------------------ office: company-wide rules (every home follows them unless it has its own) */
+const RULE_FIELDS = [
+  ["warm_to","Warm to (°F) for arrival","num"],["warm_hours","Start warming (hours before)","num"],["vacant_heat","Empty home: heat to","num"],
+  ["vacant_cool","Empty home: AC to","num"],["cool_to","Arrival AC to (summer, blank = leave AC alone)","num"],
+  ["heat_max","Limit: guests can't heat above","num"],["heat_min","Limit: guests can't heat below","num"],["cool_min","Limit: guests can't cool below","num"],
+  ["too_cold","Alert below (°F)","num"],["too_hot","Alert above (°F)","num"],
+  ["after_hours_from","After-hours from (crew/vendor code use alerts)","time"],["after_hours_to","After-hours to","time"],
+  ["auto_lock_min","Auto-lock an empty home after (min, blank = off)","num"],
+  ["noise_limit","Noise alert above (dB)","num"],["noise_minutes","…for this many minutes (quiet hours)","num"],
+  ["quiet_from","Quiet hours from","time"],["quiet_to","Quiet hours to","time"]];
+async function rulesView(){
+  if(!S.homes.length) await loadBase();
+  const set = await q("lock_settings","key,value,updated_at",x=>x.in("key",["company_rules","company_rules_by"])).catch(()=>[]);
+  const row = set.find(x=>x.key==="company_rules"), by = (set.find(x=>x.key==="company_rules_by")||{}).value;
+  let r = {}; try{ r = row ? JSON.parse(row.value) : {}; }catch(e){}
+  const ours = S.homes.filter(h=>h.section==="ours"), own = ours.filter(h=>h.own_rules);
+  if(!row){ const h0 = ours[0] || {}; RULE_FIELDS.forEach(([k])=>{ if(h0[k]!=null) r[k] = h0[k]; }); }   // first time: start from what the homes use now
+  const val = (k,t) => r[k]==null ? "" : t==="time" ? String(r[k]).slice(0,5) : r[k];
+  const admin = S.me.role==="admin";
+  shell("rules", `<h2>Company-wide rules</h2>
+    <p class="muted">Every home on our system follows these, unless a home has its own rules (set on that home's page).${row?` Last changed ${when(row.updated_at)}${by?" by "+esc(by):""}.`:" Not saved yet - these are today's values."}</p>
+    <div class="card"><div class="grid2">${RULE_FIELDS.map(([k,l,t])=>`<label class="field"><span>${esc(l)}</span><input data-cr="${k}" ${t==="time"?'type="time"':'inputmode="numeric"'} value="${esc(val(k,t))}" ${admin?"":"disabled"}></label>`).join("")}</div>
+      ${admin?`<button class="btn primary wide" id="crsave">Save - apply to ${ours.length-own.length} home${ours.length-own.length===1?"":"s"}</button>
+      ${own.length?`<label class="row" style="margin-top:8px"><input type="checkbox" id="creveryone"> <span>Also overwrite the ${own.length} home${own.length>1?"s":""} with their own rules</span></label>`:""}`:'<p class="muted">Only admins can change these.</p>'}</div>
+    <div class="card"><b>Homes with their own rules (${own.length})</b>
+      ${own.length?`<div class="list" style="margin-top:6px">${own.map(h=>`<div><b class="grow"><a href="#/home/${encodeURIComponent(h.property_id)}">${esc(dc(h.properties.code))}</a></b><button class="btn small" data-follow="${esc(h.property_id)}">Follow company rules</button></div>`).join("")}</div>`
+        :'<p class="muted">None - every home follows the company-wide rules.</p>'}</div>`, "Company rules", "Applies to every home");
+  const sv = $("#crsave"); if(sv) sv.onclick = async () => { const nr = {}; $$("[data-cr]").forEach(i=>{ nr[i.dataset.cr] = i.value===""?null:(i.type==="time"?i.value:+i.value); });
+    const all = $("#creveryone") && $("#creveryone").checked;
+    if(!confirm("Apply these rules to "+(all?"every home":"every home that follows the company rules")+"?")) return;
+    try{ const n = await rpc("lock_company_rules_save",{r:nr,p_everyone:!!all}); toast("Saved - applied to "+n+" homes"); await loadBase(); rulesView(); }catch(e){ fail(e); } };
+  $$("[data-follow]").forEach(b=>b.onclick=async()=>{ try{ await rpc("lock_home_rules_reset",{p_property:b.dataset.follow}); toast("Now follows the company rules"); await loadBase(); rulesView(); }catch(e){ fail(e); } });
+}
+
+/* ------------------------------------------------ office: reports (who came and went, heating & cooling) */
+const ENTRY_KINDS = {unlock_code:"Entered - code", unlock_phone:"Entered - phone key", unlock_remote:"Unlocked from the app", unlock_manual:"Unlocked from inside",
+  lock_keypad:"Left - locked from outside", lock_manual:"Locked from inside", lock_remote:"Locked from the app", lock_auto:"Auto-locked",
+  door_open:"Door opened", door_closed:"Door closed", guest_arrived:"Guest arrived (first code use)", guest_out:"Guest left"};
+const CLIMATE_BY = by => !by ? "" : by==="at the thermostat" ? "At the thermostat" : by==="first seen" ? "First seen" : /^warm/.test(by) ? "Warming for arrival" : /^vacant|^setback|out/.test(by) ? "Empty-home setback"
+  : by==="heat_test" ? "Install heat test" : by==="heat_test_done" ? "After heat test" : by==="manual" ? "Office / app" : by==="admin" ? "Office / app" : by;
+function csvDownload(name, rows){ const c = rows.map(r=>r.map(v=>{ v = v==null?"":String(v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }).join(",")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([c],{type:"text/csv"})); a.download = name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000); }
+async function reportsView(){
+  if(!S.homes.length) await loadBase();
+  const oursH = S.homes.filter(h=>h.section==="ours"), hoods = [...new Set(oursH.map(hoodOf))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b)));
+  const d0 = new Date(Date.now()-7*864e5).toISOString().slice(0,10), d1 = new Date().toISOString().slice(0,10);
+  const tab = pref("rtab") || "entries";
+  shell("reports", `<h2>Reports</h2>
+    <div class="chips" style="margin-bottom:10px"><span class="chip ${tab==="entries"?"on":""}" data-rtab="entries">🚪 Entries &amp; exits</span><span class="chip ${tab==="climate"?"on":""}" data-rtab="climate">🌡️ Heating &amp; cooling</span></div>
+    <div class="card row" style="gap:12px;flex-wrap:wrap">
+      <label class="field" style="margin:0;min-width:150px"><span>From</span><input type="date" id="rf" value="${d0}"></label>
+      <label class="field" style="margin:0;min-width:150px"><span>To</span><input type="date" id="rt" value="${d1}"></label>
+      <label class="field" style="margin:0;flex:1;min-width:170px"><span>Neighborhood</span><select id="rh"><option value="">All neighborhoods</option>${hoods.map(a=>`<option value="${esc(a)}">${esc(hoodName(a))}</option>`).join("")}</select></label>
+      <label class="field" style="margin:0;flex:1;min-width:150px"><span>Home</span><select id="rp"></select></label>
+      ${tab==="entries"?`<label class="field" style="margin:0;flex:1;min-width:150px"><span>Show</span><select id="rk"><option value="io">Entries &amp; exits</option><option value="all">Every door event</option></select></label>
+        <label class="field" style="margin:0;flex:2;min-width:180px"><span>Who</span><input id="rw" placeholder="Example: Shelby, ABC Hot Tubs, guest name"></label>`:""}
+      <button class="btn primary" id="rgo" style="align-self:flex-end">Show</button><button class="btn" id="rcsv" style="align-self:flex-end">⬇ CSV</button></div>
+    <div id="rout"><p class="muted">Loading…</p></div>`, "Reports", "Entries, exits, heating & cooling");
+  const fillHomes = () => { const hd = $("#rh").value, cur = $("#rp").value;
+    $("#rp").innerHTML = `<option value="">All homes</option>` + oursH.filter(h=>!hd || hoodOf(h)===hd).sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code),undefined,{numeric:true}))
+      .map(h=>`<option value="${esc(h.property_id)}" ${h.property_id===cur?"selected":""}>${esc(dc(h.properties.code))}</option>`).join(""); };
+  fillHomes(); $("#rh").onchange = () => { fillHomes(); run(); };
+  $$("[data-rtab]").forEach(c=>c.onclick=()=>{ pref("rtab", c.dataset.rtab); reportsView(); });
+  const pids = () => { const hm = $("#rp").value, hd = $("#rh").value; return hm ? [hm] : oursH.filter(h=>!hd || hoodOf(h)===hd).map(h=>h.property_id); };
+  const range = () => [new Date($("#rf").value+"T00:00:00").toISOString(), new Date($("#rt").value+"T23:59:59").toISOString()];
+  const code = id => dc((S.props[id]||{}).code||id);
+  let csv = [];
+  const run = async () => { const [a,b] = range(), ids = pids(); $("#rout").innerHTML = '<p class="muted">Loading…</p>';
+    if(!ids.length) return $("#rout").innerHTML = '<p class="muted">No homes.</p>';
+    if(tab==="entries"){
+      const kinds = $("#rk").value==="io" ? ["unlock_code","unlock_phone","unlock_remote","lock_keypad","guest_arrived","guest_out"] : Object.keys(ENTRY_KINDS);
+      const [ev, lk] = await Promise.all([q("lock_events","at,property_id,lock_id,kind,who,who_kind",x=>x.in("property_id",ids).in("kind",kinds).gte("at",a).lte("at",b).order("at",{ascending:false}).limit(3000)),
+        q("locks","id,name",x=>x.in("property_id",ids))]);
+      const t = $("#rw").value.trim().toLowerCase(), door = id => ((lk.find(l=>l.id===id)||{}).name)||"";
+      const rows = ev.filter(e=>!t || String(e.who||"").toLowerCase().includes(t));
+      csv = [["When","Home","Door","What","Who"], ...rows.map(e=>[new Date(e.at).toLocaleString(), code(e.property_id), door(e.lock_id), ENTRY_KINDS[e.kind]||e.kind, e.who||""])];
+      const ins = rows.filter(e=>/^unlock_code|^unlock_phone|guest_arrived/.test(e.kind)).length, outs = rows.filter(e=>e.kind==="lock_keypad"||e.kind==="guest_out").length;
+      $("#rout").innerHTML = `<div class="card"><div class="row" style="gap:18px"><div><div class="big">${rows.length}</div><span class="muted">events</span></div><div><div class="big">${ins}</div><span class="muted">entries</span></div><div><div class="big">${outs}</div><span class="muted">exits</span></div></div></div>
+        <div class="card" style="overflow-x:auto"><table class="tbl"><tr><th>When</th><th>Home</th><th>Door</th><th>What</th><th>Who</th></tr>
+        ${rows.slice(0,1000).map(e=>`<tr><td>${esc(when(e.at))}</td><td><a href="#/home/${encodeURIComponent(e.property_id)}">${esc(code(e.property_id))}</a></td><td>${esc(door(e.lock_id))}</td><td>${esc(ENTRY_KINDS[e.kind]||e.kind)}</td><td>${esc(e.who||"")}</td></tr>`).join("")
+          || '<tr><td colspan="5" class="muted">Nothing in this range.</td></tr>'}</table>${rows.length>1000?'<p class="muted">Showing the first 1,000 - use CSV for all.</p>':""}</div>`;
+    } else {
+      const [log, th] = await Promise.all([q("lock_climate_log","at,property_id,thermostat_id,temp,mode,heat_sp,cool_sp,action,changed_by",x=>x.in("property_id",ids).gte("at",a).lte("at",b).order("at").limit(10000)),
+        q("thermostats","id,name,property_id",x=>x.in("property_id",ids))]);
+      const tname = id => ((th.find(x=>x.id===id)||{}).name)||"Thermostat", end = Math.min(Date.now(), new Date(b).getTime());
+      const by = {}; log.forEach(r=>{ (by[r.thermostat_id] = by[r.thermostat_id] || []).push(r); });
+      const sum = Object.entries(by).map(([tid, rs]) => { let heat = 0, cool = 0;
+        rs.forEach((r,i)=>{ const t1 = i+1<rs.length ? new Date(rs[i+1].at).getTime() : end, dur = Math.max(0, t1 - new Date(r.at).getTime());
+          if(r.action==="heating") heat += dur; if(r.action==="cooling") cool += dur; });
+        const temps = rs.map(r=>r.temp).filter(x=>x!=null).map(Number);
+        return { tid, pid: rs[0].property_id, low: temps.length?Math.min(...temps):null, high: temps.length?Math.max(...temps):null, heat: heat/36e5, cool: cool/36e5,
+          atStat: rs.filter(r=>r.changed_by==="at the thermostat").length, changes: rs.filter(r=>r.changed_by).length, hasAction: rs.some(r=>r.action) }; })
+        .sort((x,y)=>ck(code(x.pid)).localeCompare(ck(code(y.pid)),undefined,{numeric:true}));
+      const changes = log.filter(r=>r.changed_by).reverse();
+      csv = [["When","Home","Thermostat","Temp °F","Mode","Heat to","AC to","Running","Changed by"], ...log.map(r=>[new Date(r.at).toLocaleString(), code(r.property_id), tname(r.thermostat_id), r.temp, r.mode, r.heat_sp, r.cool_sp, r.action, CLIMATE_BY(r.changed_by)])];
+      const hrs = x => x<0.05 ? "0" : x.toFixed(1);
+      $("#rout").innerHTML = `<div class="card" style="overflow-x:auto"><b>By thermostat</b><table class="tbl" style="margin-top:6px"><tr><th>Home</th><th>Thermostat</th><th>Low</th><th>High</th><th>Heat ran</th><th>AC ran</th><th>Changed at the thermostat</th></tr>
+        ${sum.map(x=>`<tr><td><a href="#/home/${encodeURIComponent(x.pid)}">${esc(code(x.pid))}</a></td><td>${esc(tname(x.tid))}</td><td>${x.low!=null?Math.round(x.low)+"°":"-"}</td><td>${x.high!=null?Math.round(x.high)+"°":"-"}</td>
+          <td>${x.hasAction?hrs(x.heat)+" h":'<span class="muted">n/a</span>'}</td><td>${x.hasAction?hrs(x.cool)+" h":'<span class="muted">n/a</span>'}</td><td>${x.atStat}</td></tr>`).join("") || '<tr><td colspan="7" class="muted">No thermostat history in this range yet.</td></tr>'}</table>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 0">"Heat ran / AC ran" comes from the thermostat reporting when the furnace or AC is running (hub 1.5.1+). n/a = this thermostat doesn't report it.</p></div>
+        <div class="card" style="overflow-x:auto"><b>Setting changes</b><table class="tbl" style="margin-top:6px"><tr><th>When</th><th>Home</th><th>Thermostat</th><th>Mode</th><th>Heat to</th><th>AC to</th><th>Temp then</th><th>Changed by</th></tr>
+        ${changes.slice(0,500).map(r=>`<tr><td>${esc(when(r.at))}</td><td>${esc(code(r.property_id))}</td><td>${esc(tname(r.thermostat_id))}</td><td>${esc(r.mode||"")}</td><td>${r.heat_sp!=null?Math.round(r.heat_sp)+"°":""}</td><td>${r.cool_sp!=null?Math.round(r.cool_sp)+"°":""}</td><td>${r.temp!=null?Math.round(r.temp)+"°":""}</td><td>${esc(CLIMATE_BY(r.changed_by))}</td></tr>`).join("")
+          || '<tr><td colspan="8" class="muted">No changes in this range.</td></tr>'}</table></div>`;
+    } };
+  $("#rgo").onclick = run; $("#rp").onchange = run; $("#rf").onchange = run; $("#rt").onchange = run;
+  if($("#rk")) $("#rk").onchange = run;
+  if($("#rw")){ let tm; $("#rw").oninput = () => { clearTimeout(tm); tm = setTimeout(run, 300); }; }
+  $("#rcsv").onclick = () => { if(!csv.length) return toast("Press Show first"); csvDownload(`moose-${tab==="entries"?"entries":"heating-cooling"}-${$("#rf").value}-to-${$("#rt").value}.csv`, csv); };
+  run();
+}
 async function scoreView(){
   if(!S.homes.length) await loadBase();
   const [s] = await q("lock_scorecard","*");
@@ -1506,6 +1641,8 @@ async function route(){
     else if(h==="stays" && DESK) await staysView();
     else if(h==="alerts") await alertsView();
     else if(h==="score" && DESK) await scoreView();
+    else if(h==="reports" && DESK) await reportsView();
+    else if(h==="rules" && DESK) await rulesView();
     else await homesView();
   }catch(e){ fail(e, "Couldn't load"); }
   if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!S.dirty && !document.querySelector("input:focus,details[open]:not(.guide):not(.sect)")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
