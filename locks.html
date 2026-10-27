@@ -373,7 +373,7 @@ async function loadBase(){
   const homes = await q("lock_homes","*,properties(id,code,name,address,area,bw_home_id)");
   S.homes = homes.filter(h=>h.properties).sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code)));
   S.props = Object.fromEntries(S.homes.map(h=>[h.property_id,h.properties]));
-  if(!S.allProps){ try{ S.allProps = await q("properties","id,code,name,area,address,city,state,kind",x=>x.eq("active",true)); }catch(e){ S.allProps = []; } }
+  if(!S.allProps){ try{ S.allProps = await q("properties","id,code,name,area,address,city,state,county,kind",x=>x.eq("active",true)); }catch(e){ S.allProps = []; } }
   const al = await q("lock_alerts","id,property_id",x=>x.is("closed_at",null));
   const ours = new Set(S.homes.filter(h=>h.section==="ours").map(h=>h.property_id));
   S.alertCount = al.filter(a=>ours.has(a.property_id)).length;
@@ -387,7 +387,8 @@ const dc = c => unpre(c) + (preOf(c) ? " · "+preOf(c) : "");
 const hoodOf = h => (h.properties && (unpre(h.properties.area) || unpre(h.properties.code).split(" ")[0])) || "Other";
 function hoodName(area){
   const pool = (S.allProps && S.allProps.length ? S.allProps.map(p=>({properties:p})) : S.homes);
-  const names = pool.filter(h=>hoodOf(h)===area).map(h=>String(h.properties.name||"")
+  if(String(area).startsWith("county:")) return area.slice(7);
+  const names = pool.filter(h=>hoodOf(h)===area).map(h=>unpre(String(h.properties.name||""))
     .replace(/\s*\(.*\)\s*$/,"").replace(/\s+PF$/i,"").replace(/\s+(unit\s+)?#?[\w-]*\d[\w-]*$/i,"").trim()).filter(Boolean);
   const top = Object.entries(names.reduce((m,n)=>(m[n]=(m[n]||0)+1,m),{})).sort((a,b)=>b[1]-a[1])[0];
   return top ? top[0] : area;
@@ -704,7 +705,7 @@ async function installView(){
       <label class="field"><span><b>5.</b> Type</span><select id="nf_kind" ${big}><option value="str">Vacation rental</option><option value="second_home" ${g.kind==="second_home"?"selected":""}>Second home (2H)</option><option value="lease" ${g.kind==="lease"?"selected":""}>Lease (L)</option></select></label>
       <button class="btn go wide" id="nf_go" style="font-size:18px;padding:16px;margin-top:6px">✓ Create home &amp; start setup</button>
       <div class="muted" style="font-size:12.5px;margin-top:6px">The app makes the home's master code for you - you'll see it on the next screen.</div></div>`;
-    let lat = g.lat, lng = g.lng;
+    let lat = g.lat, lng = g.lng, county = g.county || "";
     const areaNow = () => findArea($("#nf_area").value) || ($("#nf_area").value.trim() ? $("#nf_area2").value.trim().toUpperCase() : "");
     const showNewArea = () => { const v = $("#nf_area").value.trim(), known = findArea(v);
       $("#nf_newarea").style.display = v && !known ? "" : "none";
@@ -755,7 +756,7 @@ async function installView(){
     if(g.code) codeTyped(false);
     $("#nf_go").onclick = async () => {
       const r = { code:$("#nf_code").value.trim(), name:$("#nf_name").value.trim(), address:$("#nf_addr").value.trim(),
-        city:$("#nf_city").value.trim(), state:$("#nf_state").value.trim().toUpperCase(), area:areaNow(), kind:$("#nf_kind").value, lat, lng };
+        city:$("#nf_city").value.trim(), state:$("#nf_state").value.trim().toUpperCase(), county, area:areaNow(), kind:$("#nf_kind").value, lat, lng };
       if(!r.code && !r.name){ $("#nf_code").focus(); return toast("Type a home code or a home name (one is enough)"); }
       if($("#nf_area").value.trim() && !findArea($("#nf_area").value) && !r.area) return toast("Give the new neighborhood a short code");
       try{ const pid = await rpc("lock_create_home",{r}); S.allProps = null; await loadBase(); toast("Created "+(r.code||r.name)+" - here's its checklist"); location.hash = "#/install/"+encodeURIComponent(pid); }catch(e){ fail(e); } };
@@ -764,17 +765,17 @@ async function installView(){
       $("#nf_msg").textContent = "Finding you… (if the phone asks, tap Allow)";
       navigator.geolocation.getCurrentPosition(async pos => {
         lat = pos.coords.latitude; lng = pos.coords.longitude;
-        let address = "", city = "", state = "", msg = "";
+        let address = "", city = "", state = "", county = "", msg = "";
         try{ const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`, {headers:{"Accept-Language":"en"}})).json();
           const a = j.address || {}; address = [a.house_number, a.road].filter(Boolean).join(" ");
           city = a.city || a.town || a.village || a.hamlet || a.municipality || "";
-          state = ((a["ISO3166-2-lvl4"]||"").split("-")[1]) || a.state || ""; }catch(e){}
+          state = ((a["ISO3166-2-lvl4"]||"").split("-")[1]) || a.state || ""; county = a.county || ""; }catch(e){}
         let guess = {}; try{ guess = await rpc("lock_area_guess",{p_lat:lat,p_lng:lng}) || {}; }catch(e){}
         const near = (guess.near||[])[0], area = unpre(guess.area||""), num = (address.match(/^\d+/)||[])[0];
         const keep = id => $("#"+id) && $("#"+id).dataset.typed ? $("#"+id).value : "";
         msg = (address ? "✓ Address found - check the house number. " : "Couldn't read the street address - please type it. ")
             + (area ? `✓ Neighborhood: ${hoodName(area)} (closest home ${near?dc(near.code)+", "+near.meters+" m":"nearby"}).` : "No neighborhood close by - type it in box 4.");
-        newForm({ address, city, state, area, lat, lng, msg, kind:$("#nf_kind").value,
+        newForm({ address, city, state, county, area, lat, lng, msg, kind:$("#nf_kind").value,
           code: keep("nf_code") || (area && num ? area+" "+num : ""),
           name: keep("nf_name") || (area && num ? hoodName(area)+" "+num : "") });
       }, err => { $("#nf_msg").innerHTML = `<b style="color:var(--red)">Couldn't get your location.</b> Turn on Location for this website in the phone's settings, or just type the boxes below. (${esc(err.message)})`; }, {enableHighAccuracy:true, timeout:15000});
@@ -1462,6 +1463,8 @@ async function codesView(){
       <div id="f_pick" style="${(c.property_ids||[]).length || (c.areas||[]).length ? "" : "display:none"}">
         <span class="muted">Neighborhoods <span style="font-size:12px">(every home there, including ones added later)</span></span>
         <div class="chips" style="margin:6px 0">${[...new Set(S.homes.map(hoodOf))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b))).map(a=>`<span class="chip ${(c.areas||[]).includes(a)?"on":""}" data-area="${esc(a)}">${esc(hoodName(a))}</span>`).join("")}</div>
+        ${(()=>{ const cs = [...new Set((S.allProps||[]).map(p=>p.county).filter(Boolean))].sort(); return cs.length ? `<div class="muted" style="font-size:13px;margin-top:4px">Counties <span style="font-size:12px">(every one of our homes in that county - for county inspectors)</span></div>
+          <div class="chips" style="margin:6px 0">${cs.map(k=>`<span class="chip ${(c.areas||[]).includes("county:"+k)?"on":""}" data-area="${esc("county:"+k)}">🏛️ ${esc(k)}</span>`).join("")}</div>` : ""; })()}
         <span class="muted">Homes</span>
         <input id="f_hfind" placeholder="Find a home" style="margin:6px 0">
         <div class="chips" style="margin:6px 0;max-height:220px;overflow:auto" id="f_homes">${S.homes.filter(h=>h.section==="ours" || (c.property_ids||[]).includes(h.property_id))
