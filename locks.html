@@ -1204,6 +1204,15 @@ async function homeView(pid){
       return `<div data-res="${esc(s.res_id)}"><div class="grow"><b><a href="${resLink(s)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.guest||"Guest")}</a></b> <span class="muted">${esc(s.kind)}</span><div class="muted">${when(s.starts_at)} → ${when(s.ends_at)}</div>${s.out_at?`<div style="font-weight:700;color:var(--moose-ink);font-size:13px">✓ Left ${when(s.out_at)} - ${esc(s.out_how||"")}</div>`:""}</div>
         <div style="text-align:right;display:grid;gap:6px;justify-items:end">${stayCode(s)}${stayPill(s, state, h)}
         <div>${folioLink(s)}${DESK?' <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button> <button class="btn small" data-act="backup">🆘 Backup</button>':""}</div></div></div>`;}).join("")||'<div class="muted">No upcoming stays from Track yet.</div>'}</div></div>`;
+  const curMaster = h.master_code || (locks.find(l=>l.master_code)||{}).master_code;
+  const resetCard = `<details class="card" id="resetcard" ${h.master_pending?"open":""}><summary>🔄 Reset codes for this home</summary>
+    <div class="list" style="margin-top:6px">
+      <div><div class="grow"><b>Send all codes again</b><div class="muted" style="font-size:12.5px">Every guest, crew and vendor code gets written to the doors again. Use after new batteries, a reset lock, or "code doesn't work".</div></div><button class="btn small" data-reset="resend">Send again</button></div>
+      <div><div class="grow"><b>Clear old / unknown codes</b><div class="muted" style="font-size:12.5px">Erases codes on the doors that aren't ours (old Brivo codes). Ours and the master code stay.</div></div><button class="btn small" data-reset="wipe">Clear</button></div>
+      ${DESK?`<div><div class="grow"><b>New backup codes</b><div class="muted" style="font-size:12.5px">Every upcoming stay here gets a fresh backup code - use if a backup code was shared or used.</div></div><button class="btn small" data-reset="backup">New backups</button></div>`:""}
+      <div><div class="grow"><b>Change the master code</b><div class="muted" style="font-size:12.5px">${h.master_pending?`New code <b style="font-size:16px">${esc(h.master_pending)}</b> is waiting. On each door: old master${curMaster?" ("+esc(curMaster)+")":""} → ⚙ → <b>1</b> (Master PIN) → ⚙ → type the new code → ⚙. Then tap Done.`:`Makes a new master code${curMaster?" (now "+esc(curMaster)+")":""}, then you change it on each door.`}</div></div>
+        ${h.master_pending?`<button class="btn small go" data-reset="master_done">Done on every door</button><button class="btn small" data-reset="master_cancel">Cancel</button>`:`<button class="btn small" data-reset="master_new">New master</button>`}</div>
+    </div><div id="resetmsg"></div></details>`;
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
   const bar = await syncBar();
@@ -1234,7 +1243,7 @@ async function homeView(pid){
         <div class="chips">${[["on","On"],["off","Off"],["volume_down","Vol −"],["volume_up","Vol +"],[t.muted?"unmute":"mute",t.muted?"Unmute":"Mute"]].map(([a,l])=>`<button class="btn small" data-tvact="${a}">${l}</button>`).join("")}
           <button class="btn small" data-tvact="rename">Rename</button></div></div>`).join("")}</div></div>`:""}
     </div><div>${DESK?"<h3>Guests</h3>":""}
-    ${stayList}${hub?healCard(hub):""}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${DESK?family+rules:""}${hist}
+    ${stayList}${resetCard}${hub?healCard(hub):""}${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}${DESK?family+rules:""}${hist}
     </div></div>`, p.code, p.name);
   wireTools(hub, null); wireHeal(hub);
   const tvCmd = async (tv, action, value) => { const id = await command(tv.hub_id, null, "tv", {entity:tv.entity, action, value}); return waitCmd(id, 20); };
@@ -1302,6 +1311,17 @@ async function homeView(pid){
         if(b.dataset.act==="tsave"){ await rpc("lock_thermostat_update",{p_thermostat:id,p_name:$('[data-f="name"]',card).value,p_managed:$('[data-f="managed"]',card).checked}); toast("Saved"); }
       }catch(e){ fail(e); } }; });
   // rules
+  $$("[data-reset]").forEach(b=>b.onclick=async()=>{ const k = b.dataset.reset, msg = t => $("#resetmsg").innerHTML = `<p class="pill green" style="margin-top:8px">${esc(t)}</p>`;
+    const ask = {resend:"Send every code to this home's doors again?", wipe:"Clear every code on these doors that isn't ours (old Brivo codes)? Ours and the master stay.",
+      backup:"Make new backup codes for every upcoming stay here? The old backup codes stop working.", master_new:"Make a new master code for "+dc(p.code)+"? You'll then change it on each door.",
+      master_done:"Is the new master code set on EVERY door? The old one will be forgotten here.", master_cancel:"Cancel the new master code?"}[k];
+    if(!confirm(ask)) return;
+    try{
+      if(k==="resend"){ const n = await rpc("lock_codes_resend",{p_property:pid}); hub && wake(hub.id); msg(n+" code"+(n===1?"":"s")+" going on the doors again"); }
+      if(k==="wipe"){ for(const l of locks) await command(null, l.id, "wipe"); msg("Clearing old codes on "+locks.length+" door"+(locks.length===1?"":"s")); }
+      if(k==="backup"){ const n = await rpc("lock_backup_reset",{p_property:pid}); hub && wake(hub.id); msg("New backup codes for "+n+" stay"+(n===1?"":"s")); }
+      if(k.startsWith("master_")){ await rpc("lock_master_change",{p_property:pid,p_step:k.slice(7)}); await loadBase(); homeView(pid); }
+    }catch(e){ fail(e); } });
   $("#rfollow") && ($("#rfollow").onclick = async ev => { ev.preventDefault(); try{ await rpc("lock_home_rules_reset",{p_property:pid}); toast("Back on the company-wide rules"); await loadBase(); homeView(pid); }catch(e){ fail(e); } });
   $("#rsave") && ($("#rsave").onclick = async () => { const r = {}; $$("[data-r]").forEach(i=>{ r[i.dataset.r] = i.value===""?null:i.value; });
     try{ await rpc("lock_home_rules",{p_property:pid,r}); toast("Rules saved"); loadBase(); }catch(e){ fail(e); } });
