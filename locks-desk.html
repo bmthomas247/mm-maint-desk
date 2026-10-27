@@ -349,15 +349,17 @@ function shell(active, inner, title, sub){
 }
 function navTabs(active){
   const t = (k, href, icon, label, extra) => `<a href="${href}" class="${active===k?"on":""}">${icon}<span>${label}</span>${extra||""}</a>`;
+  const off = OFFICE(), adm = S.me && S.me.role === "admin";
   return `<nav class="tabs">
     ${t("homes","#/",ICON.homes,"Homes")}
-    ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : t("install","#/install",ICON.install,"Install")}
-    ${DESK ? t("codes","#/codes",ICON.codes,"Access codes") : ""}
+    ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : off ? "" : t("install","#/install",ICON.install,"Install")}
+    ${DESK && !off ? t("codes","#/codes",ICON.codes,"Access codes") : ""}
     ${t("alerts","#/alerts",ICON.alerts,"Alerts", S.alertCount?`<span class="badge">${S.alertCount}</span>`:"")}
     ${DESK ? t("reports","#/reports",ICON.score,"Reports") : ""}
-    ${DESK ? t("rules","#/rules",ICON.homes,"Company rules") : ""}
-    ${DESK ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
-    ${DESK ? t("install","#/install",ICON.install,"Install") : ""}
+    ${DESK && !off ? t("rules","#/rules",ICON.homes,"Company rules") : ""}
+    ${DESK && !off ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
+    ${DESK && !off ? t("install","#/install",ICON.install,"Install") : ""}
+    ${DESK && adm ? t("people","#/people",ICON.codes,"People") : ""}
   </nav>`;
 }
 
@@ -1847,6 +1849,55 @@ function wireUpdates(){
   b.onclick = async () => { const on = b.textContent.includes("on"); try{ await rpc("lock_update_settings",{p_auto:on}); toast(on?"Automatic updates on":"Automatic updates off"); route(); }catch(e){ fail(e); } };
 }
 
+/* ------------------------------------------------ office staff: simple home page (no master codes, staff codes or hardware) */
+const OFFICE = () => !!(S.me && S.me.role === "office");
+async function officeHomeView(pid){
+  if(!S.homes.length) await loadBase();
+  const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("homes","<p>Home not found.</p>");
+  const p = h.properties;
+  const [locks, stays, alerts] = await Promise.all([
+    q("locks","id,name,state,online,battery",x=>x.eq("property_id",pid).eq("active",true).order("name")),
+    q("lock_stays","res_id,guest,kind,status,starts_at,ends_at,code",x=>x.eq("property_id",pid).gte("ends_at",new Date(Date.now()-864e5).toISOString()).neq("status","cancelled").order("starts_at").limit(6)),
+    q("lock_alerts","kind,detail,opened_at",x=>x.eq("property_id",pid).is("closed_at",null))]);
+  const d = t => new Date(t).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+  shell("homes", `<p><a href="#/">← All homes</a></p>
+    <div class="card"><h2 style="margin:0">${esc(p.code)} <span class="muted">${esc(p.name||"")}</span></h2><div class="muted">${esc(p.address||"")}</div></div>
+    <h3>Doors</h3>${locks.length ? locks.map(l=>`<div class="card"><div class="row"><b class="grow">${esc(l.name)}</b>${batt(l.battery)}
+      <span class="pill ${l.online===false?"red":l.state==="unlocked"?"amber":"green"}">${l.online===false?"Not answering":esc(l.state||"?")}</span></div></div>`).join("") : `<p class="muted">No Moose Locks doors at this home yet.</p>`}
+    ${alerts.length ? `<h3>Open alerts</h3>${alerts.map(a=>`<div class="card"><b>${esc(a.kind.replace(/_/g," "))}</b><div class="muted">${esc(a.detail||"")} · ${d(a.opened_at)}</div></div>`).join("")}` : ""}
+    <h3>Stays</h3>${stays.length ? stays.map(st=>`<div class="card"><div class="row"><div class="grow"><b>${esc(st.guest||st.kind||"Stay")}</b><div class="muted">${d(st.starts_at)} → ${d(st.ends_at)}</div></div>
+      ${st.code?`<span class="code" style="font-size:20px;font-weight:800;letter-spacing:4px">${esc(st.code)}</span>`:`<span class="muted">No code yet</span>`}</div></div>`).join("") : `<p class="muted">No stays coming up.</p>`}
+    <p class="muted">Need a backup code for a guest? Use <a href="#/stays">Stays & guest codes</a>.</p>`, p.code);
+}
+
+/* ------------------------------------------------ people (admins only): who can use Moose Locks */
+async function peopleView(){
+  const ppl = await rpc("lock_people");
+  const ago = t => !t ? "never" : new Date(t).toLocaleDateString([], { month:"short", day:"numeric", year:"numeric" });
+  const roleSel = (id, r) => `<select data-role="${id}">${[["admin","Admin - everything"],["office","Office - stays, guest codes, alerts, reports"],["tech","Tech - field app + install"],["none","No access"]].map(([v,l])=>`<option value="${v}" ${(r||"none")===v?"selected":""}>${l}</option>`).join("")}</select>`;
+  shell("people", `<h2>People</h2>
+    <p class="muted">Who can sign in to Moose Locks and what they can do. Only admins see this page.</p>
+    ${ppl.map(u=>`<div class="card" data-id="${u.id}">
+      <div class="row"><div class="grow"><b>${esc(u.name||"")}</b><div class="muted">2-step: ${u.two_step?"✓ set up":"not yet"} · last sign-in: ${ago(u.last_sign_in)}</div></div></div>
+      <div class="grid2"><label class="field"><span>Email</span><input data-email="${u.id}" type="email" value="${esc(u.email||"")}" placeholder="Example: name@moosemanagement.com"></label>
+        <label class="field"><span>Access</span>${roleSel(u.id, u.lock_role)}</label></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn small primary" data-save="${u.id}">Save</button>
+        <button class="btn small" data-mail="${u.id}" ${u.email?"":"disabled"}>Email a sign-in code</button>
+        <button class="btn small" data-2fa="${u.id}" ${u.two_step?"":"disabled"}>Reset 2-step (new phone)</button>
+        <span class="muted" data-msg="${u.id}"></span></div></div>`).join("")}`, "People");
+  const msg = (id, t) => { const m = document.querySelector(`[data-msg="${id}"]`); if(m) m.textContent = t; };
+  document.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const id = b.dataset.save;
+    try{ await rpc("lock_person_set", { p_id:id, p_lock_role: document.querySelector(`[data-role="${id}"]`).value, p_email: document.querySelector(`[data-email="${id}"]`).value }); toast("Saved"); route(); }catch(e){ fail(e); } });
+  document.querySelectorAll("[data-mail]").forEach(b => b.onclick = async () => { const id = b.dataset.mail, u = ppl.find(x=>x.id===id);
+    msg(id, "Sending…");
+    const { error } = await sb.auth.signInWithOtp({ email: u.email.toLowerCase(), options:{ emailRedirectTo: location.origin + location.pathname } });
+    msg(id, error ? "Couldn't send (" + error.message + ")" : "Sent. They type the code, then set a new password under 👤 My account."); });
+  document.querySelectorAll("[data-2fa]").forEach(b => b.onclick = async () => { const id = b.dataset["2fa"], u = ppl.find(x=>x.id===id);
+    if(!confirm("Reset 2-step for " + u.name + "? They'll scan a new QR code next time they sign in.")) return;
+    try{ await rpc("lock_person_2step_reset", { p_id:id }); toast("2-step reset for " + u.name); route(); }catch(e){ fail(e); } });
+}
+
 /* ------------------------------------------------ router */
 async function route(){
   clearTimeout(S.timer);
@@ -1854,8 +1905,9 @@ async function route(){
   if(!session){ const le = window.__linkErr; window.__linkErr = null;
     if(le && location.hash.includes("error")) history.replaceState(null, "", location.pathname + location.search);
     return loginView(le ? "That email link didn't work (" + le + "). Links work once and expire after an hour - send a new one." : ""); }
-  if(!S.me){ const me = (await sb.rpc("my_desk_identity")).data; S.me = me && me[0]; }
-  if(!S.me || !["admin","tech"].includes(S.me.role)) return shell("homes","<p>Lock setup is for the maintenance crew. Ask Brandon to add you.</p>");
+  if(!S.me){ const me = (await sb.rpc("my_desk_identity")).data; S.me = me && me[0];
+    if(S.me){ S.me.deskRole = S.me.role; S.me.role = (await sb.rpc("lock_my_role")).data || null; } }
+  if(!S.me || !["admin","tech","office"].includes(S.me.role)) return shell("homes","<p>You don't have access to Moose Locks yet. Ask an admin (Brandon, Kim or Janae) to add you.</p>");
   // 2-step sign-in (authenticator app): required for everyone on the lock sites
   if(!S.aal2){ try{ const { data } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
       if(data.currentLevel === "aal2") S.aal2 = true;
@@ -1863,7 +1915,10 @@ async function route(){
       else return mfaSetupView(); }catch(e){ return mfaSetupView(); } }
   const h = location.hash.replace(/^#\/?/,"");
   try{
-    if(h.startsWith("home/")) await homeView(decodeURIComponent(h.slice(5)));
+    if(OFFICE() && /^(install|codes|score|rules|people)/.test(h)){ location.hash = "#/"; return; }
+    if(h==="people" && S.me.role!=="admin"){ location.hash = "#/"; return; }
+    if(h.startsWith("home/")) await (OFFICE() ? officeHomeView : homeView)(decodeURIComponent(h.slice(5)));
+    else if(h==="people") await peopleView();
     else if(h.startsWith("install/")) await installHome(decodeURIComponent(h.slice(8)));
     else if(h==="install") await installView();
     else if(h==="codes" && DESK) await codesView();
