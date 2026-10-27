@@ -266,8 +266,9 @@ function statusLights(o){
   const hubUp = hub && age(hub.last_seen) < 10;
   grp(o.locks||[], "Doors", "none paired yet", l => hubUp && l.online !== false);
   grp(o.thermos||[], "Thermostats", "none paired yet - every home needs one", t => hubUp && t.online !== false);
-  const leak = (o.sensors||[]).filter(x=>x.kind!=="noise"), noise = (o.sensors||[]).filter(x=>x.kind==="noise");
-  if(leak.length) grp(leak, "Leak / door sensors", "", x => hubUp && x.online !== false);
+  const leak = (o.sensors||[]).filter(x=>x.kind!=="noise" && x.kind!=="contact"), noise = (o.sensors||[]).filter(x=>x.kind==="noise"), cont = (o.sensors||[]).filter(x=>x.kind==="contact");
+  if(leak.length) grp(leak, "Leak sensors", "", x => hubUp && x.online !== false);
+  if(cont.length) grp(cont, "Door & window sensors", "", x => hubUp && x.online !== false);
   grp(noise, "Noise sensor (Wi-Fi)", "not set up yet", x => hubUp && x.online !== false && age(x.last_seen) < 10);
   if(o.tvs) grp(o.tvs, "TVs (Wi-Fi)", "none found (optional)", t => hubUp && t.state !== "unavailable" && age(t.last_seen) < 10);
   if(o.codes) L.push(o.codes.total ? [o.codes.on===o.codes.total ? "ok" : "wait", "Codes on the doors", `${o.codes.on} of ${o.codes.total} confirmed`] : ["off","Codes on the doors","none yet"]);
@@ -614,6 +615,7 @@ const STICKER_SVG = `<svg viewBox="0 0 340 250" width="100%" style="max-width:42
   <text x="198" y="216" font-size="11" fill="#3c4a36">paper manual. Or snap a photo</text>
   <text x="198" y="231" font-size="11" fill="#3c4a36">of it before you put it in.</text>
 </svg>`;
+const SENSOR_NAMES = ["Front door","Back door","Side door","Garage door","Slider","Deck door","Window","Bedroom window","Basement window"];
 const KB_KEYS = ["Front Door Lock","Side Door Lock","Garage Door Lock","Back Door Lock","Owner Keys","Other"];
 const OLD_HW = ["Old door locks","Old thermostat","Brivo hub","Old keypad / deadbolt","Other"];
 const KB_DEFAULT = "1358";   // most key boxes get this code
@@ -625,6 +627,7 @@ const STEPS = [
   {k:"thermo", t:"Thermostats",              auto:"thermo", must:true},
   {k:"heat",   t:"Test the heat",            auto:null, must:true},
   {k:"noise",  t:"Noise sensor",             auto:"noise", skip:"No noise sensor in this home"},
+  {k:"doors",  t:"Door & window sensors",    auto:"doors", skip:"No door/window sensors here"},
   {k:"tv",     t:"TVs (coming soon)",        auto:null, skip:"No TVs / skip for now"},
   {k:"routes", t:"Rebuild routes",           auto:"routes", must:true},
   {k:"test",   t:"Test every door",          auto:"test", must:true},
@@ -798,7 +801,7 @@ async function installHome(pid){
     q("lock_hubs","id,name,last_seen,claimed_at,status",x=>x.eq("property_id",pid).eq("active",true)),
     q("locks","*",x=>x.eq("property_id",pid).eq("active",true).order("node_id")),
     q("thermostats","id,node_id,name,temp,mode,heat_sp,action,heating_at,online,rssi,dropped",x=>x.eq("property_id",pid).eq("active",true)),
-    q("sensors","id,node_id,name,kind,online,rssi,last_seen,value",x=>x.eq("property_id",pid).eq("active",true)),
+    q("sensors","id,node_id,name,kind,online,rssi,last_seen,value,state,temp,humidity,battery",x=>x.eq("property_id",pid).eq("active",true)),
     q("lock_assign","lock_id,ref_kind,state,code,created_at,verified_at",x=>x.eq("ref_kind","test").order("created_at",{ascending:false})),
     q("lock_commands","lock_id,kind,ok,done_at",x=>x.eq("kind","wipe").eq("ok",true)),
     q("property_access","wifi_name,wifi_password,gate_code,garage_code,lockbox_code",x=>x.eq("property_id",pid)),
@@ -827,6 +830,7 @@ async function installHome(pid){
     noise: sensors.some(x=>x.kind==="noise"),
     brivo: named,   // every paired door named; a Z-Wave lock can only be on one network: if it joined our hub, it's off Brivo
     thermo: thermos.length > 0,
+    doors: sensors.filter(x=>x.kind==="contact").length > 0 && sensors.filter(x=>x.kind==="contact").every(x=>!/node \d+\)$/.test(x.name)),
     routes: heals.length > 0,
     keybox: !!(kb && kb.code && kb.photo && (kb.items||[]).length),
     oldhw: !!(sp("oldhw") && sp("oldhw").photo && sp("oldhw").spot),
@@ -932,6 +936,13 @@ async function installHome(pid){
               <div class="muted">Hold your hand over a vent. Is <b>warm air</b> coming out?</div>
               <div class="row" style="margin-top:8px;gap:8px"><button class="btn go grow" data-heat="pass" style="font-size:17px;padding:14px">Yes - warm air</button>
                 <button class="btn grow" data-heat="fail" style="font-size:17px;padding:14px;border-color:var(--red);color:var(--red)">No heat</button></div></div>`); })(),
+    doors: (()=>{ const cs = sensors.filter(x=>x.kind==="contact");
+      return `<div class="muted">Sensors on the outside doors, sliders and easy-to-reach windows. They warn us when a door opens at an empty home, is left open, or is open while the heat runs.</div>
+      ${keyHow([["🧲","Stick the sensor on the frame and the magnet on the door / window, lined up, no more than ¼ inch apart when closed."],["📱","Tap <b>Start pairing (no PIN)</b> below. The hub listens for 5 minutes."],["🔘","Put the sensor in pairing mode - check its paper guide (usually a few quick presses of its button)."],["🏷️","It shows up below - tap the name that matches (Front door, Slider…)."],["🚪","Test: open the door - it should say <b>OPEN</b> here within a few seconds, then <b>CLOSED</b>."]])}
+      <button class="btn wide" id="pair3" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg3"></div>
+      ${cs.map(x=>`<div style="margin-top:10px" data-sens="${x.id}"><div class="row"><input data-f="name" value="${esc(x.name)}" class="grow"><span class="pill ${x.state==="open"?"amber":x.state==="closed"?"green":"grey"}" style="font-size:14px">${x.state==="open"?"OPEN":x.state==="closed"?"CLOSED":"?"}</span><button class="btn small" data-act="sname">Save</button></div>
+        <div class="chips" style="margin-top:6px">${SENSOR_NAMES.map(n=>`<span class="chip" data-sn="${esc(n)}">${esc(n)}</span>`).join("")}</div>
+        <div class="muted" style="font-size:12.5px">${x.temp!=null?Math.round(x.temp)+"°F":""}${x.humidity!=null?" · "+Math.round(x.humidity)+"% humidity":""}${x.battery!=null?" · 🔋 "+x.battery+"%":""} · ${signal(x.rssi)}</div></div>`).join("")}`; })(),
     tv: `<div class="muted"><b>Coming soon.</b> Later the system will turn TVs off when guests leave and show a welcome screen. Nothing to set up yet - tick Done if the TVs are on the home's Wi-Fi, or N/A.</div>
       <div class="muted" style="margin-top:6px">If a TV pops up "Allow?" on screen (Samsung / LG), press Allow. Roku: Settings → System → Advanced → Control by mobile apps → Network access = Permissive.</div>
       ${tvsI.length?`<div class="muted" style="margin-top:8px">Found: ${tvsI.map(t=>esc(t.name)).join(" · ")}</div>`:""}${mark(STEPS.find(x=>x.k==="tv"))}`,
@@ -996,7 +1007,7 @@ async function installHome(pid){
       <details style="margin-top:8px"><summary><b>👀 What each thing looks like</b></summary><p class="muted" style="margin:4px 0 8px">Simple drawings - the real thing may look a little different.</p>
         <div class="pics">${Object.values(PICS).map(v=>`<div class="pic">${v.svg}<b>${esc(v.t)}</b><span>${esc(v.d)}</span></div>`).join("")}</div></details>
       <a class="btn small" href="install-guide.html" target="_blank" style="margin-top:8px">Full guide / print</a></details>
-    ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI, go:{"Your phone":"hub","Hub":"hub","Hub internet":"hub","Z-Wave stick":"hub","Doors":"locks","Thermostats":"thermo","Leak / door sensors":"thermo","Noise sensor (Wi-Fi)":"noise","TVs (Wi-Fi)":"tv"}})}
+    ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI, go:{"Your phone":"hub","Hub":"hub","Hub internet":"hub","Z-Wave stick":"hub","Doors":"locks","Thermostats":"thermo","Leak sensors":"thermo","Door & window sensors":"doors","Noise sensor (Wi-Fi)":"noise","TVs (Wi-Fi)":"tv"}})}
     <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(dc(p.code))}</div><div class="muted">${esc(p.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill amber">${total}/${STEPS.length}</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*total/STEPS.length)}%"></i></div></div>
@@ -1066,7 +1077,9 @@ async function installHome(pid){
     try{ const id = await command(hub.id, null, "include", pin?{pin}:{}); const r = await waitCmd(id, 300);
       m.innerHTML = r ? (r.ok? '<p class="pill green">Added</p>' : `<p class="pill red">${esc((r.result||{}).msg||"Didn't pair")}</p>`) : '<p class="muted">No answer yet - check again in a minute.</p>';
       again(); }catch(e){ fail(e); } btn.disabled = false; }; };
-  pairBtn($("#pair"), "#pairmsg", true); pairBtn($("#pair2"), "#pairmsg2", false);
+  pairBtn($("#pair"), "#pairmsg", true); pairBtn($("#pair2"), "#pairmsg2", false); pairBtn($("#pair3"), "#pairmsg3", false);
+  $$("[data-sens]").forEach(r=>{ $$("[data-sn]",r).forEach(c=>c.onclick=()=>{ $('[data-f="name"]',r).value = c.dataset.sn; S.dirty = true; });
+    $('[data-act="sname"]',r).onclick = async () => { try{ await rpc("lock_sensor_update",{p_sensor:r.dataset.sens,p_name:$('[data-f="name"]',r).value}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
   $$("[data-for]").forEach(box=>$$(".chip",box).forEach(c=>c.onclick=()=>{ $(`[data-lock="${box.dataset.for}"] input`).value = c.dataset.name; }));
   $$("[data-lock]").forEach(r=>{ const btn = $("[data-act=name]", r); if(btn) btn.onclick = async () => {
     try{ const l = locks.find(x=>x.id===r.dataset.lock); await rpc("lock_update",{p_lock:l.id,p_name:$("input",r).value.trim(),p_for_guests:l.for_guests,p_active:true}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
@@ -1208,7 +1221,7 @@ async function homeView(pid){
     ${thermos.length?`<h3>Thermostats</h3>${thermos.map(thermoCard).join("")}`:""}
     ${sensors.length?`<h3>Sensors</h3><div class="card list">${sensors.map(x=>x.kind==="noise"
         ? `<div><span class="grow">🔊 ${esc(x.name)}<div class="muted" style="font-size:12.5px">limit ${h.noise_limit??80} dB for ${h.noise_minutes??10} min (quiet hours ${String(h.quiet_from||"22:00").slice(0,5)}–${String(h.quiet_to||"08:00").slice(0,5)}; 3× as long in the day)</div></span><span class="pill ${x.value!=null&&x.value>(h.noise_limit??80)?"red":"grey"}">${x.value!=null?Math.round(x.value)+" dB":"?"}</span>${x.online===false?'<span class="pill red">offline</span>':""}</div>`
-        : `<div><span class="grow">${esc(x.name)}</span><span class="pill ${x.state==="wet"?"red":"grey"}">${esc(x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}</div>`).join("")}</div>`:""}
+        : `<div><span class="grow">${x.kind==="contact"?"🚪 ":x.kind==="leak"?"💧 ":""}${esc(x.name)}${x.kind==="contact"&&x.state==="open"&&x.open_since?`<div class="muted" style="font-size:12.5px">open since ${esc(when(x.open_since))}</div>`:""}${x.temp!=null?`<div class="muted" style="font-size:12.5px">${Math.round(x.temp)}°F${x.humidity!=null?" · "+Math.round(x.humidity)+"% humidity":""}</div>`:""}</span><span class="pill ${x.state==="wet"?"red":x.state==="open"?"amber":x.state==="closed"?"green":"grey"}">${esc(x.state==="open"?"OPEN":x.state==="closed"?"closed":x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}${x.online===false?'<span class="pill red">offline</span>':""}</div>`).join("")}</div>`:""}
     ${tvs.length?`<h3>TVs</h3><div class="card" id="tvs"><div class="row" style="margin-bottom:6px"><span class="grow muted">${tvs.filter(t=>!["off","unavailable","standby"].includes(t.state)).length} of ${tvs.length} on · TVs turn off by themselves when the guest leaves</span>
         <button class="btn small" data-tvall="off">Turn all off</button></div><div class="list">${tvs.map(t=>`<div data-tv="${t.id}"><div class="grow"><b>${esc(t.name)}</b><div class="muted" style="font-size:12.5px">${esc(({roku:"Roku",androidtv_remote:"Google TV",androidtv:"Android / Fire TV",cast:"Chromecast",samsungtv:"Samsung",webostv:"LG",apple_tv:"Apple TV",braviatv:"Sony",vizio:"Vizio",philips_js:"Philips"})[t.platform]||t.platform||"")}${t.app?" · "+esc(t.app):""}</div></div>
         <span class="pill ${["off","standby"].includes(t.state)?"grey":t.state==="unavailable"?"red":"green"}">${esc(t.state||"?")}</span>
@@ -1627,11 +1640,11 @@ async function reportsView(){
       lock_keypad:"Locked from outside (left)", lock_manual:"Locked from inside", lock_remote:"Locked from the app", lock_auto:"Auto-locked", jammed:"Lock JAMMED",
       code_set:"Code put on the lock", code_cleared:"Code taken off the lock", code_failed:"Code FAILED to go on the lock", guest_arrived:"Guest arrived (first use of their code)",
       guest_out:"Guest left / ready to clean", guest_opened_link:"Guest opened their link", backup_given:"BACKUP code shown to the office", hub_online:"Hub back online", hub_offline:"Hub OFFLINE",
-      remote_unlock_sent:"Remote unlock sent", remote_lock_sent:"Remote lock sent", master_made:"Master code made", keybox_spot:"Key box recorded", heat_test_pass:"Heat test passed", heat_test_fail:"Heat test FAILED"}[e.kind] || e.kind.replace(/_/g," "));
+      remote_unlock_sent:"Remote unlock sent", remote_lock_sent:"Remote lock sent", master_made:"Master code made", keybox_spot:"Key box recorded", heat_test_pass:"Heat test passed", heat_test_fail:"Heat test FAILED", tamper:"Sensor pulled off / opened up", leak:"WATER detected", leak_clear:"Leak sensor dry again"}[e.kind] || e.kind.replace(/_/g," "));
     ev.forEach(e => { if(tl && !stay && !String(e.who||"").toLowerCase().includes(tl)) return;
       if(stay && e.who_id && e.who_id!==stay.res_id && /guest|stay|backup/.test(e.who_kind||"")) return;
       const extra = e.kind==="guest_opened_link" ? ((e.detail||{}).code_shown ? " - code was showing" : " - code NOT showing yet"+((e.detail||{}).held_for?" (waiting on the agreement)":"")) : e.kind==="backup_given" ? " by "+((e.detail||{}).by||"") : "";
-      add(e.at, e.property_id, /code_|backup/.test(e.kind) ? "Codes" : /guest_/.test(e.kind) ? "Guest" : /hub_/.test(e.kind) ? "System" : "Door", words(e)+(e.lock_id?" - "+door(e.lock_id):"")+extra, e.who); });
+      add(e.at, e.property_id, /code_|backup/.test(e.kind) ? "Codes" : /guest_/.test(e.kind) ? "Guest" : /hub_/.test(e.kind) ? "System" : "Door", words(e)+(e.lock_id?" - "+door(e.lock_id):(e.detail||{}).sensor?" - "+(e.detail||{}).sensor:"")+extra, e.who); });
     const lbl = {lock_stays:"Stay", lock_staff_codes:"Access code", lock_homes:"Home settings", locks:"Lock", lock_settings:"Company setting", lock_commands:"Command", property_access:"Guest info"};
     au.forEach(x => { if(stay && x.tbl!=="lock_stays" && x.tbl!=="lock_homes" && x.tbl!=="locks") return; if(stay && x.tbl==="lock_stays" && x.ref!==stay.res_id) return;
       if(tl && !stay && !(String(x.who).toLowerCase().includes(tl) || JSON.stringify(x.changes).toLowerCase().includes(tl))) return;
