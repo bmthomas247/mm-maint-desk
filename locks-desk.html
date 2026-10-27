@@ -353,11 +353,11 @@ function navTabs(active){
   return `<nav class="tabs">
     ${t("homes","#/",ICON.homes,"Homes")}
     ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : off ? "" : t("install","#/install",ICON.install,"Install")}
-    ${DESK && !off ? t("codes","#/codes",ICON.codes,"Access codes") : ""}
+    ${DESK ? t("codes","#/codes",ICON.codes,"Access codes") : ""}
     ${t("alerts","#/alerts",ICON.alerts,"Alerts", S.alertCount?`<span class="badge">${S.alertCount}</span>`:"")}
     ${DESK ? t("reports","#/reports",ICON.score,"Reports") : ""}
-    ${DESK && !off ? t("rules","#/rules",ICON.homes,"Company rules") : ""}
-    ${DESK && !off ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
+    ${DESK ? t("rules","#/rules",ICON.homes,"Company rules") : ""}
+    ${DESK ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
     ${DESK && !off ? t("install","#/install",ICON.install,"Install") : ""}
     ${DESK && adm ? t("people","#/people",ICON.codes,"People") : ""}
   </nav>`;
@@ -1165,7 +1165,7 @@ async function homeView(pid){
       <details style="margin-top:8px"><summary>Name, master code, test</summary>
         <div class="chips" style="margin:6px 0">${DOOR_NAMES.map(n=>`<span class="chip ${n===l.name?"on":""}" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>
         <label class="field"><span>Name</span><input data-f="name" value="${esc(l.name)}"></label>
-        ${DESK?`<label class="field"><span>Master code (Yale master PIN)</span><input data-f="master" inputmode="numeric" value="${esc(l.master_code||"")}"></label>`
+        ${OFFICE()?"":DESK?`<label class="field"><span>Master code (Yale master PIN)</span><input data-f="master" inputmode="numeric" value="${esc(l.master_code||"")}"></label>`
               :`<div class="muted" style="margin:6px 0">Master code: ${l.master_code?"on file (shown on the Install page)":"not set - add it on the desk"}</div>`}
         <div class="grid2"><label class="field"><span>Installed on</span><input type="date" data-f="installed" value="${esc(l.installed_on||"")}"></label>
         <label class="field"><span>Replace after (years)</span><input data-f="years" inputmode="numeric" value="${l.replace_years}"></label></div>
@@ -1235,8 +1235,8 @@ async function homeView(pid){
       <div><div class="grow"><b>Send all codes again</b><div class="muted" style="font-size:12.5px">Every guest, crew and vendor code gets written to the doors again. Use after new batteries, a reset lock, or "code doesn't work".</div></div><button class="btn small" data-reset="resend">Send again</button></div>
       <div><div class="grow"><b>Clear old / unknown codes</b><div class="muted" style="font-size:12.5px">Erases codes on the doors that aren't ours (old Brivo codes). Ours and the master code stay.</div></div><button class="btn small" data-reset="wipe">Clear</button></div>
       ${DESK?`<div><div class="grow"><b>New backup codes</b><div class="muted" style="font-size:12.5px">Every upcoming stay here gets a fresh backup code - use if a backup code was shared or used.</div></div><button class="btn small" data-reset="backup">New backups</button></div>`:""}
-      <div><div class="grow"><b>Change the master code</b><div class="muted" style="font-size:12.5px">${h.master_pending?`New code <b style="font-size:16px">${esc(h.master_pending)}</b> is waiting. On each door: old master${curMaster?" ("+esc(curMaster)+")":""} → ⚙ → <b>1</b> (Master PIN) → ⚙ → type the new code → ⚙. Then tap Done.`:`Makes a new master code${curMaster?" (now "+esc(curMaster)+")":""}, then you change it on each door.`}</div></div>
-        ${h.master_pending?`<button class="btn small go" data-reset="master_done">Done on every door</button><button class="btn small" data-reset="master_cancel">Cancel</button>`:`<button class="btn small" data-reset="master_new">New master</button>`}</div>
+      ${OFFICE()?"":`<div><div class="grow"><b>Change the master code</b><div class="muted" style="font-size:12.5px">${h.master_pending?`New code <b style="font-size:16px">${esc(h.master_pending)}</b> is waiting. On each door: old master${curMaster?" ("+esc(curMaster)+")":""} → ⚙ → <b>1</b> (Master PIN) → ⚙ → type the new code → ⚙. Then tap Done.`:`Makes a new master code${curMaster?" (now "+esc(curMaster)+")":""}, then you change it on each door.`}</div></div>
+        ${h.master_pending?`<button class="btn small go" data-reset="master_done">Done on every door</button><button class="btn small" data-reset="master_cancel">Cancel</button>`:`<button class="btn small" data-reset="master_new">New master</button>`}</div>`}
     </div><div id="resetmsg"></div></details>`;
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
@@ -1438,7 +1438,7 @@ async function staysView(){
 async function codesView(){
   if(!S.homes.length) await loadBase();
   const [codes, masters, brivoM] = await Promise.all([q("lock_staff_codes","*",x=>x.order("kind").order("label")),
-    q("locks","property_id,name,master_code",x=>x.eq("active",true).order("property_id")), rpc("lock_brivo_masters").then(r=>r||[]).catch(()=>[])]);
+    OFFICE()?[]:q("locks","property_id,name,master_code",x=>x.eq("active",true).order("property_id")), OFFICE()?[]:rpc("lock_brivo_masters").then(r=>r||[]).catch(()=>[])]);
   const ours = S.homes.filter(h=>h.section==="ours");
   const homeNames = (ids, areas) => (!ids || !ids.length) && (!areas || !areas.length) ? "All our homes"
     : [...(areas||[]).map(a=>hoodName(a)+" (all)"), ...(ids||[]).map(i=>(S.props[i]||{}).code||i)].join(", ");
@@ -1459,13 +1459,13 @@ async function codesView(){
       <button class="btn go" id="new">+ Add a code</button></div>
     <div id="form"></div>
     <div id="clist"></div>
-    <details class="sect" open><summary><h3 style="margin:0">Lock master codes</h3></summary><div class="card"><table class="tbl"><tr><th>Home</th><th>Door</th><th>Master code</th><th>From</th></tr>
+    ${OFFICE()?"":`<details class="sect" open><summary><h3 style="margin:0">Lock master codes</h3></summary><div class="card"><table class="tbl"><tr><th>Home</th><th>Door</th><th>Master code</th><th>From</th></tr>
       ${ours.slice().sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code),undefined,{numeric:true})).map(h => {
           const ls = masters.filter(m=>m.property_id===h.property_id && m.master_code), bs = brivoM.filter(b=>b.property_id===h.property_id && !ls.some(m=>m.master_code===b.master_code));
           const rows = [...ls.map(m=>[m.name, m.master_code, "Lock"]), ...bs.map(b=>[b.door||"Home", b.master_code, "Brivo"]),
             ...(h.master_code && !ls.some(m=>m.master_code===h.master_code) ? [["Home", h.master_code, "Made by app"]] : [])];
           return rows.length ? rows.map(r=>`<tr><td><b>${esc(dc(h.properties.code))}</b></td><td>${esc(r[0])}</td><td><span class="code-chip">${esc(r[1])}</span></td><td class="muted">${r[2]}</td></tr>`).join("")
-            : `<tr><td><b>${esc(dc(h.properties.code))}</b></td><td></td><td><span class="muted" style="color:var(--red)">not on file - get it from Brivo, or make one on the Install page</span></td><td></td></tr>`; }).join("")}</table></div></details>`, "Moose Locks", "Office · access codes");
+            : `<tr><td><b>${esc(dc(h.properties.code))}</b></td><td></td><td><span class="muted" style="color:var(--red)">not on file - get it from Brivo, or make one on the Install page</span></td><td></td></tr>`; }).join("")}</table></div></details>`}`, "Moose Locks", "Office · access codes");
   const firstHome = c => c.property_ids && c.property_ids.length ? ((S.props[c.property_ids[0]]||{}).code||"") : "~";
   const drawCodes = () => {
     const show = pref("cshow") || "all", srt = $("#csort").value, t = $("#cfind").value.trim().toLowerCase();
@@ -1919,9 +1919,9 @@ async function route(){
       else return mfaSetupView(); }catch(e){ return mfaSetupView(); } }
   const h = location.hash.replace(/^#\/?/,"");
   try{
-    if(OFFICE() && /^(install|codes|score|rules|people)/.test(h)){ location.hash = "#/"; return; }
+    if(OFFICE() && /^(install|people)/.test(h)){ location.hash = "#/"; return; }
     if(h==="people" && S.me.role!=="admin"){ location.hash = "#/"; return; }
-    if(h.startsWith("home/")) await (OFFICE() ? officeHomeView : homeView)(decodeURIComponent(h.slice(5)));
+    if(h.startsWith("home/")) await homeView(decodeURIComponent(h.slice(5)));
     else if(h==="people") await peopleView();
     else if(h.startsWith("install/")) await installHome(decodeURIComponent(h.slice(8)));
     else if(h==="install") await installView();
