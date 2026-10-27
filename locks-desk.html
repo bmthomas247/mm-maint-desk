@@ -247,6 +247,7 @@ const folioLink = s => `<a class="btn small" href="${TRACK}/pms/guest-folio/view
 const resLink = s => `${TRACK}/pms/reservations/view/${encodeURIComponent(s.res_id)}`;
 function stayPill(s, state, home){
   const pre = (home && home.preload_days) || 3, goes = new Date(new Date(s.starts_at) - pre*864e5);
+  if(s.out_at) return `<span class="pill grey" title="Guest left ${when(s.out_at)}. The code comes off at check-out.">guest left</span>`;
   if(state==="on") return `<span class="pill green" title="The code is on the door now. It works from 1 hour before check-in to 1 hour after check-out.">on lock</span>`;
   if(s.kind==="guest" && !["received","not-needed"].includes(s.agreement)) return `<span class="pill red" title="The code goes on the door once the rental agreement is back in Track (now: ${esc(s.agreement||"not sent")}).">needs agreement</span>`;
   if(goes > Date.now()) return `<span class="pill grey" title="The code goes on the door on ${goes.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})} (${pre} days before check-in). The door only accepts it from 1 hour before check-in.">on ${goes.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span>`;
@@ -878,34 +879,56 @@ async function homeView(pid){
 /* ------------------------------------------------ desk: every upcoming stay at our homes, with codes */
 async function staysView(){
   if(!S.homes.length) await loadBase();
-  const ours = S.homes.filter(h=>h.section==="ours").map(h=>h.property_id);
-  const [stays, assigns, locks] = await Promise.all([
-    q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,portal_token",x=>x.in("property_id",ours).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(300)),
-    q("lock_assign","lock_id,ref_kind,ref_id,state,wanted",x=>x.eq("ref_kind","stay").neq("state","cleared")),
-    q("locks","id,property_id,name",x=>x.eq("active",true))]);
+  const oursH = S.homes.filter(h=>h.section==="ours"), ours = oursH.map(h=>h.property_id);
+  const [all, assigns] = await Promise.all([
+    q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,portal_token,out_at",x=>x.in("property_id",ours).gte("ends_at",new Date(Date.now()-30*864e5).toISOString()).neq("status","cancelled").order("starts_at").limit(1000)),
+    q("lock_assign","lock_id,ref_kind,ref_id,state,wanted",x=>x.eq("ref_kind","stay").neq("state","cleared"))]);
   const cleared = s => s.kind!=="guest" || ["received","not-needed"].includes(s.agreement);
   const onLock = s => { const a = assigns.filter(x=>x.ref_id===s.res_id && x.wanted); return !a.length ? null : a.every(x=>x.state==="verified") ? "on" : "sending"; };
-  const inHouse = stays.filter(s=>new Date(s.starts_at)<=Date.now()).length;
+  const hoods = [...new Set(oursH.map(hoodOf))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b)));
   shell("stays", `<h2>Stays &amp; guest codes</h2>
-    <div class="stats"><div class="stat"><div class="n">${stays.length}</div><div class="l">Upcoming stays</div></div>
+    <div class="card row" style="gap:12px">
+      <label class="field" style="margin:0;flex:2;min-width:220px"><span>Find a guest</span><input id="sfind" placeholder="Guest name, reservation #, or code" autocomplete="off"></label>
+      <label class="field" style="margin:0;flex:1;min-width:180px"><span>Neighborhood</span><select id="shood"><option value="">All neighborhoods</option>${hoods.map(a=>`<option value="${esc(a)}">${esc(hoodName(a))}</option>`).join("")}</select></label>
+      <label class="field" style="margin:0;flex:1;min-width:160px"><span>Home</span><select id="shome"></select></label>
+      <label class="field" style="margin:0;flex:1;min-width:160px"><span>Show</span><select id="swhen"><option value="up">Upcoming + in the home</option><option value="all">Also the last 30 days</option></select></label></div>
+    <div id="sstats"></div>${STAY_KEY}<div class="card" style="overflow-x:auto" id="stable"></div>
+    <p class="muted">Codes go live (lock, guest page, Track Door Code) once the rental agreement is back. Owner and lease stays don't need one.</p>`, "Moose Locks", "Office desk · stays and codes");
+  const homeOpts = () => { const hd = $("#shood").value, cur = $("#shome").value;
+    $("#shome").innerHTML = `<option value="">All homes</option>` + oursH.filter(h=>!hd || hoodOf(h)===hd).sort((a,b)=>a.properties.code.localeCompare(b.properties.code,undefined,{numeric:true}))
+      .map(h=>`<option value="${esc(h.property_id)}" ${h.property_id===cur?"selected":""}>${esc(h.properties.code)}</option>`).join(""); };
+  const draw = () => {
+    const t = $("#sfind").value.trim().toLowerCase(), hd = $("#shood").value, hm = $("#shome").value, wh = $("#swhen").value;
+    pref("shood", hd); pref("shome", hm); pref("swhen", wh);
+    const now = Date.now();
+    const stays = all.filter(s => (wh==="all" || t || new Date(s.ends_at) >= now)
+      && (!hd || hoodOf(S.homes.find(h=>h.property_id===s.property_id)||{properties:{}})===hd) && (!hm || s.property_id===hm)
+      && (!t || [s.guest, s.res_id, s.code].join(" ").toLowerCase().includes(t)));
+    const up = stays.filter(s=>new Date(s.ends_at)>=now), inHouse = up.filter(s=>new Date(s.starts_at)<=now && !s.out_at).length;
+    $("#sstats").innerHTML = `<div class="stats"><div class="stat"><div class="n">${up.length}</div><div class="l">Upcoming stays</div></div>
       <div class="stat"><div class="n">${inHouse}</div><div class="l">In the home now</div></div>
-      <div class="stat ${stays.some(s=>!cleared(s))?"warn":""}"><div class="n">${stays.filter(s=>!cleared(s)).length}</div><div class="l">Agreement not back</div></div>
-      <div class="stat"><div class="n">${stays.filter(s=>onLock(s)==="on").length}</div><div class="l">Codes on the lock</div></div></div>
-    ${STAY_KEY}<div class="card" style="overflow-x:auto"><table class="tbl"><tr><th>Home</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Agreement</th><th>Code</th><th>Lock</th><th></th></tr>
-    ${stays.map(s=>{ const ol = onLock(s); return `<tr data-res="${esc(s.res_id)}"><td><a href="#/home/${encodeURIComponent(s.property_id)}"><b>${esc((S.props[s.property_id]||{}).code||"")}</b></a></td>
+      <div class="stat ${up.some(s=>!cleared(s))?"warn":""}"><div class="n">${up.filter(s=>!cleared(s)).length}</div><div class="l">Agreement not back</div></div>
+      <div class="stat"><div class="n">${up.filter(s=>onLock(s)==="on").length}</div><div class="l">Codes on the lock</div></div></div>`;
+    $("#stable").innerHTML = `<table class="tbl"><tr><th>Home</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Agreement</th><th>Code</th><th>Lock</th><th></th></tr>
+    ${stays.map(s=>{ const ol = onLock(s), past = new Date(s.ends_at) < now; return `<tr data-res="${esc(s.res_id)}" style="${past?"opacity:.6":""}"><td><a href="#/home/${encodeURIComponent(s.property_id)}"><b>${esc((S.props[s.property_id]||{}).code||"")}</b></a></td>
       <td><b><a href="${resLink(s)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.guest||"Guest")}</a></b><div class="muted" style="font-size:12px">${esc(s.kind)} · ${esc(s.res_id)}</div></td>
-      <td>${when(s.starts_at)}</td><td>${when(s.ends_at)}</td>
+      <td>${when(s.starts_at)}</td><td>${when(s.ends_at)}${s.out_at?`<div class="muted" style="font-size:12px">left ${when(s.out_at)}</div>`:""}</td>
       <td>${cleared(s)?'<span class="pill green">OK</span>':`<span class="pill red">${esc(s.agreement||"not sent")}</span>`}</td>
       <td><span class="code-chip">${esc(s.code)}</span><div class="muted" style="font-size:12px">${s.code_source==="phone"?"last 4 of phone":esc(s.code_source)}</div></td>
-      <td>${stayPill(s, ol, S.homes.find(x=>x.property_id===s.property_id))}</td>
-      <td style="white-space:nowrap;text-align:right">${folioLink(s)} <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button></td></tr>`; }).join("")
-      || '<tr><td colspan="8" class="muted">No upcoming stays from Track.</td></tr>'}</table></div>
-    <p class="muted">Codes go live (lock, guest page, Track Door Code) once the rental agreement is back. Owner and lease stays don't need one.</p>`, "Moose Locks", "Office desk · stays and codes");
-  $$("[data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = stays.find(x=>x.res_id===row.dataset.res);
-    if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
-      try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
-    if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
-      try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); staysView(); }catch(e){ fail(e); } } });
+      <td>${past?'<span class="pill grey">over</span>':stayPill(s, ol, S.homes.find(x=>x.property_id===s.property_id))}</td>
+      <td style="white-space:nowrap;text-align:right">${folioLink(s)}${past?"":` <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button>`}</td></tr>`; }).join("")
+      || `<tr><td colspan="8" class="muted">${t||hd||hm?"No stays match.":"No upcoming stays from Track."}</td></tr>`}</table>`;
+    $$("#stable [data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = all.find(x=>x.res_id===row.dataset.res);
+      if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
+        try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
+      if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
+        try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); staysView(); }catch(e){ fail(e); } } });
+  };
+  const ph = pref("shood"); if(ph && hoods.includes(ph)) $("#shood").value = ph;
+  homeOpts(); const pm = pref("shome"); if(pm && [...$("#shome").options].some(o=>o.value===pm)) $("#shome").value = pm;
+  const pw = pref("swhen"); if(pw) $("#swhen").value = pw;
+  $("#shood").onchange = () => { homeOpts(); draw(); }; $("#shome").onchange = draw; $("#swhen").onchange = draw; $("#sfind").oninput = draw;
+  draw();
 }
 
 /* ------------------------------------------------ employee / vendor / backup codes */
@@ -1085,7 +1108,7 @@ async function route(){
     else if(h==="score" && DESK) await scoreView();
     else await homesView();
   }catch(e){ fail(e, "Couldn't load"); }
-  if(h.startsWith("home/") || h==="" || h==="stays") S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]")) route(); }, 30000);
+  if(h.startsWith("home/") || h==="") S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]")) route(); }, 30000);
 }
 window.addEventListener("hashchange", route);
 sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
