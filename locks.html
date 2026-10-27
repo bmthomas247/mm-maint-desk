@@ -607,6 +607,7 @@ async function installHome(pid){
       ${locks.map(l=>`<div class="row" style="margin-top:10px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
         <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}`,
     climate: `<div class="muted">Same pairing button, PIN left blank, then use the thermostat's or sensor's Z-Wave "include" menu.
+      <br><b>Noise sensor:</b> set it up at the office first on the <a href="noise-setup.html" target="_blank">noise sensor setup page</a> (Chrome, USB cable, this home's Wi-Fi).
       <br><b>TVs and noise sensor:</b> they show up on their own once they're on the home's Wi-Fi (same network as the hub). Samsung / LG TVs pop up "Allow?" on screen the first time - press Allow. Roku: Settings → System → Advanced → Control by mobile apps → Network access = Permissive.</div>
       <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>
       ${thermos.length||sensors.length?`<div class="muted" style="margin-top:8px">Found: ${[...thermos.map(t=>esc(t.name)+(t.temp!=null?` ${Math.round(t.temp)}°`:"")), ...sensors.map(x=>esc(x.name))].join(" · ")}</div>`:""}${mark(STEPS[4])}`,
