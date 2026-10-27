@@ -367,8 +367,10 @@ function loginView(msg){
     <label class="field"><span>Email</span><input type="email" id="em" autocomplete="username"></label>
     <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password"></label>
     <button class="btn primary wide" id="go">Sign in</button>
-    <button class="btn wide" id="link" style="margin-top:8px">First time or forgot it? Email me a link</button>
-    <p class="muted">The link signs you in here. Then set your password under 👤 My account.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
+    <button class="btn wide" id="link" style="margin-top:8px">First time or forgot it? Email me a code</button>
+    <div id="codebox" style="display:none;margin-top:10px"><label class="field"><span>Code from the email</span><input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Example: 123456" style="font-size:24px;letter-spacing:6px;text-align:center"></label>
+      <button class="btn primary wide" id="otpgo">Sign in with code</button></div>
+    <p class="muted">Then set your password under 👤 My account.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
   $("#go").onclick = async () => {
     const { error } = await sb.auth.signInWithPassword({ email:$("#em").value.trim().toLowerCase(), password:$("#pw").value });
     if(error) $("#msg").textContent = "Wrong email or password."; else route();
@@ -376,10 +378,17 @@ function loginView(msg){
   $("#link").onclick = async () => { const email = $("#em").value.trim().toLowerCase(); if(!email) return $("#msg").textContent = "Type your email first.";
     $("#msg").textContent = "Sending…";
     const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname } });
-    $("#msg").textContent = !error ? "Link sent to " + email + ". Open it on this device."
-      : /rate|limit|seconds|429/i.test((error.message||"") + (error.status||"")) ? "Too many email links sent in the last hour. Use the newest link you already got, or wait and try again."
+    if(!error){ $("#codebox").style.display = "block"; $("#otp").focus(); }
+    $("#msg").textContent = !error ? "Code sent to " + email + ". Type it above (or tap the button in the email)."
+      : /rate|limit|seconds|429/i.test((error.message||"") + (error.status||"")) ? "Too many emails sent in the last hour. Use the newest code you already got, or wait a minute and try again."
       : /signup|not allowed|not found/i.test(error.message||"") ? "Couldn't send the link - ask Brandon to add " + email + "."
       : "Couldn't send the link (" + error.message + ")."; };
+  $("#otpgo").onclick = async () => { const email = $("#em").value.trim().toLowerCase(), token = $("#otp").value.replace(/\D/g,"");
+    if(!email || token.length < 6) return $("#msg").textContent = "Type your email and the code from the email.";
+    $("#msg").textContent = "Checking…";
+    const { error } = await sb.auth.verifyOtp({ email, token, type:"email" });
+    if(error) $("#msg").textContent = "That code didn't work - it may be old. Send a new one."; else route(); };
+  $("#otp").addEventListener("keydown", e => { if(e.key === "Enter") $("#otpgo").click(); });
 }
 
 /* ------------------------------------------------ homes list */
