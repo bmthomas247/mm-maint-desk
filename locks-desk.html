@@ -1903,7 +1903,9 @@ async function peopleView(){
   const owner = S.me.role === "admin";
   const roleSel = (id, r) => `<select data-role="${id}" ${!owner && r==="admin"?"disabled":""}>${[["admin","Admin - everything (Brandon, Kim)"],["manager","Manager - everything, can't change admins"],["office","Office - everything but master codes + install"],["tech","Tech - field app + install"],["none","No access"]].filter(([v])=>owner || v!=="admin" || r==="admin").map(([v,l])=>`<option value="${v}" ${(r||"none")===v?"selected":""}>${l}</option>`).join("")}</select>`;
   shell("people", `<h2>People</h2>
-    <p class="muted">Who can sign in to Moose Locks and what they can do. Only admins see this page.</p>
+    <p class="muted">Who can sign in to Moose Locks and what they can do. Only admins and managers see this page.</p>
+    <div class="card"><b>Temporary passwords for everyone not in yet</b><div class="muted">Makes a temporary password for each person who hasn't finished setting up (no 2-step yet). They can't do anything until they pick their own. Shown once - hand them out.</div>
+      <button class="btn primary" id="tempall" style="margin-top:8px">Make temporary passwords</button><div id="templist"></div></div>
     ${ppl.map(u=>`<div class="card" data-id="${u.id}">
       <div class="row"><div class="grow"><b>${esc(u.name||"")}</b><div class="muted">2-step: ${u.two_step?"✓ set up":"not yet"} · last sign-in: ${ago(u.last_sign_in)}</div></div></div>
       <div class="grid2"><label class="field"><span>Email</span><input data-email="${u.id}" type="email" ${!owner && u.lock_role==="admin"?"disabled":""} value="${esc(u.email||"")}" placeholder="Example: name@moosemanagement.com"></label>
@@ -1921,6 +1923,14 @@ async function peopleView(){
     msg(id, "Sending…");
     const { error } = await sb.auth.signInWithOtp({ email: u.email.toLowerCase(), options:{ emailRedirectTo: location.origin + location.pathname } });
     msg(id, error ? "Couldn't send (" + error.message + ")" : "Sent. They type the code, then set a new password under 👤 My account."); });
+  $("#tempall").onclick = async () => { const who = ppl.filter(u => !u.two_step && u.email && u.lock_role !== "none" && u.lock_role !== null || (!u.two_step && u.email && u.desk_role === "tech" && u.lock_role === null));
+    const list = who.filter(u => S.me.role === "admin" || u.lock_role !== "admin");
+    if(!list.length) return toast("Everyone is already set up");
+    if(!confirm("Make temporary passwords for " + list.length + " people: " + list.map(u=>u.name).join(", ") + "?\n\nTheir current passwords stop working.")) return;
+    const rows = [];
+    for(const u of list){ try{ rows.push([u.name, u.email, await rpc("lock_person_temp_password", { p_id:u.id })]); }catch(e){ rows.push([u.name, u.email, "✗ " + (e.message||e)]); } }
+    $("#templist").innerHTML = `<table class="tbl" style="margin-top:10px"><tr><th>Name</th><th>Sign in with</th><th>Temporary password</th></tr>${rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td><b style="user-select:all">${esc(r[2])}</b></td></tr>`).join("")}</table>
+      <p class="muted">Sign in at crew.moosemanagement.com/office (phones: /locks) → set up the authenticator app → pick their own password.</p>`; };
   document.querySelectorAll("[data-temp]").forEach(b => b.onclick = async () => { const id = b.dataset.temp, u = ppl.find(x=>x.id===id);
     if(!confirm("Make a temporary password for " + u.name + "? Their old password stops working. They must pick a new one when they sign in.")) return;
     try{ const pw = await rpc("lock_person_temp_password", { p_id:id });
