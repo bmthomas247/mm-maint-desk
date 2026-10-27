@@ -432,10 +432,12 @@ end $$;
 
 -- A code is "taken" at a home if another stay overlapping (with an hour either side) or an active crew code uses it.
 -- which homes a crew/vendor/owner code reaches: picked homes + every home in the picked neighborhoods; nothing picked = all
+alter table properties add column if not exists county text;   -- Summit County / Wasatch County (from GPS) - county inspector codes
 create or replace function lock_code_covers(p_props text[], p_areas text[], p_prop text) returns boolean
 language sql stable security definer set search_path = public as $$
   select (p_props is null and p_areas is null) or p_prop = any(coalesce(p_props, '{}'))
       or (select area from properties where id = p_prop) = any(coalesce(p_areas, '{}'))
+      or ('county:' || (select county from properties where id = p_prop)) = any(coalesce(p_areas, '{}'))   -- whole county (inspectors)
 $$;
 create or replace function lock_code_homes(p_props text[], p_areas text[]) returns text[]
 language sql stable security definer set search_path = public as $$
@@ -1928,6 +1930,7 @@ end $$;
 -- ---------------------------------------------------------------- master codes made by the app (new homes, never on Brivo)
 alter table lock_homes add column if not exists master_code text;
 alter table properties add column if not exists city text;
+alter table properties add column if not exists county text;
 alter table properties add column if not exists state text;
 
 -- a 6-digit master PIN that's hard to guess and not already used by anyone on our system
@@ -1992,8 +1995,8 @@ begin
   if pid is null then
     pid := lower(regexp_replace(c, '[^A-Za-z0-9]+', '-', 'g'));
     if exists (select 1 from properties where id = pid) then pid := pid || '-' || substr(md5(random()::text), 1, 4); end if;
-    insert into properties (id, code, name, address, city, state, area, kind, active)
-    values (pid, c, coalesce(nm, c), nullif(trim(r->>'address'),''), nullif(trim(r->>'city'),''), nullif(upper(trim(r->>'state')),''),
+    insert into properties (id, code, name, address, city, state, county, area, kind, active)
+    values (pid, c, coalesce(nm, c), nullif(trim(r->>'address'),''), nullif(trim(r->>'city'),''), nullif(upper(trim(r->>'state')),''), nullif(trim(r->>'county'),''),
             nullif(upper(trim(r->>'area')),''), coalesce(nullif(r->>'kind',''), 'str'), true);
   end if;
   if (r->>'lat') is not null and (r->>'lng') is not null then
