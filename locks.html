@@ -119,6 +119,13 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 .temp{font-size:34px;font-weight:800;letter-spacing:-.03em}
 /* install stepper */
+.how{margin:8px 0 4px;padding:0;list-style:none;display:grid;gap:6px}
+.how li{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.35}
+.how .key{flex:0 0 auto;min-width:44px;text-align:center;padding:6px 8px;border-radius:10px;background:var(--card,#fff);border:2px solid var(--line);font-weight:900;font-size:16px}
+.master{font-size:18px;margin-top:8px}
+.pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.pic{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:10px;border:1px solid #dfe5da;border-radius:14px;background:var(--card,#fff)}.pic b{font-size:14px}.pic span{font-size:12.5px;color:#5b6656;line-height:1.3}
+.step.flash{background:var(--pine-soft);border-radius:12px;transition:background .4s}
+.step{scroll-margin-top:80px}
 .step{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
 .step:first-child{border-top:0;padding-top:4px}
 .step .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--line);color:var(--ink-2);display:grid;place-items:center;font-weight:800;font-size:14px}
@@ -163,7 +170,7 @@ body.desk{padding-bottom:30px}
 .tbl td,.tbl th{padding:10px 8px}.tbl tr:hover td{background:var(--ground)}
 .code-chip{font-weight:800;letter-spacing:2px;font-size:16px}
 details.sect{margin:18px 0 6px} details.sect>summary{padding:6px 2px;border-bottom:1px solid var(--line);margin-bottom:10px} details.sect>summary h3{display:inline}
-.status .sl{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);flex-wrap:wrap} .status .sl b{min-width:150px}
+.status .sl{display:grid;grid-template-columns:14px 1fr auto;column-gap:10px;row-gap:2px;align-items:center;padding:7px 0;border-top:1px solid var(--line)} .status .sl .muted{grid-column:2;grid-row:2;font-size:13.5px} .status .sl .btn{grid-column:3;grid-row:1 / span 2}
 .dot{width:12px;height:12px;border-radius:50%;display:inline-block;flex:none;transform:translateY(1px);background:var(--line-2)}
 .dot.ok{background:#3fb24a;box-shadow:0 0 0 3px #3fb24a33} .dot.wait{background:#e0a106;box-shadow:0 0 0 3px #e0a10633;animation:pulse 1.4s infinite} .dot.bad{background:var(--red);box-shadow:0 0 0 3px #c8382b33}
 @keyframes pulse{50%{opacity:.35}}
@@ -239,7 +246,7 @@ function statusLights(o){
       : o.net.other_home ? ["bad","Your phone","on "+o.net.other_home+"'s internet - join this home's Wi-Fi"]
       : ["wait","Your phone", ct==="cellular" ? "on cell data - join the home's Wi-Fi" : "not on the hub's network yet"]); }
   const hub = o.hub;
-  if(!hub) L.push([o.net && o.net.new_hub_here ? "wait" : "off", "Hub", o.net && o.net.new_hub_here ? "found on this internet - add it in step 2" : "not added yet (plug it in: power + cable to the router)"]);
+  if(!hub) L.push([o.net && o.net.new_hub_here ? "wait" : "off", "Hub", o.net && o.net.new_hub_here ? "found on this internet - add it in step 2" : "not added yet (plug it in: power + Ethernet cable to the router)"]);
   else { const m = age(hub.last_seen);
     L.push(m < 3 ? ["ok","Hub","online · checked in "+ago(hub.last_seen)] : m < 10 ? ["wait","Hub","checking in… last "+ago(hub.last_seen)] : ["bad","Hub","offline since "+ago(hub.last_seen)+" - check power and the router cable"]);
     const st = hub.status || {};
@@ -248,7 +255,7 @@ function statusLights(o){
     const on = list.filter(ok); L.push([on.length===list.length ? "ok" : on.length ? "wait" : "bad", name, `${on.length} of ${list.length} connected` + (on.length<list.length ? " - not answering: "+list.filter(x=>!ok(x)).map(x=>x.name).join(", ") : "")]); };
   const hubUp = hub && age(hub.last_seen) < 10;
   grp(o.locks||[], "Doors", "none paired yet", l => hubUp && l.online !== false);
-  grp(o.thermos||[], "Thermostats", "none paired (optional)", t => hubUp && t.online !== false);
+  grp(o.thermos||[], "Thermostats", "none paired yet - every home needs one", t => hubUp && t.online !== false);
   const leak = (o.sensors||[]).filter(x=>x.kind!=="noise"), noise = (o.sensors||[]).filter(x=>x.kind==="noise");
   if(leak.length) grp(leak, "Leak / door sensors", "", x => hubUp && x.online !== false);
   grp(noise, "Noise sensor (Wi-Fi)", "not set up yet", x => hubUp && x.online !== false && age(x.last_seen) < 10);
@@ -258,7 +265,7 @@ function statusLights(o){
   const anyBad = L.some(x=>x[0]==="bad");
   return `<div class="card status ${allOk?"allok":anyBad?"anybad":""}">
     <div class="row" style="margin-bottom:6px"><b class="grow" style="font-size:16px">${allOk ? "🟢 Everything is connected" : anyBad ? "🔴 Something isn't connected" : "🟡 Still connecting…"}</b><span class="muted" style="font-size:12px">updates every 15 s</span></div>
-    ${L.map(([st,l,d])=>`<div class="sl"><i class="dot ${st}"></i><b>${esc(l)}</b><span class="muted">${esc(d)}</span></div>`).join("")}</div>`;
+    ${L.map(([st,l,d])=>`<div class="sl"><i class="dot ${st}"></i><b>${esc(l)}</b><span class="muted grow">${esc(d)}</span>${o.go&&o.go[l]?`<button class="btn small" data-goto="${o.go[l]}">${st==="ok"?"View":"Fix it"} ↓</button>`:""}</div>`).join("")}</div>`;
 }
 
 /* whole-home controls: every door at once, every thermostat at once */
@@ -346,15 +353,20 @@ function loginView(msg){
 /* ------------------------------------------------ homes list */
 async function loadBase(){
   const homes = await q("lock_homes","*,properties(id,code,name,address,area,bw_home_id)");
-  S.homes = homes.filter(h=>h.properties).sort((a,b)=>a.properties.code.localeCompare(b.properties.code));
+  S.homes = homes.filter(h=>h.properties).sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code)));
   S.props = Object.fromEntries(S.homes.map(h=>[h.property_id,h.properties]));
-  if(!S.allProps){ try{ S.allProps = await q("properties","id,code,name,area",x=>x.eq("active",true)); }catch(e){ S.allProps = []; } }
+  if(!S.allProps){ try{ S.allProps = await q("properties","id,code,name,area,address,city,state,kind",x=>x.eq("active",true)); }catch(e){ S.allProps = []; } }
   const al = await q("lock_alerts","id,property_id",x=>x.is("closed_at",null));
   const ours = new Set(S.homes.filter(h=>h.section==="ours").map(h=>h.property_id));
   S.alertCount = al.filter(a=>ours.has(a.property_id)).length;
 }
 /* neighborhoods (office desk): Track area code (RJ, BHV...) + the name the homes share ("Retreat at Jordanelle") */
-const hoodOf = h => (h.properties && (h.properties.area || (h.properties.code||"").split(" ")[0])) || "Other";
+/* "2H-" = second home, "L-" = lease: ignored for sorting / neighborhood, shown as a tag at the end ("DR 4043 · 2H") */
+const unpre = c => String(c||"").replace(/^(2H|L)\s*-\s*/i,"");
+const preOf = c => ((String(c||"").match(/^(2H|L)\s*-/i)||[])[1]||"").toUpperCase();
+const ck = c => unpre(c).toUpperCase();
+const dc = c => unpre(c) + (preOf(c) ? " · "+preOf(c) : "");
+const hoodOf = h => (h.properties && (unpre(h.properties.area) || unpre(h.properties.code).split(" ")[0])) || "Other";
 function hoodName(area){
   const pool = (S.allProps && S.allProps.length ? S.allProps.map(p=>({properties:p})) : S.homes);
   const names = pool.filter(h=>hoodOf(h)===area).map(h=>String(h.properties.name||"")
@@ -362,6 +374,15 @@ function hoodName(area){
   const top = Object.entries(names.reduce((m,n)=>(m[n]=(m[n]||0)+1,m),{})).sort((a,b)=>b[1]-a[1])[0];
   return top ? top[0] : area;
 }
+/* phone photo -> small JPEG (about 1000px) so it can be saved with the home */
+function shrinkPhoto(file){ return new Promise((ok, no) => { const img = new Image(), url = URL.createObjectURL(file);
+  img.onload = () => { const m = 1000, sc = Math.min(1, m/Math.max(img.width, img.height)), c = document.createElement("canvas");
+    c.width = Math.round(img.width*sc); c.height = Math.round(img.height*sc); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url); ok(c.toDataURL("image/jpeg", 0.72)); }; img.onerror = no; img.src = url; }); }
+// typed-but-not-saved on a page: don't auto-refresh it away
+document.addEventListener("input", e => { if(e.target.closest && e.target.closest("#newform,.step")) S.dirty = true; }, true);
+document.addEventListener("change", e => { if(e.target.closest && e.target.closest("#newform,.step")) S.dirty = true; }, true);
+window.addEventListener("hashchange", () => { S.dirty = false; });
 function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("locks_"+k); localStorage.setItem("locks_"+k, v); }catch(e){ return null; } }
 async function homesView(){
   await loadBase();
@@ -399,7 +420,7 @@ async function homesView(){
     const temps = ts.filter(t=>t.temp!=null);
     const tOn = ts.filter(t=>t.online!==false && hub && online(hub)).length;
     return `<a class="card home ${cls}" href="#/home/${encodeURIComponent(h.property_id)}">
-      <div class="row"><div class="grow"><div class="code">${esc(h.properties.code)}</div><div class="muted">${esc(h.properties.name)}</div></div>
+      <div class="row"><div class="grow"><div class="code">${esc(dc(h.properties.code))}</div><div class="muted">${esc(h.properties.name)}</div></div>
         <div style="text-align:right;display:grid;gap:6px;justify-items:end">${status}${guestPill(h.property_id)}${as.length?`<span class="pill red">${as.length} alert${as.length>1?"s":""}</span>`:""}</div></div>
       <div class="meta">
         ${hub?`<span class="mini">${ICON.hub} hub ${online(hub)?"online":"offline"}</span>`:""}
@@ -433,7 +454,7 @@ async function homesView(){
     : `<h3>Homes on our system · ${sec.ours.length}</h3><div class="tile-grid">${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}</div>`}
     ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
       <label class="field"><span>Home code - start typing (e.g. bhv)</span><input id="nh" list="nh_list" autocomplete="off" placeholder="Type letters or numbers…"></label>
-      <datalist id="nh_list">${(S.allProps||[]).filter(x=>!S.homes.some(h=>h.property_id===x.id && h.section==="ours")).sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})).map(x=>`<option value="${esc(x.code)}">${esc(x.name||"")}</option>`).join("")}</datalist>
+      <datalist id="nh_list">${(S.allProps||[]).filter(x=>!S.homes.some(h=>h.property_id===x.id && h.section==="ours")).sort((a,b)=>ck(a.code).localeCompare(ck(b.code),undefined,{numeric:true})).map(x=>`<option value="${esc(dc(x.code))}">${esc(x.name||"")}</option>`).join("")}</datalist>
       <label class="field"><span>Section</span><select id="ns"><option value="ours">Our system</option></select></label>
       <button class="btn primary wide" id="addh">Add</button></details>`:""}`, "Moose Locks", `${sec.ours.length} test homes · ${hubOn} online`);
   wireSync();
@@ -454,8 +475,8 @@ async function homesView(){
     const draw = () => {
       const hood = $("#hood").value, srt = $("#hsort").value, t = $("#hfind").value.trim().toLowerCase();
       pref("hood", hood); pref("sort", srt);
-      const cmp = (a,b) => srt==="attn" ? (score(b)-score(a)) || a.properties.code.localeCompare(b.properties.code, undefined, {numeric:true})
-        : (srt==="za" ? -1 : 1) * a.properties.code.localeCompare(b.properties.code, undefined, {numeric:true});
+      const cmp = (a,b) => srt==="attn" ? (score(b)-score(a)) || ck(a.properties.code).localeCompare(ck(b.properties.code), undefined, {numeric:true})
+        : (srt==="za" ? -1 : 1) * ck(a.properties.code).localeCompare(ck(b.properties.code), undefined, {numeric:true});
       const list = sec.ours.filter(h => (!hood || hoodOf(h)===hood) && (!t || (h.properties.code+" "+h.properties.name).toLowerCase().includes(t)));
       const groups = [...new Set(list.map(hoodOf))].sort((a,b)=>(srt==="za"?-1:1)*hoodName(a).localeCompare(hoodName(b)));
       $("#hoodlist").innerHTML = groups.map(g => { const hs = list.filter(h=>hoodOf(h)===g).sort(cmp);
@@ -540,14 +561,48 @@ function wireTools(hub, after){
 }
 
 /* ------------------------------------------------ install: one guided checklist per home */
+const PICS = {"hub": {"t": "Hub (gateway)", "d": "Small gray box. Power + Ethernet cable.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"18\" y=\"22\" width=\"64\" height=\"58\" rx=\"12\" fill=\"#d9ddd6\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"50\" cy=\"51\" r=\"4\" fill=\"#7bb342\"/><rect x=\"34\" y=\"80\" width=\"12\" height=\"7\" fill=\"#3c4a36\"/><rect x=\"54\" y=\"80\" width=\"12\" height=\"7\" fill=\"#3c4a36\"/></svg>"}, "stick": {"t": "Z-Wave stick", "d": "USB stick - the antenna. Goes on the extension cable.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"38\" y=\"14\" width=\"24\" height=\"56\" rx=\"6\" fill=\"#2f3a4a\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"42\" y=\"70\" width=\"16\" height=\"16\" fill=\"#c8ccd0\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"50\" cy=\"28\" r=\"3\" fill=\"#59c1ff\"/></svg>"}, "usbext": {"t": "USB extension cable", "d": "Lets the stick sit 3 ft+ from the hub.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"10\" y=\"40\" width=\"16\" height=\"20\" rx=\"3\" fill=\"#c8ccd0\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M26 50 C 45 20, 55 80, 74 50\" fill=\"none\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"74\" y=\"38\" width=\"18\" height=\"24\" rx=\"3\" fill=\"#555\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></svg>"}, "eth": {"t": "Ethernet cable", "d": "Network cable. Bring your own - 6 ft+.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"12\" y=\"36\" width=\"20\" height=\"26\" rx=\"3\" fill=\"#e9eef7\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M16 62v6h12v-6\" fill=\"none\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M32 49 C 50 20, 60 80, 78 49\" fill=\"none\" stroke=\"#2d6cdf\" stroke-width=\"5\"/><rect x=\"74\" y=\"36\" width=\"20\" height=\"26\" rx=\"3\" fill=\"#e9eef7\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></svg>"}, "lock": {"t": "Door lock (keypad)", "d": "Yale keypad deadbolt. Wireless module inside, above the batteries.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"30\" y=\"8\" width=\"40\" height=\"84\" rx=\"10\" fill=\"#4a4f55\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"40\" cy=\"26\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"50\" cy=\"26\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"60\" cy=\"26\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"40\" cy=\"38\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"50\" cy=\"38\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"60\" cy=\"38\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"40\" cy=\"50\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"50\" cy=\"50\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"60\" cy=\"50\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"40\" cy=\"62\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"50\" cy=\"62\" r=\"3\" fill=\"#e8f0ff\"/><circle cx=\"60\" cy=\"62\" r=\"3\" fill=\"#e8f0ff\"/><text x=\"50\" y=\"84\" text-anchor=\"middle\" font-size=\"11\" fill=\"#e8f0ff\">\u2699</text></svg>"}, "thermo": {"t": "Thermostat", "d": "On the wall. Turn HVAC power OFF before swapping.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"20\" y=\"20\" width=\"60\" height=\"60\" rx=\"14\" fill=\"#f4f4f2\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><text x=\"50\" y=\"58\" text-anchor=\"middle\" font-size=\"22\" font-weight=\"800\" fill=\"#3c4a36\">68\u00b0</text></svg>"}, "noise": {"t": "Noise sensor", "d": "Tiny cube (Atom Echo). Hears loudness only - no recording.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"30\" y=\"30\" width=\"40\" height=\"40\" rx=\"8\" fill=\"#2b2b2b\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"50\" cy=\"50\" r=\"9\" fill=\"#6b6b6b\"/><rect x=\"44\" y=\"70\" width=\"12\" height=\"10\" fill=\"#c8ccd0\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></svg>"}, "repeater": {"t": "Plug-in repeater", "d": "Only if a door has 1-2 bars. Plugs into an outlet halfway.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"28\" y=\"20\" width=\"44\" height=\"56\" rx=\"10\" fill=\"#f4f4f2\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M42 76v12M58 76v12\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"50\" cy=\"40\" r=\"4\" fill=\"#7bb342\"/></svg>"}, "batt": {"t": "AA batteries", "d": "Fresh ones in every lock.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><rect x=\"22\" y=\"26\" width=\"22\" height=\"56\" rx=\"5\" fill=\"#d4b35a\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"29\" y=\"20\" width=\"8\" height=\"6\" fill=\"#3c4a36\"/><rect x=\"56\" y=\"26\" width=\"22\" height=\"56\" rx=\"5\" fill=\"#d4b35a\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"63\" y=\"20\" width=\"8\" height=\"6\" fill=\"#3c4a36\"/></svg>"}, "keybox": {"t": "Key box", "d": "Spare key inside. Code is usually 1358.", "svg": "<svg viewBox=\"0 0 100 100\" width=\"72\" height=\"72\" aria-hidden=\"true\"><path d=\"M36 34v-10a14 14 0 0 1 28 0v10\" fill=\"none\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"24\" y=\"34\" width=\"52\" height=\"52\" rx=\"8\" fill=\"#2b2b2b\" stroke=\"#3c4a36\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"32\" y=\"52\" width=\"7\" height=\"16\" rx=\"2\" fill=\"#d9ddd6\"/><rect x=\"42\" y=\"52\" width=\"7\" height=\"16\" rx=\"2\" fill=\"#d9ddd6\"/><rect x=\"52\" y=\"52\" width=\"7\" height=\"16\" rx=\"2\" fill=\"#d9ddd6\"/><rect x=\"62\" y=\"52\" width=\"7\" height=\"16\" rx=\"2\" fill=\"#d9ddd6\"/></svg>"}};
+const STICKER_SVG = `<svg viewBox="0 0 340 250" width="100%" style="max-width:420px;display:block;margin:8px 0" role="img" aria-label="Where the PIN sticker is: inside the lock, battery cover off, on the wireless module above the batteries">
+  <rect x="20" y="10" width="130" height="230" rx="22" fill="#e9ece6" stroke="#6b7a64" stroke-width="3"/>
+  <text x="85" y="32" text-anchor="middle" font-size="12" font-weight="700" fill="#3c4a36">Inside of the door</text>
+  <rect x="40" y="44" width="90" height="62" rx="8" fill="#fff" stroke="#6b7a64" stroke-width="2"/>
+  <text x="85" y="58" text-anchor="middle" font-size="10" fill="#3c4a36">wireless module</text>
+  <rect x="48" y="64" width="26" height="26" fill="#2b2b2b"/><rect x="52" y="68" width="6" height="6" fill="#fff"/><rect x="64" y="68" width="6" height="6" fill="#fff"/><rect x="52" y="80" width="6" height="6" fill="#fff"/><rect x="60" y="74" width="4" height="4" fill="#fff"/>
+  <text x="80" y="76" font-size="9" fill="#2b2b2b">DSK</text><text x="80" y="88" font-size="10" font-weight="800" fill="#c0392b" text-decoration="underline">12345</text>
+  <rect x="78" y="78" width="36" height="14" rx="4" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+  <rect x="48" y="118" width="18" height="70" rx="5" fill="#d4b35a" stroke="#8a6d1f"/><rect x="70" y="118" width="18" height="70" rx="5" fill="#d4b35a" stroke="#8a6d1f"/>
+  <rect x="92" y="118" width="18" height="70" rx="5" fill="#d4b35a" stroke="#8a6d1f"/><rect x="114" y="118" width="14" height="70" rx="5" fill="#d4b35a" stroke="#8a6d1f"/>
+  <text x="88" y="204" text-anchor="middle" font-size="10" fill="#3c4a36">batteries (cover off)</text>
+  <circle cx="85" cy="225" r="9" fill="#bfc7b8" stroke="#6b7a64"/>
+  <path d="M118 85 C 170 85, 170 70, 196 70" fill="none" stroke="#c0392b" stroke-width="2.5" marker-end="url(#ar)"/>
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#c0392b"/></marker></defs>
+  <rect x="198" y="40" width="132" height="120" rx="12" fill="#fff" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="264" y="62" text-anchor="middle" font-size="12" font-weight="800" fill="#2b2b2b">The sticker</text>
+  <text x="210" y="84" font-size="11" fill="#2b2b2b">DSK:</text>
+  <text x="210" y="102" font-size="13" font-weight="800" fill="#c0392b" text-decoration="underline">12345</text><text x="252" y="102" font-size="13" fill="#555">-67890-</text>
+  <text x="210" y="120" font-size="13" fill="#555">11223-44556-…</text>
+  <text x="264" y="146" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">PIN = first 5 digits</text>
+  <text x="198" y="186" font-size="11" fill="#3c4a36">Can't find it? Same sticker</text>
+  <text x="198" y="201" font-size="11" fill="#3c4a36">is on the lock's box and the</text>
+  <text x="198" y="216" font-size="11" fill="#3c4a36">paper manual. Or snap a photo</text>
+  <text x="198" y="231" font-size="11" fill="#3c4a36">of it before you put it in.</text>
+</svg>`;
+const KB_KEYS = ["Front Door Lock","Side Door Lock","Garage Door Lock","Back Door Lock","Owner Keys","Other"];
+const OLD_HW = ["Old door locks","Old thermostat","Brivo hub","Old keypad / deadbolt","Other"];
+const KB_DEFAULT = "1358";   // most key boxes get this code
 const STEPS = [
   {k:"prep",   t:"Before you go",            auto:null},
-  {k:"hub",    t:"Plug in the hub",          auto:"hub"},
-  {k:"brivo",  t:"Take the locks off Brivo", auto:null},
-  {k:"locks",  t:"Pair and name each door",  auto:"locks"},
-  {k:"climate",t:"Pair thermostats & sensors",auto:null},
-  {k:"test",   t:"Test every door",          auto:"test"},
+  {k:"hub",    t:"Plug in the hub",          auto:"hub", must:true},
+  {k:"brivo",  t:"Take the locks off Brivo", auto:"brivo"},
+  {k:"locks",  t:"Pair and name each door",  auto:"locks", must:true},
+  {k:"thermo", t:"Thermostats",              auto:"thermo", must:true},
+  {k:"heat",   t:"Test the heat",            auto:null, must:true},
+  {k:"noise",  t:"Noise sensor",             auto:"noise", skip:"No noise sensor in this home"},
+  {k:"tv",     t:"TVs (coming soon)",        auto:null, skip:"No TVs / skip for now"},
+  {k:"test",   t:"Test every door",          auto:"test", must:true},
   {k:"wipe",   t:"Clear old Brivo codes",    auto:"wipe"},
+  {k:"keybox", t:"Key box with spare key",   auto:"keybox"},
+  {k:"oldhw",  t:"Store the owner's old hardware", auto:"oldhw"},
   {k:"guest",  t:"Check what guests see",    auto:"guest"},
   {k:"track",  t:"Switch Track off Brivo",   auto:null},
 ];
@@ -569,7 +624,7 @@ async function installView(){
       <div id="near" style="margin-top:10px"></div></div>
     <h3>Homes on our system</h3>
     ${ours.map(h=>{ const p = installProgress(h); return `<a class="card home ${h.installed_at?"ok":p.done?"todo":""}" href="#/install/${encodeURIComponent(h.property_id)}">
-      <div class="row"><div class="grow"><div class="code">${esc(h.properties.code)}</div><div class="muted">${esc(h.properties.name)}</div></div>
+      <div class="row"><div class="grow"><div class="code">${esc(dc(h.properties.code))}</div><div class="muted">${esc(h.properties.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill ${p.done?"amber":"grey"}">${p.done}/${p.total} steps</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*p.done/p.total)}%"></i></div></a>`; }).join("")}`, "Install", "Step-by-step at the home");
   const start = async (pid, onOurs) => { try{ if(!onOurs){ await rpc("lock_setup_home",{p_property:pid,p_new:$("#isnew").checked}); await loadBase(); toast("Added - here's its checklist"); }
@@ -578,57 +633,101 @@ async function installView(){
     const t = $("#findh").value.trim(); if(t.length < 2) return $("#near").innerHTML = "";
     try{ const rows = await q("properties","id,code,name,address",x=>x.or(`code.ilike.*${t.replace(/[,()*]/g,"")}*,name.ilike.*${t.replace(/[,()*]/g,"")}*`).order("code").limit(8));
       const onOurs = id => S.homes.some(h=>h.property_id===id && h.section==="ours");
-      $("#near").innerHTML = rows.length ? `<div class="list">${rows.map(r=>`<div><div class="grow"><b>${esc(r.code)}</b><div class="muted" style="font-size:12.5px">${esc(r.address||r.name)}</div></div>
+      $("#near").innerHTML = rows.length ? `<div class="list">${rows.map(r=>`<div><div class="grow"><b>${esc(dc(r.code))}</b><div class="muted" style="font-size:12.5px">${esc(r.address||r.name)}</div></div>
           <button class="btn small ${onOurs(r.id)?"":"go"}" data-pick="${esc(r.id)}" data-ours="${onOurs(r.id)?1:""}">${onOurs(r.id)?"Open":"Start setup"}</button></div>`).join("")}</div>`
         : '<p class="muted">No home with that name. New homes show up here after they are added in Track and the next sync runs (or press Sync now on Homes).</p>';
       $$("[data-pick]").forEach(b=>b.onclick=()=>start(b.dataset.pick, !!b.dataset.ours));
     }catch(e){ fail(e); } }, 250); };
-  // Brand-new home: GPS -> street address + neighborhood -> suggested home code. Everything stays editable.
-  const AREAS = [...new Set((S.allProps||[]).map(p=>p.area).concat(S.homes.map(hoodOf)).filter(a=>a && a!=="Moose"))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b)));
+  // Brand-new home - built for anyone: one question at a time, GPS does most of it, everything stays editable.
+  const AREAS = [...new Set((S.allProps||[]).map(p=>unpre(p.area)).concat(S.homes.map(hoodOf)).filter(a=>a && a!=="Moose"))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b)));
+  const areaLabel = a => `${hoodName(a)} (${a})`;
+  const findArea = v => { v = String(v||"").trim(); if(!v) return "";
+    const m = v.match(/\(([^)]+)\)\s*$/); if(m && AREAS.includes(m[1].toUpperCase())) return m[1].toUpperCase();
+    const u = v.toUpperCase(); return AREAS.find(a=>a===u) || AREAS.find(a=>hoodName(a).toUpperCase()===u) || ""; };
+  const initials = t => String(t||"").split(/\s+/).filter(w=>/^[a-z0-9]/i.test(w)).map(w=>w[0]).join("").toUpperCase().slice(0,4);
   const newForm = (g) => {
     g = g || {};
+    const big = 'style="font-size:18px;padding:12px"';
     $("#newform").innerHTML = `<div class="card" style="margin:10px 0 0;background:var(--ground)">
-      <div class="row"><b class="grow">New home details</b><button class="btn small" id="nf_gps">📍 Use my location</button></div>
-      <div id="nf_msg" class="muted" style="margin:6px 0">${g.msg||"Fills in the address, neighborhood and a home code from where you're standing. Change anything that's wrong."}</div>
-      <label class="field"><span>Street address</span><input id="nf_addr" value="${esc(g.address||"")}" placeholder="13536 N Bucks Cir"></label>
-      <div class="grid2"><label class="field"><span>Neighborhood</span><select id="nf_area"><option value="">Pick…</option>${AREAS.map(a=>`<option value="${esc(a)}" ${a===g.area?"selected":""}>${esc(hoodName(a))} (${esc(a)})</option>`).join("")}<option value="__new">New neighborhood…</option></select></label>
-        <label class="field"><span>Home code</span><input id="nf_code" value="${esc(g.code||"")}" placeholder="RJ 13536"></label></div>
-      <div id="nf_newarea" style="display:none" class="grid2"><label class="field"><span>New neighborhood code</span><input id="nf_area2" placeholder="e.g. PCM"></label>
-        <label class="field"><span>Its name</span><input id="nf_aname" placeholder="e.g. Park City Mountain"></label></div>
-      <div class="grid2"><label class="field"><span>Home name</span><input id="nf_name" value="${esc(g.name||"")}" placeholder="Retreat at Jordanelle 13536"></label>
-        <label class="field"><span>Type</span><select id="nf_kind"><option value="str">Vacation rental</option><option value="second_home">Second home</option><option value="lease">Lease</option></select></label></div>
-      <button class="btn go wide" id="nf_go">Create home &amp; start setup</button>
-      <div class="muted" style="font-size:12.5px;margin-top:6px">Already in Track? Search for it above instead - it keeps the Track link.</div></div>`;
+      <b style="font-size:17px">New home</b>
+      <button class="btn primary wide" id="nf_gps" style="margin:8px 0;font-size:17px;padding:14px">📍 Fill it in from where I'm standing</button>
+      <div id="nf_msg" class="muted" style="margin:0 0 8px">${g.msg||"Stand inside the home and tap the blue button. Then check each box - fix anything that's wrong."}</div>
+      <label class="field"><span><b>1.</b> Home code <span class="muted">- like RJ 13536 (put 2H- in front for a second home, L- for a lease)</span></span>
+        <input id="nf_code" style="font-size:18px;padding:12px;text-transform:uppercase" value="${esc(g.code||"")}" placeholder="RJ 13536" autocapitalize="characters" autocomplete="off"></label>
+      <div id="nf_hit"></div>
+      <label class="field"><span><b>2.</b> Home name <span class="muted">- what we call it. Need a code <i>or</i> a name.</span></span>
+        <input id="nf_name" ${big} value="${esc(g.name||"")}" placeholder="Retreat at Jordanelle 13536"></label>
+      <label class="field"><span><b>3.</b> Street address</span><input id="nf_addr" ${big} value="${esc(g.address||"")}" placeholder="13536 N Bucks Cir"></label>
+      <div class="grid2"><label class="field"><span>City</span><input id="nf_city" ${big} value="${esc(g.city||"")}" placeholder="Park City"></label>
+        <label class="field"><span>State</span><input id="nf_state" ${big} value="${esc(g.state||"")}" placeholder="UT" maxlength="2" autocapitalize="characters"></label></div>
+      <label class="field"><span><b>4.</b> Neighborhood <span class="muted">- start typing, pick from the list</span></span>
+        <input id="nf_area" ${big} list="nf_areas" value="${esc(g.area?areaLabel(g.area):"")}" placeholder="Retreat at Jordanelle" autocomplete="off">
+        <datalist id="nf_areas">${AREAS.map(a=>`<option value="${esc(areaLabel(a))}"></option>`).join("")}</datalist></label>
+      <div id="nf_newarea" style="display:none" class="card"><b>New neighborhood</b> <span class="muted">- not on our list yet. Give it a short code:</span>
+        <input id="nf_area2" ${big} maxlength="6" autocapitalize="characters" placeholder="e.g. PCM"></div>
+      <label class="field"><span><b>5.</b> Type</span><select id="nf_kind" ${big}><option value="str">Vacation rental</option><option value="second_home" ${g.kind==="second_home"?"selected":""}>Second home (2H)</option><option value="lease" ${g.kind==="lease"?"selected":""}>Lease (L)</option></select></label>
+      <button class="btn go wide" id="nf_go" style="font-size:18px;padding:16px;margin-top:6px">✓ Create home &amp; start setup</button>
+      <div class="muted" style="font-size:12.5px;margin-top:6px">The app makes the home's master code for you - you'll see it on the next screen.</div></div>`;
     let lat = g.lat, lng = g.lng;
-    const suggest = () => { const a = $("#nf_area").value === "__new" ? $("#nf_area2").value.trim().toUpperCase() : $("#nf_area").value;
-      const num = ($("#nf_addr").value.match(/^\s*(\d{1,6})/)||[])[1] || "";
-      if(!$("#nf_code").dataset.typed && a && num) $("#nf_code").value = a + " " + num;
-      if(!$("#nf_name").dataset.typed && a && num) $("#nf_name").value = ($("#nf_area").value==="__new" ? $("#nf_aname").value.trim() : hoodName(a)) + " " + num; };
-    $("#nf_code").oninput = () => $("#nf_code").dataset.typed = 1; $("#nf_name").oninput = () => $("#nf_name").dataset.typed = 1;
-    $("#nf_area").onchange = () => { $("#nf_newarea").style.display = $("#nf_area").value==="__new" ? "" : "none"; suggest(); };
-    $("#nf_addr").oninput = suggest; $("#nf_area2").oninput = suggest; $("#nf_aname").oninput = suggest;
+    const areaNow = () => findArea($("#nf_area").value) || ($("#nf_area").value.trim() ? $("#nf_area2").value.trim().toUpperCase() : "");
+    const showNewArea = () => { const v = $("#nf_area").value.trim(), known = findArea(v);
+      $("#nf_newarea").style.display = v && !known ? "" : "none";
+      if(v && !known && !$("#nf_area2").dataset.typed) $("#nf_area2").value = initials(v); };
+    const suggest = () => { const a = areaNow(), num = ($("#nf_addr").value.match(/^\s*(\d{1,6})/)||[])[1] || "";
+      if(!$("#nf_code").dataset.typed && a && num) { $("#nf_code").value = a + " " + num; codeTyped(false); }
+      if(!$("#nf_name").dataset.typed && a && num) $("#nf_name").value = (findArea($("#nf_area").value) ? hoodName(a) : $("#nf_area").value.trim()) + " " + num; };
+    // Home code first: typing it fills in the rest
+    const codeTyped = (typed) => {
+      const v = $("#nf_code").value.toUpperCase().replace(/\s+/g," ").trim(); if(typed) $("#nf_code").dataset.typed = v ? 1 : "";
+      const pre = preOf(v); if(pre) $("#nf_kind").value = pre==="2H" ? "second_home" : "lease";
+      const hit = v.length >= 3 && (S.allProps||[]).find(x => String(x.code).toUpperCase()===v || ck(x.code)===ck(v));
+      if(hit){ const ours = S.homes.some(h=>h.property_id===hit.id && h.section==="ours");
+        $("#nf_hit").innerHTML = `<div class="card" style="border-color:var(--moose)"><b>✓ Found it: ${esc(dc(hit.code))}</b><div class="muted">${esc(hit.name||"")}${hit.address?" · "+esc(hit.address):""}</div>
+          <button class="btn go wide" id="nf_open" style="margin-top:8px;font-size:17px;padding:14px">${ours?"Open its checklist":"Use this home - start setup"}</button></div>`;
+        $("#nf_open").onclick = () => start(hit.id, ours);
+        if(!$("#nf_name").dataset.typed) $("#nf_name").value = hit.name||"";
+        if(hit.address && !$("#nf_addr").value) $("#nf_addr").value = hit.address;
+        if(hit.city && !$("#nf_city").value) $("#nf_city").value = hit.city;
+        if(hit.state && !$("#nf_state").value) $("#nf_state").value = hit.state;
+        if(hit.kind) $("#nf_kind").value = hit.kind;
+      } else $("#nf_hit").innerHTML = "";
+      const a = unpre(v).split(" ")[0];
+      if(typed && a && AREAS.includes(a)){ $("#nf_area").value = areaLabel(a); showNewArea();
+        const num = (unpre(v).match(/\s(\d{1,6})\b/)||[])[1];
+        if(!hit && num && !$("#nf_name").dataset.typed) $("#nf_name").value = hoodName(a) + " " + num; }
+    };
+    $("#nf_code").oninput = () => codeTyped(true);
+    $("#nf_name").oninput = () => $("#nf_name").dataset.typed = $("#nf_name").value ? 1 : "";
+    $("#nf_area").oninput = () => { showNewArea(); suggest(); };
+    $("#nf_area2").oninput = () => { $("#nf_area2").dataset.typed = 1; suggest(); };
+    $("#nf_addr").oninput = suggest;
     $("#nf_gps").onclick = () => locate();
+    if(g.code) codeTyped(false);
     $("#nf_go").onclick = async () => {
-      const area = $("#nf_area").value === "__new" ? $("#nf_area2").value.trim().toUpperCase() : $("#nf_area").value;
-      const r = { code:$("#nf_code").value.trim(), name:$("#nf_name").value.trim(), address:$("#nf_addr").value.trim(), area, kind:$("#nf_kind").value, lat, lng };
-      if(!r.code) return toast("Add a home code"); if(!area) return toast("Pick the neighborhood");
-      try{ const pid = await rpc("lock_create_home",{r}); await loadBase(); toast("Created "+r.code+" - here's its checklist"); location.hash = "#/install/"+encodeURIComponent(pid); }catch(e){ fail(e); } };
+      const r = { code:$("#nf_code").value.trim(), name:$("#nf_name").value.trim(), address:$("#nf_addr").value.trim(),
+        city:$("#nf_city").value.trim(), state:$("#nf_state").value.trim().toUpperCase(), area:areaNow(), kind:$("#nf_kind").value, lat, lng };
+      if(!r.code && !r.name){ $("#nf_code").focus(); return toast("Type a home code or a home name (one is enough)"); }
+      if($("#nf_area").value.trim() && !findArea($("#nf_area").value) && !r.area) return toast("Give the new neighborhood a short code");
+      try{ const pid = await rpc("lock_create_home",{r}); S.allProps = null; await loadBase(); toast("Created "+(r.code||r.name)+" - here's its checklist"); location.hash = "#/install/"+encodeURIComponent(pid); }catch(e){ fail(e); } };
     const locate = () => {
       if(!navigator.geolocation) return toast("This phone can't share location");
-      $("#nf_msg").textContent = "Finding you…";
+      $("#nf_msg").textContent = "Finding you… (if the phone asks, tap Allow)";
       navigator.geolocation.getCurrentPosition(async pos => {
         lat = pos.coords.latitude; lng = pos.coords.longitude;
-        let address = "", msg = "";
+        let address = "", city = "", state = "", msg = "";
         try{ const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`, {headers:{"Accept-Language":"en"}})).json();
-          const a = j.address || {}; address = [a.house_number, a.road].filter(Boolean).join(" "); }catch(e){}
+          const a = j.address || {}; address = [a.house_number, a.road].filter(Boolean).join(" ");
+          city = a.city || a.town || a.village || a.hamlet || a.municipality || "";
+          state = ((a["ISO3166-2-lvl4"]||"").split("-")[1]) || a.state || ""; }catch(e){}
         let guess = {}; try{ guess = await rpc("lock_area_guess",{p_lat:lat,p_lng:lng}) || {}; }catch(e){}
-        const near = (guess.near||[])[0];
-        msg = (address ? "Address from GPS - check the house number. " : "Couldn't read the street address - type it. ")
-            + (guess.area ? `Neighborhood: ${hoodName(guess.area)} (closest home ${near?near.code+", "+near.meters+" m":"nearby"}).` : "No known neighborhood close by - pick one or add a new one.");
-        newForm({ address, area: guess.area||"", lat, lng, msg,
-          code: guess.area && /^\d/.test(address) ? guess.area+" "+address.match(/^\d+/)[0] : "",
-          name: guess.area && /^\d/.test(address) ? hoodName(guess.area)+" "+address.match(/^\d+/)[0] : "" });
-      }, err => { $("#nf_msg").textContent = "Couldn't get your location ("+err.message+"). Allow location for this site, or type the details."; }, {enableHighAccuracy:true, timeout:15000});
+        const near = (guess.near||[])[0], area = unpre(guess.area||""), num = (address.match(/^\d+/)||[])[0];
+        const keep = id => $("#"+id) && $("#"+id).dataset.typed ? $("#"+id).value : "";
+        msg = (address ? "✓ Address found - check the house number. " : "Couldn't read the street address - please type it. ")
+            + (area ? `✓ Neighborhood: ${hoodName(area)} (closest home ${near?dc(near.code)+", "+near.meters+" m":"nearby"}).` : "No neighborhood close by - type it in box 4.");
+        newForm({ address, city, state, area, lat, lng, msg, kind:$("#nf_kind").value,
+          code: keep("nf_code") || (area && num ? area+" "+num : ""),
+          name: keep("nf_name") || (area && num ? hoodName(area)+" "+num : "") });
+      }, err => { $("#nf_msg").innerHTML = `<b style="color:var(--red)">Couldn't get your location.</b> Turn on Location for this website in the phone's settings, or just type the boxes below. (${esc(err.message)})`; }, {enableHighAccuracy:true, timeout:15000});
     };
     if(!g.lat && g.auto) locate();
   };
@@ -640,7 +739,7 @@ async function installView(){
       try{
         const rows = await rpc("lock_nearby",{p_lat:pos.coords.latitude,p_lng:pos.coords.longitude});
         const fmt = m => m < 1000 ? m+" m away" : (m/1609).toFixed(1)+" mi away";
-        $("#near").innerHTML = rows.length ? `<div class="card"><b>Closest homes</b><div class="list" style="margin-top:6px">${rows.map(r=>`<div><div class="grow"><b>${esc(r.code)}</b> <span class="muted">${fmt(r.meters)}</span><div class="muted" style="font-size:12.5px">${esc(r.address||r.name)}</div></div>
+        $("#near").innerHTML = rows.length ? `<div class="card"><b>Closest homes</b><div class="list" style="margin-top:6px">${rows.map(r=>`<div><div class="grow"><b>${esc(dc(r.code))}</b> <span class="muted">${fmt(r.meters)}</span><div class="muted" style="font-size:12.5px">${esc(r.address||r.name)}</div></div>
             <button class="btn small ${r.section==="ours"?"":"go"}" data-here="${esc(r.property_id)}" data-ours="${r.section==="ours"?1:""}">${r.section==="ours"?"Open":"Start setup"}</button></div>`).join("")}</div></div>`
           : '<p class="muted">No homes found near you.</p>';
         $$("[data-here]").forEach(b=>b.onclick=()=>start(b.dataset.here, !!b.dataset.ours));
@@ -649,76 +748,164 @@ async function installView(){
   };
 }
 async function installHome(pid){
+  S.dirty = false;
   if(!S.homes.length) await loadBase();
   const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("install","<p>Home not found.</p>");
   const p = h.properties;
   const [hubs, locks, thermos, sensors, assigns, cmds, access, stays, masters] = await Promise.all([
     q("lock_hubs","id,name,last_seen,claimed_at,status",x=>x.eq("property_id",pid).eq("active",true)),
     q("locks","*",x=>x.eq("property_id",pid).eq("active",true).order("node_id")),
-    q("thermostats","id,node_id,name,temp,mode,online,rssi,dropped",x=>x.eq("property_id",pid).eq("active",true)),
+    q("thermostats","id,node_id,name,temp,mode,heat_sp,action,heating_at,online,rssi,dropped",x=>x.eq("property_id",pid).eq("active",true)),
     q("sensors","id,node_id,name,kind,online,rssi,last_seen,value",x=>x.eq("property_id",pid).eq("active",true)),
     q("lock_assign","lock_id,ref_kind,state,code,created_at,verified_at",x=>x.eq("ref_kind","test").order("created_at",{ascending:false})),
     q("lock_commands","lock_id,kind,ok,done_at",x=>x.eq("kind","wipe").eq("ok",true)),
     q("property_access","wifi_name,wifi_password,gate_code,garage_code,lockbox_code",x=>x.eq("property_id",pid)),
     q("lock_stays","guest,starts_at,ends_at,status",x=>x.eq("property_id",pid).gte("ends_at",new Date().toISOString()).neq("status","cancelled").order("starts_at").limit(2)),
     q("locks","name,master_code",x=>x.eq("property_id",pid))]);
+  const tvsI = await q("lock_tvs","name,state,last_seen",x=>x.eq("property_id",pid).eq("active",true)).catch(()=>[]);
+  const spots = await q("lock_spots","*",x=>x.eq("property_id",pid)).catch(()=>[]);
+  const sp = k => spots.find(x=>x.kind===k) || null, kb = sp("keybox");
   const brivoM = (await rpc("lock_brivo_masters").catch(()=>[])||[]).filter(m=>m.property_id===pid);
   const hub = hubs.find(x=>x.claimed_at);
   await loadUpdates(hub);
   const ids = new Set(locks.map(l=>l.id)), a = access[0]||{};
+  const ourA = locks.length ? await q("lock_assign","lock_id,wanted,state",x=>x.in("lock_id",[...ids]).eq("wanted",true)).catch(()=>[]) : [];
+  const wipeState = l => { const sent = cmds.some(c=>c.lock_id===l.id), ours = ourA.filter(x=>x.lock_id===l.id).length;
+    if(!sent) return ["none", "old codes not cleared yet"];
+    if(l.slots_used == null) return ["wait", "cleared - waiting for the lock to report back"];
+    return l.slots_used <= ours ? ["ok", `✓ Confirmed clear - only our ${ours} code${ours===1?"":"s"} on it`] : ["wait", `clearing… ${l.slots_used - ours} old code${l.slots_used-ours===1?"":"s"} still on it`]; };
   const named = locks.length && locks.every(l=>!/^New lock/.test(l.name));
   const facts = {
-    hub: !!hub,
+    hub: !!hub && !!(sp("hub") && sp("hub").photo && sp("hub").spot),
     locks: named,
     test: locks.length && locks.every(l=>assigns.some(x=>x.lock_id===l.id && (x.state==="verified" || x.verified_at))),   // test codes clear themselves after 10 min - keep the step done
-    wipe: locks.length && locks.every(l=>cmds.some(c=>c.lock_id===l.id)),
+    wipe: locks.length && locks.every(l=>wipeState(l)[0]==="ok" || (wipeState(l)[0]==="wait" && l.slots_used==null)),
     guest: !!(a.wifi_name && a.wifi_password),
+    noise: sensors.some(x=>x.kind==="noise"),
+    brivo: named,   // every paired door named; a Z-Wave lock can only be on one network: if it joined our hub, it's off Brivo
+    thermo: thermos.length > 0,
+    keybox: !!(kb && kb.code && kb.photo && (kb.items||[]).length),
+    oldhw: !!(sp("oldhw") && sp("oldhw").photo && sp("oldhw").spot),
   };
   const st = h.install || {};
-  const isDone = s => !!(st[s.k] || facts[s.auto]);
+  const isDone = s => !!(st[s.k] || facts[s.auto] || ((s.k==="thermo"||s.k==="noise") && st.climate));
   const firstOpen = STEPS.find(s=>!isDone(s));
   const next = stays.find(s=>new Date(s.starts_at) > new Date()) ;
   const inHome = stays.find(s=>new Date(s.starts_at) <= new Date());
-  const mark = s => s.auto ? "" : `<label class="check"><input type="checkbox" data-step="${s.k}" ${st[s.k]?"checked":""}> Done</label>`;
-  const who = s => st[s.k] ? `<div class="who">✓ ${esc(st[s.k].by||"")} · ${when(st[s.k].at)}</div>` : (s.auto && facts[s.auto] ? `<div class="who">✓ the system saw it</div>` : "");
+  const mark = s => (s.auto ? "" : `<label class="check"><input type="checkbox" data-step="${s.k}" ${st[s.k]&&!st[s.k].note?"checked":""}> Done</label>`)
+    ;
+  const na = s => s.must || s.k==="prep" || s.k==="track" || isDone(s) ? "" : `<button class="btn small" data-skip="${s.k}" style="margin-top:8px">N/A${s.skip?" - "+esc(s.skip):" - not needed here"} → next</button>`;
+  const keyHow = (keys, what) => `<ol class="how">${keys.map(([k,m])=>`<li><span class="key">${k}</span><span>${m}</span></li>`).join("")}</ol>${what?`<div class="muted">${what}</div>`:""}`;
+  const homeMaster = h.master_code;
+  const spotForm = (k, o) => { const v = sp(k) || {}, its = v.items || [];
+    return `<div class="spot" data-spot="${k}">
+      <label class="field" style="margin-top:8px"><span>📷 Photo <span class="muted">(needed)</span></span>
+        ${v.photo?`<img src="${v.photo}" alt="" style="width:100%;max-width:360px;border-radius:12px;display:block;margin:6px 0">`:""}
+        <input type="file" data-photo accept="image/*" capture="environment"></label>
+      <label class="field"><span>${o.where}</span><input data-sp="spot" value="${esc(v.spot||"")}" placeholder="${esc(o.ph||"")}"></label>
+      ${o.picks?`<div class="chips" style="margin:-2px 0 6px">${o.picks.map(x=>`<span class="chip" data-pickspot="${esc(x)}">${esc(x)}</span>`).join("")}</div>`:""}
+      ${o.code?`<label class="field"><span>Code you set on the key box <span class="muted">- most homes use <b>${KB_DEFAULT}</b></span></span><input data-sp="code" inputmode="numeric" value="${esc(v.code||KB_DEFAULT)}" style="font-size:18px;padding:12px"></label>`:""}
+      ${o.items?`<div class="field"><span>${o.itemsLabel} <span class="muted">(tap all that apply)</span></span>
+        <div class="chips" style="margin-top:6px">${o.items.map(x=>`<span class="chip ${its.includes(x)?"on":""}" data-item="${esc(x)}">${esc(x)}</span>`).join("")}</div></div>
+        <label class="field" data-otherw style="${its.includes("Other")?"":"display:none"}"><span>Other - what is it?</span><input data-sp="other" value="${esc(v.other||"")}" placeholder="${esc(o.otherPh||"")}"></label>`:""}
+      <button class="btn primary wide" data-spotsave style="margin-top:8px">Save</button>
+      ${v.set_at?`<div class="who">Saved by ${esc(v.set_by||"")} · ${when(v.set_at)}</div>`:""}</div>`; };
+  const who = s => st[s.k] ? `<div class="who">${st[s.k].note?"N/A ("+esc(st[s.k].note)+")":"✓"} ${esc(st[s.k].by||"")} · ${when(st[s.k].at)}${st[s.k].note?` <a href="#" data-undo="${s.k}">undo</a>`:""}</div>` : (s.auto && facts[s.auto] ? `<div class="who">✓ the system saw it</div>` : "");
   const body = {
     prep: `<div class="muted">${inHome?`<b style="color:var(--red)">Guests are in the home until ${when(inHome.ends_at)}.</b> Install on an empty day.`:next?`Next guest: <b>${when(next.starts_at)}</b>`:"No guests booked."}</div>
-      <div class="check">□ Hub, Z-Wave stick, USB extension cable, network cable</div>
+      <div class="check">□ Hub, Z-Wave stick, USB extension cable</div>
+      <div class="check"><b>□ Ethernet (network) cable - bring one, 6 ft or longer.</b> The hub plugs into the router with it. Don't count on finding one at the home.</div>
+      <div class="check">□ Key box + the spare key for it (code ${KB_DEFAULT} unless told otherwise)</div>
+      <div class="check">□ A bag for the owner's old locks / thermostat / Brivo parts</div>
       <div class="check">□ Fresh AA batteries for each lock</div>
       <div class="check">□ Phone charged, on the home's Wi-Fi once there</div>
-      ${masters.some(m=>m.master_code)||brivoM.length?`<div class="muted" style="margin-top:6px">Master code: ${[...masters.filter(m=>m.master_code).map(m=>`${esc(m.name)} <b>${esc(m.master_code)}</b>`),
-          ...brivoM.filter(b=>!masters.some(m=>m.master_code===b.master_code)).map(b=>`<b>${esc(b.master_code)}</b> (from Brivo${b.door?" - "+esc(b.door):""})`)].join(" · ")}</div>`
-        :`<div class="muted" style="margin-top:6px">Master code: <b style="color:var(--red)">not on file</b> - get it from Brivo (home → Add/Remove Device) before you go.</div>`}${mark(STEPS[0])}`,
-    hub: hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span> <span class="muted">checked in ${ago(hub.last_seen)}</span>`
+      ${masters.some(m=>m.master_code)||brivoM.length||homeMaster?`<div class="master">Master code: ${[...masters.filter(m=>m.master_code).map(m=>`${esc(m.name)} <b>${esc(m.master_code)}</b>`),
+          ...brivoM.filter(b=>!masters.some(m=>m.master_code===b.master_code)).map(b=>`<b>${esc(b.master_code)}</b> (from Brivo${b.door?" - "+esc(b.door):""})`),
+          ...(homeMaster && !masters.some(m=>m.master_code===homeMaster) ? [`<b>${esc(homeMaster)}</b> (made by the app)`] : [])].join(" · ")}</div>
+          <div class="muted">The master code is the lock's "boss" PIN. You type it to open the lock's settings. Guests never get it.</div>`
+        :`<div class="master" style="color:var(--red)">Master code: not on file</div>
+          <div class="muted">Locks from Brivo already have one - get it from Brivo (home → Add/Remove Device). Brand-new locks: tap below and the app makes one.</div>
+          <button class="btn primary wide" id="mkmaster" style="margin-top:6px">Make a master code for this home</button>`}
+      ${homeMaster && !masters.some(m=>m.master_code) && !brivoM.length ? `<details style="margin-top:6px"><summary><b>How to put it on a new lock</b></summary>
+        ${keyHow([["🔋","Put the batteries in. The screen lights up and the lock asks you to register a master code."],["⚙","Press the gear key (⚙). On some keypads it's #."],[esc(homeMaster),"Type the master code above."],["⚙","Press the gear key again to save it."]],
+          'Lock already has a different master code? Type the old one, ⚙, <b>1</b> (= "Master PIN code setting"), ⚙, then follow the voice to enter the new one.')}</details>` : ""}${mark(STEPS[0])}`,
+    hub: (hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span> <span class="muted">checked in ${ago(hub.last_seen)}</span>`
       : `<div class="muted">Put the hub in the owner closet or utility room by the router. Network cable from the router, stick on the extension cable placed up high, then power. Wait 5 minutes.</div>
          <button class="btn go wide" id="find" style="margin-top:10px">Find hub</button><div id="found"></div>
          <details style="margin-top:8px"><summary>Doesn't show up? Type the 6-digit code</summary><div class="row"><input id="pc" inputmode="numeric" maxlength="6" class="grow"><button class="btn primary" id="claim">Add</button></div>
-         <p class="muted">The code is on the hub's Home Assistant page (http://homeassistant.local:8123 → Notifications).</p></details>`,
-    brivo: `<div class="muted">In Brivo: this home → Add/Remove Device → remove each lock. Or reset the lock's Z-Wave module. The lock keeps working on its keypad meanwhile.</div>${mark(STEPS[2])}`,
-    locks: `<label class="field"><span>5-digit PIN from the sticker on the lock's Z-Wave module</span><input id="pin" inputmode="numeric" maxlength="5"></label>
+         <p class="muted">The code is on the hub's Home Assistant page (http://homeassistant.local:8123 → Notifications).</p></details>`)
+      + `<div style="margin-top:10px"><b>Where is the hub?</b> <span class="muted">So the next tech can find it.</span>${spotForm("hub", {where:"Where is it? (short)", ph:"Owner closet by the router, top shelf", picks:["Owner closet","Furnace room","Utility room"]})}</div>`,
+    brivo: `<div class="muted">Each lock is still "married" to Brivo's old hub. Undo that first, one lock at a time - the lock keeps opening with its keypad the whole time.</div>
+      <button class="btn primary wide" id="unbrivo" style="margin-top:8px" ${hub?"":"disabled"}>${hub?"1. Tap here - the hub listens for 5 minutes":"Plug in the hub first (step 2)"}</button><div id="unbrivomsg"></div>${(st.brivo_n||{}).note?`<div class="muted" style="margin-top:4px">✓ ${esc(st.brivo_n.note)} lock(s) confirmed off Brivo so far</div>`:""}
+      ${keyHow([["master","2. At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["3","Picks <b>Leave network</b> - it forgets Brivo."],["⚙","Confirm. The lock beeps when it's done."]],
+        'Do every door, tapping the blue button again before each one. If pressing 7 does nothing, the wireless module is loose or the lock has no master code yet. This step ticks itself once a door pairs in step 4.')}
+      ${mark(STEPS.find(x=>x.k==="brivo"))}`,
+    locks: `<label class="field"><span>5-digit PIN from the sticker on the lock's wireless (Z-Wave) module</span><input id="pin" inputmode="numeric" maxlength="5" style="font-size:20px;padding:12px;letter-spacing:4px"></label>
+      <details style="margin:-4px 0 8px"><summary><b>📍 Where's the sticker?</b></summary>
+        <div class="muted">Take the battery cover off the inside of the lock. The wireless module sits above the batteries. Its sticker has a QR code and a long number (the DSK). The PIN is the <b>first 5 digits</b> - usually underlined.</div>${STICKER_SVG}</details>
       <button class="btn go wide" id="pair" ${hub?"":"disabled"}>Start pairing</button>
-      <div class="muted" style="margin-top:8px">On the keypad: <b>master code</b> → ✓ → <b>7</b> → ✓ → <b>1</b> → ✓</div><div id="pairmsg"></div>
+      ${keyHow([["📱","Type the 5-digit PIN from the sticker on the lock's wireless module, then tap <b>Start pairing</b> above. The hub listens for 5 minutes."],["master","At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["1","Picks <b>Join network</b> - joins our hub."],["⚙","Confirm. Wait about a minute - the door shows up below."]],
+        'One door at a time, closest door to the hub first. Then tap the door name that matches (Front, Garage…).')}<div id="pairmsg"></div>
       ${locks.map(l=>`<div class="row" style="margin-top:10px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
         <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}`,
-    climate: `<div style="margin-bottom:6px;padding:8px 10px;border-radius:10px;background:var(--red-soft);color:var(--red);font-weight:800">⚡ Replacing a thermostat? Turn OFF the power to the HVAC system first (furnace / air-handler switch or breaker), make sure the old thermostat's screen is dead, and photo the wiring before you disconnect it.</div>
-      <div class="muted">Same pairing button, PIN left blank, then use the thermostat's or sensor's Z-Wave "include" menu.
-      <br><b>Noise sensor:</b> set it up at the office first on the <a href="noise-setup.html" target="_blank">noise sensor setup page</a> (Chrome, USB cable, this home's Wi-Fi).
-      <br><b>TVs and noise sensor:</b> they show up on their own once they're on the home's Wi-Fi (same network as the hub). Samsung / LG TVs pop up "Allow?" on screen the first time - press Allow. Roku: Settings → System → Advanced → Control by mobile apps → Network access = Permissive.</div>
+    thermo: `<div style="margin-bottom:6px;padding:8px 10px;border-radius:10px;background:var(--red-soft);color:var(--red);font-weight:800">⚡ Replacing a thermostat? Turn OFF the power to the HVAC system first (furnace / air-handler switch or breaker), make sure the old thermostat's screen is dead, and photo the wiring before you disconnect it.</div>
+      ${keyHow([["📱","Tap <b>Start pairing (no PIN)</b> below. The hub listens for 5 minutes."],["🌡️","On the thermostat, open its Z-Wave menu and choose <b>Include</b> (sometimes called Add or Join) - check the thermostat's paper guide for where that menu is."],["⏳","Wait about a minute - it shows up below."]])}
       <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>
-      ${thermos.length||sensors.length?`<div class="muted" style="margin-top:8px">Found: ${[...thermos.map(t=>esc(t.name)+(t.temp!=null?` ${Math.round(t.temp)}°`:"")), ...sensors.map(x=>esc(x.name))].join(" · ")}</div>`:""}${mark(STEPS[4])}`,
-    test: locks.map(l=>{ const t = assigns.find(x=>x.lock_id===l.id);
+      ${thermos.length?`<div class="muted" style="margin-top:8px">Found: ${thermos.map(t=>esc(t.name)+(t.temp!=null?` ${Math.round(t.temp)}°`:"")).join(" · ")}</div>`:""}<div class="muted" style="margin-top:6px">${thermos.length?"✓ Ticks itself once a thermostat shows up.":"Every home needs its thermostat(s) on the system - this ticks itself once one shows up."}</div>`,
+    noise: `${keyHow([["🏢","At the office first: plug the sensor into a computer with its USB cable and open the <a href=\"noise-setup.html\" target=\"_blank\">noise sensor setup page</a> in Chrome. Pick this home's Wi-Fi."],["🔌","At the home: plug it in in the living area, chest height, 6 ft+ from TVs, speakers, the fridge and vents."],["⏳","Wait a few minutes - it shows up here by itself and this step ticks."]])}
+      ${sensors.some(x=>x.kind==="noise")?`<div class="muted" style="margin-top:8px">Found: ${sensors.filter(x=>x.kind==="noise").map(x=>esc(x.name)+(x.value!=null?" "+Math.round(x.value)+" dB":"")).join(" · ")}</div>`:""}${mark(STEPS.find(x=>x.k==="noise"))}`,
+    heat: (()=>{ const hs = st.heat_start, hf = st.heat_fail, since = hs ? new Date(hs.at) : null;
+      const seen = since && thermos.some(t=>t.heating_at && new Date(t.heating_at) >= since);
+      const head = `<div class="muted">Before you leave, make sure the heat really comes on. No heat after an install = frozen pipes.</div>`;
+      if(st.heat) return head + `<div class="card" style="border-color:var(--moose);margin-top:8px"><b style="color:var(--pine)">✓ Heat works.</b><div class="muted">Set back to the empty-home temperature.</div></div>`;
+      if(!thermos.length) return head + `<div class="muted" style="margin-top:6px">Pair the thermostat first (step above).</div>`;
+      return head + (hf ? `<div class="card" style="border-color:var(--red);margin-top:8px"><b style="color:var(--red)">✗ No heat - don't leave yet.</b><div class="muted">Call Chris. The office got an alert. Check the furnace switch / breaker you turned off, the thermostat wiring photo, and that the thermostat is on Heat.</div></div>` : "")
+        + (!hs || hf ? `<button class="btn primary wide" id="heatgo" style="margin-top:8px">🔥 ${hf?"Try the heat test again":"Start heat test"}</button>
+            <div class="muted" style="margin-top:4px">Turns the heat up a few degrees on every thermostat. Then go feel a vent.</div>`
+          : `<div class="card" style="border-color:${seen?"var(--moose)":"var(--amber)"};margin-top:8px">
+              <b>${seen?"✓ The thermostat says the furnace is running.":"⏳ Heat turned up to "+esc(thermos.map(t=>t.heat_sp!=null?Math.round(t.heat_sp)+"°":"").filter(Boolean).join(" / ")||"a few degrees warmer")+" - wait 2-5 minutes."}</b>
+              <div class="muted">Hold your hand over a vent. Is <b>warm air</b> coming out?</div>
+              <div class="row" style="margin-top:8px;gap:8px"><button class="btn go grow" data-heat="pass" style="font-size:17px;padding:14px">Yes - warm air</button>
+                <button class="btn grow" data-heat="fail" style="font-size:17px;padding:14px;border-color:var(--red);color:var(--red)">No heat</button></div></div>`); })(),
+    tv: `<div class="muted"><b>Coming soon.</b> Later the system will turn TVs off when guests leave and show a welcome screen. Nothing to set up yet - tick Done if the TVs are on the home's Wi-Fi, or N/A.</div>
+      <div class="muted" style="margin-top:6px">If a TV pops up "Allow?" on screen (Samsung / LG), press Allow. Roku: Settings → System → Advanced → Control by mobile apps → Network access = Permissive.</div>
+      ${tvsI.length?`<div class="muted" style="margin-top:8px">Found: ${tvsI.map(t=>esc(t.name)).join(" · ")}</div>`:""}${mark(STEPS.find(x=>x.k==="tv"))}`,
+    keybox: `<div class="muted">Put the spare key in the key box, set its code, and hang it somewhere out of sight but easy for crew to find.</div>
+      ${spotForm("keybox", {where:"Where is it? (short)", ph:"Left of garage door, behind the downspout", code:true, items:KB_KEYS, itemsLabel:"Keys left in the box", otherPh:"Shed padlock"})}`,
+    oldhw: `<div class="muted">Bag up the owner's old locks, thermostat and Brivo parts. Put them in the <b>owner closet</b> or the <b>furnace room</b> - somewhere guests won't find them. Never leave them in a guest area.</div>
+      ${spotForm("oldhw", {where:"Where did you put it?", ph:"Owner closet, top shelf", picks:["Owner closet","Furnace room"], items:OLD_HW, itemsLabel:"What's in there", otherPh:"Old garage remote"})}`,
+    test: `${(()=>{ const up = hub && online(hub), on = locks.filter(l=>l.online!==false);
+        const [ok, why] = !hub ? [false,"plug in the hub first (step 2)"] : !up ? [false,"the hub is offline - check its power and network cable"]
+          : !locks.length ? [false,"pair a door first (step 4)"] : on.length < locks.length ? [false, locks.filter(l=>l.online===false).map(l=>l.name).join(", ")+" not answering - stand by it, press Ping"]
+          : [true, locks.length+" door"+(locks.length>1?"s":"")+" connected"];
+        return `<div style="margin:2px 0 8px"><span class="pill ${ok?"green":"red"}" style="font-size:14px;padding:6px 12px">${ok?"✓ Ready for testing":"✗ Not ready for testing"}</span> <span class="muted">${esc(why)}</span></div>`; })()}` + locks.map(l=>{ const t = assigns.find(x=>x.lock_id===l.id);
       return `<div style="margin-top:10px"><div class="row"><b class="grow">${esc(l.name)}</b>
         <button class="btn small" data-test="${l.id}">Test code</button><button class="btn small" data-unlock="${l.id}">Unlock</button></div>
-        ${t?`<div style="margin-top:6px"><span class="pill ${t.state==="verified"?"green":"amber"}">${t.state==="verified"?"Code "+esc(t.code)+" is on the lock - type it on the keypad":"Sending "+esc(t.code)+"…"}</span></div>`:""}</div>`; }).join("") || '<div class="muted">Pair a door first.</div>',
-    wipe: locks.map(l=>`<div class="row" style="margin-top:6px"><span class="grow"><b>${esc(l.name)}</b> ${cmds.some(c=>c.lock_id===l.id)?'<span class="pill green">cleared</span>':""}</span><button class="btn small" data-wipe="${l.id}">Clear old codes</button></div>`).join("") || '<div class="muted">Pair a door first.</div>',
+        ${t?`<div style="margin-top:6px"><span class="pill ${t.state==="verified"?"green":"amber"}">${t.state==="verified"?"Code "+esc(t.code)+" is on the lock - type it on the keypad":"Sending "+esc(t.code)+"…"}</span></div>`:""}</div>`; }).join("") || '<div class="muted">This unlocks after step 4 - pair a door first. Then each door gets a <b>Test code</b> button: tap it, wait for the green tag, and type that code on the keypad. The door should open.</div>',
+    wipe: `<div class="muted">Brivo's old guest and crew codes are still saved inside each lock. This erases them so only our codes work. Your master code is NOT erased.</div>
+      ${locks.length ? `<button class="btn primary wide" id="wipeall" style="margin-top:8px" ${hub&&online(hub)?"":"disabled"}>${hub&&online(hub)?"Clear old codes on every door":"Hub offline - can't clear yet"}</button>
+        <div class="muted" style="margin-top:4px">One tap does every door. Then wait here - each door turns green when the lock confirms it's clean (1-3 minutes).</div>`
+        : `<div class="muted" style="margin-top:6px">This unlocks after step 4 - pair a door first, then come back here.</div>`}` + locks.map(l=>{ const [w, msg] = wipeState(l);
+        return `<div class="row" style="margin-top:8px"><b class="grow">${esc(l.name)}</b><span class="pill ${w==="ok"?"green":w==="wait"?"amber":"grey"}">${esc(msg)}</span></div>`; }).join(""),
     guest: `<div class="grid2"><label class="field"><span>Wi-Fi name</span><input id="wn" value="${esc(a.wifi_name||"")}"></label>
       <label class="field"><span>Wi-Fi password</span><input id="wp" value="${esc(a.wifi_password||"")}"></label>
       <label class="field"><span>Building / gate code</span><input id="gc" value="${esc(a.gate_code||"")}"></label>
       <label class="field"><span>Garage code</span><input id="gg" value="${esc(a.garage_code||"")}"></label></div>
-      <div class="muted">Key box code: ${a.lockbox_code?"<b>on file</b> (from Track)":"<b style='color:var(--red)'>missing</b> - add it in Track → Security"}</div>
+      <div class="muted">Key box code: ${kb&&kb.code?"<b>on file</b> (key box step)":a.lockbox_code?"<b>on file</b> (from Track)":"<b style='color:var(--red)'>missing</b> - do the key box step"}</div>
       <button class="btn primary wide" id="wsave" style="margin-top:10px">Save</button>`,
-    track: `<div class="muted">${(h.install||{}).track ? "Done - Track no longer uses Brivo for this unit. The system fills each guest's Door Code."
-      : "Automatic. Once step 3 is ticked and every guest door passes its test code, the system switches this unit off Brivo in Track (within 30 min) and fills each guest's Door Code. Nothing to do in the office."}</div>${S.me.role==="admin"&&!(h.install||{}).track?mark(STEPS[8]):""}`,
+    track: (()=>{ const tr = (h.install||{}).track;
+      if(tr) return `<div class="card" style="border-color:var(--moose)"><b style="color:var(--pine)">✓ Confirmed - Track no longer uses Brivo for this home.</b><div class="muted">Guests' Door Codes now come from Moose Locks.</div></div>`;
+      if(!h.track_unit_id) return `<div class="muted">This home isn't in Track yet, so there's nothing to switch.</div><button class="btn wide" data-skip="track" style="margin-top:8px">Not in Track - mark done</button>`;
+      const guestLocks = locks.filter(l=>l.for_guests), why = [];
+      if(!hub) why.push("hub not added (step 2)");
+      if(!guestLocks.length) why.push("no guest door paired (step 4)");
+      if(!isDone(STEPS.find(x=>x.k==="brivo"))) why.push("locks still on Brivo (step 3)");
+      const untested = guestLocks.filter(l=>!assigns.some(x=>x.lock_id===l.id && (x.state==="verified"||x.verified_at)));
+      if(untested.length) why.push("not tested yet: "+untested.map(l=>l.name).join(", ")+" (step "+(STEPS.findIndex(x=>x.k==="test")+1)+")");
+      return `<div class="muted">Tells Track to stop using Brivo for this home and to use our door codes for every guest.</div>
+        ${why.length ? `<div style="margin-top:8px"><span class="pill red">✗ Not ready yet</span><ul class="muted" style="margin:6px 0 0 18px;padding:0">${why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+        <button class="btn go wide" id="trackgo" style="margin-top:8px" ${why.length?"disabled":""}>Switch Track off Brivo now</button><div id="trackmsg"></div>
+        <div class="muted" style="font-size:12.5px;margin-top:4px">If nobody taps it, the system does it on its own within 30 minutes once everything above is green.</div>`; })(),
   };
   const total = STEPS.filter(isDone).length;
   const net = await rpc("lock_net_check",{p_property:pid}).catch(()=>null) || {};
@@ -728,30 +915,73 @@ async function installHome(pid){
     : net.other_home ? `<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">⚠ You're on ${esc(net.other_home)}'s internet, not this home's</b><div class="muted">Join this home's Wi-Fi first.</div></div>`
     : ctype === "cellular" ? `<div class="card" style="border-color:var(--amber)"><b>📱 You're on cell data</b><div class="muted">Join the home's Wi-Fi first - the system finds the hub through the home's internet. Then type the Wi-Fi name and password in the Guest info step.</div></div>`
     : `<div class="card" style="border-color:var(--amber)"><b>📶 Join the home's Wi-Fi first</b><div class="muted">Once you're on it and the hub is plugged in (Ethernet cable to the router - the hub itself never needs Wi-Fi), this turns green. Phones don't share the Wi-Fi name with websites, so type it in the Guest info step.</div></div>`;
-  const tvsI = await q("lock_tvs","name,state,last_seen",x=>x.eq("property_id",pid).eq("active",true)).catch(()=>[]);
   shell("install", `<p><a href="#/install">← All installs</a></p>
     <details class="card guide" open style="border-color:var(--moose)"><summary>📏 Install guide - read every time</summary>
       <div class="list" style="font-size:14px">
-        <div>📦 <span class="grow"><b>Hub</b> next to the router, Ethernet cable, on a shelf - not the floor or a metal cabinet.</span></div>
+        <div>📦 <span class="grow"><b>Hub</b> next to the router, plugged in with <b>the Ethernet cable you brought</b>, on a shelf - not the floor or a metal cabinet.</span></div>
         <div>📡 <span class="grow"><b>Z-Wave stick</b> on the extension cable, <b>3 ft+</b> from the hub and router, high and central. Final spot before pairing - <b>never move it after</b>.</span></div>
         <div>🔒 <span class="grow"><b>Locks</b>: closest door first. Need <b>3+ bars</b>. More than <b>2 walls or 1 floor</b> away, or 1–2 bars → plug-in repeater halfway, then Rebuild routes.</span></div>
         <div>🌡️ <span class="grow"><b>Thermostats</b> stay on the wall; wired ones help as repeaters - pair them before the far doors.
           <b style="color:var(--red)">⚡ Changing one out? Turn OFF the HVAC power (furnace switch or breaker) first, check the old screen is dead, photo the wiring.</b></span></div>
         <div>🔊 <span class="grow"><b>Noise sensor</b>: living area, chest height, <b>6 ft+</b> from TVs, speakers, fridge, vents. Good Wi-Fi.</span></div>
+        <div>🔥 <span class="grow"><b>Test the heat</b> before you leave - warm air at a vent. No heat = don't leave, call Chris.</span></div>
         <div>✅ <span class="grow">Leave only when the lights say <b>Everything is connected</b>.</span></div>
       </div>
+      <details style="margin-top:8px"><summary><b>👀 What each thing looks like</b></summary><p class="muted" style="margin:4px 0 8px">Simple drawings - the real thing may look a little different.</p>
+        <div class="pics">${Object.values(PICS).map(v=>`<div class="pic">${v.svg}<b>${esc(v.t)}</b><span>${esc(v.d)}</span></div>`).join("")}</div></details>
       <a class="btn small" href="install-guide.html" target="_blank" style="margin-top:8px">Full guide / print</a></details>
-    ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI})}
-    <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(p.code)}</div><div class="muted">${esc(p.name)}</div></div>
+    ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI, go:{"Your phone":"hub","Hub":"hub","Z-Wave stick":"hub","Doors":"locks","Thermostats":"thermo","Leak / door sensors":"thermo","Noise sensor (Wi-Fi)":"noise","TVs (Wi-Fi)":"tv"}})}
+    <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(dc(p.code))}</div><div class="muted">${esc(p.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill amber">${total}/${STEPS.length}</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*total/STEPS.length)}%"></i></div></div>
-    <div class="card">${STEPS.map((s,i)=>`<div class="step ${isDone(s)?"done":s===firstOpen?"now":""}"><div class="n">${isDone(s)?"✓":i+1}</div>
-      <div class="grow"><div class="t">${s.t}</div>${who(s)}${(s===firstOpen || !isDone(s)) ? `<div class="body">${body[s.k]}</div>` : `<details><summary class="muted" style="font-size:13px">Show</summary><div class="body">${body[s.k]}</div></details>`}</div></div>`).join("")}</div>
+    <div class="card">${STEPS.map((s,i)=>`<div id="step-${s.k}" class="step ${isDone(s)?"done":s===firstOpen?"now":""}"><div class="n">${isDone(s)?"✓":i+1}</div>
+      <div class="grow"><div class="t">${s.t}</div>${who(s)}${(s===firstOpen || !isDone(s)) ? `<div class="body">${body[s.k]}${na(s)}</div>` : `<details><summary class="muted" style="font-size:13px">Show</summary><div class="body">${body[s.k]}</div></details>`}</div></div>`).join("")}</div>
     ${toolsCard(hub, [...locks.map(l=>({...l,kind:"lock"})), ...thermos.map(t=>({...t,kind:"thermo"})), ...sensors.map(x=>({...x,kind:"sensor"}))])}
     ${!h.installed_at?`<button class="btn go wide" id="finish" ${total<STEPS.length?"disabled":""}>${total<STEPS.length?`Finish the ${STEPS.length-total} open step${STEPS.length-total>1?"s":""}`:"Mark this home installed"}</button>`:""}`,
     "Install · "+p.code, next?"Next guest "+when(next.starts_at):"No guests booked");
   const again = () => setTimeout(()=>installHome(pid), 1200);
   wireTools(hub, null);
+  $$("[data-skip]").forEach(b=>b.onclick=async()=>{ const s2 = STEPS.find(x=>x.k===b.dataset.skip);
+    try{ await rpc("lock_install_step",{p_property:pid,p_step:s2.k,p_done:true,p_note:s2.skip||(s2.k==="track"?"Not in Track":"N/A")}); await loadBase(); again(); }catch(e){ fail(e); } });
+  $$("[data-goto]").forEach(b=>b.onclick=()=>{ const el = $("#step-"+b.dataset.goto); if(!el) return;
+    const d = $("details", el); if(d && !$(".body", el).offsetParent) d.open = true;
+    el.scrollIntoView({behavior:"smooth", block:"start"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"), 1600); });
+  $$("[data-undo]").forEach(a2=>a2.onclick=async e=>{ e.preventDefault(); try{ await rpc("lock_install_step",{p_property:pid,p_step:a2.dataset.undo,p_done:false}); await loadBase(); again(); }catch(er){ fail(er); } });
+  $$("[data-spot]").forEach(box => { const k = box.dataset.spot; let photo = (sp(k)||{}).photo || null;
+    $$("[data-item]", box).forEach(c=>c.onclick=()=>{ c.classList.toggle("on"); S.dirty = true; if(c.dataset.item==="Other") $("[data-otherw]",box).style.display = c.classList.contains("on") ? "" : "none"; });
+    $$("[data-pickspot]", box).forEach(c=>c.onclick=()=>{ $('[data-sp="spot"]',box).value = c.dataset.pickspot; S.dirty = true; });
+    $("[data-photo]", box).onchange = async e => { const f = e.target.files[0]; if(!f) return; try{ photo = await shrinkPhoto(f); toast("Photo ready - tap Save"); }catch(er){ toast("Couldn't read that photo - try again"); } };
+    $("[data-spotsave]", box).onclick = async () => {
+      const val = n => { const i = $(`[data-sp="${n}"]`, box); return i ? i.value.trim() : ""; };
+      const items = $$("[data-item].on", box).map(c=>c.dataset.item), r = { spot:val("spot"), code:val("code"), other:val("other"), items, photo };
+      if(!r.photo) return toast("Take the photo first (📷)"); if(!r.spot) return toast("Say where it is");
+      if(k==="keybox" && !r.code) return toast("Type the key box code");
+      if($("[data-item]", box) && !items.length) return toast("Tap what's in there");
+      if(items.includes("Other") && !r.other) return toast("Say what the Other item is");
+      try{ await rpc("lock_spot_save",{p_property:pid,p_kind:k,r}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
+  const mk = $("#mkmaster"); if(mk) mk.onclick = async () => { try{ const c = await rpc("lock_master_new",{p_property:pid}); await loadBase(); toast("Master code "+c+" made for "+dc(p.code)); again(); }catch(e){ fail(e); } };
+  const hg = $("#heatgo"); if(hg) hg.onclick = async () => { try{ const r = await rpc("lock_heat_test",{p_property:pid,p_step:"start"}); hub && wake(hub.id); toast("Heat turned up on "+r.thermostats+" thermostat"+(r.thermostats>1?"s":"")); again(); }catch(e){ fail(e); } };
+  $$("[data-heat]").forEach(b=>b.onclick=async()=>{ if(b.dataset.heat==="fail" && !confirm("No warm air at all? This alerts the office.")) return;
+    try{ await rpc("lock_heat_test",{p_property:pid,p_step:b.dataset.heat}); hub && wake(hub.id); toast(b.dataset.heat==="pass"?"Heat works - set back to normal":"Office alerted - don't leave yet"); await loadBase(); again(); }catch(e){ fail(e); } });
+  const tg = $("#trackgo"); if(tg) tg.onclick = async () => { if(!confirm("Switch "+dc(p.code)+" off Brivo in Track? From now on guests get our door codes.")) return;
+    const box = $("#trackmsg"); tg.disabled = true; S.dirty = true; const since = new Date().toISOString();
+    try{ await rpc("lock_request_sync");
+      box.innerHTML = '<div class="card" style="border-color:var(--amber);margin-top:8px"><b>⏳ Switching in Track…</b><div class="muted">The office computer does it within a minute or two. Stay on this page for the confirmation.</div></div>';
+      for(let i=0;i<36;i++){ await sleep(5000);
+        const ev = (await q("lock_events","kind,detail",x=>x.eq("property_id",pid).in("kind",["track_switched","track_switch_failed"]).gte("at",since).order("at",{ascending:false}).limit(1)).catch(()=>[]))[0];
+        if(ev){ box.innerHTML = ev.kind==="track_switched" ? `<div class="card" style="border-color:var(--moose);margin-top:8px"><b style="color:var(--pine)">✓ Confirmed - Track switched off Brivo.</b><div class="muted">Guests' Door Codes now come from Moose Locks.</div></div>`
+            : `<div class="card" style="border-color:var(--red);margin-top:8px"><b style="color:var(--red)">✗ Track didn't take it.</b><div class="muted">${esc((ev.detail||{}).detail||"")} - the office has been told; try again in a few minutes.</div></div>`;
+          S.dirty = false; if(ev.kind==="track_switched"){ await loadBase(); setTimeout(()=>installHome(pid), 2500); } return; } }
+      box.innerHTML = '<div class="card" style="border-color:var(--amber);margin-top:8px"><b>Still waiting on the office computer.</b><div class="muted">It will finish on its own within 30 minutes - this step goes green when it does.</div></div>';
+    }catch(e){ fail(e); } tg.disabled = false; S.dirty = false; };
+  const ub = $("#unbrivo"); if(ub) ub.onclick = async () => { const box = $("#unbrivomsg"); ub.disabled = true; S.dirty = true;
+    try{ const id = await command(hub.id, null, "exclude");
+      box.innerHTML = '<div class="card" style="border-color:var(--amber);margin-top:8px"><b>⏳ Hub is listening (5 min)</b><div class="muted">Go to the lock now: master code ⚙ 7 ⚙ 3 ⚙. This turns green when the lock confirms it left Brivo.</div></div>';
+      const r = await waitCmd(id, 300);
+      box.innerHTML = r && r.ok ? `<div class="card" style="border-color:var(--moose);margin-top:8px"><b style="color:var(--pine)">✓ Confirmed - that lock left Brivo.</b><div class="muted">Next door: tap the blue button again. All done? Go to step 4 and pair them.</div></div>`
+        : `<div class="card" style="border-color:var(--red);margin-top:8px"><b style="color:var(--red)">✗ No lock confirmed.</b><div class="muted">${esc((r&&r.result&&r.result.msg)||"Nothing happened in 5 minutes")}. Tap the blue button and try the keypad again - master code ⚙ 7 ⚙ 3 ⚙. If 7 does nothing, the wireless module is loose.</div></div>`;
+      if(r && r.ok) await rpc("lock_install_step",{p_property:pid,p_step:"brivo_n",p_done:true,p_note:String(((st.brivo_n||{}).note|0)+1)}).catch(()=>{});
+    }catch(e){ fail(e); } ub.disabled = false; S.dirty = false; };
   $$("[data-step]").forEach(c=>c.onchange=async()=>{ try{ await rpc("lock_install_step",{p_property:pid,p_step:c.dataset.step,p_done:c.checked}); await loadBase(); again(); }catch(e){ fail(e); } });
   const find = $("#find"); if(find) find.onclick = async () => {
     try{ const hs = await rpc("lock_find_hubs"); $("#found").innerHTML = hs.length ? hs.map(x=>`<button class="btn primary wide" style="margin-top:8px" data-hub="${x.id}">Add the hub found here</button>`).join("")
@@ -772,6 +1002,8 @@ async function installHome(pid){
     try{ const l = locks.find(x=>x.id===r.dataset.lock); await rpc("lock_update",{p_lock:l.id,p_name:$("input",r).value.trim(),p_for_guests:l.for_guests,p_active:true}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
   $$("[data-test]").forEach(b=>b.onclick=async()=>{ const code = String(Math.floor(1000+Math.random()*9000)); try{ await command(null, b.dataset.test, "refresh", {code}); toast("Test code "+code+" going on the lock (10 min)"); setTimeout(()=>installHome(pid), 15000); }catch(e){ fail(e); } });
   $$("[data-unlock]").forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ const r = await waitCmd(await command(null, b.dataset.unlock, "unlock"), 30); toast(r? (r.ok?"Unlocked":"The lock didn't answer") : "No answer from the hub"); }catch(e){ fail(e); } b.disabled=false; });
+  const wa = $("#wipeall"); if(wa) wa.onclick = async () => { if(!confirm("Clear every old (Brivo) code on all "+locks.length+" door"+(locks.length>1?"s":"")+"? Our crew, vendor and guest codes stay, and so does the master code.")) return;
+    try{ for(const l of locks) await command(null, l.id, "wipe"); toast("Clearing - each door turns green when it's confirmed"); again(); }catch(e){ fail(e); } };
   $$("[data-wipe]").forEach(b=>b.onclick=async()=>{ if(!confirm("Clear every code on this lock that isn't ours (old Brivo codes)? Crew, vendor and guest codes from our system stay.")) return;
     try{ await command(null, b.dataset.wipe, "wipe"); toast("Reading the lock - old codes will be cleared"); again(); }catch(e){ fail(e); } });
   $("#wsave") && ($("#wsave").onclick = async () => {
@@ -885,7 +1117,7 @@ async function homeView(pid){
   const hist = `<details class="card"><summary>History</summary><div class="list">${events.map(e=>`<div><span class="grow">${esc(e.kind.replace(/_/g," "))}${e.who?" · "+esc(e.who):""}${e.lock_id?' <span class="muted">'+esc(lockName(e.lock_id))+'</span>':""}</span><span class="muted">${when(e.at)}</span></div>`).join("")}</div></details>`;
 
   const bar = await syncBar();
-  shell("homes", `<p><a href="#/">← Homes</a></p><h2>${esc(p.code)} <span class="muted" style="font-weight:400">${esc(p.name)}</span></h2>${bar}
+  shell("homes", `<p><a href="#/">← Homes</a></p><h2>${esc(dc(p.code))} <span class="muted" style="font-weight:400">${esc(p.name)}</span></h2>${bar}
     ${alerts.map(a=>`<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">${esc(a.kind.replace(/_/g," "))}</b><div>${esc(a.detail||"")}</div>${a.bw_task&&a.bw_task.startsWith("http")?`<a href="${esc(a.bw_task)}">Breezeway task</a>`:""}</div>`).join("")}
     ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
     ${h.section==="ours" ? statusLights({hub, locks, thermos, sensors, tvs, codes:{ on: myAssign.filter(a=>a.wanted&&a.state==="verified").length, total: myAssign.filter(a=>a.wanted).length }}) : ""}
@@ -1011,8 +1243,8 @@ async function staysView(){
     <div id="sstats"></div>${STAY_KEY}<div class="card" style="overflow-x:auto" id="stable"></div>
     <p class="muted">Codes go live (lock, guest page, Track Door Code) once the rental agreement is back. Owner and lease stays don't need one.</p>`, "Moose Locks", "Office desk · stays and codes");
   const homeOpts = () => { const hd = $("#shood").value, cur = $("#shome").value;
-    $("#shome").innerHTML = `<option value="">All homes</option>` + oursH.filter(h=>!hd || hoodOf(h)===hd).sort((a,b)=>a.properties.code.localeCompare(b.properties.code,undefined,{numeric:true}))
-      .map(h=>`<option value="${esc(h.property_id)}" ${h.property_id===cur?"selected":""}>${esc(h.properties.code)}</option>`).join(""); };
+    $("#shome").innerHTML = `<option value="">All homes</option>` + oursH.filter(h=>!hd || hoodOf(h)===hd).sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code),undefined,{numeric:true}))
+      .map(h=>`<option value="${esc(h.property_id)}" ${h.property_id===cur?"selected":""}>${esc(dc(h.properties.code))}</option>`).join(""); };
   const draw = () => {
     const t = $("#sfind").value.trim().toLowerCase(), hd = $("#shood").value, hm = $("#shome").value;
     pref("shood", hd); pref("shome", hm);
@@ -1075,11 +1307,12 @@ async function codesView(){
     <div id="form"></div>
     <div id="clist"></div>
     <details class="sect" open><summary><h3 style="margin:0">Lock master codes</h3></summary><div class="card"><table class="tbl"><tr><th>Home</th><th>Door</th><th>Master code</th><th>From</th></tr>
-      ${ours.slice().sort((a,b)=>a.properties.code.localeCompare(b.properties.code,undefined,{numeric:true})).map(h => {
+      ${ours.slice().sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code),undefined,{numeric:true})).map(h => {
           const ls = masters.filter(m=>m.property_id===h.property_id && m.master_code), bs = brivoM.filter(b=>b.property_id===h.property_id && !ls.some(m=>m.master_code===b.master_code));
-          const rows = [...ls.map(m=>[m.name, m.master_code, "Lock"]), ...bs.map(b=>[b.door||"Home", b.master_code, "Brivo"])];
-          return rows.length ? rows.map(r=>`<tr><td><b>${esc(h.properties.code)}</b></td><td>${esc(r[0])}</td><td><span class="code-chip">${esc(r[1])}</span></td><td class="muted">${r[2]}</td></tr>`).join("")
-            : `<tr><td><b>${esc(h.properties.code)}</b></td><td></td><td><span class="muted" style="color:var(--red)">not on file - get it from Brivo</span></td><td></td></tr>`; }).join("")}</table></div></details>`, "Moose Locks", "Office · access codes");
+          const rows = [...ls.map(m=>[m.name, m.master_code, "Lock"]), ...bs.map(b=>[b.door||"Home", b.master_code, "Brivo"]),
+            ...(h.master_code && !ls.some(m=>m.master_code===h.master_code) ? [["Home", h.master_code, "Made by app"]] : [])];
+          return rows.length ? rows.map(r=>`<tr><td><b>${esc(dc(h.properties.code))}</b></td><td>${esc(r[0])}</td><td><span class="code-chip">${esc(r[1])}</span></td><td class="muted">${r[2]}</td></tr>`).join("")
+            : `<tr><td><b>${esc(dc(h.properties.code))}</b></td><td></td><td><span class="muted" style="color:var(--red)">not on file - get it from Brivo, or make one on the Install page</span></td><td></td></tr>`; }).join("")}</table></div></details>`, "Moose Locks", "Office · access codes");
   const firstHome = c => c.property_ids && c.property_ids.length ? ((S.props[c.property_ids[0]]||{}).code||"") : "~";
   const drawCodes = () => {
     const show = pref("cshow") || "all", srt = $("#csort").value, t = $("#cfind").value.trim().toLowerCase();
@@ -1125,8 +1358,8 @@ async function codesView(){
         <span class="muted">Homes</span>
         <input id="f_hfind" placeholder="Find a home" style="margin:6px 0">
         <div class="chips" style="margin:6px 0;max-height:220px;overflow:auto" id="f_homes">${S.homes.filter(h=>h.section==="ours" || (c.property_ids||[]).includes(h.property_id))
-          .sort((a,b)=>a.properties.code.localeCompare(b.properties.code,undefined,{numeric:true}))
-          .map(h=>`<span class="chip ${(c.property_ids||[]).includes(h.property_id)?"on":""}" data-home="${esc(h.property_id)}">${esc(h.properties.code)}</span>`).join("")}</div></div>
+          .sort((a,b)=>ck(a.properties.code).localeCompare(ck(b.properties.code),undefined,{numeric:true}))
+          .map(h=>`<span class="chip ${(c.property_ids||[]).includes(h.property_id)?"on":""}" data-home="${esc(h.property_id)}">${esc(dc(h.properties.code))}</span>`).join("")}</div></div>
       <span class="muted"><b>Days</b> (none picked = every day)</span>
       <div class="chips" style="margin:6px 0">${DAYS.map((d,i)=>`<span class="chip ${(c.days||[]).includes(i)?"on":""}" data-day="${i}">${d}</span>`).join("")}</div>
       <div class="grid2"><label class="field"><span>From (time)</span><input type="time" id="f_tf" value="${c.time_from?c.time_from.slice(0,5):""}"></label>
@@ -1235,7 +1468,7 @@ async function route(){
     else if(h==="score" && DESK) await scoreView();
     else await homesView();
   }catch(e){ fail(e, "Couldn't load"); }
-  if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!document.querySelector("input:focus,details[open]:not(.guide):not(.sect)")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
+  if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!S.dirty && !document.querySelector("input:focus,details[open]:not(.guide):not(.sect)")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
 }
 window.addEventListener("hashchange", route);
 sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
