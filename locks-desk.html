@@ -1568,11 +1568,12 @@ async function mfaCodeView(){
   $("#mfago").onclick = go; $("#mfac").onkeyup = e => { if(e.key==="Enter" || $("#mfac").value.length===6) go(); }; $("#mfac").focus();
 }
 async function mfaSetupView(){
+  if(S.mfaBusy) return; S.mfaBusy = true; setTimeout(()=>S.mfaBusy=false, 4000);   // sign-in fires twice; only set up once
   mfaShell(`<h2>Turn on 2-step sign-in</h2><p class="muted">One time only. After this you'll type a 6-digit code from your phone when you sign in.</p><div id="mfabox"><p class="muted">Getting your QR code…</p></div>`);
   try{
     const { data:f } = await sb.auth.mfa.listFactors();
     for(const x of (f.all||[]).filter(x=>x.status!=="verified")) await sb.auth.mfa.unenroll({ factorId: x.id });
-    const { data, error } = await sb.auth.mfa.enroll({ factorType:"totp", friendlyName:"Moose Locks " + new Date().toISOString().slice(0,10) });
+    const { data, error } = await sb.auth.mfa.enroll({ factorType:"totp", friendlyName:"Moose Locks " + new Date().toISOString().slice(0,16).replace("T"," ") + " " + Math.random().toString(36).slice(2,6) });
     if(error) throw error;
     $("#mfabox").innerHTML = `<ol class="how" style="text-align:left">
         <li><span class="key">1</span><span>Install <b>Google Authenticator</b> or <b>Microsoft Authenticator</b> from the App Store / Google Play.</span></li>
