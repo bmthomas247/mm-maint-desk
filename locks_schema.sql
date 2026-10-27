@@ -1790,3 +1790,55 @@ begin
   if not lock_is_crew() then raise exception 'Only crew'; end if;
   update lock_tvs set name = coalesce(nullif(p_name,''), name) where id = p_tv;
 end $$;
+
+-- ---------------------------------------------------------------- brand-new homes: GPS -> neighborhood guess, then create the home
+-- Nearest homes we already know (Track GPS) decide the neighborhood: the area most of the closest homes share (within ~1 km).
+create or replace function lock_area_guess(p_lat float8, p_lng float8) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with near as (
+    select p.area, p.code, p.name,
+           round(6371000 * 2 * asin(sqrt(power(sin(radians(pl.lat - p_lat) / 2), 2)
+                 + cos(radians(p_lat)) * cos(radians(pl.lat)) * power(sin(radians(pl.lng - p_lng) / 2), 2))))::int as m
+      from lock_places pl join properties p on p.id = pl.property_id
+     where lock_is_crew() and p.area is not null and p.area <> 'Moose'
+     order by 4 limit 7)
+  select jsonb_build_object(
+    'area', (select area from near where m < 1000 group by area order by count(*) desc, min(m) limit 1),
+    'meters', (select min(m) from near),
+    'near', coalesce((select jsonb_agg(jsonb_build_object('code', code, 'area', area, 'meters', m) order by m) from near), '[]'))
+$$;
+
+-- Create a home that isn't in Track yet. r = {code, name, address, area, kind, lat, lng}. Same id style as the desk (lower-case code, dashes).
+create or replace function lock_create_home(r jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare pid text; c text := upper(trim(coalesce(r->>'code','')));
+begin
+  if not lock_is_crew() then raise exception 'Only crew'; end if;
+  if c !~ '^[A-Z0-9][A-Z0-9 -]{1,20}$' then raise exception 'Home code looks wrong (example: RJ 13536)'; end if;
+  select id into pid from properties where upper(code) = c;
+  if pid is null then
+    pid := lower(regexp_replace(c, '[^A-Za-z0-9]+', '-', 'g'));
+    if exists (select 1 from properties where id = pid) then pid := pid || '-' || substr(md5(random()::text), 1, 4); end if;
+    insert into properties (id, code, name, address, area, kind, active)
+    values (pid, c, coalesce(nullif(trim(r->>'name'),''), c), nullif(trim(r->>'address'),''), nullif(upper(trim(r->>'area')),''),
+            coalesce(nullif(r->>'kind',''), 'str'), true);
+  end if;
+  if (r->>'lat') is not null and (r->>'lng') is not null then
+    insert into lock_places (property_id, lat, lng, address) values (pid, (r->>'lat')::float8, (r->>'lng')::float8, nullif(trim(r->>'address'),''))
+    on conflict (property_id) do nothing;
+  end if;
+  perform lock_setup_home(pid, true);
+  return pid;
+end $$;
+
+-- Is the tech's phone on the same internet connection as this home's hub (or a new hub waiting to be added)?
+create or replace function lock_net_check(p_property text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'hub', (select b.public_ip is not null from lock_hubs b where b.property_id = p_property and b.active and b.claimed_at is not null order by b.last_seen desc nulls last limit 1),
+    'same_as_hub', exists (select 1 from lock_hubs b where b.property_id = p_property and b.active and b.public_ip = lock_caller_ip()),
+    'new_hub_here', (select count(*) from lock_hubs b where b.active and b.claimed_at is null and b.last_seen > now() - interval '30 minutes' and b.public_ip = lock_caller_ip()),
+    'other_home', (select p.code from lock_hubs b join properties p on p.id = b.property_id
+                    where b.active and b.claimed_at is not null and b.property_id <> p_property and b.public_ip = lock_caller_ip() limit 1))
+  where lock_is_crew()
+$$;
