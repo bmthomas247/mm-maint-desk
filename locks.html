@@ -46,6 +46,8 @@ header.top{position:sticky;top:0;z-index:6;color:#fff;background:linear-gradient
 .top .grow{flex:1;min-width:0}
 .top .iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;display:grid;place-items:center;text-decoration:none}
 .top .iconbtn svg{width:20px;height:20px}
+.top .deskbtn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;text-decoration:none;font-weight:800;font-size:14px;white-space:nowrap}
+.top .deskbtn svg{width:18px;height:18px}
 main{max-width:760px;margin:0 auto;padding:16px}
 h2{font-size:22px;margin:4px 0 12px;font-weight:800;letter-spacing:-.02em}
 h3{font-size:13px;margin:22px 2px 10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
@@ -274,7 +276,7 @@ function shell(active, inner, title, sub){
   app.innerHTML = `<header class="top"><div class="bar">
       <div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${ICON.lock}</span></div>
       <div class="grow"><h1>${esc(title||"Moose Locks")}</h1><div class="sub">${esc(sub||"Moose Management · lock system")}</div></div>
-      ${DESK?`<a class="iconbtn" href="desk.html" title="Maintenance desk">${ICON.homes}</a>`:""}</div></header>
+      ${DESK?`<a class="deskbtn" href="desk.html" title="Go to the Maintenance Desk">${ICON.homes}<span>Maintenance Desk</span></a>`:""}</div></header>
   ${DESK?navTabs(active):""}
   <main id="main">${inner}</main>
   ${DESK?"":navTabs(active)}`;
@@ -309,6 +311,7 @@ async function loadBase(){
   const homes = await q("lock_homes","*,properties(id,code,name,address,area,bw_home_id)");
   S.homes = homes.filter(h=>h.properties).sort((a,b)=>a.properties.code.localeCompare(b.properties.code));
   S.props = Object.fromEntries(S.homes.map(h=>[h.property_id,h.properties]));
+  if(!S.allProps){ try{ S.allProps = await q("properties","id,code,name,area",x=>x.eq("active",true)); }catch(e){ S.allProps = []; } }
   const al = await q("lock_alerts","id,property_id",x=>x.is("closed_at",null));
   const ours = new Set(S.homes.filter(h=>h.section==="ours").map(h=>h.property_id));
   S.alertCount = al.filter(a=>ours.has(a.property_id)).length;
@@ -316,7 +319,8 @@ async function loadBase(){
 /* neighborhoods (office desk): Track area code (RJ, BHV...) + the name the homes share ("Retreat at Jordanelle") */
 const hoodOf = h => (h.properties && (h.properties.area || (h.properties.code||"").split(" ")[0])) || "Other";
 function hoodName(area){
-  const names = S.homes.filter(h=>hoodOf(h)===area).map(h=>String(h.properties.name||"")
+  const pool = (S.allProps && S.allProps.length ? S.allProps.map(p=>({properties:p})) : S.homes);
+  const names = pool.filter(h=>hoodOf(h)===area).map(h=>String(h.properties.name||"")
     .replace(/\s*\(.*\)\s*$/,"").replace(/\s+PF$/i,"").replace(/\s+(unit\s+)?#?[\w-]*\d[\w-]*$/i,"").trim()).filter(Boolean);
   const top = Object.entries(names.reduce((m,n)=>(m[n]=(m[n]||0)+1,m),{})).sort((a,b)=>b[1]-a[1])[0];
   return top ? top[0] : area;
@@ -391,7 +395,8 @@ async function homesView(){
       <div id="hoodlist"></div>`
     : `<h3>Homes on our system · ${sec.ours.length}</h3><div class="tile-grid">${sec.ours.map(card).join("")||'<div class="empty">No homes yet.</div>'}</div>`}
     ${S.me.role==="admin"?`<details class="card"><summary>Add a home to the test</summary>
-      <label class="field"><span>Home code (as in Track, e.g. RJ 811)</span><input id="nh"></label>
+      <label class="field"><span>Home code - start typing (e.g. bhv)</span><input id="nh" list="nh_list" autocomplete="off" placeholder="Type letters or numbers…"></label>
+      <datalist id="nh_list">${(S.allProps||[]).filter(x=>!S.homes.some(h=>h.property_id===x.id && h.section==="ours")).sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})).map(x=>`<option value="${esc(x.code)}">${esc(x.name||"")}</option>`).join("")}</datalist>
       <label class="field"><span>Section</span><select id="ns"><option value="ours">Our system</option></select></label>
       <button class="btn primary wide" id="addh">Add</button></details>`:""}`, "Moose Locks", `${sec.ours.length} test homes · ${hubOn} online`);
   wireSync();
@@ -429,7 +434,7 @@ async function homesView(){
     $("#hood").onchange = draw; $("#hsort").onchange = draw; $("#hfind").oninput = draw; draw();
   }
   const b = $("#addh"); if(b) b.onclick = async () => {
-    try{ const p = (await q("properties","id",x=>x.eq("code",$("#nh").value.trim())))[0]; if(!p) return toast("No home with that code");
+    try{ const typed = $("#nh").value.trim().toLowerCase(); const p = (S.allProps||[]).find(x=>x.code.toLowerCase()===typed); if(!p) return toast("No home with that code - pick one from the list");
       await rpc("lock_home_set",{p_property:p.id,p_section:$("#ns").value,p_enabled:true}); toast("Added"); homesView(); }catch(e){ fail(e); } };
 }
 
@@ -523,6 +528,7 @@ async function installView(){
       <button class="btn go wide" id="gps">📍 I'm at the home - find it</button>
       <label class="field"><span>…or type the home code or name</span><input id="findh" placeholder="RJ 13536, Black Rock…" autocomplete="off"></label>
       <label class="row" style="margin:4px 0 0"><input type="checkbox" id="isnew"> <span>Brand-new home - never had Brivo</span></label>
+      <div id="newform"></div>
       <div id="near" style="margin-top:10px"></div></div>
     <h3>Homes on our system</h3>
     ${ours.map(h=>{ const p = installProgress(h); return `<a class="card home ${h.installed_at?"ok":p.done?"todo":""}" href="#/install/${encodeURIComponent(h.property_id)}">
@@ -540,6 +546,56 @@ async function installView(){
         : '<p class="muted">No home with that name. New homes show up here after they are added in Track and the next sync runs (or press Sync now on Homes).</p>';
       $$("[data-pick]").forEach(b=>b.onclick=()=>start(b.dataset.pick, !!b.dataset.ours));
     }catch(e){ fail(e); } }, 250); };
+  // Brand-new home: GPS -> street address + neighborhood -> suggested home code. Everything stays editable.
+  const AREAS = [...new Set((S.allProps||[]).map(p=>p.area).concat(S.homes.map(hoodOf)).filter(a=>a && a!=="Moose"))].sort((a,b)=>hoodName(a).localeCompare(hoodName(b)));
+  const newForm = (g) => {
+    g = g || {};
+    $("#newform").innerHTML = `<div class="card" style="margin:10px 0 0;background:var(--ground)">
+      <div class="row"><b class="grow">New home details</b><button class="btn small" id="nf_gps">📍 Use my location</button></div>
+      <div id="nf_msg" class="muted" style="margin:6px 0">${g.msg||"Fills in the address, neighborhood and a home code from where you're standing. Change anything that's wrong."}</div>
+      <label class="field"><span>Street address</span><input id="nf_addr" value="${esc(g.address||"")}" placeholder="13536 N Bucks Cir"></label>
+      <div class="grid2"><label class="field"><span>Neighborhood</span><select id="nf_area"><option value="">Pick…</option>${AREAS.map(a=>`<option value="${esc(a)}" ${a===g.area?"selected":""}>${esc(hoodName(a))} (${esc(a)})</option>`).join("")}<option value="__new">New neighborhood…</option></select></label>
+        <label class="field"><span>Home code</span><input id="nf_code" value="${esc(g.code||"")}" placeholder="RJ 13536"></label></div>
+      <div id="nf_newarea" style="display:none" class="grid2"><label class="field"><span>New neighborhood code</span><input id="nf_area2" placeholder="e.g. PCM"></label>
+        <label class="field"><span>Its name</span><input id="nf_aname" placeholder="e.g. Park City Mountain"></label></div>
+      <div class="grid2"><label class="field"><span>Home name</span><input id="nf_name" value="${esc(g.name||"")}" placeholder="Retreat at Jordanelle 13536"></label>
+        <label class="field"><span>Type</span><select id="nf_kind"><option value="str">Vacation rental</option><option value="second_home">Second home</option><option value="lease">Lease</option></select></label></div>
+      <button class="btn go wide" id="nf_go">Create home &amp; start setup</button>
+      <div class="muted" style="font-size:12.5px;margin-top:6px">Already in Track? Search for it above instead - it keeps the Track link.</div></div>`;
+    let lat = g.lat, lng = g.lng;
+    const suggest = () => { const a = $("#nf_area").value === "__new" ? $("#nf_area2").value.trim().toUpperCase() : $("#nf_area").value;
+      const num = ($("#nf_addr").value.match(/^\s*(\d{1,6})/)||[])[1] || "";
+      if(!$("#nf_code").dataset.typed && a && num) $("#nf_code").value = a + " " + num;
+      if(!$("#nf_name").dataset.typed && a && num) $("#nf_name").value = ($("#nf_area").value==="__new" ? $("#nf_aname").value.trim() : hoodName(a)) + " " + num; };
+    $("#nf_code").oninput = () => $("#nf_code").dataset.typed = 1; $("#nf_name").oninput = () => $("#nf_name").dataset.typed = 1;
+    $("#nf_area").onchange = () => { $("#nf_newarea").style.display = $("#nf_area").value==="__new" ? "" : "none"; suggest(); };
+    $("#nf_addr").oninput = suggest; $("#nf_area2").oninput = suggest; $("#nf_aname").oninput = suggest;
+    $("#nf_gps").onclick = () => locate();
+    $("#nf_go").onclick = async () => {
+      const area = $("#nf_area").value === "__new" ? $("#nf_area2").value.trim().toUpperCase() : $("#nf_area").value;
+      const r = { code:$("#nf_code").value.trim(), name:$("#nf_name").value.trim(), address:$("#nf_addr").value.trim(), area, kind:$("#nf_kind").value, lat, lng };
+      if(!r.code) return toast("Add a home code"); if(!area) return toast("Pick the neighborhood");
+      try{ const pid = await rpc("lock_create_home",{r}); await loadBase(); toast("Created "+r.code+" - here's its checklist"); location.hash = "#/install/"+encodeURIComponent(pid); }catch(e){ fail(e); } };
+    const locate = () => {
+      if(!navigator.geolocation) return toast("This phone can't share location");
+      $("#nf_msg").textContent = "Finding you…";
+      navigator.geolocation.getCurrentPosition(async pos => {
+        lat = pos.coords.latitude; lng = pos.coords.longitude;
+        let address = "", msg = "";
+        try{ const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`, {headers:{"Accept-Language":"en"}})).json();
+          const a = j.address || {}; address = [a.house_number, a.road].filter(Boolean).join(" "); }catch(e){}
+        let guess = {}; try{ guess = await rpc("lock_area_guess",{p_lat:lat,p_lng:lng}) || {}; }catch(e){}
+        const near = (guess.near||[])[0];
+        msg = (address ? "Address from GPS - check the house number. " : "Couldn't read the street address - type it. ")
+            + (guess.area ? `Neighborhood: ${hoodName(guess.area)} (closest home ${near?near.code+", "+near.meters+" m":"nearby"}).` : "No known neighborhood close by - pick one or add a new one.");
+        newForm({ address, area: guess.area||"", lat, lng, msg,
+          code: guess.area && /^\d/.test(address) ? guess.area+" "+address.match(/^\d+/)[0] : "",
+          name: guess.area && /^\d/.test(address) ? hoodName(guess.area)+" "+address.match(/^\d+/)[0] : "" });
+      }, err => { $("#nf_msg").textContent = "Couldn't get your location ("+err.message+"). Allow location for this site, or type the details."; }, {enableHighAccuracy:true, timeout:15000});
+    };
+    if(!g.lat && g.auto) locate();
+  };
+  $("#isnew").onchange = () => { if($("#isnew").checked) newForm({auto:true}); else $("#newform").innerHTML = ""; };
   $("#gps").onclick = () => {
     if(!navigator.geolocation) return toast("This phone can't share location");
     $("#near").innerHTML = '<p class="muted">Finding you…</p>';
@@ -627,7 +683,14 @@ async function installHome(pid){
       : "Automatic. Once step 3 is ticked and every guest door passes its test code, the system switches this unit off Brivo in Track (within 30 min) and fills each guest's Door Code. Nothing to do in the office."}</div>${S.me.role==="admin"&&!(h.install||{}).track?mark(STEPS[8]):""}`,
   };
   const total = STEPS.filter(isDone).length;
-  shell("install", `<p><a href="#/install">← All installs</a></p>
+  const net = await rpc("lock_net_check",{p_property:pid}).catch(()=>null) || {};
+  const ctype = (navigator.connection||{}).type;
+  const netCard = net.same_as_hub ? `<div class="card" style="border-color:var(--moose)"><b>📶 You're on this home's internet ✓</b><div class="muted">Same connection as the hub - add mode, pings and tests will work from here.</div></div>`
+    : net.new_hub_here ? `<div class="card" style="border-color:var(--moose)"><b>📶 A new hub is on your connection</b><div class="muted">You're on the home's Wi-Fi and the hub is online - add it in step 2.</div></div>`
+    : net.other_home ? `<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">⚠ You're on ${esc(net.other_home)}'s internet, not this home's</b><div class="muted">Join this home's Wi-Fi first.</div></div>`
+    : ctype === "cellular" ? `<div class="card" style="border-color:var(--amber)"><b>📱 You're on cell data</b><div class="muted">Join the home's Wi-Fi first - the system finds the hub through the home's internet. Then type the Wi-Fi name and password in the Guest info step.</div></div>`
+    : `<div class="card" style="border-color:var(--amber)"><b>📶 Join the home's Wi-Fi first</b><div class="muted">Once you're on it and the hub is plugged in (Ethernet cable to the router - the hub itself never needs Wi-Fi), this turns green. Phones don't share the Wi-Fi name with websites, so type it in the Guest info step.</div></div>`;
+  shell("install", `<p><a href="#/install">← All installs</a></p>${netCard}
     <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(p.code)}</div><div class="muted">${esc(p.name)}</div></div>
       ${h.installed_at?`<span class="pill green">Installed</span>`:`<span class="pill amber">${total}/${STEPS.length}</span>`}</div>
       <div class="progress"><i style="width:${Math.round(100*total/STEPS.length)}%"></i></div></div>
@@ -881,7 +944,7 @@ async function staysView(){
   if(!S.homes.length) await loadBase();
   const oursH = S.homes.filter(h=>h.section==="ours"), ours = oursH.map(h=>h.property_id);
   const [all, assigns] = await Promise.all([
-    q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,portal_token,out_at",x=>x.in("property_id",ours).gte("ends_at",new Date(Date.now()-30*864e5).toISOString()).neq("status","cancelled").order("starts_at").limit(1000)),
+    q("lock_stays","res_id,property_id,guest,kind,status,starts_at,ends_at,code,code_source,agreement,portal_token,out_at",x=>x.in("property_id",ours).gte("ends_at",new Date(Date.now()-120*864e5).toISOString()).neq("status","cancelled").order("starts_at").limit(3000)),
     q("lock_assign","lock_id,ref_kind,ref_id,state,wanted",x=>x.eq("ref_kind","stay").neq("state","cleared"))]);
   const cleared = s => s.kind!=="guest" || ["received","not-needed"].includes(s.agreement);
   const onLock = s => { const a = assigns.filter(x=>x.ref_id===s.res_id && x.wanted); return !a.length ? null : a.every(x=>x.state==="verified") ? "on" : "sending"; };
@@ -891,21 +954,25 @@ async function staysView(){
       <label class="field" style="margin:0;flex:2;min-width:220px"><span>Find a guest</span><input id="sfind" placeholder="Guest name, reservation #, or code" autocomplete="off"></label>
       <label class="field" style="margin:0;flex:1;min-width:180px"><span>Neighborhood</span><select id="shood"><option value="">All neighborhoods</option>${hoods.map(a=>`<option value="${esc(a)}">${esc(hoodName(a))}</option>`).join("")}</select></label>
       <label class="field" style="margin:0;flex:1;min-width:160px"><span>Home</span><select id="shome"></select></label>
-      <label class="field" style="margin:0;flex:1;min-width:160px"><span>Show</span><select id="swhen"><option value="up">Upcoming + in the home</option><option value="all">Also the last 30 days</option></select></label></div>
+      <label class="field" style="margin:0;flex:1;min-width:150px"><span>From</span><input type="date" id="sfrom"></label>
+      <label class="field" style="margin:0;flex:1;min-width:150px"><span>To</span><input type="date" id="sto"></label></div>
     <div id="sstats"></div>${STAY_KEY}<div class="card" style="overflow-x:auto" id="stable"></div>
     <p class="muted">Codes go live (lock, guest page, Track Door Code) once the rental agreement is back. Owner and lease stays don't need one.</p>`, "Moose Locks", "Office desk · stays and codes");
   const homeOpts = () => { const hd = $("#shood").value, cur = $("#shome").value;
     $("#shome").innerHTML = `<option value="">All homes</option>` + oursH.filter(h=>!hd || hoodOf(h)===hd).sort((a,b)=>a.properties.code.localeCompare(b.properties.code,undefined,{numeric:true}))
       .map(h=>`<option value="${esc(h.property_id)}" ${h.property_id===cur?"selected":""}>${esc(h.properties.code)}</option>`).join(""); };
   const draw = () => {
-    const t = $("#sfind").value.trim().toLowerCase(), hd = $("#shood").value, hm = $("#shome").value, wh = $("#swhen").value;
-    pref("shood", hd); pref("shome", hm); pref("swhen", wh);
+    const t = $("#sfind").value.trim().toLowerCase(), hd = $("#shood").value, hm = $("#shome").value;
+    pref("shood", hd); pref("shome", hm);
     const now = Date.now();
-    const stays = all.filter(s => (wh==="all" || t || new Date(s.ends_at) >= now)
+    // date range: stays that overlap From..To (From empty = today, or the last 120 days when searching; To empty = no end)
+    const from = $("#sfrom").value ? new Date($("#sfrom").value+"T00:00:00") : (t ? new Date(now-120*864e5) : new Date(new Date().setHours(0,0,0,0)));
+    const to = $("#sto").value ? new Date($("#sto").value+"T23:59:59") : null;
+    const stays = all.filter(s => new Date(s.ends_at) >= from && (!to || new Date(s.starts_at) <= to)
       && (!hd || hoodOf(S.homes.find(h=>h.property_id===s.property_id)||{properties:{}})===hd) && (!hm || s.property_id===hm)
       && (!t || [s.guest, s.res_id, s.code].join(" ").toLowerCase().includes(t)));
-    const up = stays.filter(s=>new Date(s.ends_at)>=now), inHouse = up.filter(s=>new Date(s.starts_at)<=now && !s.out_at).length;
-    $("#sstats").innerHTML = `<div class="stats"><div class="stat"><div class="n">${up.length}</div><div class="l">Upcoming stays</div></div>
+    const up = stays, inHouse = up.filter(s=>new Date(s.starts_at)<=now && !s.out_at).length;
+    $("#sstats").innerHTML = `<div class="stats"><div class="stat"><div class="n">${up.length}</div><div class="l">${$("#sfrom").value||$("#sto").value?"Stays in these dates":"Upcoming stays"}</div></div>
       <div class="stat"><div class="n">${inHouse}</div><div class="l">In the home now</div></div>
       <div class="stat ${up.some(s=>!cleared(s))?"warn":""}"><div class="n">${up.filter(s=>!cleared(s)).length}</div><div class="l">Agreement not back</div></div>
       <div class="stat"><div class="n">${up.filter(s=>onLock(s)==="on").length}</div><div class="l">Codes on the lock</div></div></div>`;
@@ -926,8 +993,7 @@ async function staysView(){
   };
   const ph = pref("shood"); if(ph && hoods.includes(ph)) $("#shood").value = ph;
   homeOpts(); const pm = pref("shome"); if(pm && [...$("#shome").options].some(o=>o.value===pm)) $("#shome").value = pm;
-  const pw = pref("swhen"); if(pw) $("#swhen").value = pw;
-  $("#shood").onchange = () => { homeOpts(); draw(); }; $("#shome").onchange = draw; $("#swhen").onchange = draw; $("#sfind").oninput = draw;
+  $("#shood").onchange = () => { homeOpts(); draw(); }; $("#shome").onchange = draw; $("#sfrom").onchange = draw; $("#sto").onchange = draw; $("#sfind").oninput = draw;
   draw();
 }
 
