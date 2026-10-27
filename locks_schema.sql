@@ -2500,3 +2500,28 @@ begin
   get diagnostics n = row_count;
   return n;
 end $$;
+
+-- ---------------------------------------------------------------- temporary passwords (admins/managers): shown once, person must change it at next sign-in
+alter table allowed_users add column if not exists must_change_pw boolean not null default false;
+create or replace function lock_person_temp_password(p_id uuid) returns text
+language plpgsql security definer set search_path = public, extensions, auth as $$
+declare pw text; n int; u allowed_users;
+begin
+  if not lock_is_admin() then raise exception 'Only admins'; end if;
+  select * into u from allowed_users where id = p_id;
+  if u.lock_role = 'admin' and not lock_is_owner() then raise exception 'Only Brandon or Kim can change an admin'; end if;
+  pw := 'Moose-' || upper(substr(md5(gen_random_uuid()::text), 1, 4)) || '-' || lpad((floor(random()*10000))::int::text, 4, '0');
+  update auth.users set encrypted_password = crypt(pw, gen_salt('bf')), email_confirmed_at = coalesce(email_confirmed_at, now()), updated_at = now()
+   where lower(email) in (lower(u.email), lower(u.alt_email));
+  get diagnostics n = row_count;
+  if n = 0 then raise exception 'They have no sign-in yet. Tap "Email a sign-in code" once first, then try again.'; end if;
+  update allowed_users set must_change_pw = true where id = p_id;
+  insert into lock_audit (tbl, op, ref, who, changes) values ('allowed_users', 'temp_password', p_id::text, actor(), jsonb_build_object('name', u.name));
+  return pw;
+end $$;
+create or replace function lock_must_change_pw() returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((select must_change_pw from allowed_users where active and lower(auth.jwt()->>'email') in (lower(email), lower(alt_email)) limit 1), false)
+$$;
+create or replace function lock_pw_changed() returns void language sql security definer set search_path = public as $$
+  update allowed_users set must_change_pw = false where lower(auth.jwt()->>'email') in (lower(email), lower(alt_email))
+$$;
