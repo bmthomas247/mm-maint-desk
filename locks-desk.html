@@ -198,6 +198,11 @@ details.sect{margin:18px 0 6px} details.sect>summary{padding:6px 2px;border-bott
 (function(){
 "use strict";
 const C = window.MM_CONFIG;
+// Email links: older links came back as "#/page#access_token=..." which the sign-in library can't read - clean it up first
+(function(){ const h = location.hash, i = h.search(/(access_token|error_description|error)=/);
+  if(i > 1){ const tail = h.slice(i); history.replaceState(null, "", location.pathname + location.search + "#" + tail); }
+  const m = (location.hash + "&" + location.search).match(/error_description=([^&]+)/);
+  if(m) window.__linkErr = decodeURIComponent(m[1].replace(/\+/g," ")); })();
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
 const app = document.getElementById("app");
 const S = { me:null, homes:[], props:{}, timer:null };
@@ -370,7 +375,7 @@ function loginView(msg){
   };
   $("#link").onclick = async () => { const email = $("#em").value.trim().toLowerCase(); if(!email) return $("#msg").textContent = "Type your email first.";
     $("#msg").textContent = "Sending…";
-    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname + location.hash } });
+    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname } });
     $("#msg").textContent = error ? "Couldn't send the link - ask Brandon to add " + email + "." : "Link sent to " + email + ". Open it on this device."; };
 }
 
@@ -1833,7 +1838,9 @@ function wireUpdates(){
 async function route(){
   clearTimeout(S.timer);
   const { data:{ session } } = await sb.auth.getSession();
-  if(!session) return loginView();
+  if(!session){ const le = window.__linkErr; window.__linkErr = null;
+    if(le && location.hash.includes("error")) history.replaceState(null, "", location.pathname + location.search);
+    return loginView(le ? "That email link didn't work (" + le + "). Links work once and expire after an hour - send a new one." : ""); }
   if(!S.me){ const me = (await sb.rpc("my_desk_identity")).data; S.me = me && me[0]; }
   if(!S.me || !["admin","tech"].includes(S.me.role)) return shell("homes","<p>Lock setup is for the maintenance crew. Ask Brandon to add you.</p>");
   // 2-step sign-in (authenticator app): required for everyone on the lock sites
