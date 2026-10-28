@@ -70,10 +70,22 @@ iframe.desk{border:0;width:100%;flex:1;background:var(--ground)}
 .page{max-width:760px;margin:0 auto;padding:24px 16px;width:100%;overflow:auto}
 h2{font-size:24px;margin:4px 0 6px;font-weight:800;letter-spacing:-.02em}
 .topbar{display:none}
-.sstrip{display:flex;gap:8px;overflow-x:auto;padding:10px 0 6px;scrollbar-width:thin}
-.sday{flex:none;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;text-align:center;display:flex;flex-direction:column;gap:1px;font-size:12.5px}
+.shead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.spill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--ink-2);background:var(--ground);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+i.g,i.o{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--moose);vertical-align:middle} i.o{background:var(--blue)}
+.sgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:12px 0 4px}
+.sday{border:1px solid var(--line);border-radius:12px;padding:6px 4px 7px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:0;min-width:0}
 .sday.on{border-color:var(--moose);background:var(--moose-soft)}
-.sday b{font-size:22px;line-height:1.1;margin-top:4px} .sday small{color:var(--muted);font-weight:700} .sday .io{color:var(--muted);font-size:11.5px}
+.sday .dw{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.sday .dd{font-size:12px;color:var(--muted);font-weight:700}
+.sday b{font-size:20px;line-height:1.15;margin:2px 0}
+.sday .go{font-size:11px;color:var(--ink-2);font-weight:700;display:flex;align-items:center;gap:3px;flex-wrap:wrap;justify-content:center}
+.sday .go i{margin-left:2px}
+.srow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0} .srow .su{min-width:84px} .srow .sg{flex-basis:100%;font-size:14px;font-weight:600;padding-left:2px}
+.daily{background:linear-gradient(135deg,var(--moose-soft),var(--card))}
+.dhd{display:flex;align-items:center;gap:8px} .dq{font-size:18px;font-weight:700;line-height:1.4;margin:10px 0 6px}
+@media (max-width:520px){ .sgrid{gap:4px} .sday b{font-size:17px} .sday .go{font-size:10px} }
 details.acc2{border-top:1px solid var(--line);padding:10px 0 0;margin-top:10px}
 details.acc2>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px}
 details.acc2>summary::-webkit-details-marker{display:none}
@@ -396,25 +408,76 @@ async function loadStays(){
   const box = $("#stays"); if(!box) return;
   const r = await sb.rpc("hub_home_stays"); const j = r.data;
   if(r.error || !j){ box.innerHTML = `<b style="font-size:17px">🏠 Who's in house</b><p class="muted">Couldn't load stays${r.error ? ": " + esc(r.error.message) : ""}.</p>`; return; }
-  const dn = d => new Date(d + "T12:00"), wk = d => d === j.today ? "Today" : dn(d).toLocaleDateString(undefined, { weekday:"short" });
-  const tomorrow = (j.days[1] || {}).day;
-  const strip = j.days.map(d => `<div class="sday${d.day === j.today ? " on" : ""}"><div class="muted">${wk(d.day)}<br>${dn(d.day).toLocaleDateString(undefined,{month:"numeric",day:"numeric"})}</div>
-      <b>${d.guests}</b><small>guests</small><span>${d.owners} owner${d.owners === 1 ? "" : "s"}</span><span class="io">↘ ${d.arrivals} · ↗ ${d.departures}</span></div>`).join("");
-  const list = day => { const ci = j.checkins.filter(x => x.day === day), co = j.checkouts.filter(x => x.day === day);
-    return (ci.length ? ci.map(x => `<div class="fb"><div class="hd"><b>${esc(x.unit)}</b><span class="pill ${x.owner ? "blue" : "green"}">${x.owner ? "Owner" : "Guest"}</span>
-        <span class="muted">${x.nights} night${x.nights === 1 ? "" : "s"}${x.status && x.status !== "Confirmed" ? " · " + esc(x.status) : ""}</span>${x.turn ? `<span class="pill amber">Same-day turn</span>` : ""}</div></div>`).join("") : `<p class="muted">No check-ins.</p>`)
-      + (co.length ? `<p class="muted" style="margin:8px 0 0">Check-outs: ${co.map(x => esc(x.unit)).join(", ")}</p>` : ""); };
-  const nIn = day => j.checkins.filter(x => x.day === day).length;
-  box.innerHTML = `<b style="font-size:17px">🏠 Who's in house · next 14 days</b>
-    <div class="sstrip">${strip}</div>
-    <details class="acc2" name="ciacc"><summary><b>Check-ins today</b><span class="pill green">${nIn(j.today)}</span></summary>${list(j.today)}</details>
-    <details class="acc2" name="ciacc"><summary><b>Check-ins tomorrow</b><span class="pill green">${nIn(tomorrow)}</span></summary>${list(tomorrow)}</details>
-    <p class="muted" style="font-size:12px;margin:8px 0 0">Source: Track reservations${j.updated ? ", pulled " + new Date(j.updated).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}) : ""}. Homes with a stay that night; leases and cancelled stays left out. ↘ check-ins · ↗ check-outs.</p>`;
+  const dn = d => new Date(d + "T12:00"), md = d => dn(d).toLocaleDateString(undefined, { month:"short", day:"numeric" });
+  const t0 = j.today, t1 = (j.days[1] || {}).day, td = j.days[0] || {};
+  const cells = j.days.map(d => `<div class="sday${d.day === t0 ? " on" : ""}" title="${md(d.day)}: ${d.guests} guest homes, ${d.owners} owner homes, ${d.arrivals} check-ins, ${d.departures} check-outs">
+      <span class="dw">${d.day === t0 ? "Today" : dn(d.day).toLocaleDateString(undefined, { weekday:"short" })}</span><span class="dd">${dn(d.day).getDate()}</span>
+      <b>${d.guests + d.owners}</b><span class="go"><i class="g"></i>${d.guests}<i class="o"></i>${d.owners}</span></div>`).join("");
+  const S = j.stays || [];
+  const row = x => `<div class="srow"><b class="su">${esc(x.unit)}</b><span class="pill ${x.owner ? "blue" : "green"}">${x.owner ? "Owner" : "Guest"}</span>${x.turn ? `<span class="pill amber">Same-day turn</span>` : ""}
+      <span class="muted">${md(x.in)} → ${md(x.out)} · ${x.nights} night${x.nights === 1 ? "" : "s"}${x.status && x.status !== "Confirmed" ? " · " + esc(x.status) : ""}</span>
+      ${j.names && x.guest ? `<span class="sg">${esc(x.guest)}${x.res ? ` <span class="muted">· #${esc(x.res)}</span>` : ""}${x.type ? ` <span class="muted">· ${esc(x.type)}</span>` : ""}</span>` : ""}</div>`;
+  const sect = (title, list, empty) => `<details class="acc2" name="ciacc"><summary><b>${title}</b><span class="pill ${list.length ? "green" : ""}">${list.length}</span></summary>
+      ${list.length ? list.map(row).join("") : `<p class="muted" style="margin:6px 0 0">${empty}</p>`}</details>`;
+  const inNow = S.filter(x => x.in <= t0 && x.out > t0), ciT = S.filter(x => x.in === t0), ciM = S.filter(x => x.in === t1), co = S.filter(x => x.out === t0 || x.out === t1);
+  box.innerHTML = `<div class="shead"><b style="font-size:17px">🏠 Who's in house</b>
+      <span class="spill"><i class="g"></i>${td.guests || 0} guest homes</span><span class="spill"><i class="o"></i>${td.owners || 0} owner homes</span></div>
+    <div class="sgrid">${cells}</div>
+    ${sect("In the property now", inNow, "Nobody in a home tonight.")}
+    ${sect("Check-ins today", ciT, "No check-ins today.")}
+    ${sect("Check-ins tomorrow", ciM, "No check-ins tomorrow.")}
+    ${sect("Check-outs today & tomorrow", co, "No check-outs.")}
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Next 14 days: homes with a stay that night (<i class="g"></i> guest · <i class="o"></i> owner). ${j.names ? "" : "Guest names show for office staff only. "}Source: Track reservations${j.updated ? ", pulled " + new Date(j.updated).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : ""}; leases and cancelled stays left out.</p>`;
   box.querySelectorAll("details.acc2").forEach(d => d.addEventListener("toggle", () => { if(d.open) box.querySelectorAll("details.acc2").forEach(o => { if(o !== d) o.open = false; }); }));
+}
+/* Daily pick: same quote / joke / fact for everyone each day; "Another" shuffles. Quotes are attributed; facts carry their source. */
+const DAILY = [
+ { k:"Quote", t:"Well done is better than well said.", a:"Benjamin Franklin, Poor Richard's Almanack (1737)" },
+ { k:"Quote", t:"Do what you can, with what you have, where you are.", a:"Theodore Roosevelt, quoting Bill Widener, in his Autobiography (1913)" },
+ { k:"Quote", t:"Great things are done by a series of small things brought together.", a:"Vincent van Gogh, letter to his brother Theo (1882)" },
+ { k:"Quote", t:"The best way out is always through.", a:"Robert Frost, “A Servant to Servants” (1915)" },
+ { k:"Quote", t:"The mountains are calling and I must go.", a:"John Muir, letter to his sister Sarah (1873)" },
+ { k:"Quote", t:"In every walk with nature one receives far more than he seeks.", a:"John Muir, Steep Trails (1918)" },
+ { k:"Quote", t:"No act of kindness, no matter how small, is ever wasted.", a:"Aesop, “The Lion and the Mouse”" },
+ { k:"Quote", t:"Slow and steady wins the race.", a:"Aesop, “The Tortoise and the Hare”" },
+ { k:"Quote", t:"Many hands make light work.", a:"English proverb, recorded by John Heywood (1546)" },
+ { k:"Quote", t:"Fall seven times, stand up eight.", a:"Japanese proverb" },
+ { k:"Quote", t:"A journey of a thousand miles begins with a single step.", a:"Laozi, Tao Te Ching, ch. 64" },
+ { k:"Quote", t:"Alone we can do so little; together we can do so much.", a:"Helen Keller (as recalled by Joseph Lash)" },
+ { k:"Quote", t:"We are what we repeatedly do. Excellence, then, is not an act, but a habit.", a:"Will Durant, summing up Aristotle in The Story of Philosophy (1926)" },
+ { k:"Joke", t:"What do you call a moose with no name? Anonymoose." },
+ { k:"Joke", t:"What do you call a sleeping moose? A bull-dozer." },
+ { k:"Joke", t:"How do moose send secret messages? Moose code." },
+ { k:"Joke", t:"What's a moose's favorite kind of music? Moose-ic, especially when it's played by the moose-icians." },
+ { k:"Joke", t:"Why did the snowflake apply to work at Moose? It heard we're great with turnover." },
+ { k:"Joke", t:"Why did the hot tub get promoted? It stays calm under pressure and always keeps things at the right temperature." },
+ { k:"Joke", t:"Why are mountains so funny? They're hill-arious." },
+ { k:"Joke", t:"What do you call a fake noodle? An impasta." },
+ { k:"Joke", t:"Why don't eggs tell jokes? They'd crack each other up." },
+ { k:"Joke", t:"I'd tell you a joke about the broken elevator, but it works on another level." },
+ { k:"Fact", t:"A large bull moose can weigh as much as 1,500 pounds, and an adult stands five to seven feet at the shoulder.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { k:"Fact", t:"A bull moose's antlers can reach five feet across and weigh up to 77 pounds.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { k:"Fact", t:"A moose can eat up to 70 pounds of food a day.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { k:"Fact", t:"Moose have long legs that let them walk through deep snow and even swim in deep water.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { k:"Fact", t:"Park City was founded by prospectors in the late 1860s, and silver was mined here until the early 1970s.", a:"Park City Municipal", u:"https://parkcity.gov/about-us" },
+ { k:"Fact", t:"Park City's Ontario Mine, found in 1872, went on to produce over $50 million in its lifetime.", a:"Park City Municipal history", u:"https://parkcity.gov/about-us" },
+ { k:"Fact", t:"The film festival that came to Park City in 1981 grew into the Sundance Film Festival.", a:"Park City Municipal history", u:"https://parkcity.gov/about-us" },
+ { k:"Fact", t:"Park City is home to two ski resorts, Deer Valley and Park City Mountain.", a:"Park City Municipal", u:"https://parkcity.gov/about-us" }
+];
+function dailyPick(shift){
+  const box = $("#daily"); if(!box) return;
+  const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+  const x = DAILY[((day * 7 + (shift || 0)) % DAILY.length + DAILY.length) % DAILY.length];
+  const ic = { Quote:"💬", Joke:"😄", Fact:"💡" }[x.k];
+  box.innerHTML = `<div class="dhd"><span class="pill green">${ic} ${x.k} of the day</span><button class="btn small" id="dmore" style="margin-left:auto">Another</button></div>
+    <p class="dq">${x.k === "Quote" ? "“" + esc(x.t) + "”" : esc(x.t)}</p>
+    ${x.a ? `<p class="muted" style="margin:0">— ${x.u ? `<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.a)}</a>` : esc(x.a)}</p>` : ""}`;
+  $("#dmore").onclick = () => dailyPick((shift || 0) + 1);
 }
 async function homeView(v){
   const first = (ME.name||"").split(" ")[0];
   v.innerHTML = `<div class="page"><h2>Hi ${esc(first)} 👋</h2><p class="muted">${new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p>
+    <div class="card daily" id="daily"></div>
     <div class="card" id="wx"><p class="muted">Loading Park City weather…</p></div>
     <div class="card" id="stays"><b style="font-size:17px">🏠 Who's in house · next 14 days</b><p class="muted">Loading…</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎉 Shout-outs</b><button class="btn small" style="margin-left:auto" id="soadd">Give a shout-out</button></div>
@@ -426,7 +489,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
-  loadStays();
+  loadStays(); dailyPick(0);
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
