@@ -415,7 +415,7 @@ var S={db:null, me:ls("me")||"", tab:(location.hash||"").replace("#","")||"today
   recurring:{}, rlog:{}, expenses:{}, time:{}, config:{}, bwq:{}, taskbill:{}, projedits:{}, slackq:{}, deskprojects:{}, asanaq:{}, asks:{},
   ui:{q:"", st:{open:1,scheduled:1,waiting:1}, src:{}, kind:{}, who:"", vendor:"", hideOld:true, hideInfo:true,
       sel:"", home:"", hq:"", vq:"", vtrade:"", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
-var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["money","Expenses & Time"],["care","Home care"],["projects","Projects"],["routines","Seasonal & yearly"],["homes","Homes"],
+var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["money","Expenses & Time"],["care","Home care"],["projects","Projects"],["routines","Seasonal & yearly"],["trash","Trash"],["homes","Homes"],
   ["vendors","Vendors"],["repeats","Repeats"],["recalls","Recalls"],["fire","Fire & licenses"],["firesys","Fire suppression"],["lease","Leases"]];
 /* Moose Hub (2026-10-27): Expenses & Time = maintenance manager + admins (MM_MONEY from hub_can, enforced in RLS);
    Homes, Vendors and Fire & licenses are their own hub desks (desk.html?only=<tab>). */
@@ -425,7 +425,7 @@ if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
 else TABS=TABS.filter(function(x){ return ["homes","vendors","fire","firesys","lease"].indexOf(x[0])<0; });
 /* 2026-10-28 (Brandon): in the hub, Projects and Expenses & Time are their own Maintenance drop-down items (?split=1 on the Workbench) */
 /* Inside the hub this holds even without ?split (old cached hub pages); a report link to #money / #projects keeps just that tab */
-try{ var _emb=window.top!==window.self, _sp=["projects","money","routines","recalls"];
+try{ var _emb=window.top!==window.self, _sp=["projects","money","routines","recalls","trash"];
   if(!ONLY && (_emb || new URLSearchParams(location.search).get("split"))){
     var _one=_sp.indexOf(S.tab)>=0 && TABS.some(function(x){ return x[0]===S.tab; });
     TABS=TABS.filter(function(x){ return _one ? x[0]===S.tab : _sp.indexOf(x[0])<0; }); } }catch(e){}
@@ -611,7 +611,7 @@ function render0(){
   var mb=$("meetbtn"); if(mb){ mb.setAttribute("aria-pressed",String(!!S.ui.meeting)); mb.textContent=S.ui.meeting?"Back to the desk":"Monday meeting"+(D.bwLoaded&&typeof meetCount==="function"?" ("+meetCount()+")":""); mb.classList.toggle("pri",!!S.ui.meeting); }
   $("sect").style.display=S.ui.meeting?"none":"";
   if(S.ui.meeting){ $("view").innerHTML=vMeet(); if(typeof autoQueueRepeats==="function") autoQueueRepeats(); return; }
-  var v=$("view"); var f={today:vToday,check:vCheck,care:vCare,jobs:vJobs,projects:vProjects,routines:vRoutines,homes:vHomes,vendors:vVendors,vused:vVused,repeats:vRepeats,
+  var v=$("view"); var f={today:vToday,check:vCheck,care:vCare,jobs:vJobs,projects:vProjects,routines:vRoutines,trash:vTrash,homes:vHomes,vendors:vVendors,vused:vVused,repeats:vRepeats,
     money:vMoney,recalls:vRecalls,rvr:vRvr,fire:vFire,firesys:function(){ return LIC?LIC.vFireSys():""; },lease:function(){ return LIC?LIC.vLease():""; }}[S.tab];
   // keep focus + caret in text inputs across re-render
   var a=document.activeElement, aid=a&&a.id, ss=a&&a.selectionStart, se=a&&a.selectionEnd;
@@ -686,7 +686,7 @@ function vToday(){
     stat("check",fx.notime.length+fx.noreport.length,"Missing time or report",{})+
     stat("repeats",rep.same.length,"Homes with repeat calls (90d)",{},rep.same.length?"warnish":"")+
     stat("recalls",rc.length,"Appliances on a recall",{},rc.length?"alert":"")+'</div>';
-  var due=routinesDue();
+  var due=routinesDue().filter(function(r){ return !isTrash(r); });   // trash has its own Trash page (Brandon 2026-10-28)
   h+='<div class="grid2"><div style="display:flex;flex-direction:column;gap:14px">';
   h+=bwStale()+slackFailed()+overnightPanel()+vendorsInHomes()+vendorFollowPanel();
   h+='<section class="panel"><div class="ph"><h3>Created in Breezeway today</h3><span class="ct">'+todays.length+'</span></div>'+
@@ -919,7 +919,7 @@ function routineBwBtn(r){ var k=sid("r_"+r.id+"_"+period(r)), q=S.bwq[k], ps=pla
 function vRoutines(){
   var rs=routines(), cols=[["seasonal","Seasonal & yearly","once a year"]];
   var h='<div class="sechead"><h2>Seasonal & yearly</h2><p>Heat tape, irrigation, spring and fall services — the once-a-year work. Plan each one by community so it spreads over the month. '+
-    'Trash and other weekly routines show on Today; filters, BBQ cleans and other repeat care are on Home care.</p><button class="btn pri" data-act="newroutine">+ Routine</button></div><div class="rcols" style="grid-template-columns:minmax(0,1fr)">';
+    'Trash is on its own Trash page and other weekly routines show on Today; filters, BBQ cleans and other repeat care are on Home care.</p><button class="btn pri" data-act="newroutine">+ Routine</button></div><div class="rcols" style="grid-template-columns:minmax(0,1fr)">';
   cols.forEach(function(c){ var list=rs.filter(function(r){ return r.cadence===c[0]; }).map(function(r){ r._next=nextWhen(r.when); return r; })
       .sort(function(a,b){ return (a._next||"9999").localeCompare(b._next||"9999"); });
     var left=list.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
@@ -2278,6 +2278,16 @@ function timesheetPanel(m){
 }
 
 /* ================= TRASH — only homes someone stayed in this week ================= */
+/* Trash page (Brandon 2026-10-28): its own hub item, field crew included; out of the Workbench's Today list */
+function vTrash(){
+  var rs=routines().filter(isTrash).map(function(r){ var p=trashPlan(r); r._day=p?p.day:trashDay(r); return r; })
+    .sort(function(a,b){ return a._day.localeCompare(b._day)||String(a.title).localeCompare(String(b.title)); });
+  var left=rs.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
+  return '<div class="sechead"><h2>Trash</h2><p>Each trash day, take out only the homes someone stayed in that week (Track occupancy). '+
+    'Leases always go out; second homes get a check. Skipped homes are checked off on the Asana trash task. Tick a route when it\'s done.</p>'+
+    '<button class="btn pri" data-act="newroutine">+ Routine</button></div>'+
+    '<section class="panel"><div class="ph"><h3>Trash routes this week</h3><span class="ct">'+left+' / '+rs.length+' left</span></div>'+
+    (rs.length?rs.map(routineRow).join(""):'<div class="empty">No trash routes yet. Add one with + Routine: weekly, a title that starts with "Trash", the day, and its homes.</div>')+'</section>'; }
 function isTrash(r){ return /trash/i.test(r.title||"") && r.cadence==="weekly" && (r.props||[]).length>0; }
 function trashDay(r){ var w=(r.when||r.title||"").toLowerCase(), d=new Date();
   for(var i=0;i<7;i++){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+i); if(w.indexOf(WD[x.getDay()].slice(0,3))>-1) return x.getFullYear()+"-"+p2(x.getMonth()+1)+"-"+p2(x.getDate()); }
