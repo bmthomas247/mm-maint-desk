@@ -314,7 +314,8 @@ tr.xtr:hover td{background:var(--surface-2)} tr.xtr.open td{background:var(--acc
 <div class="wrap">
   <header class="top">
     <button class="btn" id="backbtn" title="Back to where you were" style="display:none">← Back</button><div class="brand"><span class="mk">Maintenance Desk</span><span class="sub">Moose Management</span></div>
-    <div class="sync"><span class="dot" id="syncdot"></span><span id="synctxt">Connecting…</span></div>
+    <!-- 2026-10-28 (Brandon): Breezeway read status lives in the hub's Sync area now, so it is hidden here (kept for setSync) -->
+    <div class="sync" hidden><span class="dot" id="syncdot"></span><span id="synctxt">Connecting…</span></div>
     <label class="who"><span class="lbl">You</span><select id="who" aria-label="Who is working"></select></label>
     <button class="btn" id="meetbtn" aria-pressed="false">Monday meeting</button>
     <a class="btn" href="locks-desk.html" style="text-decoration:none">Locks</a>
