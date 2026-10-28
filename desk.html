@@ -401,6 +401,8 @@ var ONLY=(function(){ try{ return new URLSearchParams(location.search).get("only
 if(!window.MM_MONEY) TABS=TABS.filter(function(x){ return x[0]!=="money"; });
 if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
 else TABS=TABS.filter(function(x){ return ["homes","vendors","fire"].indexOf(x[0])<0; });
+/* 2026-10-28 (Brandon): in the hub, Projects and Expenses & Time are their own Maintenance drop-down items (?split=1 on the Workbench) */
+try{ if(!ONLY && new URLSearchParams(location.search).get("split")) TABS=TABS.filter(function(x){ return ["projects","money"].indexOf(x[0])<0; }); }catch(e){}
 try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; if(ONLY==="vendors" && location.hash==="#preferred") S.ui.vmode="pref"; }catch(e){}
 if(!ONLY && !TABS.some(function(t){return t[0]===S.tab;}) && ["jobs","homes","vendors","fire"].indexOf(S.tab)<0) S.tab="today";
 
@@ -592,7 +594,8 @@ function render0(){
   if(typeof autoQueueRepeats==="function") autoQueueRepeats();
   if(typeof queueTrashAsana==="function") queueTrashAsana();
 }
-function go(tab,extra){ NAV_Y=window.scrollY; S.ui.meeting=false; S.tab=tab; if(extra) Object.assign(S.ui,extra); try{ history.replaceState(null,"","#"+tab); }catch(e){} render(); window.scrollTo(0,0); }
+function go(tab,extra){ if(ONLY && tab!==ONLY && window.MM_FEEDS_FULL) window.MM_FEEDS_FULL();   /* 2026-10-28: one-tab pages load photos/receipts/reports only when they leave their tab (e.g. open a job) */
+  NAV_Y=window.scrollY; S.ui.meeting=false; S.tab=tab; if(extra) Object.assign(S.ui,extra); try{ history.replaceState(null,"","#"+tab); }catch(e){} render(); window.scrollTo(0,0); }
 function old(j){ return !!j.autoDone; }
 
 /* ---- common bits ---- */
