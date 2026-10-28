@@ -18,14 +18,29 @@ const CSS = `
 .rstep input{width:22px;height:22px;min-height:0;flex:0 0 auto;margin-top:1px;accent-color:var(--forest-2)} .rstep .l{flex:1;font-size:14.5px} .rstep.opt .l{color:var(--ink-2)}
 .rstep .who{font-size:12px;color:var(--muted);white-space:nowrap} .rstep.done .l{text-decoration:line-through;text-decoration-color:var(--line-2)}
 .rhist{font-size:13px;border-top:1px solid var(--line);padding:6px 0}
+.rq3{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,1fr);gap:6px 14px;align-items:start}
+.rq3 .who,.rq3 .when,.rq3 .st{display:flex;flex-direction:column;gap:2px;min-width:0} .rq3 .who b{font-size:15.5px}
+.rq3 .sub{font-size:13px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rq3 .sub+.sub{color:var(--muted)}
+.rq3 .when{font-size:13.5px} .rq3 .when>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .rq3 .when .k{display:inline-block;min-width:52px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.rq3 .st{align-items:flex-end} .rq3 .why{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end} .rq3 .why .pill{font-size:11px;padding:2px 7px}
 @media(min-width:1000px){ .rpage{max-width:1180px!important} }
-@media(max-width:640px){ .rrow{flex-wrap:wrap;gap:4px 10px} .rrow .g{order:3;flex-basis:100%;white-space:normal} .rrow .d{flex:1} .rrow .rbar{display:none} }`;
+@media(max-width:640px){ .rq3{grid-template-columns:minmax(0,1fr) minmax(0,44%)} .rq3 .when{grid-column:1 / -1;grid-row:2} .rrow{flex-wrap:wrap;gap:4px 10px} .rrow .g{order:3;flex-basis:100%;white-space:normal} .rrow .d{flex:1} .rrow .rbar{display:none} }`;
 const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / BDC / Hopper", oguest:"Owner guest", owner:"Owner stay" };
 const STAGE = { in_progress:"In progress", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
+// Neighborhoods: unit code prefix -> name (maintenance_desk/units.json "communities", from Track units)
+const HOODS = {"BHL":"Bear Hollow Lodges","BHR":"Bear Hollow Ridge","BHV":"Bear Hollow Village","BRR":"Black Rock Ridge","BSR":"Blackstone Residences","CH":"Carriage House",
+  "CR":"Coyote Ridge","CV":"Crestview","DR":"Discovery Ridge","DS":"Deer Springs","EH":"Edelweiss Haus","FB":"Fox Bay","FP":"Foxpoint","HS":"Hailstone Heights",
+  "JDR":"Jordanelle Ridge","JE":"Jordanelle Estates","JMR":"Jeremy Ranch","KR":"Klaim Retreats","MFL":"Mayflower Lakeside","MFV":"Mayflower Village","ML":"Moose Lodge",
+  "NC":"New Claim","PE":"Parks Edge","PL":"Prospector Lodge","PV":"Pioche Village","PW":"Powderwood Pines","PWV":"Park West Village","RC":"Racquet Club",
+  "RJ":"Retreat at Jordanelle","RP":"Red Pine","SCV":"Silver Creek Village","SS":"Sunspot","ST":"Ski Team","SW":"The Mason at Stillwater","TK":"Three Kings",
+  "UM":"Upper Main","VS":"Village at the Shores","WG":"Westgate","WP":"White Pine","WS":"Wasatch Springs"};
+const area = u => ((/^(?:2H-|L-)?([A-Za-z]+)/.exec(u || "") || [])[1] || "").toUpperCase();
 const WAIT = ["Guest to reply", "Owner to reply"];
 let B = null, loadedAt = 0;
 const money = v => v == null ? "—" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
 const day = s => s ? new Date(s + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }) : "";
+const dayY = s => { if(!s) return "—"; const d = new Date(String(s).slice(0, 10) + "T12:00");
+  return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { month:"short", day:"numeric" } : { month:"short", day:"numeric", year:"numeric" }); };
 const when = s => s ? new Date(s).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
 const folioUrl = r => "https://moosemanagement.trackhs.com/pms/guest-folio/view/?id=" + encodeURIComponent(r);
 
@@ -52,6 +67,11 @@ function autoOk(s, a){
     case "agreement_received": return s.agreement === "received";
     case "ah_verified": return !!(s.ah && s.ah.verify === "verified") || tag(s, /^autohost verified$/i);
     case "cancelled": return s.status === "Cancelled";
+    case "og_type": return /^owner guest/i.test(s.type || "");
+    // Home takes dogs: Track unit allows pets, no "No Pets" tag, and no more pets than the cap (2, or a property rule "Pet cap: N")
+    case "pets_ok": { const cap = Math.min(2, ...s.rules.map(r => +((/pet cap:\s*(\d+)/i.exec(r.text) || [])[1] || 9)));
+      return s.unitPets === true && (s.occ && s.occ.pets || 0) <= cap && !tag(s, /^no pets$/i); }
+    case "bw_clean": return bwClean(s);
     case "balance_zero": return s.balance != null && Math.abs(s.balance) < 0.005;
     // Breezeway (bw_res_tasks.py): matched by home + scheduled date, names as the team uses them (Oct 2026 tasks)
     case "bw_pre_out": return bwHas(s, "housekeeping", /pre-?clean/i, addDay(s.arrive, -5), s.arrive) && bwClean(s);
@@ -98,6 +118,13 @@ const TD_RULES = {
   td_addendum:   s => doc(s, /change addendum/i),
   td_card_auth:  s => doc(s, /credit card authorization|secondary guest/i),
   td_paid_some:  s => (s.paid || 0) > 0,
+  // round 2 (2026-10-28): Track contact yes/no, notes, 30+ night fees, Advantage Dropbox file
+  td_contact_ep:   s => !!(s.td.contact && s.td.contact.email && s.td.contact.phone),
+  td_contact_addr: s => !!(s.td.contact && s.td.contact.address && s.td.contact.email),
+  td_notes:        s => !!(s.td.notes && s.td.notes.n > 0),
+  td_no_beyond:    s => !fee(s, /beyond/i),
+  td_ext_clean:    s => fee(s, /extended stay cleaning/i),
+  td_adv:          s => s.td.advantage === true,
 };
 const addDay =(d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
 const bwHas = (s, dp, re, from, to, who) => (s.bw || []).some(t => t.dp === dp && t.sd >= from && t.sd <= to && re.test(t.n) && (!who || (t.who || []).some(w => who.test(w))));
@@ -108,6 +135,8 @@ const bwKnown = s => !!B.bwUpdated && !(B.bwMissing || []).includes(s.unit) && s
 const AUTO_SRC = { ah_verified:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
 function prep(s){
   const c = conds(s), ticks = s.ticks || {};
+  s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
+  s.area = area(s.unit);
   s.steps = B.steps.filter(t => t.chans.includes(s.chan) && t.cond.every(k => c[k]))
     .map(t => { const k = ticks[t.key], au = t.auto && autoOk(s, t.auto);
       return { ...t, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : null, done:k ? k.d : !!au }; });
@@ -117,7 +146,6 @@ function prep(s){
   const today = B.today;
   s.stage = (s.list && s.list.stage) || (s.status === "Cancelled" ? "cancelling" : s.depart < today ? (s.chan === "owner" ? "owner_done" : "checkout") : "in_progress");
   s.waiting = (s.list && s.list.waiting) || [];
-  s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
   s.state = s.stage === "closed" ? "Complete" : s.status === "Cancelled" && s.stage !== "closed" ? "Cancelling" : s.got === 0 ? "Not started"
     : s.got >= s.need ? (s.depart < today ? "Ready to close" : "Paperwork done") : s.waiting.length ? "Waiting" : "In progress";
 }
@@ -125,13 +153,13 @@ function css(){ if(!document.getElementById("rescss")){ const st = document.crea
 const fresh = () => `<p class="muted" style="margin:4px 0 10px">Source: Track reservations, updated ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost, updated ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway, updated ${esc(when(B.bwUpdated))}` : ""}</p>`;
 
 /* ---------- queue */
-const F = { q:"", chan:"", stage:"in_progress", held:"" };
+const F = { q:"", chan:"", area:"", stage:"in_progress", held:"" };
 async function queue(v){
   v.innerHTML = `<div class="page rpage"><h2>Check lists</h2><p class="muted">Loading…</p></div>`;
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load the check lists: ${esc(e.message)}</p></div></div>`; return; }
   if(!B){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   const draw = () => {
-    const base = B.stays.filter(s => (!F.chan || s.chan === F.chan) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase())));
+    const base = B.stays.filter(s => (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase())));
     const inStage = base.filter(s => s.stage === F.stage);
     const rows = inStage.filter(s => !F.held || s.blockers.includes(F.held) || s.waiting.includes(F.held));
     const cnt = k => base.filter(s => s.stage === k).length;
@@ -139,11 +167,14 @@ async function queue(v){
     $("#rqbody").innerHTML = `
       <div class="rchips">${Object.entries(STAGE).map(([k, l]) => `<button class="rchip ${F.stage === k ? "on" : ""}" data-stage="${k}">${l}<span class="n">${cnt(k)}</span></button>`).join("")}</div>
       ${Object.keys(held).length ? `<div class="rchips"><span class="muted" style="align-self:center">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}<span class="n">${n}</span></button>`).join("")}</div>` : ""}
-      <div class="card" style="padding:6px 12px">${rows.length ? rows.map(s => `<a class="rrow" href="#/reservations/${encodeURIComponent(s.res)}">
-        <span class="u">${esc(s.unit || "")}</span><span class="g">${esc(s.guest || "#" + s.res)} <span class="muted">· ${esc(CH[s.chan])}</span>${s.vip ? ` <span class="pill blue">VIP</span>` : ""}${s.dnr ? ` <span class="pill red">DNR</span>` : ""}</span>
-        <span class="d">${esc(day(s.arrive))} → ${esc(day(s.depart))}</span>
-        <span class="pill ${s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "" : s.state === "Cancelling" ? "red" : "amber"}">${esc(s.state)}</span>
-        <span class="rbar" title="${s.got} of ${s.need} steps"><i style="width:${s.need ? Math.round(100 * s.got / s.need) : 0}%"></i></span></a>`).join("")
+      <div class="card" style="padding:6px 12px">${rows.length ? rows.map(s => { const why = [...s.waiting, ...s.blockers];
+        return `<a class="rrow rq3" href="#/reservations/${encodeURIComponent(s.res)}">
+        <span class="who"><b>${esc(s.guest || "#" + s.res)}</b>${s.vip ? ` <span class="pill blue">VIP</span>` : ""}${s.dnr ? ` <span class="pill red">DNR</span>` : ""}
+          <span class="sub">${esc(s.unit || "")}${HOODS[s.area] ? ` · ${esc(HOODS[s.area])}` : ""}</span><span class="sub">${esc(s.type || CH[s.chan])}</span></span>
+        <span class="when"><span><span class="k">Booked</span> ${esc(dayY(s.bookedAt))}</span><span><span class="k">Stay</span> <b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> <span class="muted"> · ${esc(s.nights)} nights</span></span></span>
+        <span class="st"><span style="display:flex;gap:8px;align-items:center;justify-content:flex-end"><span class="pill ${s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "" : s.state === "Cancelling" ? "red" : "amber"}">${esc(s.state)}</span>
+          <span class="rbar" title="${s.got} of ${s.need} steps"><i style="width:${s.need ? Math.round(100 * s.got / s.need) : 0}%"></i></span></span>
+          ${why.length && s.state !== "Complete" ? `<span class="why">${why.slice(0, 4).map(b => `<span class="pill amber">${esc(b)}</span>`).join("")}${why.length > 4 ? `<span class="muted">+${why.length - 4}</span>` : ""}</span>` : ""}</span></a>`; }).join("")
         : `<p class="muted">Nothing here${F.q || F.chan || F.held ? " with these filters" : ""}.</p>`}</div>`;
     $("#rqbody").querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; draw(); });
     $("#rqbody").querySelectorAll("[data-held]").forEach(b => b.onclick = () => { F.held = F.held === b.dataset.held ? "" : b.dataset.held; draw(); });
@@ -151,10 +182,13 @@ async function queue(v){
   v.innerHTML = `<div class="page rpage"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0;flex:1">Check lists</h2>
       <a class="btn small" href="#/reservations/held">Held up report</a></div>${fresh()}
     <div class="rqbar"><input id="rq_q" placeholder="Search guest, home or res #" value="${esc(F.q)}">
-      <select id="rq_c"><option value="">All types</option>${Object.entries(CH).map(([k, l]) => `<option value="${k}" ${F.chan === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <select id="rq_c"><option value="">All types</option>${Object.entries(CH).map(([k, l]) => `<option value="${k}" ${F.chan === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select id="rq_a"><option value="">All neighborhoods</option>${[...new Set(B.stays.map(s => s.area).filter(Boolean))].map(a => [a, HOODS[a] || a]).sort((x, y) => x[1].localeCompare(y[1]))
+        .map(([a, n]) => `<option value="${a}" ${F.area === a ? "selected" : ""}>${esc(n)}${n !== a ? " (" + a + ")" : ""}</option>`).join("")}</select></div>
     <div id="rqbody"></div></div>`;
   $("#rq_q").oninput = e => { F.q = e.target.value; draw(); };
   $("#rq_c").onchange = e => { F.chan = e.target.value; draw(); };
+  $("#rq_a").onchange = e => { F.area = e.target.value; draw(); };
   draw();
 }
 
