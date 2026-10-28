@@ -50,7 +50,7 @@ function autoOk(s, a){
     case "guarantee": return /10\/40\/50/.test(s.guarantee || "");
     case "agreement_sent": return ["sent","viewed","received"].includes(s.agreement);
     case "agreement_received": return s.agreement === "received";
-    case "ah_verified": return !!(s.ah && s.ah.verify === "verified");
+    case "ah_verified": return !!(s.ah && s.ah.verify === "verified") || tag(s, /^autohost verified$/i);
     case "cancelled": return s.status === "Cancelled";
     case "balance_zero": return s.balance != null && Math.abs(s.balance) < 0.005;
     // Breezeway (bw_res_tasks.py): matched by home + scheduled date, names as the team uses them (Oct 2026 tasks)
@@ -61,9 +61,45 @@ function autoOk(s, a){
     case "bw_wg": return bwHas(s, "housekeeping", /wg housekeeping/i, s.depart, s.depart);
     case "bw_no_clean": return bwKnown(s) && !(s.bw || []).some(t => t.dp === "housekeeping" && t.sd === s.depart && t.st !== "done")
       || bwKnown(s) && B.stays.some(o => o !== s && o.unit === s.unit && o.status !== "Cancelled" && (o.depart === s.depart || o.arrive === s.depart));
-  } return false;
+  }
+  if(a && a.startsWith("td_")) return tdOk(s, a);
+  return false;
 }
-const addDay = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+// Track details (track_res_details.py): tag names, document subjects + status, fee names (+ owner charge), note flags, door code set.
+const tag = (s, re) => !!(s.td && (s.td.tags || []).some(t => re.test(t)));
+const fee = (s, re, own) => !!(s.td && (s.td.fees || []).some(f => re.test(f.n) && (own == null || f.own === own)));
+const doc = (s, re, done) => !!(s.td && (s.td.docs || []).some(d => re.test(d.s) && d.st !== "voided" && (!done || d.st === "completed")));
+function tdOk(s, a){
+  if(!s.td) return false;
+  const R = TD_RULES[a]; return !!(R && R(s));
+}
+// Names as they are in Track on 2026-10-28 (tags, fee charge names, esign document subjects) — track_res_details.py pull of 456 stays.
+const PETS = /^\d+\s*pets?$/i, OWNER_CL = /cleaning & laundry|clean\/laundry/i;
+const TD_RULES = {
+  td_pet_tag:    s => tag(s, PETS),
+  td_pet_owner:  s => tag(s, PETS) && fee(s, /pet/i),
+  td_pet_gp:     s => tag(s, PETS) && fee(s, /pet/i, false),
+  td_pet_clean:  s => fee(s, /pet cleaning/i),
+  td_pet_fee:    s => fee(s, /pet hosting|pet fee|pet approval/i),
+  td_30:         s => tag(s, /over 30 nights/i),
+  td_pcwg:       s => tag(s, /pc\/wg confirmed/i),
+  td_ticket:     s => !!(s.td.notes && s.td.notes.ticket),
+  td_og_tag:     s => tag(s, /^owner guest$/i),
+  td_door:       s => s.td.door === true,
+  td_card:       s => s.td.card === true,
+  td_fees:       s => fee(s, /clean/i, false) && fee(s, /damage waiver/i) && fee(s, /admin/i),
+  td_gp_cl:      s => fee(s, /clean/i, false),
+  td_dw:         s => fee(s, /damage waiver/i),
+  td_gp_not:     s => !fee(s, OWNER_CL, true),
+  td_owner_cl:   s => fee(s, OWNER_CL, true),
+  td_no_dw:      s => !fee(s, /damage waiver|safely/i),
+  td_pet_doc:    s => doc(s, /pet/i),
+  td_pet_doc_ok: s => doc(s, /pet/i, true),
+  td_addendum:   s => doc(s, /change addendum/i),
+  td_card_auth:  s => doc(s, /credit card authorization|secondary guest/i),
+  td_paid_some:  s => (s.paid || 0) > 0,
+};
+const addDay =(d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
 const bwHas = (s, dp, re, from, to, who) => (s.bw || []).some(t => t.dp === dp && t.sd >= from && t.sd <= to && re.test(t.n) && (!who || (t.who || []).some(w => who.test(w))));
 const bwClean = s => bwHas(s, "housekeeping", /^(?!.*(assessment|spring)).*(clean)/i, s.depart, s.depart);
 const bwInOut = s => bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart);
