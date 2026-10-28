@@ -1057,3 +1057,53 @@ create or replace function desk_is_money(c text, i text) returns boolean languag
 insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
  ('maint_crew_gain','maint_money','Crew cost vs. gain (Hubstaff)','Each maintenance tech: Hubstaff hours x pay cost vs. what their Breezeway work bills, by month','desk.html#money','live',false,5)
 on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, status=excluded.status, desk_key=excluded.desk_key;
+
+
+-- ===== Moose Hub 2026-10-28: Slack mentions (copy of hub_site/hub_slack_mentions.sql) =====
+-- hub_slack_mentions.sql (Brandon, 2026-10-28): Home shows each person their last 5 Slack @-mentions. Additive, safe to re-run.
+-- Filled by ThinkStation slack_mentions.py (bot token, read only; public channels only). Each person reads only their own rows.
+create table if not exists hub_slack_users (
+  user_id uuid primary key references allowed_users(id), slack_id text not null, slack_name text, updated_at timestamptz not null default now());
+create table if not exists hub_slack_mentions (
+  channel_id text not null, ts text not null, slack_id text not null,
+  channel_name text, author text, body text, permalink text, at timestamptz not null,
+  primary key (channel_id, ts, slack_id));
+create index if not exists hub_slack_mentions_who on hub_slack_mentions (slack_id, at desc);
+do $$ declare t text; begin
+  foreach t in array array['hub_slack_users','hub_slack_mentions'] loop
+    execute format('alter table %I enable row level security', t);
+    execute format('alter table %I force row level security', t);
+    execute format('revoke all on %I from anon, public, authenticated', t);
+    execute format('drop trigger if exists %I on %I', t||'_nodelete', t);
+    execute format('create trigger %I before delete on %I for each statement execute function forbid_delete()', t||'_nodelete', t);
+    execute format('drop trigger if exists %I on %I', t||'_notruncate', t);
+    execute format('create trigger %I before truncate on %I for each statement execute function forbid_change()', t||'_notruncate', t);
+  end loop; end $$;
+create or replace function hub_my_mentions(p_n int default 5) returns json
+language sql stable security definer set search_path = public as $$
+  select json_build_object(
+    'linked', exists (select 1 from hub_slack_users where user_id = hub_uid()),
+    'updated', (select max(updated_at) from hub_slack_users),
+    'items', coalesce((select json_agg(x order by x.at desc) from (
+        select m.channel_name, m.author, m.body, m.permalink, m.at from hub_slack_mentions m
+        where m.slack_id = (select slack_id from hub_slack_users where user_id = hub_uid())
+        order by m.at desc limit least(greatest(coalesce(p_n,5),1),20)) x), '[]'::json)) $$;
+revoke all on function hub_my_mentions(int) from public, anon;
+grant execute on function hub_my_mentions(int) to authenticated;
+
+-- Profile picture (Brandon 2026-10-28): any picture the person picks, shrunk to 160px in the browser, kept on their own prefs row.
+alter table hub_prefs add column if not exists avatar text;
+create or replace function hub_my_prefs() returns json language sql stable security definer set search_path = public as $$
+  select coalesce((select json_build_object('desk_order', desk_order, 'interests', interests, 'kinds', kinds, 'avatar', avatar) from hub_prefs where user_id = hub_uid()),
+                  json_build_object('desk_order', '{}'::text[], 'interests', '{}'::text[], 'kinds', '{}'::text[], 'avatar', null)) $$;
+create or replace function hub_set_avatar(p_avatar text) returns void
+language plpgsql security definer set search_path = public as $$
+declare v uuid := hub_uid();
+begin
+  if v is null then raise exception 'not signed in'; end if;
+  if p_avatar is not null and (p_avatar !~ '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$' or length(p_avatar) > 300000) then raise exception 'picture must be a small jpeg/png/webp'; end if;
+  insert into hub_prefs (user_id, avatar, updated_at) values (v, p_avatar, now())
+  on conflict (user_id) do update set avatar = excluded.avatar, updated_at = now();
+end $$;
+revoke all on function hub_set_avatar(text) from public, anon;
+grant execute on function hub_set_avatar(text) to authenticated;
