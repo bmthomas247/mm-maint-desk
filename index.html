@@ -425,7 +425,7 @@ function shell(){
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
-                   rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio" } },
+                   rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
                    competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } } };   // Brandon 2026-10-28
   // Damage claims sits under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; front desk keeps it on its own
   if(DESKS.some(x => x.key === "maintenance")) GROUPS.maint.kids.damage_claims = "Damage claims";
@@ -859,7 +859,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", housekeeping:"hk", linen_calc:"hk", guest_desk:"guest", breezeway_assist:"guest", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", competitor:"competitor", competitor_add:"competitor" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", housekeeping:"hk", linen_calc:"hk", guest_desk:"guest", breezeway_assist:"guest", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", competitor:"competitor", competitor_add:"competitor" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], guest:["Guest","chat"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = G[x.key];
