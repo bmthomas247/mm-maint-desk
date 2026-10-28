@@ -75,6 +75,10 @@
   async function boot(){
     var s = (await sb.auth.getSession()).data.session;
     if(!s){ gate('<h2>Maintenance Desk</h2><p>Sign in first.</p><p><a href="./?next=desk" style="font-weight:700">Go to sign in →</a></p>'); return; }
+    // 2-step sign-in: a password-only session reads nothing once the hub switch is on (hub_two_step.sql); finish it on the Hub
+    try{ var lv = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data;
+      if(lv.currentLevel !== "aal2" && (lv.nextLevel === "aal2" || (await sb.rpc("hub_two_step_mode")).data === "all")){
+        gate('<h2>One more step</h2><p>Type the code from your authenticator app to finish signing in.</p><p><a href="hub.html" target="_top" style="font-weight:700">Go to the Moose Hub →</a></p>'); return; } }catch(e){}
     var me = (await sb.rpc("my_desk_identity")).data;
     me = me && me[0];
     if(!me){ gate('<h2>Not on the list</h2><p>' + s.user.email + " isn't set up. Ask Brandon to add it.</p>"); return; }
