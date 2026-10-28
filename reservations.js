@@ -16,7 +16,8 @@ const CSS = `
 .rgrp{margin-top:14px} .rgrp h3{font-size:15px;margin:0 0 4px;display:flex;gap:8px;align-items:center}
 .rstep{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)} .rstep:last-child{border-bottom:0}
 .rstep input{width:22px;height:22px;min-height:0;flex:0 0 auto;margin-top:1px;accent-color:var(--forest-2)} .rstep .l{flex:1;font-size:14.5px} .rstep.opt .l{color:var(--ink-2)}
-.rstep .who{font-size:12px;color:var(--muted);white-space:nowrap} .rstep.done .l{text-decoration:line-through;text-decoration-color:var(--line-2)}
+.rstep .who{font-size:12px;color:var(--muted);white-space:nowrap;min-width:200px;text-align:right}
+@media(max-width:640px){ .rstep{flex-wrap:wrap} .rstep .who{min-width:0;flex-basis:100%;text-align:left;padding-left:32px;white-space:normal} } .rstep.done .l{text-decoration:line-through;text-decoration-color:var(--line-2)}
 .rhist{font-size:13px;border-top:1px solid var(--line);padding:6px 0}
 .rq3{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,1fr);gap:6px 14px;align-items:start}
 .rq3 .who,.rq3 .when,.rq3 .st{display:flex;flex-direction:column;gap:2px;min-width:0} .rq3 .who b{font-size:15.5px}
@@ -35,6 +36,21 @@ const HOODS = {"BHL":"Bear Hollow Lodges","BHR":"Bear Hollow Ridge","BHV":"Bear 
   "RJ":"Retreat at Jordanelle","RP":"Red Pine","SCV":"Silver Creek Village","SS":"Sunspot","ST":"Ski Team","SW":"The Mason at Stillwater","TK":"Three Kings",
   "UM":"Upper Main","VS":"Village at the Shores","WG":"Westgate","WP":"White Pine","WS":"Wasatch Springs"};
 const area = u => ((/^(?:2H-|L-)?([A-Za-z]+)/.exec(u || "") || [])[1] || "").toUpperCase();
+// "Open" buttons (Brandon 2026-10-28): links from the Reservation Desk board's config/links (checklist PDFs + verified in Track/Safely Sep 2026);
+// Keycafe = its Bookings page (keycafe.com, seen 2026-10-28). {res} is filled per stay.
+const LINKS = {
+  track: "https://moosemanagement.trackhs.com/pms/reservations/view/{res}/", autohost: "https://portal.autohost.ai/reservations",
+  breezeway: "https://app.breezeway.io", brevo: "https://app.brevo.com/contact/list", safely: "https://portal.safely.com/guests",
+  prospector: "https://fs27.formsite.com/2XpG4h/form1/index.html", keycafe: "https://www.keycafe.com/desktop#!/bookings",
+  westgate: "https://forms.office.com/Pages/ResponsePage.aspx?id=fujdTilSREuwP2RU5RjnVWGoIOdDIHhFruJUefJmkkFUMVJGMEdEUU5aSDJIM1cyMjFNSDdIRExTTi4u" };
+const LINK_NAME = { track:"Track", autohost:"Autohost", breezeway:"Breezeway", brevo:"Brevo", safely:"Safely", prospector:"Prospector form", keycafe:"Keycafe", westgate:"Westgate form" };
+const STEP_LINK = {};
+[["track", "i_campaign i_agent i_ta i_rate i_fees i_card i_guar i_contract i_notesq g_dates g_type g_contact g_notes o_open o_dates o_notes o_behalf w_post w_verify w_earn a_earn g_agree g_pay g_35 g_30 c_sig c_resend oc_cl oc_post oc_prime oc_pet oc_di oc_nofee oc_doc_o oc_doc_g gp_cl gp_dw gp_not gp_pet gp_doc pt_ok pt_clean pt_fee pt_price pt_guar pt_collect pt_tag dc_set t_tag t_beyond t_di t_clean x_rent x_modify x_total x_add x_charge k_track k_refund k_zero k_pet pl_conf pl_tag wg_conf wg_tag p_split p_change p_second"],
+ ["autohost", "ah_verified ah_remind ah_extra ah_card ah_review ah_link c_addr"], ["safely", "ah_safely"], ["brevo", "ah_brevo"],
+ ["breezeway", "bo_pre bo_notes bo_either bo_next5 bo_wg bo_wp bo_maint bo_og bg_insp k_bw x_avail"], ["prospector", "pl_form"], ["westgate", "wg_form"], ["keycafe", "dc_pv"]]
+  .forEach(([k, keys]) => keys.split(" ").forEach(s => STEP_LINK[s] = k));
+const openFor = (key, s) => { const k = STEP_LINK[key]; if(!k) return "";
+  return `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${esc(LINKS[k].replace("{res}", encodeURIComponent(s.res)))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${LINK_NAME[k]} ↗</a>`; };
 const WAIT = ["Guest to reply", "Owner to reply"];
 let B = null, loadedAt = 0;
 const money = v => v == null ? "—" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -252,7 +268,7 @@ async function card(v, res){
       ${Object.entries(grp).map(([g, ts]) => `<div class="rgrp"><h3>${esc(g)} <span class="muted" style="font-weight:600">${ts.filter(t => !t.opt && t.done).length}/${ts.filter(t => !t.opt).length}</span></h3>
         ${ts.map(t => `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" ${t.done ? "checked" : ""}>
           <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}</span>
-          <span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`).join("")}</div>`).join("")}
+          ${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
