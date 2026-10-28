@@ -12,10 +12,19 @@
     var docs = Object.keys(map).map(function(k){ var v = map[k]; return { id:k, exists:true, data:function(){ return v; } }; });
     return { docs:docs, size:docs.length, empty:!docs.length, forEach:function(f){ docs.forEach(f); } };
   }
-  async function fetchAll(c){
+  /* 2026-10-28 (Brandon: load fast): Property Details, Vendors and Licensing (?only=) skip the heavy Breezeway feeds - receipt
+     pictures, photos, reports (~9 MB of the ~16.5 MB feeds) - until someone opens a job or another tab (MM_FEEDS_FULL).
+     Every shared collection (edits, propedits, vendoredits...) still loads in full with live updates, so desks stay in sync. */
+  var HEAVY = ["bw-rcpt-", "bw-photos-", "bw-reports-"];
+  var isHeavy = function(id){ return HEAVY.some(function(p){ return String(id).indexOf(p) === 0; }); };
+  var LAZY = !!new URLSearchParams(location.search).get("only"), heavyOn = !LAZY, heavyHooks = [];
+  async function fetchAll(c, heavyOnly){
     var out = [], from = 0;
     for(;;){
-      var r = await sb.from(T).select("id,data").eq("collection", c).range(from, from + 499);
+      var q = sb.from(T).select("id,data").eq("collection", c);
+      if(c === "feeds" && heavyOnly) q = q.or(HEAVY.map(function(p){ return "id.like." + p + "*"; }).join(","));
+      else if(c === "feeds" && !heavyOn) HEAVY.forEach(function(p){ q = q.not("id", "like", p + "*"); });
+      var r = await q.order("id").range(from, from + 499);
       if(r.error) throw r.error;
       out = out.concat(r.data || []);
       if(!r.data || r.data.length < 500) break;
@@ -45,9 +54,12 @@
           var emit = function(){ clearTimeout(t); t = setTimeout(function(){ cb(snapOf(cache)); }, 60); };
           fetchAll(c).then(function(rows){ rows.forEach(function(r){ cache[r.id] = r.data; }); emit(); })
                      .catch(function(e){ console.error(e); if(err) err(e); });
+          if(c === "feeds" && !heavyOn) heavyHooks.push(function(){
+            return fetchAll(c, true).then(function(rows){ rows.forEach(function(r){ cache[r.id] = r.data; }); emit(); }); });
           sb.channel("desk-" + c + "-" + Math.random().toString(36).slice(2, 7))
             .on("postgres_changes", { event:"*", schema:"public", table:T, filter:"collection=eq." + c }, async function(p){
               var id = (p.new && p.new.id) || (p.old && p.old.id); if(!id) return;
+              if(c === "feeds" && !heavyOn && isHeavy(id)) return;   // picked up when the heavy feeds load
               var r = await sb.from(T).select("id,data").eq("collection", c).eq("id", id).maybeSingle();
               if(r.data) cache[id] = r.data.data; else delete cache[id];
               emit();
@@ -66,6 +78,10 @@
       };
     }
   };
+
+  var heavyP = null;
+  window.MM_FEEDS_FULL = function(){ if(heavyOn) return heavyP || Promise.resolve(); heavyOn = true;
+    heavyP = Promise.all(heavyHooks.map(function(f){ return f(); })).catch(function(e){ console.error(e); }); return heavyP; };
 
   function gate(html){
     document.body.insertAdjacentHTML("afterbegin",
@@ -110,7 +126,7 @@
     // same header as the Claude artifact: show who is signed in instead of the name picker
     var brand = document.querySelector("header.top .brand");
     if(brand){ brand.insertAdjacentHTML("afterbegin", '<img class="mlogo" src="moose-logo.png" alt="">');
-      var mk = brand.querySelector(".mk"); if(mk && ONLY) mk.textContent = ({homes:"Property Details", vendors:"Vendors", fire:"Licensing"})[ONLY] || mk.textContent; }
+      var mk = brand.querySelector(".mk"); if(mk && ONLY) mk.textContent = ({homes:"Property Details", vendors:"Vendors", fire:"Licensing", firesys:"Fire suppression", lease:"Leases"})[ONLY] || mk.textContent; }
     var who = document.querySelector("label.who");
     if(who){ who.innerHTML = '<span class="lbl">You</span><b style="padding:0 6px">' + me.name + "</b>"; }
     var hdr = document.querySelector("header.top");
