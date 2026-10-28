@@ -1043,16 +1043,22 @@ function ownerOf(code){ var oc=(S.ownercontacts||{})[sid(code)]||{}, f=((S.feeds
   var list=tr.map(function(o){ return {name:o.name,phone:o.phone,email:o.email,src:"Track"}; });
   if(oc.name||oc.phone||oc.email) list=[{name:oc.name||((list[0]||{}).name)||"",phone:oc.phone||((list[0]||{}).phone)||"",email:oc.email||((list[0]||{}).email)||"",src:"Edited in the hub"+(oc.by?" by "+nameFor(oc.by):""),notes:oc.notes||""}].concat(list.slice(1));
   return {can:!!f||Object.keys(S.ownercontacts||{}).length>0, list:list}; }
+/* Quick view text, easy to scan (Brandon 2026-10-28): "Label: value" lines show the label small and the answer bold; codes/numbers get a highlight. */
+function qBold(x){ return esc(x).replace(/(\d[\d #*\-]{1,}\d#?|\d{3,}#?)/g,'<b class="qcode">$1</b>'); }
+function qFmt(val){ var lines=String(val||"").replace(/\r/g,"").split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+  var row=function(l){ var m=l.match(/^([^:]{2,40}?):\s*(.+)$/);
+    return m?'<div class="qrow"><span class="ql">'+esc(m[1])+'</span><span class="qa">'+qBold(m[2])+'</span></div>':'<div class="qrow"><span class="qa plain">'+qBold(l)+'</span></div>'; };
+  var top=lines.slice(0,5).map(row).join(""), rest=lines.slice(5);
+  return top+(rest.length?'<details class="qmore"><summary>'+rest.length+' more line'+(rest.length===1?'':'s')+'</summary>'+rest.map(row).join("")+'</details>':''); }
 function qCard(title,val,src,cls){ if(!val) return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div><div class="muted">Not recorded</div></div>';
-  var long=val.length>160;
-  return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+(long?'<details><summary class="qvt">'+esc(val.slice(0,150))+'…</summary><div class="qvt">'+esc(val.slice(150))+'</div></details>':'<div class="qvt">'+esc(val)+'</div>')+(src?'<div class="hint">'+src+'</div>':'')+'</div>'; }
+  return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+qFmt(val)+(src?'<div class="hint">'+src+'</div>':'')+'</div>'; }
 function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(code);
   var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
   var wifi=pe.wifiName||pe.wifiPass?{v:(pe.wifiName?"Network: "+pe.wifiName:"")+(pe.wifiPass?(pe.wifiName?"\n":"")+"Password: "+pe.wifiPass:""),s:"Edited in the hub"}:asana(/^(wifi|wi-fi|stay[- ]?fi)/i);
   var entry=pick(pe.lockoutCode,/^lockout info/i), garage=pick(pe.garageCode,/^parking\/? ?garage info$|^parking$/i), closet=pick(pe.ownerCloset,/^owner closet info$/i);
   var own='<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'<div class="muted">Owner contact isn\'t shared with your team.</div>':
-    (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b>'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
+    (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi")+qCard("Entry / owner lockout codes",entry.v,entry.s,"codes")+qCard("Garage / parking",garage.v,garage.s,"codes")+qCard("Owner closet",closet.v,closet.s,"codes")+
     qCard("Key box",hi.keybox,hi.src&&hi.src.keybox?"From "+hi.src.keybox:"","")+'</div>'+
@@ -2589,12 +2595,13 @@ function fireFields(code){ var f=fireInfo(code), l=licInfo(code), pe=pedit(code)
     '<label class="f"><span>License #</span><input id="h_ln" value="'+esc(l.no)+'"></label>'+
     '<label class="f"><span>License expires</span><input id="h_le" type="date" value="'+esc(l.exp)+'"><span class="hint">'+(l.exp?dueState(l.exp).t:'')+'</span></label></div>'; }
 function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(function(h){ return !h.company; });
-  var rows=homes.map(function(h){ var f=fireInfo(h.code), l=licInfo(h.code); return {code:h.code,f:f,l:l,fs:dueState(f.exp),ls:licState(l)}; });
+  var rows0=homes.map(function(h){ var f=fireInfo(h.code), l=licInfo(h.code); return {code:h.code,f:f,l:l,fs:dueState(f.exp),ls:licState(l),county:countyOf(h.code)||"County not set",hood:(h.community||"").trim()||"Neighborhood not set"}; });
+  var rows=rows0.filter(function(r){ return (!u.licCounty||r.county===u.licCounty)&&(!u.licHood||r.hood===u.licHood); });
   var lrows=rows.filter(function(r){ return needsLicense(r.code); });
   var fire=rows.filter(function(r){ return r.f.has!==false; }), cnt=function(a,key,k){ return a.filter(function(r){ return r[key].k===k; }).length; };
   var pick=function(a,key){ return a.filter(function(r){ return flt==="all"||(flt==="due"?(r[key].k==="late"||r[key].k==="soon"):r[key].k===flt); }).sort(function(a1,b1){ return (a1[key==="fs"?"f":"l"].exp||"9999").localeCompare(b1[key==="fs"?"f":"l"].exp||"9999"); }); };
   var chips='<div class="chiprow">'+[["due","Expired or due in 60 days"],["late","Expired"],["none","No date"],["ok","Up to date"],["all","All"]].map(function(c){ return '<button class="chip" data-firef="'+c[0]+'" aria-pressed="'+(flt===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>';
-  var h='<div class="sechead"><h2>Fire &amp; licenses</h2><p>Which homes have a fire suppression system, when its tag runs out (a year after the last Pye-Barker inspection), and when each home\'s license expires. Fix any home on its Homes page.</p>'+chips+'</div>';
+  var h=licOverview(rows0)+'<div class="sechead"><h2>Fire &amp; licenses'+(u.licHood?' · '+esc(u.licHood):u.licCounty?' · '+esc(u.licCounty):'')+'</h2><p>Which homes have a fire suppression system, when its tag runs out (a year after the last Pye-Barker inspection), and when each home\'s license expires. Fix any home on its Homes page.</p>'+chips+'</div>';
   var F=pick(fire.filter(function(r){ return r.f.has===true||flt==="all"||flt==="none"; }),"fs"), L=pick(lrows,"ls");
   var fneed=F.filter(function(r){ return r.fs.k!=="ok" && !fireQ(r.code); }).map(function(r){ return r.code; });
   h+='<div class="grid2"><section class="panel"><div class="ph"><h3>Fire suppression</h3><span class="ct">'+fire.filter(function(r){return r.f.has===true;}).length+' homes have one · '+cnt(fire,"fs","late")+' expired · '+cnt(fire,"fs","soon")+' due soon</span>'+
@@ -2608,6 +2615,24 @@ function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(fun
       return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a></td><td class="mono">'+esc(r.l.no||"—")+'</td><td>'+duePill(r.ls)+(r.l.county?' <span class="note">'+esc(r.l.county)+(r.l.summit?' · renews every Jan 15':'')+'</span>':'')+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':'')+(r.l.notes?'<div class="note">'+esc(r.l.notes)+'</div>':'')+(!r.l.sheet&&(r.l.county||needsLicense(r.code))?'<div class="note">Not on the Dropbox license sheet</div>':'')+'</td><td>'+(q?licAsk(q)+' ':'')+'<button class="btn sm ghost" data-licask="'+esc(r.code)+'">'+(q?'Ask again':'Ask Haylee')+'</button></td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
     '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept) every morning. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out.</div></section></div>';
   return h; }
+
+/* Licensing main page (Brandon 2026-10-28): property status by county, then by neighborhood. Click to drill in; the tables below follow. */
+function licOverview(rows){ var u=S.ui, needs=function(r){ return needsLicense(r.code); };
+  var tally=function(list){ var t={n:list.length,ok:0,soon:0,late:0,none:0,fire:0,fireBad:0};
+    list.forEach(function(r){ if(needs(r)) t[r.ls.k]=(t[r.ls.k]||0)+1; if(r.f.has===true){ t.fire++; if(r.fs.k==="late"||r.fs.k==="soon") t.fireBad++; } }); return t; };
+  var bar=function(t){ var lic=t.ok+t.soon+t.late+t.none||1, seg=function(k,c){ return t[k]?'<span class="lseg" style="flex:0 0 '+(t[k]/lic*100)+'%;background:'+c+'"></span>':''; };
+    return '<div class="lbar">'+seg("ok","var(--go)")+seg("soon","var(--wait)")+seg("late","var(--stop)")+seg("none","var(--line-2)")+'</div>'; };
+  var pills=function(t){ return '<div class="lpills">'+(t.late?'<span class="pill late">'+t.late+' expired</span>':'')+(t.soon?'<span class="pill soon">'+t.soon+' due soon</span>':'')+(t.none?'<span class="pill mute">'+t.none+' no date</span>':'')+(t.ok?'<span class="pill ok">'+t.ok+' good</span>':'')+
+    (t.fire?'<span class="pill'+(t.fireBad?' soon':' ok')+'">🔥 '+t.fire+' fire system'+(t.fire===1?'':'s')+(t.fireBad?' · '+t.fireBad+' tag due':'')+'</span>':'')+'</div>'; };
+  var by=function(list,key){ var g={}; list.forEach(function(r){ (g[r[key]]=g[r[key]]||[]).push(r); }); return Object.keys(g).sort(function(a,b){ return (/not set/.test(a)?1:0)-(/not set/.test(b)?1:0)||a.localeCompare(b); }).map(function(k){ return {k:k,list:g[k],t:tally(g[k])}; }); };
+  var all=tally(rows), counties=by(rows,"county");
+  var h='<div class="sechead"><h2>Property status</h2><p>Every home by county, then by neighborhood: rental license status (second homes and leases don\'t need one) and fire suppression tags. Click a county, then a neighborhood, to see its homes below.</p>'+
+    '<div class="lsum">'+pills(all)+'</div></div><div class="lgrid">'+counties.map(function(c){ var on=u.licCounty===c.k;
+      return '<button class="lcard'+(on?' on':'')+'" data-liccounty="'+esc(c.k)+'"><div class="lh"><b>'+esc(c.k)+'</b><span class="muted">'+c.t.n+' home'+(c.t.n===1?'':'s')+'</span></div>'+bar(c.t)+pills(c.t)+'</button>'; }).join("")+'</div>';
+  if(u.licCounty){ var hoods=by(rows.filter(function(r){ return r.county===u.licCounty; }),"hood");
+    h+='<div class="sechead" style="margin-top:14px"><h2>'+esc(u.licCounty)+' · neighborhoods</h2><p><a href="#" data-liccounty="">← All counties</a></p></div><div class="lgrid">'+hoods.map(function(n){ var on=u.licHood===n.k;
+      return '<button class="lcard'+(on?' on':'')+'" data-lichood="'+esc(n.k)+'"><div class="lh"><b>'+esc(n.k)+'</b><span class="muted">'+n.t.n+'</span></div>'+bar(n.t)+pills(n.t)+'</button>'; }).join("")+'</div>'; }
+  return h+'<div style="height:14px"></div>'; }
 /* ---- ask Haylee in Slack about a license (single home or all shown) ---- */
 function licLine(code){ var l=licInfo(code), st=dueState(l.exp); return code+(l.no?" (license #"+l.no+")":"")+" — "+(l.pending&&!l.exp?"not licensed yet ("+l.pending+")":(st.k==="none"?"no expiration date on file":st.k==="late"?"expired "+fmtD(l.exp):"expires "+fmtD(l.exp))+(l.pending?"; still pending: "+l.pending:"")); }
 function licQ(code){ var q=S.slackq[sid("lic_"+code)]; if(q&&q.status==="covered"&&S.slackq[q.coveredBy]) q=Object.assign({},q,S.slackq[q.coveredBy]); return q; }
@@ -3074,6 +3099,8 @@ document.addEventListener("click",function(ev){
   if(d.licall){ return mLicMsg(d.licall.split(",")); }
   if(d.vmode){ ev.preventDefault(); S.ui.vmode=d.vmode; if(S.tab!=="vendors") return go("vendors"); return render(); }
   if(d.firef){ S.ui.fireF=d.firef; return render(); }
+  if(d.liccounty!=null){ ev.preventDefault(); S.ui.licCounty=(S.ui.licCounty===d.liccounty?"":d.liccounty); S.ui.licHood=""; return render(); }
+  if(d.lichood!=null){ S.ui.licHood=(S.ui.licHood===d.lichood?"":d.lichood); render(); var t=document.querySelector(".grid2"); if(t) t.scrollIntoView({behavior:"smooth"}); return; }
   if(d.xo){ S.ui.xo=S.ui.xo||{}; var xk=d.xo;
     if(S.ui.xo[xk]){ delete S.ui.xo[xk]; return render(); }
     /* accordion: opening one closes the others in the same list */
