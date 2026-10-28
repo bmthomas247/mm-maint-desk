@@ -306,7 +306,7 @@ function shell(){
     <main class="view" id="view"></main>
   </div>
   <div class="modal" id="fb"><div class="card">
-    <h2 style="font-size:20px">Tell Brandon</h2>
+    <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="fbback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Tell Brandon</h2><button class="btn small" id="fbx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
     <div class="seg" id="kind"><button class="btn small on" data-v="bug">🐞 Something's broken</button><button class="btn small" data-v="upgrade">⬆️ Upgrade I want</button><button class="btn small" data-v="idea">💡 Idea</button></div>
     <label class="field"><span>What happened, or what would help?</span><textarea id="fbtext" placeholder="Example: On Locks · Office the Alerts tab won't load on my phone."></textarea></label>
     <p class="muted" style="margin:0 0 6px">You're on: <b id="fbwhere"></b></p>
@@ -328,7 +328,8 @@ function shell(){
     document.querySelectorAll("#kind button").forEach(x => x.classList.toggle("on", x === b)); });
   let WHERE = { label:"", page:"" };
   $("#fbopen").onclick = e => { e.preventDefault(); WHERE = whereAmI(); $("#fbwhere").textContent = WHERE.label; $("#fbmsg").textContent = ""; $("#fb").classList.add("on"); $("#fbtext").focus(); };
-  $("#fbcancel").onclick = () => $("#fb").classList.remove("on");
+  $("#fbcancel").onclick = $("#fbback").onclick = $("#fbx").onclick = () => $("#fb").classList.remove("on");
+  $("#fb").onclick = e => { if(e.target.id === "fb" && !$("#fbtext").value.trim()) $("#fb").classList.remove("on"); };
   $("#fbsend").onclick = async () => {
     const body = $("#fbtext").value.trim(); if(body.length < 3) return $("#fbmsg").textContent = "Write a little more first.";
     $("#fbsend").disabled = true; $("#fbmsg").textContent = "Sending…";
@@ -754,6 +755,7 @@ async function syncView(v){
     b.textContent = r.error ? "Couldn't ask" : "Asked ✓"; if(r.error) b.title = r.error.message; setTimeout(() => syncView(v), 2500); });
 }
 window.addEventListener("hashchange", route);
+document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
 sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { ME = null; loginView(); } });
 boot();
 </script>
