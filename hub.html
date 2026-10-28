@@ -600,8 +600,26 @@ function dailyPool(){
   if(!pool.length) pool = DAILY.filter(okK);
   return pool.length ? pool : DAILY;
 }
+/* typed-in interests (2026-10-28): today's first pick comes from one of them through daily-pick (web-sourced, shared + cached per day) */
+async function dailyCustom(box, day){
+  const own = (PREFS.interests || []).filter(x => !INTERESTS.some(([k]) => k === x)); if(!own.length) return false;
+  const ks = (PREFS.kinds || []).length ? PREFS.kinds : KINDS.map(k => k[0]);
+  const topic = own[day % own.length], kind = ks[(day + Math.floor(day / own.length)) % ks.length];
+  box.innerHTML = `<p class="muted">Finding today's ${esc(kind.toLowerCase())} about ${esc(topic)}…</p>`;
+  const r = await sb.functions.invoke("daily-pick", { body:{ topic, kind } }); const x = r.data || {};
+  if(!x.ok) return false;
+  const ic = { Quote:"💬", Joke:"😄", Fact:"💡", Stat:"📊" }[x.kind];
+  box.innerHTML = `<div class="dhd"><span class="pill green">${ic} ${x.kind} of the day · ${esc(x.topic)}</span><button class="btn small" id="dmore" style="margin-left:auto">Another</button></div>
+    <p class="dq">${x.kind === "Quote" ? "“" + esc(x.t) + "”" : esc(x.t)}</p>
+    ${x.a || x.u ? `<p class="muted" style="margin:0">— ${x.u ? `<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.a || "Source")}</a>` : esc(x.a)}</p>` : ""}
+    <p class="muted" style="margin:8px 0 0;font-size:12px">From your own interests. <a href="#/settings">Change them</a></p>`;
+  $("#dmore").onclick = () => dailyPick(1);
+  return true;
+}
 function dailyPick(shift){
   const box = $("#daily"); if(!box) return;
+  if(!shift){ const d0 = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+    if((PREFS.interests || []).some(x => !INTERESTS.some(([k]) => k === x))) return dailyCustom(box, d0).then(ok => { if(!ok) dailyPick(1); }); }
   const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000), pool = dailyPool();
   const x = pool[((day * 7 + (shift || 0)) % pool.length + pool.length) % pool.length];
   const ic = { Quote:"💬", Joke:"😄", Fact:"💡", Stat:"📊" }[x.k];
@@ -633,7 +651,8 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
-  const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res" }, GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"] };
+  const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", competitor:"competitor", competitor_add:"competitor" },
+    GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key)).forEach(x => { const g = G[x.key];
     if(g){ if(seen[g]) return; seen[g] = 1; items.push({ k:"g:" + g, label:GL[g][0], icon:GL[g][1], sort:x.sort }); }
@@ -661,6 +680,8 @@ function settingsView2(v){
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn small" id="ordreset">Back to the standard order</button></div></div>
     <div class="card"><b style="font-size:17px">☀️ My morning pick</b><p class="muted" style="margin:4px 0 4px">What you care about — your quote, joke, fact or stat of the day comes from these. Pick none to get everything.</p>
       <div class="ints">${INTERESTS.map(([k, l]) => `<label class="${ints.includes(k) ? "on" : ""}"><input type="checkbox" data-int="${k}" ${ints.includes(k) ? "checked" : ""}>${esc(l)}</label>`).join("")}</div>
+      <label class="field" style="margin-top:10px"><span>Your own interests <span class="muted">(type anything, separated by commas)</span></span>
+        <input id="intown" placeholder="Example: golf, dogs, country music, baking" value="${esc(ints.filter(x => !INTERESTS.some(([k]) => k === x)).join(", "))}"></label>
       <p class="muted" style="margin:10px 0 4px">What kind?</p>
       <div class="ints">${KINDS.map(([k, l]) => `<label class="${ks.includes(k) ? "on" : ""}"><input type="checkbox" data-kind="${k}" ${ks.includes(k) ? "checked" : ""}>${l}</label>`).join("")}</div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Every fact and stat shows where it came from.</p></div>
@@ -680,7 +701,9 @@ function settingsView2(v){
       const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
       b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
     $("#ordreset").onclick = () => { list = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k); list.custom = false; draw(); };
-    $("#prefsave").onclick = async () => { $("#prefsave").disabled = true;
+    $("#intown").onchange = () => { const own = $("#intown").value.split(",").map(x => x.trim().replace(/\s+/g, " ").slice(0, 40)).filter(x => x.length > 1);
+      ints = ints.filter(x => INTERESTS.some(([k]) => k === x)).concat([...new Set(own.map(x => x.toLowerCase()))]).slice(0, 20); };
+    $("#prefsave").onclick = async () => { $("#intown").onchange(); $("#prefsave").disabled = true;
       const std = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k).join(), order = list.join() === std ? [] : list.slice();
       const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
       $("#prefsave").disabled = false;
