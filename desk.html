@@ -288,6 +288,8 @@ tr.xtr:hover td{background:var(--surface-2)} tr.xtr.open td{background:var(--acc
 .rcard .rd{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .rcard .rbtns{margin-top:auto;padding-top:6px;display:flex;flex-wrap:wrap;gap:6px}
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="moose-theme.css">
 <div class="wrap">
   <header class="top">
     <button class="btn" id="backbtn" title="Back to where you were" style="display:none">← Back</button><div class="brand"><span class="mk">Maintenance Desk</span><span class="sub">Moose Management</span></div>
@@ -393,8 +395,14 @@ var S={db:null, me:ls("me")||"", tab:(location.hash||"").replace("#","")||"today
       sel:"", home:"", hq:"", vq:"", vtrade:"", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
 var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["money","Expenses & Time"],["care","Home care"],["projects","Projects"],["routines","Seasonal & yearly"],["homes","Homes"],
   ["vendors","Vendors"],["repeats","Repeats"],["recalls","Recalls"],["fire","Fire & licenses"]];
-if(window.MM_ROLE && window.MM_ROLE!=="admin") TABS=TABS.filter(function(x){ return x[0]!=="money"; });
-if(!TABS.some(function(t){return t[0]===S.tab;}) && S.tab!=="jobs") S.tab="today";
+/* Moose Hub (2026-10-27): Expenses & Time = maintenance manager + admins (MM_MONEY from hub_can, enforced in RLS);
+   Homes, Vendors and Fire & licenses are their own hub desks (desk.html?only=<tab>). */
+var ONLY=(function(){ try{ return new URLSearchParams(location.search).get("only")||""; }catch(e){ return ""; } })();
+if(!window.MM_MONEY) TABS=TABS.filter(function(x){ return x[0]!=="money"; });
+if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
+else TABS=TABS.filter(function(x){ return ["homes","vendors","fire"].indexOf(x[0])<0; });
+try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); }catch(e){}
+if(!ONLY && !TABS.some(function(t){return t[0]===S.tab;}) && ["jobs","homes","vendors","fire"].indexOf(S.tab)<0) S.tab="today";
 
 /* ---- derived ---- */
 var COMPANY_HOME={code:"Moose company",community:"Truck, office, storage, tools",active:true,company:true,info:[],appliances:[],heatTape:"",yearBuilt:""};
