@@ -468,7 +468,7 @@ function shell(){
         ${soonHtml ? `<div class="grp">Coming soon</div>` + soonHtml : ""}
       </nav>
       <div class="foot">
-        ${repD ? item("reports", anD ? "Reports & analytics" : repD.label, repD.icon || "chart") : ""}
+        ${repD ? item("reports", anD ? "Reports & Analytics" : repD.label, repD.icon || "chart") : ""}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
         <div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button id="out">Sign out</button></div>
       </div>
