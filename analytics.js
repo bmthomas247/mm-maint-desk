@@ -1,7 +1,8 @@
 /* analytics.js (Brandon 2026-10-28): Reports & Analytics ▸ Key Data reports.
    Loaded by hub.html; uses its sb / $ / esc / hashArg. Data: analytics_market_trend() + analytics_vs_comps() (hub_analytics.sql),
    both gated by hub_can('analytics') in Supabase. Routes: #/an/market · #/an/comps
-   Round 2 (2026-10-28, hub_analytics_2.sql): #/an/demand · #/an/pace · #/an/top · #/an/home/<comp id> · #/an/channels */
+   Round 2 (2026-10-28, hub_analytics_2.sql): #/an/demand · #/an/pace · #/an/top · #/an/home/<comp id> · #/an/channels
+   Round 3 (2026-10-28, hub_analytics_3.sql): #/an/worst · #/an/worst/<comp id> */
 (function(){
 const CSS = `
 .anbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px} .anbar select,.anbar input{width:auto;min-width:150px} .anbar input{flex:1}
@@ -66,8 +67,8 @@ const homeLink = (id, label) => `<a class="anlink" href="#/an/home/${encodeURICo
 // sortable table: cols = [{ k, t, f(row)->html, v(row)->sort value, l (left) }]
 function table(el, cols, rows, sortK, cls, asc){   // asc = start ascending (dates, ranks)
   let k = sortK, dir = asc ? 1 : -1;
-  const draw = () => { const c = cols.find(x => x.k === k) || cols[0], val = c.v || (r => r[c.k]);
-    const L = rows.slice().sort((a, b) => { const x = val(a), y = val(b); return (x == null) - (y == null) || (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  const draw = () => { const c = cols.find(x => x.k === k), val = c && (c.v || (r => r[c.k]));   // no sort key = keep the rows' order
+    const L = !c ? rows.slice() : rows.slice().sort((a, b) => { const x = val(a), y = val(b); return (x == null) - (y == null) || (x < y ? -1 : x > y ? 1 : 0) * dir; });
     el.innerHTML = `<div class="anwrap"><table class="antbl"><thead><tr>${cols.map(c => `<th class="${c.l ? "l" : ""}" data-k="${c.k}">${esc(c.t)}${c.k === k ? (dir < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead>
       <tbody>${L.map(r => `<tr class="${cls ? cls(r) : ""}">${cols.map(c => `<td class="${c.l ? "l" : ""}">${c.f ? c.f(r) : esc(r[c.k] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     el.querySelectorAll("th").forEach(th => th.onclick = () => { dir = th.dataset.k === k ? -dir : -1; k = th.dataset.k; draw(); }); };
@@ -373,8 +374,148 @@ async function channels(v){
   table($("#chm"), [{ k:"month", t:"Arrival month", l:1, f:r => esc(mon(r.month)) + (r.fut ? " · booked so far" : "") }, ...chans.map(c => ({ k:c, t:c })), { k:"total", t:"All guest nights" }], rows, "month", r => r.fut ? "fut" : "", 1);
 }
 
-const VIEWS = { comps, demand, pace, top, channels };
+/* ---------- Worst performers (Brandon 2026-10-28): why a home is behind, what to fix, and a draft for the owner ----------
+   Data: analytics_vs_comps() (like-for-like Key Data RevPAR) + analytics_diagnose() (hub_analytics_3.sql). Recommendations are rules
+   on that evidence; each one names its source. The owner draft is text to copy — the hub never sends it (rule: show Brandon first). */
+let DX = null, VC = null;
+async function worstData(){
+  if(!VC){ const r = await sb.rpc("analytics_vs_comps"); if(r.error) throw r.error; VC = r.data || []; }
+  if(!DX){ const r = await sb.rpc("analytics_diagnose"); if(r.error) throw r.error; DX = {}; (r.data || []).forEach(x => DX[x.id] = x); }
+  VC.forEach(x => { num(x, ["kd_occ","kd_adr","comp_occ","comp_adr","our_rent","our_adr"]);
+    x.kd = x.kd_months > 0 && x.kd_occ != null && x.comp_occ != null && !!x.comp_adr;
+    x.kd_rp = x.kd ? x.kd_occ * (x.kd_adr || 0) : null; x.comp_rp = x.kd ? x.comp_occ * x.comp_adr : null; x.gap = x.kd && x.comp_rp ? x.kd_rp / x.comp_rp - 1 : null; });
+  return VC;
+}
+const RCAT = [["r_overall","Overall"],["r_clean","Cleanliness"],["r_accuracy","Accuracy"],["r_checkin","Check-in"],["r_comm","Communication"],["r_location","Location"],["r_value","Value"]];
+const ownerOf = label => { const m = /\(([^)]+)\)\s*$/.exec(label || ""); return m ? m[1] : ""; };
+function recommend(h, x){
+  const o = (x && x.ours) || {}, c = (x && x.comps) || {}, R = [], KD = "Key Data listing KPIs (like for like)", KDL = "Key Data listing details (Airbnb)";
+  const add = (area, text, evidence, source, owner, ownerText) => R.push({ area, text, evidence, source, owner:!!owner, ownerText:ownerText || text });
+  const n = v => v == null ? null : +v, minRule = (x && x.rules || []).find(r => r.min_price), stayRule = (x && x.rules || []).find(r => r.min_stay);
+  // Key Data sees no Airbnb bookings at all: the listing (not the price) is the first thing to check
+  if(h.kd && !h.kd_occ) add("Listing", "Key Data saw no Airbnb bookings on this home's listing — check the Airbnb listing is live, visible and synced with Track before anything else.",
+    `Key Data guest occupancy 0%; Track shows ${h.our_nights || 0} guest nights in the same window${h.our_nights ? " (booked through other channels)" : ""}.`, KD);
+  // pricing vs. comps (like for like)
+  if(h.kd && h.kd_occ){
+    const ap = h.kd_adr / h.comp_adr - 1, op = h.kd_occ - h.comp_occ;
+    if(ap >= .10 && op <= -.03) add("Pricing", "Priced above its comps and booking less — test lower rates on open non-holiday nights (through the Rates desk / Beyond).",
+      `Nightly rate ${Math.round(ap * 100)}% above comps; occupancy ${(op * 100).toFixed(1)} pts below.`, KD);
+    else if(ap <= -.10 && op <= -.03) add("Listing", "Cheaper than its comps and still booking less — price isn't the problem; look at the listing, photos and reviews below.",
+      `Nightly rate ${Math.round(-ap * 100)}% below comps; occupancy ${(-op * 100).toFixed(1)} pts below.`, KD);
+    else if(op >= 0 && ap <= -.10) add("Pricing", "Books as well as its comps but for less — room to raise rates, starting with peak dates.",
+      `Occupancy at or above comps; nightly rate ${Math.round(-ap * 100)}% below.`, KD);
+    if(minRule && ap >= .05 && op < 0) add("Owner", `The owner's minimum price (${usd(minRule.min_price)}${minRule.min_price_peak ? ", peak " + usd(minRule.min_price_peak) : ""}) may be keeping the rate above what the market pays — ask about lowering it for slow periods.`,
+      minRule.note || "", minRule.source || "owner_rules", true,
+      `Your minimum nightly price of ${usd(minRule.min_price)} is above what similar homes are booking at in slower weeks. Would you be open to a lower minimum for those dates?`);
+  }
+  (x && x.findings || []).forEach(f => add("Pricing", f.suggestion || f.title, f.evidence || f.title, "Rates desk check " + f.run_date + " — " + (f.sources || ""), f.kind === "owner_min_block",
+    "Your minimum price is keeping some open nights from booking. Can we talk about adjusting it for slower dates?"));
+  // reviews vs. comps
+  const TIP = { r_clean:["Guest experience", "Cleanliness scores trail the comps — do a quality inspection after the next turn, deep clean, and check linens, carpets and the hot tub.", false],
+    r_accuracy:["Listing", "Guests say the listing doesn't match the home — update the description, amenities and photos so they're accurate.", false],
+    r_checkin:["Guest experience", "Check-in scores trail the comps — check door code timing, arrival instructions, parking and directions.", false],
+    r_comm:["Guest experience", "Communication scores trail the comps — review response times and the pre-arrival messages.", false],
+    r_location:["Listing", "Location scores trail the comps — set expectations in the listing (shuttle, drive times, walkability) so the location doesn't surprise guests.", false],
+    r_value:["Owner", "Guests don't feel they got their money's worth — either the rate or the home needs to move (refresh furniture, beds, kitchen, or add an amenity).", true],
+    r_overall:["Guest experience", "Overall rating trails the comps — read the recent reviews for the repeat complaint and fix that first.", false] };
+  if(o.r_count != null && o.r_count < 3 && o.r_count > 0) add("Guest experience", `Only ${o.r_count} Airbnb review${o.r_count === 1 ? "" : "s"} — too few to judge the review categories yet; getting more reviews comes first.`, `${o.r_count} reviews vs. comps median ${c.r_count == null ? "—" : Math.round(c.r_count)}.`, KDL);
+  if((o.r_count || 0) >= 3) RCAT.forEach(([k]) => { const a = n(o[k]), b = n(c[k]); if(a != null && b != null && a < b - .15) { const t = TIP[k]; add(t[0], t[1], `${a.toFixed(2)} vs. comps median ${b.toFixed(2)} (Airbnb ${RCAT.find(z => z[0] === k)[1].toLowerCase()}).`, KDL, t[2],
+    k === "r_value" ? `Guests rate the value of the stay below similar homes (${a.toFixed(2)} vs. ${b.toFixed(2)} on Airbnb). Some updates — furniture, beds, kitchen, or a new amenity — would help us charge what the area supports.` : ""); } });
+  if(o.r_count != null && o.r_count >= 3 && c.r_count != null && o.r_count < Math.min(15, c.r_count * .5)) add("Guest experience", "Few reviews — ask happy guests for a review after checkout; more reviews lift search placement.", `${o.r_count} reviews vs. comps median ${Math.round(c.r_count)}.`, KDL);
+  // listing
+  if(o.photos != null && c.photos && o.photos < c.photos * .75) add("Owner", "Fewer photos than the comps — schedule new professional photos (every room, the views, amenities, the neighborhood).", `${o.photos} photos vs. comps median ${Math.round(c.photos)}.`, KDL, true,
+    `Your listing has ${o.photos} photos while similar homes have about ${Math.round(c.photos)}. We'd like to schedule new professional photos.`);
+  const ai = x && x.ai; if(ai && ai.overall != null && +ai.overall < 3.3) add("Owner", "The interior scores low against the comps (photo estimate) — a refresh or light staging would help it compete.", `Photo score ${(+ai.overall).toFixed(1)} of 5 — a Claude estimate from the listing photos, not a guest rating.`, "home_ai (Claude photo score, ESTIMATE) " + (ai.scored || "").slice(0, 10), true,
+    "Next to similar homes nearby, the interior looks a step behind in the listing photos. A light refresh or some staging would help it compete.");
+  if(o.min_stay != null && c.min_stay != null && o.min_stay > c.min_stay) add(stayRule ? "Owner" : "Pricing", `Longer minimum stay than the comps — try ${Math.round(c.min_stay)} night${c.min_stay > 1 ? "s" : ""} outside holidays${stayRule ? " (the owner set this — ask them)" : ""}.`, `${o.min_stay}-night minimum vs. comps median ${Math.round(c.min_stay)}.`, stayRule ? (stayRule.source || "owner_rules") : KDL, !!stayRule,
+    `Your ${o.min_stay}-night minimum is longer than similar homes (most ask ${Math.round(c.min_stay)}). Would you consider ${Math.round(c.min_stay)} night${c.min_stay > 1 ? "s" : ""} outside holidays?`);
+  if(o.instant === false && c.instant >= .5) add("Listing", "Instant Book is off while most comps have it on — turn it on (Airbnb ranks Instant Book listings higher).", `${Math.round(c.instant * 100)}% of comps use Instant Book.`, KDL);
+  if(o.hot_tub === "none" && c.hot_tub >= .5) add("Owner", "Most comps offer a hot tub and this home doesn't — a hot tub is one of the most-searched amenities in Park City; worth raising with the owner.", `${Math.round(c.hot_tub * 100)}% of comps list a hot tub.`, KDL, true,
+    `About ${Math.round(c.hot_tub * 100)}% of similar homes nearby offer a hot tub, and it's one of the most-searched amenities in Park City. Is adding one something you'd consider?`);
+  if(h.owner_nights > 60) add("Owner", "Heavy owner use — owner and blocked nights cut into rentable peak dates; ask whether some can move to slower weeks.", `${h.owner_nights} owner/blocked nights in the window (Track).`, "Track stays", true,
+    `The home was blocked for owner use or holds on ${h.owner_nights} nights over the last year. Moving some of those to slower weeks would open up the dates that earn the most.`);
+  return R;
+}
+async function worst(v){
+  v.innerHTML = `<div class="page wide">${back}<h2>Worst performers — what to fix</h2><p class="muted">Loading…</p></div>`;
+  let H; try { H = await worstData(); } catch(e){ return fail(v, e); }
+  if(!H.length) return noAccess(v);
+  const B = H.filter(x => x.kd && x.gap < 0).map(x => ({ ...x, recs:recommend(x, DX[x.home_id]), rv:(DX[x.home_id] || {}).ours || {}, rc:(DX[x.home_id] || {}).comps || {} })), W = H[0];
+  v.innerHTML = `<div class="page wide">${back}<h2>Worst performers — what to fix</h2>
+    <p class="muted">Our homes earning less per available night than the comps in their rate set, measured the same way on both sides (Key Data), ${esc(dt(W.win_from + "T12:00"))} – ${esc(dt(W.win_to + "T12:00"))}. Open a home for the reasons, what to fix, and a draft note for the owner.</p>
+    <div class="ankpi"><div class="card"><small>Homes behind their comps</small><b>${B.length}</b><small>of ${H.filter(x => x.kd).length} compared</small></div>
+      <div class="card"><small>More than 25% behind</small><b>${B.filter(x => x.gap <= -.25).length}</b><small>revenue per available night</small></div>
+      <div class="card"><small>With a reviews gap</small><b>${B.filter(x => x.recs.some(r => r.source.startsWith("Key Data listing details") && /scores|rating|reviews/.test(r.text))).length}</b><small>a category below the comps</small></div></div>
+    <div class="anbar"><input id="wq" type="search" placeholder="Search homes, owners or rate sets"><select id="wa"><option value="">All areas</option>${[...new Set(B.map(x => x.area).filter(Boolean))].sort().map(a => `<option>${esc(a)}</option>`).join("")}</select></div>
+    <div id="wt"></div>
+    <p class="ansrc">Sources: Key Data listing KPIs and listing details (captured ${esc(dt(W.kd_captured))}) for our Airbnb listing and the Primary comps; Track stays; Rates desk checks; owner rules from the Kolleen workbook.</p></div>`;
+  const draw = () => { const q = $("#wq").value.toLowerCase(), a = $("#wa").value;
+    table($("#wt"), [
+      { k:"home", t:"Home", l:1, f:r => `<a class="anlink" href="#/an/worst/${encodeURIComponent(r.home_id)}">${esc(r.home)}</a>` }, { k:"area", t:"Area", l:1 }, { k:"bedrooms", t:"Beds" },
+      { k:"gap", t:"RevPAR vs. comps", f:r => r.kd_occ ? `<span class="andn">${Math.round(r.gap * 100)}%</span>` : `<span class="pill amber" title="Key Data saw no Airbnb bookings — check the listing">no Airbnb bookings seen</span>` },
+      { k:"occ_d", t:"Occ. gap", v:r => r.kd_occ - r.comp_occ, f:r => pts(r.kd_occ, r.comp_occ) }, { k:"adr_d", t:"ADR gap", v:r => r.kd_adr / r.comp_adr, f:r => chg(r.kd_adr, r.comp_adr) },
+      { k:"rating", t:"Airbnb rating", v:r => r.rv.r_overall == null ? null : +r.rv.r_overall, f:r => r.rv.r_overall == null ? "—" : `${(+r.rv.r_overall).toFixed(2)} <span class="muted">vs ${r.rc.r_overall == null ? "—" : (+r.rc.r_overall).toFixed(2)}</span>` },
+      { k:"nrec", t:"Things to fix", v:r => r.recs.length, f:r => `${r.recs.length}${r.recs.some(x => x.owner) ? ` <span class="pill">owner</span>` : ""}` },
+      { k:"our_rent", t:"Track guest rent", f:r => usd(r.our_rent) }
+    ], B.filter(x => (!q || [x.home, x.set_name].join(" ").toLowerCase().includes(q)) && (!a || x.area === a)), "gap", null, 1); };
+  $("#wq").oninput = $("#wa").onchange = draw; draw();
+}
+async function worstOne(v, id){
+  v.innerHTML = `<div class="page wide">${back}<h2>Home</h2><p class="muted">Loading…</p></div>`;
+  let H; try { H = await worstData(); } catch(e){ return fail(v, e); }
+  const h = H.find(x => x.home_id === id), x = DX[id]; if(!h || !x) return noAccess(v);
+  const o = x.ours || {}, c = x.comps || {}, R = recommend(h, x), own = ownerOf(h.home), nm = h.home.replace(/\s*\([^)]*\)\s*$/, "");
+  const f2 = v => v == null ? "—" : (+v).toFixed(2), cmp = (a, b, hi) => a == null || b == null ? "" : (+a >= +b - (hi || 0) ? "anup" : "andn");
+  // owner draft: owner-facing points in full; our own work summed up by area in plain words (no internal tool names)
+  const OR = R.filter(r => r.owner), OURS = { Pricing:"fine-tuning your nightly rates and minimum stays against the market", Listing:"improving the listing — description, photos and how it shows up in search",
+    "Guest experience":"the guest experience — cleaning checks, check-in and asking happy guests for reviews" };
+  const ourWork = [...new Set(R.filter(r => !r.owner).map(r => OURS[r.area]).filter(Boolean))];
+  const lead = h.kd && h.kd_occ && h.gap != null ? ` — over the last 12 months it earned about ${Math.abs(Math.round(h.gap * 100))}% less per available night than the comparable homes we track` : "";
+  const draft = `Hi${own ? " " + own : ""},\n\nWe've been reviewing how ${nm} is doing against similar homes nearby${lead}. We want to close that gap before the season.\n\n`
+    + (ourWork.length ? `Here's what we're working on:\n${ourWork.map(t => "• " + t.charAt(0).toUpperCase() + t.slice(1)).join("\n")}\n\n` : "")
+    + (OR.length ? `A few things are in your hands, and we'd love your thoughts:\n${OR.map(r => "• " + r.ownerText).join("\n")}\n\n` : "")
+    + `Could we set up a quick call this week to go over it?\n\nThanks,\nMoose Management`;
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a> · <a href="#/an/worst">Worst performers</a> · <a href="#/an/home/${encodeURIComponent(id)}">Month by month</a></p>
+    <h2>${esc(h.home)}</h2><p class="muted">${esc([h.set_name, h.area, h.bedrooms ? h.bedrooms + " bedrooms" : "", o.url ? "" : ""].filter(Boolean).join(" · "))}${o.url ? ` · <a href="${esc(o.url)}" target="_blank" rel="noopener">Airbnb listing</a>` : ""}</p>
+    <div class="ankpi">
+      <div class="card"><small>Revenue per available night</small><b>${h.kd ? usd(h.kd_rp) : "—"}</b><small>comps ${usd(h.comp_rp)} · ${h.gap == null ? "" : Math.round(h.gap * 100) + "%"}</small></div>
+      <div class="card"><small>Occupancy</small><b>${pct(h.kd_occ)}</b><small>comps ${pct(h.comp_occ)}</small></div>
+      <div class="card"><small>Nightly rate</small><b>${usd(h.kd_adr)}</b><small>comps ${usd(h.comp_adr)} · Track actual ${usd(h.our_adr)}</small></div>
+      <div class="card"><small>Airbnb rating</small><b>${f2(o.r_overall)}</b><small>${o.r_count ?? "—"} reviews · comps ${f2(c.r_overall)}</small></div></div>
+    <h3 class="anh3">What to fix</h3>
+    <div id="wr">${R.length ? R.map(r => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill">${esc(r.area)}</span>${r.owner ? `<span class="pill amber">talk to owner</span>` : ""}</div>
+      <p style="margin:6px 0 2px;font-weight:600">${esc(r.text)}</p><p class="muted" style="margin:0;font-size:13px">${esc(r.evidence)}${r.evidence ? " · " : ""}Source: ${esc(r.source)}</p></div>`).join("") : `<div class="card"><p class="muted">No clear cause in the data — it may be a one-off season. Check the month-by-month page.</p></div>`}</div>
+    <h3 class="anh3">Guest reviews vs. comps (Airbnb)</h3><div id="wrv"></div>
+    <h3 class="anh3">Listing vs. comps</h3><div id="wls"></div>
+    ${x.rules.length || x.feedback.length ? `<h3 class="anh3">Owner rules and past feedback</h3><div id="wow"></div>` : ""}
+    <h3 class="anh3">Draft note for the owner</h3>
+    <p class="muted" style="margin:0 0 6px">Edit before you use it. The hub doesn't send this — copy it into your email or Track. Check the numbers first; Key Data figures are estimates measured the same way for every home.</p>
+    <textarea id="wdraft" rows="14" style="width:100%;font:inherit;font-size:14px">${esc(draft)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:6px"><button class="btn small" id="wcopy">Copy</button><span class="muted" id="wcopied"></span></div>
+    <p class="ansrc">Sources: Key Data listing KPIs and listing details for this home's Airbnb listing and the ${c.n || 0} Primary comps in its rate set (comp figures are medians; amenity shares leave out comps Key Data marks "Unknown"); Track stays; Rates desk checks; owner rules (Kolleen workbook) and owner feedback (Desk); photo score = home_ai (Claude ESTIMATE).</p></div>`;
+  table($("#wrv"), [{ k:"cat", t:"Category", l:1 }, { k:"o", t:"This home", f:r => `<span class="${cmp(r.o, r.c, .15)}">${f2(r.o)}</span>` }, { k:"c", t:"Comps median", f:r => f2(r.c) },
+    { k:"d", t:"Gap", v:r => r.o == null || r.c == null ? null : r.o - r.c, f:r => r.o == null || r.c == null ? "—" : `<span class="${cmp(r.o, r.c, .15)}">${(r.o - r.c >= 0 ? "+" : "") + (r.o - r.c).toFixed(2)}</span>` }],
+    RCAT.map(([k, t]) => ({ cat:t, o:o[k] == null ? null : +o[k], c:c[k] == null ? null : +c[k] })).concat([{ cat:"Number of reviews", o:o.r_count, c:c.r_count == null ? null : Math.round(c.r_count) }]), null);
+  const am = v => v == null ? "—" : v === "none" ? "No" : v === "unknown" ? "Not known" : v.replace(/_/g, " "), sh = s => s == null ? "not known" : Math.round(s * 100) + "%";
+  table($("#wls"), [{ k:"t", t:"", l:1 }, { k:"o", t:"This home", l:1 }, { k:"c", t:"Comps", l:1 }], [
+    { t:"Photos", o:o.photos ?? "—", c:c.photos == null ? "—" : "median " + Math.round(c.photos) },
+    { t:"Minimum stay (nights)", o:o.min_stay ?? "—", c:c.min_stay == null ? "—" : "median " + Math.round(c.min_stay) },
+    { t:"Instant Book", o:o.instant == null ? "—" : o.instant ? "On" : "Off", c:c.instant == null ? "—" : Math.round(c.instant * 100) + "% on" },
+    { t:"Hot tub", o:am(o.hot_tub), c:sh(c.hot_tub) + " have one" },
+    { t:"Pool", o:am(o.pool), c:sh(c.pool) + " have one" },
+    { t:"Ski in / ski out", o:am(o.ski), c:sh(c.ski) },
+    { t:"Mountain view / access", o:am(o.mountain), c:sh(c.mountain) },
+    { t:"Sleeps", o:o.guests ?? "—", c:"" },
+    ...(x.ai ? [{ t:"Photo score (Claude estimate)", o:x.ai.overall == null ? "—" : (+x.ai.overall).toFixed(1) + " of 5", c:"" }] : [])
+  ].map(r => ({ ...r, o:String(r.o), c:String(r.c) })), null);
+  if($("#wow")) $("#wow").innerHTML = x.rules.map(r => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><b>Owner rule</b> · ${esc([r.min_price ? "min price " + usd(r.min_price) : "", r.min_price_peak ? "peak min " + usd(r.min_price_peak) : "", r.min_stay ? "min stay " + r.min_stay : "", r.rule || ""].filter(Boolean).join(" · "))}<p class="muted" style="margin:4px 0 0;font-size:13px">${esc(r.note || "")} · Source: ${esc(r.source || "owner_rules")}</p></div>`).join("")
+    + x.feedback.map(b => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><b>Owner feedback ${esc(b.received || "")}</b> · ${esc(b.topic || "")}<p style="margin:4px 0">${esc(b.complaint || "")}</p><p class="muted" style="margin:0;font-size:13px">Action: ${esc(b.action || "—")}${b.result ? " · Result: " + esc(b.result) : ""}</p></div>`).join("");
+  $("#wcopy").onclick = async () => { try { await navigator.clipboard.writeText($("#wdraft").value); $("#wcopied").textContent = "Copied."; } catch(e){ $("#wdraft").select(); $("#wcopied").textContent = "Press Ctrl+C to copy."; } };
+}
+
+const VIEWS = { comps, demand, pace, top, channels, worst };
 window.anView = function(v){ css(); const a = hashArg();
   if(a.startsWith("home/")) return home(v, decodeURIComponent(a.slice(5)));
+  if(a.startsWith("worst/")) return worstOne(v, decodeURIComponent(a.slice(6)));
   return (VIEWS[a] || market)(v); };
 })();
