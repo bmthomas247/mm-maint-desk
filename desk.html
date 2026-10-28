@@ -2591,6 +2591,21 @@ function licInfo(code){ var pe=pedit(code), p=profile(code)||{}, o={no:"",exp:""
     o.notes=ok.filter(function(e){ return e.note; }).map(function(e){ return e.note; }).join(" · "); }
   else if(countyOf(code)==="Summit"){ o.summit=true; }
   return o; }
+
+/* License copies (Brandon 2026-10-28): files from the Dropbox 2b-Licenses folders, uploaded by licenses_sync.py to the private
+   Storage bucket license-docs (Licensing desk only). Opens a 5-minute signed link. */
+function licDocs(code){ var h=((S.feeds["license-docs"]||{}).homes)||{}; return h[code]||h[String(code).replace(/^(2H-|L-)/,"")]||[]; }
+function licDocLinks(code,max){ var d=licDocs(code); if(!d.length) return '<span class="muted" style="font-size:12.5px">No license copy on file</span>';
+  var lic=d.filter(function(x){ return x.kind==="License"; }), ins=d.filter(function(x){ return x.kind!=="License"; }), show=lic.slice(0,max||2);
+  return '<div class="ldocs">'+show.map(function(x){ return '<a href="#" class="ldoc" data-ldoc="'+esc(x.path)+'" title="'+esc(x.name)+'">📄 License'+(x.year?' '+x.year:'')+'</a>'; }).join("")+
+    ((lic.length>show.length||ins.length)?'<a href="#" class="ldoc more" data-ldocs="'+esc(code)+'">'+(lic.length>show.length?'+'+(lic.length-show.length)+' more':'')+(ins.length?(lic.length>show.length?' · ':'')+ins.length+' inspection'+(ins.length===1?'':'s'):'')+'</a>':'')+'</div>'; }
+function openLicDoc(path){ var sb=window.MM_SB; if(!sb) return toast("Sign in to open license copies");
+  var w=window.open("about:blank","_blank"); sb.storage.from("license-docs").createSignedUrl(path,300).then(function(r){
+    if(r.error||!r.data){ if(w) w.close(); return toast("Couldn't open: "+((r.error&&r.error.message)||"not found")); } if(w) w.location=r.data.signedUrl; else location.href=r.data.signedUrl; }); }
+function mLicDocs(code){ var d=licDocs(code);
+  openModal("License copies · "+code,'<div class="note">From the Dropbox 2b-Licenses folders. Copies open for 5 minutes.</div>'+
+    ['License','Inspection report'].map(function(k){ var l=d.filter(function(x){ return x.kind===k; }); if(!l.length) return "";
+      return '<div class="lbl" style="margin-top:10px">'+(k==="License"?"Licenses":"Inspection reports")+'</div>'+l.map(function(x){ return '<div class="ldocrow"><a href="#" class="ldoc" data-ldoc="'+esc(x.path)+'">📄 '+esc(x.name)+'</a><span class="muted">'+(x.year||"")+'</span></div>'; }).join(""); }).join(""),null); }
 function licFeed(code){ var f=(S.feeds.licenses||{}).homes||{}; return f[code]||f[canon(code)]||null; }
 function licState(l){ if(l.pending && !l.exp) return {k:"late",t:"Not licensed yet"}; var st=dueState(l.exp); if(l.pending && st.k==="ok") return {k:"soon",t:"One license still pending"}; return st; }
 function jan15After(d){ var y=+String(d).slice(0,4); var j=y+"-01-15"; return d<j?j:(y+1)+"-01-15"; }
@@ -2598,7 +2613,17 @@ function jan15After(d){ var y=+String(d).slice(0,4); var j=y+"-01-15"; return d<
 function needsLicense(code){ return !/^(2H|L)-/i.test(code); }
 var SUMMIT_RX=/\b(park city|kamas|oakley|coalville|peoa|henefer|wanship|francis|marion|woodland|hoytsville|echo)\b|\b(84060|84098|84036|84055|84017|84061|84033|84024)\b/i;
 var SUMMIT_COMM=/^(BHL|BHV|BHR|CV|PW|RC|EH|MFL|SL|PL)\b/;
-function countyOf(code){ var pe=pedit(code); if(pe.county) return pe.county; var lf=licFeed(code); if(lf) return lf.county; var p=profile(code)||{}, a="";
+/* Brandon 2026-10-28: Bear Hollow Lodges + Discovery Ridge = Summit, Prospector Lodge = Park City (city limits), Fox Bay = Wasatch.
+   Other neighborhoods take the county most of their homes have on the license sheets. */
+var COMM_COUNTY_FIXED={"bear hollow lodges":"Summit","discovery ridge":"Summit","prospector lodge":"Park City","fox bay":"Wasatch"};
+var _cc=null, _ccAt=0;
+function commCounty(comm){ var f=(S.feeds.licenses||{}), k=String(comm||"").toLowerCase().trim(); if(!k) return "";
+  if(COMM_COUNTY_FIXED[k]) return COMM_COUNTY_FIXED[k];
+  if(!_cc || _ccAt!==f.at){ _cc={}; _ccAt=f.at; var t={}; Object.keys(f.homes||{}).forEach(function(c){ var p=profile(c); if(!p||!p.community) return; var cm=p.community.toLowerCase().trim(), co=f.homes[c].county; t[cm]=t[cm]||{}; t[cm][co]=(t[cm][co]||0)+1; });
+    Object.keys(t).forEach(function(cm){ _cc[cm]=Object.keys(t[cm]).sort(function(a,b){ return t[cm][b]-t[cm][a]; })[0]; }); }
+  return _cc[k]||""; }
+function countyOf(code){ var pe=pedit(code); if(pe.county) return pe.county; var lf=licFeed(code)||licFeed(String(code).replace(/^(2H-|L-)/,"")); if(lf) return lf.county;
+  var p=profile(code)||{}, cc=commCounty(p.community); if(cc) return cc; var a="";
   (p.info||[]).forEach(function(i){ var m=(i.notes||"").match(/Property Address:\s*([^\n]+)/i); if(m&&!a) a=m[1]; });
   if(a) return SUMMIT_RX.test(a)?"Summit":/heber|midway|wasatch|84032|84049|84082/i.test(a)?"Wasatch":"";
   return ""; }
@@ -2630,7 +2655,7 @@ function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(fun
   h+='<section class="panel"><div class="ph"><h3>Licenses</h3><span class="ct">'+cnt(lrows,"ls","late")+' expired · '+cnt(lrows,"ls","soon")+' due soon · '+cnt(lrows,"ls","none")+' no date</span>'+
     (askable.length?'<button class="btn sm pri" data-licall="'+esc(askable.join(","))+'">Message Haylee about '+askable.length+'</button>':'')+'</div>'+
     (L.length?'<div class="appl" style="border:0;border-radius:0;max-height:640px;overflow-y:auto"><table class="t"><thead><tr><th>Home</th><th>License #</th><th>Expires</th><th>Haylee</th></tr></thead><tbody>'+L.map(function(r){ var q=licQ(r.code);
-      return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a></td><td class="mono">'+esc(r.l.no||"—")+'</td><td>'+duePill(r.ls)+(r.l.county?' <span class="note">'+esc(r.l.county)+(r.l.summit?' · renews every Jan 15':'')+'</span>':'')+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':'')+(r.l.notes?'<div class="note">'+esc(r.l.notes)+'</div>':'')+(!r.l.sheet&&(r.l.county||needsLicense(r.code))?'<div class="note">Not on the Dropbox license sheet</div>':'')+'</td><td>'+(q?licAsk(q)+' ':'')+'<button class="btn sm ghost" data-licask="'+esc(r.code)+'">'+(q?'Ask again':'Ask Haylee')+'</button></td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
+      return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a>'+licDocLinks(r.code,1)+'</td><td class="mono">'+esc(r.l.no||"—")+'</td><td>'+duePill(r.ls)+(r.l.county?' <span class="note">'+esc(r.l.county)+(r.l.summit?' · renews every Jan 15':'')+'</span>':'')+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':'')+(r.l.notes?'<div class="note">'+esc(r.l.notes)+'</div>':'')+(!r.l.sheet&&(r.l.county||needsLicense(r.code))?'<div class="note">Not on the Dropbox license sheet</div>':'')+'</td><td>'+(q?licAsk(q)+' ':'')+'<button class="btn sm ghost" data-licask="'+esc(r.code)+'">'+(q?'Ask again':'Ask Haylee')+'</button></td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
     '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept) every morning. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out.</div></section></div>';
   return h; }
 
@@ -2649,7 +2674,14 @@ function licOverview(rows){ var u=S.ui, needs=function(r){ return needsLicense(r
       return '<button class="lcard'+(on?' on':'')+'" data-liccounty="'+esc(c.k)+'"><div class="lh"><b>'+esc(c.k)+'</b><span class="muted">'+c.t.n+' home'+(c.t.n===1?'':'s')+'</span></div>'+bar(c.t)+pills(c.t)+'</button>'; }).join("")+'</div>';
   if(u.licCounty){ var hoods=by(rows.filter(function(r){ return r.county===u.licCounty; }),"hood");
     h+='<div class="sechead" style="margin-top:14px"><h2>'+esc(u.licCounty)+' · neighborhoods</h2><p><a href="#" data-liccounty="">← All counties</a></p></div><div class="lgrid">'+hoods.map(function(n){ var on=u.licHood===n.k;
-      return '<button class="lcard'+(on?' on':'')+'" data-lichood="'+esc(n.k)+'"><div class="lh"><b>'+esc(n.k)+'</b><span class="muted">'+n.t.n+'</span></div>'+bar(n.t)+pills(n.t)+'</button>'; }).join("")+'</div>'; }
+      return '<button class="lcard'+(on?' on':'')+'" data-lichood="'+esc(n.k)+'"><div class="lh"><b>'+esc(n.k)+'</b><span class="muted">'+n.t.n+'</span></div>'+bar(n.t)+pills(n.t)+'</button>'; }).join("")+'</div>';
+    /* click a neighborhood -> its homes (Brandon 2026-10-28) */
+    if(u.licHood){ var hs=rows.filter(function(r){ return r.county===u.licCounty && r.hood===u.licHood; }).sort(function(a,b){ return a.code.localeCompare(b.code,undefined,{numeric:true}); });
+      h+='<div class="sechead" style="margin-top:14px"><h2>'+esc(u.licHood)+' · homes</h2><p><a href="#" data-lichood="'+esc(u.licHood)+'">← All '+esc(u.licCounty)+' neighborhoods</a></p></div><div class="lgrid">'+hs.map(function(r){ var need=needsLicense(r.code);
+        return '<div class="lcard home"><div class="lh"><b>'+esc(r.code)+'</b>'+(need?duePill(r.ls):'<span class="pill mute">No license needed</span>')+'</div>'+
+          (need?'<div class="lrow"><span class="ql">License #</span><b>'+esc(r.l.no||"—")+'</b></div>'+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':''):'')+
+          (r.f.has===true?'<div class="lrow"><span class="ql">Fire system tag</span>'+duePill(r.fs)+'</div>':'')+
+          licDocLinks(r.code,2)+'<div class="lrow"><a href="./#/homes/'+encodeURIComponent(r.code)+'" target="_top" class="muted" style="font-size:12.5px">Open in Property Details →</a></div></div>'; }).join("")+'</div>'; } }
   return h+'<div style="height:14px"></div>'; }
 /* ---- ask Haylee in Slack about a license (single home or all shown) ---- */
 function licLine(code){ var l=licInfo(code), st=dueState(l.exp); return code+(l.no?" (license #"+l.no+")":"")+" — "+(l.pending&&!l.exp?"not licensed yet ("+l.pending+")":(st.k==="none"?"no expiration date on file":st.k==="late"?"expired "+fmtD(l.exp):"expires "+fmtD(l.exp))+(l.pending?"; still pending: "+l.pending:"")); }
@@ -3119,8 +3151,10 @@ document.addEventListener("click",function(ev){
   if(d.licall){ return mLicMsg(d.licall.split(",")); }
   if(d.vmode){ ev.preventDefault(); S.ui.vmode=d.vmode; if(S.tab!=="vendors") return go("vendors"); return render(); }
   if(d.firef){ S.ui.fireF=d.firef; return render(); }
+  if(d.ldoc){ ev.preventDefault(); return openLicDoc(d.ldoc); }
+  if(d.ldocs){ ev.preventDefault(); return mLicDocs(d.ldocs); }
   if(d.liccounty!=null){ ev.preventDefault(); S.ui.licCounty=(S.ui.licCounty===d.liccounty?"":d.liccounty); S.ui.licHood=""; return render(); }
-  if(d.lichood!=null){ S.ui.licHood=(S.ui.licHood===d.lichood?"":d.lichood); render(); var t=document.querySelector(".grid2"); if(t) t.scrollIntoView({behavior:"smooth"}); return; }
+  if(d.lichood!=null){ ev.preventDefault(); S.ui.licHood=(S.ui.licHood===d.lichood?"":d.lichood); render(); var t=S.ui.licHood?document.querySelector(".lcard.home"):null; if(t) t.scrollIntoView({behavior:"smooth",block:"center"}); return; }
   if(d.xo){ S.ui.xo=S.ui.xo||{}; var xk=d.xo;
     if(S.ui.xo[xk]){ delete S.ui.xo[xk]; return render(); }
     /* accordion: opening one closes the others in the same list */
