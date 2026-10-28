@@ -470,7 +470,7 @@ function shell(){
       </nav>
       <div class="foot">
         ${repD ? item("reports", anD ? "Reports & Analytics" : repD.label, repD.icon || "chart") : ""}
-        <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
+        <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a Bug / Upgrade</span></a>
         <div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button id="out">Sign out</button></div>
       </div>
     </aside>
@@ -516,7 +516,7 @@ function shell(){
 /* What page/tab someone is on when they report a bug: hub section + the desk's own tab (and home/vendor if one is open) */
 function whereAmI(){
   const k = current(), d = DESKS.find(x => x.key === k);
-  const base = d ? d.label : ({ feedback:"Bugs & upgrades", reports:"Reports", sync:"Sync", home:"Home", settings:"My settings" })[k] || "Moose Hub";
+  const base = d ? d.label : ({ feedback:"Bugs & Upgrades", reports:"Reports", sync:"Sync", home:"Home", settings:"My settings" })[k] || "Moose Hub";
   const parts = [base]; let page = location.href;
   const f = document.getElementById("deskframe");
   if(f){ try { const w = f.contentWindow, doc = f.contentDocument; page = w.location.pathname.split("/").pop() + w.location.search + w.location.hash;
@@ -539,7 +539,7 @@ function route(){
   document.querySelector(".mgear")?.classList.toggle("on", k === "settings");
   document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
   const v = $("#view"), d = DESKS.find(x => x.key === k);
-  $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & upgrades" : k === "settings" ? "My settings" : "Moose Hub");
+  $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & Upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   if(k === "feedback") return feedbackView(v);
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "reports") return hubReportsView(v);
@@ -553,7 +553,7 @@ function route(){
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
-      <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a bug / upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
+      <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a Bug / Upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
   const arg = hashArg(), sep = d.url.includes("?") ? "&" : "?";
   if(k === "maintenance"){ const to = { projects:"maint_projects", money:"maint_money" }[arg];
     if(to && DESKS.some(x => x.key === to)){ location.replace("#/" + to); return; } }
@@ -603,7 +603,7 @@ function hubSearchSetup(){
     if(e.key === "Escape"){ inp.value = ""; box.classList.remove("on"); } });
 }
 async function feedbackView(v){
-  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Bugs & upgrades</h2><p class="muted">${ME.admin ? "Everything the crew has sent. Change the status as you work them." : "What everyone has reported or asked for, and where it stands. See something you'd like too? Send your own with Report a bug / upgrade."}</p>
+  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Bugs & Upgrades</h2><p class="muted">${ME.admin ? "Everything the crew has sent. Change the status as you work them." : "What everyone has reported or asked for, and where it stands. See something you'd like too? Send your own with Report a Bug / Upgrade."}</p>
     <div class="seg" id="fbf" style="margin:0 0 10px"><button class="btn small on" data-f="all">All</button><button class="btn small" data-f="bug">🐞 Bugs</button><button class="btn small" data-f="upgrade">⬆️ Upgrades</button><button class="btn small" data-f="idea">💡 Ideas</button><button class="btn small" data-f="mine">Mine</button></div><div class="card" id="fblist"><p class="muted">Loading…</p></div></div>`;
   const r = await sb.rpc("hub_feedback_board");
   const box = $("#fblist");
@@ -945,7 +945,7 @@ async function loadMentions(){
   const ago = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 60 ? Math.max(1, m) + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; };
   const head = `<div class="shead"><b style="font-size:17px">🔔 Your Slack mentions</b><span class="muted" style="margin-left:auto">last 5</span></div>`;
   if(r.error || !j){ box.innerHTML = head + `<p class="muted">Couldn't load${r.error ? ": " + esc(r.error.message) : ""}.</p>`; return; }
-  if(!j.linked){ box.innerHTML = head + `<p class="muted">We couldn't match you to a Slack account yet. Tell Brandon with Report a bug / upgrade.</p>`; return; }
+  if(!j.linked){ box.innerHTML = head + `<p class="muted">We couldn't match you to a Slack account yet. Tell Brandon with Report a Bug / Upgrade.</p>`; return; }
   box.innerHTML = head + ((j.items || []).length ? j.items.map(x => `<a class="ment" href="${esc(x.permalink)}" target="_blank" rel="noopener">
       <div class="hd" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px"><b>${esc(x.author || "")}</b><span class="pill">${esc(x.channel_name || "")}</span><span class="muted" style="margin-left:auto">${ago(x.at)}</span></div>
       <div class="mt">${esc(x.body || "")}</div></a>`).join("") : `<p class="muted">No @-mentions in public channels in the last two weeks.</p>`)
