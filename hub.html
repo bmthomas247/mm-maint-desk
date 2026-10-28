@@ -401,6 +401,7 @@ async function boot(){
   if(mD){ DESKS.push({ key:"maint_projects", label:"Maintenance · Projects", icon:mD.icon, url:"desk.html?only=projects", status:"live", sort:mD.sort + 0.1 });
     try { if((await sb.rpc("hub_can", { p_desk:"maint_money" })).data) DESKS.push({ key:"maint_money", label:"Maintenance · Expenses & Time", icon:mD.icon, url:"desk.html?only=money", status:"live", sort:mD.sort + 0.2 }); } catch(e){} }
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
+  PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k);   // Maintenance became a drop-down 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
 }
 function noAccess(err){
