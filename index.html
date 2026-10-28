@@ -300,7 +300,7 @@ function shell(){
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
-                   res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews" } },
+                   res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio" } } };   // Brandon 2026-10-28
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
   const soonTag = `<span class="soon">soon</span>`;
@@ -406,6 +406,7 @@ function route(){
   if(k === "home") return homeView(v);
   if(k === "settings") return settingsView(v);
   if(k === "penny") return pennyView(v);
+  if(d && k === "res_report") return resReportView(v);
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
@@ -685,7 +686,7 @@ async function loadRateFlag(){
   box.innerHTML = `<details class="card acc" open><summary><b style="font-size:17px">🚩 Report an odd reservation rate</b></summary>
     <p class="muted" style="margin:4px 0 8px">See a reservation in Track whose rate looks wrong? Enter the folio number and we'll take a look.</p>
     <label class="field"><span>Track folio number</span><input id="rf_f" inputmode="numeric" placeholder="Example: 123456"></label>
-    <label class="field"><span>What looks off?</span><select id="rf_k"><option value="looks_low">Rate looks too low</option><option value="looks_high">Rate looks too high</option><option value="booked_too_low">Booked for too little</option><option value="other">Something else</option></select></label>
+    <label class="field"><span>What looks off?</span><select id="rf_k"><option value="looks_low">Rate looks too low</option><option value="looks_high">Rate looks too high</option><option value="booked_too_low">Booked for too little</option><option value="other">Other rate problem</option><option value="not_rate">Not a rate problem (guest / stay issue)</option></select></label>
     <label class="field"><span>Note (optional)</span><textarea id="rf_n" style="min-height:60px"></textarea></label>
     <button class="btn primary" id="rf_s">Send</button> <span class="muted" id="rf_m"></span></details>`;
   $("#rf_s").onclick = async () => { const f = $("#rf_f").value.trim(); if(!f) return $("#rf_m").textContent = "Enter the folio number.";
@@ -693,7 +694,43 @@ async function loadRateFlag(){
     const r = await sb.rpc("rates_flag_folio", { p_folio:f, p_kind:$("#rf_k").value, p_note:$("#rf_n").value });
     $("#rf_s").disabled = false;
     if(r.error){ $("#rf_m").textContent = "Couldn't send: " + r.error.message; return; }
-    $("#rf_f").value = ""; $("#rf_n").value = ""; $("#rf_m").textContent = "Sent ✓ Thanks — it's been passed along."; };
+    $("#rf_f").value = ""; $("#rf_n").value = ""; $("#rf_m").textContent = r.data < 0 ? "Sent ✓ That's a guest / stay issue, so it went to the Reservations folio list." : "Sent ✓ Thanks — it's been passed along."; };
+}
+/* Reservations ▸ Report folio (2026-10-28): guest / stay issues by Track folio. "Rate looks wrong" goes to the Rates list instead. */
+const RES_KINDS = [["bad_guest","Bad guest (do not rent again)"],["damage","Damage"],["complaint","Guest complaint"],["noise_party","Noise / party"],["extra_guests_pets","Extra guests or pets"],
+  ["payment","Payment problem"],["cleaning","Cleaning issue"],["maintenance","Maintenance issue"],["other","Other"],["rate_off","Rate looks wrong (goes to Rates)"]];
+const RES_ST = { new:["New","red"], seen:["Seen","blue"], doing:["Working on it","amber"], done:["Done","green"], no_action:["No action",""] };
+async function resReportView(v){
+  const rev = !!(await sb.rpc("hub_can", { p_desk:"res_report_review" })).data;
+  v.innerHTML = `<div class="page"><h2>Report folio</h2><p class="muted">Tell us about a guest or stay problem. Use the Track folio number; add the home if you know it.</p>
+    <div class="card"><label class="field"><span>Track folio number</span><input id="rr_f" inputmode="numeric" placeholder="Example: 320102"></label>
+    <label class="field"><span>Home (optional)</span><input id="rr_u" placeholder="Example: PL 612"></label>
+    <label class="field"><span>What happened?</span><select id="rr_k">${RES_KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+    <label class="field"><span>Details</span><textarea id="rr_n" style="min-height:80px" placeholder="What happened, when, and anything we should do next time"></textarea></label>
+    <button class="btn primary" id="rr_s">Send</button> <span class="muted" id="rr_m"></span></div>
+    <div class="card" id="rr_list"><p class="muted">Loading…</p></div></div>`;
+  const list = async () => {
+    const r = await sb.from("res_folio_reports").select("*").order("id", { ascending:false }).limit(200); const rows = r.data || [];
+    const lab = Object.fromEntries(RES_KINDS);
+    $("#rr_list").innerHTML = `<b style="font-size:17px">${rev ? "Folio reports" : "Your reports"}</b> <span class="muted">${rows.length}${rev ? " · " + rows.filter(x => x.status === "new").length + " new" : ""}</span>` +
+      (rows.length ? rows.map(x => `<div class="fb"><div class="hd" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${x.folio ? "#" + esc(x.folio) : ""}${x.unit ? " · " + esc(x.unit) : ""}</b>
+        <span class="pill">${esc(lab[x.kind] || x.kind)}</span><span class="pill ${RES_ST[x.status][1]}">${RES_ST[x.status][0]}</span>${x.from_form === "rates" ? `<span class="pill">from Rates form</span>` : ""}
+        <span class="muted" style="margin-left:auto">${rev ? esc(x.reporter_name || "") + " · " : ""}${new Date(x.created_at).toLocaleString()}</span></div>
+        <p style="white-space:pre-wrap;margin:6px 0">${esc(x.note)}</p>${x.handle_note || x.handled_by ? `<p class="muted" style="margin:0">${esc(x.handled_by || "")}${x.handle_note ? ": " + esc(x.handle_note) : ""}</p>` : ""}
+        ${rev ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center"><input data-rn="${x.id}" placeholder="Note (optional)" style="flex:1;min-width:160px;min-height:0;padding:6px 8px">${Object.entries(RES_ST).filter(([k]) => k !== x.status).map(([k, [l]]) => `<button class="btn small" data-rs="${x.id}" data-st="${k}">${l}</button>`).join("")}</div>` : ""}</div>`).join("")
+      : `<p class="muted">No reports yet.</p>`);
+    $("#rr_list").querySelectorAll("[data-rs]").forEach(b => b.onclick = async () => { const inp = $("#rr_list").querySelector(`[data-rn="${b.dataset.rs}"]`);
+      const r2 = await sb.rpc("res_report_set", { p_id:+b.dataset.rs, p_status:b.dataset.st, p_note:inp ? inp.value : "" }); if(r2.error){ b.textContent = "Couldn't save"; return; } list(); });
+  };
+  $("#rr_s").onclick = async () => { const f = $("#rr_f").value.trim(), u = $("#rr_u").value.trim();
+    if(!f && !u) return $("#rr_m").textContent = "Enter the folio number (or the home).";
+    $("#rr_s").disabled = true; $("#rr_m").textContent = "Sending…";
+    const r = await sb.rpc("res_report_folio", { p_folio:f, p_unit:u, p_kind:$("#rr_k").value, p_note:$("#rr_n").value }); $("#rr_s").disabled = false;
+    if(r.error){ $("#rr_m").textContent = "Couldn't send: " + r.error.message; return; }
+    $("#rr_f").value = $("#rr_u").value = $("#rr_n").value = "";
+    $("#rr_m").textContent = r.data && r.data.list === "rates" ? "Sent ✓ That's a rate question, so it went to the Rates folio list." : "Sent ✓ Thanks — a manager will look at it.";
+    list(); };
+  list();
 }
 /* Birthdays (2026-10-28): on the day, the week of (Mon-Sun), and the whole month during its first 7 days */
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
