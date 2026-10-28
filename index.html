@@ -397,7 +397,7 @@ function route(){
   $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   if(k === "feedback") return feedbackView(v);
   if(k === "reports") return hubReportsView(v);
-  if(k === "sync") return syncView(v, hashArg());
+  if(k === "sync"){ const a = hashArg(); return a === "recent" || a === "errors" ? syncReport(v, a) : syncView(v, a); }
   if(k === "home") return homeView(v);
   if(k === "settings") return settingsView(v);
   if(k === "penny") return pennyView(v);
@@ -492,7 +492,7 @@ async function loadStays(){
     ${sect("Check-ins today", ciT, "No check-ins today.")}
     ${sect("Check-ins tomorrow", ciM, "No check-ins tomorrow.")}
     ${sect("Check-outs today & tomorrow", co, "No check-outs.")}
-    <p class="muted" style="font-size:12px;margin:10px 0 0">Next 14 days: homes with a stay that night (<i class="g"></i> guest · <i class="o"></i> owner). ${j.names ? "" : "Guest names show for office staff only. "}Source: Track reservations${j.updated ? ", pulled " + new Date(j.updated).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : ""}; leases and cancelled stays left out.</p>`;
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Next 14 days: homes with a stay that night (<i class="g"></i> guest · <i class="o"></i> owner). Source: Track reservations${j.updated ? ", pulled " + new Date(j.updated).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : ""}; leases and cancelled stays left out.</p>`;
   box.querySelectorAll("details.acc2").forEach(d => d.addEventListener("toggle", () => { if(d.open) box.querySelectorAll("details.acc2").forEach(o => { if(o !== d) o.open = false; }); }));
 }
 /* Daily pick: same quote / joke / fact for everyone each day; "Another" shuffles. Quotes are attributed; facts carry their source. */
@@ -743,7 +743,7 @@ async function hubReportsView(v){
   if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
   const name = k => k === "home" ? "Hub" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
-  const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers + admins only" };
+  const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = sb ? sb[0] : x.desk_key; (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => name(a).localeCompare(name(b)));
   const link = x => x.status === "live"
@@ -763,14 +763,39 @@ async function hubReportsView(v){
       st.textContent = `header.top .deskbtn{display:none!important}`; f.contentDocument.head.appendChild(st); } catch(e){} });
   });
 }
+/* Reports > Sync (Brandon 2026-10-28): Manual sync (#/sync), Recent sync report (#/sync/recent), Error report (#/sync/errors) */
+async function syncReport(v, kind){
+  const ago = t => { if(!t) return "never"; const m = Math.round((Date.now() - new Date(t)) / 60000);
+    return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m/60) + " h ago" : Math.round(m/1440) + " days ago"; };
+  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a> · <a href="#/sync">Manual sync</a></p><h2>${kind === "errors" ? "Error report" : "Recent sync report"}</h2>
+    <p class="muted">${kind === "errors" ? "Data sources with a problem on their last run, or that haven't synced in over a day." : "When each data source last synced, newest first, and the syncs people started by hand."}</p><div id="srep"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
+  const [s, q] = await Promise.all([ sb.from("hub_sync_sources").select("*"), sb.from("hub_sync_requests").select("*").order("id", { ascending:false }).limit(40) ]);
+  if(s.error) return $("#srep").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(s.error.message)}</p></div>`;
+  const src = s.data || [], label = k => k ? ((src.find(x => x.key === k) || {}).label || k) : "Every data source";
+  const stale = x => !x.last_ok_at || (Date.now() - new Date(x.last_ok_at)) / 36e5 > 26;
+  const row = x => { const bad = x.last_status === "error", old = stale(x);
+    return `<div class="fb"><div class="hd"><b>${esc(x.label)}</b><span class="pill ${bad ? "red" : old ? "amber" : "green"}">${bad ? "error" : old ? "no sync in " + ago(x.last_ok_at).replace(" ago","") : "ok · " + ago(x.last_ok_at)}</span>
+      <a class="btn small" style="margin-left:auto" href="#/sync/${esc(x.key)}">Open</a></div>
+      ${x.feeds ? `<p style="margin:6px 0 0"><span class="muted">Feeds:</span> ${esc(x.feeds)}</p>` : ""}
+      <p class="muted" style="margin:4px 0 0">Last run ${ago(x.last_run_at)} · ${esc(x.schedule || "")}</p>${x.last_detail ? `<p class="muted" style="margin:4px 0 0;font-size:12.5px">${esc(x.last_detail)}</p>` : ""}</div>`; };
+  if(kind === "errors"){
+    const list = src.filter(x => x.last_status === "error" || (x.can_run && stale(x))).sort((a, b) => a.label.localeCompare(b.label));
+    const failed = (q.data || []).filter(r => /problem|fail|declined/i.test(r.result || ""));
+    $("#srep").innerHTML = `<div class="card">${list.length ? list.map(row).join("") : `<p class="muted">No problems — every data source synced in the last day. ✅</p>`}</div>` +
+      (failed.length ? `<div class="card"><b style="font-size:17px">Hand-started syncs with problems</b>${failed.map(r => `<div class="fb"><div class="hd"><b>${esc(label(r.source_key))}</b><span class="muted">${esc(r.requested_by || "")} · ${ago(r.requested_at)}</span></div><p class="muted">${esc(r.result || "")}</p></div>`).join("")}</div>` : "");
+  } else {
+    const list = src.slice().sort((a, b) => new Date(b.last_run_at || 0) - new Date(a.last_run_at || 0));
+    $("#srep").innerHTML = `<div class="card">${list.map(row).join("")}</div>` + ((q.data || []).length ? `<div class="card"><b style="font-size:17px">Started by hand</b>${(q.data || []).slice(0, 20).map(r => `<div class="fb"><div class="hd"><b>${esc(label(r.source_key))}</b><span class="pill ${r.status === "declined" ? "red" : r.status === "needs_approval" ? "amber" : r.done_at ? "green" : "blue"}">${r.status === "declined" ? "declined" : r.status === "needs_approval" ? "waiting" : r.done_at ? "done" : "running"}</span><span class="muted">${esc(r.requested_by || "")} · ${ago(r.requested_at)}</span></div>${r.result ? `<p class="muted">${esc(r.result)}</p>` : ""}</div>`).join("")}</div>` : "");
+  }
+}
 async function syncView(v, only){
   /* Reports + Sync together (Brandon 2026-10-28). Admins run anything and approve. Managers (sync_status) run free syncs;
      big data pulls (Breezeway + Hubstaff, "everything") and paid ones go to Brandon/Kim to approve (Slack DM). One source: #/sync/<key> */
   const A = !!ME.admin;
-  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a>${only ? ` · <a href="#/sync">All sources</a>` : ""}</p><h2>${only ? "Last sync" : "Sync"}</h2>
-    <p class="muted">Every data source A–Z: when it last synced and what it feeds. ${A ? "You can run anything." : "Free syncs run right away. Big data pulls and paid sources go to Brandon or Kim to approve."}</p>
+  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a>${only ? ` · <a href="#/sync">All sources</a>` : ""}</p><h2>${only ? "Last sync" : "Manual sync"}</h2>
+    <p class="muted">Pick what to sync. Each data source shows when it last synced and what it feeds.${A ? "" : " Big data pulls go to Brandon or Kim to approve first."}</p>
     <div id="approvals"></div>
-    ${!only ? `<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncall">${A ? "Sync everything now" : "Ask to sync everything"}</button>${A ? "" : `<span class="pill amber">needs admin OK</span>`}<span class="muted" id="syncmsg"></span></div></div>` : `<span id="syncmsg" hidden></span>`}
+    ${!only ? `<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncall">${A ? "Sync everything now" : "Ask to sync everything"}</button>${A ? "" : `<span class="pill amber">needs approval</span>`}<span class="muted" id="syncmsg"></span></div></div>` : `<span id="syncmsg" hidden></span>`}
     <div class="card" id="srcs"><p class="muted">Loading…</p></div></div>`;
   const ago = t => { if(!t) return "no report yet"; const m = Math.round((Date.now() - new Date(t)) / 60000);
     return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m/60) + " h ago" : Math.round(m/1440) + " days ago"; };
@@ -786,9 +811,9 @@ async function syncView(v, only){
   const rows = s.data.slice().filter(x => !only || x.key === only).sort((a, b) => a.label.localeCompare(b.label));
   if(!rows.length) return $("#srcs").innerHTML = `<p class="muted">No report for that source.</p>`;
   const btn = x => { if(!x.can_run) return `<span class="muted" style="margin-left:auto">runs on its own${x.cost === "paid" ? " · costs money" : ""}</span>`;
-    const r = lastFor(x.key); if(r && r.status === "needs_approval") return `<span class="pill amber" style="margin-left:auto">waiting for admin OK</span>`;
+    const r = lastFor(x.key); if(r && r.status === "needs_approval") return `<span class="pill amber" style="margin-left:auto">waiting for approval</span>`;
     return A || x.cost === "free" ? `<button class="btn small" style="margin-left:auto" data-sync="${esc(x.key)}">Sync now</button>`
-      : `<span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="pill amber">${COST[x.cost]} · needs admin OK</span><button class="btn small" data-sync="${esc(x.key)}">Ask to sync</button></span>`; };
+      : `<span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="pill amber">${COST[x.cost]} · needs approval</span><button class="btn small" data-sync="${esc(x.key)}">Ask to sync</button></span>`; };
   $("#srcs").innerHTML = rows.map(x => { const age = x.last_ok_at ? (Date.now() - new Date(x.last_ok_at)) / 36e5 : null;
       const tone = x.last_status === "error" ? "red" : age == null ? "" : age < 6 ? "green" : age < 26 ? "amber" : "red", r = lastFor(x.key);
       const state = r ? (r.status === "declined" ? "Last ask declined" + (r.approved_by ? " by " + r.approved_by : "") : r.done_at ? "Last run from here " + ago(r.done_at) + (r.result ? " - " + r.result : "") : r.status === "needs_approval" ? "Asked by " + (r.requested_by || "") + " " + ago(r.requested_at) : "Asked " + ago(r.requested_at) + " - waiting for the ThinkStation") : "";
