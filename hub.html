@@ -709,23 +709,32 @@ async function hubReportsView(v){
   });
 }
 async function syncView(v){
-  v.innerHTML = `<div class="page"><h2>Sync</h2><p class="muted">Admins only. Last run of every data source, and one button to pull everything now.</p>
+  v.innerHTML = `<div class="page"><h2>Sync</h2><p class="muted">Admins only. Every data source A–Z: when it last ran, what it feeds, and a button to run just that one.</p>
     <div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncall">Sync everything now</button><span class="muted" id="syncmsg"></span></div></div>
     <div class="card" id="srcs"><p class="muted">Loading…</p></div></div>`;
   const ago = t => { if(!t) return "no report yet"; const m = Math.round((Date.now() - new Date(t)) / 60000);
     return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m/60) + " h ago" : Math.round(m/1440) + " days ago"; };
-  const [s, q] = await Promise.all([ sb.from("hub_sync_sources").select("*").order("sort"),
-    sb.from("hub_sync_requests").select("*").order("id", { ascending:false }).limit(1) ]);
+  const [s, q] = await Promise.all([ sb.from("hub_sync_sources").select("*").order("label"),
+    sb.from("hub_sync_requests").select("*").order("id", { ascending:false }).limit(40) ]);
   if(s.error) return $("#srcs").innerHTML = `<p class="muted">Couldn't load: ${esc(s.error.message)}</p>`;
-  $("#srcs").innerHTML = s.data.map(x => { const age = x.last_ok_at ? (Date.now() - new Date(x.last_ok_at)) / 36e5 : null;
-      const tone = x.last_status === "error" ? "red" : age == null ? "" : age < 6 ? "green" : age < 26 ? "amber" : "red";
+  const reqs = q.data || [], lastFor = k => reqs.find(r => (r.source_key || null) === k);
+  const rows = s.data.slice().sort((a, b) => a.label.localeCompare(b.label));
+  $("#srcs").innerHTML = rows.map(x => { const age = x.last_ok_at ? (Date.now() - new Date(x.last_ok_at)) / 36e5 : null;
+      const tone = x.last_status === "error" ? "red" : age == null ? "" : age < 6 ? "green" : age < 26 ? "amber" : "red", r = lastFor(x.key);
+      const state = r ? (r.done_at ? "Last run from here " + ago(r.done_at) + (r.result ? " - " + r.result : "") : "Asked " + ago(r.requested_at) + " - waiting for the ThinkStation") : "";
       return `<div class="fb"><div class="hd"><b>${esc(x.label)}</b><span class="pill ${tone}">${x.last_status === "error" ? "error" : ago(x.last_ok_at)}</span>
-        <span class="muted" style="margin-left:auto">${esc(x.runs_on||"")} · ${esc(x.schedule||"")}</span></div>${x.last_detail ? `<p class="muted">${esc(x.last_detail)}</p>` : ""}</div>`; }).join("");
-  const last = (q.data||[])[0];
-  if(last) $("#syncmsg").textContent = last.done_at ? "Last full sync finished " + ago(last.done_at) + (last.result ? " - " + last.result : "") : "Full sync asked " + ago(last.requested_at) + " - waiting for the ThinkStation to pick it up.";
-  $("#syncall").onclick = async () => { $("#syncall").disabled = true; const r = await sb.rpc("hub_sync_request");
+        ${x.can_run ? `<button class="btn small" style="margin-left:auto" data-sync="${esc(x.key)}">Sync now</button>` : `<span class="muted" style="margin-left:auto">runs on its own</span>`}</div>
+        ${x.feeds ? `<p style="margin:6px 0 0"><span class="muted">Feeds:</span> ${esc(x.feeds)}</p>` : ""}
+        <p class="muted" style="margin:4px 0 0">${esc(x.runs_on||"")} · ${esc(x.schedule||"")}${state ? " · " + esc(state) : ""}</p>
+        ${x.last_detail ? `<p class="muted" style="margin:4px 0 0;font-size:12.5px">${esc(x.last_detail)}</p>` : ""}</div>`; }).join("");
+  const all = lastFor(null);
+  if(all) $("#syncmsg").textContent = all.done_at ? "Last full sync finished " + ago(all.done_at) + (all.result ? " - " + all.result : "") : "Full sync asked " + ago(all.requested_at) + " - waiting for the ThinkStation to pick it up.";
+  $("#syncall").onclick = async () => { $("#syncall").disabled = true; const r = await sb.rpc("hub_sync_request", { p_key:null });
     $("#syncmsg").textContent = r.error ? "Couldn't ask: " + r.error.message : "Asked. The ThinkStation will run every sync and update this list.";
     setTimeout(() => { $("#syncall").disabled = false; }, 4000); };
+  $("#srcs").querySelectorAll("[data-sync]").forEach(b => b.onclick = async () => { b.disabled = true; b.textContent = "Asking…";
+    const r = await sb.rpc("hub_sync_request", { p_key:b.dataset.sync });
+    b.textContent = r.error ? "Couldn't ask" : "Asked ✓"; if(r.error) b.title = r.error.message; setTimeout(() => syncView(v), 2500); });
 }
 window.addEventListener("hashchange", route);
 sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { ME = null; loginView(); } });
