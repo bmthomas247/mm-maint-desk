@@ -111,10 +111,19 @@ window.MM_LIC = function(A){
           '<td>'+(n.fire_needed === "yes" ? 'Yes' : n.fire_needed === "no" ? 'No' : '<span class="muted">not sure</span>')+'</td><td>'+esc(n.notes || "")+'<div class="note">Added by '+esc(n.added_by || "?")+'</div></td>'+
           '<td style="white-space:nowrap"><button class="btn sm ghost" data-newedit="'+esc(n.id)+'">Edit</button> <button class="btn sm ghost" data-newoff="'+esc(n.id)+'" title="Take it off this list (kept, not deleted)">Done</button></td></tr>'; }).join("")+'</tbody></table></div>'
         : '<div class="empty">No homes in set up on the list.</div>')+
+      sheetOnly(mc)+
       (fresh.length ? '<div class="pad"><div class="lbl">New in Track (last '+NEW_DAYS+' days)</div><div class="lgrid">'+fresh.map(function(t){ var l = A.licInfo(t.code);
         return '<div class="lcard home"><div class="lh"><b>'+esc(t.code)+'</b>'+A.duePill(A.licState(l))+'</div><div class="note">Added to Track '+esc(A.fmtD(t.track_created))+(t.community ? ' · '+esc(t.community) : '')+'</div>'+
           '<div class="lrow"><span class="ql">License #</span><b>'+esc(l.no || "—")+'</b></div></div>'; }).join("")+'</div></div>' : '')+'</section><div style="height:14px"></div>';
     return h; }
+  /* homes on Haylee's license sheets that aren't on (or are turned off) in Track: often a home still being set up (licenses_sync.py trackActive) */
+  function sheetOnly(skip){ var f = (S.feeds.licenses || {}).homes || {};
+    var hs = Object.keys(f).filter(function(c){ return f[c].trackActive === false && !skip[c] && !skip[f[c].sheetCode]; }).sort(function(a, b){ return a.localeCompare(b, undefined, { numeric:true }); });
+    if(!hs.length) return "";
+    return '<div class="pad"><div class="lbl">On a license sheet, not active in Track ('+hs.length+')</div><div class="note">Still being set up, or a home that left. Read from Haylee\'s Dropbox sheets.</div><div class="lgrid">'+hs.map(function(c){ var h = f[c], ex = h.lic.filter(function(e){ return e.exp; }).map(function(e){ return e.exp; }).sort()[0] || "",
+        notes = h.lic.map(function(e){ return e.note; }).filter(Boolean).join(" · ");
+      return '<div class="lcard home"><div class="lh"><b>'+esc(h.sheetCode || c)+'</b>'+A.duePill(A.dueState(ex))+'</div><div class="note">'+esc(h.county || "")+(h.sheetCode ? ' · Track: '+esc(c)+' (off)' : ' · off in Track')+'</div>'+
+        (notes ? '<div class="note">'+esc(notes)+'</div>' : '')+'</div>'; }).join("")+'</div></div>'; }
   function mNew(id){ var n = S.licNew.filter(function(x){ return x.id === id; })[0] || { step:"setup" };
     A.openModal(id ? "New property · "+n.code : "Add a home in set up", '<div class="fields">'+A.fld("nh_code", "Home code (as it will be in Track)", n.code, "text", 'placeholder="PL 218"')+A.fld("nh_addr", "Address", n.address)+
       A.sel("nh_county", "County", [["","Not sure"],["Park City","Park City"],["Summit","Summit"],["Wasatch","Wasatch"],["Other","Other"]], n.county || "")+A.sel("nh_step", "Step", STEPS, n.step)+
