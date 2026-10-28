@@ -521,7 +521,7 @@ async function loadStays(pick){
   const S = j.stays || [];
   const row = x => `<div class="srow"><b class="su">${esc(x.unit)}</b><span class="pill ${x.owner ? "blue" : "green"}">${x.owner ? "Owner" : "Guest"}</span>${x.turn ? `<span class="pill amber">Same-day turn</span>` : ""}
       <span class="muted">${md(x.in)} → ${md(x.out)} · ${x.nights} night${x.nights === 1 ? "" : "s"}${x.status && x.status !== "Confirmed" ? " · " + esc(x.status) : ""}</span>
-      ${j.names && x.guest ? `<span class="sg">${esc(x.guest)}${x.res ? ` <span class="muted">· #${esc(x.res)}</span>` : ""}${x.type ? ` <span class="muted">· ${esc(x.type)}</span>` : ""}</span>` : ""}
+      ${j.names && x.guest ? `<span class="sg">${esc(x.guest)}${x.res ? ` <span class="muted">· <a href="https://moosemanagement.trackhs.com/pms/guest-folio/view/?id=${encodeURIComponent(x.res)}" target="_blank" rel="noopener" title="Open this stay's folio in Track">#${esc(x.res)} ↗</a></span>` : ""}${x.type ? ` <span class="muted">· ${esc(x.type)}</span>` : ""}</span>` : ""}
       ${x.phone || x.email ? `<span class="sg">${x.phone ? `📞 <a href="tel:${esc(x.phone.replace(/[^0-9+]/g, ""))}"><b>${esc(x.phone)}</b></a>` : ""}${x.phone && x.email ? " · " : ""}${x.email ? `✉️ <a href="mailto:${esc(x.email)}"><b>${esc(x.email)}</b></a>` : ""}</span>` : ""}</div>`;
   const sect = (title, list, empty) => `<details class="acc2" name="ciacc"><summary><b>${title}</b><span class="pill ${list.length ? "green" : ""}">${list.length}</span></summary>
       ${list.length ? list.map(row).join("") : `<p class="muted" style="margin:6px 0 0">${empty}</p>`}</details>`;
