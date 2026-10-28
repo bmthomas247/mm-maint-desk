@@ -1057,7 +1057,7 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
   var wifi=pe.wifiName||pe.wifiPass?{v:(pe.wifiName?"Network: "+pe.wifiName:"")+(pe.wifiPass?(pe.wifiName?"\n":"")+"Password: "+pe.wifiPass:""),s:"Edited in the hub"}:asana(/^(wifi|wi-fi|stay[- ]?fi)/i);
   var entry=pick(pe.lockoutCode,/^lockout info/i), garage=pick(pe.garageCode,/^parking\/? ?garage info$|^parking$/i), closet=pick(pe.ownerCloset,/^owner closet info$/i);
-  var own='<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'<div class="muted">Owner contact isn\'t shared with your team.</div>':
+  var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi")+qCard("Entry / owner lockout codes",entry.v,entry.s,"codes")+qCard("Garage / parking",garage.v,garage.s,"codes")+qCard("Owner closet",closet.v,closet.s,"codes")+
