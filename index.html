@@ -169,6 +169,29 @@ details.acc[open]>summary{margin-bottom:6px}
 .fb{border-top:1px solid var(--line);padding:12px 0}.fb:first-child{border-top:0}
 .fb .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 .fb p{margin:6px 0 0;white-space:pre-wrap}
+/* Ask Penny (2026-10-28): helper button bottom-right on every page, chat panel, hello bubble on Home */
+#pennyBtn{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;align-items:center;gap:8px;border:0;cursor:pointer;
+  background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;border-radius:999px;padding:8px 16px 8px 8px;font:inherit;font-weight:800;font-size:15px;box-shadow:0 6px 20px rgba(20,40,25,.3)}
+#pennyBtn .pav,.pmsg .pav{width:38px;height:38px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-size:20px;flex:none}
+#pennyBtn:hover{filter:brightness(1.08)}
+#pennyHi{position:fixed;right:18px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:50;max-width:300px;background:var(--card);border:1px solid var(--line);border-radius:18px 18px 4px 18px;box-shadow:var(--shadow);padding:12px 14px;font-size:15px;display:none}
+#pennyHi.on{display:block} #pennyHi b{display:block;margin-bottom:4px} #pennyHi .x{position:absolute;top:6px;right:8px;border:0;background:none;cursor:pointer;color:var(--muted);font-size:14px}
+#pennyHi .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} #pennyHi .chips button{border:1px solid var(--line-2);background:var(--card);border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+#pennyBox{position:fixed;right:18px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:51;width:min(400px,calc(100vw - 24px));height:min(560px,calc(100dvh - 110px));background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 12px 40px rgba(20,40,25,.28);display:none;flex-direction:column;overflow:hidden}
+#pennyBox.on{display:flex}
+#pennyBox .ph{display:flex;align-items:center;gap:10px;padding:10px 12px;background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff}
+#pennyBox .ph b{flex:1;font-size:16px} #pennyBox .ph small{display:block;font-weight:600;opacity:.8;font-size:12px}
+#pennyBox .ph button{border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:5px 10px;font:inherit;font-weight:800;cursor:pointer}
+#pennyLog{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--ground)}
+.pmsg{display:flex;gap:8px;align-items:flex-start} .pmsg .pav{width:28px;height:28px;font-size:15px}
+.pmsg .bub{background:var(--card);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:9px 12px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;max-width:85%}
+.pmsg.me{justify-content:flex-end} .pmsg.me .bub{background:var(--moose-soft);border-color:transparent;border-radius:14px 4px 14px 14px}
+.pmsg .fbk{display:flex;gap:4px;margin-top:4px} .pmsg .fbk button{border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;font-size:13px;padding:2px 7px}
+.pmsg .fbk button.on{background:var(--moose-soft);border-color:var(--moose)}
+#pennyForm{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--card)}
+#pennyForm textarea{min-height:44px;height:44px;resize:none;font-size:15px;padding:10px 12px}
+@media (max-width:820px){ #pennyBtn .plb{display:none} #pennyBtn{padding:8px} }
+
 /* Reports index, Track-style columns (2026-10-28) */
 .page.wide{max-width:1240px}
 .rpgrid{columns:4 250px;column-gap:14px}
@@ -224,6 +247,7 @@ let ME = null, DESKS = [], PREFS = { desk_order:[], interests:[], kinds:[] };
 
 /* ---------- sign in (same accounts as Moose Locks and the Maintenance site) */
 function loginView(msg){
+  document.querySelectorAll("#pennyBtn,#pennyHi,#pennyBox").forEach(e => e.remove());
   app.innerHTML = `<div class="login"><div class="logo"><img src="moose-logo.png" alt="Moose Management"></div><h2>Moose Hub</h2>
     <p class="muted">Same sign-in as Moose Locks.</p>
     <label class="field"><span>Email</span><input type="email" id="em" autocomplete="username"></label>
@@ -256,7 +280,7 @@ async function boot(){
   ME = me.data; ME.canNews = !!(await sb.rpc("hub_can_post_news")).data;
   const d = await sb.rpc("hub_my_desks"); DESKS = d.data || [];
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
-  shell(); route();
+  shell(); pennyMount(); route();
 }
 function noAccess(err){
   app.innerHTML = `<div class="login"><div class="logo"><img src="moose-logo.png" alt=""></div><h2>No hub access yet</h2>
@@ -373,6 +397,7 @@ function route(){
   if(k === "sync") return syncView(v, hashArg());
   if(k === "home") return homeView(v);
   if(k === "settings") return settingsView(v);
+  if(k === "penny") return pennyView(v);
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a bug / upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
@@ -674,7 +699,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
-  loadStays(); dailyPick(0); loadMentions(); loadBirthdays();
+  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello();
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
@@ -776,6 +801,77 @@ async function syncView(v, only){
   $("#srcs").querySelectorAll("[data-sync]").forEach(b => b.onclick = async () => { b.disabled = true; b.textContent = "Asking…"; const m = await ask(b.dataset.sync); b.textContent = /approve/.test(m) ? "Sent for OK" : /Couldn't/.test(m) ? "Couldn't ask" : "Asked ✓"; b.title = m; setTimeout(() => syncView(v, only), 2500); });
   v.querySelectorAll("[data-ok],[data-no]").forEach(b => b.onclick = async () => { b.disabled = true;
     const r = await sb.rpc("hub_sync_approve", { p_id:+(b.dataset.ok || b.dataset.no), p_ok:!!b.dataset.ok }); if(r.error) b.textContent = "Error"; else syncView(v, only); });
+}
+
+/* ---------- Ask Penny: the Moose Hub helper (Edge Function `penny`; answers from penny_kb, logged in penny_chats) */
+const PENNY = { hist:[], open:false };
+function pennyMount(){
+  if($("#pennyBtn")) return;
+  document.body.insertAdjacentHTML("beforeend", `<button id="pennyBtn" aria-label="Ask Penny"><span class="pav">🦌</span><span class="plb">Ask Penny</span></button>
+    <div id="pennyHi" role="status"><button class="x" aria-label="Close">✕</button><b>Hi ${esc((ME.name||"").split(" ")[0])}! I'm Penny 👋</b>What can I help you with today?
+      <div class="chips"><button>How do I add a property?</button><button>How do I find a vendor?</button><button>How do I report a bug?</button></div></div>
+    <div id="pennyBox" role="dialog" aria-label="Ask Penny"><div class="ph"><span class="pav" style="width:34px;height:34px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-size:18px">🦌</span>
+      <b>Ask Penny<small>Your Moose Hub helper</small></b><button id="pennyClose" aria-label="Close">✕</button></div>
+      <div id="pennyLog"></div>
+      <form id="pennyForm"><textarea id="pennyQ" placeholder="Ask how to do something…" aria-label="Your question"></textarea><button class="btn primary small" style="min-height:44px">Ask</button></form></div>`);
+  $("#pennyBtn").onclick = () => pennyOpen(!PENNY.open);
+  $("#pennyClose").onclick = () => pennyOpen(false);
+  $("#pennyHi .x").onclick = () => $("#pennyHi").classList.remove("on");
+  $("#pennyHi").querySelectorAll(".chips button").forEach(b => b.onclick = () => { pennyOpen(true); pennyAsk(b.textContent); });
+  $("#pennyForm").onsubmit = e => { e.preventDefault(); const q = $("#pennyQ").value.trim(); if(q){ $("#pennyQ").value = ""; pennyAsk(q); } };
+  $("#pennyQ").addEventListener("keydown", e => { if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); $("#pennyForm").requestSubmit(); } });
+  document.addEventListener("keydown", e => { if(e.key === "Escape" && PENNY.open) pennyOpen(false); });
+}
+function pennyOpen(on){
+  PENNY.open = on; $("#pennyBox").classList.toggle("on", on); $("#pennyHi").classList.remove("on");
+  if(on && !$("#pennyLog").children.length) pennySay("assistant", `Hi ${(ME.name||"").split(" ")[0]}! What can I help you with today? Ask me how to do anything in the Moose Hub.`);
+  if(on) setTimeout(() => $("#pennyQ").focus(), 50);
+}
+function pennySay(role, text, id){
+  const el = document.createElement("div"); el.className = "pmsg" + (role === "user" ? " me" : "");
+  el.innerHTML = role === "user" ? `<div class="bub">${esc(text)}</div>` : `<span class="pav">🦌</span><div><div class="bub">${esc(text)}</div>${id ? `<div class="fbk"><button data-h="1" title="Helpful">👍</button><button data-h="0" title="Not helpful">👎</button></div>` : ""}</div>`;
+  $("#pennyLog").appendChild(el); $("#pennyLog").scrollTop = 1e9;
+  el.querySelectorAll("[data-h]").forEach(b => b.onclick = async () => { el.querySelectorAll("[data-h]").forEach(x => x.classList.toggle("on", x === b));
+    await sb.rpc("penny_feedback", { p_id:id, p_helpful:b.dataset.h === "1", p_note:null }); });
+  return el;
+}
+async function pennyAsk(q){
+  pennySay("user", q); const wait = pennySay("assistant", "Thinking…");
+  const where = (typeof whereAmI === "function" ? whereAmI().label : "") || location.hash;
+  const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, history:PENNY.hist } });
+  wait.remove();
+  const d = r.data || {}; const a = d.ok ? d.answer : (d.error || (r.error && r.error.message) || "Penny couldn't answer right now.");
+  pennySay("assistant", a, d.id); PENNY.hist.push({ role:"user", text:q }, { role:"assistant", text:a }); PENNY.hist = PENNY.hist.slice(-8);
+}
+function pennyHello(){ // Home: Penny pops up once a day asking what she can help with
+  const k = "penny_hi_" + new Date().toDateString(); let seen = null; try { seen = localStorage.getItem(k); } catch(e){}
+  if(seen || PENNY.open) return; setTimeout(() => { if(current() === "home" && !PENNY.open) $("#pennyHi").classList.add("on"); }, 900);
+  try { localStorage.setItem(k, "1"); } catch(e){}
+}
+/* admins: what staff asked Penny + edit what she knows (#/penny) */
+async function pennyView(v){
+  if(!ME.admin){ v.innerHTML = `<div class="page"><div class="card"><p class="muted">Only Brandon or Kim can see Penny's log.</p></div></div>`; return; }
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Below: the how-to notes she answers from — edit them to fix an answer.</p>
+    <div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
+  const [c, k] = await Promise.all([ sb.from("penny_chats").select("*").order("id", { ascending:false }).limit(200), sb.from("penny_kb").select("*").order("topic") ]);
+  const rows = c.data || [], tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
+  $("#plog").innerHTML = `<b style="font-size:17px">Questions</b> <span class="muted">${rows.length} shown · $${tot.toFixed(2)} · 👍 ${rows.filter(x => x.helpful === true).length} · 👎 ${rows.filter(x => x.helpful === false).length}</span>` +
+    (rows.length ? rows.map(x => `<div class="fb"><div class="hd"><b>${esc(x.user_name || "")}</b><span class="muted">${new Date(x.created_at).toLocaleString()} · ${esc(x.page || "")}</span>${x.helpful === true ? `<span class="pill green">👍</span>` : x.helpful === false ? `<span class="pill red">👎</span>` : ""}<span class="muted" style="margin-left:auto">$${(+x.cost_usd || 0).toFixed(4)}</span></div>
+      <p><b>Q:</b> ${esc(x.question)}</p><p class="muted"><b>Penny:</b> ${esc(x.answer || "")}</p></div>`).join("") : `<p class="muted">No questions yet.</p>`);
+  const kb = k.data || [];
+  $("#pkb").innerHTML = `<div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">What Penny knows</b><span class="muted">${kb.length} notes</span><button class="btn small" id="pkbnew" style="margin-left:auto">+ Note</button></div><div id="pkbform"></div>` +
+    kb.map((x, i) => `<details class="acc2"><summary><b>${esc(x.topic)}</b>${x.desk_key ? `<span class="pill">${esc(x.desk_key)} only</span>` : ""}${x.active ? "" : `<span class="pill amber">off</span>`}</summary>
+      <p style="white-space:pre-wrap">${esc(x.body)}</p><p class="muted" style="font-size:12px">${esc(x.source || "")}${x.updated_by ? " · edited by " + esc(x.updated_by) : ""}</p><button class="btn small" data-pkb="${i}">Edit</button></details>`).join("");
+  const form = x => { $("#pkbform").innerHTML = `<div class="card" style="margin-top:10px"><label class="field"><span>Topic</span><input id="pk_t" value="${esc(x.topic || "")}"></label>
+      <label class="field"><span>What Penny should know (plain steps, no codes or passwords)</span><textarea id="pk_b">${esc(x.body || "")}</textarea></label>
+      <label class="field"><span>Only for people who can open this desk (blank = everyone)</span><select id="pk_d"><option value="">Everyone</option>${DESKS.map(d => `<option value="${esc(d.key)}" ${x.desk_key === d.key ? "selected" : ""}>${esc(d.label)}</option>`).join("")}${x.desk_key && !DESKS.some(d => d.key === x.desk_key) ? `<option selected value="${esc(x.desk_key)}">${esc(x.desk_key)}</option>` : ""}</select></label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pk_a" style="width:auto;min-height:0" ${x.active === false ? "" : "checked"}> On</label>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary small" id="pk_s">Save note</button><button class="btn small" id="pk_c">Cancel</button><span class="muted" id="pk_m"></span></div></div>`;
+    $("#pk_c").onclick = () => $("#pkbform").innerHTML = "";
+    $("#pk_s").onclick = async () => { const r = await sb.rpc("penny_kb_save", { p_topic:$("#pk_t").value, p_body:$("#pk_b").value, p_desk:$("#pk_d").value, p_active:$("#pk_a").checked });
+      if(r.error) $("#pk_m").textContent = r.error.message; else pennyView(v); }; };
+  $("#pkbnew").onclick = () => form({});
+  $("#pkb").querySelectorAll("[data-pkb]").forEach(b => b.onclick = () => { form(kb[+b.dataset.pkb]); $("#pkbform").scrollIntoView({ behavior:"smooth" }); });
 }
 window.addEventListener("hashchange", route);
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
