@@ -1262,10 +1262,20 @@ function pennyAdmin(el, ab){
     if(r.error || !r.data || !r.data.ok){ send.disabled = false; msg.textContent = "Couldn't send - try again."; return; }
     box.innerHTML = `<p class="muted" style="margin:4px 0">Sent ✓ An admin will get back to you.</p>`; ab.disabled = true; };
 }
+/* 2026-10-28 (Brandon): Penny knows what you're looking at - the home on Property Details, or the stay on a reservation check list */
+function pennyCtx(){
+  const k = current(), arg = hashArg(), c = { desk:k };
+  try { const f = document.getElementById("deskframe"), S = f && f.contentWindow.S;
+    if(S && S.tab === "homes" && S.ui && S.ui.home) c.home = S.ui.home;
+    if(S && S.tab === "jobs" && S.ui && S.ui.sel) c.job = String(S.ui.sel); } catch(e){}
+  if(!c.home && k === "homes" && arg) c.home = arg;
+  if(k === "reservations" && /^\d+$/.test(arg)) Object.assign(c, typeof window.resCtx === "function" ? window.resCtx(arg) : { res:arg });
+  return c;
+}
 async function pennyAsk(q){
   pennySay("user", q); const wait = pennySay("assistant", "Penny is thinking"); { const wb = wait.querySelector(".bub"); wb.classList.add("wait"); wb.insertAdjacentHTML("beforeend", "<i></i><i></i><i></i>"); }
   const where = (typeof whereAmI === "function" ? whereAmI().label : "") || location.hash;
-  const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, history:PENNY.hist } });
+  const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, ctx:pennyCtx(), history:PENNY.hist } });
   wait.remove();
   const d = r.data || {}; const a = d.ok ? d.answer : (d.error || (r.error && r.error.message) || "Penny couldn't answer right now.");
   pennySay("assistant", a, d.id, d.links); PENNY.hist.push({ role:"user", text:q }, { role:"assistant", text:a }); PENNY.hist = PENNY.hist.slice(-8);
