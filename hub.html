@@ -208,6 +208,10 @@ details.acc[open]>summary{margin-bottom:6px}
 .pmsg .plinks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px} .pmsg .plinks a{text-decoration:none}
 .pmsg .pask{margin-top:6px} .pmsg .pask textarea{width:100%;min-height:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 #pennyForm{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--card)}
+#pennyPic{min-height:44px;min-width:44px;padding:0 10px;font-size:18px} #pennyPicChip{display:none;align-items:center;gap:6px;padding:6px 10px 0;font-size:13px;color:var(--muted)} #pennyPicChip.on{display:flex}
+#pennyPicChip img,.pmsg .pphoto{max-height:64px;border-radius:8px;border:1px solid var(--line)} .pmsg .pphoto{display:block;max-height:140px;margin-bottom:4px}
+.pmsg .pacts{display:flex;flex-direction:column;gap:6px;margin-top:8px} .pmsg .pacts .pa{border:1px dashed var(--moose);border-radius:10px;padding:8px 10px;font-size:13.5px}
+.pmsg .pacts .pa b{display:block;margin-bottom:6px;font-weight:600}
 #pennyForm textarea{min-height:44px;height:44px;resize:none;font-size:15px;padding:10px 12px}
 @media (max-width:820px){ #pennyBtn .plb{display:none} #pennyBtn{padding:8px} }
 
@@ -1215,12 +1219,18 @@ function pennyMount(){
     <div id="pennyBox" role="dialog" aria-label="Ask Penny"><div class="ph"><span class="pav" style="width:38px;height:38px"><img src="penny-face.png" alt="Penny"></span>
       <b>Ask Penny<small>Your Moose Hub helper</small></b><button id="pennyNew" title="Clear this chat and start fresh">↺ New chat</button><button id="pennyClose" aria-label="Close">✕</button></div>
       <div id="pennyLog"></div>
-      <form id="pennyForm"><textarea id="pennyQ" placeholder="Ask me anything about Moose…" aria-label="Your question"></textarea><button class="btn primary small" style="min-height:44px">Ask</button></form></div>`);
+      <div id="pennyPicChip"><img alt="Photo to send"><span>Photo ready to send</span><button type="button" class="btn small" id="pennyPicX">Remove</button></div>
+      <form id="pennyForm"><button type="button" class="btn small" id="pennyPic" title="Add a photo" aria-label="Add a photo">📷</button><input type="file" id="pennyPicIn" accept="image/*" capture="environment" hidden><textarea id="pennyQ" placeholder="Ask me anything about Moose…" aria-label="Your question"></textarea><button class="btn primary small" style="min-height:44px">Ask</button></form></div>`);
   $("#pennyBtn").onclick = () => pennyOpen(!PENNY.open);
   $("#pennyClose").onclick = () => pennyOpen(false);
   $("#pennyHi .x").onclick = () => $("#pennyHi").classList.remove("on");
   $("#pennyHi").querySelectorAll(".chips button").forEach(b => b.onclick = () => { pennyOpen(true); pennyAsk(b.textContent); });
-  $("#pennyForm").onsubmit = e => { e.preventDefault(); const q = $("#pennyQ").value.trim(); if(q){ $("#pennyQ").value = ""; pennyAsk(q); } };
+  $("#pennyForm").onsubmit = e => { e.preventDefault(); const q = $("#pennyQ").value.trim() || (PENNY.img ? "What is this, and what should I do?" : ""); if(q){ $("#pennyQ").value = ""; pennyAsk(q); } };
+  $("#pennyPic").onclick = () => $("#pennyPicIn").click();
+  $("#pennyPicX").onclick = () => { PENNY.img = null; $("#pennyPicChip").classList.remove("on"); };
+  $("#pennyPicIn").onchange = async e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if(!f) return;
+    try { PENNY.img = await pennyShrink(f); $("#pennyPicChip img").src = "data:image/jpeg;base64," + PENNY.img.data; $("#pennyPicChip").classList.add("on"); $("#pennyQ").focus(); }
+    catch(err){ pennySay("assistant", "I couldn't read that photo. Try a JPG or PNG."); } };
   $("#pennyNew").onclick = () => { PENNY.hist = []; $("#pennyLog").innerHTML = ""; pennyOpen(true); };
   $("#pennyQ").addEventListener("keydown", e => { if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); $("#pennyForm").requestSubmit(); } });
   document.addEventListener("keydown", e => { if(e.key === "Escape" && PENNY.open) pennyOpen(false); });
@@ -1272,13 +1282,40 @@ function pennyCtx(){
   if(k === "reservations" && /^\d+$/.test(arg)) Object.assign(c, typeof window.resCtx === "function" ? window.resCtx(arg) : { res:arg });
   return c;
 }
+/* 2026-10-28 (Brandon): photos for Penny - shrunk in the browser to <= 1280px JPEG, sent once, never stored */
+function pennyShrink(f){ return new Promise((ok, bad) => { const im = new Image(), u = URL.createObjectURL(f);
+  im.onload = () => { const k = Math.min(1, 1280 / Math.max(im.width, im.height)), c = document.createElement("canvas"); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); ok({ type:"image/jpeg", data:c.toDataURL("image/jpeg", 0.82).split(",")[1] }); };
+  im.onerror = () => { URL.revokeObjectURL(u); bad(new Error("bad image")); }; im.src = u; }); }
+/* Penny's drafts (job / check-list tick / Freshdesk note) only happen when the person taps the button. Jobs and ticks save under their own login. */
+async function pennyAct(a, btn, box){
+  btn.disabled = true; btn.textContent = "Working…"; let r, msg;
+  if(a.kind === "job"){ const id = "desk-penny-" + Date.now().toString(36), d = new Date().toLocaleDateString("en-CA");
+    r = await sb.from("desk_docs").upsert({ collection:"deskjobs", id, data:{ id, src:"desk", title:a.data.title, prop:a.data.prop || "", kind:a.data.kind || "repair", who:"", vendor:"",
+      due:a.data.due || "", detail:(a.data.detail || "") + "\n(Made with Ask Penny by " + ME.name + ")", status:"open", created:d, updated:d, list:"Desk", props:[], links:[], at:Date.now(), by:ME.name } }, { onConflict:"collection,id" });
+    msg = r.error ? "Couldn't create it: " + r.error.message : "✅ Job created on the Maintenance desk."; }
+  else if(a.kind === "tick"){ r = await sb.rpc("res_tick", { p_res:a.data.res, p_step:a.data.step, p_done:true, p_note:a.data.note || "Ticked with Ask Penny" });
+    msg = r.error ? "Couldn't tick it: " + r.error.message : "✅ Ticked on the check list."; }
+  else if(a.kind === "fd_note"){ r = await sb.functions.invoke("penny", { body:{ act:{ kind:"fd_note", data:a.data } } }); const d = r.data || {};
+    msg = d.ok ? "✅ " + d.done : "Couldn't add it: " + (d.error || (r.error && r.error.message) || "error"); }
+  box.innerHTML = `<span>${esc(msg)}</span>`;
+}
 async function pennyAsk(q){
-  pennySay("user", q); const wait = pennySay("assistant", "Penny is thinking"); { const wb = wait.querySelector(".bub"); wb.classList.add("wait"); wb.insertAdjacentHTML("beforeend", "<i></i><i></i><i></i>"); }
+  const img = PENNY.img; PENNY.img = null; $("#pennyPicChip").classList.remove("on");
+  const ue = pennySay("user", q); if(img) ue.querySelector(".bub").insertAdjacentHTML("afterbegin", `<img class="pphoto" alt="Your photo" src="data:image/jpeg;base64,${img.data}">`);
+  const wait = pennySay("assistant", "Penny is thinking"); { const wb = wait.querySelector(".bub"); wb.classList.add("wait"); wb.insertAdjacentHTML("beforeend", "<i></i><i></i><i></i>"); }
   const where = (typeof whereAmI === "function" ? whereAmI().label : "") || location.hash;
-  const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, ctx:pennyCtx(), history:PENNY.hist } });
+  const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, ctx:pennyCtx(), history:PENNY.hist, image:img || undefined } });
   wait.remove();
   const d = r.data || {}; const a = d.ok ? d.answer : (d.error || (r.error && r.error.message) || "Penny couldn't answer right now.");
-  pennySay("assistant", a, d.id, d.links); PENNY.hist.push({ role:"user", text:q }, { role:"assistant", text:a }); PENNY.hist = PENNY.hist.slice(-8);
+  const el = pennySay("assistant", a, d.id, d.links);
+  if(d.ok && (d.actions || []).length){ const box = document.createElement("div"); box.className = "pacts";
+    d.actions.forEach(x => { const row = document.createElement("div"); row.className = "pa"; row.innerHTML = `<b>${esc(x.label)}</b>`;
+      const go = document.createElement("button"); go.className = "btn primary small"; go.textContent = { job:"✅ Create this job", tick:"✅ Tick it", fd_note:"✅ Add to the ticket" }[x.kind] || "✅ Do it";
+      const no = document.createElement("button"); no.className = "btn small"; no.textContent = "Not now"; no.style.marginLeft = "6px";
+      go.onclick = () => pennyAct(x, go, row); no.onclick = () => row.remove(); row.append(go, no); box.appendChild(row); });
+    el.querySelector(".bub").after(box); $("#pennyLog").scrollTop = 1e9; }
+  PENNY.hist.push({ role:"user", text:q }, { role:"assistant", text:a }); PENNY.hist = PENNY.hist.slice(-8);
 }
 function pennyHello(){ // Home: Penny pops up once a day asking what she can help with
   const k = "penny_hi_" + new Date().toDateString(); let seen = null; try { seen = localStorage.getItem(k); } catch(e){}
@@ -1309,6 +1346,46 @@ function pennyInsights(all, needs){
       <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Questions per day</div>${bars(days, 14)}</div>
       <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Missed by team (train or build here first)</div>${bars(tally(x => needs(x) ? ((x.teams || []).length ? x.teams.map(t => PENNY_TEAM[t] || t) : ["No team"]) : null))}</div>
     </div><p class="muted" style="font-size:12px;margin:8px 0 0">Source: Ask Penny log (penny_chats). "Missed" = 👎 or an answer saying she didn't know.</p>`;
+}
+/* Reports > Ask Patrick & Penny > Penny — data cleanup (#/penny/cleanup, Brandon 2026-10-28): messy data, grouped by who owns the fix (penny_data_issues) */
+async function pennyCleanupView(v){
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Penny — data cleanup</h2>
+    <p class="muted">Data that looks wrong or stale, grouped by who owns the fix. Run it any time; copy a person's list to send it to them.</p><div id="pclean"><div class="card"><p class="muted">Checking…</p></div></div></div>`;
+  const r = await sb.rpc("penny_data_issues"); const j = r.data || {};
+  if(r.error) return $("#pclean").innerHTML = `<div class="card"><p class="muted">Couldn't run: ${esc(r.error.message)}</p></div>`;
+  const items = j.items || [], by = {}; items.forEach(x => (by[x.owners || x.team] = by[x.owners || x.team] || []).push(x));
+  const text = L => L.map(x => `• ${x.issue}: ${x.count}\n` + (x.examples || []).slice(0, 8).map(e => "   - " + e).join("\n")).join("\n");
+  $("#pclean").innerHTML = (Object.keys(by).length ? Object.entries(by).map(([who, L], i) => `<div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:17px;flex:1">${esc(who)}</b><span class="muted">${L.reduce((a, x) => a + x.count, 0)} things</span><button class="btn small" data-copy="${i}">Copy list</button></div>
+      ${L.map(x => `<div class="fb"><div class="hd"><b>${esc(x.issue)}</b><span class="pill amber">${x.count}</span><span class="muted">${esc(x.area)}</span></div>${(x.examples || []).length ? `<ul style="margin:4px 0 0 18px;padding:0">${x.examples.slice(0, 8).map(e => `<li style="font-size:13.5px">${esc(e)}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>`).join("")
+    : `<div class="card"><p>Nothing to clean up right now. 🎉</p></div>`) + `<p class="muted" style="font-size:12px">Source: ${esc(j.source || "")} · checked ${j.checked ? new Date(j.checked).toLocaleString() : ""}</p>`;
+  $("#pclean").querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => { const L = Object.values(by)[+b.dataset.copy];
+    try { await navigator.clipboard.writeText("Data cleanup from the Moose Hub (" + new Date().toLocaleDateString() + "):\n" + text(L)); b.textContent = "Copied ✓"; } catch(e){ b.textContent = "Couldn't copy"; } });
+}
+/* Reports > Ask Patrick & Penny > Penny — teach her this week (#/penny/teach): last 7 days of missed / 👎 questions, one tap to teach or make a check */
+async function pennyTeachView(v){
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a> · <a href="#/penny/missed">All missed</a></p><h2>Penny — teach her this week</h2>
+    <p class="muted">Questions from the last 7 days she missed or got a 👎. Write the right answer once: <b>🎓 Teach</b> saves it with your name as the source, <b>+ Check</b> also adds it to the accuracy checks.</p><div id="pteach"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
+  const since = new Date(Date.now() - 7 * 864e5).toISOString();
+  const c = await sb.from("penny_chats").select("*").gte("created_at", since).order("id", { ascending:false }).limit(500);
+  const miss = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test(x.answer || "");
+  const rows = (c.data || []).filter(x => !/^(accuracy check|action)/.test(x.note || "") && miss(x));
+  $("#pteach").innerHTML = rows.length ? rows.map(x => `<div class="card"><div class="hd" style="display:flex;gap:8px;flex-wrap:wrap"><b>${esc(x.user_name || "")}</b>${x.helpful === false ? `<span class="pill red">👎</span>` : `<span class="pill amber">didn't know</span>`}<span class="muted">${new Date(x.created_at).toLocaleString()}</span></div>
+      <p><b>Q:</b> ${esc(x.question)}</p><details class="acc2"><summary>What Penny said</summary><p style="white-space:pre-wrap">${esc(x.answer || "")}</p></details>
+      <label class="field"><span>The right answer (no codes or passwords)</span><textarea data-ta="${x.id}"></textarea></label>
+      <label class="field"><span>Penny shares it with</span><select data-td="${x.id}"><option value="">Everyone</option>${DESKS.map(d => `<option value="${esc(d.key)}">People who can open ${esc(d.label)}</option>`).join("")}</select></label>
+      <label class="field"><span>For a check: words the answer must include (optional, one per line)</span><textarea data-tm="${x.id}" style="min-height:44px"></textarea></label>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn primary small" data-teach="${x.id}">🎓 Teach</button><button class="btn small" data-tcheck="${x.id}">🎓 Teach + Check</button><span class="muted" data-tmsg="${x.id}"></span></div></div>`).join("")
+    : `<div class="card"><p>Nothing missed this week. 🎉</p></div>`;
+  const go = async (id, alsoCheck) => { const m = $(`[data-tmsg="${id}"]`), ans = $(`[data-ta="${id}"]`).value, x = rows.find(r => r.id === id);
+    const r = await sb.rpc("penny_teach", { p_chat:id, p_answer:ans, p_desk:$(`[data-td="${id}"]`).value, p_topic:null });
+    if(r.error) return m.textContent = "Couldn't save: " + r.error.message;
+    if(alsoCheck){ const must = $(`[data-tm="${id}"]`).value.split("\n").map(t => t.trim().toLowerCase()).filter(Boolean);
+      if(!must.length) return m.textContent = "Taught ✓ — add words the answer must include to make a check.";
+      const c2 = await sb.from("penny_checks").insert({ question:x.question, must, must_not:[], why:"Taught from a missed question", source:`Taught by ${ME.name}, ${new Date().toLocaleDateString("en-CA")} (Penny question #${id})`, created_by:ME.name });
+      if(c2.error) return m.textContent = "Taught ✓, check not saved: " + c2.error.message; }
+    m.textContent = alsoCheck ? "Taught ✓ and added to the checks" : "Taught ✓ — Penny knows it now"; };
+  $("#pteach").querySelectorAll("[data-teach]").forEach(b => b.onclick = () => go(+b.dataset.teach, false));
+  $("#pteach").querySelectorAll("[data-tcheck]").forEach(b => b.onclick = () => go(+b.dataset.tcheck, true));
 }
 /* Reports > Ask Patrick & Penny > Penny accuracy checks (#/penny/checks, Brandon 2026-10-28): re-ask questions with known answers.
    A check passes when every "must" item (alternatives split by |) is in the answer and no "must not" item is. Runs cost like normal questions. */
@@ -1351,6 +1428,8 @@ async function pennyChecksView(v){
 async function pennyView(v){
   if(!ME.admin){ location.hash = "#/home"; return; }
   if(hashArg().startsWith("checks")) return pennyChecksView(v);
+  if(hashArg() === "cleanup") return pennyCleanupView(v);
+  if(hashArg() === "teach") return pennyTeachView(v);
   const missedOnly = hashArg() === "missed";
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
     <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
