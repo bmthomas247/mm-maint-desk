@@ -299,7 +299,6 @@ function shell(){
       <div class="foot">
         ${ME.admin ? item("feedback", "Bugs & upgrades", "list") : item("feedback", "My bug reports", "list")}
         ${repD ? item("reports", repD.label, repD.icon || "chart") : ""}
-        ${syncD ? item("sync", syncD.label, syncD.icon || "spark") : ""}
         ${item("settings", "My settings", "gear")}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
         <div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button id="out">Sign out</button></div>
@@ -709,12 +708,14 @@ async function homeView(v){
 }
 /* Reports: Track-style index (Brandon 2026-10-28) — one column per desk, plain report links A-Z, our look. Only desks you can open. */
 async function hubReportsView(v){
-  v.innerHTML = `<div class="page wide"><h2>Reports</h2><p class="muted">Every report you can open, by desk. Hover a report to see what it shows.</p><div id="rplist"><p class="muted">Loading…</p></div></div>`;
+  v.innerHTML = `<div class="page wide"><h2>Reports & sync</h2><p class="muted">Every report you can open, by desk, and the Sync section. Hover a report to see what it shows.</p><div id="rpwait"></div><div id="rplist"><p class="muted">Loading…</p></div></div>`;
+  if(ME.admin) sb.from("hub_sync_requests").select("id").eq("status","needs_approval").then(w => { const n = (w.data || []).length;
+    if(n && $("#rpwait")) $("#rpwait").innerHTML = `<div class="card" style="border-color:var(--amber)"><b>⏳ ${n} sync request${n === 1 ? "" : "s"} waiting for your OK</b> <a href="#/sync" style="margin-left:8px">Review →</a></div>`; });
   const r = await sb.from("hub_reports").select("*").order("sort");
   if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
   const name = k => k === "home" ? "Hub" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
-  const SUB = { maint_money:["maintenance","Expenses & Time"] };
+  const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers + admins only" };
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = sb ? sb[0] : x.desk_key; (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => name(a).localeCompare(name(b)));
   const link = x => x.status === "live"
@@ -722,7 +723,7 @@ async function hubReportsView(v){
         : `<span class="rpl soon" title="${esc(x.note || "")}">${esc(x.label)} <span class="pill amber">soon</span></span>`;
   const byLabel = (a, b) => a.label.localeCompare(b.label);
   const body = list => { const main = list.filter(x => !x._sub).sort(byLabel), subs = [...new Set(list.filter(x => x._sub).map(x => x._sub))].sort();
-    return main.map(link).join("") + subs.map(t => `<div class="rpsub">${esc(t)}</div>` + list.filter(x => x._sub === t).sort(byLabel).map(link).join("")).join(""); };
+    return main.map(link).join("") + subs.map(t => `<div class="rpsub">${esc(t)}${SUBWHO[t] ? ` <span class="pill">${esc(SUBWHO[t])}</span>` : ""}</div>` + list.filter(x => x._sub === t).sort(byLabel).map(link).join("")).join(""); };
   $("#rplist").innerHTML = keys.length ? `<div class="rpgrid">${keys.map(k => `<section class="rpg"><h3>${esc(name(k))}</h3>
       ${body(groups[k])}</section>`).join("")}</div>`
     : `<div class="card"><p class="muted">No reports for your desks yet.</p></div>`;
@@ -735,35 +736,46 @@ async function hubReportsView(v){
   });
 }
 async function syncView(v, only){
-  /* admins: run syncs. Managers (sync_status, from Reports): read-only last-sync reports (2026-10-28). One source: #/sync/<key> */
+  /* Reports + Sync together (Brandon 2026-10-28). Admins run anything and approve. Managers (sync_status) run free syncs;
+     big data pulls (Breezeway + Hubstaff, "everything") and paid ones go to Brandon/Kim to approve (Slack DM). One source: #/sync/<key> */
   const A = !!ME.admin;
-  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a>${only ? ` · <a href="#/sync">All sources</a>` : ""}</p><h2>${only ? "Last sync" : "Sync"}</h2><p class="muted">${A ? "Every data source A–Z: when it last ran, what it feeds, and a button to run just that one." : "When each data source last synced and what it feeds. Ask Brandon or Kim if one looks stuck."}</p>
-    ${A && !only ? `<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncall">Sync everything now</button><span class="muted" id="syncmsg"></span></div></div>` : `<span id="syncmsg" hidden></span>`}
+  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a>${only ? ` · <a href="#/sync">All sources</a>` : ""}</p><h2>${only ? "Last sync" : "Sync"}</h2>
+    <p class="muted">Every data source A–Z: when it last synced and what it feeds. ${A ? "You can run anything." : "Free syncs run right away. Big data pulls and paid sources go to Brandon or Kim to approve."}</p>
+    <div id="approvals"></div>
+    ${!only ? `<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncall">${A ? "Sync everything now" : "Ask to sync everything"}</button>${A ? "" : `<span class="pill amber">needs admin OK</span>`}<span class="muted" id="syncmsg"></span></div></div>` : `<span id="syncmsg" hidden></span>`}
     <div class="card" id="srcs"><p class="muted">Loading…</p></div></div>`;
   const ago = t => { if(!t) return "no report yet"; const m = Math.round((Date.now() - new Date(t)) / 60000);
     return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m/60) + " h ago" : Math.round(m/1440) + " days ago"; };
   const [s, q] = await Promise.all([ sb.from("hub_sync_sources").select("*").order("label"),
-    sb.from("hub_sync_requests").select("*").order("id", { ascending:false }).limit(40) ]);
+    sb.from("hub_sync_requests").select("*").order("id", { ascending:false }).limit(60) ]);
   if(s.error) return $("#srcs").innerHTML = `<p class="muted">Couldn't load: ${esc(s.error.message)}</p>`;
-  const reqs = q.data || [], lastFor = k => reqs.find(r => (r.source_key || null) === k);
+  const reqs = q.data || [], lastFor = k => reqs.find(r => (r.source_key || null) === k), label = k => ((s.data.find(x => x.key === k) || {}).label) || "Every data source";
+  const COST = { big:"big data pull", paid:"costs money" };
+  // admins: requests waiting for an OK
+  const wait = reqs.filter(r => r.status === "needs_approval");
+  if(A && wait.length) $("#approvals").innerHTML = `<div class="card" style="border-color:var(--amber)"><b style="font-size:17px">⏳ Waiting for your OK</b>${wait.map(r => `<div class="fb"><div class="hd"><b>${esc(label(r.source_key))}</b><span class="muted">asked by ${esc(r.requested_by || "")} · ${ago(r.requested_at)}</span>
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="btn small primary" data-ok="${r.id}">Approve</button><button class="btn small" data-no="${r.id}">Decline</button></span></div></div>`).join("")}</div>`;
   const rows = s.data.slice().filter(x => !only || x.key === only).sort((a, b) => a.label.localeCompare(b.label));
   if(!rows.length) return $("#srcs").innerHTML = `<p class="muted">No report for that source.</p>`;
+  const btn = x => { if(!x.can_run) return `<span class="muted" style="margin-left:auto">runs on its own${x.cost === "paid" ? " · costs money" : ""}</span>`;
+    const r = lastFor(x.key); if(r && r.status === "needs_approval") return `<span class="pill amber" style="margin-left:auto">waiting for admin OK</span>`;
+    return A || x.cost === "free" ? `<button class="btn small" style="margin-left:auto" data-sync="${esc(x.key)}">Sync now</button>`
+      : `<span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="pill amber">${COST[x.cost]} · needs admin OK</span><button class="btn small" data-sync="${esc(x.key)}">Ask to sync</button></span>`; };
   $("#srcs").innerHTML = rows.map(x => { const age = x.last_ok_at ? (Date.now() - new Date(x.last_ok_at)) / 36e5 : null;
       const tone = x.last_status === "error" ? "red" : age == null ? "" : age < 6 ? "green" : age < 26 ? "amber" : "red", r = lastFor(x.key);
-      const state = r ? (r.done_at ? "Last run from here " + ago(r.done_at) + (r.result ? " - " + r.result : "") : "Asked " + ago(r.requested_at) + " - waiting for the ThinkStation") : "";
-      return `<div class="fb"><div class="hd"><b>${esc(x.label)}</b><span class="pill ${tone}">${x.last_status === "error" ? "error" : ago(x.last_ok_at)}</span>
-        ${A && x.can_run ? `<button class="btn small" style="margin-left:auto" data-sync="${esc(x.key)}">Sync now</button>` : `<span class="muted" style="margin-left:auto">${x.can_run ? "" : "runs on its own"}</span>`}</div>
+      const state = r ? (r.status === "declined" ? "Last ask declined" + (r.approved_by ? " by " + r.approved_by : "") : r.done_at ? "Last run from here " + ago(r.done_at) + (r.result ? " - " + r.result : "") : r.status === "needs_approval" ? "Asked by " + (r.requested_by || "") + " " + ago(r.requested_at) : "Asked " + ago(r.requested_at) + " - waiting for the ThinkStation") : "";
+      return `<div class="fb"><div class="hd"><b>${esc(x.label)}</b><span class="pill ${tone}">${x.last_status === "error" ? "error" : ago(x.last_ok_at)}</span>${btn(x)}</div>
         ${x.feeds ? `<p style="margin:6px 0 0"><span class="muted">Feeds:</span> ${esc(x.feeds)}</p>` : ""}
         <p class="muted" style="margin:4px 0 0">${esc(x.runs_on||"")} · ${esc(x.schedule||"")}${state ? " · " + esc(state) : ""}</p>
         ${x.last_detail ? `<p class="muted" style="margin:4px 0 0;font-size:12.5px">${esc(x.last_detail)}</p>` : ""}</div>`; }).join("");
   const all = lastFor(null);
-  if(all) $("#syncmsg").textContent = all.done_at ? "Last full sync finished " + ago(all.done_at) + (all.result ? " - " + all.result : "") : "Full sync asked " + ago(all.requested_at) + " - waiting for the ThinkStation to pick it up.";
-  if($("#syncall")) $("#syncall").onclick = async () => { $("#syncall").disabled = true; const r = await sb.rpc("hub_sync_request", { p_key:null });
-    $("#syncmsg").textContent = r.error ? "Couldn't ask: " + r.error.message : "Asked. The ThinkStation will run every sync and update this list.";
-    setTimeout(() => { $("#syncall").disabled = false; }, 4000); };
-  $("#srcs").querySelectorAll("[data-sync]").forEach(b => b.onclick = async () => { b.disabled = true; b.textContent = "Asking…";
-    const r = await sb.rpc("hub_sync_request", { p_key:b.dataset.sync });
-    b.textContent = r.error ? "Couldn't ask" : "Asked ✓"; if(r.error) b.title = r.error.message; setTimeout(() => syncView(v), 2500); });
+  if(all) $("#syncmsg").textContent = all.status === "needs_approval" ? "Asked " + ago(all.requested_at) + " - waiting for Brandon or Kim" : all.status === "declined" ? "Last full sync ask was declined" : all.done_at ? "Last full sync finished " + ago(all.done_at) + (all.result ? " - " + all.result : "") : "Full sync asked " + ago(all.requested_at) + " - waiting for the ThinkStation.";
+  const ask = async key => { const r = await sb.rpc("hub_sync_request", { p_key:key }); if(r.error) return "Couldn't ask: " + r.error.message;
+    return (r.data && r.data.status) === "needs_approval" ? "Sent to Brandon and Kim to approve." : "Asked. The ThinkStation picks it up within a minute."; };
+  if($("#syncall")) $("#syncall").onclick = async () => { $("#syncall").disabled = true; $("#syncmsg").textContent = await ask(null); setTimeout(() => syncView(v, only), 2500); };
+  $("#srcs").querySelectorAll("[data-sync]").forEach(b => b.onclick = async () => { b.disabled = true; b.textContent = "Asking…"; const m = await ask(b.dataset.sync); b.textContent = /approve/.test(m) ? "Sent for OK" : /Couldn't/.test(m) ? "Couldn't ask" : "Asked ✓"; b.title = m; setTimeout(() => syncView(v, only), 2500); });
+  v.querySelectorAll("[data-ok],[data-no]").forEach(b => b.onclick = async () => { b.disabled = true;
+    const r = await sb.rpc("hub_sync_approve", { p_id:+(b.dataset.ok || b.dataset.no), p_ok:!!b.dataset.ok }); if(r.error) b.textContent = "Error"; else syncView(v, only); });
 }
 window.addEventListener("hashchange", route);
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
