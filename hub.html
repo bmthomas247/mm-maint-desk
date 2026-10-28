@@ -1252,14 +1252,40 @@ function pennyHello(){ // Home: Penny pops up once a day asking what she can hel
   if(seen || PENNY.open) return; setTimeout(() => { if(current() === "home" && !PENNY.open) $("#pennyHi").classList.add("on"); }, 900);
   try { localStorage.setItem(k, "1"); } catch(e){}
 }
+/* admins: what people ask Penny, to see where tools and training help most (Brandon 2026-10-28). Counts from penny_chats. */
+const PENNY_TOOL = { lookup_home:"Homes", who_is_in:"Who's in house", find_vendor:"Vendors", past_chats:"Past chats", knowledge:"Guest / owner replies & policies",
+  staff:"Coworkers", maintenance_jobs:"Maintenance jobs", projects:"Projects", licensing:"Licensing", owner_feedback:"Owner feedback" };
+const PENNY_TEAM = { owner_relations:"Owner relations", maint_manager:"Maintenance manager", office_manager:"Office manager", hk_manager:"Housekeeping manager",
+  front_desk:"Front desk", maint_crew:"Maintenance crew", licensing:"Licensing", leasing:"Leasing", admin:"Admin" };
+function pennyInsights(all, needs){
+  const since = Date.now() - 30 * 864e5, rows = all.filter(x => new Date(x.created_at) >= since);
+  const tally = (f) => { const m = {}; rows.forEach(x => [].concat(f(x) || []).forEach(k => { if(k) m[k] = (m[k] || 0) + 1; })); return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+  const bars = (list, n = 8) => { const top = list.slice(0, n), max = Math.max(1, ...top.map(x => x[1]));
+    return top.length ? top.map(([k, v]) => `<div style="display:flex;align-items:center;gap:8px;margin:3px 0"><span style="width:44%;font-size:13.5px">${esc(k)}</span><span style="flex:1;background:var(--line);border-radius:4px;height:10px"><span style="display:block;height:10px;border-radius:4px;background:var(--moose);width:${Math.round(v / max * 100)}%"></span></span><b style="width:28px;text-align:right;font-size:13px">${v}</b></div>`).join("") : `<p class="muted">Nothing yet.</p>`; };
+  const STOP = new Set("the and for you are can what who how does did any our with that this have from about there they when where which into just your need want know tell give show get its was were has had will would should could been some more like over also only them then than very much".split(" "));
+  const tools = x => /looked up: (.*)/.exec(x.note || "")?.[1].split(", ").map(t => PENNY_TOOL[t] || t) || ["Notes only (no lookup)"];
+  const days = tally(x => new Date(x.created_at).toLocaleDateString("en-CA", { timeZone:"America/Denver" })).sort((a, b) => a[0] < b[0] ? -1 : 1).slice(-14)
+    .map(([d, n]) => [new Date(d + "T12:00").toLocaleDateString([], { month:"short", day:"numeric" }), n]);
+  const missed = rows.filter(needs), people = new Set(rows.map(x => x.user_id)).size, cost = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
+  $("#pins").innerHTML = `<b style="font-size:17px">What people ask (last 30 days)</b> <span class="muted">${rows.length} questions · ${people} people · ${missed.length} missed or 👎 · $${cost.toFixed(2)}</span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:10px">
+      <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">By team</div>${bars(tally(x => (x.teams || []).length ? x.teams.map(t => PENNY_TEAM[t] || t) : ["No team"]))}</div>
+      <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">What she had to look up</div>${bars(tally(tools))}</div>
+      <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Who asks most</div>${bars(tally(x => x.user_name))}</div>
+      <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Words that come up most</div>${bars(tally(x => [...new Set(String(x.question || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2 && !STOP.has(w) && !/^d+$/.test(w)))]), 10)}</div>
+      <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Questions per day</div>${bars(days, 14)}</div>
+      <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Missed by team (train or build here first)</div>${bars(tally(x => needs(x) ? ((x.teams || []).length ? x.teams.map(t => PENNY_TEAM[t] || t) : ["No team"]) : null))}</div>
+    </div><p class="muted" style="font-size:12px;margin:8px 0 0">Source: Ask Penny log (penny_chats). "Missed" = 👎 or an answer saying she didn't know.</p>`;
+}
 /* admins: what staff asked Penny + edit what she knows (#/penny) */
 async function pennyView(v){
-  if(!ME.admin){ v.innerHTML = `<div class="page"><div class="card"><p class="muted">Only Brandon or Kim can see Penny's log.</p></div></div>`; return; }
+  if(!ME.admin){ location.hash = "#/home"; return; }
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
-    <div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
-  const [c, k] = await Promise.all([ sb.from("penny_chats").select("*").order("id", { ascending:false }).limit(200), sb.from("penny_kb").select("*").order("topic") ]);
-  const needs = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes/i.test(x.answer || "");
-  const rows = (c.data || []).sort((a, b) => needs(b) - needs(a)), tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
+    <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
+  const [c, k] = await Promise.all([ sb.from("penny_chats").select("*").order("id", { ascending:false }).limit(1000), sb.from("penny_kb").select("*").order("topic") ]);
+  const needs = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test(x.answer || "");
+  const all = c.data || []; pennyInsights(all, needs);
+  const rows = all.slice(0, 200).sort((a, b) => needs(b) - needs(a)), tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
   $("#plog").innerHTML = `<b style="font-size:17px">Questions</b> <span class="muted">${rows.filter(needs).length} to teach first · ${rows.length} shown · $${tot.toFixed(2)} · 👍 ${rows.filter(x => x.helpful === true).length} · 👎 ${rows.filter(x => x.helpful === false).length}</span>` +
     (rows.length ? rows.map((x, i) => `<div class="fb"><div class="hd"><b>${esc(x.user_name || "")}</b>${needs(x) ? `<span class="pill amber">teach her</span>` : ""}<span class="muted">${new Date(x.created_at).toLocaleString()} · ${esc(x.page || "")}</span>${x.helpful === true ? `<span class="pill green">👍</span>` : x.helpful === false ? `<span class="pill red">👎</span>` : ""}<span class="muted" style="margin-left:auto">$${(+x.cost_usd || 0).toFixed(4)}</span></div>
       <p><b>Q:</b> ${esc(x.question)}</p><p class="muted"><b>Penny:</b> ${esc(x.answer || "")}</p><button class="btn small" data-teach="${i}">🎓 Teach Penny</button></div>`).join("") : `<p class="muted">No questions yet.</p>`);
