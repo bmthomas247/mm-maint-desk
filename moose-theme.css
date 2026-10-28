@@ -118,3 +118,9 @@ body.locklook .modal,body.locklook .sheet{border-radius:var(--radius)}
 .vcontact a.vc:hover{color:var(--accent-ink);text-decoration:underline}
 body.locklook main#view section>h3{font-size:18px!important;font-weight:800;letter-spacing:-.01em;margin:6px 0 10px!important}
 body.locklook .vcard{border-radius:18px;box-shadow:var(--shadow)}
+
+/* Pop-ups: Back + X always at the top (2026-10-28) */
+.modal .mhead{position:sticky;top:-1px;z-index:2;display:flex;align-items:center;gap:10px;background:var(--surface);margin:-4px 0 10px;padding:6px 0 8px;border-bottom:1px solid var(--line)}
+.modal .mhead h3{flex:1;min-width:0;margin:0}
+.modal .mx{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);width:36px;height:36px;border-radius:50%;font-size:16px;font-weight:800;cursor:pointer;flex:none}
+.modal .mx:hover{background:var(--sunk)}
