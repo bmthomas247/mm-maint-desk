@@ -376,7 +376,9 @@ async function allRows(q, size = 1000) {
   if (first.error || !first.count || first.count <= size) return first;
   const pages = [];
   for (let from = size; from < first.count; from += size) pages.push(q().range(from, from + size - 1));
-  const rest = await Promise.all(pages);
+  const rest = [];
+  for (let i = 0; i < pages.length; i += 4) rest.push(...await Promise.all(pages.slice(i, i + 4)));
+  for (let i = 0; i < rest.length; i++) if (rest[i].error) { const from = size * (i + 1); rest[i] = await q().range(from, from + size - 1); }
   const bad = rest.find(r => r.error);
   return { data: first.data.concat(...rest.map(r => r.data || [])), error: bad?.error || null, count: first.count };
 }
