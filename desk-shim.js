@@ -82,7 +82,8 @@
     // Moose Hub: Expenses & Time only for the maintenance manager + admins (RLS enforces it too)
     try{ window.MM_MONEY = !!(await sb.rpc("hub_can", { p_desk:"maint_money" })).data; }catch(e){ window.MM_MONEY = false; }
     var ONLY = new URLSearchParams(location.search).get("only") || "";
-    if(ONLY) document.body.classList.add("only");
+    if(ONLY) document.body.classList.add("only", "only-" + ONLY);
+    if(ONLY === "fire") document.body.classList.add("locklook");   // Licensing = Moose Locks look (Brandon 2026-10-28)
     try{ if(window.top !== window) document.body.classList.add("inhub"); }catch(e){}
     window.MM_ME = me;
     try{ localStorage.setItem("md_me", me.initials || ""); localStorage.setItem("md_seenhelp", "1"); }catch(e){}
