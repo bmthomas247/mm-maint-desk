@@ -880,3 +880,180 @@ do $$ declare f text; begin
     execute format('grant execute on function %s to service_role', f);
   end loop;
 end $$;
+
+
+-- ===== Moose Hub split (2026-10-27) — copied from hub_site/hub_maint_split.sql so a schema re-run keeps the hub rules =====
+-- hub_maint_split.sql (2026-10-27, Brandon): Maintenance desk split. Additive, safe to re-run.
+--  * Expenses & Time  -> maintenance manager + admins only (new section key maint_money)
+--  * Homes, Vendors   -> own hub desks, every team can open AND edit
+--  * Fire & licenses  -> the Licensing desk (licensing team can work its queue items)
+
+alter table hub_desks drop constraint if exists hub_desks_status_check;
+alter table hub_desks add constraint hub_desks_status_check check (status in ('live','soon','section'));
+
+create or replace function hub_my_desks() returns table (key text, label text, icon text, url text, status text, sort int)
+language sql stable security definer set search_path = public as $$
+  select d.key, d.label, d.icon, d.url, d.status, d.sort from hub_desks d
+  where hub_can(d.key) and d.status <> 'section' order by d.sort $$;
+
+insert into hub_desks (key,label,icon,url,sort,status,note) values
+ ('homes','Homes','home','desk.html?only=homes',32,'live','Every home: basics, appliances, Asana info, recent jobs. Everyone can edit.'),
+ ('vendors','Vendors','truck','desk.html?only=vendors',34,'live','Search our vendors by need or trade. Everyone can edit.'),
+ ('maint_money','Maintenance · Expenses & Time','dollar',null,0,'section','Section inside Maintenance: maintenance manager + admins only.')
+on conflict (key) do update set label=excluded.label, icon=excluded.icon, url=excluded.url, sort=excluded.sort, status=excluded.status, note=excluded.note;
+update hub_desks set url='desk.html?only=fire', status='live', icon=coalesce(icon,'badge') where key='licensing';
+
+insert into hub_desk_access (desk_key, team_key)
+select d, t.key from unnest(array['homes','vendors']) d, hub_teams t
+on conflict do nothing;
+insert into hub_desk_access (desk_key, team_key) values ('maint_money','maint_manager') on conflict do nothing;
+
+-- which desk_docs rows are money (expenses, time, billing, receipts, Hubstaff hours, fees)
+create or replace function desk_is_money(c text, i text) returns boolean language sql immutable as $$
+  select c in ('expenses','taskbill','time')
+      or (c = 'feeds' and (i like 'bw-fees%' or i like 'hs-time%' or i like 'bw-rcpt-%' or i like 'bw-receipts%')) $$;
+
+create or replace function desk_can_read(c text, i text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when desk_is_money(c, i) then hub_can('maint_money')
+    when c in ('vendoredits','deskvendors') or (c = 'feeds' and i = 'vendors') then hub_can('vendors') or hub_can('maintenance')
+    when hub_can('licensing') and ((c = 'slackq' and i like 'lic\_%') or (c = 'bwq' and i like 'fire\_%')) then true
+    else case app_role()
+      when 'admin' then true
+      when 'tech'   then not (c in ('asks','slackq','bwq','config','raw') or (c = 'feeds' and i = 'usage'))
+      when 'viewer' then not (c in ('asks','slackq','bwq','config','raw') or (c = 'feeds' and i = 'usage'))
+      else false end
+  end $$;
+
+create or replace function desk_can_write2(c text, i text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when desk_is_money(c, i) then hub_can('maint_money')
+    when c in ('propedits','profiles','applimg') and hub_can('homes') then true
+    when c in ('vendoredits','deskvendors') and hub_can('vendors') then true
+    when c = 'rlog' and (hub_can('homes') or hub_can('vendors')) then true
+    when hub_can('licensing') and ((c = 'slackq' and i like 'lic\_%') or (c = 'bwq' and i like 'fire\_%')) then true
+    else case app_role()
+      when 'admin' then true
+      when 'tech'  then c in ('edits','rlog','projedits','deskprojects','propedits','deskjobs','profiles','bwq','recurring','applimg')
+      else false end
+  end $$;
+revoke all on function desk_can_write2(text,text), desk_is_money(text,text) from public, anon;
+grant execute on function desk_can_write2(text,text), desk_is_money(text,text) to authenticated;
+
+drop policy if exists desk_ins on desk_docs;
+drop policy if exists desk_upd on desk_docs;
+create policy desk_ins on desk_docs for insert to authenticated with check (desk_can_write2(collection, id));
+create policy desk_upd on desk_docs for update to authenticated using (desk_can_write2(collection, id)) with check (desk_can_write2(collection, id));
+
+-- reports: Expenses & Time follows the section, Fire & licenses lives on Licensing, desk tabs open by hash
+update hub_reports set desk_key='maint_money', admin_only=false, url='desk.html#money' where key='maint_money';
+update hub_reports set desk_key='licensing', url='#/licensing' where key='maint_fire';
+update hub_reports set url='desk.html#repeats' where key='maint_repeats';
+
+-- 2026-10-27 (Brandon): Homes is renamed "Property Details" and sits under Home, then Vendors. Field techs (maintenance crew) don't get Vendors.
+update hub_desks set label='Property Details', sort=2 where key='homes';
+update hub_desks set sort=4 where key='vendors';
+-- rows are never deleted: access is switched off with hub_desk_access.off
+alter table hub_desk_access add column if not exists off boolean not null default false;
+create or replace function hub_can(p_desk text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select hub_uid() is not null and (hub_is_admin() or exists (
+    select 1 from hub_desk_access a join hub_member_teams m on m.team_key = a.team_key
+    where a.desk_key = p_desk and m.user_id = hub_uid() and not a.off)) $$;
+update hub_desk_access set off = true where desk_key='vendors' and team_key='maint_crew';
+
+
+-- ===== Moose Hub 2026-10-28 (copy of hub_site/hub_2026_10_28.sql so a maintenance re-run keeps it) =====
+-- hub_2026_10_28.sql (Brandon, 2026-10-28). Additive, safe to re-run. Runs after hub_home_stays.sql.
+--  * owner_contacts section: owner name/phone/email on Property Details (Track feed + hub edits). Every team except maintenance crew.
+--  * Reviews desk: admins + every manager + front desk (front desk = reservationists). Still "soon".
+--  * hub_prefs: each person's sidebar order + interests for the daily pick (own row only).
+--  * Report: Vendors added & removed.
+
+insert into hub_desks (key,label,icon,url,sort,status,note) values
+ ('owner_contacts','Property Details · owner contact','home',null,0,'section','Owner name / phone / email on Property Details. Every team except maintenance crew.')
+on conflict (key) do update set label=excluded.label, status=excluded.status, note=excluded.note;
+insert into hub_desk_access (desk_key, team_key)
+select 'owner_contacts', t.key from hub_teams t where t.key <> 'maint_crew' on conflict do nothing;
+
+insert into hub_desk_access (desk_key, team_key)
+select 'reviews', t from unnest(array['owner_relations','maint_manager','office_manager','hk_manager','front_desk']) t on conflict do nothing;
+update hub_desk_access set off = false where desk_key='reviews' and team_key in ('owner_relations','maint_manager','office_manager','hk_manager','front_desk');
+
+-- desk_docs read/write: same as hub_maint_split.sql plus owner contact rows (feeds/owners from Track, ownercontacts edited in the hub)
+create or replace function desk_can_read(c text, i text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when (c = 'feeds' and i = 'owners') or c = 'ownercontacts' then hub_can('owner_contacts')
+    when desk_is_money(c, i) then hub_can('maint_money')
+    when c in ('vendoredits','deskvendors') or (c = 'feeds' and i = 'vendors') then hub_can('vendors') or hub_can('maintenance')
+    when hub_can('licensing') and ((c = 'slackq' and i like 'lic\_%') or (c = 'bwq' and i like 'fire\_%')) then true
+    else case app_role()
+      when 'admin' then true
+      when 'tech'   then not (c in ('asks','slackq','bwq','config','raw') or (c = 'feeds' and i = 'usage'))
+      when 'viewer' then not (c in ('asks','slackq','bwq','config','raw') or (c = 'feeds' and i = 'usage'))
+      else false end
+  end $$;
+create or replace function desk_can_write2(c text, i text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when c = 'feeds' and i = 'owners' then false
+    when c = 'ownercontacts' then hub_can('owner_contacts') and hub_can('homes')
+    when desk_is_money(c, i) then hub_can('maint_money')
+    when c in ('propedits','profiles','applimg') and hub_can('homes') then true
+    when c in ('vendoredits','deskvendors') and hub_can('vendors') then true
+    when c = 'rlog' and (hub_can('homes') or hub_can('vendors')) then true
+    when hub_can('licensing') and ((c = 'slackq' and i like 'lic\_%') or (c = 'bwq' and i like 'fire\_%')) then true
+    else case app_role()
+      when 'admin' then true
+      when 'tech'  then c in ('edits','rlog','projedits','deskprojects','propedits','deskjobs','profiles','bwq','recurring','applimg')
+      else false end
+  end $$;
+
+-- personal settings
+create table if not exists hub_prefs (
+  user_id uuid primary key references allowed_users(id),
+  desk_order text[] not null default '{}',
+  interests text[] not null default '{}',
+  kinds text[] not null default '{}',
+  updated_at timestamptz not null default now());
+alter table hub_prefs enable row level security;
+alter table hub_prefs force row level security;
+revoke all on hub_prefs from anon, public;
+grant select on hub_prefs to authenticated;
+drop policy if exists hub_prefs_own on hub_prefs;
+create policy hub_prefs_own on hub_prefs for select to authenticated using (user_id = hub_uid());
+drop trigger if exists hub_prefs_nodelete on hub_prefs;
+create trigger hub_prefs_nodelete before delete on hub_prefs for each statement execute function forbid_delete();
+drop trigger if exists hub_prefs_notruncate on hub_prefs;
+create trigger hub_prefs_notruncate before truncate on hub_prefs for each statement execute function forbid_change();
+
+create or replace function hub_my_prefs() returns json language sql stable security definer set search_path = public as $$
+  select coalesce((select json_build_object('desk_order', desk_order, 'interests', interests, 'kinds', kinds) from hub_prefs where user_id = hub_uid()),
+                  json_build_object('desk_order', '{}'::text[], 'interests', '{}'::text[], 'kinds', '{}'::text[])) $$;
+create or replace function hub_set_prefs(p_desk_order text[], p_interests text[], p_kinds text[]) returns void
+language plpgsql security definer set search_path = public as $$
+declare v uuid := hub_uid();
+begin
+  if v is null then raise exception 'not signed in'; end if;
+  insert into hub_prefs (user_id, desk_order, interests, kinds, updated_at)
+  values (v, coalesce(p_desk_order[1:60], '{}'), coalesce(p_interests[1:20], '{}'), coalesce(p_kinds[1:6], '{}'), now())
+  on conflict (user_id) do update set desk_order = excluded.desk_order, interests = excluded.interests, kinds = excluded.kinds, updated_at = now();
+end $$;
+revoke all on function hub_my_prefs(), hub_set_prefs(text[],text[],text[]) from public, anon;
+grant execute on function hub_my_prefs(), hub_set_prefs(text[],text[],text[]) to authenticated;
+
+-- report
+insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
+ ('vendors_changes','vendors','Vendors added & removed','Who added or removed a vendor, when and why (this month, last month, 12 months)','desk.html?only=vendors#changes','live',false,10)
+on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, status=excluded.status;
+
+-- Crew cost vs. gain (Hubstaff), Brandon 2026-10-28: Chris (maintenance manager) + admins. Pay cost per tech = money (paycost collection).
+create or replace function desk_is_money(c text, i text) returns boolean language sql immutable as $$
+  select c in ('expenses','taskbill','time','paycost')
+      or (c = 'feeds' and (i like 'bw-fees%' or i like 'hs-time%' or i like 'bw-rcpt-%' or i like 'bw-receipts%')) $$;
+insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
+ ('maint_crew_gain','maint_money','Crew cost vs. gain (Hubstaff)','Each maintenance tech: Hubstaff hours x pay cost vs. what their Breezeway work bills, by month','desk.html#money','live',false,5)
+on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, status=excluded.status, desk_key=excluded.desk_key;
