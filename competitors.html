@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Competitor Playbook</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Competitor Playbook desk (hub keys 'competitor' + 'competitor_add'). Ported from the "Moose Competitor Playbook" artifact;
+     content now lives in the cmp_* tables (cmp_schema.sql). Access is enforced in Supabase - this page only hides what RLS already refuses. -->
+<style>
+:root{
+  --moose:#88B535; --moose-2:#A6CE39; --moose-ink:#2f4710; --moose-soft:#eef5e0;
+  --forest:#3c5f12; --forest-2:#5b8a1e; --pine:#4f7a18; --pine-soft:#eaf3da;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --red-ink:#7a271b; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --blue-ink:#274b5e;
+  --gold:#a5741f; --gold-soft:#fbf3e4; --gold-line:#ecd9b6; --green:#3a7d44; --green-soft:#e6f1ea; --green-ink:#2f5d40;
+  --radius:16px; --tap:48px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --pine-soft:#173026; --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --red-ink:#f3c3bc; --amber-soft:#33270c;
+  --blue-soft:#13283d; --blue-ink:#bcd6e6; --gold:#e0b25f; --gold-soft:#2e2412; --gold-line:#4a3a1a; --green-soft:#16301f; --green-ink:#b9dcc4;
+  --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --pine-soft:#173026; --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --red-ink:#f3c3bc; --amber-soft:#33270c;
+  --blue-soft:#13283d; --blue-ink:#bcd6e6; --gold:#e0b25f; --gold-soft:#2e2412; --gold-line:#4a3a1a; --green-soft:#16301f; --green-ink:#b9dcc4;
+  --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+a{color:var(--pine)}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:44px;padding:0 15px;
+  font:inherit;font-weight:800;font-size:14.5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none}
+.btn:active{transform:scale(.98)} .btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff}
+.btn.small{min-height:34px;font-size:13px;padding:0 11px;border-radius:10px} .btn:disabled{opacity:.5;cursor:default}
+.muted{color:var(--muted);font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:3px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+label.f{display:block;margin:12px 0} label.f>span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800}
+label.f small{display:block;color:var(--muted);font-size:12.5px;margin-top:4px;font-weight:600}
+input,select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
+textarea{min-height:110px;resize:vertical} textarea.code{font-family:ui-monospace,Consolas,monospace;font-size:13.5px}
+input:focus,select:focus,textarea:focus{outline:3px solid var(--moose-soft);border-color:var(--moose)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+@media (max-width:640px){ .row2{grid-template-columns:1fr} }
+
+/* masthead + tabs */
+header.mast{background:linear-gradient(160deg,#2e4a0e,var(--forest) 60%,var(--forest-2));color:#fff;padding:22px 0 18px;border-bottom:4px solid var(--gold)}
+header.mast h1{font-size:26px;line-height:1.15;margin:0 0 6px;font-weight:800;letter-spacing:-.02em}
+header.mast p{margin:0;max-width:68ch;opacity:.93;font-size:15px}
+.metabar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;font-size:12.5px}
+.metabar span{background:rgba(255,255,255,.13);padding:4px 11px;border-radius:999px}
+.metabar .conf{border:1px solid rgba(224,178,95,.7);background:rgba(224,178,95,.2)}
+nav.tabs{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+nav.tabs .wrap{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+nav.tabs a{display:inline-flex;align-items:center;gap:6px;padding:12px 12px;font-weight:800;font-size:14px;color:var(--ink-2);text-decoration:none;border-bottom:3px solid transparent;white-space:nowrap}
+nav.tabs a.on{color:var(--ink);border-bottom-color:var(--moose)}
+nav.tabs .n{background:var(--red);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px}
+.controls{position:sticky;top:47px;z-index:20;background:color-mix(in srgb,var(--ground) 94%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:10px 0}
+.controls .wrap{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:999px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
+.chip.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+#q{flex:1;min-width:180px;max-width:300px;margin-left:auto;min-height:38px;border-radius:999px;padding:6px 15px;font-size:15px}
+@media (max-width:640px){ #q{margin-left:0;max-width:none} header.mast h1{font-size:22px} }
+
+/* sections */
+section.s{padding:26px 0 6px}
+.kicker{text-transform:uppercase;letter-spacing:.14em;font-size:11.5px;font-weight:800;color:var(--gold);margin:0 0 4px}
+h2.sec{font-size:21px;margin:0 0 6px;color:var(--ink);font-weight:800;letter-spacing:-.01em}
+.sec-note{color:var(--muted);font-size:14.5px;max-width:70ch;margin:0 0 16px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px;margin-bottom:12px}
+.box table{width:100%;border-collapse:collapse;font-size:14px}
+.box th,.box td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.box th{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.box tr:last-child td{background:var(--moose-soft)}
+.box h5{margin:14px 0 6px;font-size:15px;color:var(--forest-2)} .box h5:first-child{margin-top:0}
+.box ul,.box ol{padding-left:20px} .box li{margin-bottom:4px}
+.argument{background:linear-gradient(160deg,#2e4a0e,var(--forest-2));color:#fff;border-radius:18px;padding:24px 26px;box-shadow:var(--shadow)}
+.argument .kicker{color:#ffd98a}
+.argument blockquote{font-size:19px;line-height:1.5;font-weight:600;margin:6px 0 0;border-left:4px solid var(--gold);padding-left:16px}
+.rulecard{background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:14px;padding:16px 20px;font-size:14.5px}
+.rulecard strong{color:var(--gold)}
+.edit-sec{float:right}
+
+/* competitor cards (same anatomy as the artifact) */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:16px}
+.cc{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 18px 16px;display:flex;flex-direction:column;border-top:4px solid var(--muted);min-width:0;scroll-margin-top:160px}
+.cc[data-tier="local"]{border-top-color:var(--forest-2)} .cc[data-tier="national"]{border-top-color:#4a6fa5} .cc[data-tier="half"]{border-top-color:var(--amber)}
+.cc[data-tier="boutique"]{border-top-color:var(--gold)} .cc[data-tier="resort"]{border-top-color:#6d8a96} .cc[data-tier="heber"]{border-top-color:#7d9b6a}
+.cc.hit{outline:3px solid var(--moose)}
+.cc h3{margin:0;font-size:18px;line-height:1.2;font-weight:800}
+.cc .who{font-size:13px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
+.cc .who a{color:var(--pine)}
+.flagbadge{display:inline-block;margin-left:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#fff;background:var(--red);padding:3px 7px;border-radius:6px;vertical-align:middle}
+.flagbadge.opp{background:var(--green)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 2px}
+.tag{font-size:12px;background:var(--ground);border:1px solid var(--line);color:var(--muted);padding:3px 8px;border-radius:6px;font-weight:600}
+.tag.comm{background:var(--green-soft);border-color:#cfe3d6;color:var(--green-ink);font-weight:800}
+.tag.pms{background:#ece7f6;border-color:#cdc0ea;color:#5a4a8a;font-weight:800}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .tag.pms{background:#241d38;border-color:#3b3060;color:#cdbff0} :root:not([data-theme="light"]) .tag.comm{border-color:#24412d} }
+.bx{border-radius:10px;padding:10px 12px;margin-top:12px;font-size:14px}
+.bx .lbl,.fld .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;margin-bottom:3px}
+.bx p{margin:0 0 6px} .bx p:last-child{margin-bottom:0} .bx ul,.fld ul,.bx ol{margin:4px 0 0;padding-left:18px} .bx li,.fld li{margin-bottom:3px}
+.bx.flag{background:var(--red-soft);border:1px solid #e6b4ab;color:var(--red-ink)} .bx.flag .lbl{color:var(--red)}
+.bx.opp{background:var(--green-soft);border:1px solid #bcd9c6;color:var(--green-ink)} .bx.opp .lbl{color:var(--green)}
+.bx.intel{background:var(--blue-soft);border:1px solid #bcd6e6;color:var(--blue-ink)} .bx.intel .lbl{color:var(--blue)}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bx.flag,:root:not([data-theme="light"]) .bx.opp,:root:not([data-theme="light"]) .bx.intel{border-color:var(--line-2)} }
+.fld{margin-top:12px;font-size:14.5px} .fld .lbl{color:var(--gold)} .fld p{margin:0 0 6px}
+.bx.win{background:var(--moose-soft);color:var(--ink)} .bx.win .lbl{color:var(--moose-ink)}
+.bx.ask{background:var(--gold-soft);border:1px solid var(--gold-line);color:var(--ink)} .bx.ask .lbl{color:var(--gold)}
+.bx.ask ol{padding-left:20px}
+.src{font-size:12.5px;color:var(--muted);margin-top:auto;padding-top:12px}
+.src>div{border-top:1px dashed var(--line-2);padding-top:9px;margin-top:12px}
+.cfoot{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.noresult{text-align:center;color:var(--muted);padding:30px;font-style:italic}
+
+/* lists (intel, threads, log, reports) */
+.page{max-width:900px;margin:0 auto;padding:20px 16px 60px}
+.page h2{font-size:22px;margin:4px 0 4px;font-weight:800;letter-spacing:-.02em}
+.item{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
+.item .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item .hd b{font-size:15.5px}
+.item .what{white-space:pre-wrap;margin:8px 0 6px;font-size:14.5px;overflow-wrap:anywhere}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13.5px;margin-top:6px}
+.meta dt{color:var(--muted);font-weight:700} .meta dd{margin:0;overflow-wrap:anywhere}
+.files{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.sure{display:flex;gap:8px;flex-wrap:wrap}
+.sure label{flex:1;min-width:150px;border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--card)}
+.sure label:has(input:checked){border-color:var(--moose);background:var(--moose-soft)}
+.sure input{width:auto;min-height:0;margin:0 6px 0 0;vertical-align:-2px}
+.sure b{font-size:14.5px} .sure small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.drop{border:2px dashed var(--line-2);border-radius:14px;padding:16px;text-align:center;background:var(--card);cursor:pointer}
+.drop.over{border-color:var(--moose);background:var(--moose-soft)}
+.flist{list-style:none;padding:0;margin:8px 0 0} .flist li{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.flist li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg{padding:10px 12px;border-radius:12px;margin:10px 0;font-size:14.5px;font-weight:600}
+.msg.ok{background:var(--moose-soft);color:var(--moose-ink)} .msg.err{background:var(--red-soft);color:var(--red)}
+table.rep{width:100%;border-collapse:collapse;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table.rep th,table.rep td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.rep th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--ground)}
+.scroll{overflow-x:auto}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+
+/* editor dialog */
+dialog{border:0;border-radius:18px;padding:0;width:min(860px,calc(100vw - 20px));max-height:calc(100dvh - 30px);background:var(--card);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(10,20,14,.5)}
+dialog .dh{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:14px 18px;display:flex;gap:10px;align-items:center;z-index:2}
+dialog .dh b{flex:1;font-size:17px}
+dialog .db{padding:6px 18px 10px}
+dialog .df{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sub{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--ground)}
+.sub .hd{display:flex;gap:8px;align-items:center}
+.center{max-width:520px;margin:12vh auto;padding:0 16px;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"><div class="center"><p class="muted">Loading…</p></div></div>
+<dialog id="dlg"></dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const fmtD = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const errText = e => { const m = (e && (e.message || e.error_description)) || String(e);
+  return /row-level security|permission denied/i.test(m) ? "Your login can't change this." : m.replace(/^.*?ERROR:\s*/, ""); };
+
+const TIERS = [["local","Local — deep-profiled"],["boutique","Luxury & boutique"],["resort","Resort programs"],["heber","Heber Valley"],
+               ["national","National"],["half","Half-service"],["budget","Budget / AI"]];
+const TIER = Object.fromEntries(TIERS);
+const STATUS = { active:"Active", historical:"Historical", not_str:"Not an STR manager", watch:"Watch" };
+// how we got it (cmp_captures.channel) - order = how often front desk sees them
+const CHANNELS = [["mailer","Mailer / letter"],["email","Email"],["owner","Owner told us"],["realtor","Realtor told us"],["call","Phone call"],["text","Text message"],
+  ["in_person","In person"],["rumor","Rumor / word of mouth"],["web","Their website"],["social","Social media"],["ad","Ad (Google, print, sign)"],
+  ["review","Online review"],["event","Event / conference"],["other","Other"]];
+const CHANNEL = Object.fromEntries(CHANNELS);
+const SURE = [["confirmed","Confirmed","We saw it: a mailer, email, page or their own words"],
+              ["likely","Likely","From someone we trust, not seen ourselves"],
+              ["rumor","Rumor","Heard around; not checked"]];
+const SURE_PILL = { confirmed:"green", likely:"blue", rumor:"amber" };
+const CSTATUS = { new:["New","red"], reviewed:["Reviewed","blue"], filed:["Filed on a card","green"], set_aside:["Set aside",""] };
+const FILE_TYPES = { jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", webp:"image/webp", heic:"image/heic", gif:"image/gif", pdf:"application/pdf",
+  eml:"message/rfc822", msg:"application/vnd.ms-outlook", txt:"text/plain" };
+const MAX_FILE = 15 * 1024 * 1024;
+
+/* ---------- card HTML: a small allow-list, everything else is dropped (cards are typed by editors, rendered for everyone) ---------- */
+const OK_TAGS = new Set(["P","B","STRONG","EM","I","U","UL","OL","LI","BR","A","CODE","TABLE","THEAD","TBODY","TR","TH","TD","H5","BLOCKQUOTE","SPAN","SMALL","SUP"]);
+function clean(html){
+  if(!html) return "";
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html"), root = doc.body.firstChild;
+  (function walk(el){
+    [...el.childNodes].forEach(n => {
+      if(n.nodeType === 3) return;
+      if(n.nodeType !== 1 || !OK_TAGS.has(n.tagName)){ if(n.nodeType === 1 && !/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED)$/.test(n.tagName)){ walk(n); n.replaceWith(...n.childNodes); } else n.remove(); return; }
+      const href = n.tagName === "A" ? n.getAttribute("href") : null;
+      [...n.attributes].forEach(a => n.removeAttribute(a.name));
+      if(href && /^(https?:|mailto:)/i.test(href.trim())){ n.setAttribute("href", href.trim()); n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener"); }
+      walk(n);
+    });
+  })(root);
+  return root.innerHTML;
+}
+
+/* ---------- state ---------- */
+const S = { me:null, uid:null, companies:[], cards:{}, content:[], threads:[], due:{}, newCount:0, loaded:false, tier:"all", q:"" };
+const byId = id => S.companies.find(c => c.id === id);
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<div class="center"><h2>Please sign in</h2><p class="muted">Open the Competitor Playbook from the Moose Hub.</p>
+      <a class="btn primary" href="hub.html#/competitor" target="_top">Go to the Moose Hub</a></div>`; return; }
+  const r = await sb.rpc("cmp_me");
+  S.me = r.data || {};
+  if(r.error || (!S.me.read && !S.me.add)){ $("#app").innerHTML = `<div class="center"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div>`; return; }
+  window.addEventListener("hashchange", route);
+  route();
+}
+
+async function loadPlaybook(force){
+  if(S.loaded && !force) return;
+  const [co, ca, ct, th, du] = await Promise.all([
+    sb.from("cmp_companies").select("*").order("sort").order("name"),
+    sb.from("cmp_cards").select("*"),
+    sb.from("cmp_content").select("*").order("sort"),
+    sb.from("cmp_threads").select("*").order("id"),
+    sb.from("cmp_due").select("id,why,days_since")]);
+  const bad = [co, ca, ct, th, du].find(x => x.error); if(bad) throw bad.error;
+  S.companies = co.data; S.cards = Object.fromEntries(ca.data.map(c => [c.company_id, c]));
+  S.content = ct.data; S.threads = th.data; S.due = Object.fromEntries(du.data.map(d => [d.id, d]));
+  S.loaded = true;
+}
+async function countNew(){
+  if(!S.me.edit) return;
+  const r = await sb.from("cmp_captures").select("id", { count:"exact", head:true }).eq("status", "new");
+  S.newCount = r.count || 0;
+}
+
+/* ---------- routing: #/ playbook · #/add · #/mine · #/review · #/threads · #/log · #/report/intel|due|changes · #<company-id> ---------- */
+function tabs(on){
+  const t = [];
+  if(S.me.read) t.push(["", "Playbook"]);
+  t.push(["add", "Add what you heard"]);
+  if(S.me.edit) t.push(["review", "Review intel" + (S.newCount ? ` <span class="n">${S.newCount}</span>` : "")]);
+  else t.push(["mine", "What I've sent"]);
+  if(S.me.read) t.push(["threads", "Open threads"], ["log", "Crew log"], ["reports", "Reports"]);
+  return `<nav class="tabs"><div class="wrap">${t.map(([k, l]) => `<a href="#/${k}" class="${k === on ? "on" : ""}">${l}</a>`).join("")}</div></nav>`;
+}
+async function route(){
+  const h = decodeURIComponent(location.hash.replace(/^#/, ""));
+  const parts = h.replace(/^\//, "").split("/"), k = h.startsWith("/") || !h ? parts[0] : "";
+  const jump = !h.startsWith("/") && h ? h : "";
+  try {
+    if(!S.me.read && !["add", "mine"].includes(k)){ location.replace("#/add"); return; }
+    await countNew();
+    if(k === "add") return addView(parts[1] || "");
+    if(k === "mine") return mineView();
+    if(k === "review" && S.me.edit) return reviewView(parts[1] || "open");
+    if(k === "threads") return threadsView();
+    if(k === "log") return logView();
+    if(k === "reports") return reportsView();
+    if(k === "report") return reportView(parts[1]);
+    return playbookView(jump);
+  } catch(e){ console.error(e); $("#app").innerHTML = tabs("") + `<div class="page"><div class="msg err">Couldn't load: ${esc(errText(e))}</div></div>`; }
+}
+
+/* ---------- Playbook (cards + sections) ---------- */
+const sec = key => S.content.find(c => c.key === key);
+function secBox(key, kicker, opts = {}){
+  const c = sec(key); if(!c) return "";
+  const ed = S.me.edit ? `<button class="btn small edit-sec" data-edit-content="${esc(key)}">Edit</button>` : "";
+  const body = opts.argument ? `<div class="argument"><p class="kicker">Higher commission, more bookings</p>${clean(c.html)}</div>`
+             : opts.rule ? `<div class="rulecard">${clean(c.html)}</div>` : `<div class="box">${clean(c.html)}</div>`;
+  return `<section class="s" id="sec-${esc(key)}">${ed}<p class="kicker">${esc(kicker)}</p><h2 class="sec">${esc(c.title)}</h2>${body}</section>`;
+}
+async function playbookView(jump){
+  await loadPlaybook();
+  const mast = sec("masthead"), n = S.companies.length;
+  const counts = Object.fromEntries(TIERS.map(([t]) => [t, S.companies.filter(c => c.tier === t).length]));
+  const meta = mast ? new DOMParser().parseFromString(mast.html, "text/html").body.textContent.split(/(?=🔒|📍|🗓|♻)/u).map(s => s.trim()).filter(Boolean) : [];
+  $("#app").innerHTML = tabs("") + `
+  <header class="mast"><div class="wrap">
+    <h1>Competitor Intel Playbook</h1>
+    <p>Who we're up against in the Park City STR management market: what they charge, how they pitch, where they're weak, and how we win the conversation.</p>
+    <div class="metabar">${meta.map((m, i) => `<span class="${i === 0 ? "conf" : ""}">${esc(m)}</span>`).join("")}</div>
+    ${S.me.edit ? `<p style="margin-top:12px"><button class="btn small" data-edit-content="masthead">Edit this line</button></p>` : ""}
+  </div></header>
+  <div class="controls"><div class="wrap">
+    <button class="chip ${S.tier === "all" ? "on" : ""}" data-tier="all">All (${n})</button>
+    ${TIERS.filter(([t]) => counts[t]).map(([t, l]) => `<button class="chip ${S.tier === t ? "on" : ""}" data-tier="${t}">${esc(l)} (${counts[t]})</button>`).join("")}
+    <input id="q" type="search" placeholder="Search competitors, people, brands…" aria-label="Search competitors" value="${esc(S.q)}">
+  </div></div>
+  <div class="wrap">
+    ${secBox("snapshot", "The lay of the land")}
+    <section class="s" id="competitors">
+      ${S.me.edit ? `<button class="btn small edit-sec" data-new-company>+ New company</button>` : ""}
+      <p class="kicker">The field</p><h2 class="sec">Competitor deep dives</h2>
+      <p class="sec-note">${n} companies, one card per operating company. Commission figures are scans: most full-service rates are quote-only and negotiable, so treat them as ranges and re-verify before quoting an owner.
+        Heard something new? <a href="#/add">Add what you heard</a>.</p>
+      <div class="grid" id="grid">${S.companies.map(cardHTML).join("")}</div>
+      <div class="noresult" id="noresult" hidden>No competitors match that search.</div>
+    </section>
+    ${secBox("positioning", "The playbook")}
+    ${secBox("interviewing", "“I'm talking to a few companies”")}
+    ${secBox("argument", "Memorize this", { argument:true })}
+    ${secBox("rules", "Ground rules", { rule:true })}
+    ${secBox("standing", "For the team")}
+    ${secBox("filing", "How it works")}
+    <p class="muted" style="padding:20px 0 50px">Moose Management · Competitor Intel Playbook · Internal only. Every card edit is logged with who, when and the source.</p>
+  </div>`;
+  $$(".chip").forEach(b => b.onclick = () => { S.tier = b.dataset.tier; $$(".chip").forEach(x => x.classList.toggle("on", x === b)); filter(); });
+  $("#q").oninput = e => { S.q = e.target.value; filter(); };
+  wireEdits($("#app"));
+  filter();
+  if(jump){ const el = document.getElementById("c-" + jump); if(el){ el.classList.add("hit"); el.scrollIntoView({ block:"start" }); } }
+}
+function filter(){
+  const q = S.q.trim().toLowerCase(); let shown = 0;
+  $$("#grid .cc").forEach(c => { const ok = (S.tier === "all" || c.dataset.tier === S.tier) && (!q || c.dataset.s.includes(q) || c.textContent.toLowerCase().includes(q));
+    c.hidden = !ok; if(ok) shown++; });
+  $("#noresult").hidden = !!shown;
+}
+function cardHTML(co){
+  const c = S.cards[co.id] || {}, due = S.due[co.id];
+  const tags = (c.tags || []).map(t => `<span class="tag ${/^PMS:/i.test(t) ? "pms" : t === co.commission ? "comm" : ""}">${esc(t)}</span>`).join("");
+  const box = (cls, label, html) => html ? `<div class="bx ${cls}">${label ? `<div class="lbl">${esc(label)}</div>` : ""}${clean(html)}</div>` : "";
+  const fld = (label, html) => html ? `<div class="fld"><div class="lbl">${esc(label)}</div>${clean(html)}</div>` : "";
+  const intel = (c.intel || []).map(x => x.kind === "field" ? fld(x.label, x.html) : box(x.kind === "flag" ? "flag" : x.kind === "opp" ? "opp" : "intel", x.label, x.html)).join("");
+  const ask = (c.ask_them || []).map(a => `<div class="bx ask"><div class="lbl">${esc(a.label || "Ask them")}</div><ol>${(a.questions || []).map(q => `<li>${clean(q)}</li>`).join("")}</ol></div>`).join("");
+  const badges = (co.threat ? `<span class="flagbadge">⚠ threat</span>` : "") + (co.opportunity ? `<span class="flagbadge opp">📈 opportunity</span>` : "");
+  const s = [co.name, co.id, (co.brands || []).join(" "), co.search_terms || "", co.pms || ""].join(" ").toLowerCase();
+  return `<article class="cc" id="c-${esc(co.id)}" data-tier="${esc(co.tier)}" data-s="${esc(s)}">
+    <h3>${esc(co.name)}${badges}</h3>
+    <div class="who">${clean(c.contacts) || (co.website ? `<a href="${esc(co.website)}" target="_blank" rel="noopener">${esc(co.website.replace(/^https?:\/\/(www\.)?/, ""))} ↗</a>` : "")}</div>
+    ${(co.brands || []).length ? `<div class="muted" style="font-size:12.5px;margin-top:3px">Also: ${esc(co.brands.join(" · "))}</div>` : ""}
+    <div class="tags">${co.status !== "active" ? `<span class="pill ${co.status === "watch" ? "amber" : ""}">${esc(STATUS[co.status])}</span>` : ""}${tags}</div>
+    ${box("flag", "", c.threat_html)}${box("opp", "", c.opportunity_html)}
+    ${fld("Who they are", c.who)}${intel}
+    ${fld("What they lead with", c.leads_with)}${fld("Where they're vulnerable", c.vulnerable)}
+    ${c.how_wins ? `<div class="bx win"><div class="lbl">How Moose wins</div>${clean(c.how_wins)}</div>` : ""}
+    ${ask}
+    <div class="src"><div>${clean(c.source) || "No source line yet."}${c.source_date ? ` <b>(${esc(fmtD(c.source_date))})</b>` : ""}
+      <br>Last verified: ${co.last_verified ? esc(fmtD(co.last_verified)) : "never"}${due ? ` <span class="pill amber">${esc(due.why)}</span>` : ""}</div>
+      <div class="cfoot" style="border:0;margin-top:6px;padding-top:0">
+        <a class="btn small" href="#/add/${esc(co.id)}">+ Add intel</a>
+        ${S.me.edit ? `<button class="btn small" data-edit-card="${esc(co.id)}">Edit card</button><button class="btn small" data-verify="${esc(co.id)}">Mark re-verified</button>` : ""}
+      </div></div>
+  </article>`;
+}
+function wireEdits(el){
+  $$("[data-edit-content]", el).forEach(b => b.onclick = () => editContent(b.dataset.editContent));
+  $$("[data-edit-card]", el).forEach(b => b.onclick = () => editCard(b.dataset.editCard));
+  $$("[data-new-company]", el).forEach(b => b.onclick = () => editCard(null));
+  $$("[data-verify]", el).forEach(b => b.onclick = () => markVerified(b.dataset.verify));
+}
+
+/* ---------- Add what you heard: when · where/how · who told us · how sure · files ---------- */
+let pending = [];
+async function addView(pre){
+  let list = [];
+  if(S.me.read){ await loadPlaybook(); list = S.companies; }
+  else { const r = await sb.from("cmp_companies").select("id,name").order("name"); list = r.data || []; }   // add-only: RLS returns none, so they type the name
+  pending = [];
+  const opts = list.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${esc(c.id)}" ${c.id === pre ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+  $("#app").innerHTML = tabs("add") + `<div class="page">
+    <h2>Add what you heard</h2>
+    <p class="muted">A mailer, an owner's story, a price, a rumor: send it in. Owner relations reviews every entry before anything goes on a card.
+      Include <b>when</b>, <b>where</b>, <b>who</b> told us and <b>how</b> we got it.</p>
+    <form id="addf" class="item" style="padding:6px 18px 16px" novalidate>
+      ${list.length ? `<label class="f"><span>Which company?</span><select name="company"><option value="">Pick a company…</option>${opts}<option value="__new">Not on the list / not sure</option></select></label>` : ""}
+      <label class="f" id="ctext" ${list.length ? "hidden" : ""}><span>${list.length ? "Company name (as you heard it)" : "Which company?"}</span><input name="company_text" maxlength="200" placeholder="e.g. Blue Haven, Avari, “the new Deer Valley guys”"></label>
+      <div class="row2">
+        <label class="f"><span>How did we get it?</span><select name="channel" required><option value="">Pick one…</option>${CHANNELS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></label>
+        <label class="f"><span>When did we hear or get it?</span><input type="date" name="heard_on" max="${today()}" value="${today()}" required></label>
+      </div>
+      <label class="f"><span>What did we hear?</span><textarea name="what" maxlength="6000" required placeholder="What they offered, charged or said. Quote their words when you can."></textarea></label>
+      <div class="row2">
+        <label class="f"><span>Who told us?</span><input name="source_person" maxlength="200" placeholder="e.g. Greg Watkins (KW), a Moose owner at Bear Hollow">
+          <small>Business contacts only: no personal phone numbers or home addresses.</small></label>
+        <label class="f"><span>Where? (place, address, link, forwarded by…)</span><input name="where" maxlength="500" placeholder="e.g. mailer at a Bear Hollow condo, forwarded by Kim"></label>
+      </div>
+      <div class="f" style="margin:12px 0"><span style="display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800">How sure are we?</span>
+        <div class="sure">${SURE.map(([k, l, d]) => `<label><input type="radio" name="confidence" value="${k}" ${k === "likely" ? "checked" : ""}><b>${l}</b><small>${d}</small></label>`).join("")}</div></div>
+      <div class="f" style="margin:12px 0"><span style="display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800">Photos, PDFs or emails <span class="muted" style="font-weight:600">(optional, as many as you need)</span></span>
+        <div class="drop" id="drop" tabindex="0" role="button">📎 Tap to add files, or drop them here<br><small class="muted">Photos, PDF, .eml/.msg email, up to 15 MB each</small></div>
+        <input type="file" id="fpick" multiple accept="image/*,.pdf,.eml,.msg,.txt" hidden>
+        <ul class="flist" id="flist"></ul></div>
+      <label class="f"><span>Freshdesk ticket # <span class="muted" style="font-weight:600">(optional)</span></span><input name="freshdesk" maxlength="60" inputmode="numeric"></label>
+      <div id="addmsg"></div>
+      <button class="btn primary" type="submit" style="width:100%">Send to owner relations</button>
+    </form></div>`;
+  const f = $("#addf");
+  if(f.company) f.company.onchange = () => { $("#ctext").hidden = f.company.value !== "__new"; };
+  const pick = $("#fpick"), drop = $("#drop");
+  drop.onclick = () => pick.click(); drop.onkeydown = e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); pick.click(); } };
+  pick.onchange = () => { addFiles(pick.files); pick.value = ""; };
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); };
+  f.onsubmit = e => { e.preventDefault(); submitCapture(f); };
+}
+function fileType(f){ const ext = (f.name.split(".").pop() || "").toLowerCase(); return FILE_TYPES[ext] || (Object.values(FILE_TYPES).includes(f.type) ? f.type : ""); }
+function addFiles(fl){
+  const bad = [];
+  [...fl].forEach(f => { if(!fileType(f)) bad.push(`${f.name}: not a photo, PDF or email file`); else if(f.size > MAX_FILE) bad.push(`${f.name}: over 15 MB`); else pending.push(f); });
+  $("#flist").innerHTML = pending.map((f, i) => `<li><span>📄 ${esc(f.name)}</span><small class="muted">${Math.max(1, Math.round(f.size / 1024))} KB</small><button type="button" class="btn small" data-rm="${i}">Remove</button></li>`).join("");
+  $$("[data-rm]").forEach(b => b.onclick = () => { pending.splice(+b.dataset.rm, 1); addFiles([]); });
+  $("#addmsg").innerHTML = bad.length ? `<div class="msg err">${bad.map(esc).join("<br>")}</div>` : "";
+}
+async function submitCapture(f){
+  const v = n => (f[n] && f[n].value || "").trim();
+  const company = f.company && f.company.value !== "__new" ? v("company") : "", ctext = v("company_text");
+  const errs = [];
+  if(!company && !ctext) errs.push("Which company is it about?");
+  if(!v("channel")) errs.push("How did we get it?");
+  if(!v("heard_on")) errs.push("When did we hear it?"); else if(v("heard_on") > today()) errs.push("The date can't be in the future.");
+  if(v("what").length < 3) errs.push("Say what we heard.");
+  if(errs.length){ $("#addmsg").innerHTML = `<div class="msg err">${errs.map(esc).join("<br>")}</div>`; return; }
+  const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    const r = await sb.rpc("cmp_capture_add", { p_company: company || null, p_company_text: ctext || null, p_channel: v("channel"), p_heard_on: v("heard_on"),
+      p_what: v("what"), p_where: v("where") || null, p_source_person: v("source_person") || null,
+      p_confidence: (f.querySelector("input[name=confidence]:checked") || {}).value || "likely", p_freshdesk: v("freshdesk") || null });
+    if(r.error) throw r.error;
+    const id = r.data, failed = await uploadFiles(id, pending);
+    $("#app").innerHTML = tabs("add") + `<div class="page"><div class="item">
+      <h2>Thanks — sent</h2><p>Entry #${esc(id)} is with owner relations for review.${pending.length ? ` ${pending.length - failed.length} of ${pending.length} file${pending.length === 1 ? "" : "s"} attached.` : ""}</p>
+      ${failed.length ? `<div class="msg err">These files didn't attach: ${failed.map(esc).join(", ")}. Open <a href="#/${S.me.edit ? "review/all" : "mine"}">your entry</a> to try again.</div>` : ""}
+      <div class="acts"><a class="btn primary" href="#/add">Add another</a><a class="btn" href="#/${S.me.edit ? "review" : "mine"}">${S.me.edit ? "Review intel" : "What I've sent"}</a></div></div></div>`;
+  } catch(e){ $("#addmsg").innerHTML = `<div class="msg err">${esc(errText(e))}</div>`; btn.disabled = false; btn.textContent = "Send to owner relations"; }
+}
+async function myUid(captureId){   // storage folders are named by the hub user id (allowed_users.id), which RLS shows on your own entries
+  if(S.uid) return S.uid;
+  const r = await sb.from("cmp_captures").select("added_by").eq("id", captureId).maybeSingle();
+  return S.uid = r.data && r.data.added_by;
+}
+async function uploadFiles(captureId, files){
+  const failed = []; if(!files.length) return failed;
+  const uid = await myUid(captureId); if(!uid) return files.map(f => f.name);
+  for(const f of files){
+    try {
+      const path = `${uid}/${captureId}/${Date.now()}-${f.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-120)}`;
+      const up = await sb.storage.from("cmp-files").upload(path, f, { contentType: fileType(f), upsert:false });
+      if(up.error) throw up.error;
+      const r = await sb.rpc("cmp_capture_file_add", { p_capture: captureId, p_path: path, p_name: f.name, p_type: fileType(f) });
+      if(r.error) throw r.error;
+    } catch(e){ console.error(e); failed.push(f.name); }
+  }
+  return failed;
+}
+async function openFile(path){
+  const r = await sb.storage.from("cmp-files").createSignedUrl(path, 120);
+  if(r.error){ alert(errText(r.error)); return; }
+  window.open(r.data.signedUrl, "_blank", "noopener");
+}
+
+/* ---------- captures list (mine, or the review queue) ---------- */
+async function fetchCaptures(q){
+  const r = await q; if(r.error) throw r.error;
+  const ids = r.data.map(c => c.id), files = {};
+  if(ids.length){ const fr = await sb.from("cmp_capture_files").select("*").in("capture_id", ids).order("id"); (fr.data || []).forEach(x => (files[x.capture_id] = files[x.capture_id] || []).push(x)); }
+  return r.data.map(c => Object.assign(c, { files: files[c.id] || [] }));
+}
+function captureHTML(c, editor){
+  const co = c.company_id && byId(c.company_id), st = CSTATUS[c.status] || [c.status, ""];
+  const files = c.files.map(x => `<button class="btn small" data-file="${esc(x.storage_path)}">📄 ${esc(x.file_name)}</button>`).join("")
+    + (c.file_path ? `<button class="btn small" data-file="${esc(c.file_path)}">📄 ${esc(c.file_name || "file")}</button>` : "");
+  return `<div class="item" id="cap-${c.id}">
+    <div class="hd"><b>${esc(co ? co.name : c.company_text || c.company_id || "Unknown company")}</b>
+      ${!c.company_id ? `<span class="pill amber">not on the list</span>` : ""}
+      <span class="pill ${st[1]}">${esc(st[0])}</span><span class="pill ${SURE_PILL[c.confidence] || ""}">${esc((SURE.find(s => s[0] === c.confidence) || [, c.confidence])[1])}</span>
+      <span class="muted" style="margin-left:auto">#${c.id}</span></div>
+    <div class="what">${esc(c.what)}</div>
+    <dl class="meta">
+      <dt>When</dt><dd>${esc(fmtD(c.heard_on))}</dd>
+      <dt>How</dt><dd>${esc(CHANNEL[c.channel] || c.channel)}</dd>
+      ${c.source_person ? `<dt>Who told us</dt><dd>${esc(c.source_person)}</dd>` : ""}
+      ${c.where_heard ? `<dt>Where</dt><dd>${esc(c.where_heard)}</dd>` : ""}
+      ${c.freshdesk ? `<dt>Freshdesk</dt><dd>${esc(c.freshdesk)}</dd>` : ""}
+      <dt>Sent by</dt><dd>${esc(c.added_by_name || "")} · ${esc(fmtDT(c.created_at))}</dd>
+      ${c.reviewed_by ? `<dt>Reviewed</dt><dd>${esc(c.reviewed_by)} · ${esc(fmtDT(c.reviewed_at))}${c.review_note ? ` — ${esc(c.review_note)}` : ""}</dd>` : ""}
+    </dl>
+    ${files ? `<div class="files">${files}</div>` : ""}
+    <div class="acts">
+      <button class="btn small" data-addfile="${c.id}">+ Add files</button>
+      ${editor ? `${c.status !== "reviewed" ? `<button class="btn small" data-rv="${c.id}" data-to="reviewed">Mark reviewed</button>` : ""}
+        ${c.company_id ? `<button class="btn small primary" data-tocard="${c.id}">Put on the card…</button>` : `<button class="btn small" data-rv="${c.id}" data-to="${c.status}" data-pickco>Link to a company…</button>`}
+        ${c.status !== "filed" ? `<button class="btn small" data-rv="${c.id}" data-to="filed">Mark filed</button>` : ""}
+        ${c.status !== "set_aside" ? `<button class="btn small" data-rv="${c.id}" data-to="set_aside">Set aside</button>` : `<button class="btn small" data-rv="${c.id}" data-to="new">Back to new</button>`}` : ""}
+    </div></div>`;
+}
+function wireCaptures(el, list, reload){
+  $$("[data-file]", el).forEach(b => b.onclick = () => openFile(b.dataset.file));
+  $$("[data-addfile]", el).forEach(b => b.onclick = () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.multiple = true; inp.accept = "image/*,.pdf,.eml,.msg,.txt";
+    inp.onchange = async () => { const ok = [...inp.files].filter(f => fileType(f) && f.size <= MAX_FILE), skip = inp.files.length - ok.length;
+      b.disabled = true; b.textContent = "Uploading…"; const failed = await uploadFiles(+b.dataset.addfile, ok);
+      if(failed.length || skip) alert(`${failed.length + skip} file(s) didn't attach (photos, PDF or email files, 15 MB max).`); reload(); };
+    inp.click(); });
+  $$("[data-rv]", el).forEach(b => b.onclick = () => reviewDialog(list.find(c => c.id === +b.dataset.rv), b.dataset.to, b.hasAttribute("data-pickco"), reload));
+  $$("[data-tocard]", el).forEach(b => b.onclick = () => { const c = list.find(x => x.id === +b.dataset.tocard); editCard(c.company_id, c); });
+}
+async function mineView(){
+  if(S.me.read) await loadPlaybook();
+  const list = await fetchCaptures(sb.from("cmp_captures").select("*").order("created_at", { ascending:false }).limit(200));
+  $("#app").innerHTML = tabs("mine") + `<div class="page"><h2>What I've sent</h2>
+    <p class="muted">Your entries and where they stand. Owner relations reviews each one.</p>
+    ${list.length ? list.map(c => captureHTML(c, false)).join("") : `<div class="item"><p class="muted">Nothing yet. <a href="#/add">Add what you heard</a>.</p></div>`}</div>`;
+  wireCaptures($("#app"), list, mineView);
+}
+async function reviewView(which){
+  await loadPlaybook();
+  let q = sb.from("cmp_captures").select("*").order("created_at", { ascending:false }).limit(300);
+  if(which === "open") q = q.in("status", ["new", "reviewed"]); else if(which !== "all") q = q.eq("status", which);
+  const list = await fetchCaptures(q);
+  const seg = [["open","To do"],["new","New"],["reviewed","Reviewed"],["filed","Filed"],["set_aside","Set aside"],["all","All"]];
+  $("#app").innerHTML = tabs("review") + `<div class="page"><h2>Review intel</h2>
+    <p class="muted">Everything staff sent in. Check it, then put what holds up on the card (with its source) or set it aside. Owner names stay here, never on cards.</p>
+    <div class="seg">${seg.map(([k, l]) => `<a class="chip ${k === which ? "on" : ""}" href="#/review/${k}" style="text-decoration:none">${l}</a>`).join("")}</div>
+    ${list.length ? list.map(c => captureHTML(c, true)).join("") : `<div class="item"><p class="muted">Nothing here.</p></div>`}</div>`;
+  wireCaptures($("#app"), list, () => reviewView(which));
+}
+function reviewDialog(c, to, pickCo, reload){
+  const d = $("#dlg"), opts = S.companies.map(x => `<option value="${esc(x.id)}" ${x.id === c.company_id ? "selected" : ""}>${esc(x.name)}</option>`).join("");
+  d.innerHTML = `<div class="dh"><b>${esc(CSTATUS[to] ? (pickCo ? "Link to a company" : CSTATUS[to][0]) : to)} · #${c.id}</b><button class="btn small" data-x>Close</button></div>
+    <div class="db">
+      ${pickCo || !c.company_id ? `<label class="f"><span>Company</span><select id="rvco"><option value="">(leave as typed: ${esc(c.company_text || "?")})</option>${opts}</select>
+        <small>Not on the list? Add it with “+ New company” on the Playbook first.</small></label>` : ""}
+      <label class="f"><span>Note ${to === "set_aside" ? "(why it's set aside)" : "(optional)"}</span><textarea id="rvnote" style="min-height:80px">${esc(c.review_note || "")}</textarea></label>
+      <div id="rvmsg"></div></div>
+    <div class="df"><button class="btn primary" data-ok>Save</button><button class="btn" data-x>Cancel</button></div>`;
+  d.showModal();
+  $$("[data-x]", d).forEach(b => b.onclick = () => d.close());
+  $("[data-ok]", d).onclick = async () => {
+    const r = await sb.rpc("cmp_capture_review", { p_id: c.id, p_status: to, p_note: $("#rvnote").value.trim() || null, p_company: ($("#rvco") || {}).value || null });
+    if(r.error){ $("#rvmsg").innerHTML = `<div class="msg err">${esc(errText(r.error))}</div>`; return; }
+    d.close(); reload();
+  };
+}
+
+/* ---------- card editor (owner relations + admins). Every save needs a reason: source + date. ---------- */
+function editCard(id, capture){
+  const co = id ? byId(id) : {}, c = (id && S.cards[id]) || {};
+  const intel = JSON.parse(JSON.stringify(c.intel || [])), ask = JSON.parse(JSON.stringify(c.ask_them || []));
+  const d = $("#dlg");
+  const ta = (n, label, val, hint) => `<label class="f"><span>${label}</span><textarea class="code" name="${n}">${esc(val || "")}</textarea>${hint ? `<small>${hint}</small>` : ""}</label>`;
+  const inp = (n, label, val, extra = "") => `<label class="f"><span>${label}</span><input name="${n}" value="${esc(val || "")}" ${extra}></label>`;
+  d.innerHTML = `<div class="dh"><b>${id ? "Edit card: " + esc(co.name) : "New company"}</b><button class="btn small" data-x>Close</button></div>
+  <form class="db" id="cf">
+    ${capture ? `<div class="sub"><b>From intel #${capture.id}</b> <span class="pill ${SURE_PILL[capture.confidence]}">${esc(capture.confidence)}</span>
+      <div class="what" style="white-space:pre-wrap;font-size:14px;margin-top:6px">${esc(capture.what)}</div>
+      <small class="muted">${esc(CHANNEL[capture.channel] || capture.channel)} · ${esc(fmtD(capture.heard_on))}${capture.source_person ? " · " + esc(capture.source_person) : ""}.
+      Saving marks it filed.${capture.confidence === "rumor" ? ` <b>It's a rumor, so the card text must say “rumor”.</b>` : ""}</small></div>` : ""}
+    <p class="muted" style="margin:10px 0 0">Text boxes take simple HTML: &lt;p&gt; &lt;b&gt; &lt;ul&gt;&lt;li&gt; &lt;a href&gt;. Business details only: no personal phones, home addresses or owner names.</p>
+    <div class="row2">
+      ${inp("name", "Company name", co.name, "required maxlength=120")}
+      <label class="f"><span>Tier</span><select name="tier">${TIERS.map(([k, l]) => `<option value="${k}" ${co.tier === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+      <label class="f"><span>Status</span><select name="status">${Object.entries(STATUS).map(([k, l]) => `<option value="${k}" ${(co.status || "active") === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+      ${inp("website", "Website", co.website, 'type="url" placeholder="https://"')}
+      ${inp("pms", "PMS", co.pms)}${inp("commission", "Commission (shown as the green tag)", co.commission)}
+      ${inp("brands", "Other brands (comma between)", (co.brands || []).join(", "))}${inp("search_terms", "Extra search words (people, old names)", co.search_terms)}
+      ${inp("threat", "⚠ Threat label (blank = none)", co.threat)}${inp("opportunity", "📈 Opportunity label (blank = none)", co.opportunity)}
+    </div>
+    ${ta("contacts", "Contact line (under the name)", c.contacts)}
+    ${ta("tags", "Tags (one per line; start with “PMS:” for the purple tag)", (c.tags || []).join("\n"))}
+    ${ta("threat_html", "⚠ Threat box", c.threat_html)}${ta("opportunity_html", "📈 Opportunity box", c.opportunity_html)}
+    ${ta("who", "Who they are", c.who)}
+    <div class="f"><span style="display:block;font-size:13px;color:var(--ink-2);font-weight:800">Extra boxes (intel, flags, fields)</span><div id="intelEd"></div>
+      <button type="button" class="btn small" id="addIntel">+ Add a box</button></div>
+    ${ta("leads_with", "What they lead with", c.leads_with)}${ta("vulnerable", "Where they're vulnerable", c.vulnerable)}${ta("how_wins", "How Moose wins", c.how_wins)}
+    <div class="f"><span style="display:block;font-size:13px;color:var(--ink-2);font-weight:800">“Ask them” questions</span><div id="askEd"></div>
+      <button type="button" class="btn small" id="addAsk">+ Add a question set</button></div>
+    ${ta("source", "Source line (what was verified, from where)", c.source)}
+    <div class="row2">${inp("source_date", "Source date", c.source_date, 'type="date"')}</div>
+    <label class="f"><span>Reason for this change (source + date) — required, goes in the change log</span>
+      <input name="reason" required value="${capture ? esc(`Intel #${capture.id}: ${CHANNEL[capture.channel] || capture.channel}, ${fmtD(capture.heard_on)}${capture.source_person ? ", " + capture.source_person : ""}`) : ""}"></label>
+    <div id="cfmsg"></div>
+  </form>
+  <div class="df"><button class="btn primary" data-save>Save card</button><button class="btn" data-x>Cancel</button></div>`;
+  const drawIntel = () => { $("#intelEd").innerHTML = intel.map((x, i) => `<div class="sub"><div class="hd">
+      <select data-i="${i}" data-k="kind" style="width:auto;min-height:36px">${[["intel","Blue intel box"],["flag","Red flag box"],["opp","Green opportunity box"],["field","Plain field"]].map(([k, l]) => `<option value="${k}" ${x.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <button type="button" class="btn small" data-up="${i}" ${i ? "" : "disabled"}>↑</button><button type="button" class="btn small" data-rmi="${i}">Remove</button></div>
+      <label class="f"><span>Label</span><input data-i="${i}" data-k="label" value="${esc(x.label || "")}"></label>
+      <label class="f"><span>Text</span><textarea class="code" data-i="${i}" data-k="html">${esc(x.html || "")}</textarea></label></div>`).join("");
+    $$("#intelEd [data-i]").forEach(el => el.oninput = el.onchange = () => { intel[+el.dataset.i][el.dataset.k] = el.value; });
+    $$("#intelEd [data-rmi]").forEach(b => b.onclick = () => { intel.splice(+b.dataset.rmi, 1); drawIntel(); });
+    $$("#intelEd [data-up]").forEach(b => b.onclick = () => { const i = +b.dataset.up; [intel[i - 1], intel[i]] = [intel[i], intel[i - 1]]; drawIntel(); }); };
+  const drawAsk = () => { $("#askEd").innerHTML = ask.map((a, i) => `<div class="sub"><div class="hd"><b style="flex:1">Set ${i + 1}</b><button type="button" class="btn small" data-rma="${i}">Remove</button></div>
+      <label class="f"><span>Heading</span><input data-a="${i}" data-k="label" value="${esc(a.label || "")}"></label>
+      <label class="f"><span>Questions (one per line)</span><textarea data-a="${i}" data-k="questions">${esc((a.questions || []).join("\n"))}</textarea></label></div>`).join("");
+    $$("#askEd [data-a]").forEach(el => el.oninput = () => { const a = ask[+el.dataset.a]; if(el.dataset.k === "questions") a.questions = el.value.split("\n").map(s => s.trim()).filter(Boolean); else a.label = el.value; });
+    $$("#askEd [data-rma]").forEach(b => b.onclick = () => { ask.splice(+b.dataset.rma, 1); drawAsk(); }); };
+  drawIntel(); drawAsk();
+  $("#addIntel").onclick = () => { intel.push({ kind:"intel", label:"", html:"" }); drawIntel(); };
+  $("#addAsk").onclick = () => { ask.push({ label:"Ask them (owner interview questions)", questions:[] }); drawAsk(); };
+  d.showModal(); d.scrollTop = 0;
+  $$("[data-x]", d).forEach(b => b.onclick = () => d.close());
+  $("[data-save]", d).onclick = async () => {
+    const f = $("#cf"), v = n => f[n].value.trim(), nul = s => s === "" ? null : s, msg = $("#cfmsg");
+    const reason = v("reason");
+    if(!v("name")) { msg.innerHTML = `<div class="msg err">Company name is required.</div>`; return; }
+    if(reason.length < 3) { msg.innerHTML = `<div class="msg err">Add a reason (source + date). Every change is logged.</div>`; f.reason.focus(); return; }
+    const coNew = { name:v("name"), tier:v("tier"), status:v("status"), website:nul(v("website")), pms:nul(v("pms")), commission:nul(v("commission")),
+      brands:v("brands").split(",").map(s => s.trim()).filter(Boolean), search_terms:nul(v("search_terms")), threat:nul(v("threat")), opportunity:nul(v("opportunity")) };
+    const cardNew = { contacts:nul(v("contacts")), tags:v("tags").split("\n").map(s => s.trim()).filter(Boolean), threat_html:nul(v("threat_html")), opportunity_html:nul(v("opportunity_html")),
+      who:nul(v("who")), intel:intel.filter(x => (x.html || "").trim() || (x.label || "").trim()), leads_with:nul(v("leads_with")), vulnerable:nul(v("vulnerable")),
+      how_wins:nul(v("how_wins")), ask_them:ask.filter(a => (a.questions || []).length), source:nul(v("source")), source_date:nul(v("source_date")) };
+    const diff = (o, n) => Object.fromEntries(Object.entries(n).filter(([k, x]) => JSON.stringify(x ?? null) !== JSON.stringify(o[k] ?? (Array.isArray(x) ? [] : null))));
+    let key = id;
+    if(!id){
+      key = coNew.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+      if(key.length < 2 || byId(key)){ msg.innerHTML = `<div class="msg err">A card with that name already exists (or the name is too short). Check the list first: several operators run more than one brand.</div>`; return; }
+      coNew.sort = Math.max(0, ...S.companies.map(c => c.sort || 0)) + 1;
+    }
+    const pc = id ? diff(co, coNew) : coNew, pk = id ? diff(c, cardNew) : cardNew;
+    if(!Object.keys(pc).length && !Object.keys(pk).length){ msg.innerHTML = `<div class="msg err">Nothing changed.</div>`; return; }
+    const btn = $("[data-save]", d); btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const cap = capture ? capture.id : null;
+      if(Object.keys(pc).length){ const r = await sb.rpc("cmp_save", { p_table:"cmp_companies", p_key:key, p_patch:pc, p_reason:reason, p_capture:Object.keys(pk).length ? null : cap }); if(r.error) throw r.error; }
+      if(Object.keys(pk).length){ const r = await sb.rpc("cmp_save", { p_table:"cmp_cards", p_key:key, p_patch:pk, p_reason:reason, p_capture:cap }); if(r.error) throw r.error; }
+      d.close(); S.loaded = false;
+      if(capture){ await loadPlaybook(true); location.hash === "#/review" ? reviewView("open") : (location.hash = "#/review"); }
+      else { await loadPlaybook(true); playbookView(key); }
+    } catch(e){ msg.innerHTML = `<div class="msg err">${esc(errText(e))}</div>`; btn.disabled = false; btn.textContent = "Save card"; }
+  };
+}
+async function markVerified(id){
+  const co = byId(id), note = prompt(`Mark ${co.name} re-verified today?\nWhat did you check? (e.g. "website + BBB, nothing changed")`);
+  if(note === null) return;
+  const r = await sb.rpc("cmp_mark_verified", { p_company:id, p_note:note });
+  if(r.error){ alert(errText(r.error)); return; }
+  await loadPlaybook(true); playbookView(id);
+}
+function editContent(key){
+  const c = sec(key), d = $("#dlg");
+  d.innerHTML = `<div class="dh"><b>Edit: ${esc(c.title)}</b><button class="btn small" data-x>Close</button></div>
+    <div class="db"><label class="f"><span>Title</span><input id="ectitle" value="${esc(c.title)}"></label>
+      <label class="f"><span>Text (simple HTML)</span><textarea class="code" id="echtml" style="min-height:300px">${esc(c.html)}</textarea></label>
+      <label class="f"><span>Reason for this change (source + date) — required</span><input id="ecreason"></label><div id="ecmsg"></div></div>
+    <div class="df"><button class="btn primary" data-ok>Save</button><button class="btn" data-x>Cancel</button></div>`;
+  d.showModal();
+  $$("[data-x]", d).forEach(b => b.onclick = () => d.close());
+  $("[data-ok]", d).onclick = async () => {
+    const patch = {}; if($("#ectitle").value.trim() !== c.title) patch.title = $("#ectitle").value.trim(); if($("#echtml").value !== c.html) patch.html = $("#echtml").value;
+    if(!Object.keys(patch).length){ $("#ecmsg").innerHTML = `<div class="msg err">Nothing changed.</div>`; return; }
+    const r = await sb.rpc("cmp_save", { p_table:"cmp_content", p_key:key, p_patch:patch, p_reason:$("#ecreason").value.trim() });
+    if(r.error){ $("#ecmsg").innerHTML = `<div class="msg err">${esc(errText(r.error))}</div>`; return; }
+    d.close(); await loadPlaybook(true); playbookView("");
+    const el = document.getElementById("sec-" + key); if(el) el.scrollIntoView();
+  };
+}
+
+/* ---------- open threads ---------- */
+async function threadsView(){
+  await loadPlaybook(true);
+  const open = S.threads.filter(t => t.status === "open"), closed = S.threads.filter(t => t.status !== "open");
+  const row = t => `<div class="item"><div class="hd"><b>#${t.id} ${esc(t.title)}</b>
+      ${t.flag === "threat" ? `<span class="pill red">⚠ threat</span>` : t.flag === "opportunity" ? `<span class="pill green">📈 opportunity</span>` : ""}
+      ${t.status !== "open" ? `<span class="pill">${esc(t.status)}</span>` : ""}<span class="muted" style="margin-left:auto">${esc(t.owner_name || "unassigned")}</span></div>
+    <div class="what">${esc(t.body || "")}</div>
+    <div class="muted" style="font-size:12.5px">Opened ${esc(fmtD(t.opened_on))}${t.closed_on ? ` · closed ${esc(fmtD(t.closed_on))}` : ""} · last change ${esc(t.updated_by)} ${esc(fmtD(t.updated_at))}</div>
+    ${S.me.edit ? `<div class="acts"><button class="btn small" data-thread="${t.id}">Edit</button></div>` : ""}</div>`;
+  $("#app").innerHTML = tabs("threads") + `<div class="page"><h2>Open threads</h2>
+    <p class="muted">Work the playbook has started but not finished, numbered like the crew log.</p>
+    ${S.me.edit ? `<p><button class="btn small primary" data-thread="">+ New thread</button></p>` : ""}
+    ${open.map(row).join("") || `<div class="item"><p class="muted">No open threads.</p></div>`}
+    ${closed.length ? `<details style="margin-top:16px"><summary class="muted" style="cursor:pointer;font-weight:800">Closed (${closed.length})</summary>${closed.map(row).join("")}</details>` : ""}</div>`;
+  $$("[data-thread]").forEach(b => b.onclick = () => editThread(b.dataset.thread ? S.threads.find(t => t.id === +b.dataset.thread) : null));
+}
+function editThread(t){
+  const d = $("#dlg"), x = t || { status:"open", opened_on:today() };
+  d.innerHTML = `<div class="dh"><b>${t ? "Edit thread #" + t.id : "New thread"}</b><button class="btn small" data-x>Close</button></div>
+    <form class="db" id="tf">
+      <label class="f"><span>Title</span><input name="title" value="${esc(x.title || "")}"></label>
+      <label class="f"><span>What it's about / what's needed</span><textarea name="body">${esc(x.body || "")}</textarea></label>
+      <div class="row2"><label class="f"><span>Owner</span><input name="owner_name" value="${esc(x.owner_name || "")}" placeholder="blank = unassigned"></label>
+        <label class="f"><span>Flag</span><select name="flag"><option value="">None</option><option value="threat" ${x.flag === "threat" ? "selected" : ""}>⚠ Threat</option><option value="opportunity" ${x.flag === "opportunity" ? "selected" : ""}>📈 Opportunity</option></select></label>
+        <label class="f"><span>Status</span><select name="status">${["open","done","dropped"].map(s => `<option ${x.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+        <label class="f"><span>Opened</span><input type="date" name="opened_on" value="${esc(x.opened_on || "")}"></label></div>
+      <label class="f"><span>Reason (source + date) — required</span><input name="reason"></label><div id="tfmsg"></div></form>
+    <div class="df"><button class="btn primary" data-ok>Save</button><button class="btn" data-x>Cancel</button></div>`;
+  d.showModal();
+  $$("[data-x]", d).forEach(b => b.onclick = () => d.close());
+  $("[data-ok]", d).onclick = async () => {
+    const f = $("#tf"), v = n => f[n].value.trim() || null;
+    const n = { title:v("title"), body:v("body"), owner_name:v("owner_name"), flag:v("flag"), status:v("status"), opened_on:v("opened_on") };
+    if(n.status !== "open" && x.status === "open") n.closed_on = today();
+    if(n.status === "open") n.closed_on = null;
+    const patch = t ? Object.fromEntries(Object.entries(n).filter(([k, val]) => (val ?? null) !== (t[k] ?? null))) : n;
+    if(!n.title){ $("#tfmsg").innerHTML = `<div class="msg err">Add a title.</div>`; return; }
+    if(!Object.keys(patch).length){ $("#tfmsg").innerHTML = `<div class="msg err">Nothing changed.</div>`; return; }
+    const r = await sb.rpc("cmp_save", { p_table:"cmp_threads", p_key:t ? String(t.id) : null, p_patch:patch, p_reason:f.reason.value.trim() });
+    if(r.error){ $("#tfmsg").innerHTML = `<div class="msg err">${esc(errText(r.error))}</div>`; return; }
+    d.close(); threadsView();
+  };
+}
+
+/* ---------- crew log (append-only) ---------- */
+async function logView(){
+  const r = await sb.from("cmp_log").select("*").order("entry_date", { ascending:false }).order("id", { ascending:false }).limit(200);
+  if(r.error) throw r.error;
+  const f = (l, v) => v ? `<dt>${l}</dt><dd>${esc(v)}</dd>` : "";
+  $("#app").innerHTML = tabs("log") + `<div class="page"><h2>Crew log</h2>
+    <p class="muted">What was done and decided on this desk. Entries are never edited: correct one with a new entry.</p>
+    ${S.me.edit ? `<p><button class="btn small primary" id="newlog">+ New entry</button></p>` : ""}
+    ${r.data.map(l => `<div class="item"><div class="hd"><b>${esc(l.title)}</b><span class="muted" style="margin-left:auto">${esc(fmtD(l.entry_date))} · ${esc(l.author)}</span></div>
+      <dl class="meta" style="margin-top:8px">${f("Did", l.did)}${f("Decided", l.decided)}${f("Where it lives", l.where_lives)}${f("Open", l.open_items)}</dl></div>`).join("")}</div>`;
+  if($("#newlog")) $("#newlog").onclick = () => {
+    const d = $("#dlg");
+    d.innerHTML = `<div class="dh"><b>New crew log entry</b><button class="btn small" data-x>Close</button></div>
+      <form class="db" id="lf"><label class="f"><span>Title</span><input name="title"></label>
+        <label class="f"><span>Did</span><textarea name="did" style="min-height:70px"></textarea></label>
+        <label class="f"><span>Decided</span><textarea name="decided" style="min-height:70px"></textarea></label>
+        <label class="f"><span>Where it lives</span><input name="where"></label>
+        <label class="f"><span>Open items</span><input name="open"></label><div id="lfmsg"></div></form>
+      <div class="df"><button class="btn primary" data-ok>Add entry</button><button class="btn" data-x>Cancel</button></div>`;
+    d.showModal();
+    $$("[data-x]", d).forEach(b => b.onclick = () => d.close());
+    $("[data-ok]", d).onclick = async () => { const f = $("#lf"), v = n => f[n].value.trim() || null;
+      if(!v("title")){ $("#lfmsg").innerHTML = `<div class="msg err">Add a title.</div>`; return; }
+      const x = await sb.rpc("cmp_log_add", { p_title:v("title"), p_did:v("did"), p_decided:v("decided"), p_where:v("where"), p_open:v("open") });
+      if(x.error){ $("#lfmsg").innerHTML = `<div class="msg err">${esc(errText(x.error))}</div>`; return; }
+      d.close(); logView(); };
+  };
+}
+
+/* ---------- reports (hub Reports ▸ Competitor Playbook opens these directly) ---------- */
+function reportsView(){
+  $("#app").innerHTML = tabs("reports") + `<div class="page"><h2>Reports</h2>
+    <div class="item"><a href="#/report/intel"><b>New intel this month</b></a><div class="muted">Everything sent in this month, by status</div></div>
+    <div class="item"><a href="#/report/due"><b>Cards due for re-verify</b></a><div class="muted">Spring re-verify of the deep-profiled rivals + any card 6+ months old</div></div>
+    <div class="item"><a href="#/report/changes"><b>Playbook change log</b></a><div class="muted">Every card edit, who made it and why</div></div></div>`;
+}
+async function reportView(which){
+  await loadPlaybook();
+  const back = `<p style="margin:0 0 6px"><a href="#/reports">← Reports</a></p>`;
+  if(which === "intel"){
+    const d = new Date(), from = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+    const list = await fetchCaptures(sb.from("cmp_captures").select("*").gte("created_at", from).order("created_at", { ascending:false }));
+    const n = s => list.filter(c => c.status === s).length;
+    $("#app").innerHTML = tabs("reports") + `<div class="page">${back}<h2>New intel this month</h2>
+      <p class="muted">${list.length} entr${list.length === 1 ? "y" : "ies"} since ${esc(fmtD(from))}: ${n("new")} new · ${n("reviewed")} reviewed · ${n("filed")} filed · ${n("set_aside")} set aside${S.me.edit ? "" : " (yours only)"}.</p>
+      ${list.map(c => captureHTML(c, S.me.edit)).join("") || `<div class="item"><p class="muted">Nothing yet this month.</p></div>`}</div>`;
+    wireCaptures($("#app"), list, () => reportView("intel"));
+  } else if(which === "due"){
+    const r = await sb.from("cmp_due").select("*").order("days_since", { ascending:false, nullsFirst:true }); if(r.error) throw r.error;
+    $("#app").innerHTML = tabs("reports") + `<div class="page">${back}<h2>Cards due for re-verify</h2>
+      <p class="muted">${r.data.length} card${r.data.length === 1 ? "" : "s"}. Re-check the website, BBB and anything we've heard, then “Mark re-verified” on the card (even if nothing changed).</p>
+      <div class="scroll"><table class="rep"><thead><tr><th>Company</th><th>Tier</th><th>Last verified</th><th>Why</th></tr></thead><tbody>
+      ${r.data.map(x => `<tr><td><a href="#${esc(x.id)}">${esc(x.name)}</a></td><td>${esc(TIER[x.tier] || x.tier)}</td><td>${x.last_verified ? `${esc(fmtD(x.last_verified))} <span class="muted">(${x.days_since} days)</span>` : "never"}</td><td>${esc(x.why)}</td></tr>`).join("")}
+      </tbody></table></div></div>`;
+  } else if(which === "changes"){
+    const r = await sb.from("cmp_changes").select("*").order("at", { ascending:false }).limit(300); if(r.error) throw r.error;
+    const name = x => (x.company_id && byId(x.company_id) || {}).name || ({ cmp_threads:"Thread #", cmp_content:"Section: " }[x.table_name] || "") + (x.row_key || "");
+    const val = v => { const s = typeof v === "string" ? v : JSON.stringify(v); return s == null ? "—" : s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160) + (s.length > 160 ? "…" : ""); };
+    $("#app").innerHTML = tabs("reports") + `<div class="page">${back}<h2>Playbook change log</h2>
+      <p class="muted">The last ${r.data.length} saves. Nothing here can be edited or removed.</p>
+      ${r.data.map(x => `<div class="item"><div class="hd"><b>${x.company_id ? `<a href="#${esc(x.company_id)}">${esc(name(x))}</a>` : esc(name(x))}</b>
+          <span class="pill">${esc(x.action)}</span>${x.capture_id ? `<span class="pill blue">from intel #${x.capture_id}</span>` : ""}
+          <span class="muted" style="margin-left:auto">${esc(x.by_name)} · ${esc(fmtDT(x.at))}</span></div>
+        ${x.reason ? `<div class="what"><b>Why:</b> ${esc(x.reason)}</div>` : ""}
+        <details><summary class="muted" style="cursor:pointer">${Object.keys(x.changed || {}).length} field${Object.keys(x.changed || {}).length === 1 ? "" : "s"}: ${esc(Object.keys(x.changed || {}).join(", "))}</summary>
+          <dl class="meta">${Object.entries(x.changed || {}).map(([k, o]) => `<dt>${esc(k)}</dt><dd><span class="muted">was</span> ${esc(val(o.old))}<br><span class="muted">now</span> ${esc(val(o.new))}</dd>`).join("")}</dl></details></div>`).join("")}</div>`;
+  } else reportsView();
+}
+
+boot().catch(e => { console.error(e); $("#app").innerHTML = `<div class="center"><div class="msg err">Couldn't load: ${esc(errText(e))}</div></div>`; });
+</script>
+</body>
+</html>
