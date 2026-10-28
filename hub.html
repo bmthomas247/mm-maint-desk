@@ -69,6 +69,7 @@ aside.rail{overflow-y:auto;overscroll-behavior:contain}
 .me .nm{flex:1;min-width:0;line-height:1.2} .me .nm small{display:block;opacity:.7;font-size:11.5px;white-space:normal}
 a.mlink{display:flex;align-items:center;gap:10px;flex:1;min-width:0;color:#fff;text-decoration:none;border-radius:10px}
 a.mlink:hover .nm{text-decoration:underline}
+a.mgear{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:9px;color:#fff;opacity:.75;background:rgba(255,255,255,.08)} a.mgear:hover,a.mgear.on{opacity:1;background:rgba(255,255,255,.18)} a.mgear svg{width:17px;height:17px}
 .av img,.avbig img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .avbig{width:88px;height:88px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-weight:800;font-size:28px;flex:none;overflow:hidden}
 .ment{display:block;padding:9px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit} .ment:last-child{border-bottom:0}
@@ -141,7 +142,7 @@ details.acc[open]>summary{margin-bottom:6px}
 @media (min-width:821px){
   body.mini{--rail:70px} body.mini .shell{grid-template-columns:var(--rail) 1fr} body.mini aside.rail{min-width:0}
   body.mini aside.rail{padding-left:8px;padding-right:8px}
-  body.mini .railtop .brand,body.mini .dk .lb,body.mini .dk .soon,body.mini .dk .chev,body.mini .grp,body.mini .me .nm,body.mini .me button,body.mini .gbox .subs,body.mini .sres{display:none!important}
+  body.mini .railtop .brand,body.mini .dk .lb,body.mini .dk .soon,body.mini .dk .chev,body.mini .grp,body.mini .me .nm,body.mini .me button,body.mini .me .mgear,body.mini .gbox .subs,body.mini .sres{display:none!important}
   body.mini .railtop{flex-direction:column}
   body.mini .rsearch input{padding:0;width:40px;min-height:40px;color:transparent;cursor:pointer;margin:0 auto;display:block}
   body.mini .rsearch input::placeholder{color:transparent}
@@ -414,9 +415,11 @@ function noAccess(err){
   $("#out").onclick = async () => { await sb.auth.signOut(); loginView(); };
 }
 function shell(){
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
+  // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics"];
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key)),
-    syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live");
+    syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
+  const anD = DESKS.some(x => x.key === "analytics");
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time" } },
@@ -465,10 +468,9 @@ function shell(){
         ${soonHtml ? `<div class="grp">Coming soon</div>` + soonHtml : ""}
       </nav>
       <div class="foot">
-        ${repD ? item("reports", repD.label, repD.icon || "chart") : ""}
-        ${item("settings", "My settings", "gear")}
+        ${repD ? item("reports", anD ? "Reports & analytics" : repD.label, repD.icon || "chart") : ""}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
-        <div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button id="out">Sign out</button></div>
+        <div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button id="out">Sign out</button></div>
       </div>
     </aside>
     <main class="view" id="view"></main>
@@ -533,10 +535,12 @@ function route(){
   let k = current();
   if(!k){ const first = DESKS.find(x => x.status === "live"); k = first ? first.key : "feedback"; history.replaceState(null, "", "#/" + k); }
   document.querySelectorAll(".dk[data-k]").forEach(a => a.classList.toggle("on", a.dataset.k === k));
+  document.querySelector(".mgear")?.classList.toggle("on", k === "settings");
   document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
   const v = $("#view"), d = DESKS.find(x => x.key === k);
   $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   if(k === "feedback") return feedbackView(v);
+  if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "reports") return hubReportsView(v);
   if(k === "sync"){ const a = hashArg(); return a === "recent" || a === "errors" ? syncReport(v, a) : syncView(v, a); }
   if(k === "home") return homeView(v);
@@ -1065,7 +1069,8 @@ async function homeView(v){
 }
 /* Reports: Track-style index (Brandon 2026-10-28) — one column per desk, plain report links A-Z, our look. Only desks you can open. */
 async function hubReportsView(v){
-  v.innerHTML = `<div class="page wide"><h2>Reports & sync</h2><p class="muted">Every report you can open, by desk, and the Sync section. Hover a report to see what it shows.</p><div id="rpwait"></div><div id="rplist"><p class="muted">Loading…</p></div></div>`;
+  const anD = DESKS.some(x => x.key === "analytics");   // Analytics folded into Reports (Brandon 2026-10-28); only shown to people who can open it
+  v.innerHTML = `<div class="page wide"><h2>${anD ? "Reports, analytics & sync" : "Reports & sync"}</h2><p class="muted">Every report you can open, by desk${anD ? ", company analytics" : ""} and the Sync section. Hover a report to see what it shows.</p><div id="rpwait"></div><div id="rplist"><p class="muted">Loading…</p></div></div>`;
   if(ME.admin) sb.from("hub_sync_requests").select("id").eq("status","needs_approval").then(w => { const n = (w.data || []).length;
     if(n && $("#rpwait")) $("#rpwait").innerHTML = `<div class="card" style="border-color:var(--amber)"><b>⏳ ${n} sync request${n === 1 ? "" : "s"} waiting for your OK</b> <a href="#/sync" style="margin-left:8px">Review →</a></div>`; });
   const r = await sb.from("hub_reports").select("*").order("sort");
@@ -1074,7 +1079,7 @@ async function hubReportsView(v){
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = sb ? sb[0] : x.desk_key; (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
-  const keys = Object.keys(groups).sort((a, b) => name(a).localeCompare(name(b)));
+  const keys = Object.keys(groups).sort((a, b) => (b === "analytics") - (a === "analytics") || name(a).localeCompare(name(b)));   // Analytics first
   const link = x => x.status === "live"
         ? `<a href="#" class="rpl" data-run="${esc(x.url)}" title="${esc(x.note || "")}">${esc(x.label)}${x.admin_only ? ` <span class="pill">admins</span>` : ""}</a>`
         : `<span class="rpl soon" title="${esc(x.note || "")}">${esc(x.label)} <span class="pill amber">soon</span></span>`;
