@@ -1050,8 +1050,17 @@ function qFmt(val){ var lines=String(val||"").replace(/\r/g,"").split("\n").map(
     return m?'<div class="qrow"><span class="ql">'+esc(m[1])+'</span><span class="qa">'+qBold(m[2])+'</span></div>':'<div class="qrow"><span class="qa plain">'+qBold(l)+'</span></div>'; };
   var top=lines.slice(0,5).map(row).join(""), rest=lines.slice(5);
   return top+(rest.length?'<details class="qmore"><summary>'+rest.length+' more line'+(rest.length===1?'':'s')+'</summary>'+rest.map(row).join("")+'</details>':''); }
-function qCard(title,val,src,cls){ if(!val) return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div><div class="muted">Not recorded</div></div>';
-  return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+qFmt(val)+(src?'<div class="hint">'+src+'</div>':'')+'</div>'; }
+/* Quick view = codes + the short answer only; the full note lives in Home information below (Brandon 2026-10-28) */
+var Q_KEY=/code|pass|network|wi-?fi|ssid|gate|door|lock|garage|key ?box|closet|#|\d{3,}/i;
+function qShort(val){ var lines=String(val||"").replace(/\r/g,"").split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+  var key=lines.filter(function(l){ return Q_KEY.test(l); }); var pick=(key.length?key:lines).slice(0,3), cut=false;
+  pick=pick.map(function(l){ if(l.length>90){ cut=true; return l.slice(0,88).replace(/\s+\S*$/,"")+"…"; } return l; });
+  return {html:pick.map(function(l){ var m=l.match(/^([^:]{2,40}?):\s*(.+)$/);
+    return m?'<div class="qrow"><span class="ql">'+esc(m[1])+'</span><span class="qa">'+qBold(m[2])+'</span></div>':'<div class="qrow"><span class="qa plain">'+qBold(l)+'</span></div>'; }).join(""),
+    more:cut||lines.length>pick.length}; }
+function qCard(title,val,src,cls,cat){ if(!val) return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div><div class="muted">Not recorded</div></div>';
+  var q=qShort(val);
+  return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+q.html+(q.more&&cat?'<a href="#" class="qinfo" data-qinfo="'+esc(cat)+'">More in Home information ↓</a>':'')+(src?'<div class="hint">'+src+'</div>':'')+'</div>'; }
 function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(code);
   var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
@@ -1060,7 +1069,7 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
-    qCard("Wi-Fi",wifi.v,wifi.s,"wifi")+qCard("Entry / owner lockout codes",entry.v,entry.s,"codes")+qCard("Garage / parking",garage.v,garage.s,"codes")+qCard("Owner closet",closet.v,closet.s,"codes")+
+    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+qCard("Owner closet",closet.v,closet.s,"codes","closet")+
     qCard("Key box",hi.keybox,hi.src&&hi.src.keybox?"From "+hi.src.keybox:"","")+'</div>'+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
 function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
@@ -3133,7 +3142,7 @@ function bwqDoc(j){ return {kind:"job",jobId:j.id,title:j.title,detail:(j.detail
   due:j.due||"",dept:j.kind==="inspection"?"inspection":"maintenance",src:j.src,srcUrl:j.srcUrl||"",links:j.links||[],status:"queued",by:S.me,at:Date.now()}; }
 /* ================= events ================= */
 document.addEventListener("click",function(ev){
-  var t=ev.target.closest("[data-licf],button,a,select,input,textarea,[data-job],[data-home],[data-vuopen],[data-tswho],[data-careopen],[data-doneopen],[data-copen],[data-rczoom],[data-mopen],[data-pzoom],[data-imgzoom],[data-xo],[data-bwsort],tr.xtr"); if(!t || /^(SELECT|INPUT|TEXTAREA)$/.test(t.tagName)) return;
+  var t=ev.target.closest("[data-qinfo],[data-licf],button,a,select,input,textarea,[data-job],[data-home],[data-vuopen],[data-tswho],[data-careopen],[data-doneopen],[data-copen],[data-rczoom],[data-mopen],[data-pzoom],[data-imgzoom],[data-xo],[data-bwsort],tr.xtr"); if(!t || /^(SELECT|INPUT|TEXTAREA)$/.test(t.tagName)) return;
   var d=t.dataset;
   if(t.id==="backbtn") return navBack();
   if(t.id==="helpbtn") return mHelp();
@@ -3153,6 +3162,8 @@ document.addEventListener("click",function(ev){
   if(d.licall){ return mLicMsg(d.licall.split(",")); }
   if(d.vmode){ ev.preventDefault(); S.ui.vmode=d.vmode; if(S.tab!=="vendors") return go("vendors"); return render(); }
   if(d.firef){ S.ui.fireF=d.firef; return render(); }
+  if(d.qinfo){ ev.preventDefault(); var rx=new RegExp(d.qinfo,"i"), hit=[].slice.call(document.querySelectorAll("details.infocat")).filter(function(x){ var sm=x.querySelector("summary"); return sm&&rx.test(sm.textContent); });
+    if(hit.length){ hit.forEach(function(x){ x.open=true; }); hit[0].scrollIntoView({behavior:"smooth",block:"start"}); } else { var hb=[].slice.call(document.querySelectorAll(".block h4")).filter(function(h){ return /Home information/.test(h.textContent); })[0]; if(hb) hb.scrollIntoView({behavior:"smooth"}); } return; }
   if(d.licf){ ev.preventDefault(); ev.stopPropagation(); S.ui.fireF=d.licf==="fire"?"due":d.licf;
     if(d.licfc!=null){ S.ui.licCounty=d.licfc; S.ui.licHood=d.licfh||""; }
     render(); var tg=document.querySelectorAll(".grid2 .panel")[d.licf==="fire"?0:1]; if(tg) tg.scrollIntoView({behavior:"smooth",block:"start"}); return; }
