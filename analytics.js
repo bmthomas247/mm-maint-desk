@@ -50,12 +50,11 @@ async function market(v){
     <div id="anmt"></div>
     <h3 style="margin:18px 0 6px">All neighborhoods · last 12 full months</h3><div id="anall"></div>
     <p class="ansrc">Source: Key Data market KPIs (via the Rates pull), latest capture ${esc(dt(cap))}. Occupancy = Key Data guest occupancy; ADR = average nightly rate; RevPAR = revenue per available night.</p></div>`;
-  // combine channels for one market + month
-  const roll = list => { const n = list.reduce((a, x) => a + (+x.listings || 0), 0); if(!n) return null;
-    const w = f => list.reduce((a, x) => a + (+x[f] || 0) * (+x.listings || 0), 0) / n;
-    const booked = list.reduce((a, x) => a + (+x.guest_occ || 0) * (+x.listings || 0), 0);
-    return { listings:n, occ:w("guest_occ"), revpar:w("revpar"), win:w("booking_window"), stay:w("stay_length"),
-      adr: booked ? list.reduce((a, x) => a + (+x.adr || 0) * (+x.guest_occ || 0) * (+x.listings || 0), 0) / booked : null }; };
+  // combine channels / months from Key Data's raw totals, the way Key Data computes them (occ = guest ÷ property nights, ADR = rent ÷ guest nights)
+  const roll = list => { const s = f => list.reduce((a, x) => a + (+x[f] || 0), 0), gn = s("guest_nights"), pn = s("property_nights"), rev = s("revenue"), ci = s("checkins");
+    if(!pn) return null;
+    const byCi = f => ci ? list.reduce((a, x) => a + (+x[f] || 0) * (+x.checkins || 0), 0) / ci : null;
+    return { listings:s("homes"), occ:gn / pn, adr:gn ? rev / gn : null, revpar:rev / pn, win:byCi("booking_window"), stay:byCi("stay_length") }; };
   const pick = (m, o) => MK.filter(x => x.market === m && (!o || x.ota === o));
   const byMonth = list => { const g = {}; list.forEach(x => (g[x.month] = g[x.month] || []).push(x)); const out = {}; Object.keys(g).forEach(k => out[k] = roll(g[k])); return out; };
   const draw = () => { const o = $("#ano").value, M = byMonth(pick($("#anm").value, o));
@@ -77,8 +76,8 @@ async function market(v){
       const months = new Set(L.map(x => x.month)).size; return { market:m, ...r, listings:r.listings / (months || 1) }; }).filter(Boolean);
     table($("#anall"), [
       { k:"market", t:"Neighborhood", l:1 }, { k:"occ", t:"Occupancy", f:r => pct(r.occ) }, { k:"adr", t:"ADR", f:r => usd(r.adr) },
-      { k:"revpar", t:"RevPAR", f:r => usd(r.revpar) }, { k:"win", t:"Books ahead (days)", f:r => Math.round(r.win) },
-      { k:"stay", t:"Avg stay (nights)", f:r => r.stay.toFixed(1) }, { k:"listings", t:"Avg listings", f:r => Math.round(r.listings).toLocaleString() }
+      { k:"revpar", t:"RevPAR", f:r => usd(r.revpar) }, { k:"win", t:"Books ahead (days)", f:r => r.win == null ? "—" : Math.round(r.win) },
+      { k:"stay", t:"Avg stay (nights)", f:r => r.stay == null ? "—" : r.stay.toFixed(1) }, { k:"listings", t:"Avg listings", f:r => Math.round(r.listings).toLocaleString() }
     ], all, "revpar"); };
   $("#anm").onchange = $("#ano").onchange = draw; draw();
 }
@@ -91,34 +90,36 @@ async function comps(v){
   if(!H.length){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This report isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   const W = H[0], areas = [...new Set(H.map(x => x.area).filter(Boolean))].sort();
   H.forEach(x => { ["our_occ","our_adr","comp_occ","comp_adr","our_rent"].forEach(f => x[f] = x[f] == null ? null : +x[f]); });
-  v.innerHTML = `<div class="page wide">${back}<h2>Moose homes vs. their comps</h2>
-    <p class="muted">Each of our homes against the comps in its rate set, ${esc(dt(W.win_from + "T12:00"))} – ${esc(dt(W.win_to + "T12:00"))}. Click a column to sort.</p>
-    <div class="ankpi" id="ank"></div>
-    <div class="anbar"><input id="anq" type="search" placeholder="Search homes or rate sets"><select id="ana"><option value="">All areas</option>${areas.map(a => `<option>${esc(a)}</option>`).join("")}</select>
-      <select id="anf"><option value="">All homes</option><option value="ahead">Beating comps</option><option value="behind">Behind comps</option></select></div>
+  /* Check 2026-10-28 (Brandon asked): Track actuals and Key Data estimates are NOT like for like, so no gaps / "beating" here.
+     Same homes, same booked nights: Track rent was 51-70% of Key Data's posted Airbnb price (1,169 nights, 41 homes), and in the
+     off-season comps' Key Data "guest" occupancy matches our guest + owner + blocked nights. Fair comparison = Key Data for our own
+     listings too (130 of our homes are in Key Data's market listings) — not pulled yet. */
+  v.innerHTML = `<div class="page wide">${back}<h2>Moose homes and their comps</h2>
+    <p class="muted">Each of our homes next to the comps in its rate set, from ${esc(dt(W.win_from + "T12:00"))} (or the month of the home's first Track stay) to ${esc(dt(W.win_to + "T12:00"))}. Click a column to sort.</p>
+    <div class="card" style="border-color:var(--amber);background:var(--amber-soft)"><b>Not a like-for-like comparison yet.</b>
+      <p style="margin:4px 0 0">Our numbers are Track actuals; the comps' numbers are Key Data estimates from public calendars. Checked 2026-10-28 on our own homes for the same booked nights: Key Data's posted Airbnb price was well above the rent Track recorded (Track was 51–70% of it, 1,169 nights on 41 homes), and Key Data's "guest" occupancy appears to include owner and blocked nights. Don't read the gap between the two as how we're doing, and don't share this with owners, until Key Data numbers for our own listings are pulled.</p></div>
+    <div class="ankpi" id="ank" style="margin-top:12px"></div>
+    <div class="anbar"><input id="anq" type="search" placeholder="Search homes or rate sets"><select id="ana"><option value="">All areas</option>${areas.map(a => `<option>${esc(a)}</option>`).join("")}</select></div>
     <div id="anct"></div>
-    <p class="ansrc">Sources: <b>our homes</b> = Track stays (guest stays, not cancelled; nights and rent split by the nights inside the window), Track synced ${esc(dt(H.reduce((a, x) => x.track_synced > a ? x.track_synced : a, "")))};
-      <b>comps</b> = Key Data listing KPIs for the Primary comps in each rate set, captured ${esc(dt(W.kd_captured))}.
-      Our occupancy = guest nights ÷ every night in the window (owner and blocked nights count as empty). Comp occupancy = Key Data guest occupancy, averaged over the comps and months. Homes that joined during the window will look low.</p></div>`;
-  const draw = () => { const q = $("#anq").value.toLowerCase(), a = $("#ana").value, f = $("#anf").value;
-    const L = H.filter(x => (!q || ((x.home || "") + " " + (x.set_name || "")).toLowerCase().includes(q)) && (!a || x.area === a)
-      && (!f || (x.comp_occ != null && (f === "ahead" ? x.our_occ >= x.comp_occ : x.our_occ < x.comp_occ))));
-    const avg = (k, list) => { const z = list.filter(x => x[k] != null); return z.length ? z.reduce((s, x) => s + x[k], 0) / z.length : null; };
-    const booked = L.filter(x => x.our_nights > 0), ahead = L.filter(x => x.comp_occ != null && x.our_occ >= x.comp_occ).length;
-    $("#ank").innerHTML = `<div class="card"><small>Homes</small><b>${L.length}</b><small>${ahead} beating their comps on occupancy</small></div>
-      <div class="card"><small>Our occupancy (avg)</small><b>${pct(avg("our_occ", booked))}</b><small>comps ${pct(avg("comp_occ", L))}</small></div>
-      <div class="card"><small>Our ADR (avg)</small><b>${usd(avg("our_adr", booked))}</b><small>comps ${usd(avg("comp_adr", L))}</small></div>
-      <div class="card"><small>Guest rent in window</small><b>${usd(L.reduce((s, x) => s + (x.our_rent || 0), 0))}</b><small>${L.reduce((s, x) => s + (x.our_nights || 0), 0).toLocaleString()} guest nights</small></div>`;
+    <p class="ansrc">Sources: <b>our homes</b> = Track stays (guest stays, not cancelled; nights and rent split by the nights inside the window), Track synced ${esc(dt(H.reduce((a, x) => x.track_synced > a ? x.track_synced : a, "")))}. Track occupancy = guest nights ÷ every night since the home's start (owner and blocked nights count as empty).
+      <b>Comps</b> = Key Data listing KPIs for the Primary comps in each rate set, same months, captured ${esc(dt(W.kd_captured))}: occupancy = guest nights ÷ all nights, ADR = rent ÷ guest nights (Key Data's own method).</p></div>`;
+  const draw = () => { const q = $("#anq").value.toLowerCase(), a = $("#ana").value;
+    const L = H.filter(x => (!q || ((x.home || "") + " " + (x.set_name || "")).toLowerCase().includes(q)) && (!a || x.area === a));
+    const nights = L.reduce((s, x) => s + (x.our_nights || 0), 0), rent = L.reduce((s, x) => s + (x.our_rent || 0), 0),
+      days = L.reduce((s, x) => s + ((new Date(x.win_to + "T12:00") - new Date(x.since + "T12:00")) / 864e5 + 1), 0);
+    $("#ank").innerHTML = `<div class="card"><small>Homes</small><b>${L.length}</b><small>${L.filter(x => x.our_nights > 0).length} with guest stays in the window</small></div>
+      <div class="card"><small>Track occupancy (all these homes)</small><b>${pct(days ? nights / days : null)}</b><small>${nights.toLocaleString()} guest nights</small></div>
+      <div class="card"><small>Track ADR (rent ÷ guest nights)</small><b>${usd(nights ? rent / nights : null)}</b><small>Track actual</small></div>
+      <div class="card"><small>Guest rent in window</small><b>${usd(rent)}</b><small>Track actual</small></div>`;
     table($("#anct"), [
       { k:"home", t:"Home", l:1 }, { k:"set_name", t:"Rate set", l:1 }, { k:"area", t:"Area", l:1 }, { k:"bedrooms", t:"Beds" },
-      { k:"our_occ", t:"Our occ.", f:r => pct(r.our_occ) }, { k:"comp_occ", t:"Comps occ.", f:r => pct(r.comp_occ) },
-      { k:"occ_d", t:"Gap", v:r => r.comp_occ == null ? null : r.our_occ - r.comp_occ, f:r => pts(r.our_occ, r.comp_occ) },
-      { k:"our_adr", t:"Our ADR", f:r => usd(r.our_adr) }, { k:"comp_adr", t:"Comps ADR", f:r => usd(r.comp_adr) },
-      { k:"adr_d", t:"Gap", v:r => r.our_adr && r.comp_adr ? r.our_adr / r.comp_adr : null, f:r => chg(r.our_adr, r.comp_adr) },
+      { k:"since", t:"Counted from", f:r => esc(new Date(r.since + "T12:00").toLocaleDateString(undefined, { month:"short", year:"numeric" })) },
+      { k:"our_occ", t:"Track occ.", f:r => pct(r.our_occ) }, { k:"our_adr", t:"Track ADR", f:r => usd(r.our_adr) },
       { k:"our_nights", t:"Guest nights" }, { k:"owner_nights", t:"Owner / blocked" }, { k:"our_rent", t:"Guest rent", f:r => usd(r.our_rent) },
+      { k:"comp_occ", t:"Comps occ. (Key Data est.)", f:r => pct(r.comp_occ) }, { k:"comp_adr", t:"Comps ADR (Key Data est.)", f:r => usd(r.comp_adr) },
       { k:"comp_count", t:"Comps" }
-    ], L, "occ_d"); };
-  $("#anq").oninput = $("#ana").onchange = $("#anf").onchange = draw; draw();
+    ], L, "our_rent"); };
+  $("#anq").oninput = $("#ana").onchange = draw; draw();
 }
 
 window.anView = function(v){ css(); const a = hashArg(); return a === "comps" ? comps(v) : market(v); };
