@@ -915,13 +915,14 @@ function pennyHello(){ // Home: Penny pops up once a day asking what she can hel
 /* admins: what staff asked Penny + edit what she knows (#/penny) */
 async function pennyView(v){
   if(!ME.admin){ v.innerHTML = `<div class="page"><div class="card"><p class="muted">Only Brandon or Kim can see Penny's log.</p></div></div>`; return; }
-  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Below: the how-to notes she answers from — edit them to fix an answer.</p>
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
     <div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
   const [c, k] = await Promise.all([ sb.from("penny_chats").select("*").order("id", { ascending:false }).limit(200), sb.from("penny_kb").select("*").order("topic") ]);
-  const rows = c.data || [], tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
-  $("#plog").innerHTML = `<b style="font-size:17px">Questions</b> <span class="muted">${rows.length} shown · $${tot.toFixed(2)} · 👍 ${rows.filter(x => x.helpful === true).length} · 👎 ${rows.filter(x => x.helpful === false).length}</span>` +
-    (rows.length ? rows.map(x => `<div class="fb"><div class="hd"><b>${esc(x.user_name || "")}</b><span class="muted">${new Date(x.created_at).toLocaleString()} · ${esc(x.page || "")}</span>${x.helpful === true ? `<span class="pill green">👍</span>` : x.helpful === false ? `<span class="pill red">👎</span>` : ""}<span class="muted" style="margin-left:auto">$${(+x.cost_usd || 0).toFixed(4)}</span></div>
-      <p><b>Q:</b> ${esc(x.question)}</p><p class="muted"><b>Penny:</b> ${esc(x.answer || "")}</p></div>`).join("") : `<p class="muted">No questions yet.</p>`);
+  const needs = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes/i.test(x.answer || "");
+  const rows = (c.data || []).sort((a, b) => needs(b) - needs(a)), tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
+  $("#plog").innerHTML = `<b style="font-size:17px">Questions</b> <span class="muted">${rows.filter(needs).length} to teach first · ${rows.length} shown · $${tot.toFixed(2)} · 👍 ${rows.filter(x => x.helpful === true).length} · 👎 ${rows.filter(x => x.helpful === false).length}</span>` +
+    (rows.length ? rows.map((x, i) => `<div class="fb"><div class="hd"><b>${esc(x.user_name || "")}</b>${needs(x) ? `<span class="pill amber">teach her</span>` : ""}<span class="muted">${new Date(x.created_at).toLocaleString()} · ${esc(x.page || "")}</span>${x.helpful === true ? `<span class="pill green">👍</span>` : x.helpful === false ? `<span class="pill red">👎</span>` : ""}<span class="muted" style="margin-left:auto">$${(+x.cost_usd || 0).toFixed(4)}</span></div>
+      <p><b>Q:</b> ${esc(x.question)}</p><p class="muted"><b>Penny:</b> ${esc(x.answer || "")}</p><button class="btn small" data-teach="${i}">🎓 Teach Penny</button></div>`).join("") : `<p class="muted">No questions yet.</p>`);
   const kb = k.data || [];
   $("#pkb").innerHTML = `<div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">What Penny knows</b><span class="muted">${kb.length} notes</span><button class="btn small" id="pkbnew" style="margin-left:auto">+ Note</button></div><div id="pkbform"></div>` +
     kb.map((x, i) => `<details class="acc2"><summary><b>${esc(x.topic)}</b>${x.desk_key ? `<span class="pill">${esc(x.desk_key)} only</span>` : ""}${x.active ? "" : `<span class="pill amber">off</span>`}</summary>
@@ -935,6 +936,8 @@ async function pennyView(v){
     $("#pk_s").onclick = async () => { const r = await sb.rpc("penny_kb_save", { p_topic:$("#pk_t").value, p_body:$("#pk_b").value, p_desk:$("#pk_d").value, p_active:$("#pk_a").checked });
       if(r.error) $("#pk_m").textContent = r.error.message; else pennyView(v); }; };
   $("#pkbnew").onclick = () => form({});
+  $("#plog").querySelectorAll("[data-teach]").forEach(b => b.onclick = () => { const x = rows[+b.dataset.teach];
+    form({ topic:String(x.question || "").slice(0, 80), body:x.answer || "", active:true }); $("#pkbform").scrollIntoView({ behavior:"smooth" }); });
   $("#pkb").querySelectorAll("[data-pkb]").forEach(b => b.onclick = () => { form(kb[+b.dataset.pkb]); $("#pkbform").scrollIntoView({ behavior:"smooth" }); });
 }
 window.addEventListener("hashchange", route);
