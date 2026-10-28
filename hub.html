@@ -178,7 +178,7 @@ function shell(){
         ${soon.length ? `<div class="grp">Coming soon</div>` + soon.map(x => item(x.key, x.label, x.icon, `<span class="soon">soon</span>`)).join("") : ""}
       </nav>
       <div class="foot">
-        ${ME.admin ? item("reports", "Bugs & upgrades", "list") : item("reports", "My reports", "list")}
+        ${ME.admin ? item("feedback", "Bugs & upgrades", "list") : item("feedback", "My bug reports", "list")}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
         <div class="me"><span class="av">${esc(ME.initials || (ME.name||"?").slice(0,2))}</span><span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span><button id="out">Sign out</button></div>
       </div>
@@ -216,11 +216,12 @@ function route(){
   if(!ME) return;
   document.body.classList.remove("open");
   let k = current();
-  if(!k){ const first = DESKS.find(x => x.status === "live"); k = first ? first.key : "reports"; history.replaceState(null, "", "#/" + k); }
+  if(!k){ const first = DESKS.find(x => x.status === "live"); k = first ? first.key : "feedback"; history.replaceState(null, "", "#/" + k); }
   document.querySelectorAll(".dk[data-k]").forEach(a => a.classList.toggle("on", a.dataset.k === k));
   const v = $("#view"), d = DESKS.find(x => x.key === k);
-  $("#ttl").textContent = d ? d.label : (k === "reports" ? "Bugs & upgrades" : "Moose Hub");
-  if(k === "reports") return reportsView(v);
+  $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & upgrades" : "Moose Hub");
+  if(k === "feedback") return feedbackView(v);
+  if(k === "reports") return hubReportsView(v);
   if(k === "sync") return syncView(v);
   if(k === "home") return homeView(v);
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
@@ -233,7 +234,7 @@ function route(){
     st.textContent = `header.top .deskbtn{display:none!important}`; doc.head.appendChild(st);
   } catch(e){} });
 }
-async function reportsView(v){
+async function feedbackView(v){
   v.innerHTML = `<div class="page"><h2>${ME.admin ? "Bugs & upgrades" : "My reports"}</h2><p class="muted">${ME.admin ? "Everything the crew has sent. Change the status as you work them." : "What you've sent Brandon and where it stands."}</p><div class="card" id="fblist"><p class="muted">Loading…</p></div></div>`;
   const r = await sb.from("hub_feedback").select("id,created_at,user_name,desk_key,kind,body,status,admin_note").order("created_at", { ascending:false }).limit(300);
   const box = $("#fblist");
@@ -293,6 +294,23 @@ async function homeView(v){
   if(ME.canNews){ $("#nwadd").onclick = () => { $("#nwform").style.display = "block"; $("#nwtitle").focus(); };
     $("#nwsend").onclick = async () => { const p = await sb.rpc("hub_post", { p_kind:"news", p_title:$("#nwtitle").value, p_body:$("#nwbody").value, p_about:"" });
       if(p.error) $("#nwmsg").textContent = "Couldn't post: " + p.error.message; else homeView(v); }; }
+}
+async function hubReportsView(v){
+  v.innerHTML = `<div class="page"><h2>Reports</h2><p class="muted">Run any report you have access to, grouped by desk.</p><div id="rplist"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
+  const r = await sb.from("hub_reports").select("*").order("sort");
+  if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
+  const order = ["home","sync"].concat(DESKS.map(x => x.key)), name = k => k === "home" ? "Hub" : k === "sync" ? "Admin" : ((DESKS.find(x => x.key === k) || {}).label || k);
+  const groups = {}; r.data.forEach(x => (groups[x.desk_key] = groups[x.desk_key] || []).push(x));
+  const keys = Object.keys(groups).sort((a,b) => order.indexOf(a) - order.indexOf(b));
+  $("#rplist").innerHTML = keys.map(k => `<div class="card"><b style="font-size:17px">${esc(name(k))}</b>${groups[k].map(x => `<div class="fb"><div class="hd"><b>${esc(x.label)}</b>${x.admin_only ? `<span class="pill">admins</span>` : ""}
+      ${x.status === "live" ? `<button class="btn small" style="margin-left:auto" data-run="${esc(x.url)}">Open</button>` : `<span class="pill amber" style="margin-left:auto">Coming soon</span>`}</div>${x.note ? `<p class="muted" style="margin-top:4px">${esc(x.note)}</p>` : ""}</div>`).join("")}</div>`).join("") || `<div class="card"><p class="muted">No reports for your desks yet.</p></div>`;
+  $("#rplist").querySelectorAll("[data-run]").forEach(b => b.onclick = () => {
+    const u = b.dataset.run; if(u.startsWith("#")) { location.hash = u; return; }
+    $("#ttl").textContent = "Reports";
+    v.innerHTML = `<div style="padding:8px 12px;border-bottom:1px solid var(--line);background:var(--card)"><a href="#/reports">← All reports</a></div><iframe class="desk" id="deskframe" src="${esc(u)}"></iframe>`;
+    const f = $("#deskframe"); f.addEventListener("load", () => { try { const st = f.contentDocument.createElement("style");
+      st.textContent = `header.top .deskbtn{display:none!important}`; f.contentDocument.head.appendChild(st); } catch(e){} });
+  });
 }
 async function syncView(v){
   v.innerHTML = `<div class="page"><h2>Sync</h2><p class="muted">Admins only. Last run of every data source, and one button to pull everything now.</p>
