@@ -229,6 +229,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="reservations.js"></script>
+<script src="analytics.js"></script>
 <script>
 const C = window.MM_CONFIG;
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
@@ -548,6 +549,7 @@ function route(){
   if(k === "feedback") return feedbackView(v);
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "reports") return hubReportsView(v);
+  if(k === "an" && window.anView){ $("#ttl").textContent = "Reports & Analytics"; return anView(v); }   // analytics.js (2026-10-28); data gated by hub_can('analytics')
   if(k === "sync"){ const a = hashArg(); return a === "recent" || a === "errors" ? syncReport(v, a) : syncView(v, a); }
   if(k === "home") return homeView(v);
   if(k === "settings") return settingsView(v);
