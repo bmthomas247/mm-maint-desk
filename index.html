@@ -67,6 +67,12 @@ aside.rail{overflow-y:auto;overscroll-behavior:contain}
 .me{display:flex;align-items:center;gap:10px;padding:8px 10px;font-size:13.5px}
 .me .av{width:30px;height:30px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
 .me .nm{flex:1;min-width:0;line-height:1.2} .me .nm small{display:block;opacity:.7;font-size:11.5px;white-space:normal}
+a.mlink{display:flex;align-items:center;gap:10px;flex:1;min-width:0;color:#fff;text-decoration:none;border-radius:10px}
+a.mlink:hover .nm{text-decoration:underline}
+.av img,.avbig img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.avbig{width:88px;height:88px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-weight:800;font-size:28px;flex:none;overflow:hidden}
+.ment{display:block;padding:9px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit} .ment:last-child{border-bottom:0}
+.ment .mt{font-size:14.5px;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
 .me button{background:none;border:0;color:#fff;opacity:.7;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer}
 main.view{min-width:0;min-height:0;display:flex;flex-direction:column}
 iframe.desk{border:0;width:100%;flex:1;background:var(--ground)}
@@ -281,7 +287,7 @@ function shell(){
         ${syncD ? item("sync", syncD.label, syncD.icon || "spark") : ""}
         ${item("settings", "My settings", "gear")}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
-        <div class="me"><span class="av">${esc(ME.initials || (ME.name||"?").slice(0,2))}</span><span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span><button id="out">Sign out</button></div>
+        <div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button id="out">Sign out</button></div>
       </div>
     </aside>
     <main class="view" id="view"></main>
@@ -530,6 +536,14 @@ function dailyPick(shift){
   $("#dmore").onclick = () => dailyPick((shift || 0) + 1);
 }
 /* My settings: sidebar order + interests for the daily pick (hub_prefs, your row only) */
+function avatarHtml(big){ const ini = esc(ME.initials || (ME.name||"?").slice(0,2));
+  return `<span class="${big ? "avbig" : "av"}">${PREFS.avatar ? `<img src="${esc(PREFS.avatar)}" alt="${esc(ME.name)}">` : ini}</span>`; }
+/* any picture -> 160px square (center crop) jpeg, so it stays small */
+function shrinkPic(file){ return new Promise((ok, bad) => { const r = new FileReader(); r.onerror = bad;
+  r.onload = () => { const im = new Image(); im.onerror = () => bad(new Error("That file isn't a picture we can read.")); im.onload = () => {
+    const n = 160, c = document.createElement("canvas"); c.width = c.height = n; const x = c.getContext("2d"), m = Math.min(im.width, im.height);
+    x.drawImage(im, (im.width - m) / 2, (im.height - m) / 2, m, m, 0, 0, n, n); ok(c.toDataURL("image/jpeg", 0.85)); }; im.src = r.result; };
+  r.readAsDataURL(file); }); }
 function settingsView(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
   const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick" }, GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"] };
@@ -543,6 +557,9 @@ function settingsView(v){
   const L = k => items.find(x => x.k === k);
   const draw = () => {
     v.innerHTML = `<div class="page"><h2>My settings</h2><p class="muted">Only you see these. They follow you to any computer or phone you sign in on.</p>
+    <div class="card"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
+      ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
     <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Move the desks you use most to the top.</p>
       <div id="ordl">${list.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
         <button class="btn small" data-up="${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${i}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("")}</div>
@@ -557,20 +574,38 @@ function settingsView(v){
     v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => { const i = +b.dataset.dn; [list[i+1], list[i]] = [list[i], list[i+1]]; draw(); });
     v.querySelectorAll("[data-int]").forEach(c => c.onchange = () => { ints = c.checked ? ints.concat(c.dataset.int) : ints.filter(x => x !== c.dataset.int); draw(); });
     v.querySelectorAll("[data-kind]").forEach(c => c.onchange = () => { ks = c.checked ? ks.concat(c.dataset.kind) : ks.filter(x => x !== c.dataset.kind); draw(); });
+    $("#avfile").onchange = async e => { const f = e.target.files[0]; if(!f) return; $("#avmsg").textContent = "Saving…";
+      try { const d = await shrinkPic(f); const r = await sb.rpc("hub_set_avatar", { p_avatar:d }); if(r.error) throw r.error;
+        PREFS.avatar = d; shell(); route(); } catch(err){ $("#avmsg").textContent = "Couldn't save: " + (err.message || err); } };
+    if($("#avdel")) $("#avdel").onclick = async () => { const r = await sb.rpc("hub_set_avatar", { p_avatar:null }); if(!r.error){ PREFS.avatar = null; shell(); route(); } };
     $("#ordreset").onclick = () => { list = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k); list.custom = false; draw(); };
     $("#prefsave").onclick = async () => { $("#prefsave").disabled = true;
       const std = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k).join(), order = list.join() === std ? [] : list.slice();
       const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
       $("#prefsave").disabled = false;
       if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
-      PREFS = { desk_order:order, interests:ints, kinds:ks }; shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
+      PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks }); shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
   };
   draw();
+}
+/* Home: the last 5 times you were @-mentioned in Slack (public channels; hub_my_mentions = only your own) */
+async function loadMentions(){
+  const box = $("#ment"); if(!box) return;
+  const r = await sb.rpc("hub_my_mentions", { p_n:5 }), j = r.data;
+  const ago = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 60 ? Math.max(1, m) + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; };
+  const head = `<div class="shead"><b style="font-size:17px">🔔 Your Slack mentions</b><span class="muted" style="margin-left:auto">last 5</span></div>`;
+  if(r.error || !j){ box.innerHTML = head + `<p class="muted">Couldn't load${r.error ? ": " + esc(r.error.message) : ""}.</p>`; return; }
+  if(!j.linked){ box.innerHTML = head + `<p class="muted">We couldn't match you to a Slack account yet. Tell Brandon with Report a bug / upgrade.</p>`; return; }
+  box.innerHTML = head + ((j.items || []).length ? j.items.map(x => `<a class="ment" href="${esc(x.permalink)}" target="_blank" rel="noopener">
+      <div class="hd" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px"><b>${esc(x.author || "")}</b><span class="pill">${esc(x.channel_name || "")}</span><span class="muted" style="margin-left:auto">${ago(x.at)}</span></div>
+      <div class="mt">${esc(x.body || "")}</div></a>`).join("") : `<p class="muted">No @-mentions in public channels in the last two weeks.</p>`)
+    + `<p class="muted" style="font-size:12px;margin:8px 0 0">Source: Slack public channels (private channels and DMs aren't included)${j.updated ? ", checked " + ago(j.updated) : ""}. Tap one to open it in Slack.</p>`;
 }
 async function homeView(v){
   const first = (ME.name||"").split(" ")[0];
   v.innerHTML = `<div class="page"><h2>Hi ${esc(first)} 👋</h2><p class="muted">${new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p>
     <div class="card daily" id="daily"></div>
+    <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
     <div class="card" id="wx"><p class="muted">Loading Park City weather…</p></div>
     <div class="card" id="stays"><b style="font-size:17px">🏠 Who's in house · next 14 days</b><p class="muted">Loading…</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎉 Shout-outs</b><button class="btn small" style="margin-left:auto" id="soadd">Give a shout-out</button></div>
@@ -582,7 +617,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
-  loadStays(); dailyPick(0);
+  loadStays(); dailyPick(0); loadMentions();
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
