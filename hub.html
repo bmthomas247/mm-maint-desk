@@ -329,7 +329,6 @@ function shell(){
         ${soon.length ? `<div class="grp">Coming soon</div>` + navList(soon, true) : ""}
       </nav>
       <div class="foot">
-        ${ME.admin ? item("feedback", "Bugs & upgrades", "list") : item("feedback", "My bug reports", "list")}
         ${repD ? item("reports", repD.label, repD.icon || "chart") : ""}
         ${item("settings", "My settings", "gear")}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
@@ -352,8 +351,9 @@ function shell(){
   $("#rtoggle").onclick = () => { if(window.innerWidth <= 820) return document.body.classList.remove("open");
     const m = document.body.classList.toggle("mini"); try { localStorage.setItem("hub_mini", m ? "1" : "0"); } catch(e){} };
   document.querySelectorAll(".dk.par").forEach(a => a.onclick = e => { e.preventDefault();
-    if(document.body.classList.contains("mini")){ document.body.classList.remove("mini"); try { localStorage.setItem("hub_mini","0"); } catch(e){} a.parentElement.classList.add("open"); return; }
-    a.parentElement.classList.toggle("open"); });
+    const closeOthers = () => document.querySelectorAll(".gbox.open").forEach(g => { if(g !== a.parentElement) g.classList.remove("open"); });   // accordion (Brandon 2026-10-28)
+    if(document.body.classList.contains("mini")){ document.body.classList.remove("mini"); try { localStorage.setItem("hub_mini","0"); } catch(e){} closeOthers(); a.parentElement.classList.add("open"); return; }
+    closeOthers(); a.parentElement.classList.toggle("open"); });
   hubSearchSetup();
   $("#scrim").onclick = () => document.body.classList.remove("open");
   let kind = "bug";
@@ -397,7 +397,7 @@ function route(){
   let k = current();
   if(!k){ const first = DESKS.find(x => x.status === "live"); k = first ? first.key : "feedback"; history.replaceState(null, "", "#/" + k); }
   document.querySelectorAll(".dk[data-k]").forEach(a => a.classList.toggle("on", a.dataset.k === k));
-  document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); if(on) g.classList.add("open"); });
+  document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
   const v = $("#view"), d = DESKS.find(x => x.key === k);
   $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   if(k === "feedback") return feedbackView(v);
@@ -406,6 +406,7 @@ function route(){
   if(k === "home") return homeView(v);
   if(k === "settings") return settingsView(v);
   if(k === "penny") return pennyView(v);
+  if(k === "messages") return messagesView(v);
   if(d && k === "res_report") return resReportView(v);
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
@@ -457,20 +458,41 @@ function hubSearchSetup(){
     if(e.key === "Escape"){ inp.value = ""; box.classList.remove("on"); } });
 }
 async function feedbackView(v){
-  v.innerHTML = `<div class="page"><h2>${ME.admin ? "Bugs & upgrades" : "My reports"}</h2><p class="muted">${ME.admin ? "Everything the crew has sent. Change the status as you work them." : "What you've sent Brandon and where it stands."}</p><div class="card" id="fblist"><p class="muted">Loading…</p></div></div>`;
-  const r = await sb.from("hub_feedback").select("id,created_at,user_name,desk_key,kind,body,status,admin_note,page_url").order("created_at", { ascending:false }).limit(300);
+  v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Bugs & upgrades</h2><p class="muted">${ME.admin ? "Everything the crew has sent. Change the status as you work them." : "What everyone has reported or asked for, and where it stands. See something you'd like too? Send your own with Report a bug / upgrade."}</p>
+    <div class="seg" id="fbf" style="margin:0 0 10px"><button class="btn small on" data-f="all">All</button><button class="btn small" data-f="bug">🐞 Bugs</button><button class="btn small" data-f="upgrade">⬆️ Upgrades</button><button class="btn small" data-f="idea">💡 Ideas</button><button class="btn small" data-f="mine">Mine</button></div><div class="card" id="fblist"><p class="muted">Loading…</p></div></div>`;
+  const r = await sb.rpc("hub_feedback_board");
   const box = $("#fblist");
   if(r.error) return box.innerHTML = `<p class="muted">Couldn't load: ${esc(r.error.message)}</p>`;
   if(!r.data.length) return box.innerHTML = `<p class="muted">Nothing yet.</p>`;
   const label = { bug:"🐞 Bug", upgrade:"⬆️ Upgrade", idea:"💡 Idea", ask:"🙋 Asked via Penny" }, tone = { new:"red", seen:"blue", doing:"amber", done:"green", wont:"" };
   const deskName = k => (DESKS.find(x => x.key === k) || {}).label || k || "Hub";
-  box.innerHTML = r.data.map(x => `<div class="fb"><div class="hd"><b>${label[x.kind]||x.kind}</b><span class="pill ${tone[x.status]||""}">${esc(x.status)}</span>
+  box.innerHTML = r.data.map(x => `<div class="fb" data-kind="${x.kind}" data-mine="${x.mine ? 1 : 0}"><div class="hd"><b>${label[x.kind]||x.kind}</b><span class="pill ${tone[x.status]||""}">${esc(x.status)}</span>
       <span class="muted">#${x.id} · ${esc(x.user_name||"")} · ${esc(deskName(x.desk_key))} · ${new Date(x.created_at).toLocaleString()}</span>
       ${ME.admin ? `<select data-id="${x.id}" style="width:auto;min-height:34px;padding:4px 8px;margin-left:auto">${["new","seen","doing","done","wont"].map(s => `<option ${s===x.status?"selected":""}>${s}</option>`).join("")}</select>` : ""}</div>
       <p>${esc(x.body)}</p>${x.page_url ? `<p class="muted" style="margin-top:4px">📍 ${esc(String(x.page_url).split(" | ")[0])}</p>` : ""}${x.admin_note ? `<p class="muted">Brandon: ${esc(x.admin_note)}</p>` : ""}</div>`).join("");
+  document.querySelectorAll("#fbf button").forEach(b => b.onclick = () => { document.querySelectorAll("#fbf button").forEach(x => x.classList.toggle("on", x === b));
+    box.querySelectorAll(".fb").forEach(el => el.style.display = b.dataset.f === "all" || (b.dataset.f === "mine" ? el.dataset.mine === "1" : el.dataset.kind === b.dataset.f) ? "" : "none"); });
   box.querySelectorAll("select[data-id]").forEach(s => s.onchange = async () => {
     const u = await sb.from("hub_feedback").update({ status:s.value }).eq("id", s.dataset.id);
     if(u.error){ s.insertAdjacentHTML("afterend", `<span class="muted"> couldn't save: ${esc(u.error.message)}</span>`); } });
+}
+/* Reports ▸ Messages sent by the hub (2026-10-28): your own; managers also their desks'; admins all (hub_messages_report decides) */
+async function messagesView(v){
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Messages sent by the hub</h2>
+    <p class="muted">Slack messages the hub and its desks sent out, newest first.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px"><input id="msq" type="search" placeholder="Search messages" style="flex:1;min-width:200px"><select id="msd" style="width:auto"><option value="">All desks</option></select></div>
+    <div class="card" id="mslist"><p class="muted">Loading…</p></div></div>`;
+  const r = await sb.rpc("hub_messages_report"); const rows = r.data || [];
+  if(r.error){ $("#mslist").innerHTML = `<p class="muted">Couldn't load: ${esc(r.error.message)}</p>`; return; }
+  const dn = k => (DESKS.find(x => x.key === k) || {}).label || ({ sync_status:"Sync" })[k] || k || "Hub";
+  [...new Set(rows.map(x => x.desk_key).filter(Boolean))].sort().forEach(k => $("#msd").insertAdjacentHTML("beforeend", `<option value="${esc(k)}">${esc(dn(k))}</option>`));
+  const draw = () => { const q = $("#msq").value.toLowerCase(), dk = $("#msd").value;
+    const L = rows.filter(x => (!dk || x.desk_key === dk) && (!q || (x.text + " " + x.to_label + " " + x.sender_name + " " + x.source).toLowerCase().includes(q)));
+    $("#mslist").innerHTML = `<b style="font-size:17px">${L.length} message${L.length === 1 ? "" : "s"}</b>` + (L.length ? L.map(x => `<div class="fb"><div class="hd" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <b>${esc(x.source)}</b>${x.desk_key ? `<span class="pill">${esc(dn(x.desk_key))}</span>` : ""}${x.ok ? "" : `<span class="pill red">didn't send</span>`}${x.mine ? `<span class="pill green">you</span>` : ""}
+        <span class="muted" style="margin-left:auto">${x.sent_at ? new Date(x.sent_at).toLocaleString() : ""}</span></div>
+        <p class="muted" style="margin:4px 0">From <b>${esc(x.sender_name || "Hub")}</b> → <b>${esc(x.to_label || "")}</b></p><p style="white-space:pre-wrap;margin:0">${esc(x.text)}</p></div>`).join("") : `<p class="muted">No messages yet.</p>`); };
+  $("#msq").oninput = draw; $("#msd").onchange = draw; draw();
 }
 /* Home: weather (Open-Meteo, no key), company news + shout-outs (hub_posts) */
 const WX = { 0:"Clear",1:"Mostly clear",2:"Partly cloudy",3:"Cloudy",45:"Fog",48:"Fog",51:"Drizzle",53:"Drizzle",55:"Drizzle",61:"Rain",63:"Rain",65:"Heavy rain",
