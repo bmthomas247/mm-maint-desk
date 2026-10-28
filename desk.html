@@ -434,6 +434,8 @@ if(!ONLY && !TABS.some(function(t){return t[0]===S.tab;}) && ["jobs","homes","ve
 
 /* ---- derived ---- */
 var COMPANY_HOME={code:"Moose company",community:"Truck, office, storage, tools",active:true,company:true,info:[],appliances:[],heatTape:"",yearBuilt:""};
+/* shown as "Moose Office" (Brandon 2026-10-28); the key stays "Moose company" — the Asana/Breezeway/Freshdesk/Hubstaff syncs file under it */
+function coName(c){ return c==="Moose company"?"Moose Office":c; }
 var D={jobs:[], byId:{}, byProp:{}, vendors:[], homes:[]};
 function rates(){ var r=S.config.rates||{}; return {
   techCost:Object.assign({},r.techCost||{},((S.paycost||{}).hubstaff||{}).techCost||{},((S.paycost||{}).rates||{}).techCost||{}), defaultCost:+(((S.paycost||{}).rates||{}).defaultCost||r.defaultCost)||0, mileage:(r.mileage!=null?+r.mileage:0.67),
@@ -628,7 +630,7 @@ function old(j){ return !!j.autoDone; }
 function srcTag(j){ return '<span class="tag '+esc(j.src)+'">'+esc(SRCNAME[j.src]||j.src)+'</span>'; }
 function stPill(s){ var n={open:"Open",scheduled:"Scheduled",waiting:"Waiting",done:"Done",vendor:"With vendor"}[s]||s; return '<span class="pill '+esc(s)+'">'+esc(n)+'</span>'; }
 function propLink(code){ if(!code) return ""; var p=profile(code);
-  return p?'<a href="#homes" class="rcode" data-home="'+esc(code)+'">'+esc(code)+'</a>':'<span class="rcode">'+esc(code)+'</span>'; }
+  return p?'<a href="#homes" class="rcode" data-home="'+esc(code)+'">'+esc(coName(code))+'</a>':'<span class="rcode">'+esc(coName(code))+'</span>'; }
 function jobRow(j,cur){
   var os=j.prop?ownerStay(j.prop):null, t=today(), occ=os && os.in<=t;
   return '<button class="row" data-job="'+esc(j.id)+'" aria-current="'+(cur?"true":"false")+'">'+
@@ -934,7 +936,7 @@ function vRoutines(){
 }
 
 /* ================= HOMES ================= */
-var HTYPES=[["str","Short-term rentals"],["lease","Lease"],["2h","Second homes"],["co","Moose company"]];
+var HTYPES=[["str","Short-term rentals"],["lease","Lease"],["2h","Second homes"],["co","Moose Office"]];
 function homeType(code){ if(code==="Moose company") return "co"; return /^2H-/i.test(code)?"2h":/^L-/i.test(code)?"lease":"str"; }
 function yearOf(s){ s=String(s||""); var m=s.match(/(19|20)\d\d/); if(m) return +m[0];
   m=s.match(/^(\d{1,2})\s*[\/\-]\s*(\d{2})$/); if(m){ var y=+m[2]; return y>40?1900+y:2000+y; } return null; }
@@ -972,7 +974,7 @@ function vHomes(){
   var u=S.ui, q=u.hq.trim().toLowerCase();
   var ht=u.htype||"str", cnt={str:0,lease:0,"2h":0,co:0};
   D.homes.forEach(function(p){ cnt[homeType(p.code)]++; });
-  var list=D.homes.filter(function(p){ return homeType(p.code)===ht && (!q || (p.code+" "+p.community).toLowerCase().indexOf(q)>-1); });
+  var list=D.homes.filter(function(p){ return homeType(p.code)===ht && (!q || (coName(p.code)+" "+p.code+" "+p.community).toLowerCase().indexOf(q)>-1); });
   if(u.home && !list.some(function(p){ return p.code===u.home; })) u.home="";
   if(!u.home && list.length && window.innerWidth>1000) u.home=list[0].code;
   var h='<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
@@ -982,7 +984,7 @@ function vHomes(){
   h+='<div class="cols"><aside class="panel listp"><div class="rows">'+list.map(function(p){
       var jobs=(D.byProp[p.code]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
       var rc=p.appliances.some(function(a){ return a.recalls&&a.recalls.length; }), os=ownerStay(p.code), occ=os&&os.in<=today();
-      return '<button class="row" data-home="'+esc(p.code)+'" aria-current="'+(p.code===u.home)+'"><span class="rt"><span class="rcode">'+esc(p.code)+'</span> <span class="muted">'+esc(p.community)+'</span></span>'+
+      return '<button class="row" data-home="'+esc(p.code)+'" aria-current="'+(p.code===u.home)+'"><span class="rt"><span class="rcode">'+esc(coName(p.code))+'</span> <span class="muted">'+esc(p.community)+'</span></span>'+
         '<span>'+(jobs.length?'<span class="pill open">'+jobs.length+' open</span>':'')+'</span><span class="rm">'+
         (rc?'<span class="badge recall">Recall</span>':'')+(occ?'<span class="pill waiting">Owner in</span>':'')+
         '<span>'+homeAppl(p.code,p).length+' appliances</span>'+(homeInfo(p.code).heatTape?'<span>· heat tape</span>':'')+'</span></button>'; }).join("")+
@@ -1119,7 +1121,7 @@ function coStaff(){ if(D._staff || D._staffAsk) return D._staff||[]; D._staffAsk
   sb.rpc("hub_staff_directory").then(function(r){ D._staff=(r&&r.data)||[]; schedule(); }); return []; }
 function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=today();
   var rec=allc.filter(function(j){ return /daily receipts/i.test(j.title) && j.status==="done" && (j.finished||"").slice(0,7)===t.slice(0,7); });
-  var h='<div class="dhead"><div class="dtitle"><h2>Moose company</h2><span class="tag">Company</span></div><div class="dsub">Vehicles, the office, the team, our logos and the basics about Moose. Every fact shows where it came from; Edit to fill a blank or fix one.</div></div><div class="dbody">';
+  var h='<div class="dhead"><div class="dtitle"><h2>Moose Office</h2><span class="tag">Company</span></div><div class="dsub">Vehicles, the office, the team, our logos and the basics about Moose. Every fact shows where it came from; Edit to fill a blank or fix one.</div></div><div class="dbody">';
   h+='<div class="block"><h4>Breezeway office</h4><div class="note">General Moose jobs live on the Breezeway office property (1-Bear Hollow Office). '+rec.length+' "Maint. Daily Receipts" check-ins done this month — the receipts attached to those are read into Expenses on each Breezeway run. '+
     '<a class="golink" href="https://app.breezeway.io/property/337648" target="_blank" rel="noopener">Open the office in Breezeway ↗</a></div></div>';
   // vehicles
