@@ -1107,3 +1107,35 @@ begin
 end $$;
 revoke all on function hub_set_avatar(text) from public, anon;
 grant execute on function hub_set_avatar(text) to authenticated;
+
+-- Birthdays (Brandon 2026-10-28): month + day only (no year). Each person sets their own in My settings; admins can set anyone's.
+-- Everyone signed in sees names + month/day so Home can celebrate at the start of the month, the week of, and on the day.
+create table if not exists hub_birthdays (
+  user_id uuid primary key references allowed_users(id),
+  month int not null check (month between 1 and 12), day int not null check (day between 1 and 31),
+  set_by text, updated_at timestamptz not null default now());
+alter table hub_birthdays enable row level security;
+alter table hub_birthdays force row level security;
+revoke all on hub_birthdays from anon, public, authenticated;
+drop trigger if exists hub_birthdays_nodelete on hub_birthdays;
+create trigger hub_birthdays_nodelete before delete on hub_birthdays for each statement execute function forbid_delete();
+drop trigger if exists hub_birthdays_notruncate on hub_birthdays;
+create trigger hub_birthdays_notruncate before truncate on hub_birthdays for each statement execute function forbid_change();
+create or replace function hub_birthdays_all() returns json language sql stable security definer set search_path = public as $$
+  select case when hub_uid() is null then '[]'::json else coalesce((select json_agg(json_build_object('id', u.id, 'name', u.name, 'month', b.month, 'day', b.day, 'me', u.id = hub_uid()) order by b.month, b.day)
+    from hub_birthdays b join allowed_users u on u.id = b.user_id where u.active), '[]'::json) end $$;
+create or replace function hub_birthday_people() returns json language sql stable security definer set search_path = public as $$
+  select case when not hub_is_admin() then '[]'::json else coalesce((select json_agg(json_build_object('id', u.id, 'name', u.name, 'month', b.month, 'day', b.day) order by u.name)
+    from allowed_users u left join hub_birthdays b on b.user_id = u.id where u.active and exists (select 1 from hub_member_teams m where m.user_id = u.id)), '[]'::json) end $$;
+create or replace function hub_set_birthday(p_user uuid, p_month int, p_day int) returns void
+language plpgsql security definer set search_path = public as $$
+declare me uuid := hub_uid(); who uuid := coalesce(p_user, hub_uid());
+begin
+  if me is null then raise exception 'not signed in'; end if;
+  if who <> me and not hub_is_admin() then raise exception 'only Brandon or Kim can set someone else''s birthday'; end if;
+  if p_month is null or p_day is null or p_day > extract(day from (make_date(2024, p_month, 1) + interval '1 month - 1 day')) then raise exception 'not a real date'; end if;
+  insert into hub_birthdays (user_id, month, day, set_by, updated_at) values (who, p_month, p_day, (select name from allowed_users where id = me), now())
+  on conflict (user_id) do update set month = excluded.month, day = excluded.day, set_by = excluded.set_by, updated_at = now();
+end $$;
+revoke all on function hub_birthdays_all(), hub_birthday_people(), hub_set_birthday(uuid,int,int) from public, anon;
+grant execute on function hub_birthdays_all(), hub_birthday_people(), hub_set_birthday(uuid,int,int) to authenticated;
