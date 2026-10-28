@@ -60,6 +60,9 @@ const dayY = s => { if(!s) return "—"; const d = new Date(String(s).slice(0, 1
 const when = s => s ? new Date(s).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
 const folioUrl = r => "https://moosemanagement.trackhs.com/pms/guest-folio/view/?id=" + encodeURIComponent(r);
 
+// for Ask Penny (hub.html pennyCtx): which stay this check list is about
+window.resCtx = r => { const s = B && B.stays.find(x => String(x.res) === String(r));
+  return s ? { res:String(s.res), home:s.unit, guest:s.guest, arrive:s.arrive, depart:s.depart, status:s.status } : { res:String(r) }; };
 async function load(force){
   if(B && !force && Date.now() - loadedAt < 60000) return B;
   const [r, al] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts")]); if(r.error) throw r.error;
