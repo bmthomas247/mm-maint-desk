@@ -70,6 +70,15 @@ iframe.desk{border:0;width:100%;flex:1;background:var(--ground)}
 .page{max-width:760px;margin:0 auto;padding:24px 16px;width:100%;overflow:auto}
 h2{font-size:24px;margin:4px 0 6px;font-weight:800;letter-spacing:-.02em}
 .topbar{display:none}
+.sstrip{display:flex;gap:8px;overflow-x:auto;padding:10px 0 6px;scrollbar-width:thin}
+.sday{flex:none;min-width:84px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;text-align:center;display:flex;flex-direction:column;gap:1px;font-size:12.5px}
+.sday.on{border-color:var(--moose);background:var(--moose-soft)}
+.sday b{font-size:22px;line-height:1.1;margin-top:4px} .sday small{color:var(--muted);font-weight:700} .sday .io{color:var(--muted);font-size:11.5px}
+details.acc2{border-top:1px solid var(--line);padding:10px 0 0;margin-top:10px}
+details.acc2>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px}
+details.acc2>summary::-webkit-details-marker{display:none}
+details.acc2>summary::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(45deg)}
+details.acc2[open]>summary::after{transform:rotate(-135deg)}
 details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px}
 details.acc>summary::-webkit-details-marker{display:none}
 details.acc>summary::after{content:"";margin-left:auto;width:9px;height:9px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(45deg);transition:transform .15s}
@@ -377,10 +386,32 @@ async function feedbackView(v){
 /* Home: weather (Open-Meteo, no key), company news + shout-outs (hub_posts) */
 const WX = { 0:"Clear",1:"Mostly clear",2:"Partly cloudy",3:"Cloudy",45:"Fog",48:"Fog",51:"Drizzle",53:"Drizzle",55:"Drizzle",61:"Rain",63:"Rain",65:"Heavy rain",
   66:"Freezing rain",67:"Freezing rain",71:"Snow",73:"Snow",75:"Heavy snow",77:"Snow grains",80:"Showers",81:"Showers",82:"Heavy showers",85:"Snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm",99:"Thunderstorm" };
+/* Home: next 14 days of occupancy + today's / tomorrow's check-ins (hub_home_stays: Track reservations, no guest names) */
+async function loadStays(){
+  const box = $("#stays"); if(!box) return;
+  const r = await sb.rpc("hub_home_stays"); const j = r.data;
+  if(r.error || !j){ box.innerHTML = `<b style="font-size:17px">🏠 Who's in house</b><p class="muted">Couldn't load stays${r.error ? ": " + esc(r.error.message) : ""}.</p>`; return; }
+  const dn = d => new Date(d + "T12:00"), wk = d => d === j.today ? "Today" : dn(d).toLocaleDateString(undefined, { weekday:"short" });
+  const tomorrow = (j.days[1] || {}).day;
+  const strip = j.days.map(d => `<div class="sday${d.day === j.today ? " on" : ""}"><div class="muted">${wk(d.day)}<br>${dn(d.day).toLocaleDateString(undefined,{month:"numeric",day:"numeric"})}</div>
+      <b>${d.guests}</b><small>guests</small><span>${d.owners} owner${d.owners === 1 ? "" : "s"}</span><span class="io">↘ ${d.arrivals} · ↗ ${d.departures}</span></div>`).join("");
+  const list = day => { const ci = j.checkins.filter(x => x.day === day), co = j.checkouts.filter(x => x.day === day);
+    return (ci.length ? ci.map(x => `<div class="fb"><div class="hd"><b>${esc(x.unit)}</b><span class="pill ${x.owner ? "blue" : "green"}">${x.owner ? "Owner" : "Guest"}</span>
+        <span class="muted">${x.nights} night${x.nights === 1 ? "" : "s"}${x.status && x.status !== "Confirmed" ? " · " + esc(x.status) : ""}</span>${x.turn ? `<span class="pill amber">Same-day turn</span>` : ""}</div></div>`).join("") : `<p class="muted">No check-ins.</p>`)
+      + (co.length ? `<p class="muted" style="margin:8px 0 0">Check-outs: ${co.map(x => esc(x.unit)).join(", ")}</p>` : ""); };
+  const nIn = day => j.checkins.filter(x => x.day === day).length;
+  box.innerHTML = `<b style="font-size:17px">🏠 Who's in house · next 14 days</b>
+    <div class="sstrip">${strip}</div>
+    <details class="acc2" name="ciacc"><summary><b>Check-ins today</b><span class="pill green">${nIn(j.today)}</span></summary>${list(j.today)}</details>
+    <details class="acc2" name="ciacc"><summary><b>Check-ins tomorrow</b><span class="pill green">${nIn(tomorrow)}</span></summary>${list(tomorrow)}</details>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Source: Track reservations${j.updated ? ", pulled " + new Date(j.updated).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}) : ""}. Homes with a stay that night; leases and cancelled stays left out. ↘ check-ins · ↗ check-outs.</p>`;
+  box.querySelectorAll("details.acc2").forEach(d => d.addEventListener("toggle", () => { if(d.open) box.querySelectorAll("details.acc2").forEach(o => { if(o !== d) o.open = false; }); }));
+}
 async function homeView(v){
   const first = (ME.name||"").split(" ")[0];
   v.innerHTML = `<div class="page"><h2>Hi ${esc(first)} 👋</h2><p class="muted">${new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p>
     <div class="card" id="wx"><p class="muted">Loading Park City weather…</p></div>
+    <div class="card" id="stays"><b style="font-size:17px">🏠 Who's in house · next 14 days</b><p class="muted">Loading…</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎉 Shout-outs</b><button class="btn small" style="margin-left:auto" id="soadd">Give a shout-out</button></div>
       <div id="soform" style="display:none"><label class="field"><span>Who?</span><input id="soabout" placeholder="Example: Dave"></label>
       <label class="field"><span>What did they do?</span><textarea id="sobody" style="min-height:80px" placeholder="Example: Fixed the hot tub at BHL 1206 before the guests landed."></textarea></label>
@@ -390,6 +421,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
+  loadStays();
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
