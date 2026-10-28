@@ -64,9 +64,12 @@ window.MM_LIC = function(A){
         var src = r.f.saved ? 'Saved here'+(r.f.saved.updated_by ? ' by '+esc(r.f.saved.updated_by) : '') : r.f.tasks.length ? 'From Pye-Barker / Breezeway tasks' : r.f.why.length ? 'From Asana' : r.f.bwListed ? 'Listed on the Breezeway home page — check' : '';
         return '<tr><td><a href="./#/homes/'+encodeURIComponent(r.code)+'" target="_top">'+esc(r.code)+'</a></td><td>'+(r.f.has === true ? 'Yes' : r.f.has === false ? 'No' : '<span class="muted">not sure</span>')+(src ? '<div class="note">'+src+'</div>' : '')+(r.f.saved && r.f.saved.notes ? '<div class="note">'+esc(r.f.saved.notes)+'</div>' : '')+'</td>'+
           '<td class="mono">'+esc(r.f.last ? A.fmtD(r.f.last) : "—")+'</td><td>'+A.duePill(r.fs)+'</td><td>'+(r.need ? A.duePill(r.ls)+((r.fs.k === "late" || r.fs.k === "none") && r.f.has === true ? '<div class="note">Can\'t renew until the tag is current</div>' : '') : '<span class="muted">No license needed</span>')+'</td>'+
-          '<td style="white-space:nowrap"><button class="btn sm ghost" data-fsedit="'+esc(r.code)+'">Edit</button> '+A.fireBtn(r.code)+'</td></tr>'; }).join("")+'</tbody></table></div>' : '<div class="empty">Nothing here.</div>')+
+          '<td style="white-space:nowrap"><button class="btn sm ghost" data-fsedit="'+esc(r.code)+'">Edit</button> '+A.fireBtn(r.code)+bwFail(r.code)+'</td></tr>'; }).join("")+'</tbody></table></div>' : '<div class="empty">Nothing here.</div>')+
       '<div class="pad note">Yes = saved on this page, Asana says there\'s a system, or there are Pye-Barker / fire suppression tasks for the home. The Breezeway home page lists a fire suppression item on most homes by default, so on its own that only means "not sure". Homes come from the Track home list.</div></section>';
     return h; }
+  /* fire_tasks.py (ThinkStation, every 30 min) sends the queued check to Breezeway; say why when it couldn't */
+  function bwFail(code){ var q = (S.bwq || {})[String("fire_"+code).replace(/[^A-Za-z0-9_\-.~:@+]/g, "_")];
+    return q && q.status === "failed" ? '<div class="note" style="white-space:normal">Didn\'t reach Breezeway: '+esc(q.note || "unknown")+'</div>' : ""; }
   function mFire(code){ var f = A.fireInfo(code), s = S.licFire[code] || {};
     A.openModal("Fire suppression · "+code, '<div class="fields">'+
       A.sel("fs_has", "Fire suppression system", [["yes","Yes"],["no","No"],["","Not sure"]], f.has === true ? "yes" : f.has === false ? "no" : "")+
