@@ -92,3 +92,21 @@ body.locklook .pad.note{color:var(--muted);padding:12px 16px}
 body.locklook input,body.locklook select,body.locklook textarea{min-height:44px;border-radius:13px;font-size:15px}
 body.locklook .modal,body.locklook .sheet{border-radius:var(--radius)}
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) body.locklook{--moose-ink:#cfe79a;--moose-soft:#1e2a10;--pine-soft:#173026;--red-soft:#3a1714;--amber-soft:#33270c;--blue-soft:#13283d} }
+/* Licensing: property status by county -> neighborhood (2026-10-28) */
+.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.lcard{appearance:none;text-align:left;font:inherit;color:inherit;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px}
+.lcard:hover{border-color:var(--accent)} .lcard.on{border-color:var(--forest-2);box-shadow:0 0 0 2px var(--forest-2) inset,var(--shadow)}
+.lcard .lh{display:flex;align-items:baseline;gap:8px;justify-content:space-between} .lcard .lh b{font-size:16px;font-weight:800}
+.lcard .lbar{display:flex!important;flex:0 0 8px;height:8px!important;min-height:0;width:100%;border-radius:99px;overflow:hidden;background:var(--sunk)} .lbar .lseg{display:block;height:8px;min-width:0}
+.lpills{display:flex;flex-wrap:wrap;gap:6px} .lsum{flex-basis:100%;margin-top:6px}
+
+/* Quick view: answers bold, labels small, codes highlighted (2026-10-28) */
+.qrow{display:flex;flex-direction:column;margin:0 0 7px;min-width:0}
+.qrow .ql{font-size:11.5px;font-weight:700;color:var(--muted);line-height:1.2}
+.qrow .qa{font-size:15px;font-weight:800;color:var(--ink);line-height:1.35;word-break:break-word}
+.qrow .qa.plain{font-weight:500;font-size:14px;color:var(--ink-2)}
+.qcode{font-weight:800;background:var(--wait-soft);color:var(--ink);padding:0 5px;border-radius:6px;letter-spacing:.03em;white-space:nowrap}
+.qv.wifi .qcode{background:var(--info-soft)}
+.qmore summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--accent-ink);margin:2px 0 6px}
+.qv .qname{font-size:16px;font-weight:800} .qv.owner a{font-weight:700;word-break:break-all}
+.qv .hint{margin-top:4px}
