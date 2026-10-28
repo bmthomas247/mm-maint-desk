@@ -992,6 +992,14 @@ function vHomes(){
     '</div></aside><section class="panel detail">'+(u.home?homeDetail(u.home):'<div class="empty">Pick a home.</div>')+'</section></div>';
   return h;
 }
+/* Heads-up (Brandon 2026-10-28): big open/recent problems + active projects at this home, from hub_home_alerts (hub_penny_3.sql).
+   Same list Penny and the reservation check list use. Loaded once, then the page redraws. */
+function homeHeads(code){ var sb=window.MM_SB; if(!sb) return "";
+  if(!D._heads){ if(!D._headsAsk){ D._headsAsk=1; sb.rpc("hub_home_alerts").then(function(r){ D._heads=(r&&r.data)||[]; schedule(); }); } return ""; }
+  var k=String(code).replace(/^(L-|2H-)/i,"").replace(/[^A-Za-z0-9]/g,"").toUpperCase(), L=D._heads.filter(function(a){ return a.key===k; });
+  if(!L.length) return "";
+  var warn=L.some(function(a){ return a.level==="warn"; });
+  return '<div class="'+(warn?"warnbox":"infobox")+'" style="margin-bottom:10px"><b>⚠️ Heads-up for this home</b>'+L.map(function(a){ return '<div style="margin-top:3px'+(a.level==="warn"?';font-weight:600':'')+'">• '+esc(a.text)+' <span style="opacity:.75;font-weight:400">· '+esc(a.source)+'</span></div>'; }).join("")+'</div>'; }
 function homeDetail(code){
   var p=profile(code); if(!p) return '<div class="empty">No profile for '+esc(code)+'.</div>';
   if(p.company) return companyDetail(code);
@@ -1006,6 +1014,7 @@ function homeDetail(code){
     '<span>· '+open.length+' open job'+(open.length===1?'':'s')+'</span></div></div><div class="dbody">';
   if(os && os.in<=t) h+='<div class="warnbox"><b>Owner in the home until '+esc(fmtD(os.out))+'.</b></div>';
   else if(os && daysBetween(t,os.in)<=30) h+='<div class="infobox">Owner stay '+esc(fmtD(os.in))+' → '+esc(fmtD(os.out))+'.</div>';
+  h+=homeHeads(code);
   h+=quickView(code,p);
   h+=ownerRelBlock(jobs);
   // basics
@@ -1190,9 +1199,9 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   h+=coBlock("office","Moose office info");
   // employees — names + teams from the hub team list; titles typed in here
   var st=coStaff(), ti=pe.co_titles||{};
-  h+='<div class="block"><h4>Employees <button class="btn sm ghost" data-co="titles">Edit titles</button></h4>'+
+  h+='<div class="block"><h4>Employees <button class="btn sm ghost" data-co="titles">Edit titles &amp; roles</button></h4>'+
     (!D._staff?'<div class="note">'+(window.MM_SB?'Loading…':'Sign in to see the team.')+'</div>':
-    '<table class="t"><thead><tr><th>Name</th><th>Title</th><th>Hub teams</th></tr></thead><tbody>'+st.map(function(p){ return '<tr><td>'+esc(p.name)+'</td><td>'+(ti[p.name]?esc(ti[p.name]):'<span class="muted">—</span>')+'</td><td>'+esc((p.teams||[]).join(", "))+'</td></tr>'; }).join("")+'</tbody></table>'+
+    '<table class="t"><thead><tr><th>Name</th><th>Title</th><th>What they handle</th><th>Hub teams</th></tr></thead><tbody>'+st.map(function(p){ var hd=(pe.co_handles||{})[p.name]; return '<tr><td>'+esc(p.name)+'</td><td>'+(ti[p.name]?esc(ti[p.name]):'<span class="muted">—</span>')+'</td><td>'+(hd?esc(hd):'<span class="muted">—</span>')+'</td><td>'+esc((p.teams||[]).join(", "))+'</td></tr>'; }).join("")+'</tbody></table>'+
     '<div class="hint" style="margin-top:6px">Names and teams from the Moose Hub team list'+(pe.co_titles_by?' · titles edited in the hub by '+esc(nameFor(pe.co_titles_by)):'')+'</div>')+'</div>';
   // logos & colors
   var cols=(pe.co_colors||"").split("\n").map(function(l){ var m=/(#[0-9a-f]{6}|#[0-9a-f]{3})\b\s*[-–:]?\s*(.*)/i.exec(l); return m?{hex:m[1],name:m[2],src:"Edited in the hub"}:null; }).filter(Boolean);
@@ -1204,10 +1213,11 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   h+=coBlock("general","General Moose info");
   return h+'</div>'; }
 function mCo(sec){ var pe=coEdits();
-  if(sec==="titles"){ var st=D._staff||[], ti=pe.co_titles||{};
-    return openModal("Employee titles",'<div class="fields">'+st.map(function(p,i){ return fld("cot_"+i,p.name,ti[p.name]||""); }).join("")+'</div>',
-      function(){ var t2=Object.assign({},ti); st.forEach(function(p,i){ t2[p.name]=fv("cot_"+i); });
-        return coPut({co_titles:t2,co_titles_by:S.me}); },"Save"); }
+  if(sec==="titles"){ var st=D._staff||[], ti=pe.co_titles||{}, hd=pe.co_handles||{};
+    // "What they handle" teaches Ask Penny who to send people to (Brandon 2026-10-28)
+    return openModal("Employee titles",'<div class="hint" style="margin-bottom:8px">Title, and what each person handles (e.g. "licenses and renewals", "owner stays and owner questions"). Ask Penny uses this to point people to the right person.</div><div class="fields">'+st.map(function(p,i){ return fld("cot_"+i,p.name+" · title",ti[p.name]||"")+fld("coh_"+i,p.name+" · what they handle",hd[p.name]||""); }).join("")+'</div>',
+      function(){ var t2=Object.assign({},ti), h2=Object.assign({},hd); st.forEach(function(p,i){ t2[p.name]=fv("cot_"+i); h2[p.name]=fv("coh_"+i); });
+        return coPut({co_titles:t2,co_handles:h2,co_titles_by:S.me}); },"Save"); }
   if(sec==="brand") return openModal("Logos & colors",area("co_colors","Brand colors, one per line",pe.co_colors||CO_FACTS.colors.map(function(c){ return c.hex+" "+(c.name||""); }).join("\n"),"#1B3A2F Moose green")+area("co_logos","Logo notes",pe.co_logos||"","Which logo to use where"),
       function(){ return coPut({co_colors:fv("co_colors"),co_logos:fv("co_logos"),co_brand_by:S.me}); },"Save");
   var cur=pe["co_"+sec]||{};
