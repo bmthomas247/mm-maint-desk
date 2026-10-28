@@ -70,6 +70,11 @@ iframe.desk{border:0;width:100%;flex:1;background:var(--ground)}
 .page{max-width:760px;margin:0 auto;padding:24px 16px;width:100%;overflow:auto}
 h2{font-size:24px;margin:4px 0 6px;font-weight:800;letter-spacing:-.02em}
 .topbar{display:none}
+details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:"";margin-left:auto;width:9px;height:9px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(45deg);transition:transform .15s}
+details.acc[open]>summary::after{transform:rotate(-135deg)}
+details.acc[open]>summary{margin-bottom:6px}
 /* Track-style rail: ☰ opens/closes it, search on top, Locks has a drop-down (2026-10-27) */
 .shell{transition:grid-template-columns .18s ease}
 .railtop{display:flex;align-items:center;gap:8px;padding:0 2px 10px}
@@ -383,15 +388,17 @@ async function homeView(v){
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">📣 Company news</b>${ME.canNews ? `<button class="btn small" style="margin-left:auto" id="nwadd">Post news</button>` : ""}</div>
       <div id="nwform" style="display:none"><label class="field"><span>Headline</span><input id="nwtitle"></label><label class="field"><span>Details</span><textarea id="nwbody" style="min-height:80px"></textarea></label>
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
-    <div class="card"><b style="font-size:17px">📅 This week in Park City</b><div id="evlist"><p class="muted">Loading events…</p></div></div>
-    <div class="card"><b style="font-size:17px">🗞️ Park City news</b><div id="pclist"><p class="muted">Loading headlines…</p></div></div></div>`;
+    <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
+    <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
+  // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
+  v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
     if(!data || !data.ok){ $("#pclist").innerHTML = $("#evlist").innerHTML = `<p class="muted">Couldn't load right now.</p>`; return; }
-    const ev = data.events.items || [];
+    const ev = data.events.items || []; if($("#evn")) $("#evn").textContent = ev.length ? `${ev.length} events` : "";
     $("#evlist").innerHTML = (ev.length ? ev.map(e => `<div class="fb"><div class="hd">${e.pick ? `<span class="pill green">Moose pick</span>` : ""}<b><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.name)}</a></b>${e.free ? `<span class="pill blue">Free</span>` : ""}</div>
       <p class="muted" style="margin-top:4px">${new Date(e.date+"T12:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}${e.time ? " · " + esc(e.time) : ""}${e.venue ? " · " + esc(e.venue) : ""}</p></div>`).join("") : `<p class="muted">Nothing listed this week.</p>`)
       + `<p class="muted" style="font-size:12px;margin:8px 0 0">Source: <a href="https://www.vacationrentalsparkcity.com/local-events/" target="_blank" rel="noopener">our Local Events page</a>${data.events.updated ? ", updated " + new Date(data.events.updated).toLocaleDateString() : ""}</p>`;
-    const nw = data.news || [];
+    const nw = data.news || []; if($("#pcn")) $("#pcn").textContent = nw.length ? `${nw.length} headlines` : "";
     $("#pclist").innerHTML = (nw.length ? nw.map(n => `<div class="fb"><div class="hd"><span class="pill">${esc(n.src)}</span><b><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a></b></div>
       <p class="muted" style="margin-top:4px">${new Date(n.at).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</p></div>`).join("") : `<p class="muted">No headlines right now.</p>`)
       + `<p class="muted" style="font-size:12px;margin:8px 0 0">Sources: <a href="https://www.parkrecord.com/" target="_blank" rel="noopener">The Park Record</a> and <a href="https://www.kpcw.org/local-news" target="_blank" rel="noopener">KPCW</a> news feeds</p>`;
