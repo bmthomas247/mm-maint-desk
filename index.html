@@ -221,7 +221,9 @@ function noAccess(err){
   $("#out").onclick = async () => { await sb.auth.signOut(); loginView(); };
 }
 function shell(){
-  const live = DESKS.filter(x => x.status === "live" && x.key !== "sync"), syncD = DESKS.find(x => x.key === "sync"), soon = DESKS.filter(x => x.status !== "live");
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
+  const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key)),
+    syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live");
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
@@ -240,14 +242,16 @@ function shell(){
     <aside class="rail">
       <div class="railtop"><button class="rtoggle" id="rtoggle" title="Open / close the menu" aria-label="Open or close the menu">${ICON.menu}</button>
         <div class="brand"><div class="logo"><img src="moose-logo.png" alt=""></div><div><b>Moose Hub</b><small>crew.moosemanagement.com</small></div></div></div>
-      <div class="rsearch"><span class="ic">${ICON.search}</span><input id="hsearch" type="search" placeholder="Search desks, homes, vendors" autocomplete="off" title="Search"></div>
+      <div class="rsearch"><span class="ic">${ICON.search}</span><input id="hsearch" type="search" placeholder="Search desks, properties, vendors" autocomplete="off" title="Search"></div>
       <div class="sres" id="sres"></div>
       <nav class="desks">
-        ${navList(live)}
+        ${navList(info)}
+        ${live.length ? `<div class="grp">Desks</div>` + navList(live) : ""}
         ${soon.length ? `<div class="grp">Coming soon</div>` + navList(soon, true) : ""}
       </nav>
       <div class="foot">
         ${ME.admin ? item("feedback", "Bugs & upgrades", "list") : item("feedback", "My bug reports", "list")}
+        ${repD ? item("reports", repD.label, repD.icon || "chart") : ""}
         ${syncD ? item("sync", syncD.label, syncD.icon || "spark") : ""}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
         <div class="me"><span class="av">${esc(ME.initials || (ME.name||"?").slice(0,2))}</span><span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span><button id="out">Sign out</button></div>
@@ -359,7 +363,7 @@ function hubSearchSetup(){
     const vend = ix.vendors.filter(x => has(x.name) || has(x.sub)).slice(0,6).map(x => ({ h:"#/vendors/" + encodeURIComponent(x.name), t:x.name, s:x.sub }));
     if(DESKS.some(x => x.key === "vendors")) vend.push({ h:"#/vendors/" + encodeURIComponent(inp.value.trim()), t:`Find a vendor for "${inp.value.trim()}"`, s:"Vendors desk search" });
     const sec = (n, a) => a.length ? `<div class="sh">${n}</div>` + a.map(x => `<a href="${esc(x.h)}">${esc(x.t)}${x.s ? `<small>${esc(x.s)}</small>` : ""}</a>`).join("") : "";
-    box.innerHTML = (sec("Desks", desks) + sec("Homes", homes) + sec("Vendors", vend)) || `<div class="none">Nothing found.</div>`;
+    box.innerHTML = (sec("Desks", desks) + sec("Property Details", homes) + sec("Vendors", vend)) || `<div class="none">Nothing found.</div>`;
     box.classList.add("on"); hi = 0; const f = box.querySelector("a"); if(f) f.classList.add("hi");
     box.querySelectorAll("a").forEach(a => a.onclick = e => { e.preventDefault(); go(a.getAttribute("href")); });
   });
