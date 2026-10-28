@@ -32,9 +32,12 @@
     }
     return out;
   }
+  /* 2026-10-28 (Brandon): people without home entry codes (hub section home_codes) read and save the code-free copies
+     profilespub / propeditspub; the database forwards their saves into the real docs (hub_home_codes.sql). */
+  var cc = function(c){ return window.MM_CODES === false && (c === "profiles" || c === "propedits") ? c + "pub" : c; };
   var db = {
     doc: function(path){
-      var i = path.indexOf("/"), c = path.slice(0, i), id = path.slice(i + 1);
+      var i = path.indexOf("/"), c = cc(path.slice(0, i)), id = path.slice(i + 1);
       return {
         set: async function(obj){
           var r = await sb.from(T).upsert({ collection:c, id:id, data:obj }, { onConflict:"collection,id", returning:"minimal" });
@@ -48,6 +51,7 @@
       };
     },
     collection: function(c){
+      c = cc(c);
       return {
         onSnapshot: function(cb, err){
           var cache = {}, t = 0;
@@ -101,6 +105,7 @@
     window.MM_ROLE = me.role;
     // Moose Hub: Expenses & Time only for the maintenance manager + admins (RLS enforces it too)
     try{ window.MM_MONEY = !!(await sb.rpc("hub_can", { p_desk:"maint_money" })).data; }catch(e){ window.MM_MONEY = false; }
+    try{ window.MM_CODES = !!(await sb.rpc("hub_can", { p_desk:"home_codes" })).data; }catch(e){ window.MM_CODES = false; }
     var ONLY = new URLSearchParams(location.search).get("only") || "";
     if(ONLY) document.body.classList.add("only", "only-" + ONLY);
     if(ONLY) document.body.classList.add("locklook");   // Licensing, Vendors, Property Details = Moose Locks look (Brandon 2026-10-28)
