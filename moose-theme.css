@@ -49,3 +49,14 @@ body.only nav.sect{display:none!important}
 body.only main#view{margin-top:16px}
 /* inside the hub frame: the hub sidebar handles moving between desks and signing out */
 body.inhub a[href="locks-desk.html"],body.inhub #mm_signout,body.inhub a[title="Phone view"]{display:none!important}
+/* Property Details quick view (2026-10-28): owner, Wi-Fi, codes at the top of each home */
+.block.quick{background:var(--accent-soft);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.qv{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+.qv.owner{border-left:4px solid var(--forest-2)}
+.qv.codes{border-left:4px solid var(--wait)}
+.qv.wifi{border-left:4px solid var(--info)}
+.qvh{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.qvt{white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.4}
+.qv details summary{cursor:pointer;list-style:none}
+.qv a{color:var(--accent-ink)}
