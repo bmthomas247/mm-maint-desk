@@ -141,6 +141,8 @@ h2.sec{font-size:21px;margin:0 0 6px;color:var(--ink);font-weight:800;letter-spa
 .drop.over{border-color:var(--moose);background:var(--moose-soft)}
 .flist{list-style:none;padding:0;margin:8px 0 0} .flist li{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
 .flist li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.more{border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
+details.more>summary{cursor:pointer;font-weight:800;font-size:14.5px;min-height:36px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .msg{padding:10px 12px;border-radius:12px;margin:10px 0;font-size:14.5px;font-weight:600}
 .msg.ok{background:var(--moose-soft);color:var(--moose-ink)} .msg.err{background:var(--red-soft);color:var(--red)}
 table.rep{width:100%;border-collapse:collapse;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -377,30 +379,31 @@ async function addView(pre){
   const opts = list.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${esc(c.id)}" ${c.id === pre ? "selected" : ""}>${esc(c.name)}</option>`).join("");
   $("#app").innerHTML = tabs("add") + `<div class="page">
     <h2>Add what you heard</h2>
-    <p class="muted">A mailer, an owner's story, a price, a rumor: send it in. Owner relations reviews every entry before anything goes on a card.
-      Include <b>when</b>, <b>where</b>, <b>who</b> told us and <b>how</b> we got it.</p>
+    <p class="muted">A mailer, an owner's story, a price, a rumor: anything helps, even a sentence. Owner relations checks every entry before anything goes on a card.</p>
     <form id="addf" class="item" style="padding:6px 18px 16px" novalidate>
-      ${list.length ? `<label class="f"><span>Which company?</span><select name="company"><option value="">Pick a company…</option>${opts}<option value="__new">Not on the list / not sure</option></select></label>` : ""}
-      <label class="f" id="ctext" ${list.length ? "hidden" : ""}><span>${list.length ? "Company name (as you heard it)" : "Which company?"}</span><input name="company_text" maxlength="200" placeholder="e.g. Blue Haven, Avari, “the new Deer Valley guys”"></label>
-      <div class="row2">
-        <label class="f"><span>How did we get it?</span><select name="channel" required><option value="">Pick one…</option>${CHANNELS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></label>
-        <label class="f"><span>When did we hear or get it?</span><input type="date" name="heard_on" max="${today()}" value="${today()}" required></label>
-      </div>
-      <label class="f"><span>What did we hear?</span><textarea name="what" maxlength="6000" required placeholder="What they offered, charged or said. Quote their words when you can."></textarea></label>
-      <div class="row2">
-        <label class="f"><span>Who told us?</span><input name="source_person" maxlength="200" placeholder="e.g. Greg Watkins (KW), a Moose owner at Bear Hollow">
-          <small>Business contacts only: no personal phone numbers or home addresses.</small></label>
-        <label class="f"><span>Where? (place, address, link, forwarded by…)</span><input name="where" maxlength="500" placeholder="e.g. mailer at a Bear Hollow condo, forwarded by Kim"></label>
-      </div>
-      <div class="f" style="margin:12px 0"><span style="display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800">How sure are we?</span>
-        <div class="sure">${SURE.map(([k, l, d]) => `<label><input type="radio" name="confidence" value="${k}" ${k === "likely" ? "checked" : ""}><b>${l}</b><small>${d}</small></label>`).join("")}</div></div>
-      <div class="f" style="margin:12px 0"><span style="display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800">Photos, PDFs or emails <span class="muted" style="font-weight:600">(optional, as many as you need)</span></span>
+      <!-- Brandon 2026-10-28: only "what" is required so staff aren't put off; the rest is optional and folded away -->
+      <label class="f"><span>What did you hear or see?</span><textarea name="what" maxlength="6000" required placeholder="e.g. Owner said Avari offered him 18%. A mailer from Blue Haven came to a Bear Hollow condo."></textarea></label>
+      ${list.length ? `<label class="f"><span>Which company? <span class="muted" style="font-weight:600">(if you know)</span></span><select name="company"><option value="">Not sure / skip</option>${opts}<option value="__new">Not on the list</option></select></label>` : ""}
+      <label class="f" id="ctext" ${list.length ? "hidden" : ""}><span>${list.length ? "Company name (as you heard it)" : "Which company? <span class=\"muted\" style=\"font-weight:600\">(if you know)</span>"}</span><input name="company_text" maxlength="200" placeholder="e.g. Blue Haven, Avari, “the new Deer Valley guys”"></label>
+      <label class="f"><span>Freshdesk ticket # <span class="muted" style="font-weight:600">(if there is one)</span></span><input name="freshdesk" maxlength="60" inputmode="numeric" placeholder="e.g. 100825"></label>
+      <div class="f" style="margin:12px 0"><span style="display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800">Photos, PDFs or emails <span class="muted" style="font-weight:600">(optional)</span></span>
         <div class="drop" id="drop" tabindex="0" role="button">📎 Tap to add files, or drop them here<br><small class="muted">Photos, PDF, .eml/.msg email, up to 15 MB each</small></div>
         <input type="file" id="fpick" multiple accept="image/*,.pdf,.eml,.msg,.txt" hidden>
         <ul class="flist" id="flist"></ul></div>
-      <label class="f"><span>Freshdesk ticket # <span class="muted" style="font-weight:600">(optional)</span></span><input name="freshdesk" maxlength="60" inputmode="numeric"></label>
+      <details class="more">
+        <summary>More detail <span class="muted" style="font-weight:600">(optional: how, when, who, how sure)</span></summary>
+        <div class="row2">
+          <label class="f"><span>How did we get it?</span><select name="channel"><option value="">Skip</option>${CHANNELS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></label>
+          <label class="f"><span>When did we hear or get it?</span><input type="date" name="heard_on" max="${today()}" value="${today()}"></label>
+          <label class="f"><span>Who told us?</span><input name="source_person" maxlength="200" placeholder="e.g. Greg Watkins (KW), a Moose owner">
+            <small>Business contacts only: no personal phone numbers or home addresses.</small></label>
+          <label class="f"><span>Where?</span><input name="where" maxlength="500" placeholder="e.g. mailer at a Bear Hollow condo"></label>
+        </div>
+        <div class="f" style="margin:12px 0"><span style="display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800">How sure are we?</span>
+          <div class="sure">${SURE.map(([k, l, d]) => `<label><input type="radio" name="confidence" value="${k}" ${k === "likely" ? "checked" : ""}><b>${l}</b><small>${d}</small></label>`).join("")}</div></div>
+      </details>
       <div id="addmsg"></div>
-      <button class="btn primary" type="submit" style="width:100%">Send to owner relations</button>
+      <button class="btn primary" type="submit" style="width:100%;margin-top:14px">Send it in</button>
     </form></div>`;
   const f = $("#addf");
   if(f.company) f.company.onchange = () => { $("#ctext").hidden = f.company.value !== "__new"; };
@@ -423,15 +426,12 @@ function addFiles(fl){
 async function submitCapture(f){
   const v = n => (f[n] && f[n].value || "").trim();
   const company = f.company && f.company.value !== "__new" ? v("company") : "", ctext = v("company_text");
-  const errs = [];
-  if(!company && !ctext) errs.push("Which company is it about?");
-  if(!v("channel")) errs.push("How did we get it?");
-  if(!v("heard_on")) errs.push("When did we hear it?"); else if(v("heard_on") > today()) errs.push("The date can't be in the future.");
-  if(v("what").length < 3) errs.push("Say what we heard.");
-  if(errs.length){ $("#addmsg").innerHTML = `<div class="msg err">${errs.map(esc).join("<br>")}</div>`; return; }
+  if(v("what").length < 3){ $("#addmsg").innerHTML = `<div class="msg err">Add a few words about what you heard.</div>`; f.what.focus(); return; }
+  if(v("heard_on") > today()){ $("#addmsg").innerHTML = `<div class="msg err">The date can't be in the future.</div>`; return; }
   const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Sending…";
   try {
-    const r = await sb.rpc("cmp_capture_add", { p_company: company || null, p_company_text: ctext || null, p_channel: v("channel"), p_heard_on: v("heard_on"),
+    // skipped fields: company -> "Not sure" (owner relations links it in review), channel -> other, date -> today
+    const r = await sb.rpc("cmp_capture_add", { p_company: company || null, p_company_text: company ? null : ctext || "Not sure", p_channel: v("channel") || "other", p_heard_on: v("heard_on") || today(),
       p_what: v("what"), p_where: v("where") || null, p_source_person: v("source_person") || null,
       p_confidence: (f.querySelector("input[name=confidence]:checked") || {}).value || "likely", p_freshdesk: v("freshdesk") || null });
     if(r.error) throw r.error;
@@ -440,7 +440,7 @@ async function submitCapture(f){
       <h2>Thanks — sent</h2><p>Entry #${esc(id)} is with owner relations for review.${pending.length ? ` ${pending.length - failed.length} of ${pending.length} file${pending.length === 1 ? "" : "s"} attached.` : ""}</p>
       ${failed.length ? `<div class="msg err">These files didn't attach: ${failed.map(esc).join(", ")}. Open <a href="#/${S.me.edit ? "review/all" : "mine"}">your entry</a> to try again.</div>` : ""}
       <div class="acts"><a class="btn primary" href="#/add">Add another</a><a class="btn" href="#/${S.me.edit ? "review" : "mine"}">${S.me.edit ? "Review intel" : "What I've sent"}</a></div></div></div>`;
-  } catch(e){ $("#addmsg").innerHTML = `<div class="msg err">${esc(errText(e))}</div>`; btn.disabled = false; btn.textContent = "Send to owner relations"; }
+  } catch(e){ $("#addmsg").innerHTML = `<div class="msg err">${esc(errText(e))}</div>`; btn.disabled = false; btn.textContent = "Send it in"; }
 }
 async function myUid(captureId){   // storage folders are named by the hub user id (allowed_users.id), which RLS shows on your own entries
   if(S.uid) return S.uid;
