@@ -395,6 +395,11 @@ async function boot(){
     return noAccess(me.error ? me.error.message : ""); }
   ME = me.data; ME.canNews = !!(await sb.rpc("hub_can_post_news")).data;
   const d = await sb.rpc("hub_my_desks"); DESKS = d.data || [];
+  /* Maintenance drop-down (Brandon 2026-10-28): Workbench · Projects · Expenses & Time. Projects follows Maintenance;
+     Expenses & Time follows the maint_money section (hub_can; RLS on desk_docs enforces it too). */
+  const mD = DESKS.find(x => x.key === "maintenance" && x.status === "live");
+  if(mD){ DESKS.push({ key:"maint_projects", label:"Maintenance · Projects", icon:mD.icon, url:"desk.html?only=projects", status:"live", sort:mD.sort + 0.1 });
+    try { if((await sb.rpc("hub_can", { p_desk:"maint_money" })).data) DESKS.push({ key:"maint_money", label:"Maintenance · Expenses & Time", icon:mD.icon, url:"desk.html?only=money", status:"live", sort:mD.sort + 0.2 }); } catch(e){} }
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
   shell(); pennyMount(); route();
 }
@@ -410,7 +415,8 @@ function shell(){
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live");
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
-  const GROUPS = { locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
+  const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time" } },
+                   locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio" } },
@@ -531,10 +537,16 @@ function route(){
   if(d && k === "res_report") return resReportView(v);
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
+  // Tools planned for a "soon" desk (Brandon 2026-10-28: Housekeeping gets a Linen Calculator; the rest of the HK desk comes later)
+  const PLANNED = { housekeeping:["Linen Calculator"] }, plan = PLANNED[k] || [];
   if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
+      ${plan.length ? `<div style="margin:10px 0">${plan.map(t => `<div><b>${esc(t)}</b> <span class="pill amber">soon</span></div>`).join("")}</div>` : ""}
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a bug / upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
   const arg = hashArg(), sep = d.url.includes("?") ? "&" : "?";
-  const src = !arg ? d.url : k === "homes" ? d.url + sep + "home=" + encodeURIComponent(arg) : k === "vendors" ? d.url + sep + "vq=" + encodeURIComponent(arg) : d.url + "#" + encodeURIComponent(arg);
+  if(k === "maintenance"){ const to = { projects:"maint_projects", money:"maint_money" }[arg];
+    if(to && DESKS.some(x => x.key === to)){ location.replace("#/" + to); return; } }
+  const url = k === "maintenance" ? d.url + sep + "split=1" : d.url;
+  const src = !arg ? url : k === "maintenance" ? url + "#" + encodeURIComponent(arg) : k === "homes" ? d.url + sep + "home=" + encodeURIComponent(arg) : k === "vendors" ? d.url + sep + "vq=" + encodeURIComponent(arg) : d.url + "#" + encodeURIComponent(arg);
   v.innerHTML = `<iframe class="desk" id="deskframe" title="${esc(d.label)}" src="${esc(src)}"></iframe>`;
   const f = $("#deskframe");
   f.addEventListener("load", () => { try {   // same site: hide the old "jump to other desk" header buttons - the sidebar does that now
@@ -841,8 +853,8 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
-  const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", competitor:"competitor", competitor_add:"competitor" },
-    GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", competitor:"competitor", competitor_add:"competitor" },
+    GL = { maint:["Maintenance","wrench"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = G[x.key];
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
