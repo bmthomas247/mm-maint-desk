@@ -79,6 +79,11 @@
     me = me && me[0];
     if(!me){ gate('<h2>Not on the list</h2><p>' + s.user.email + " isn't set up. Ask Brandon to add it.</p>"); return; }
     window.MM_ROLE = me.role;
+    // Moose Hub: Expenses & Time only for the maintenance manager + admins (RLS enforces it too)
+    try{ window.MM_MONEY = !!(await sb.rpc("hub_can", { p_desk:"maint_money" })).data; }catch(e){ window.MM_MONEY = false; }
+    var ONLY = new URLSearchParams(location.search).get("only") || "";
+    if(ONLY) document.body.classList.add("only");
+    try{ if(window.top !== window) document.body.classList.add("inhub"); }catch(e){}
     window.MM_ME = me;
     try{ localStorage.setItem("md_me", me.initials || ""); localStorage.setItem("md_seenhelp", "1"); }catch(e){}
     window.MMDB = { ready: function(){ return Promise.resolve(db); } };
@@ -98,6 +103,9 @@
     var code = document.getElementById("deskcode").textContent;
     var el = document.createElement("script"); el.textContent = code; document.body.appendChild(el);
     // same header as the Claude artifact: show who is signed in instead of the name picker
+    var brand = document.querySelector("header.top .brand");
+    if(brand){ brand.insertAdjacentHTML("afterbegin", '<img class="mlogo" src="moose-logo.png" alt="">');
+      var mk = brand.querySelector(".mk"); if(mk && ONLY) mk.textContent = ({homes:"Homes", vendors:"Vendors", fire:"Licensing"})[ONLY] || mk.textContent; }
     var who = document.querySelector("label.who");
     if(who){ who.innerHTML = '<span class="lbl">You</span><b style="padding:0 6px">' + me.name + "</b>"; }
     var hdr = document.querySelector("header.top");
