@@ -427,8 +427,8 @@ function shell(){
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
                    competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } } };   // Brandon 2026-10-28
-  // Damage claims sits under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; front desk keeps it on its own
-  if(DESKS.some(x => x.key === "maintenance")) GROUPS.maint.kids.damage_claims = "Damage claims";
+  // Damage claims + Vehicles sit under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; others keep them on their own
+  if(DESKS.some(x => x.key === "maintenance")) Object.assign(GROUPS.maint.kids, { damage_claims:"Damage claims", vehicles:"Vehicles" });
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
   const soonTag = `<span class="soon">soon</span>`;
   const navList = (list, isSoon) => { const done = {}; return list.map(x => { const g = grouped(x.key);
