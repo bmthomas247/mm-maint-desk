@@ -42,7 +42,8 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--moose-soft);bord
 .pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
 
 /* layout */
-.shell{display:grid;grid-template-columns:var(--rail) 1fr;height:100vh;height:100dvh}
+.shell{display:grid;grid-template-columns:fit-content(420px) 1fr;height:100vh;height:100dvh}
+aside.rail{min-width:var(--rail)}
 aside.rail{background:linear-gradient(180deg,var(--forest),#2e4a0e);color:#fff;display:flex;flex-direction:column;min-height:0;
   padding:14px 10px calc(10px + env(safe-area-inset-bottom,0px))}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 6px 14px}
@@ -50,20 +51,22 @@ aside.rail{background:linear-gradient(180deg,var(--forest),#2e4a0e);color:#fff;d
 .logo img{width:42px;height:42px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 2px 8px rgba(0,0,0,.25);display:block}
 .brand b{font-size:18px;font-weight:800;letter-spacing:-.01em;display:block;line-height:1.1}
 .brand small{font-size:12.5px;opacity:.75;font-weight:600}
-nav.desks{flex:1;overflow:auto;display:flex;flex-direction:column;gap:3px;padding-right:2px}
+nav.desks{flex:1 0 auto;display:flex;flex-direction:column;gap:3px;padding-right:2px}
+aside.rail{overflow-y:auto;overscroll-behavior:contain}
 .dk{display:flex;align-items:center;gap:11px;min-height:44px;padding:0 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:14.5px;opacity:.88}
 .dk:hover{background:rgba(255,255,255,.08);opacity:1}
 .dk.on{background:rgba(255,255,255,.16);opacity:1;box-shadow:inset 3px 0 0 var(--moose-2)}
 .dk .ic{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.1);display:grid;place-items:center;flex:none}
 .dk.on .ic{background:var(--moose);color:#16220a}
 .dk .ic svg{width:17px;height:17px}
-.dk .lb{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dk .lb{flex:1;min-width:0;white-space:nowrap}
+.dk.sub .lb{white-space:nowrap}
 .dk .soon{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;opacity:.65}
 .grp{font-size:11px;text-transform:uppercase;letter-spacing:.1em;font-weight:800;opacity:.55;margin:12px 10px 4px}
 .foot{border-top:1px solid rgba(255,255,255,.14);padding-top:8px;margin-top:8px;display:flex;flex-direction:column;gap:3px}
 .me{display:flex;align-items:center;gap:10px;padding:8px 10px;font-size:13.5px}
 .me .av{width:30px;height:30px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
-.me .nm{flex:1;min-width:0;line-height:1.2} .me .nm small{display:block;opacity:.7;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me .nm{flex:1;min-width:0;line-height:1.2} .me .nm small{display:block;opacity:.7;font-size:11.5px;white-space:normal}
 .me button{background:none;border:0;color:#fff;opacity:.7;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer}
 main.view{min-width:0;min-height:0;display:flex;flex-direction:column}
 iframe.desk{border:0;width:100%;flex:1;background:var(--ground)}
@@ -125,7 +128,7 @@ details.acc[open]>summary{margin-bottom:6px}
 .dk.sub{min-height:36px;padding-left:51px;font-size:13.5px;font-weight:700}
 .dk.sub.on{box-shadow:inset 3px 0 0 var(--moose-2)}
 @media (min-width:821px){
-  body.mini{--rail:70px}
+  body.mini{--rail:70px} body.mini .shell{grid-template-columns:var(--rail) 1fr} body.mini aside.rail{min-width:0}
   body.mini aside.rail{padding-left:8px;padding-right:8px}
   body.mini .railtop .brand,body.mini .dk .lb,body.mini .dk .soon,body.mini .dk .chev,body.mini .grp,body.mini .me .nm,body.mini .me button,body.mini .gbox .subs,body.mini .sres{display:none!important}
   body.mini .railtop{flex-direction:column}
@@ -138,7 +141,7 @@ details.acc[open]>summary{margin-bottom:6px}
 /* phones: rail becomes a slide-out drawer */
 @media (max-width:820px){
   .shell{grid-template-columns:1fr}
-  aside.rail{position:fixed;inset:0 auto 0 0;width:min(84vw,300px);z-index:20;transform:translateX(-102%);transition:transform .2s ease;box-shadow:4px 0 24px rgba(0,0,0,.3)}
+  aside.rail{position:fixed;inset:0 auto 0 0;width:max-content;min-width:min(84vw,300px);max-width:94vw;overflow-y:auto;z-index:20;transform:translateX(-102%);transition:transform .2s ease;box-shadow:4px 0 24px rgba(0,0,0,.3)}
   body.open aside.rail{transform:none}
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:19;display:none} body.open .scrim{display:block}
   .topbar{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;
@@ -155,6 +158,12 @@ details.acc[open]>summary{margin-bottom:6px}
 .fb{border-top:1px solid var(--line);padding:12px 0}.fb:first-child{border-top:0}
 .fb .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 .fb p{margin:6px 0 0;white-space:pre-wrap}
+/* My settings (2026-10-28) */
+.ord{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)} .ord:last-child{border-bottom:0}
+.ord .oi{width:32px;height:32px;border-radius:9px;background:var(--moose-soft);color:var(--moose-ink);display:grid;place-items:center;flex:none} .ord .oi svg{width:17px;height:17px}
+.ord b{flex:1;min-width:0} .ord .btn.small{min-width:40px;padding:0 10px}
+.ints{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0} .ints label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);border-radius:999px;padding:7px 12px;font-weight:700;font-size:14px;cursor:pointer;background:var(--card)}
+.ints input{width:auto;min-height:0;margin:0} .ints label.on{background:var(--moose-soft);border-color:var(--moose);color:var(--moose-ink)}
 </style>
 </head>
 <body>
@@ -187,9 +196,10 @@ const ICON = {
   search: I('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>'),
   chev: I('<path d="m9 6 6 6-6 6"/>'),
   menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+  gear: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
   grid: I('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>')
 };
-let ME = null, DESKS = [];
+let ME = null, DESKS = [], PREFS = { desk_order:[], interests:[], kinds:[] };
 
 /* ---------- sign in (same accounts as Moose Locks and the Maintenance site) */
 function loginView(msg){
@@ -224,6 +234,7 @@ async function boot(){
   if(me.error || !me.data) return noAccess(me.error ? me.error.message : "");
   ME = me.data; ME.canNews = !!(await sb.rpc("hub_can_post_news")).data;
   const d = await sb.rpc("hub_my_desks"); DESKS = d.data || [];
+  try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
   shell(); route();
 }
 function noAccess(err){
@@ -248,6 +259,10 @@ function shell(){
       return `<div class="gbox" data-g="${g}"><a class="dk par" href="#" data-g="${g}" title="${esc(G.label)}"><span class="ic">${ICON[G.icon]}</span><span class="lb">${esc(G.label)}</span><span class="chev">${ICON.chev}</span></a>
         <div class="subs">${kids.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(y.label)}"><span class="lb">${esc(G.kids[y.key])}</span>${y.status !== "live" ? soonTag : ""}</a>`).join("")}</div></div>`; }).join(""); };
   const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
+  const ORD = PREFS.desk_order || [], okey = x => { const g = grouped(x.key); return g ? "g:" + g : x.key; };
+  const byMine = list => !ORD.length ? list : list.slice().sort((a, b) => { const ia = ORD.indexOf(okey(a)), ib = ORD.indexOf(okey(b));
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
+  const mineAll = byMine(info.concat(live));
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b></div>
   <div class="scrim" id="scrim"></div>
   <div class="shell">
@@ -257,14 +272,14 @@ function shell(){
       <div class="rsearch"><span class="ic">${ICON.search}</span><input id="hsearch" type="search" placeholder="Search desks, properties, vendors" autocomplete="off" title="Search"></div>
       <div class="sres" id="sres"></div>
       <nav class="desks">
-        ${navList(info)}
-        ${live.length ? `<div class="grp">Desks</div>` + navList(live) : ""}
+        ${ORD.length ? navList(mineAll) : navList(info) + (live.length ? `<div class="grp">Desks</div>` + navList(live) : "")}
         ${soon.length ? `<div class="grp">Coming soon</div>` + navList(soon, true) : ""}
       </nav>
       <div class="foot">
         ${ME.admin ? item("feedback", "Bugs & upgrades", "list") : item("feedback", "My bug reports", "list")}
         ${repD ? item("reports", repD.label, repD.icon || "chart") : ""}
         ${syncD ? item("sync", syncD.label, syncD.icon || "spark") : ""}
+        ${item("settings", "My settings", "gear")}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a bug / upgrade</span></a>
         <div class="me"><span class="av">${esc(ME.initials || (ME.name||"?").slice(0,2))}</span><span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span><button id="out">Sign out</button></div>
       </div>
@@ -309,7 +324,7 @@ function shell(){
 /* What page/tab someone is on when they report a bug: hub section + the desk's own tab (and home/vendor if one is open) */
 function whereAmI(){
   const k = current(), d = DESKS.find(x => x.key === k);
-  const base = d ? d.label : ({ feedback:"Bugs & upgrades", reports:"Reports", sync:"Sync", home:"Home" })[k] || "Moose Hub";
+  const base = d ? d.label : ({ feedback:"Bugs & upgrades", reports:"Reports", sync:"Sync", home:"Home", settings:"My settings" })[k] || "Moose Hub";
   const parts = [base]; let page = location.href;
   const f = document.getElementById("deskframe");
   if(f){ try { const w = f.contentWindow, doc = f.contentDocument; page = w.location.pathname.split("/").pop() + w.location.search + w.location.hash;
@@ -331,11 +346,12 @@ function route(){
   document.querySelectorAll(".dk[data-k]").forEach(a => a.classList.toggle("on", a.dataset.k === k));
   document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); if(on) g.classList.add("open"); });
   const v = $("#view"), d = DESKS.find(x => x.key === k);
-  $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & upgrades" : "Moose Hub");
+  $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   if(k === "feedback") return feedbackView(v);
   if(k === "reports") return hubReportsView(v);
   if(k === "sync") return syncView(v);
   if(k === "home") return homeView(v);
+  if(k === "settings") return settingsView(v);
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a bug / upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
@@ -432,47 +448,124 @@ async function loadStays(){
 }
 /* Daily pick: same quote / joke / fact for everyone each day; "Another" shuffles. Quotes are attributed; facts carry their source. */
 const DAILY = [
- { k:"Quote", t:"Well done is better than well said.", a:"Benjamin Franklin, Poor Richard's Almanack (1737)" },
- { k:"Quote", t:"Do what you can, with what you have, where you are.", a:"Theodore Roosevelt, quoting Bill Widener, in his Autobiography (1913)" },
- { k:"Quote", t:"Great things are done by a series of small things brought together.", a:"Vincent van Gogh, letter to his brother Theo (1882)" },
- { k:"Quote", t:"The best way out is always through.", a:"Robert Frost, “A Servant to Servants” (1915)" },
- { k:"Quote", t:"The mountains are calling and I must go.", a:"John Muir, letter to his sister Sarah (1873)" },
- { k:"Quote", t:"In every walk with nature one receives far more than he seeks.", a:"John Muir, Steep Trails (1918)" },
- { k:"Quote", t:"No act of kindness, no matter how small, is ever wasted.", a:"Aesop, “The Lion and the Mouse”" },
- { k:"Quote", t:"Slow and steady wins the race.", a:"Aesop, “The Tortoise and the Hare”" },
- { k:"Quote", t:"Many hands make light work.", a:"English proverb, recorded by John Heywood (1546)" },
- { k:"Quote", t:"Fall seven times, stand up eight.", a:"Japanese proverb" },
- { k:"Quote", t:"A journey of a thousand miles begins with a single step.", a:"Laozi, Tao Te Ching, ch. 64" },
- { k:"Quote", t:"Alone we can do so little; together we can do so much.", a:"Helen Keller (as recalled by Joseph Lash)" },
- { k:"Quote", t:"We are what we repeatedly do. Excellence, then, is not an act, but a habit.", a:"Will Durant, summing up Aristotle in The Story of Philosophy (1926)" },
- { k:"Joke", t:"What do you call a moose with no name? Anonymoose." },
- { k:"Joke", t:"What do you call a sleeping moose? A bull-dozer." },
- { k:"Joke", t:"How do moose send secret messages? Moose code." },
- { k:"Joke", t:"What's a moose's favorite kind of music? Moose-ic, especially when it's played by the moose-icians." },
- { k:"Joke", t:"Why did the snowflake apply to work at Moose? It heard we're great with turnover." },
- { k:"Joke", t:"Why did the hot tub get promoted? It stays calm under pressure and always keeps things at the right temperature." },
- { k:"Joke", t:"Why are mountains so funny? They're hill-arious." },
- { k:"Joke", t:"What do you call a fake noodle? An impasta." },
- { k:"Joke", t:"Why don't eggs tell jokes? They'd crack each other up." },
- { k:"Joke", t:"I'd tell you a joke about the broken elevator, but it works on another level." },
- { k:"Fact", t:"A large bull moose can weigh as much as 1,500 pounds, and an adult stands five to seven feet at the shoulder.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
- { k:"Fact", t:"A bull moose's antlers can reach five feet across and weigh up to 77 pounds.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
- { k:"Fact", t:"A moose can eat up to 70 pounds of food a day.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
- { k:"Fact", t:"Moose have long legs that let them walk through deep snow and even swim in deep water.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
- { k:"Fact", t:"Park City was founded by prospectors in the late 1860s, and silver was mined here until the early 1970s.", a:"Park City Municipal", u:"https://parkcity.gov/about-us" },
- { k:"Fact", t:"Park City's Ontario Mine, found in 1872, went on to produce over $50 million in its lifetime.", a:"Park City Municipal history", u:"https://parkcity.gov/about-us" },
- { k:"Fact", t:"The film festival that came to Park City in 1981 grew into the Sundance Film Festival.", a:"Park City Municipal history", u:"https://parkcity.gov/about-us" },
- { k:"Fact", t:"Park City is home to two ski resorts, Deer Valley and Park City Mountain.", a:"Park City Municipal", u:"https://parkcity.gov/about-us" }
+ { i:"work", k:"Quote", t:"Well done is better than well said.", a:"Benjamin Franklin, Poor Richard's Almanack (1737)" },
+ { i:"work", k:"Quote", t:"Do what you can, with what you have, where you are.", a:"Theodore Roosevelt, quoting Bill Widener, in his Autobiography (1913)" },
+ { i:"work", k:"Quote", t:"Great things are done by a series of small things brought together.", a:"Vincent van Gogh, letter to his brother Theo (1882)" },
+ { i:"work", k:"Quote", t:"The best way out is always through.", a:"Robert Frost, “A Servant to Servants” (1915)" },
+ { i:"outdoors", k:"Quote", t:"The mountains are calling and I must go.", a:"John Muir, letter to his sister Sarah (1873)" },
+ { i:"outdoors", k:"Quote", t:"In every walk with nature one receives far more than he seeks.", a:"John Muir, Steep Trails (1918)" },
+ { i:"work", k:"Quote", t:"No act of kindness, no matter how small, is ever wasted.", a:"Aesop, “The Lion and the Mouse”" },
+ { i:"work", k:"Quote", t:"Slow and steady wins the race.", a:"Aesop, “The Tortoise and the Hare”" },
+ { i:"work", k:"Quote", t:"Many hands make light work.", a:"English proverb, recorded by John Heywood (1546)" },
+ { i:"work", k:"Quote", t:"Fall seven times, stand up eight.", a:"Japanese proverb" },
+ { i:"work", k:"Quote", t:"A journey of a thousand miles begins with a single step.", a:"Laozi, Tao Te Ching, ch. 64" },
+ { i:"work", k:"Quote", t:"Alone we can do so little; together we can do so much.", a:"Helen Keller (as recalled by Joseph Lash)" },
+ { i:"work", k:"Quote", t:"We are what we repeatedly do. Excellence, then, is not an act, but a habit.", a:"Will Durant, summing up Aristotle in The Story of Philosophy (1926)" },
+ { i:"moose", k:"Joke", t:"What do you call a moose with no name? Anonymoose." },
+ { i:"moose", k:"Joke", t:"What do you call a sleeping moose? A bull-dozer." },
+ { i:"moose", k:"Joke", t:"How do moose send secret messages? Moose code." },
+ { i:"moose", k:"Joke", t:"What's a moose's favorite kind of music? Moose-ic, especially when it's played by the moose-icians." },
+ { i:"ski,work", k:"Joke", t:"Why did the snowflake apply to work at Moose? It heard we're great with turnover." },
+ { i:"work", k:"Joke", t:"Why did the hot tub get promoted? It stays calm under pressure and always keeps things at the right temperature." },
+ { i:"outdoors,ski", k:"Joke", t:"Why are mountains so funny? They're hill-arious." },
+ { i:"food", k:"Joke", t:"What do you call a fake noodle? An impasta." },
+ { i:"food", k:"Joke", t:"Why don't eggs tell jokes? They'd crack each other up." },
+ { i:"work", k:"Joke", t:"I'd tell you a joke about the broken elevator, but it works on another level." },
+ { i:"moose", k:"Fact", t:"A large bull moose can weigh as much as 1,500 pounds, and an adult stands five to seven feet at the shoulder.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { i:"moose", k:"Fact", t:"A bull moose's antlers can reach five feet across and weigh up to 77 pounds.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { i:"moose", k:"Fact", t:"A moose can eat up to 70 pounds of food a day.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { i:"moose", k:"Fact", t:"Moose have long legs that let them walk through deep snow and even swim in deep water.", a:"National Park Service, Rocky Mountain NP", u:"https://www.nps.gov/romo/learn/nature/moose.htm" },
+ { i:"parkcity,history", k:"Fact", t:"Park City was founded by prospectors in the late 1860s, and silver was mined here until the early 1970s.", a:"Park City Municipal", u:"https://parkcity.gov/about-us" },
+ { i:"parkcity,history", k:"Fact", t:"Park City's Ontario Mine, found in 1872, went on to produce over $50 million in its lifetime.", a:"Park City Municipal history", u:"https://parkcity.gov/about-us" },
+ { i:"parkcity", k:"Fact", t:"The film festival that came to Park City in 1981 grew into the Sundance Film Festival.", a:"Park City Municipal history", u:"https://parkcity.gov/about-us" },
+ { i:"parkcity,ski", k:"Fact", t:"Park City is home to two ski resorts, Deer Valley and Park City Mountain.", a:"Park City Municipal", u:"https://parkcity.gov/about-us" },
+ { i:"ski", k:"Fact", t:"Skiing and snowboarding became Utah's official state winter sports in 2012 — the bill passed both the House and Senate unanimously.", a:"Utah's Online Public Library, State Symbols", u:"https://onlinelibrary.utah.gov/state-symbol/winter-sports/" },
+ { i:"ski,parkcity", k:"Stat", t:"Park City Mountain: 7,300 skiable acres, 41 lifts and 330+ trails.", a:"Park City Mountain, Mountain Information", u:"https://www.parkcitymountain.com/the-mountain/about-the-mountain/mountain-info.aspx" },
+ { i:"ski,parkcity", k:"Stat", t:"Park City Mountain averages 355 inches of snow a year.", a:"Park City Mountain, Mountain Information", u:"https://www.parkcitymountain.com/the-mountain/about-the-mountain/mountain-info.aspx" },
+ { i:"ski,parkcity", k:"Stat", t:"Park City Mountain's summit sits at 10,026 ft and its base at 6,800 ft — 3,226 ft from bottom to top.", a:"Park City Mountain, Mountain Information", u:"https://www.parkcitymountain.com/the-mountain/about-the-mountain/mountain-info.aspx" },
+ { i:"moose", k:"Fact", t:"Utah's moose are Shiras moose, the smallest North American kind — still 800 to 1,200 pounds, with bulls about six feet at the shoulder.", a:"Swaner EcoCenter (USU), Moose Safety 101", u:"https://extension.usu.edu/swaner/naturalist-news/moose-safety.pdf" },
+ { i:"moose,outdoors", k:"Fact", t:"A moose that lowers its head, pins back its ears or raises the hair on its neck may be about to charge. Back away slowly and get behind something solid — don't run.", a:"Swaner EcoCenter (USU), Moose Safety 101", u:"https://extension.usu.edu/swaner/naturalist-news/moose-safety.pdf" },
+ { i:"moose", k:"Stat", t:"Utah is home to roughly 2,500 to 3,000 moose.", a:"Utah Division of Wildlife Resources, via Swaner EcoCenter (USU)", u:"https://extension.usu.edu/swaner/naturalist-news/moose-safety.pdf" },
+ { i:"moose,outdoors,history", k:"Fact", t:"The Rocky Mountain elk became Utah's state animal in 1971 — the idea came from fourth graders at Ashman Elementary in Sevier County.", a:"Utah's Online Public Library, State Symbols", u:"https://onlinelibrary.utah.gov/state-symbol/rocky-mountain-elk" },
+ { i:"history", k:"Fact", t:"The transcontinental railroad was joined at Promontory Summit on May 10, 1869. The golden spike was ceremonial — the real last spike was ordinary iron, driven at 12:47 p.m.", a:"Utah History Encyclopedia, via History to Go", u:"https://historytogo.utah.gov/golden-spike/" },
+ { i:"history", k:"Fact", t:"Utah became the 45th state on January 4, 1896.", a:"Utah Historical Society, I Love History", u:"https://ilovehistory.utah.gov/1896-statehood" },
+ { i:"outdoors,history", k:"Fact", t:"Zion started in 1909 as Mukuntuweep National Monument and became Zion National Park on November 20, 1919.", a:"Utah Historical Quarterly, via History to Go", u:"https://historytogo.utah.gov/zion-national-park" },
+ { i:"outdoors", k:"Stat", t:"Zion's first protected area in 1909 was about 15,840 acres; by 1918 it had grown to 76,800 acres.", a:"Utah Historical Quarterly, via History to Go", u:"https://historytogo.utah.gov/zion-national-park" },
+ { i:"food", k:"Fact", t:"The Dutch oven has been Utah's official state cooking pot since 1997.", a:"Utah's Online Public Library, State Symbols", u:"https://onlinelibrary.utah.gov/state-symbol/cooking-pot/" },
+ { i:"food", k:"Fact", t:"In 2001 the Utah Senate recognized Jell-O as a favorite snack food of Utah, after Des Moines briefly took the Jell-O-eating crown from Salt Lake City in 1999.", a:"Utah State Senate, S.R. 5 (2001)", u:"https://le.utah.gov/~2001/bills/sbillenr/SR0005.pdf" },
+ { i:"food", k:"Stat", t:"More than 14,000 people signed to make Jell-O Utah's official snack.", a:"Utah State Senate, S.R. 5 (2001)", u:"https://le.utah.gov/~2001/bills/sbillenr/SR0005.pdf" },
+ { i:"sports", k:"Fact", t:"The Jazz moved from New Orleans to Salt Lake City in 1979 and played their first Utah season at the Salt Palace.", a:"Utah History Encyclopedia, via History to Go", u:"https://historytogo.utah.gov/utah-jazz" },
+ { i:"sports", k:"Stat", t:"The Jazz's first Utah season: 24 wins and an average of 7,821 fans per home game.", a:"Utah History Encyclopedia, via History to Go", u:"https://historytogo.utah.gov/utah-jazz" },
+ { i:"sports,ski", k:"Fact", t:"The IOC awarded the 2034 Winter Olympics to Salt Lake City on July 24, 2024, at its meeting in Paris.", a:"Associated Press, via FOX 13 News", u:"https://www.fox13now.com/news/2034-slc-winter-games/its-salt-lake-city-2034-winter-olympics-awarded-to-utah" },
+ { i:"sports", k:"Stat", t:"The IOC vote for Salt Lake City 2034 was 83 to 6.", a:"Associated Press, via FOX 13 News", u:"https://www.fox13now.com/news/2034-slc-winter-games/its-salt-lake-city-2034-winter-olympics-awarded-to-utah" },
+ { i:"space", k:"Fact", t:"The International Space Station circles Earth about every 90 minutes, so the crew sees 16 sunrises and 16 sunsets a day.", a:"NASA, ISS Facts and Figures", u:"https://www.discoverspace.org/wp-content/uploads/2020/07/NASA-ISS-Diagram-and-Facts-4.2020.pdf" },
+ { i:"space", k:"Stat", t:"The space station is 357 feet end to end — one yard short of a football field with end zones — and weighs 925,335 pounds.", a:"NASA, ISS Facts and Figures", u:"https://www.discoverspace.org/wp-content/uploads/2020/07/NASA-ISS-Diagram-and-Facts-4.2020.pdf" },
+ { i:"space", k:"Stat", t:"Space station crews travel about 5 miles per second, and 8 miles of wire run its power system.", a:"NASA, ISS Facts and Figures", u:"https://www.discoverspace.org/wp-content/uploads/2020/07/NASA-ISS-Diagram-and-Facts-4.2020.pdf" },
+ { i:"space", k:"Joke", t:"How do you throw a party in space? You planet." },
+ { i:"sports", k:"Joke", t:"Why did the basketball player bring a ladder to the office? To work on his rebounds." },
+ { i:"history", k:"Joke", t:"Why were the early railroads always on time? They had a lot of training." },
+ { i:"food", k:"Joke", t:"What did the Dutch oven say to the camp stove? Let's get this pot-luck started." }
 ];
+/* Interests people can pick in My settings (2026-10-28). Every item above is tagged with at least one. */
+const INTERESTS = [["moose","Moose & wildlife"],["parkcity","Park City"],["ski","Skiing & snow"],["outdoors","Outdoors & national parks"],["history","Utah history"],
+  ["sports","Sports & the Olympics"],["food","Food & cooking"],["space","Space & science"],["work","Work & teamwork"]];
+const KINDS = [["Quote","💬 Quotes"],["Joke","😄 Jokes"],["Fact","💡 Facts"],["Stat","📊 Stats"]];
+function dailyPool(){
+  const ints = PREFS.interests || [], ks = PREFS.kinds || [];
+  const okK = x => !ks.length || ks.includes(x.k), okI = x => !ints.length || String(x.i || "").split(",").some(t => ints.includes(t));
+  let pool = DAILY.filter(x => okK(x) && okI(x));
+  if(!pool.length) pool = DAILY.filter(okK);
+  return pool.length ? pool : DAILY;
+}
 function dailyPick(shift){
   const box = $("#daily"); if(!box) return;
-  const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
-  const x = DAILY[((day * 7 + (shift || 0)) % DAILY.length + DAILY.length) % DAILY.length];
-  const ic = { Quote:"💬", Joke:"😄", Fact:"💡" }[x.k];
+  const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000), pool = dailyPool();
+  const x = pool[((day * 7 + (shift || 0)) % pool.length + pool.length) % pool.length];
+  const ic = { Quote:"💬", Joke:"😄", Fact:"💡", Stat:"📊" }[x.k];
+  const mine = (PREFS.interests || []).length || (PREFS.kinds || []).length;
   box.innerHTML = `<div class="dhd"><span class="pill green">${ic} ${x.k} of the day</span><button class="btn small" id="dmore" style="margin-left:auto">Another</button></div>
     <p class="dq">${x.k === "Quote" ? "“" + esc(x.t) + "”" : esc(x.t)}</p>
-    ${x.a ? `<p class="muted" style="margin:0">— ${x.u ? `<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.a)}</a>` : esc(x.a)}</p>` : ""}`;
+    ${x.a ? `<p class="muted" style="margin:0">— ${x.u ? `<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.a)}</a>` : esc(x.a)}</p>` : ""}
+    <p class="muted" style="margin:8px 0 0;font-size:12px">${mine ? "Picked from your interests." : ""} <a href="#/settings">Pick your interests</a></p>`;
   $("#dmore").onclick = () => dailyPick((shift || 0) + 1);
+}
+/* My settings: sidebar order + interests for the daily pick (hub_prefs, your row only) */
+function settingsView(v){
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
+  const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick" }, GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"] };
+  const seen = {}, items = [];
+  DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key)).forEach(x => { const g = G[x.key];
+    if(g){ if(seen[g]) return; seen[g] = 1; items.push({ k:"g:" + g, label:GL[g][0], icon:GL[g][1], sort:x.sort }); }
+    else items.push({ k:x.key, label:x.label, icon:x.icon, sort:INFO.includes(x.key) ? x.sort - 1000 : x.sort }); });
+  const ORD = PREFS.desk_order || [];
+  let list = items.sort((a, b) => { const ia = ORD.indexOf(a.k), ib = ORD.indexOf(b.k); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; }).map(x => x.k);
+  let ints = (PREFS.interests || []).slice(), ks = (PREFS.kinds || []).slice();
+  const L = k => items.find(x => x.k === k);
+  const draw = () => {
+    v.innerHTML = `<div class="page"><h2>My settings</h2><p class="muted">Only you see these. They follow you to any computer or phone you sign in on.</p>
+    <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Move the desks you use most to the top.</p>
+      <div id="ordl">${list.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
+        <button class="btn small" data-up="${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${i}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("")}</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn small" id="ordreset">Back to the standard order</button></div></div>
+    <div class="card"><b style="font-size:17px">☀️ My morning pick</b><p class="muted" style="margin:4px 0 4px">What you care about — your quote, joke, fact or stat of the day comes from these. Pick none to get everything.</p>
+      <div class="ints">${INTERESTS.map(([k, l]) => `<label class="${ints.includes(k) ? "on" : ""}"><input type="checkbox" data-int="${k}" ${ints.includes(k) ? "checked" : ""}>${esc(l)}</label>`).join("")}</div>
+      <p class="muted" style="margin:10px 0 4px">What kind?</p>
+      <div class="ints">${KINDS.map(([k, l]) => `<label class="${ks.includes(k) ? "on" : ""}"><input type="checkbox" data-kind="${k}" ${ks.includes(k) ? "checked" : ""}>${l}</label>`).join("")}</div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Every fact and stat shows where it came from.</p></div>
+    <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
+    v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => { const i = +b.dataset.up; [list[i-1], list[i]] = [list[i], list[i-1]]; draw(); });
+    v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => { const i = +b.dataset.dn; [list[i+1], list[i]] = [list[i], list[i+1]]; draw(); });
+    v.querySelectorAll("[data-int]").forEach(c => c.onchange = () => { ints = c.checked ? ints.concat(c.dataset.int) : ints.filter(x => x !== c.dataset.int); draw(); });
+    v.querySelectorAll("[data-kind]").forEach(c => c.onchange = () => { ks = c.checked ? ks.concat(c.dataset.kind) : ks.filter(x => x !== c.dataset.kind); draw(); });
+    $("#ordreset").onclick = () => { list = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k); list.custom = false; draw(); };
+    $("#prefsave").onclick = async () => { $("#prefsave").disabled = true;
+      const std = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k).join(), order = list.join() === std ? [] : list.slice();
+      const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
+      $("#prefsave").disabled = false;
+      if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
+      PREFS = { desk_order:order, interests:ints, kinds:ks }; shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
+  };
+  draw();
 }
 async function homeView(v){
   const first = (ME.name||"").split(" ")[0];
