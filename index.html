@@ -190,6 +190,7 @@ details.acc[open]>summary{margin-bottom:6px}
 .pmsg.me{justify-content:flex-end} .pmsg.me .bub{background:var(--moose-soft);border-color:transparent;border-radius:14px 4px 14px 14px}
 .pmsg .fbk{display:flex;gap:4px;margin-top:4px} .pmsg .fbk button{border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;font-size:13px;padding:2px 7px}
 .pmsg .fbk button.on{background:var(--moose-soft);border-color:var(--moose)}
+.pmsg .plinks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px} .pmsg .plinks a{text-decoration:none}
 .pmsg .pask{margin-top:6px} .pmsg .pask textarea{width:100%;min-height:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 #pennyForm{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--card)}
 #pennyForm textarea{min-height:44px;height:44px;resize:none;font-size:15px;padding:10px 12px}
@@ -299,12 +300,15 @@ function shell(){
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
-                   res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews" } } };   // Brandon 2026-10-28
+                   res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews" } },
+                   rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio" } } };   // Brandon 2026-10-28
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
   const soonTag = `<span class="soon">soon</span>`;
   const navList = (list, isSoon) => { const done = {}; return list.map(x => { const g = grouped(x.key);
       if(!g) return item(x.key, x.label, x.icon, isSoon ? soonTag : "");
-      if(done[g]) return ""; done[g] = 1; const G = GROUPS[g], kids = list.filter(y => G.kids[y.key]);
+      if(done[g]) return ""; done[g] = 1; const G = GROUPS[g];
+      if(isSoon && DESKS.some(y => G.kids[y.key] && y.status === "live")) return "";   // a group with any live child shows once, with the live desks
+      const kids = DESKS.filter(y => G.kids[y.key]).sort((a, b) => a.sort - b.sort);
       return `<div class="gbox" data-g="${g}"><a class="dk par" href="#" data-g="${g}" title="${esc(G.label)}"><span class="ic">${ICON[G.icon]}</span><span class="lb">${esc(G.label)}</span><span class="chev">${ICON.chev}</span></a>
         <div class="subs">${kids.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(y.label)}"><span class="lb">${esc(G.kids[y.key])}</span>${y.status !== "live" ? soonTag : ""}</a>`).join("")}</div></div>`; }).join(""); };
   const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
@@ -402,6 +406,7 @@ function route(){
   if(k === "home") return homeView(v);
   if(k === "settings") return settingsView(v);
   if(k === "penny") return pennyView(v);
+  if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a bug / upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
@@ -677,7 +682,7 @@ async function loadMentions(){
 async function loadRateFlag(){
   const box = $("#rflag"); if(!box) return;
   const ok = (await sb.rpc("hub_can", { p_desk:"rates_flag" })).data; if(!ok) return;
-  box.innerHTML = `<details class="card acc"><summary><b style="font-size:17px">🚩 Report an odd reservation rate</b></summary>
+  box.innerHTML = `<details class="card acc" open><summary><b style="font-size:17px">🚩 Report an odd reservation rate</b></summary>
     <p class="muted" style="margin:4px 0 8px">See a reservation in Track whose rate looks wrong? Enter the folio number and we'll take a look.</p>
     <label class="field"><span>Track folio number</span><input id="rf_f" inputmode="numeric" placeholder="Example: 123456"></label>
     <label class="field"><span>What looks off?</span><select id="rf_k"><option value="looks_low">Rate looks too low</option><option value="looks_high">Rate looks too high</option><option value="booked_too_low">Booked for too little</option><option value="other">Something else</option></select></label>
@@ -713,7 +718,6 @@ async function homeView(v){
     <div id="bdays"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
-    <div id="rflag"></div>
     <div class="card" id="wx"><p class="muted">Loading Park City weather…</p></div>
     <div class="card" id="stays"><b style="font-size:17px">🏠 Who's in house · next 14 days</b><p class="muted">Loading…</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎉 Shout-outs</b><button class="btn small" style="margin-left:auto" id="soadd">Give a shout-out</button></div>
@@ -725,7 +729,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
-  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); loadRateFlag(); pennyHello();
+  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello();
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
@@ -879,9 +883,9 @@ function pennyOpen(on){
   if(on && !$("#pennyLog").children.length) pennySay("assistant", `Hi ${(ME.name||"").split(" ")[0]}! What can I help you with today? Ask me how to do anything in the Moose Hub.`);
   if(on) setTimeout(() => $("#pennyQ").focus(), 50);
 }
-function pennySay(role, text, id){
+function pennySay(role, text, id, links){
   const el = document.createElement("div"); el.className = "pmsg" + (role === "user" ? " me" : "");
-  el.innerHTML = role === "user" ? `<div class="bub">${esc(text)}</div>` : `<span class="pav"><img src="penny-face.png" alt="Penny"></span><div><div class="bub">${esc(text)}</div>${id ? `<div class="fbk"><button data-h="1" title="Helpful">👍</button><button data-h="0" title="Not helpful">👎</button><button data-ask="1" title="Send this question to an admin">🙋 Ask an admin</button></div>` : ""}</div>`;
+  el.innerHTML = role === "user" ? `<div class="bub">${esc(text)}</div>` : `<span class="pav"><img src="penny-face.png" alt="Penny"></span><div><div class="bub">${esc(text)}</div>${(links || []).length ? `<div class="plinks">${links.filter(l => /^#\//.test(l.href)).map(l => `<a class="btn small" href="${esc(l.href)}">${esc(l.label)} →</a>`).join("")}</div>` : ""}${id ? `<div class="fbk"><button data-h="1" title="Helpful">👍</button><button data-h="0" title="Not helpful">👎</button><button data-ask="1" title="Send this question to an admin">🙋 Ask an admin</button></div>` : ""}</div>`;
   $("#pennyLog").appendChild(el); $("#pennyLog").scrollTop = 1e9;
   el.querySelectorAll("[data-h]").forEach(b => b.onclick = async () => { el.querySelectorAll("[data-h]").forEach(x => x.classList.toggle("on", x === b));
     await sb.rpc("penny_feedback", { p_id:id, p_helpful:b.dataset.h === "1", p_note:null }); });
@@ -909,7 +913,7 @@ async function pennyAsk(q){
   const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, history:PENNY.hist } });
   wait.remove();
   const d = r.data || {}; const a = d.ok ? d.answer : (d.error || (r.error && r.error.message) || "Penny couldn't answer right now.");
-  pennySay("assistant", a, d.id); PENNY.hist.push({ role:"user", text:q }, { role:"assistant", text:a }); PENNY.hist = PENNY.hist.slice(-8);
+  pennySay("assistant", a, d.id, d.links); PENNY.hist.push({ role:"user", text:q }, { role:"assistant", text:a }); PENNY.hist = PENNY.hist.slice(-8);
 }
 function pennyHello(){ // Home: Penny pops up once a day asking what she can help with
   const k = "penny_hi_" + new Date().toDateString(); let seen = null; try { seen = localStorage.getItem(k); } catch(e){}
