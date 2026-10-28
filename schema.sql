@@ -1165,6 +1165,7 @@ update hub_sync_sources s set feeds = v.feeds, can_run = v.can_run from (values
  ('track_res','Home (Who''s in house) · Reservation Desk', true)
 ) v(key, feeds, can_run) where s.key = v.key;
 drop function if exists hub_sync_request();
+drop function if exists hub_sync_request(text);
 create or replace function hub_sync_request(p_key text default null) returns bigint language plpgsql security definer set search_path = public as $$
 declare v bigint;
 begin
@@ -1195,3 +1196,42 @@ on conflict (key) do update set label=excluded.label, note=excluded.note, url=ex
 insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
  ('maint_crew_eff','maint_money','Crew efficiency','Breezeway tasks each tech finished vs. their Hubstaff hours, rated against the crew','desk.html#money','live',false,6)
 on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, desk_key=excluded.desk_key;
+
+-- Reports + Sync combined (Brandon 2026-10-28): managers (sync_status) can run syncs that cost nothing;
+-- big data pulls (Breezeway + Hubstaff, "everything") and paid sources (Rates) need an admin to approve first.
+-- None of these scripts use Claude. Claude-run refreshes on the Maintenance desk stay admins only (desk-shim).
+alter table hub_sync_sources add column if not exists cost text not null default 'free';
+alter table hub_sync_sources drop constraint if exists hub_sync_sources_cost_check;
+alter table hub_sync_sources add constraint hub_sync_sources_cost_check check (cost in ('free','big','paid'));
+update hub_sync_sources set cost = case key when 'breezeway' then 'big' when 'hubstaff' then 'big' when 'rates' then 'paid' else 'free' end;
+alter table hub_sync_requests add column if not exists status text not null default 'queued';
+alter table hub_sync_requests add column if not exists approved_by text;
+alter table hub_sync_requests add column if not exists approved_at timestamptz;
+alter table hub_sync_requests add column if not exists notified boolean not null default false;
+drop function if exists hub_sync_request(text);
+create or replace function hub_sync_request(p_key text default null) returns json language plpgsql security definer set search_path = public as $$
+declare v bigint; st text; c text; adm boolean := hub_is_admin(); who text := (select name from allowed_users where id = hub_uid());
+begin
+  if not (adm or hub_can('sync_status')) then raise exception 'not allowed'; end if;
+  if p_key is not null then
+    select cost into c from hub_sync_sources where key = p_key and can_run;
+    if c is null then raise exception 'that source can''t be run from the hub'; end if;
+  end if;
+  st := case when adm then 'queued' when p_key is null or c <> 'free' then 'needs_approval' else 'queued' end;
+  select id into v from hub_sync_requests where done_at is null and coalesce(source_key,'*') = coalesce(p_key,'*')
+    and status in ('queued','needs_approval') and requested_at > now() - interval '15 minutes' order by id desc limit 1;
+  if v is not null then return json_build_object('id', v, 'status', (select status from hub_sync_requests where id = v)); end if;
+  insert into hub_sync_requests (requested_by, source_key, status) values (who, p_key, st) returning id into v;
+  return json_build_object('id', v, 'status', st); end $$;
+create or replace function hub_sync_approve(p_id bigint, p_ok boolean) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not hub_is_admin() then raise exception 'admins only'; end if;
+  update hub_sync_requests set status = case when p_ok then 'queued' else 'declined' end,
+    approved_by = (select name from allowed_users where id = hub_uid()), approved_at = now(),
+    done_at = case when p_ok then null else now() end, result = case when p_ok then result else 'declined' end
+  where id = p_id and status = 'needs_approval';
+end $$;
+revoke all on function hub_sync_request(text), hub_sync_approve(bigint,boolean) from public, anon;
+grant execute on function hub_sync_request(text), hub_sync_approve(bigint,boolean) to authenticated;
+-- the sidebar no longer has its own Sync item: Sync lives in Reports
+update hub_reports set label='Sync — run or check every source', note='Every data source A-Z: last sync, what it feeds; managers run free syncs, big or paid ones go to Brandon/Kim to approve' where key='hub_sync';
