@@ -1235,3 +1235,49 @@ revoke all on function hub_sync_request(text), hub_sync_approve(bigint,boolean) 
 grant execute on function hub_sync_request(text), hub_sync_approve(bigint,boolean) to authenticated;
 -- the sidebar no longer has its own Sync item: Sync lives in Reports
 update hub_reports set label='Sync — run or check every source', note='Every data source A-Z: last sync, what it feeds; managers run free syncs, big or paid ones go to Brandon/Kim to approve' where key='hub_sync';
+
+
+-- ===== Moose Hub 2026-10-28: Ask Penny (copy of hub_site/hub_penny.sql) =====
+-- hub_penny.sql (Brandon 2026-10-28): "Ask Penny" - the Moose Hub's helper for employees ("how do I…" questions).
+-- Answers come from penny_kb (how-to notes admins keep) through Edge Function `penny` (Anthropic API, key = function secret ANTHROPIC_API_KEY).
+-- Every chat is logged with tokens + cost. People see their own chats; admins see all. Additive, safe to re-run.
+create table if not exists penny_kb (
+  id bigserial primary key, topic text not null, body text not null, desk_key text references hub_desks(key),
+  active boolean not null default true, source text, updated_by text, updated_at timestamptz not null default now(), unique (topic));
+create table if not exists penny_chats (
+  id bigserial primary key, created_at timestamptz not null default now(), user_id uuid references allowed_users(id), user_name text,
+  page text, question text not null, answer text, model text, tokens_in int, tokens_out int, cost_usd numeric(10,5), helpful boolean, note text);
+create index if not exists penny_chats_user on penny_chats (user_id, created_at desc);
+do $$ declare t text; begin
+  foreach t in array array['penny_kb','penny_chats'] loop
+    execute format('alter table %I enable row level security', t);
+    execute format('alter table %I force row level security', t);
+    execute format('revoke all on %I from anon, public, authenticated', t);
+    execute format('grant select on %I to authenticated', t);
+    execute format('drop trigger if exists %I on %I', t||'_nodelete', t);
+    execute format('create trigger %I before delete on %I for each statement execute function forbid_delete()', t||'_nodelete', t);
+    execute format('drop trigger if exists %I on %I', t||'_notruncate', t);
+    execute format('create trigger %I before truncate on %I for each statement execute function forbid_change()', t||'_notruncate', t);
+  end loop; end $$;
+drop policy if exists penny_kb_read on penny_kb;
+create policy penny_kb_read on penny_kb for select to authenticated using (hub_uid() is not null and active and (desk_key is null or hub_can(desk_key)));
+drop policy if exists penny_chats_read on penny_chats;
+create policy penny_chats_read on penny_chats for select to authenticated using (user_id = hub_uid() or hub_is_admin());
+-- thumbs up / down on your own answer
+create or replace function penny_feedback(p_id bigint, p_helpful boolean, p_note text default null) returns void
+language sql security definer set search_path = public as $$
+  update penny_chats set helpful = p_helpful, note = left(p_note, 500) where id = p_id and user_id = hub_uid() $$;
+-- admins keep Penny's notes
+create or replace function penny_kb_save(p_topic text, p_body text, p_desk text default null, p_active boolean default true) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not hub_is_admin() then raise exception 'only Brandon or Kim can change what Penny knows'; end if;
+  insert into penny_kb (topic, body, desk_key, active, source, updated_by, updated_at)
+  values (trim(p_topic), trim(p_body), nullif(p_desk,''), p_active, 'admin edit in the hub', (select name from allowed_users where id = hub_uid()), now())
+  on conflict (topic) do update set body = excluded.body, desk_key = excluded.desk_key, active = excluded.active, source = excluded.source, updated_by = excluded.updated_by, updated_at = now();
+end $$;
+revoke all on function penny_feedback(bigint,boolean,text), penny_kb_save(text,text,text,boolean) from public, anon;
+grant execute on function penny_feedback(bigint,boolean,text), penny_kb_save(text,text,text,boolean) to authenticated;
+insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
+ ('penny_log','home','Ask Penny — questions & answers','What staff asked Penny, her answers, thumbs up/down and cost','#/penny','live',true,30)
+on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, admin_only=excluded.admin_only;
