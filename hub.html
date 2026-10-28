@@ -470,30 +470,34 @@ async function feedbackView(v){
 const WX = { 0:"Clear",1:"Mostly clear",2:"Partly cloudy",3:"Cloudy",45:"Fog",48:"Fog",51:"Drizzle",53:"Drizzle",55:"Drizzle",61:"Rain",63:"Rain",65:"Heavy rain",
   66:"Freezing rain",67:"Freezing rain",71:"Snow",73:"Snow",75:"Heavy snow",77:"Snow grains",80:"Showers",81:"Showers",82:"Heavy showers",85:"Snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm",99:"Thunderstorm" };
 /* Home: next 14 days of occupancy + today's / tomorrow's check-ins (hub_home_stays: Track reservations, no guest names) */
-async function loadStays(){
+async function loadStays(pick){
   const box = $("#stays"); if(!box) return;
   const r = await sb.rpc("hub_home_stays"); const j = r.data;
   if(r.error || !j){ box.innerHTML = `<b style="font-size:17px">🏠 Who's in house</b><p class="muted">Couldn't load stays${r.error ? ": " + esc(r.error.message) : ""}.</p>`; return; }
   const dn = d => new Date(d + "T12:00"), md = d => dn(d).toLocaleDateString(undefined, { month:"short", day:"numeric" });
-  const t0 = j.today, t1 = (j.days[1] || {}).day, td = j.days[0] || {};
-  const cells = j.days.map(d => `<div class="sday${d.day === t0 ? " on" : ""}" title="${md(d.day)}: ${d.guests} guest homes, ${d.owners} owner homes, ${d.arrivals} check-ins, ${d.departures} check-outs">
-      <span class="dw">${d.day === t0 ? "Today" : dn(d.day).toLocaleDateString(undefined, { weekday:"short" })}</span><span class="dd">${dn(d.day).getDate()}</span>
+  const add1 = d => { const x = dn(d); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10); };
+  const t0 = pick && j.days.some(d => d.day === pick) ? pick : j.days[0].day, t1 = add1(t0), td = j.days.find(d => d.day === t0) || {}, isToday = t0 === j.today;
+  const lbl = isToday ? "today" : dn(t0).toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }), lbl1 = isToday ? "tomorrow" : "next day";
+  const cells = j.days.map(d => `<div class="sday${d.day === t0 ? " on" : ""}" data-day="${d.day}" role="button" tabindex="0" style="cursor:pointer" title="${md(d.day)}: ${d.guests} guest homes, ${d.owners} owner homes, ${d.arrivals} check-ins, ${d.departures} check-outs">
+      <span class="dw">${d.day === j.today ? "Today" : dn(d.day).toLocaleDateString(undefined, { weekday:"short" })}</span><span class="dd">${dn(d.day).getDate()}</span>
       <b>${d.guests + d.owners}</b><span class="go"><i class="g"></i>${d.guests}<i class="o"></i>${d.owners}</span></div>`).join("");
   const S = j.stays || [];
   const row = x => `<div class="srow"><b class="su">${esc(x.unit)}</b><span class="pill ${x.owner ? "blue" : "green"}">${x.owner ? "Owner" : "Guest"}</span>${x.turn ? `<span class="pill amber">Same-day turn</span>` : ""}
       <span class="muted">${md(x.in)} → ${md(x.out)} · ${x.nights} night${x.nights === 1 ? "" : "s"}${x.status && x.status !== "Confirmed" ? " · " + esc(x.status) : ""}</span>
-      ${j.names && x.guest ? `<span class="sg">${esc(x.guest)}${x.res ? ` <span class="muted">· #${esc(x.res)}</span>` : ""}${x.type ? ` <span class="muted">· ${esc(x.type)}</span>` : ""}</span>` : ""}</div>`;
+      ${j.names && x.guest ? `<span class="sg">${esc(x.guest)}${x.res ? ` <span class="muted">· #${esc(x.res)}</span>` : ""}${x.type ? ` <span class="muted">· ${esc(x.type)}</span>` : ""}</span>` : ""}
+      ${x.phone || x.email ? `<span class="sg">${x.phone ? `📞 <a href="tel:${esc(x.phone.replace(/[^0-9+]/g, ""))}"><b>${esc(x.phone)}</b></a>` : ""}${x.phone && x.email ? " · " : ""}${x.email ? `✉️ <a href="mailto:${esc(x.email)}"><b>${esc(x.email)}</b></a>` : ""}</span>` : ""}</div>`;
   const sect = (title, list, empty) => `<details class="acc2" name="ciacc"><summary><b>${title}</b><span class="pill ${list.length ? "green" : ""}">${list.length}</span></summary>
       ${list.length ? list.map(row).join("") : `<p class="muted" style="margin:6px 0 0">${empty}</p>`}</details>`;
   const inNow = S.filter(x => x.in <= t0 && x.out > t0), ciT = S.filter(x => x.in === t0), ciM = S.filter(x => x.in === t1), co = S.filter(x => x.out === t0 || x.out === t1);
   box.innerHTML = `<div class="shead"><b style="font-size:17px">🏠 Who's in house</b>
       <span class="spill"><i class="g"></i>${td.guests || 0} guest homes</span><span class="spill"><i class="o"></i>${td.owners || 0} owner homes</span></div>
     <div class="sgrid">${cells}</div>
-    ${sect("In the property now", inNow, "Nobody in a home tonight.")}
-    ${sect("Check-ins today", ciT, "No check-ins today.")}
-    ${sect("Check-ins tomorrow", ciM, "No check-ins tomorrow.")}
-    ${sect("Check-outs today & tomorrow", co, "No check-outs.")}
+    ${sect(isToday ? "In the property now" : "In the property · " + lbl, inNow, "Nobody in a home that night.")}
+    ${sect("Check-ins " + lbl, ciT, "No check-ins " + lbl + ".")}
+    ${sect("Check-ins " + lbl1, ciM, "No check-ins " + lbl1 + ".")}
+    ${sect("Check-outs " + lbl + " & " + lbl1, co, "No check-outs.")}
     <p class="muted" style="font-size:12px;margin:10px 0 0">Next 14 days: homes with a stay that night (<i class="g"></i> guest · <i class="o"></i> owner). Source: Track reservations${j.updated ? ", pulled " + new Date(j.updated).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : ""}; leases and cancelled stays left out.</p>`;
+  box.querySelectorAll("[data-day]").forEach(c => { c.onclick = () => loadStays(c.dataset.day); c.onkeydown = e => { if(e.key === "Enter") loadStays(c.dataset.day); }; });
   box.querySelectorAll("details.acc2").forEach(d => d.addEventListener("toggle", () => { if(d.open) box.querySelectorAll("details.acc2").forEach(o => { if(o !== d) o.open = false; }); }));
 }
 /* Daily pick: same quote / joke / fact for everyone each day; "Another" shuffles. Quotes are attributed; facts carry their source. */
