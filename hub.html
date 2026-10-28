@@ -169,6 +169,14 @@ details.acc[open]>summary{margin-bottom:6px}
 .fb{border-top:1px solid var(--line);padding:12px 0}.fb:first-child{border-top:0}
 .fb .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 .fb p{margin:6px 0 0;white-space:pre-wrap}
+/* Reports index, Track-style columns (2026-10-28) */
+.page.wide{max-width:1240px}
+.rpgrid{columns:4 250px;column-gap:14px}
+.rpg{break-inside:avoid;display:inline-block;width:100%;margin:0 0 14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.rpg h3{font-size:17px;font-weight:800;margin:0 0 8px;letter-spacing:-.01em}
+.rpl{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:14.5px;font-weight:700;color:var(--pine);text-decoration:none;border-top:1px solid var(--line)}
+.rpg h3+.rpl{border-top:0} .rpl:hover{text-decoration:underline} .rpl.soon{color:var(--muted);font-weight:600}
+.rpl .pill{font-size:10.5px;padding:2px 7px}
 /* My settings (2026-10-28) */
 .ord{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)} .ord:last-child{border-bottom:0}
 .ord .oi{width:32px;height:32px;border-radius:9px;background:var(--moose-soft);color:var(--moose-ink);display:grid;place-items:center;flex:none} .ord .oi svg{width:17px;height:17px}
@@ -570,15 +578,19 @@ function settingsView2(v){
   let list = items.sort((a, b) => { const ia = ORD.indexOf(a.k), ib = ORD.indexOf(b.k); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; }).map(x => x.k);
   let ints = (PREFS.interests || []).slice(), ks = (PREFS.kinds || []).slice();
   const L = k => items.find(x => x.k === k);
+  const bdBody = () => `<p class="muted" style="margin:4px 0 8px">Month and day only — so the team can celebrate you.</p>
+      <div class="bdsel">${bdSelects("bd", BD.mine)}<button class="btn small" id="bdsave">Save birthday</button><span class="muted" id="bdmsg"></span></div>
+      ${ME.admin ? `<details class="acc2"><summary><b>Everyone's birthdays</b><span class="muted">(Brandon & Kim) ${BD.people.filter(x => x.month).length} of ${BD.people.length} set</span></summary>
+        ${BD.people.map((x, i) => `<div class="bdrow"><b style="flex:1">${esc(x.name)}</b><span class="bdsel">${bdSelects("bp" + i, x)}<button class="btn small" data-bdp="${i}">Save</button></span></div>`).join("")}</details>` : ""}`;
+  // after it's saved, My birthday drops to the bottom as a closed accordion (Brandon 2026-10-28)
+  const bdCard = () => BD.mine ? `<details class="card acc"><summary><b style="font-size:17px">🎂 My birthday</b><span class="muted">${MONTHS[BD.mine.month - 1]} ${BD.mine.day}</span></summary>${bdBody()}</details>`
+    : `<div class="card"><b style="font-size:17px">🎂 My birthday</b>${bdBody()}</div>`;
   const draw = () => {
     v.innerHTML = `<div class="page"><h2>My settings</h2><p class="muted">Only you see these. They follow you to any computer or phone you sign in on.</p>
     <div class="card"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
-    <div class="card"><b style="font-size:17px">🎂 My birthday</b><p class="muted" style="margin:4px 0 8px">Month and day only — so the team can celebrate you.</p>
-      <div class="bdsel">${bdSelects("bd", BD.mine)}<button class="btn small" id="bdsave">Save birthday</button><span class="muted" id="bdmsg"></span></div>
-      ${ME.admin ? `<details class="acc2"><summary><b>Everyone's birthdays</b><span class="muted">(Brandon & Kim) ${BD.people.filter(x => x.month).length} of ${BD.people.length} set</span></summary>
-        ${BD.people.map((x, i) => `<div class="bdrow"><b style="flex:1">${esc(x.name)}</b><span class="bdsel">${bdSelects("bp" + i, x)}<button class="btn small" data-bdp="${i}">Save</button></span></div>`).join("")}</details>` : ""}</div>
+    ${BD.mine ? "" : bdCard()}
     <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Move the desks you use most to the top.</p>
       <div id="ordl">${list.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
         <button class="btn small" data-up="${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${i}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("")}</div>
@@ -588,6 +600,7 @@ function settingsView2(v){
       <p class="muted" style="margin:10px 0 4px">What kind?</p>
       <div class="ints">${KINDS.map(([k, l]) => `<label class="${ks.includes(k) ? "on" : ""}"><input type="checkbox" data-kind="${k}" ${ks.includes(k) ? "checked" : ""}>${l}</label>`).join("")}</div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Every fact and stat shows where it came from.</p></div>
+    ${BD.mine ? bdCard() : ""}
     <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
     v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => { const i = +b.dataset.up; [list[i-1], list[i]] = [list[i], list[i-1]]; draw(); });
     v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => { const i = +b.dataset.dn; [list[i+1], list[i]] = [list[i], list[i+1]]; draw(); });
@@ -598,7 +611,7 @@ function settingsView2(v){
         PREFS.avatar = d; shell(); route(); } catch(err){ $("#avmsg").textContent = "Couldn't save: " + (err.message || err); } };
     if($("#avdel")) $("#avdel").onclick = async () => { const r = await sb.rpc("hub_set_avatar", { p_avatar:null }); if(!r.error){ PREFS.avatar = null; shell(); route(); } };
     $("#bdsave").onclick = async () => { const r = await sb.rpc("hub_set_birthday", { p_user:null, p_month:+$("#bd_m").value || null, p_day:+$("#bd_d").value || null });
-      $("#bdmsg").textContent = r.error ? "Couldn't save: " + r.error.message : "Saved 🎉"; if(!r.error) BD.mine = { month:+$("#bd_m").value, day:+$("#bd_d").value }; };
+      $("#bdmsg").textContent = r.error ? "Couldn't save: " + r.error.message : "Saved 🎉"; if(!r.error){ BD.mine = { month:+$("#bd_m").value, day:+$("#bd_d").value }; draw(); $("#prefmsg").textContent = "Birthday saved 🎉"; } };
     v.querySelectorAll("[data-bdp]").forEach(b => b.onclick = async () => { const i = +b.dataset.bdp, x = BD.people[i];
       const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
       b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
@@ -691,19 +704,23 @@ async function homeView(v){
     $("#nwsend").onclick = async () => { const p = await sb.rpc("hub_post", { p_kind:"news", p_title:$("#nwtitle").value, p_body:$("#nwbody").value, p_about:"" });
       if(p.error) $("#nwmsg").textContent = "Couldn't post: " + p.error.message; else homeView(v); }; }
 }
+/* Reports: Track-style index (Brandon 2026-10-28) — one column per desk, plain report links A-Z, our look. Only desks you can open. */
 async function hubReportsView(v){
-  v.innerHTML = `<div class="page"><h2>Reports</h2><p class="muted">Run any report you have access to, grouped by desk.</p><div id="rplist"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
+  v.innerHTML = `<div class="page wide"><h2>Reports</h2><p class="muted">Every report you can open, by desk. Hover a report to see what it shows.</p><div id="rplist"><p class="muted">Loading…</p></div></div>`;
   const r = await sb.from("hub_reports").select("*").order("sort");
   if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
-  const order = ["home","sync"].concat(DESKS.map(x => x.key)).concat(["maint_money"]), name = k => k === "home" ? "Hub" : k === "sync" ? "Admin" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
+  const name = k => k === "home" ? "Hub" : k === "sync" ? "Admin" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   const groups = {}; r.data.forEach(x => (groups[x.desk_key] = groups[x.desk_key] || []).push(x));
-  const keys = Object.keys(groups).sort((a,b) => order.indexOf(a) - order.indexOf(b));
-  $("#rplist").innerHTML = keys.map(k => `<div class="card"><b style="font-size:17px">${esc(name(k))}</b>${groups[k].map(x => `<div class="fb"><div class="hd"><b>${esc(x.label)}</b>${x.admin_only ? `<span class="pill">admins</span>` : ""}
-      ${x.status === "live" ? `<button class="btn small" style="margin-left:auto" data-run="${esc(x.url)}">Open</button>` : `<span class="pill amber" style="margin-left:auto">Coming soon</span>`}</div>${x.note ? `<p class="muted" style="margin-top:4px">${esc(x.note)}</p>` : ""}</div>`).join("")}</div>`).join("") || `<div class="card"><p class="muted">No reports for your desks yet.</p></div>`;
-  $("#rplist").querySelectorAll("[data-run]").forEach(b => b.onclick = () => {
+  const keys = Object.keys(groups).sort((a, b) => name(a).localeCompare(name(b)));
+  $("#rplist").innerHTML = keys.length ? `<div class="rpgrid">${keys.map(k => `<section class="rpg"><h3>${esc(name(k))}</h3>
+      ${groups[k].slice().sort((a, b) => a.label.localeCompare(b.label)).map(x => x.status === "live"
+        ? `<a href="#" class="rpl" data-run="${esc(x.url)}" title="${esc(x.note || "")}">${esc(x.label)}${x.admin_only ? ` <span class="pill">admins</span>` : ""}</a>`
+        : `<span class="rpl soon" title="${esc(x.note || "")}">${esc(x.label)} <span class="pill amber">soon</span></span>`).join("")}</section>`).join("")}</div>`
+    : `<div class="card"><p class="muted">No reports for your desks yet.</p></div>`;
+  $("#rplist").querySelectorAll("[data-run]").forEach(b => b.onclick = e => { e.preventDefault();
     const u = b.dataset.run; if(u.startsWith("#")) { location.hash = u; return; }
     $("#ttl").textContent = "Reports";
-    v.innerHTML = `<div style="padding:8px 12px;border-bottom:1px solid var(--line);background:var(--card)"><a href="#/reports">← All reports</a></div><iframe class="desk" id="deskframe" src="${esc(u)}"></iframe>`;
+    v.innerHTML = `<div style="padding:8px 12px;border-bottom:1px solid var(--line);background:var(--card)"><a href="#/reports">← All reports</a> <span class="muted">· ${esc(b.textContent.trim())}</span></div><iframe class="desk" id="deskframe" src="${esc(u)}"></iframe>`;
     const f = $("#deskframe"); f.addEventListener("load", () => { try { const st = f.contentDocument.createElement("style");
       st.textContent = `header.top .deskbtn{display:none!important}`; f.contentDocument.head.appendChild(st); } catch(e){} });
   });
