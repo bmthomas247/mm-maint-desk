@@ -858,7 +858,7 @@ function pennyMount(){
     <div id="pennyHi" role="status"><button class="x" aria-label="Close">✕</button><img class="phimg" src="penny-hello.jpg" alt="Penny the moose"><b>Hi ${esc((ME.name||"").split(" ")[0])}! I'm Penny 👋</b>What can I help you with today?
       <div class="chips"><button>How do I add a property?</button><button>How do I find a vendor?</button><button>How do I report a bug?</button></div></div>
     <div id="pennyBox" role="dialog" aria-label="Ask Penny"><div class="ph"><span class="pav" style="width:38px;height:38px"><img src="penny-face.png" alt="Penny"></span>
-      <b>Ask Penny<small>Your Moose Hub helper</small></b><button id="pennyClose" aria-label="Close">✕</button></div>
+      <b>Ask Penny<small>Your Moose Hub helper</small></b><button id="pennyNew" title="Clear this chat and start fresh">↺ New chat</button><button id="pennyClose" aria-label="Close">✕</button></div>
       <div id="pennyLog"></div>
       <form id="pennyForm"><textarea id="pennyQ" placeholder="Ask how to do something…" aria-label="Your question"></textarea><button class="btn primary small" style="min-height:44px">Ask</button></form></div>`);
   $("#pennyBtn").onclick = () => pennyOpen(!PENNY.open);
@@ -866,6 +866,7 @@ function pennyMount(){
   $("#pennyHi .x").onclick = () => $("#pennyHi").classList.remove("on");
   $("#pennyHi").querySelectorAll(".chips button").forEach(b => b.onclick = () => { pennyOpen(true); pennyAsk(b.textContent); });
   $("#pennyForm").onsubmit = e => { e.preventDefault(); const q = $("#pennyQ").value.trim(); if(q){ $("#pennyQ").value = ""; pennyAsk(q); } };
+  $("#pennyNew").onclick = () => { PENNY.hist = []; $("#pennyLog").innerHTML = ""; pennyOpen(true); };
   $("#pennyQ").addEventListener("keydown", e => { if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); $("#pennyForm").requestSubmit(); } });
   document.addEventListener("keydown", e => { if(e.key === "Escape" && PENNY.open) pennyOpen(false); });
 }
