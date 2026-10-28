@@ -320,8 +320,8 @@ function shell(){
      person picks in My settings ("@desks_first" puts Desks above Moose Info; "i:<key>" orders inside Moose Info). */
   const homeD = info.find(x => x.key === "home"), infoK = info.filter(x => x.key !== "home")
     .sort((a, b) => { const ia = ORD.indexOf("i:" + a.key), ib = ORD.indexOf("i:" + b.key); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
-  const infoBlock = infoK.length ? `<div class="gbox" data-g="info"><a class="dk par" href="#" data-g="info" title="Moose Info"><span class="ic">${ICON.home || ICON.grid}</span><span class="lb">Moose Info</span><span class="chev">${ICON.chev}</span></a>
-        <div class="subs">${infoK.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(y.label)}"><span class="lb">${esc(y.label)}</span></a>`).join("")}</div></div>` : "";
+  // 2026-10-28 (Brandon): no "Moose Info" drop-down; Property Details, Vendors… sit under the Moose Info heading like the desks do
+  const infoBlock = infoK.map(y => item(y.key, y.label, y.icon)).join("");
   const deskBlock = live.length ? `<div class="grp">Desks</div>` + navList(byMine(live)) : "";
   const desksFirst = ORD.includes("@desks_first");
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b></div>
