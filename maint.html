@@ -197,12 +197,12 @@ function loginView(msg){
 function passwordView(){
   shell("", `<h2>Set your password</h2>
     <p class="muted">You'll sign in with ${esc(S.user.email)} and this password from now on.</p>
-    <label class="field"><span>New password (10+ characters)</span><input type="password" id="p1" autocomplete="new-password"></label>
+    <label class="field"><span>New password (12+ characters, with a capital, a small letter, a number and a symbol)</span><input type="password" id="p1" autocomplete="new-password"></label>
     <label class="field"><span>Same again</span><input type="password" id="p2" autocomplete="new-password"></label>
     <button class="btn primary" id="ps" style="width:100%">Save password</button>`);
   $("#ps").onclick = async () => {
     const a = $("#p1").value, b = $("#p2").value;
-    if(a.length < 10) return toast("Use at least 10 characters"); if(a !== b) return toast("Those don't match");
+    if(a.length < 12 || !/[a-z]/.test(a) || !/[A-Z]/.test(a) || !/\d/.test(a) || !/[^A-Za-z0-9]/.test(a)) return toast("12+ characters with a capital, a small letter, a number and a symbol"); if(a !== b) return toast("Those don't match");
     const { error } = await sb.auth.updateUser({ password: a });
     if(error) return fail(error, "Password not saved"); toast("Password saved"); location.hash = "#/board";
   };
@@ -558,6 +558,10 @@ async function route(){
   const { data:{ session } } = await sb.auth.getSession();
   if(new URLSearchParams(location.search).get("next") === "desk") localStorageSet("mm_next","desk");
   if(!session){ S.user = null; S.me = null; return loginView(); }
+  // 2-step sign-in (authenticator app) happens on the Moose Hub, which sends people back here (hub_two_step.sql)
+  if(!S.aal2){ try{ const lv = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data;
+      if(lv.currentLevel !== "aal2" && (lv.nextLevel === "aal2" || (await sb.rpc("hub_two_step_mode")).data === "all")){ location.href = "hub.html?next=maint.html"; return; }
+      S.aal2 = true; }catch(e){} }
   if(!S.user || S.user.id !== session.user.id){ S.user = session.user; await loadBasics(); }
   if(!S.me){ app.innerHTML = `<div class="login"><h2>Not on the list</h2><p class="muted">${esc(S.user.email)} isn't set up for maintenance. Ask Brandon to add it.</p><button class="btn" id="so">Sign out</button></div>`; $("#so").onclick = async()=>{ await sb.auth.signOut(); route(); }; return; }
   if(new URLSearchParams(location.search).get("next") === "desk") localStorageSet("mm_next","desk");
