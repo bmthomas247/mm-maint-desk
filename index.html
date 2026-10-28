@@ -197,6 +197,11 @@ details.acc[open]>summary{margin-bottom:6px}
 #pennyLog{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--ground)}
 .pmsg{display:flex;gap:8px;align-items:flex-start} .pmsg .pav{width:28px;height:28px;font-size:15px}
 .pmsg .bub{background:var(--card);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:9px 12px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;max-width:85%}
+.pmsg>div{min-width:0;max-width:85%} .pmsg>div>.bub{max-width:none;display:inline-block}
+.pmsg .bub.wait{min-width:150px;color:var(--muted)} .pmsg .bub.wait i{display:inline-block;width:6px;height:6px;margin-left:3px;border-radius:50%;background:currentColor;animation:pdot 1.2s infinite ease-in-out}
+.pmsg .bub.wait i:nth-child(2){animation-delay:.2s} .pmsg .bub.wait i:nth-child(3){animation-delay:.4s}
+@keyframes pdot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){.pmsg .bub.wait i{animation:none;opacity:.6}}
 .pmsg.me{justify-content:flex-end} .pmsg.me .bub{background:var(--moose-soft);border-color:transparent;border-radius:14px 4px 14px 14px}
 .pmsg .fbk{display:flex;gap:4px;margin-top:4px} .pmsg .fbk button{border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;font-size:13px;padding:2px 7px}
 .pmsg .fbk button.on{background:var(--moose-soft);border-color:var(--moose)}
@@ -1233,7 +1238,7 @@ function pennyAdmin(el, ab){
     box.innerHTML = `<p class="muted" style="margin:4px 0">Sent ✓ An admin will get back to you.</p>`; ab.disabled = true; };
 }
 async function pennyAsk(q){
-  pennySay("user", q); const wait = pennySay("assistant", "Thinking…");
+  pennySay("user", q); const wait = pennySay("assistant", "Penny is thinking"); { const wb = wait.querySelector(".bub"); wb.classList.add("wait"); wb.insertAdjacentHTML("beforeend", "<i></i><i></i><i></i>"); }
   const where = (typeof whereAmI === "function" ? whereAmI().label : "") || location.hash;
   const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, history:PENNY.hist } });
   wait.remove();
