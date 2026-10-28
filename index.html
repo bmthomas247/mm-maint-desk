@@ -582,7 +582,7 @@ let SIDX = null;
 async function hubSearchLoad(){
   if(SIDX) return SIDX; SIDX = { homes:[], vendors:[] };
   const can = k => DESKS.some(x => x.key === k);
-  if(can("homes")){ const r = await sb.from("desk_docs").select("id,code:data->>code,community:data->>community").eq("collection","profiles").limit(1000);
+  if(can("homes")){ const r = await sb.from("desk_docs").select("id,code:data->>code,community:data->>community").eq("collection","profilespub").limit(1000);   // code-free copy: everyone with Homes can read it (hub_home_codes.sql)
     SIDX.homes = (r.data || []).filter(x => x.code).map(x => ({ code:x.code, sub:x.community || "" }));
     // 2026-10-28: the Track home list (hub_homes) is the one list; Track decides what's active, new Track homes show up too
     const t = await sb.from("hub_homes").select("code,community,active,kind").limit(5000);
