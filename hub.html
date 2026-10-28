@@ -1319,6 +1319,7 @@ async function pennyChecksView(v){
     return c.data || [];
   };
   let checks = await load();
+  if(hashArg() === "checks/run"){ history.replaceState(null, "", "#/penny/checks"); setTimeout(() => $("#pcrun") && $("#pcrun").click(), 0); }   // Penny's "Open accuracy checks and run them" button
   $("#pcadd").onclick = () => { $("#pcform").innerHTML = `<div class="card" style="margin-top:10px"><label class="field"><span>Question</span><input id="pc_q"></label>
       <label class="field"><span>Answer must say (one per line; use | for "either", e.g. unassigned|no one)</span><textarea id="pc_m"></textarea></label>
       <label class="field"><span>Answer must NOT say (one per line)</span><textarea id="pc_n"></textarea></label>
@@ -1339,7 +1340,7 @@ async function pennyChecksView(v){
 /* admins: what staff asked Penny + edit what she knows (#/penny) */
 async function pennyView(v){
   if(!ME.admin){ location.hash = "#/home"; return; }
-  if(hashArg() === "checks") return pennyChecksView(v);
+  if(hashArg().startsWith("checks")) return pennyChecksView(v);
   const missedOnly = hashArg() === "missed";
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
     <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
