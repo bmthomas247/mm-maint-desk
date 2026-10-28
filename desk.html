@@ -389,7 +389,7 @@ function ls(k,v){ try{ if(v===undefined) return localStorage.getItem("md_"+k); l
 
 /* ================= state ================= */
 var S={db:null, me:ls("me")||"", tab:(location.hash||"").replace("#","")||"today",
-  feeds:{}, edits:{}, deskjobs:{}, profiles:{}, propedits:{}, vendoredits:{}, deskvendors:{},
+  feeds:{}, edits:{}, deskjobs:{}, profiles:{}, propedits:{}, ownercontacts:{}, paycost:{}, vendoredits:{}, deskvendors:{},
   recurring:{}, rlog:{}, expenses:{}, time:{}, config:{}, bwq:{}, taskbill:{}, projedits:{}, slackq:{}, deskprojects:{}, asanaq:{}, asks:{},
   ui:{q:"", st:{open:1,scheduled:1,waiting:1}, src:{}, kind:{}, who:"", vendor:"", hideOld:true, hideInfo:true,
       sel:"", home:"", hq:"", vq:"", vtrade:"", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
@@ -401,14 +401,14 @@ var ONLY=(function(){ try{ return new URLSearchParams(location.search).get("only
 if(!window.MM_MONEY) TABS=TABS.filter(function(x){ return x[0]!=="money"; });
 if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
 else TABS=TABS.filter(function(x){ return ["homes","vendors","fire"].indexOf(x[0])<0; });
-try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); }catch(e){}
+try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; }catch(e){}
 if(!ONLY && !TABS.some(function(t){return t[0]===S.tab;}) && ["jobs","homes","vendors","fire"].indexOf(S.tab)<0) S.tab="today";
 
 /* ---- derived ---- */
 var COMPANY_HOME={code:"Moose company",community:"Truck, office, storage, tools",active:true,company:true,info:[],appliances:[],heatTape:"",yearBuilt:""};
 var D={jobs:[], byId:{}, byProp:{}, vendors:[], homes:[]};
 function rates(){ var r=S.config.rates||{}; return {
-  techCost:r.techCost||{}, defaultCost:+r.defaultCost||0, mileage:(r.mileage!=null?+r.mileage:0.67),
+  techCost:Object.assign({},r.techCost||{},((S.paycost||{}).rates||{}).techCost||{}), defaultCost:+(((S.paycost||{}).rates||{}).defaultCost||r.defaultCost)||0, mileage:(r.mileage!=null?+r.mileage:0.67),
   billRate:(r.billRate!=null?+r.billRate:55), budget:r.budget||{}, life:Object.assign({},LIFE,r.life||{})}; }
 /* vendors the office puts on the Breezeway schedule — any task naming them is vendor scheduling (Brandon: "Foundry is a vendor") */
 var VENDOR_NAMES=/\b(foundry|thorn pest|thorn services?|tropical (hvac|air|heating)|pye[- ]?barker|shamrock plumbing|love'?s fireplace|l&k appliance|window dynamics|prospector (lodge annual )?pest)\b/i;
@@ -565,13 +565,13 @@ function renderNav(){
 }
 /* ---- Back: every change of place (tab, job, home, project, open panel) is remembered ---- */
 var NAV=[], NAV_LAST=null, NAV_BACK=false, NAV_Y=0;
-function navSig(){ var u=S.ui||{}; return {tab:S.tab, sel:u.sel||"", home:u.home||"", proj:u.proj||"", careOpen:u.careOpen||"", meeting:!!u.meeting, vmode:u.vmode||"", month:u.month||"", htype:u.htype||""}; }
+function navSig(){ var u=S.ui||{}; return {tab:S.tab, sel:u.sel||"", home:u.home||"", proj:u.proj||"", careOpen:u.careOpen||"", meeting:!!u.meeting, vmode:u.vmode||"", month:u.month||"", htype:u.htype||"", vtrade:u.vtrade||""}; }
 function navTrack(){ var now=navSig(), k=JSON.stringify(now);
   if(NAV_LAST && NAV_LAST.k!==k && !NAV_BACK){ NAV.push({s:NAV_LAST.s, y:NAV_Y}); if(NAV.length>60) NAV.shift(); }
   if(!NAV_LAST || NAV_LAST.k!==k) NAV_LAST={k:k,s:now};
   NAV_BACK=false; var bb=$("backbtn"); if(bb) bb.style.display=NAV.length?"":"none"; }
 function navBack(){ var p=NAV.pop(); if(!p) return; NAV_BACK=true; S.tab=p.s.tab;
-  ["sel","home","proj","careOpen","vmode","month","htype"].forEach(function(k){ S.ui[k]=p.s[k]; }); S.ui.meeting=p.s.meeting;
+  ["sel","home","proj","careOpen","vmode","month","htype","vtrade"].forEach(function(k){ S.ui[k]=p.s[k]; }); S.ui.meeting=p.s.meeting;
   try{ history.replaceState(null,"","#"+S.tab); }catch(e){} render(); setTimeout(function(){ window.scrollTo(0,p.y||0); },30); }
 try{ window.addEventListener("scroll",function(){ NAV_Y=window.scrollY; },{passive:true}); }catch(e){}
 function render(){ render0(); navTrack(); try{ if(typeof autoPaintNote==="function") autoPaintNote(); if(typeof autoBusyNote==="function") autoBusyNote(); if(typeof autoSync==="function") autoSync(); if(typeof flushQueued==="function") flushQueued(); if(typeof feedLoad==="function") feedLoad(false); }catch(e){} }
@@ -949,7 +949,7 @@ function vHomes(){
   var h='<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
       return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div>'+
     '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search home or community…" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
-    '<span class="qcount">'+list.length+' shown</span></div>';
+    '<span class="qcount">'+list.length+' shown</span><button class="btn sm pri" data-act="newhome">+ Add property</button></div>';
   h+='<div class="cols"><aside class="panel listp"><div class="rows">'+list.map(function(p){
       var jobs=(D.byProp[p.code]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
       var rc=p.appliances.some(function(a){ return a.recalls&&a.recalls.length; }), os=ownerStay(p.code), occ=os&&os.in<=today();
@@ -980,6 +980,7 @@ function homeDetail(code){
     '<span>· '+open.length+' open job'+(open.length===1?'':'s')+'</span></div></div><div class="dbody">';
   if(os && os.in<=t) h+='<div class="warnbox"><b>Owner in the home until '+esc(fmtD(os.out))+'.</b></div>';
   else if(os && daysBetween(t,os.in)<=30) h+='<div class="infobox">Owner stay '+esc(fmtD(os.in))+' → '+esc(fmtD(os.out))+'.</div>';
+  h+=quickView(code,p);
   h+=ownerRelBlock(jobs);
   // basics
   var hi=homeInfo(code), src=function(k){ return hi.src[k]?'<span class="hint">From '+hi.src[k]+'</span>':''; };
@@ -996,6 +997,7 @@ function homeDetail(code){
       (/^(2H-|L-)?BHL\b/.test(code)?'<span class="hint">Bear Hollow Lodges — HOA handles it</span>':src("heatTape"))+'</label>'+(function(){ var bq=hasBBQ(code); var ht2=hasHotTub(code); return '<label class="f"><span>Private hot tub</span><select id="h_hk"><option value="yes"'+(ht2.v===true?' selected':'')+'>Yes</option><option value="no"'+(ht2.v===false?' selected':'')+'>No</option>'+(ht2.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(ht2.why)+'</span></label><label class="f"><span>Private BBQ</span><select id="h_bq"><option value="yes"'+(bq.v===true?' selected':'')+'>Yes</option><option value="no"'+(bq.v===false?' selected':'')+'>No</option>'+(bq.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(bq.why)+'</span></label>'; })()+'</div>'+fireFields(code)+
     '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehome" data-code="'+esc(code)+'">Save</button>'+
     (pe.by?'<span class="note" style="align-self:center">Last changed by '+esc(nameFor(pe.by))+' '+esc(ago(ymd(pe.at)))+'</span>':'')+'</div></div>';
+  h+=hoaBlock(code,p);
   // breezeway
   var bw=bwRecent(code);
   h+='<div class="block"><h4>Last 3 done in Breezeway'+(bh.bwId?' <a class="golink" href="https://app.breezeway.io/property/'+esc(bh.bwId)+'" target="_blank" rel="noopener">Breezeway ↗</a>':'')+'</h4>'+(bw&&bw.length?'<div class="bwlist">'+bw.slice(0,3).map(function(b){ return '<div class="bwrow"><span>'+(b.url?'<a href="'+esc(b.url)+'" target="_blank" rel="noopener">'+esc(b.title)+'</a>':esc(b.title))+(b.by?' <span class="muted">· '+esc(b.by)+'</span>':'')+'</span><span class="when">'+esc(fmtD(b.on))+'</span></div>'; }).join("")+'</div>':
@@ -1032,6 +1034,51 @@ function homeDetail(code){
         '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+(i.url?'\n<a href="'+esc(i.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>'; }).join(""):'<div class="note">No property info in Asana.</div>')+'</div>';
   return h+'</div>';
 }
+
+
+/* ===== Hub 2026-10-28 (Brandon): Property Details quick view, HOA (Pyper), owner contact, add a property ===== */
+function infoNote(p,rx){ var hit=(p.info||[]).filter(function(i){ return i.notes && rx.test(i.cat||""); }).sort(function(a,b){ return (a.archived?1:0)-(b.archived?1:0); })[0];
+  return hit?{text:hit.notes.replace(/^\[codes\]\s*/,"").trim(),url:hit.url||""}:null; }
+function ownerOf(code){ var oc=(S.ownercontacts||{})[sid(code)]||{}, f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFeed(f,code)||[]):[];
+  var list=tr.map(function(o){ return {name:o.name,phone:o.phone,email:o.email,src:"Track"}; });
+  if(oc.name||oc.phone||oc.email) list=[{name:oc.name||((list[0]||{}).name)||"",phone:oc.phone||((list[0]||{}).phone)||"",email:oc.email||((list[0]||{}).email)||"",src:"Edited in the hub"+(oc.by?" by "+nameFor(oc.by):""),notes:oc.notes||""}].concat(list.slice(1));
+  return {can:!!f||Object.keys(S.ownercontacts||{}).length>0, list:list}; }
+function qCard(title,val,src,cls){ if(!val) return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div><div class="muted">Not recorded</div></div>';
+  var long=val.length>160;
+  return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+(long?'<details><summary class="qvt">'+esc(val.slice(0,150))+'…</summary><div class="qvt">'+esc(val.slice(150))+'</div></details>':'<div class="qvt">'+esc(val)+'</div>')+(src?'<div class="hint">'+src+'</div>':'')+'</div>'; }
+function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(code);
+  var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
+  var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
+  var wifi=pe.wifiName||pe.wifiPass?{v:(pe.wifiName?"Network: "+pe.wifiName:"")+(pe.wifiPass?(pe.wifiName?"\n":"")+"Password: "+pe.wifiPass:""),s:"Edited in the hub"}:asana(/^(wifi|wi-fi|stay[- ]?fi)/i);
+  var entry=pick(pe.lockoutCode,/^lockout info/i), garage=pick(pe.garageCode,/^parking\/? ?garage info$|^parking$/i), closet=pick(pe.ownerCloset,/^owner closet info$/i);
+  var own='<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'<div class="muted">Owner contact isn\'t shared with your team.</div>':
+    (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b>'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
+  return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
+    qCard("Wi-Fi",wifi.v,wifi.s,"wifi")+qCard("Entry / owner lockout codes",entry.v,entry.s,"codes")+qCard("Garage / parking",garage.v,garage.s,"codes")+qCard("Owner closet",closet.v,closet.s,"codes")+
+    qCard("Key box",hi.keybox,hi.src&&hi.src.keybox?"From "+hi.src.keybox:"","")+'</div>'+
+    '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
+function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
+  openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div>'+
+    area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Leave blank to show the Asana note")+area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note")+
+    (o.can?'<div class="lbl" style="margin-top:10px">Owner contact <span class="muted">(blank = use Track)</span></div><div class="fields">'+fld("o_name","Owner name",oc.name||"")+fld("o_phone","Phone",oc.phone||"","tel")+fld("o_email","Email",oc.email||"","email")+'</div>'+area("o_notes","Owner notes",oc.notes||"","e.g. prefers text, second contact"):''),
+  function(){ var k=sid(code);
+    var a=put("propedits",k,{wifiName:fv("q_wn"),wifiPass:fv("q_wp"),lockoutCode:fv("q_lo"),garageCode:fv("q_gc"),ownerCloset:fv("q_oc"),qBy:S.me},S.propedits[k]);
+    var b=o.can?put("ownercontacts",k,{code:code,name:fv("o_name"),phone:fv("o_phone"),email:fv("o_email"),notes:fv("o_notes")},(S.ownercontacts||{})[k]):Promise.resolve();
+    return Promise.all([a,b]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
+function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i);
+  return '<div class="block"><h4>HOA</h4><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+
+    fld("hoa_name","HOA name",pe.hoaName||"")+fld("hoa_mgmt","Management company",pe.hoaMgmt||"")+fld("hoa_contact","Contact person",pe.hoaContact||"")+
+    fld("hoa_phone","Phone",pe.hoaPhone||"","tel")+fld("hoa_email","Email",pe.hoaEmail||"","email")+fld("hoa_portal","Website / portal",pe.hoaPortal||"","url")+'</div>'+
+    '<label class="f" style="margin-top:8px"><span>HOA rules &amp; notes (parking, trash, quiet hours, pool/clubhouse, who to call after hours)</span><textarea id="hoa_rules" style="min-height:70px">'+esc(pe.hoaRules||"")+'</textarea></label>'+
+    (n?'<details class="infocat" style="margin-top:8px"><summary>HOA Info from Asana</summary><div class="prose">'+esc(n.text)+(n.url?'\n<a href="'+esc(n.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>':'')+
+    '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehoa" data-code="'+esc(code)+'">Save HOA</button></div></div>'; }
+function mNewHome(){ if(!need()) return;
+  openModal("Add a property",'<div class="note">Use the Track unit code (e.g. BHL 123, 2H-… for second homes, L-… for leases). Everyone sees it under Property Details right away.</div><div class="fields" style="margin-top:8px">'+
+    fld("n_code","Unit code","",null,'list="dl_newunits"')+'<datalist id="dl_newunits">'+Object.keys(((S.feeds.owners||{}).homes)||{}).filter(function(c){ return !profile(c) && !/accounting/i.test(c); }).sort().map(function(c){ return '<option value="'+esc(c)+'">'; }).join("")+'</datalist>'+fld("n_comm","Community")+fld("n_beds","Bedrooms","","number")+fld("n_sqft","Sq ft","","number")+fld("n_yb","Year built","","number")+'</div>'+area("n_addr","Address","","Street, city"),
+  function(){ var c=fv("n_code").replace(/\s+/g," ").trim(); if(!c) return toast("Unit code");
+    var k=sid(c); if(S.profiles[k]||profile(c)) return toast(c+" is already in Property Details");
+    return put("profiles",k,{code:c,community:fv("n_comm"),active:true,info:[],appliances:[],bedrooms:fv("n_beds"),sqft:fv("n_sqft"),yearBuilt:fv("n_yb"),address:fv("n_addr"),addedBy:S.me,addedAt:Date.now()}).then(function(){
+      closeModal(); toast(c+" added"); S.ui.htype=homeType(c); S.ui.home=c; S.ui.hq=""; render(); }); },"Add property"); }
 
 /* ================= VENDORS ================= */
 /* Plain words for what's broken -> the kinds of work in Asana's VENDOR INFORMATION. */
@@ -1083,7 +1130,7 @@ function resRow(r){ return '<div class="vcard"><div class="vtop"><h3>'+esc(r.nam
   '<div class="links">'+r.urls.map(function(u){ var href=/^https?:/.test(u)?u:"https://"+u; return '<a class="golink" href="'+esc(href)+'" target="_blank" rel="noopener">'+esc(u.replace(/^https?:\/\/(www\.)?/i,"").slice(0,40))+' ↗</a>'; }).join("")+'</div></div>'; }
 function vendUse(v){ var t=today(); return vendorJobs(v).filter(function(j){ var d=j.finished||j.due||j.when||""; return d && daysBetween(d,t)<=365 && daysBetween(d,t)>=-30; }); }
 function vendorsTop(){ var m=S.ui.vmode||"find";
-  return '<div class="chiprow" style="margin-bottom:12px">'+[["find","Find a vendor"],["rank","Ranked by use"],["used","Vendors used this month"]].map(function(c){ return '<button class="chip" data-vmode="'+c[0]+'" aria-pressed="'+(m===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>'; }
+  return '<div class="chiprow" style="margin-bottom:12px">'+[["find","Find a vendor"],["rank","Ranked by use"],["used","Vendors used this month"],["changes","Added & removed"]].map(function(c){ return '<button class="chip" data-vmode="'+c[0]+'" aria-pressed="'+(m===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>'; }
 function vRank(){ var rows=D.vendors.map(function(v){ var js=vendUse(v); return {v:v,n:js.length,last:js[0]?(js[0].finished||js[0].due||js[0].when):""}; }).filter(function(r){ return r.n>0; });
   var tot=rows.reduce(function(a,r){ return a+r.n; },0)||1; rows.sort(function(a,b){ return b.n-a.n || a.v.name.localeCompare(b.v.name); });
   var mx=rows.length?rows[0].n:1;
@@ -1092,7 +1139,21 @@ function vRank(){ var rows=D.vendors.map(function(v){ var js=vendUse(v); return 
     rows.map(function(r,i){ var pct=r.n/tot*100; return '<tr><td class="num">'+(i+1)+'</td><td><a href="#" data-vprof="'+esc(r.v.id)+'">'+esc(r.v.name)+'</a>'+(isPref(r.v)?' <span class="badge ok">use first</span>':'')+'</td><td class="muted">'+esc(vTrades(r.v).slice(0,2).join(", "))+'</td><td class="num">'+r.n+'</td>'+
       '<td><div style="display:flex;gap:8px;align-items:center"><span style="flex:1;height:8px;background:var(--sunk);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:'+(r.n/mx*100)+'%;background:var(--accent)"></i></span><b class="mono" style="min-width:44px;text-align:right">'+pct.toFixed(1)+'%</b></div></td>'+
       '<td class="mono">'+esc(r.last?fmtD(r.last):"")+'</td></tr>'; }).join("")+'</tbody></table></div></section>'; }
-function vVendors(){ var m=S.ui.vmode||"find"; if(m==="rank") return vendorsTop()+vRank(); if(m==="used") return vendorsTop()+vVused(); return vVendorsFind(); }
+function vVendors(){ var m=S.ui.vmode||"find"; if(m==="rank") return vendorsTop()+vRank(); if(m==="used") return vendorsTop()+vVused(); if(m==="changes") return vendorsTop()+vVendChanges(); return vVendorsFind(); }
+/* Hub 2026-10-28 (Brandon): report of vendors added to / removed from the list (and brought back), with who and why. */
+function vVendChanges(){ var w=S.ui.vcm||"m0", t=today(), m0=t.slice(0,7), m1=monthAdd(m0,-1), ev=[];
+  var inWin=function(ms){ if(!ms) return false; var d=ymd(ms); return w==="m0"?d.slice(0,7)===m0:w==="m1"?d.slice(0,7)===m1:w==="y"?daysBetween(d,t)<=365:true; };
+  Object.keys(S.deskvendors||{}).forEach(function(k){ var v=S.deskvendors[k]||{}; var at=v.createdAt||v.at; if(!v.deleted && inWin(at)) ev.push({at:at,kind:"Added",name:v.name,trade:(v.trades||[v.trade]).filter(Boolean).join(", "),who:v.createdBy||v.by,why:v.myNotes||""}); });
+  D.vendors.concat(D.vendorsRemoved||[]).forEach(function(v){ var e=v.desk?S.deskvendors[v.id]||{}:S.vendoredits[sid(v.id)]||{};
+    if(e.removedAt && inWin(e.removedAt)) ev.push({at:e.removedAt,kind:"Removed",name:v.name,trade:vTrades(v).join(", "),who:e.removedBy,why:e.removedWhy||""});
+    if(e.restoredAt && inWin(e.restoredAt)) ev.push({at:e.restoredAt,kind:"Brought back",name:v.name,trade:vTrades(v).join(", "),who:e.restoredBy,why:""}); });
+  ev.sort(function(a,b){ return b.at-a.at; });
+  var n=function(k){ return ev.filter(function(e){ return e.kind===k; }).length; };
+  return '<div class="sechead"><h2>Vendors added &amp; removed</h2><p>Every vendor put on or taken off the list in the hub, who did it and why. Source: the Vendors desk (hub database). Changes before 2026-10-28 show only if the desk recorded a date.</p></div>'+
+    '<div class="chiprow" style="margin-bottom:12px">'+[["m0","This month"],["m1","Last month"],["y","Last 12 months"],["all","All time"]].map(function(c){ return '<button class="chip" data-vcm="'+c[0]+'" aria-pressed="'+(w===c[0])+'">'+c[1]+'</button>'; }).join("")+
+    '<span class="note" style="align-self:center">'+n("Added")+' added · '+n("Removed")+' removed · '+n("Brought back")+' brought back</span></div>'+
+    '<section class="panel">'+(ev.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Date</th><th>Change</th><th>Vendor</th><th>Kind of work</th><th>Who</th><th>Why / notes</th></tr></thead><tbody>'+
+    ev.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(ymd(e.at)))+'</td><td><span class="badge '+(e.kind==="Removed"?"recall":"ok")+'">'+esc(e.kind)+'</span></td><td><b>'+esc(e.name||"")+'</b></td><td class="muted">'+esc(e.trade||"")+'</td><td>'+esc(nameFor(e.who)||e.who||"")+'</td><td class="note" style="white-space:normal">'+esc(e.why)+'</td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">No vendors added or removed in this period.</div>')+'</section>'; }
 function vVendorsFind(){
   var u=S.ui, q=u.vq.trim(), ql=q.toLowerCase();
   var all={}; D.vendors.forEach(function(v){ vTrades(v).forEach(function(t){ (all[t]=all[t]||[]).push(v); }); });
@@ -1102,7 +1163,7 @@ function vVendorsFind(){
     tradeNames.forEach(function(t){ if(t.toLowerCase().indexOf(ql)>-1 && hitTrades.indexOf(t)<0) hitTrades.push(t); }); }
   var shown=u.vtrade?[u.vtrade]:(q?hitTrades:tradeNames);
   var byName=q?D.vendors.filter(function(v){ return (v.name+" "+(v.contact||"")+" "+(v.myNotes||"")).toLowerCase().indexOf(ql)>-1; }):[];
-  var h=vendorsTop()+'<div class="toolbar"><div class="qsearch" style="flex:1 1 380px"><span class="mag">⌕</span><input id="vq" type="search" placeholder="What needs fixing? e.g. leaking sink, garage door, concrete steps…" value="'+esc(u.vq)+'" autocomplete="off"></div>'+
+  var h=vendorsTop()+((u.vtrade||q)?'<div style="margin-bottom:10px"><button class="btn sm" data-act="vback">← All kinds of work</button></div>':'')+'<div class="toolbar"><div class="qsearch" style="flex:1 1 380px"><span class="mag">⌕</span><input id="vq" type="search" placeholder="What needs fixing? e.g. leaking sink, garage door, concrete steps…" value="'+esc(u.vq)+'" autocomplete="off"></div>'+
     '<select id="vtrade" aria-label="Kind of work"><option value="">Every kind of work</option>'+tradeNames.map(function(t){ return '<option'+(t===u.vtrade?' selected':'')+' value="'+esc(t)+'">'+esc(t)+' ('+all[t].length+')</option>'; }).join("")+'</select>'+
     '<label class="toggle"><input type="checkbox" id="vpref"'+(u.prefOnly?' checked':'')+'> Preferred only</label>'+
     '<button class="btn sm pri" data-act="newvendor">+ Vendor</button></div>';
@@ -1363,7 +1424,7 @@ function vMoney(){
   G.pb+=billingPanel(m,bwDone)+projectedPanel(m);
   if(tm.length) G.vis+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Visits logged</h3><span class="ct">'+tm.length+'</span></div><div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Date</th><th>Who</th><th>Home</th><th class="num">Time</th><th class="num">Trips</th><th class="num">Miles</th><th>Note</th><th></th></tr></thead><tbody>'+
     tm.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(e.date))+'</td><td>'+esc(e.who||"")+'</td><td>'+propLink(e.prop)+'</td><td class="num">'+((+e.minutes||0)/60).toFixed(1)+'h</td><td class="num">'+(+e.trips||0)+'</td><td class="num">'+(+e.miles||0)+'</td><td>'+esc(e.note||"")+'</td><td><button class="btn sm ghost" data-tmedit="'+esc(e.id)+'">Edit</button></td></tr>'; }).join("")+'</tbody></table></div></section>';
-  h+=readyPanel(m)+G.bw+'<div style="height:14px"></div>'+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew;
+  h+=hsGainPanel(m)+readyPanel(m)+G.bw+'<div style="height:14px"></div>'+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew;
   return h;
 }
 
@@ -1890,6 +1951,33 @@ function vCheck(){
 /* ================= TIMESHEET — per tech, built from Breezeway ================= */
 var TECH_LIST=["Shelby","Klancey","Jordan","Dave","Chris"];   /* Brandon asked to be left off the timesheets */
 function isReceiptTask(j){ return /daily receipts?|\breceipts?\b\s*$/i.test(j.title||""); }
+
+/* Hub 2026-10-28 (Brandon): Chris (maintenance manager) + admins — each tech's Hubstaff hours (cost) vs what their Breezeway work bills (gain).
+   Pay cost per tech lives in desk_docs paycost/rates (money: maintenance manager + admins only, RLS). */
+function hsTechs(){ var o={}; TECH_LIST.forEach(function(w){ o[w]=1; }); Object.keys(((S.feeds["hs-time"]||{}).techs)||{}).forEach(function(w){ o[w]=1; }); return Object.keys(o); }
+function hsGainPanel(m){ var R=rates(), techs=hsTechs(), per={};
+  techs.forEach(function(w){ per[w]={hs:hsMonth(w,m), task:0, billed:0, est:0, n:0}; });
+  D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.finished||"").slice(0,7)===m && !j.vendorVisit && !j.schedNote && !j.officeOnly; })
+   .forEach(function(j){ var crew=(j.crew||[]).filter(function(w){ return per[w]; }); if(!crew.length) return;
+     var tid=String(j.id).replace(/^bw-/,""), tb=S.taskbill[tid], d=tb||taskBillDefaults(j), mins=+j.minutes>720?0:(+j.minutes||0);
+     var labor=(d.billTo==="none"||d.billTo==="moose"||d.billTo==="courtesy")?0:(+d.hours||0)*(+d.rate||0)+(d.lines||[]).reduce(function(a,l){ return a+(+l.amount||0); },0);
+     crew.forEach(function(w){ var x=per[w]; x.n++; x.task+=mins/60; if(tb) x.billed+=labor/crew.length; else x.est+=labor/crew.length; }); });
+  var rows=techs.filter(function(w){ var x=per[w]; return (x.hs||0)>0||x.n>0; }), T={hs:0,cost:0,gain:0};
+  var body=rows.map(function(w){ var x=per[w], c=+R.techCost[w]||R.defaultCost, hs=x.hs, cost=hs!=null&&c?hs*c:null, gain=x.billed+x.est, net=cost!=null?gain-cost:null, idle=hs!=null?Math.max(0,hs-x.task):null;
+    T.hs+=hs||0; T.cost+=cost||0; T.gain+=gain;
+    return '<tr><td><b>'+esc(w)+'</b></td><td class="num">'+(hs==null?'<span class="muted">not in Hubstaff</span>':hs.toFixed(1))+'</td><td class="num">'+(c?money2(c)+'/h':'<span class="muted">set pay cost</span>')+'</td><td class="num">'+(cost!=null?money(cost):'—')+'</td>'+
+      '<td class="num">'+x.task.toFixed(1)+'</td><td class="num">'+(idle!=null?idle.toFixed(1):'—')+'</td><td class="num">'+money(x.billed)+'</td><td class="num">'+money(x.est)+'</td>'+
+      '<td class="num"><b style="color:'+(net==null?'inherit':net>=0?'var(--go)':'var(--stop)')+'">'+(net==null?'—':money(net))+'</b></td><td class="num">'+(cost?(gain/cost).toFixed(2)+'×':'—')+'</td></tr>'; }).join("");
+  return '<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>Crew cost vs. gain (Hubstaff)</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}))+'</span>'+
+    '<button class="btn sm ghost" data-act="paycost" style="margin-left:auto">Pay cost per tech</button></div>'+
+    (rows.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Tech</th><th class="num">Hubstaff hours</th><th class="num">Pay cost</th><th class="num">Cost</th><th class="num">Task hours (Breezeway)</th><th class="num">Hours not on a task</th><th class="num">Billed (confirmed)</th><th class="num">Billable (estimate)</th><th class="num">Gain − cost</th><th class="num">Return per $1</th></tr></thead><tbody>'+body+
+      '<tr><td><b>Total</b></td><td class="num"><b>'+T.hs.toFixed(1)+'</b></td><td></td><td class="num"><b>'+money(T.cost)+'</b></td><td></td><td></td><td></td><td class="num"><b>'+money(T.gain)+'</b> <span class="muted">billed + est.</span></td><td class="num"><b>'+(T.cost?money(T.gain-T.cost):'—')+'</b></td><td></td></tr></tbody></table></div>':'<div class="empty">No Hubstaff hours or finished Breezeway tasks this month.</div>')+
+    '<div class="pad note">Cost = Hubstaff hours × each tech\'s pay cost (set by Chris or an admin; only the maintenance manager and admins can see it). Gain = labor + fees on the tech\'s finished Breezeway tasks this month: "confirmed" from the billing on Expenses &amp; Time, "estimate" = task time at the home\'s plan rate (rounded the way we bill), split evenly when several techs share a task. Parts are left out — they pass through to the owner. Sources: Hubstaff (hs-time feed), Breezeway tasks, task billing.</div></section>'; }
+function mPayCost(){ if(!window.MM_MONEY) return toast("Maintenance manager or admin only"); var r=((S.paycost||{}).rates)||{}, tc=r.techCost||{}, techs=hsTechs();
+  openModal("Pay cost per tech",'<div class="note">What one hour of each tech costs Moose (wage + payroll costs). Only the maintenance manager and admins can see these.</div><div class="fields" style="margin-top:8px">'+
+    techs.map(function(w,i){ return fld("pc_"+i,w+" ($/hour)",tc[w]!=null?tc[w]:"","number",'min="0" step="0.01"'); }).join("")+fld("pc_def","Anyone else ($/hour)",r.defaultCost||"","number",'min="0" step="0.01"')+'</div>',
+  function(){ var o={}; techs.forEach(function(w,i){ var v=fv("pc_"+i); if(v!=="") o[w]=+v; });
+    return put("paycost","rates",{techCost:o,defaultCost:+fv("pc_def")||0},(S.paycost||{}).rates).then(function(){ toast("Pay cost saved"); closeModal(); }); },"Save"); }
 function timesheetPanel(m){
   var who=S.ui.tsWho||"";
   var rows=D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.finished||"").slice(0,7)===m && !j.vendorVisit && !j.schedNote && !j.officeOnly; });
@@ -2917,7 +3005,7 @@ function mVendor(id){ var v=id?(D.vendors.filter(function(x){return x.id===id;})
     '<label class="toggle"><input type="checkbox" id="m_pref"'+(id?(isPref(v)?' checked':''):'')+'> Preferred (use first, company-wide)</label>',
   function(){ var nm=fv("m_name"); if(!nm){ toast("Vendor name"); return; }
     var trs=fv("m_trade").split(",").map(function(x){return x.trim();}).filter(Boolean);
-    if(!id){ var k=uid("vd-"); return put("deskvendors",k,{name:nm,trade:trs[0]||"",trades:trs,contact:fv("m_contact"),how:fv("m_how"),myNotes:fv("m_mine"),preferred:$("m_pref").checked}).then(function(){ toast("Vendor added"); closeModal(); }); }
+    if(!id){ var k=uid("vd-"); return put("deskvendors",k,{createdAt:Date.now(),createdBy:S.me,name:nm,trade:trs[0]||"",trades:trs,contact:fv("m_contact"),how:fv("m_how"),myNotes:fv("m_mine"),preferred:$("m_pref").checked}).then(function(){ toast("Vendor added"); closeModal(); }); }
     var k2=sid(id); return put("vendoredits",k2,{trade:trs[0]||"",trades:trs,contact:fv("m_contact"),how:fv("m_how"),myNotes:fv("m_mine"),preferred:$("m_pref").checked},S.vendoredits[k2]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
 
 function findAppl(code,key){ var p=profile(code); if(!p) return null; var pe=pedit(code);
@@ -3142,9 +3230,14 @@ document.addEventListener("click",function(ev){
     case "deljob": if(!j) return; return put("deskjobs",j.id,{deleted:true},S.deskjobs[j.id]).then(function(){ S.ui.sel=""; toast("Removed"); });
     case "newroutine": return mRoutine();
     case "newvendor": return mVendor();
+    case "vback": S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return;
+    case "newhome": return mNewHome();
+    case "editquick": return mQuick(d.code);
+    case "savehoa": var hc=d.code, hk=sid(hc); return put("propedits",hk,{hoaName:fv("hoa_name"),hoaMgmt:fv("hoa_mgmt"),hoaContact:fv("hoa_contact"),hoaPhone:fv("hoa_phone"),hoaEmail:fv("hoa_email"),hoaPortal:fv("hoa_portal"),hoaRules:fv("hoa_rules")},S.propedits[hk]).then(function(){ toast("HOA saved"); });
     case "newexp": return mExpense();
     case "newtime": return mTime();
     case "rates": return mRates();
+    case "paycost": return mPayCost();
     case "mdelexp": return put("expenses",d.id,{deleted:true},S.expenses[d.id]).then(function(){ closeModal(); toast("Deleted"); });
     case "mdeltime": return put("time",d.id,{deleted:true},S.time[d.id]).then(function(){ closeModal(); toast("Deleted"); });
     case "mrouteoff": return put("recurring",d.id,{active:false},S.recurring[d.id]).then(function(){ closeModal(); toast("Routine turned off"); });
@@ -3156,6 +3249,7 @@ document.addEventListener("click",function(ev){
   if(d.vpref){ var v=D.vendors.filter(function(x){return x.id===d.vpref;})[0]; if(!v) return;
     if(v.desk) return put("deskvendors",v.id,{preferred:!v.preferred},S.deskvendors[v.id]);
     return put("vendoredits",sid(v.id),{preferred:!isPref(v)},S.vendoredits[sid(v.id)]); }
+  if(d.vcm){ S.ui.vcm=d.vcm; render(); return; }
   if(d.vtradepick){ S.ui.vtrade=d.vtradepick; S.ui.vq=""; render(); window.scrollTo(0,0); return; }
   if(d.vtradego){ S.ui.vtrade=d.vtradego; S.ui.vq=""; return go("vendors"); }
   if(d.vfind){ S.ui.vq=d.vfind; S.ui.vtrade=""; return go("vendors"); }
@@ -3169,7 +3263,7 @@ document.addEventListener("click",function(ev){
   if(d.askweb){ var aw=d.askweb.split("|"); return askWeb(aw[0],aw.slice(1).join("|")); }
   if(d.vwhy){ var ta=$("vr_why"); if(ta){ ta.value=(ta.value?ta.value+"; ":"")+d.vwhy; ta.focus(); } return; }
   if(d.vrestore){ if(!need()) return; var rv=(D.vendorsRemoved||[]).filter(function(x){ return x.id===d.vrestore; })[0]; if(!rv) return;
-    var rp={removed:false}; return (rv.desk?put("deskvendors",rv.id,rp,S.deskvendors[rv.id]):put("vendoredits",sid(rv.id),rp,S.vendoredits[sid(rv.id)])).then(function(){ toast(rv.name+" is back on the list"); }); }
+    var rp={removed:false,restoredAt:Date.now(),restoredBy:S.me}; return (rv.desk?put("deskvendors",rv.id,rp,S.deskvendors[rv.id]):put("vendoredits",sid(rv.id),rp,S.vendoredits[sid(rv.id)])).then(function(){ toast(rv.name+" is back on the list"); }); }
   if(d.aedit){ var q=d.aedit.split("|"); return mAppl(q[0],q[1]); }
   if(d.rvr){ var z=d.rvr.split("|"), ap=applianceView(z[0],findAppl(z[0],z[1])||{});
     var calls=(D.byProp[z[0]]||[]).filter(function(x){ return daysBetween(x.created||x.when||today(),today())<=365 && catOf(x)===catOf({title:ap.type}); }).length;
@@ -3235,8 +3329,8 @@ derive(); render();
   var db=null; try{ db=await window.MMDB.ready(); }catch(e){ db=null; }
   if(!db){ setSync(false,"Offline — can't load the board here"); return; }
   S.db=db; setSync(true,"Live");
-  ["feeds","edits","deskjobs","profiles","propedits","vendoredits","deskvendors","recurring","rlog","expenses","time","config","bwq","taskbill","projedits","slackq","deskprojects","asanaq","asks"].forEach(function(c){
-    var key={asks:"asks",asanaq:"asanaq",deskprojects:"deskprojects",slackq:"slackq",bwq:"bwq",taskbill:"taskbill",projedits:"projedits",feeds:"feeds",edits:"edits",deskjobs:"deskjobs",profiles:"profiles",propedits:"propedits",vendoredits:"vendoredits",deskvendors:"deskvendors",
+  ["feeds","edits","deskjobs","profiles","propedits","vendoredits","deskvendors","recurring","rlog","expenses","time","config","bwq","taskbill","projedits","slackq","deskprojects","asanaq","asks","ownercontacts","paycost"].forEach(function(c){
+    var key={paycost:"paycost",ownercontacts:"ownercontacts",asks:"asks",asanaq:"asanaq",deskprojects:"deskprojects",slackq:"slackq",bwq:"bwq",taskbill:"taskbill",projedits:"projedits",feeds:"feeds",edits:"edits",deskjobs:"deskjobs",profiles:"profiles",propedits:"propedits",vendoredits:"vendoredits",deskvendors:"deskvendors",
       recurring:"recurring",rlog:"rlog",expenses:"expenses",time:"time",config:"config"}[c];
     subscribe(c,key, c==="feeds"?function(){ var b=bwReadAt();
       setSync(true,"Live · Breezeway read "+(b?bwAgo(b):"—")); }:null);
