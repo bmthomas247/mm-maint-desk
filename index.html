@@ -177,6 +177,8 @@ details.acc[open]>summary{margin-bottom:6px}
 .rpl{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:14.5px;font-weight:700;color:var(--pine);text-decoration:none;border-top:1px solid var(--line)}
 .rpg h3+.rpl{border-top:0} .rpl:hover{text-decoration:underline} .rpl.soon{color:var(--muted);font-weight:600}
 .rpl .pill{font-size:10.5px;padding:2px 7px}
+.rpsub{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:10px 0 2px;padding-top:8px;border-top:1px solid var(--line)}
+.rpsub+.rpl{border-top:0}
 /* My settings (2026-10-28) */
 .ord{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)} .ord:last-child{border-bottom:0}
 .ord .oi{width:32px;height:32px;border-radius:9px;background:var(--moose-soft);color:var(--moose-ink);display:grid;place-items:center;flex:none} .ord .oi svg{width:17px;height:17px}
@@ -711,12 +713,18 @@ async function hubReportsView(v){
   const r = await sb.from("hub_reports").select("*").order("sort");
   if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
   const name = k => k === "home" ? "Hub" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
-  const groups = {}; r.data.forEach(x => (groups[x.desk_key] = groups[x.desk_key] || []).push(x));
+  // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
+  const SUB = { maint_money:["maintenance","Expenses & Time"] };
+  const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = sb ? sb[0] : x.desk_key; (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => name(a).localeCompare(name(b)));
-  $("#rplist").innerHTML = keys.length ? `<div class="rpgrid">${keys.map(k => `<section class="rpg"><h3>${esc(name(k))}</h3>
-      ${groups[k].slice().sort((a, b) => a.label.localeCompare(b.label)).map(x => x.status === "live"
+  const link = x => x.status === "live"
         ? `<a href="#" class="rpl" data-run="${esc(x.url)}" title="${esc(x.note || "")}">${esc(x.label)}${x.admin_only ? ` <span class="pill">admins</span>` : ""}</a>`
-        : `<span class="rpl soon" title="${esc(x.note || "")}">${esc(x.label)} <span class="pill amber">soon</span></span>`).join("")}</section>`).join("")}</div>`
+        : `<span class="rpl soon" title="${esc(x.note || "")}">${esc(x.label)} <span class="pill amber">soon</span></span>`;
+  const byLabel = (a, b) => a.label.localeCompare(b.label);
+  const body = list => { const main = list.filter(x => !x._sub).sort(byLabel), subs = [...new Set(list.filter(x => x._sub).map(x => x._sub))].sort();
+    return main.map(link).join("") + subs.map(t => `<div class="rpsub">${esc(t)}</div>` + list.filter(x => x._sub === t).sort(byLabel).map(link).join("")).join(""); };
+  $("#rplist").innerHTML = keys.length ? `<div class="rpgrid">${keys.map(k => `<section class="rpg"><h3>${esc(name(k))}</h3>
+      ${body(groups[k])}</section>`).join("")}</div>`
     : `<div class="card"><p class="muted">No reports for your desks yet.</p></div>`;
   $("#rplist").querySelectorAll("[data-run]").forEach(b => b.onclick = e => { e.preventDefault();
     const u = b.dataset.run; if(u.startsWith("#")) { location.hash = u; return; }
