@@ -991,13 +991,7 @@ function vHomes(){
 }
 function homeDetail(code){
   var p=profile(code); if(!p) return '<div class="empty">No profile for '+esc(code)+'.</div>';
-  if(p.company){ var allc=(D.byProp[code]||[]).slice().sort(function(a,b){ return (b.when||"").localeCompare(a.when||""); });
-    var cj=allc.filter(function(j){ return !j.auto && !j.autoDone && (j.status!=="done" || daysBetween(j.finished||j.when||"2000-01-01",today())<=60); });
-    var rec=allc.filter(function(j){ return /daily receipts/i.test(j.title) && j.status==="done" && (j.finished||"").slice(0,7)===today().slice(0,7); });
-    return '<div class="dhead"><div class="dtitle"><h2>Moose company</h2><span class="tag">Company</span></div><div class="dsub">The Colorado truck, the office, storage units and tools — maintenance on things Moose owns, not a rental.</div></div>'+
-      '<div class="dbody"><div class="block"><h4>Breezeway office</h4><div class="note">General Moose jobs live on the Breezeway office property (1-Bear Hollow Office). '+rec.length+' "Maint. Daily Receipts" check-ins done this month — the receipts attached to those are read into Expenses on each Breezeway run. '+
-      '<a class="golink" href="https://app.breezeway.io/property/337648" target="_blank" rel="noopener">Open the office in Breezeway ↗</a></div></div>'+
-      '<div class="block"><h4>Jobs — open, and done in the last 60 days</h4>'+(cj.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+cj.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing yet. Set a job\'s property to "Moose company" to file it here.</div>')+'</div></div>'; }
+  if(p.company) return companyDetail(code);
   var pe=pedit(code), t=today(), bh=bwHome(code), yb=pe.yearBuilt||p.yearBuilt||bh.yearBuilt, os=ownerStay(code);
   var jobs=(D.byProp[code]||[]).slice().sort(function(a,b){ return (b.when||"").localeCompare(a.when||""); });
   var open=jobs.filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
@@ -1063,6 +1057,112 @@ function homeDetail(code){
         '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+(i.url?'\n<a href="'+esc(i.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>'; }).join(""):'<div class="note">No property info in Asana.</div>')+'</div>';
   return h+'</div>';
 }
+
+
+/* ===== Moose company page (Brandon 2026-10-28): jobs list gone (those were reminders); Vehicles, Moose office info, Employees,
+   Logos & colors, General Moose info. CO_FACTS were read from Dropbox / Track and each keeps its source; anything typed on the
+   page saves to propedits/Moose_company and wins over the file. Never put codes, passwords, Wi-Fi, bank, VINs, policy #s or pay here. ===== */
+var CO_D="Dropbox: /1-Moose Management Vacation Rentals - Park City/", CO_LIC=CO_D+"VRPC Licensing-Insurance-TaxID/", CO_LOGO="Dropbox: /VRPC Logo Files-Kim/";
+var CO_SF=CO_LIC+"Buckner Requested Documents/State Farm Kia, Colorado, Pacifica, F150, F150.pdf (2026-05-21)";
+var CO_FACTS={
+  vehicles:[["kia","2024 Kia Seltos"],["colorado","2022 Chevrolet Colorado"],["f150a","2021 Ford F150 (1 of 2)"],["f150b","2021 Ford F150 (2 of 2)"],["pacifica","2022 Chrysler Pacifica"]].map(function(v){
+    return {id:v[0],ymm:v[1],ins:"State Farm, policy period on file Apr 28 – Oct 28, 2026; no renewal in Dropbox yet",docs:"Dropbox › VRPC Licensing-Insurance-TaxID › Buckner Requested Documents",notes:"Garaged in Park City, UT (State Farm auto policy)",src:CO_SF}; }),
+  office:{
+    addr:{v:"5519 Lillehammer Ln #1101, Park City, UT 84098 (Lodges at Bear Hollow, unit 1101 — owned by VRPC since June 2019)\nA 2026 storage invoice spells it \"Lillehammer Way\".",src:CO_D+"4-Templates/Envelopes/Logo Envelope.docx (2026-09-25)"},
+    mail:{v:"PO Box 981671, Park City, UT 84098 — older templates; newer ones use the Lillehammer address, so this may be out of date",src:CO_D+"4-Templates/3-Invoice Templates/Sales Invoice Template.docx (2024-06-26)"},
+    phone:{v:"435-714-6544 (call or text) · fax 435-214-2280\nAfter-hours emergency text line 435-901-4699 (lockouts, fire/flood, no heat only)",src:CO_D+"4-Templates/3-Invoice Templates/Sales Invoice Dollys.docx (2026-01-29); emergency line: 4-Templates/Voicemail Messages/Voicemail for Nextiva.docx (2022-09-24)"},
+    email:{v:"Info@PCMoose.com (older: info@VacationRentalsPC.com)",src:CO_D+"4-Templates/Voicemail Messages/Voicemail for Nextiva.docx (2022-09-24)"},
+    hours:{v:"Phones 9am–6pm daily (2022 voicemail script)",src:CO_D+"4-Templates/Voicemail Messages/Voicemail for Nextiva.docx (2022-09-24)"},
+    storage:{v:"Protection Self Storage of Park City, 1240 W Richardson Rd, Park City 84036 · 435-465-2900 — unit B258 on the Oct 2026 invoice; a 10x10 unit B346 from Dec 2022; a Dec 2023 invoice says \"ALL 4\" units, so the count needs checking\nStorage Elevated, 4006 N. Forestdale Dr, Park City 84098 · 435-333-4400 — newest receipts are 2023; may be closed",src:CO_D+"13-Vendors & Chanel Partners/Storage-Protection Storage/Invoices/2026 (2026-10-19); Storage Elevated: 13-Vendors & Chanel Partners/Storage Elevated (2023-03-29)"}},
+  general:{
+    legal:{v:"Vacation Rentals Park City, LLC (Utah, entity no. 6424785-0160)\nRelated: Moose Property Management LLC (on the E&O policy from 9-11-2026) · Moose 1101, LLC (office unit)",src:CO_LIC+"Business Licenses & Insurance/Division of Corporations -Business Renewal 2023-2024.pdf (2023-11-06)"},
+    dba:{v:"Moose Management — \"Vacation Rentals Park City LLC dba Moose Management\". Utah DBA file 9156896 approved 09/10/2014, expired 09/10/2017; no renewal found in Dropbox",src:CO_LIC+"Business Licenses & Insurance/Moose Management DBA -Business Info.png (2014-09-10)"},
+    founded:{v:"LLC was renewing by Oct 2012 and had 2012 business licenses — formation papers not found",src:CO_LIC+"Business Licenses & Insurance/LLC Business Renewal 2012.pdf (2012-10-23)"},
+    web:{v:"www.PCMoose.com · www.MooseManagement.com · www.VacationRentalsParkCity.com (blog at /blog)",src:CO_LOGO+"email signature social media icons/Email Sig SM Icons.docx (2024-04-09)"},
+    area:{v:"Homes in and around Park City, UT — short-term rentals, long-term leases and second-home care. Areas on the website: Canyons Village, Deer Valley, Downtown/Main St, Jordanelle, Kamas, Kimball Junction, Oakley/Trail Creek, Park City Mountain, Prospector, Silver Creek, Cottonwood Heights",src:CO_D+"4-Templates/4-Check Lists & Templates/About Me - Company Profile.docx (2013-07-30); areas: Website/Area Photos folders"},
+    social:{v:"facebook.com/MooseManagementVacationRentals\ninstagram.com/vacationrentals_pc\ntwitter.com/VRparkcity\npinterest.com/vrparkcity\nYouTube channel UCWhk0z6hWV_nDPMGcIGEaCw",src:CO_LOGO+"email signature social media icons/Email Sig SM Icons.docx (2024-04-09)"},
+    license:{v:"Bear Hollow office: Summit County business license 2026 (also 2025, 2024 on file). License numbers aren't readable in the scans — type them in here",src:CO_LIC+"Business Licenses & Insurance/BH Office Business License 2026.pdf (2026-01-06)"}},
+  logos:[
+    {v:"Moose Mgmt Logo.png — main logo",src:CO_LOGO+"Moose Circle Only/Moose Mgmt Logo.png (2024-09-08)"},
+    {v:"Moose Mgmt Logo Landscape.jpg — wide version",src:CO_LOGO+"Moose Circle Only/Moose Mgmt Logo Landscape.jpg (2024-10-27)"},
+    {v:"moose circle large white background.png",src:CO_LOGO+"Moose Circle Only/moose circle large white background.png (2023-11-22)"},
+    {v:"Moose Mgmt Green Border Small.jpg, Moose Management Black Letters.png, MM OP Logo.png, decals and more",src:"Dropbox: /VRPC Logo Files-Kim (2019–2024)"},
+    {v:"No brand guide and no vector (.ai/.eps) main logo found in Dropbox",src:""}],
+  colors:[
+    {hex:"#A6CE39",name:"logo green (read off the logo image, not official)",src:CO_LOGO+"Moose Circle Only/Moose Mgmt Logo.png (2024-09-08)"},
+    {hex:"#000000",name:"logo black",src:CO_LOGO+"Moose Circle Only/Moose Mgmt Logo.png (2024-09-08)"},
+    {hex:"#8AB436",name:"darker green border (read off the image)",src:CO_LOGO+"Moose Mgmt Green Border Small.jpg (2024-02-11)"},
+    {hex:"#88B535",name:"hub Moose green",src:"Moose Hub theme (moose-theme.css)"},
+    {hex:"#3C5F12",name:"hub forest",src:"Moose Hub theme (moose-theme.css)"},
+    {hex:"#5B8A1E",name:"hub accent",src:"Moose Hub theme (moose-theme.css)"}]};
+var CO_FIELDS={
+  office:[["addr","Office address"],["mail","Mailing address"],["phone","Main phone"],["email","Main email"],["hours","Office hours"],["storage","Storage units"],["notes","Other office notes"]],
+  general:[["legal","Company name(s)"],["dba","Also known as"],["founded","Founded"],["web","Website"],["area","Service area"],["social","Social media"],["license","Business licenses"],["notes","Other notes"]]};
+var CO_VFIELDS=[["name","Name / nickname"],["ymm","Year, make, model"],["plate","Plate state"],["driver","Who drives it"],["reg","Registration due"],["ins","Insurance renews"],["docs","Where the papers are"],["notes","Notes"]];
+var CO_KEY="Moose_company";
+/* re-read the doc before each save so two people editing different sections don't wipe each other */
+function coPut(patch){ if(!need()) return Promise.reject(); return S.db.doc("propedits/"+CO_KEY).get().then(function(d){ return put("propedits",CO_KEY,patch,d.exists?d.data():coEdits()); }).then(function(){ toast("Saved"); closeModal(); }); }
+function coEdits(){ return S.propedits[CO_KEY]||{}; }
+function coVal(sec,k){ var e=(coEdits()["co_"+sec]||{})[k], f=(CO_FACTS[sec]||{})[k];
+  if(e!=null && e!=="") return {v:e,s:"Edited in the hub"+(coEdits()["co_"+sec+"_by"]?" by "+nameFor(coEdits()["co_"+sec+"_by"]):"")};
+  return f?{v:f.v,s:f.src}:{v:"",s:""}; }
+function coRow(label,v,s){ return '<div style="display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:2px 12px;padding:5px 0;border-bottom:1px solid var(--line-2)"><span class="muted">'+esc(label)+'</span><span>'+(v?'<b>'+esc(v).replace(/\n/g,"<br>")+'</b>'+(s?'<div class="hint">'+coSrc(s)+'</div>':''):'<span class="muted">—</span>')+'</span></div>'; }
+function coSrc(s){ var m=/^Dropbox: (\/[^(]+?)(\s*\(.*\))?$/.exec(s||"");
+  return m?'From Dropbox · <a href="https://www.dropbox.com/home'+esc(encodeURI(m[1].trim()).replace(/#/g,"%23"))+'" target="_blank" rel="noopener" title="'+esc(m[1].trim())+'">'+esc(m[1].trim().split("/").pop())+' ↗</a>'+esc(m[2]||""):esc(s); }
+function coBlock(sec,title){ return '<div class="block"><h4>'+esc(title)+' <button class="btn sm ghost" data-co="'+sec+'">Edit</button></h4>'+CO_FIELDS[sec].map(function(f){ var x=coVal(sec,f[0]); return coRow(f[1],x.v,x.s); }).join("")+'</div>'; }
+function coVehicles(){ var ed=coEdits().co_vehicles||{}, seen={}, out=[];
+  CO_FACTS.vehicles.forEach(function(v){ seen[v.id]=1; var e=ed[v.id]||{}, m=Object.assign({},v,{facts:v});
+    Object.keys(e).forEach(function(k){ if(e[k]!=="" && e[k]!=null) m[k]=e[k]; }); out.push(m); });
+  Object.keys(ed).forEach(function(k){ if(!seen[k]) out.push(Object.assign({id:k},ed[k])); });
+  return out; }
+function coStaff(){ if(D._staff || D._staffAsk) return D._staff||[]; D._staffAsk=1; var sb=window.MM_SB; if(!sb) return [];
+  sb.rpc("hub_staff_directory").then(function(r){ D._staff=(r&&r.data)||[]; schedule(); }); return []; }
+function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=today();
+  var rec=allc.filter(function(j){ return /daily receipts/i.test(j.title) && j.status==="done" && (j.finished||"").slice(0,7)===t.slice(0,7); });
+  var h='<div class="dhead"><div class="dtitle"><h2>Moose company</h2><span class="tag">Company</span></div><div class="dsub">Vehicles, the office, the team, our logos and the basics about Moose. Every fact shows where it came from; Edit to fill a blank or fix one.</div></div><div class="dbody">';
+  h+='<div class="block"><h4>Breezeway office</h4><div class="note">General Moose jobs live on the Breezeway office property (1-Bear Hollow Office). '+rec.length+' "Maint. Daily Receipts" check-ins done this month — the receipts attached to those are read into Expenses on each Breezeway run. '+
+    '<a class="golink" href="https://app.breezeway.io/property/337648" target="_blank" rel="noopener">Open the office in Breezeway ↗</a></div></div>';
+  // vehicles
+  var vs=coVehicles(), on=vs.filter(function(v){ return !v.off; }), off=vs.filter(function(v){ return v.off; });
+  var vcard=function(v){ return '<div class="qv'+(v.off?' muted':'')+'"><div class="qvh">'+esc(v.name||v.ymm||"Vehicle")+(v.off?' · retired':'')+' <button class="btn sm ghost" data-cov="'+esc(v.id)+'">Edit</button></div>'+
+      CO_VFIELDS.slice(1).map(function(f){ return v[f[0]]?'<div class="qrow"><span class="ql">'+esc(f[1])+'</span><span class="qa plain">'+esc(v[f[0]])+'</span></div>':''; }).join("")+
+      '<div class="hint">'+(v.by?"Edited in the hub by "+esc(nameFor(v.by)):"")+(v.facts&&v.facts.src?(v.by?" · ":"")+coSrc(v.facts.src):"")+'</div></div>'; };
+  h+='<div class="block"><h4>Vehicles <button class="btn sm ghost" data-cov="">+ Add vehicle</button></h4>'+
+    (on.length?'<div class="qgrid">'+on.map(vcard).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
+    (off.length?'<details class="infocat" style="margin-top:8px"><summary>'+off.length+' retired</summary><div class="qgrid">'+off.map(vcard).join("")+'</div></details>':'')+'</div>';
+  h+=coBlock("office","Moose office info");
+  // employees — names + teams from the hub team list; titles typed in here
+  var st=coStaff(), ti=pe.co_titles||{};
+  h+='<div class="block"><h4>Employees <button class="btn sm ghost" data-co="titles">Edit titles</button></h4>'+
+    (!D._staff?'<div class="note">'+(window.MM_SB?'Loading…':'Sign in to see the team.')+'</div>':
+    '<table class="t"><thead><tr><th>Name</th><th>Title</th><th>Hub teams</th></tr></thead><tbody>'+st.map(function(p){ return '<tr><td>'+esc(p.name)+'</td><td>'+(ti[p.name]?esc(ti[p.name]):'<span class="muted">—</span>')+'</td><td>'+esc((p.teams||[]).join(", "))+'</td></tr>'; }).join("")+'</tbody></table>'+
+    '<div class="hint" style="margin-top:6px">Names and teams from the Moose Hub team list'+(pe.co_titles_by?' · titles edited in the hub by '+esc(nameFor(pe.co_titles_by)):'')+'</div>')+'</div>';
+  // logos & colors
+  var cols=(pe.co_colors||"").split("\n").map(function(l){ var m=/(#[0-9a-f]{6}|#[0-9a-f]{3})\b\s*[-–:]?\s*(.*)/i.exec(l); return m?{hex:m[1],name:m[2],src:"Edited in the hub"}:null; }).filter(Boolean);
+  if(!cols.length) cols=CO_FACTS.colors;
+  h+='<div class="block"><h4>Logos &amp; colors <button class="btn sm ghost" data-co="brand">Edit</button></h4>'+
+    (cols.length?'<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">'+cols.map(function(c){ return '<div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:6px;border:1px solid var(--line);background:'+esc(c.hex)+'"></span><span><b class="mono">'+esc(c.hex.toUpperCase())+'</b>'+(c.name?' <span class="muted">'+esc(c.name)+'</span>':'')+(c.src?'<div class="hint">'+coSrc(c.src)+'</div>':'')+'</span></div>'; }).join("")+'</div>':'<div class="note">No brand colors recorded yet.</div>')+
+    (CO_FACTS.logos.length?'<div class="lbl">Logo files</div>'+CO_FACTS.logos.map(function(l){ return '<div class="qrow"><span class="qa plain">'+esc(l.v)+'</span></div><div class="hint" style="margin:0 0 6px">'+coSrc(l.src)+'</div>'; }).join(""):'')+
+    (pe.co_logos?'<div class="lbl" style="margin-top:6px">Notes</div><div class="prose">'+esc(pe.co_logos)+'</div>':'')+'</div>';
+  h+=coBlock("general","General Moose info");
+  return h+'</div>'; }
+function mCo(sec){ var pe=coEdits();
+  if(sec==="titles"){ var st=D._staff||[], ti=pe.co_titles||{};
+    return openModal("Employee titles",'<div class="fields">'+st.map(function(p,i){ return fld("cot_"+i,p.name,ti[p.name]||""); }).join("")+'</div>',
+      function(){ var t2=Object.assign({},ti); st.forEach(function(p,i){ t2[p.name]=fv("cot_"+i); });
+        return coPut({co_titles:t2,co_titles_by:S.me}); },"Save"); }
+  if(sec==="brand") return openModal("Logos & colors",area("co_colors","Brand colors, one per line",pe.co_colors||CO_FACTS.colors.map(function(c){ return c.hex+" "+(c.name||""); }).join("\n"),"#1B3A2F Moose green")+area("co_logos","Logo notes",pe.co_logos||"","Which logo to use where"),
+      function(){ return coPut({co_colors:fv("co_colors"),co_logos:fv("co_logos"),co_brand_by:S.me}); },"Save");
+  var cur=pe["co_"+sec]||{};
+  openModal(sec==="office"?"Moose office info":"General Moose info",'<div class="note">Blank = use the file it came from.</div><div class="fields" style="margin-top:8px">'+CO_FIELDS[sec].map(function(f){ var x=(CO_FACTS[sec]||{})[f[0]]; return area("co_"+f[0],f[1],cur[f[0]]||"",x?x.v:""); }).join("")+'</div>',
+    function(){ var o={}; CO_FIELDS[sec].forEach(function(f){ o[f[0]]=fv("co_"+f[0]); }); var p2={}; p2["co_"+sec]=o; p2["co_"+sec+"_by"]=S.me;
+      return coPut(p2); },"Save"); }
+function mCoVehicle(id){ var pe=coEdits(), ed=pe.co_vehicles||{}, v=id?(coVehicles().filter(function(x){ return x.id===id; })[0]||{}):{}, nid=id||("v"+Date.now());
+  openModal(id?"Vehicle · "+(v.name||v.ymm||""):"Add a vehicle",'<div class="note">No VINs, plate numbers or policy numbers here.</div><div class="fields" style="margin-top:8px">'+CO_VFIELDS.map(function(f){ return fld("cov_"+f[0],f[1],v[f[0]]||""); }).join("")+'</div>'+
+    (id?'<label class="toggle" style="margin-top:8px"><input type="checkbox" id="cov_off"'+(v.off?' checked':'')+'> Retired (sold or no longer ours)</label>':''),
+  function(){ var o={}; CO_VFIELDS.forEach(function(f){ o[f[0]]=fv("cov_"+f[0]); }); o.off=!!($("cov_off")&&$("cov_off").checked); o.by=S.me; o.at=Date.now();
+    if(!o.name && !o.ymm) return toast("Name or year, make, model");
+    return S.db.doc("propedits/"+CO_KEY).get().then(function(d){ var all=Object.assign({},((d.exists&&d.data())||{}).co_vehicles||ed); all[nid]=o; return coPut({co_vehicles:all}); }); },"Save"); }
 
 
 /* ===== Hub 2026-10-28 (Brandon): Property Details quick view, HOA (Pyper), owner contact, add a property ===== */
@@ -3443,6 +3543,8 @@ document.addEventListener("click",function(ev){
   if(d.vrestore){ if(!need()) return; var rv=(D.vendorsRemoved||[]).filter(function(x){ return x.id===d.vrestore; })[0]; if(!rv) return;
     var rp={removed:false,restoredAt:Date.now(),restoredBy:S.me}; return (rv.desk?put("deskvendors",rv.id,rp,S.deskvendors[rv.id]):put("vendoredits",sid(rv.id),rp,S.vendoredits[sid(rv.id)])).then(function(){ toast(rv.name+" is back on the list"); }); }
   if(d.aedit){ var q=d.aedit.split("|"); return mAppl(q[0],q[1]); }
+  if(d.co){ if(!need()) return; return mCo(d.co); }
+  if(d.cov!=null){ if(!need()) return; return mCoVehicle(d.cov); }
   if(d.rvr){ var z=d.rvr.split("|"), ap=applianceView(z[0],findAppl(z[0],z[1])||{});
     var calls=(D.byProp[z[0]]||[]).filter(function(x){ return daysBetween(x.created||x.when||today(),today())<=365 && catOf(x)===catOf({title:ap.type}); }).length;
     S.ui.rvr={code:z[0],key:z[1],label:ap.type+(ap.brand?" · "+ap.brand:"")+(ap.model?" "+ap.model:""),type:LIFE[ap.type]?ap.type:"Other",
