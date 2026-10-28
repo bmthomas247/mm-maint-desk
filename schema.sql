@@ -1307,3 +1307,7 @@ on conflict (key) do update set label=excluded.label, feeds=excluded.feeds, can_
 insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort)
 select 'sync_licenses','sync_status','Licenses (Dropbox sheets + license copies)','Feeds: Licensing','#/sync/licenses','live',false,10
 on conflict (key) do nothing;
+
+-- Reservations drop-down (Brandon 2026-10-28): Check lists + Reviews
+update hub_desks set label='Reservations · Check lists' where key='reservations';
+update hub_desks set label='Reservations · Reviews', sort=41 where key='reviews';
