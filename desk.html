@@ -1195,8 +1195,9 @@ function vcard(v){
     '<button class="star" data-vpref="'+esc(v.id)+'" aria-pressed="'+pf+'" title="'+(pf?"Click to stop listing as preferred":"Make preferred")+'">'+(pf?"★ Preferred":"☆ Prefer")+'</button></div>'+
     '<div class="chiprow">'+vTrades(v).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join("")+
     '<span class="rate" aria-label="Rating">'+[1,2,3,4,5].map(function(n){ return '<button class="'+(n<=r?'on':'')+'" data-vrate="'+esc(v.id)+'|'+n+'" aria-label="'+n+' stars">★</button>'; }).join("")+'</span></div>'+
-    '<div class="vmeta">'+(ci.person?'<b>'+esc(ci.person)+'</b> · ':'')+ci.phones.slice(0,2).map(function(p){ return '<a href="tel:'+esc(p.replace(/[^\d+]/g,""))+'">'+esc(p)+'</a>'; }).join(" · ")+
-      (ci.emails[0]?(ci.phones.length?' · ':'')+'<a href="mailto:'+esc(ci.emails[0])+'">'+esc(ci.emails[0])+'</a>':'')+(!ci.phones.length&&!ci.emails.length?'<span class="muted">No phone or email on file</span>':'')+'</div>'+
+    /* contact info bold, one per line, so it's fast to read (Brandon 2026-10-28) */
+    '<div class="vmeta vcontact">'+(ci.person?'<div class="vperson">'+esc(ci.person)+'</div>':'')+ci.phones.slice(0,2).map(function(p){ return '<a class="vc" href="tel:'+esc(p.replace(/[^\d+]/g,""))+'">📞 '+esc(p)+'</a>'; }).join("")+
+      (ci.emails[0]?'<a class="vc" href="mailto:'+esc(ci.emails[0])+'">✉️ '+esc(ci.emails[0])+'</a>':'')+(!ci.phones.length&&!ci.emails.length?'<span class="muted">No phone or email on file</span>':'')+'</div>'+
     (ci.how?'<div class="vmeta"><span class="lbl">How to reach</span> '+esc(ci.how)+'</div>':'')+
     '<div class="vmeta"><b>'+done.length+'</b> job'+(done.length===1?'':'s')+' done for us'+(vj.length>done.length?' · '+(vj.length-done.length)+' open':'')+(done[0]?' · last '+esc(fmtD(done[0].finished||done[0].updated||done[0].when)):'')+'</div>'+
     (vAsanaNotes(v)?'<div class="vmeta note" style="white-space:normal">'+esc(vAsanaNotes(v).replace(/ \/ /g," · ").slice(0,170))+(vAsanaNotes(v).length>170?'… <a href="#" data-vprof="'+esc(v.id)+'">more</a>':'')+'</div>':'')+
