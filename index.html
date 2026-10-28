@@ -316,7 +316,14 @@ function shell(){
   const ORD = PREFS.desk_order || [], okey = x => { const g = grouped(x.key); return g ? "g:" + g : x.key; };
   const byMine = list => !ORD.length ? list : list.slice().sort((a, b) => { const ia = ORD.indexOf(okey(a)), ib = ORD.indexOf(okey(b));
       return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
-  const mineAll = byMine(info.concat(live));
+  /* Sidebar (Brandon 2026-10-28): Home always on top; then "Moose Info" (Property Details, Vendors…) and the Desks, in the order each
+     person picks in My settings ("@desks_first" puts Desks above Moose Info; "i:<key>" orders inside Moose Info). */
+  const homeD = info.find(x => x.key === "home"), infoK = info.filter(x => x.key !== "home")
+    .sort((a, b) => { const ia = ORD.indexOf("i:" + a.key), ib = ORD.indexOf("i:" + b.key); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
+  const infoBlock = infoK.length ? `<div class="gbox" data-g="info"><a class="dk par" href="#" data-g="info" title="Moose Info"><span class="ic">${ICON.home || ICON.grid}</span><span class="lb">Moose Info</span><span class="chev">${ICON.chev}</span></a>
+        <div class="subs">${infoK.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(y.label)}"><span class="lb">${esc(y.label)}</span></a>`).join("")}</div></div>` : "";
+  const deskBlock = live.length ? `<div class="grp">Desks</div>` + navList(byMine(live)) : "";
+  const desksFirst = ORD.includes("@desks_first");
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b></div>
   <div class="scrim" id="scrim"></div>
   <div class="shell">
@@ -326,7 +333,8 @@ function shell(){
       <div class="rsearch"><span class="ic">${ICON.search}</span><input id="hsearch" type="search" placeholder="Search desks, properties, vendors" autocomplete="off" title="Search"></div>
       <div class="sres" id="sres"></div>
       <nav class="desks">
-        ${ORD.length ? navList(mineAll) : navList(info) + (live.length ? `<div class="grp">Desks</div>` + navList(live) : "")}
+        ${homeD ? item("home", homeD.label, homeD.icon) : ""}
+        ${desksFirst ? deskBlock + (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") : (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") + deskBlock}
         ${soon.length ? `<div class="grp">Coming soon</div>` + navList(soon, true) : ""}
       </nav>
       <div class="foot">
@@ -654,11 +662,16 @@ function settingsView2(v){
   const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", competitor:"competitor", competitor_add:"competitor" },
     GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
   const seen = {}, items = [];
-  DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key)).forEach(x => { const g = G[x.key];
+  DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = G[x.key];
+    if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
     if(g){ if(seen[g]) return; seen[g] = 1; items.push({ k:"g:" + g, label:GL[g][0], icon:GL[g][1], sort:x.sort }); }
-    else items.push({ k:x.key, label:x.label, icon:x.icon, sort:INFO.includes(x.key) ? x.sort - 1000 : x.sort }); });
+    else items.push({ k:x.key, label:x.label, icon:x.icon, sort:x.sort }); });
   const ORD = PREFS.desk_order || [];
-  let list = items.sort((a, b) => { const ia = ORD.indexOf(a.k), ib = ORD.indexOf(b.k); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; }).map(x => x.k);
+  const byOrd = a => a.slice().sort((a, b) => { const ia = ORD.indexOf(a.k), ib = ORD.indexOf(b.k); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; }).map(x => x.k);
+  let ilist = byOrd(items.filter(x => x.info)), dlist = byOrd(items.filter(x => !x.info)), desksFirst = ORD.includes("@desks_first");
+  const az = l => l.slice().sort((a, b) => L(a).label.localeCompare(L(b).label)), std = l => l.slice().sort((a, b) => L(a).sort - L(b).sort);
+  const ordRows = (l, tag) => l.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
+        <button class="btn small" data-up="${tag}:${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${tag}:${i}" ${i < l.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("");
   let ints = (PREFS.interests || []).slice(), ks = (PREFS.kinds || []).slice();
   const L = k => items.find(x => x.k === k);
   const bdBody = () => `<p class="muted" style="margin:4px 0 8px">Month and day only — so the team can celebrate you.</p>
@@ -674,9 +687,10 @@ function settingsView2(v){
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
     ${BD.mine ? "" : bdCard()}
-    <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Move the desks you use most to the top.</p>
-      <div id="ordl">${list.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
-        <button class="btn small" data-up="${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${i}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("")}</div>
+    <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Home always stays on top. Pick what comes next, then put things in the order you like.</p>
+      <div class="seg" id="ordfirst" style="margin:0 0 10px"><span class="muted" style="align-self:center;margin-right:6px">Show first:</span><button class="btn small ${desksFirst ? "" : "on"}" data-first="info">Moose Info</button><button class="btn small ${desksFirst ? "on" : ""}" data-first="desks">Desks</button></div>
+      ${ilist.length ? `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><b>Moose Info</b><button class="btn small" data-az="i" style="margin-left:auto">A–Z</button></div><div>${ordRows(ilist, "i")}</div>` : ""}
+      ${dlist.length ? `<div style="display:flex;align-items:center;gap:8px;margin-top:12px"><b>Desks</b><button class="btn small" data-az="d" style="margin-left:auto">A–Z</button></div><div>${ordRows(dlist, "d")}</div>` : ""}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn small" id="ordreset">Back to the standard order</button></div></div>
     <div class="card"><b style="font-size:17px">☀️ My morning pick</b><p class="muted" style="margin:4px 0 4px">What you care about — your quote, joke, fact or stat of the day comes from these. Pick none to get everything.</p>
       <div class="ints">${INTERESTS.map(([k, l]) => `<label class="${ints.includes(k) ? "on" : ""}"><input type="checkbox" data-int="${k}" ${ints.includes(k) ? "checked" : ""}>${esc(l)}</label>`).join("")}</div>
@@ -687,8 +701,11 @@ function settingsView2(v){
       <p class="muted" style="font-size:12px;margin:6px 0 0">Every fact and stat shows where it came from.</p></div>
     ${BD.mine ? bdCard() : ""}
     <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
-    v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => { const i = +b.dataset.up; [list[i-1], list[i]] = [list[i], list[i-1]]; draw(); });
-    v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => { const i = +b.dataset.dn; [list[i+1], list[i]] = [list[i], list[i+1]]; draw(); });
+    const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; draw(); };
+    v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => mv(b.dataset.up, -1));
+    v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => mv(b.dataset.dn, 1));
+    v.querySelectorAll("[data-az]").forEach(b => b.onclick = () => { if(b.dataset.az === "i") ilist = az(ilist); else dlist = az(dlist); draw(); });
+    v.querySelectorAll("[data-first]").forEach(b => b.onclick = () => { desksFirst = b.dataset.first === "desks"; draw(); });
     v.querySelectorAll("[data-int]").forEach(c => c.onchange = () => { ints = c.checked ? ints.concat(c.dataset.int) : ints.filter(x => x !== c.dataset.int); draw(); });
     v.querySelectorAll("[data-kind]").forEach(c => c.onchange = () => { ks = c.checked ? ks.concat(c.dataset.kind) : ks.filter(x => x !== c.dataset.kind); draw(); });
     $("#avfile").onchange = async e => { const f = e.target.files[0]; if(!f) return; $("#avmsg").textContent = "Saving…";
@@ -700,11 +717,11 @@ function settingsView2(v){
     v.querySelectorAll("[data-bdp]").forEach(b => b.onclick = async () => { const i = +b.dataset.bdp, x = BD.people[i];
       const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
       b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
-    $("#ordreset").onclick = () => { list = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k); list.custom = false; draw(); };
+    $("#ordreset").onclick = () => { ilist = std(ilist); dlist = std(dlist); desksFirst = false; draw(); };
     $("#intown").onchange = () => { const own = $("#intown").value.split(",").map(x => x.trim().replace(/\s+/g, " ").slice(0, 40)).filter(x => x.length > 1);
       ints = ints.filter(x => INTERESTS.some(([k]) => k === x)).concat([...new Set(own.map(x => x.toLowerCase()))]).slice(0, 20); };
     $("#prefsave").onclick = async () => { $("#intown").onchange(); $("#prefsave").disabled = true;
-      const std = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k).join(), order = list.join() === std ? [] : list.slice();
+      const cur = (desksFirst ? ["@desks_first"] : []).concat(ilist, dlist), order = cur.join() === std(ilist).concat(std(dlist)).join() ? [] : cur;
       const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
       $("#prefsave").disabled = false;
       if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
