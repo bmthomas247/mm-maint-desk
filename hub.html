@@ -301,7 +301,8 @@ function shell(){
   const GROUPS = { locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
-                   rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio" } } };   // Brandon 2026-10-28
+                   rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_report:"Report folio" } },
+                   competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } } };   // Brandon 2026-10-28
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
   const soonTag = `<span class="soon">soon</span>`;
   const navList = (list, isSoon) => { const done = {}; return list.map(x => { const g = grouped(x.key);
