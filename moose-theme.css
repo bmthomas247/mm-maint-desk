@@ -110,3 +110,11 @@ body.locklook .modal,body.locklook .sheet{border-radius:var(--radius)}
 .qmore summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--accent-ink);margin:2px 0 6px}
 .qv .qname{font-size:16px;font-weight:800} .qv.owner a{font-weight:700;word-break:break-all}
 .qv .hint{margin-top:4px}
+
+/* Vendor cards: contact info bold + one per line (2026-10-28) */
+.vcontact{display:flex;flex-direction:column;gap:3px}
+.vcontact .vperson{font-size:13px;font-weight:700;color:var(--ink-2)}
+.vcontact a.vc{font-size:15px;font-weight:800;color:var(--ink);text-decoration:none;word-break:break-all}
+.vcontact a.vc:hover{color:var(--accent-ink);text-decoration:underline}
+body.locklook main#view section>h3{font-size:18px!important;font-weight:800;letter-spacing:-.01em;margin:6px 0 10px!important}
+body.locklook .vcard{border-radius:18px;box-shadow:var(--shadow)}
