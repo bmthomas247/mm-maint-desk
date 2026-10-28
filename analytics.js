@@ -82,44 +82,53 @@ async function market(v){
   $("#anm").onchange = $("#ano").onchange = draw; draw();
 }
 
-/* Moose homes vs. their comps: our Track stays vs. the Primary comps in each home's rate set (Key Data listing KPIs). */
+/* Moose homes vs. their comps (like for like, 2026-10-28): Key Data's numbers for our own Airbnb listing vs. Key Data's numbers for the
+   Primary comps in the home's rate set, same months, same method. Track actuals sit alongside for real money.
+   Why: Key Data estimates run high (our homes 2025-10..2026-09: Key Data ADR ~$528 avg vs. Track $279), and its "guest"
+   occupancy appears to include some owner/blocked nights, so Track vs. Key Data is not a fair comparison. */
 async function comps(v){
   v.innerHTML = `<div class="page wide">${back}<h2>Moose homes vs. their comps</h2><p class="muted">Loading…</p></div>`;
   const r = await sb.rpc("analytics_vs_comps"); if(r.error) return fail(v, r.error);
   const H = r.data || [];
   if(!H.length){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This report isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   const W = H[0], areas = [...new Set(H.map(x => x.area).filter(Boolean))].sort();
-  H.forEach(x => { ["our_occ","our_adr","comp_occ","comp_adr","our_rent"].forEach(f => x[f] = x[f] == null ? null : +x[f]); });
-  /* Check 2026-10-28 (Brandon asked): Track actuals and Key Data estimates are NOT like for like, so no gaps / "beating" here.
-     Same homes, same booked nights: Track rent was 51-70% of Key Data's posted Airbnb price (1,169 nights, 41 homes), and in the
-     off-season comps' Key Data "guest" occupancy matches our guest + owner + blocked nights. Fair comparison = Key Data for our own
-     listings too (130 of our homes are in Key Data's market listings) — not pulled yet. */
-  v.innerHTML = `<div class="page wide">${back}<h2>Moose homes and their comps</h2>
-    <p class="muted">Each of our homes next to the comps in its rate set, from ${esc(dt(W.win_from + "T12:00"))} (or the month of the home's first Track stay) to ${esc(dt(W.win_to + "T12:00"))}. Click a column to sort.</p>
-    <div class="card" style="border-color:var(--amber);background:var(--amber-soft)"><b>Not a like-for-like comparison yet.</b>
-      <p style="margin:4px 0 0">Our numbers are Track actuals; the comps' numbers are Key Data estimates from public calendars. Checked 2026-10-28 on our own homes for the same booked nights: Key Data's posted Airbnb price was well above the rent Track recorded (Track was 51–70% of it, 1,169 nights on 41 homes), and Key Data's "guest" occupancy appears to include owner and blocked nights. Don't read the gap between the two as how we're doing, and don't share this with owners, until Key Data numbers for our own listings are pulled.</p></div>
+  H.forEach(x => { ["our_occ","our_adr","comp_occ","comp_adr","our_rent","kd_occ","kd_adr"].forEach(f => x[f] = x[f] == null ? null : +x[f]);
+    x.kd = x.kd_months > 0 && x.kd_occ != null && x.comp_occ != null;
+    x.kd_rp = x.kd ? x.kd_occ * (x.kd_adr || 0) : null; x.comp_rp = x.comp_occ != null ? x.comp_occ * (x.comp_adr || 0) : null; });
+  const KD = H.filter(x => x.kd), avg = (k, L) => { const z = L.filter(x => x[k] != null); return z.length ? z.reduce((s, x) => s + x[k], 0) / z.length : null; };
+  v.innerHTML = `<div class="page wide">${back}<h2>Moose homes vs. their comps</h2>
+    <p class="muted">Each of our homes against the comps in its rate set, from ${esc(dt(W.win_from + "T12:00"))} (or the month of the home's first Track stay) to ${esc(dt(W.win_to + "T12:00"))}. Click a column to sort.</p>
+    <div class="card" style="border-color:var(--blue,#2b5c8a);background:var(--blue-soft,#eef4fa)"><b>Like for like:</b> both sides are Key Data's numbers, measured the same way for the same months — our own Airbnb listing vs. the comps' listings.
+      Key Data's nightly rates run higher than what we actually collect (these homes: Key Data ${usd(avg("kd_adr", KD))} vs. Track ${usd(avg("our_adr", KD))} a night, average of homes), so use the <b>Track</b> columns for real money.
+      ${H.length - KD.length} home${H.length - KD.length === 1 ? "" : "s"} without a Key Data listing show “—”.</div>
     <div class="ankpi" id="ank" style="margin-top:12px"></div>
-    <div class="anbar"><input id="anq" type="search" placeholder="Search homes or rate sets"><select id="ana"><option value="">All areas</option>${areas.map(a => `<option>${esc(a)}</option>`).join("")}</select></div>
+    <div class="anbar"><input id="anq" type="search" placeholder="Search homes or rate sets"><select id="ana"><option value="">All areas</option>${areas.map(a => `<option>${esc(a)}</option>`).join("")}</select>
+      <select id="anf"><option value="">All homes</option><option value="ahead">Ahead of comps (RevPAR)</option><option value="behind">Behind comps (RevPAR)</option></select></div>
     <div id="anct"></div>
-    <p class="ansrc">Sources: <b>our homes</b> = Track stays (guest stays, not cancelled; nights and rent split by the nights inside the window), Track synced ${esc(dt(H.reduce((a, x) => x.track_synced > a ? x.track_synced : a, "")))}. Track occupancy = guest nights ÷ every night since the home's start (owner and blocked nights count as empty).
-      <b>Comps</b> = Key Data listing KPIs for the Primary comps in each rate set, same months, captured ${esc(dt(W.kd_captured))}: occupancy = guest nights ÷ all nights, ADR = rent ÷ guest nights (Key Data's own method).</p></div>`;
-  const draw = () => { const q = $("#anq").value.toLowerCase(), a = $("#ana").value;
-    const L = H.filter(x => (!q || ((x.home || "") + " " + (x.set_name || "")).toLowerCase().includes(q)) && (!a || x.area === a));
-    const nights = L.reduce((s, x) => s + (x.our_nights || 0), 0), rent = L.reduce((s, x) => s + (x.our_rent || 0), 0),
-      days = L.reduce((s, x) => s + ((new Date(x.win_to + "T12:00") - new Date(x.since + "T12:00")) / 864e5 + 1), 0);
-    $("#ank").innerHTML = `<div class="card"><small>Homes</small><b>${L.length}</b><small>${L.filter(x => x.our_nights > 0).length} with guest stays in the window</small></div>
-      <div class="card"><small>Track occupancy (all these homes)</small><b>${pct(days ? nights / days : null)}</b><small>${nights.toLocaleString()} guest nights</small></div>
-      <div class="card"><small>Track ADR (rent ÷ guest nights)</small><b>${usd(nights ? rent / nights : null)}</b><small>Track actual</small></div>
-      <div class="card"><small>Guest rent in window</small><b>${usd(rent)}</b><small>Track actual</small></div>`;
+    <p class="ansrc">Sources: <b>Key Data</b> listing KPIs (monthly, captured ${esc(dt(W.kd_captured))}) for our Airbnb listing and for the Primary comps in each rate set: occupancy = guest nights ÷ all nights, ADR = rent ÷ guest nights, RevPAR = occupancy × ADR (Key Data's method).
+      <b>Track</b> stays (guest stays, not cancelled; nights and rent split by the nights inside the window), synced ${esc(dt(H.reduce((a, x) => x.track_synced > a ? x.track_synced : a, "")))}; Track occupancy = guest nights ÷ every night since the home's start.
+      Averages in the boxes are averages of homes.</p></div>`;
+  const draw = () => { const q = $("#anq").value.toLowerCase(), a = $("#ana").value, f = $("#anf").value;
+    const L = H.filter(x => (!q || ((x.home || "") + " " + (x.set_name || "")).toLowerCase().includes(q)) && (!a || x.area === a)
+      && (!f || (x.kd && (f === "ahead" ? x.kd_rp >= x.comp_rp : x.kd_rp < x.comp_rp))));
+    const K = L.filter(x => x.kd), n = (t) => K.filter(t).length;
+    $("#ank").innerHTML = `<div class="card"><small>Homes compared</small><b>${K.length}</b><small>of ${L.length} shown</small></div>
+      <div class="card"><small>Occupancy · ours vs. comps</small><b>${pct(avg("kd_occ", K))}</b><small>comps ${pct(avg("comp_occ", K))} · ${n(x => x.kd_occ >= x.comp_occ)} homes ahead</small></div>
+      <div class="card"><small>Nightly rate · ours vs. comps</small><b>${usd(avg("kd_adr", K))}</b><small>comps ${usd(avg("comp_adr", K))} · ${n(x => x.kd_adr >= x.comp_adr)} homes ahead</small></div>
+      <div class="card"><small>RevPAR · ours vs. comps</small><b>${usd(avg("kd_rp", K))}</b><small>comps ${usd(avg("comp_rp", K))} · ${n(x => x.kd_rp >= x.comp_rp)} homes ahead</small></div>
+      <div class="card"><small>Guest rent collected (Track)</small><b>${usd(L.reduce((s, x) => s + (x.our_rent || 0), 0))}</b><small>${L.reduce((s, x) => s + (x.our_nights || 0), 0).toLocaleString()} guest nights</small></div>`;
     table($("#anct"), [
       { k:"home", t:"Home", l:1 }, { k:"set_name", t:"Rate set", l:1 }, { k:"area", t:"Area", l:1 }, { k:"bedrooms", t:"Beds" },
-      { k:"since", t:"Counted from", f:r => esc(new Date(r.since + "T12:00").toLocaleDateString(undefined, { month:"short", year:"numeric" })) },
+      { k:"kd_occ", t:"Our occ.", f:r => r.kd ? pct(r.kd_occ) : "—" }, { k:"comp_occ", t:"Comps occ.", f:r => pct(r.comp_occ) },
+      { k:"occ_d", t:"Gap", v:r => r.kd ? r.kd_occ - r.comp_occ : null, f:r => r.kd ? pts(r.kd_occ, r.comp_occ) : "—" },
+      { k:"kd_adr", t:"Our ADR", f:r => r.kd ? usd(r.kd_adr) : "—" }, { k:"comp_adr", t:"Comps ADR", f:r => usd(r.comp_adr) },
+      { k:"adr_d", t:"Gap", v:r => r.kd && r.comp_adr ? r.kd_adr / r.comp_adr : null, f:r => r.kd ? chg(r.kd_adr, r.comp_adr) : "—" },
+      { k:"kd_rp", t:"Our RevPAR", f:r => r.kd ? usd(r.kd_rp) : "—" }, { k:"comp_rp", t:"Comps RevPAR", f:r => usd(r.comp_rp) },
+      { k:"rp_d", t:"Gap", v:r => r.kd && r.comp_rp ? r.kd_rp / r.comp_rp : null, f:r => r.kd ? chg(r.kd_rp, r.comp_rp) : "—" },
       { k:"our_occ", t:"Track occ.", f:r => pct(r.our_occ) }, { k:"our_adr", t:"Track ADR", f:r => usd(r.our_adr) },
-      { k:"our_nights", t:"Guest nights" }, { k:"owner_nights", t:"Owner / blocked" }, { k:"our_rent", t:"Guest rent", f:r => usd(r.our_rent) },
-      { k:"comp_occ", t:"Comps occ. (Key Data est.)", f:r => pct(r.comp_occ) }, { k:"comp_adr", t:"Comps ADR (Key Data est.)", f:r => usd(r.comp_adr) },
-      { k:"comp_count", t:"Comps" }
-    ], L, "our_rent"); };
-  $("#anq").oninput = $("#ana").onchange = draw; draw();
+      { k:"our_rent", t:"Track guest rent", f:r => usd(r.our_rent) }, { k:"comp_count", t:"Comps" }
+    ], L, "rp_d"); };
+  $("#anq").oninput = $("#ana").onchange = $("#anf").onchange = draw; draw();
 }
 
 window.anView = function(v){ css(); const a = hashArg(); return a === "comps" ? comps(v) : market(v); };
