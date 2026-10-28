@@ -190,6 +190,7 @@ details.acc[open]>summary{margin-bottom:6px}
 .pmsg.me{justify-content:flex-end} .pmsg.me .bub{background:var(--moose-soft);border-color:transparent;border-radius:14px 4px 14px 14px}
 .pmsg .fbk{display:flex;gap:4px;margin-top:4px} .pmsg .fbk button{border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;font-size:13px;padding:2px 7px}
 .pmsg .fbk button.on{background:var(--moose-soft);border-color:var(--moose)}
+.pmsg .pask{margin-top:6px} .pmsg .pask textarea{width:100%;min-height:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 #pennyForm{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--card)}
 #pennyForm textarea{min-height:44px;height:44px;resize:none;font-size:15px;padding:10px 12px}
 @media (max-width:820px){ #pennyBtn .plb{display:none} #pennyBtn{padding:8px} }
@@ -455,7 +456,7 @@ async function feedbackView(v){
   const box = $("#fblist");
   if(r.error) return box.innerHTML = `<p class="muted">Couldn't load: ${esc(r.error.message)}</p>`;
   if(!r.data.length) return box.innerHTML = `<p class="muted">Nothing yet.</p>`;
-  const label = { bug:"🐞 Bug", upgrade:"⬆️ Upgrade", idea:"💡 Idea" }, tone = { new:"red", seen:"blue", doing:"amber", done:"green", wont:"" };
+  const label = { bug:"🐞 Bug", upgrade:"⬆️ Upgrade", idea:"💡 Idea", ask:"🙋 Asked via Penny" }, tone = { new:"red", seen:"blue", doing:"amber", done:"green", wont:"" };
   const deskName = k => (DESKS.find(x => x.key === k) || {}).label || k || "Hub";
   box.innerHTML = r.data.map(x => `<div class="fb"><div class="hd"><b>${label[x.kind]||x.kind}</b><span class="pill ${tone[x.status]||""}">${esc(x.status)}</span>
       <span class="muted">#${x.id} · ${esc(x.user_name||"")} · ${esc(deskName(x.desk_key))} · ${new Date(x.created_at).toLocaleString()}</span>
@@ -857,11 +858,27 @@ function pennyOpen(on){
 }
 function pennySay(role, text, id){
   const el = document.createElement("div"); el.className = "pmsg" + (role === "user" ? " me" : "");
-  el.innerHTML = role === "user" ? `<div class="bub">${esc(text)}</div>` : `<span class="pav"><img src="penny-face.png" alt="Penny"></span><div><div class="bub">${esc(text)}</div>${id ? `<div class="fbk"><button data-h="1" title="Helpful">👍</button><button data-h="0" title="Not helpful">👎</button></div>` : ""}</div>`;
+  el.innerHTML = role === "user" ? `<div class="bub">${esc(text)}</div>` : `<span class="pav"><img src="penny-face.png" alt="Penny"></span><div><div class="bub">${esc(text)}</div>${id ? `<div class="fbk"><button data-h="1" title="Helpful">👍</button><button data-h="0" title="Not helpful">👎</button><button data-ask="1" title="Send this question to an admin">🙋 Ask an admin</button></div>` : ""}</div>`;
   $("#pennyLog").appendChild(el); $("#pennyLog").scrollTop = 1e9;
   el.querySelectorAll("[data-h]").forEach(b => b.onclick = async () => { el.querySelectorAll("[data-h]").forEach(x => x.classList.toggle("on", x === b));
     await sb.rpc("penny_feedback", { p_id:id, p_helpful:b.dataset.h === "1", p_note:null }); });
+  const ab = el.querySelector("[data-ask]"); if(ab) ab.onclick = () => pennyAdmin(el, ab);
   return el;
+}
+/* Penny couldn't help → send the question (or an access request) to an admin; reuses hub-feedback (saved + Slack DM) */
+function pennyAdmin(el, ab){
+  if(el.querySelector(".pask")) return;
+  const lastQ = [...PENNY.hist].reverse().find(x => x.role === "user");
+  const box = document.createElement("div"); box.className = "pask";
+  box.innerHTML = `<textarea rows="3">${esc(lastQ ? lastQ.text : "")}</textarea><div style="display:flex;gap:6px;align-items:center;margin-top:4px"><button class="btn primary small">Send to admin</button><button class="btn small">Cancel</button><span class="muted"></span></div>`;
+  el.lastElementChild.appendChild(box); $("#pennyLog").scrollTop = 1e9;
+  const [send, cancel] = box.querySelectorAll("button"), msg = box.querySelector(".muted"), ta = box.querySelector("textarea"); ta.focus();
+  cancel.onclick = () => box.remove();
+  send.onclick = async () => { const body = ta.value.trim(); if(body.length < 3) return msg.textContent = "Write a little more.";
+    send.disabled = true; msg.textContent = "Sending…"; const w = typeof whereAmI === "function" ? whereAmI() : { label:"", page:"" };
+    const r = await sb.functions.invoke("hub-feedback", { body:{ kind:"ask", body:"Asked Penny: " + body, desk:"", deskLabel:w.label, page:(w.label + " | " + w.page).slice(0, 500) } });
+    if(r.error || !r.data || !r.data.ok){ send.disabled = false; msg.textContent = "Couldn't send - try again."; return; }
+    box.innerHTML = `<p class="muted" style="margin:4px 0">Sent ✓ An admin will get back to you.</p>`; ab.disabled = true; };
 }
 async function pennyAsk(q){
   pennySay("user", q); const wait = pennySay("assistant", "Thinking…");
