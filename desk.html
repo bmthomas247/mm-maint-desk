@@ -425,7 +425,7 @@ if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
 else TABS=TABS.filter(function(x){ return ["homes","vendors","fire","firesys","lease"].indexOf(x[0])<0; });
 /* 2026-10-28 (Brandon): in the hub, Projects and Expenses & Time are their own Maintenance drop-down items (?split=1 on the Workbench) */
 /* Inside the hub this holds even without ?split (old cached hub pages); a report link to #money / #projects keeps just that tab */
-try{ var _emb=window.top!==window.self, _sp=["projects","money"];
+try{ var _emb=window.top!==window.self, _sp=["projects","money","routines","recalls"];
   if(!ONLY && (_emb || new URLSearchParams(location.search).get("split"))){
     var _one=_sp.indexOf(S.tab)>=0 && TABS.some(function(x){ return x[0]===S.tab; });
     TABS=TABS.filter(function(x){ return _one ? x[0]===S.tab : _sp.indexOf(x[0])<0; }); } }catch(e){}
@@ -1067,8 +1067,8 @@ function homeDetail(code){
 var CO_D="Dropbox: /1-Moose Management Vacation Rentals - Park City/", CO_LIC=CO_D+"VRPC Licensing-Insurance-TaxID/", CO_LOGO="Dropbox: /VRPC Logo Files-Kim/";
 var CO_SF=CO_LIC+"Buckner Requested Documents/State Farm Kia, Colorado, Pacifica, F150, F150.pdf (2026-05-21)";
 var CO_FACTS={
-  vehicles:[["kia","2024 Kia Seltos"],["colorado","2022 Chevrolet Colorado"],["f150a","2021 Ford F150 (1 of 2)"],["f150b","2021 Ford F150 (2 of 2)"],["pacifica","2022 Chrysler Pacifica"]].map(function(v){
-    return {id:v[0],ymm:v[1],ins:"State Farm — renewed Oct 2026 (Brandon, 2026-10-28); the new papers aren't in Dropbox yet (last period on file Apr 28 – Oct 28, 2026)",docs:"Dropbox › VRPC Licensing-Insurance-TaxID › Buckner Requested Documents",notes:"Garaged in Park City, UT (State Farm auto policy)",src:CO_SF}; }),
+  vehicles:[["kia","2024 Kia Seltos","suv"],["colorado","2022 Chevrolet Colorado","pickup"],["f150a","2021 Ford F150 (1 of 2)","pickup"],["f150b","2021 Ford F150 (2 of 2)","pickup"],["pacifica","2022 Chrysler Pacifica","van"]].map(function(v){
+    return {id:v[0],ymm:v[1],body:v[2],ins:"State Farm — renewed Oct 2026 (Brandon, 2026-10-28); the new papers aren't in Dropbox yet (last period on file Apr 28 – Oct 28, 2026)",docs:"Dropbox › VRPC Licensing-Insurance-TaxID › Buckner Requested Documents",notes:"Garaged in Park City, UT (State Farm auto policy)",src:CO_SF}; }),
   office:{
     addr:{v:"5519 Lillehammer Ln #1101, Park City, UT 84098 (Lodges at Bear Hollow, unit 1101 — owned by VRPC since June 2019)\nA 2026 storage invoice spells it \"Lillehammer Way\".",src:CO_D+"4-Templates/Envelopes/Logo Envelope.docx (2026-09-25)"},
     mail:{v:"PO Box 981671, Park City, UT 84098 — older templates; newer ones use the Lillehammer address, so this may be out of date",src:CO_D+"4-Templates/3-Invoice Templates/Sales Invoice Template.docx (2024-06-26)"},
@@ -1100,7 +1100,7 @@ var CO_FACTS={
 var CO_FIELDS={
   office:[["addr","Office address"],["mail","Mailing address"],["phone","Main phone"],["email","Main email"],["hours","Office hours"],["storage","Storage units"],["notes","Other office notes"]],
   general:[["legal","Company name(s)"],["dba","Also known as"],["founded","Founded"],["web","Website"],["area","Service area"],["social","Social media"],["license","Business licenses"],["notes","Other notes"]]};
-var CO_VFIELDS=[["name","Name / nickname"],["ymm","Year, make, model"],["plate","Plate state"],["driver","Who drives it"],["reg","Registration due"],["ins","Insurance renews"],["docs","Where the papers are"],["notes","Notes"]];
+var CO_VFIELDS=[["name","Name / nickname"],["ymm","Year, make, model"],["body","Body"],["color","Paint color"],["plate","Plate state"],["driver","Who drives it"],["reg","Registration due"],["ins","Insurance renews"],["docs","Where the papers are"],["notes","Notes"]];
 var CO_KEY="Moose_company";
 /* re-read the doc before each save so two people editing different sections don't wipe each other */
 function coPut(patch){ if(!need()) return Promise.reject(); return S.db.doc("propedits/"+CO_KEY).get().then(function(d){ return put("propedits",CO_KEY,patch,d.exists?d.data():coEdits()); }).then(function(){ toast("Saved"); closeModal(); }); }
@@ -1119,6 +1119,53 @@ function coVehicles(){ var ed=coEdits().co_vehicles||{}, seen={}, out=[];
   return out; }
 function coStaff(){ if(D._staff || D._staffAsk) return D._staff||[]; D._staffAsk=1; var sb=window.MM_SB; if(!sb) return [];
   sb.rpc("hub_staff_directory").then(function(r){ D._staff=(r&&r.data)||[]; schedule(); }); return []; }
+/* Vehicles as drawn tiles; click one for its info + Breezeway tasks (Brandon 2026-10-28). Task scheduling is only for people who
+   can open the Maintenance desk: desk_docs 'vehtasks' is RLS-gated (hub_vehicle_tasks.sql); vehicle_tasks.py makes the Breezeway task. */
+var CO_BODY=[["suv","SUV"],["pickup","Pickup"],["van","Minivan"],["car","Car"]];
+var CO_VT={clean:["Clean-Out Work Vehicle","Breezeway template"],pretrip:["Vehicle Pre-Trip Checklist","Breezeway template"],check:["Check Company Vehicles","the every-2-weeks Breezeway task, Jun–Dec 2025"],other:["Something else",""]};
+var CO_SHAPE={
+  suv:'<path d="M14 58 L14 40 Q16 34 24 33 L46 31 L60 16 Q63 13 68 13 L124 13 Q131 13 134 19 L146 34 Q152 36 152 44 L152 58 Z"/><path d="M66 18 L54 31 L94 31 L94 18 Z M100 18 L100 31 L140 31 L131 20 Q129 18 126 18 Z" fill="#dfeaf2"/>',
+  pickup:'<path d="M8 58 L8 36 Q8 32 14 32 L74 32 L74 34 L86 34 L96 16 Q98 13 103 13 L130 13 Q136 13 139 19 L148 34 Q154 36 154 44 L154 58 Z"/><path d="M101 18 L92 33 L120 33 L120 18 Z M126 18 L126 33 L144 33 L136 20 Q135 18 132 18 Z" fill="#dfeaf2"/><path d="M10 37 L72 37" stroke="#00000033" stroke-width="2"/>',
+  van:'<path d="M10 58 L10 26 Q10 12 26 12 L118 12 Q126 12 132 18 L148 34 Q154 36 154 44 L154 58 Z"/><path d="M20 18 L20 32 L56 32 L56 18 Z M62 18 L62 32 L100 32 L100 18 Z M106 18 L106 32 L142 32 L128 20 Q126 18 122 18 Z" fill="#dfeaf2"/>',
+  car:'<path d="M10 58 L10 44 Q10 38 18 37 L46 34 L62 20 Q66 17 72 17 L112 17 Q118 17 122 22 L134 35 Q152 37 154 46 L154 58 Z"/><path d="M68 22 L54 34 L92 34 L92 22 Z M98 22 L98 34 L128 34 L118 24 Q116 22 113 22 Z" fill="#dfeaf2"/>'};
+function carSvg(body,color){ var c=String(color||"").trim(); c=/^#[0-9a-f]{3,6}$/i.test(c)||/^[a-z]{3,20}$/i.test(c)?c:"#9aa3a0";
+  var w=function(x){ return '<circle cx="'+x+'" cy="62" r="11" fill="#2b2f2d"/><circle cx="'+x+'" cy="62" r="5" fill="#cfd5d2"/>'; };
+  return '<svg class="vcar" viewBox="0 0 164 76" aria-hidden="true"><ellipse cx="82" cy="71" rx="72" ry="4" fill="#00000018"/><g fill="'+esc(c)+'" stroke="#00000055" stroke-width="1.2">'+(CO_SHAPE[body]||CO_SHAPE.car)+'</g>'+w(40)+w(126)+'<rect x="146" y="40" width="7" height="5" rx="2" fill="#ffe9a6"/></svg>'; }
+function coCanMaint(){ if(D._cm!=null) return D._cm; D._cm=false; var sb=window.MM_SB; if(!sb) return false;
+  sb.rpc("hub_can",{p_desk:"maintenance"}).then(function(r){ D._cm=!!(r&&r.data); if(D._cm) coLoadVT(); schedule(); }); return false; }
+function coLoadVT(){ var sb=window.MM_SB; if(!sb) return; sb.from("desk_docs").select("id,data").eq("collection","vehtasks").limit(1000).then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ m[x.id]=x.data; }); D._vt=m; schedule(); }); }
+function coVTasks(vid){ var m=D._vt||{}; return Object.keys(m).map(function(k){ return Object.assign({id:k},m[k]); }).filter(function(x){ return x.vid===vid; }).sort(function(a,b){ return (b.date||"").localeCompare(a.date||""); }); }
+function coVTName(x){ return x.kind==="other"?(x.name||"Vehicle task"):(CO_VT[x.kind]||[""])[0]; }
+function coNextTask(vid){ var t=today(), n=coVTasks(vid).filter(function(x){ return x.status!=="cancelled" && x.status!=="failed" && (x.date||"")>=t; }).sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); })[0];
+  return n?"Next: "+coVTName(n)+" · "+fmtD(n.date):""; }
+function coVehiclePanel(v){ if(!v) return ""; var cm=coCanMaint(), t=today(), wk=addDays(t,7);
+  var h='<div class="vpanel"><div class="vphead">'+carSvg(v.body,v.color)+'<div><h3>'+esc(v.name||v.ymm||"Vehicle")+'</h3>'+(v.name&&v.ymm?'<div class="muted">'+esc(v.ymm)+'</div>':'')+
+    '<div class="links" style="margin-top:6px"><button class="btn sm" data-cov="'+esc(v.id)+'">Edit</button><button class="btn sm ghost" data-vopen="">Close</button></div></div></div>'+
+    CO_VFIELDS.slice(2).map(function(f){ var x=v[f[0]]; if(f[0]==="body") x=((CO_BODY.filter(function(b){ return b[0]===v.body; })[0])||[])[1]||""; return coRow(f[1],x,""); }).join("")+
+    '<div class="hint" style="margin-top:4px">'+(v.by?"Edited in the hub by "+esc(nameFor(v.by)):"")+(v.facts&&v.facts.src?(v.by?" · ":"")+coSrc(v.facts.src):"")+'</div>';
+  if(cm){ var vt=coVTasks(v.id), st={queued:"Going in",created:"In Breezeway",failed:"Didn't go in",cancelled:"Cancelled"};
+    h+='<div class="lbl" style="margin-top:14px">Breezeway tasks <span class="muted">· on the office property (1-Bear Hollow Office)</span></div>'+
+      (vt.length?'<div class="appl"><table class="t"><thead><tr><th>Date</th><th>Task</th><th>Repeats</th><th>Who</th><th></th></tr></thead><tbody>'+vt.map(function(x){
+        var lab=x.status==="queued"&&(x.date||"")>wk?"Scheduled":st[x.status]||x.status;
+        return '<tr><td class="mono">'+esc(fmtD(x.date))+'</td><td>'+esc(coVTName(x))+(x.note?'<div class="muted">'+esc(x.note)+'</div>':'')+'</td><td>'+(+x.every?'every '+(+x.every)+' wk':'once')+'</td><td>'+esc(x.who||"—")+'</td>'+
+          '<td style="white-space:nowrap"><span class="pill '+(x.status==="created"?"done":x.status==="failed"?"open":"waiting")+'">'+esc(lab)+'</span>'+(x.bwUrl?' <a class="golink" href="'+esc(x.bwUrl)+'" target="_blank" rel="noopener">Open ↗</a>':'')+
+          (x.status==="queued"?' <button class="btn sm ghost" data-vtcancel="'+esc(x.id)+'">Cancel</button>':x.status==="failed"?' <button class="btn sm ghost" data-vtretry="'+esc(x.id)+'">Try again</button>':'')+'</td></tr>'; }).join("")+'</tbody></table></div>':'<div class="note">None yet.</div>')+
+      '<div class="fields" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">'+
+        '<label class="f"><span>Task</span><select id="vt_kind">'+Object.keys(CO_VT).map(function(k){ return '<option value="'+k+'">'+esc(CO_VT[k][0])+'</option>'; }).join("")+'</select></label>'+
+        fld("vt_name","If something else, what","")+fld("vt_date","Date",addDays(t,1),"date")+
+        '<label class="f"><span>Repeat</span><select id="vt_every"><option value="0">Just once</option>'+[1,2,4,8,13,26].map(function(n){ return '<option value="'+n+'">Every '+(n===1?'week':n+' weeks')+'</option>'; }).join("")+'</select></label>'+
+        '<label class="f"><span>Assign to</span><select id="vt_who"><option value="">Nobody yet</option>'+(coStaff()||[]).map(function(p){ return '<option'+(p.name===v.driver?' selected':'')+'>'+esc(p.name)+'</option>'; }).join("")+'</select></label></div>'+
+      area("vt_note","Note for the task","","e.g. vacuum, empty the bed, check tire pressure")+
+      '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-vtask="'+esc(v.id)+'">Schedule in Breezeway</button><span class="note" style="align-self:center">Goes into Breezeway within about 30 minutes once the date is a week away or less.</span></div>'+
+      '<div class="hint">'+Object.keys(CO_VT).filter(function(k){ return CO_VT[k][1]; }).map(function(k){ return esc(CO_VT[k][0])+': '+esc(CO_VT[k][1]); }).join(" · ")+'</div>'; }
+  return h+'</div>'; }
+function coVTSave(vid){ var v=coVehicles().filter(function(x){ return x.id===vid; })[0]; if(!v||!need()) return;
+  var kind=fv("vt_kind"), date=fv("vt_date"), name=fv("vt_name"); if(!date) return toast("Pick a date"); if(date<today()) return toast("Pick today or later"); if(kind==="other"&&!name) return toast("What's the task?");
+  var id=sid(vid+"_"+kind+"_"+date); if((D._vt||{})[id]&&D._vt[id].status!=="cancelled") return toast("That task is already on that date");
+  var doc={vid:vid,vname:v.name||v.ymm||"",kind:kind,name:kind==="other"?name:"",date:date,every:+fv("vt_every")||0,who:fv("vt_who"),note:fv("vt_note"),status:"queued",by:S.me,byName:(window.MM_ME&&MM_ME.name)||S.me,at:Date.now()};
+  return S.db.doc("vehtasks/"+id).set(doc).then(function(){ toast("Queued for Breezeway"); coLoadVT(); }).catch(function(e){ toast("Not saved: "+((e&&e.message)||"error")); }); }
+function coVTSet(id,status){ var x=(D._vt||{})[id]; if(!x||!need()) return;
+  return S.db.doc("vehtasks/"+id).set(Object.assign({},x,{status:status,note:status==="cancelled"?"Cancelled by "+((window.MM_ME&&MM_ME.name)||S.me):"",by:S.me,at:Date.now()})).then(function(){ toast(status==="cancelled"?"Cancelled":"Queued again"); coLoadVT(); }); }
 function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=today();
   var rec=allc.filter(function(j){ return /daily receipts/i.test(j.title) && j.status==="done" && (j.finished||"").slice(0,7)===t.slice(0,7); });
   var h='<div class="dhead"><div class="dtitle"><h2>Moose Office</h2><span class="tag">Company</span></div><div class="dsub">Vehicles, the office, the team, our logos and the basics about Moose. Every fact shows where it came from; Edit to fill a blank or fix one.</div></div><div class="dbody">';
@@ -1126,12 +1173,20 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     '<a class="golink" href="https://app.breezeway.io/property/337648" target="_blank" rel="noopener">Open the office in Breezeway ↗</a></div></div>';
   // vehicles
   var vs=coVehicles(), on=vs.filter(function(v){ return !v.off; }), off=vs.filter(function(v){ return v.off; });
-  var vcard=function(v){ return '<div class="qv'+(v.off?' muted':'')+'"><div class="qvh">'+esc(v.name||v.ymm||"Vehicle")+(v.off?' · retired':'')+' <button class="btn sm ghost" data-cov="'+esc(v.id)+'">Edit</button></div>'+
-      CO_VFIELDS.slice(1).map(function(f){ return v[f[0]]?'<div class="qrow"><span class="ql">'+esc(f[1])+'</span><span class="qa plain">'+esc(v[f[0]])+'</span></div>':''; }).join("")+
-      '<div class="hint">'+(v.by?"Edited in the hub by "+esc(nameFor(v.by)):"")+(v.facts&&v.facts.src?(v.by?" · ":"")+coSrc(v.facts.src):"")+'</div></div>'; };
+  var tile=function(v){ var nx=coNextTask(v.id);
+      return '<button class="vtile'+(v.off?' off':'')+'" data-vopen="'+esc(v.id)+'" aria-pressed="'+(S.ui.vopen===v.id)+'">'+carSvg(v.body,v.color)+
+        '<b>'+esc(v.name||v.ymm||"Vehicle")+'</b>'+(v.name&&v.ymm?'<span class="muted">'+esc(v.ymm)+'</span>':'')+(v.off?'<span class="muted">retired</span>':'')+
+        (nx?'<span class="vnext">'+esc(nx)+'</span>':'')+'</button>'; };
+  h+='<style>.vtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}'+
+    '.vtile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);cursor:pointer;font:inherit;color:inherit}'+
+    '.vtile:hover{border-color:var(--accent)}.vtile[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}.vtile.off{opacity:.6}'+
+    '.vcar{width:100%;max-width:170px;height:auto}.vnext{font-size:12px;color:var(--accent);margin-top:2px}'+
+    '.vpanel{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--surface-2)}.vphead{display:flex;gap:14px;align-items:center;margin-bottom:8px}.vphead .vcar{width:180px;flex:none}.vphead h3{margin:0}'+
+    '@media (max-width:560px){.vphead{flex-direction:column;align-items:flex-start}}</style>';
   h+='<div class="block"><h4>Vehicles <button class="btn sm ghost" data-cov="">+ Add vehicle</button></h4>'+
-    (on.length?'<div class="qgrid">'+on.map(vcard).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
-    (off.length?'<details class="infocat" style="margin-top:8px"><summary>'+off.length+' retired</summary><div class="qgrid">'+off.map(vcard).join("")+'</div></details>':'')+'</div>';
+    (on.length?'<div class="vtiles">'+on.map(tile).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
+    (off.length?'<details class="infocat" style="margin-top:8px"><summary>'+off.length+' retired</summary><div class="vtiles">'+off.map(tile).join("")+'</div></details>':'')+
+    (S.ui.vopen?coVehiclePanel(vs.filter(function(v){ return v.id===S.ui.vopen; })[0]):'')+'</div>';
   h+=coBlock("office","Moose office info");
   // employees — names + teams from the hub team list; titles typed in here
   var st=coStaff(), ti=pe.co_titles||{};
@@ -1160,7 +1215,7 @@ function mCo(sec){ var pe=coEdits();
     function(){ var o={}; CO_FIELDS[sec].forEach(function(f){ o[f[0]]=fv("co_"+f[0]); }); var p2={}; p2["co_"+sec]=o; p2["co_"+sec+"_by"]=S.me;
       return coPut(p2); },"Save"); }
 function mCoVehicle(id){ var pe=coEdits(), ed=pe.co_vehicles||{}, v=id?(coVehicles().filter(function(x){ return x.id===id; })[0]||{}):{}, nid=id||("v"+Date.now());
-  openModal(id?"Vehicle · "+(v.name||v.ymm||""):"Add a vehicle",'<div class="note">No VINs, plate numbers or policy numbers here.</div><div class="fields" style="margin-top:8px">'+CO_VFIELDS.map(function(f){ return fld("cov_"+f[0],f[1],v[f[0]]||""); }).join("")+'</div>'+
+  openModal(id?"Vehicle · "+(v.name||v.ymm||""):"Add a vehicle",'<div class="note">No VINs, plate numbers or policy numbers here.</div><div class="fields" style="margin-top:8px">'+CO_VFIELDS.map(function(f){ return f[0]==="body"?'<label class="f"><span>Body</span><select id="cov_body">'+CO_BODY.map(function(b){ return '<option value="'+b[0]+'"'+((v.body||"car")===b[0]?' selected':'')+'>'+b[1]+'</option>'; }).join("")+'</select></label>':fld("cov_"+f[0],f[1]+(f[0]==="color"?" (e.g. white, #1f4e79)":""),v[f[0]]||""); }).join("")+'</div>'+
     (id?'<label class="toggle" style="margin-top:8px"><input type="checkbox" id="cov_off"'+(v.off?' checked':'')+'> Retired (sold or no longer ours)</label>':''),
   function(){ var o={}; CO_VFIELDS.forEach(function(f){ o[f[0]]=fv("cov_"+f[0]); }); o.off=!!($("cov_off")&&$("cov_off").checked); o.by=S.me; o.at=Date.now();
     if(!o.name && !o.ymm) return toast("Name or year, make, model");
@@ -1200,15 +1255,17 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
-    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+qCard("Owner closet",closet.v,closet.s,"codes","closet")+
+    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(window.MM_CODES===false?'':qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
     qCard("Key box",hi.keybox,hi.src&&hi.src.keybox?"From "+hi.src.keybox:"","")+'</div>'+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
 function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
   openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div>'+
-    area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Leave blank to show the Asana note")+area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note")+
+    (window.MM_CODES===false?'':area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Leave blank to show the Asana note")+area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note"))+
     (o.can?'<div class="lbl" style="margin-top:10px">Owner contact <span class="muted">(blank = use Track)</span></div><div class="fields">'+fld("o_name","Owner name",oc.name||"")+fld("o_phone","Phone",oc.phone||"","tel")+fld("o_email","Email",oc.email||"","email")+'</div>'+area("o_notes","Owner notes",oc.notes||"","e.g. prefers text, second contact"):''),
   function(){ var k=sid(code);
-    var a=put("propedits",k,{wifiName:fv("q_wn"),wifiPass:fv("q_wp"),lockoutCode:fv("q_lo"),garageCode:fv("q_gc"),ownerCloset:fv("q_oc"),qBy:S.me},S.propedits[k]);
+    var qp={wifiName:fv("q_wn"),wifiPass:fv("q_wp"),qBy:S.me};
+    if(window.MM_CODES!==false){ qp.lockoutCode=fv("q_lo"); qp.garageCode=fv("q_gc"); qp.ownerCloset=fv("q_oc"); }
+    var a=put("propedits",k,qp,S.propedits[k]);
     var b=o.can?put("ownercontacts",k,{code:code,name:fv("o_name"),phone:fv("o_phone"),email:fv("o_email"),notes:fv("o_notes")},(S.ownercontacts||{})[k]):Promise.resolve();
     return Promise.all([a,b]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
 function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i);
@@ -3548,6 +3605,10 @@ document.addEventListener("click",function(ev){
   if(d.aedit){ var q=d.aedit.split("|"); return mAppl(q[0],q[1]); }
   if(d.co){ if(!need()) return; return mCo(d.co); }
   if(d.cov!=null){ if(!need()) return; return mCoVehicle(d.cov); }
+  if(d.vopen!=null){ S.ui.vopen=(d.vopen&&S.ui.vopen!==d.vopen)?d.vopen:""; return render(); }
+  if(d.vtask) return coVTSave(d.vtask);
+  if(d.vtcancel) return coVTSet(d.vtcancel,"cancelled");
+  if(d.vtretry) return coVTSet(d.vtretry,"queued");
   if(d.rvr){ var z=d.rvr.split("|"), ap=applianceView(z[0],findAppl(z[0],z[1])||{});
     var calls=(D.byProp[z[0]]||[]).filter(function(x){ return daysBetween(x.created||x.when||today(),today())<=365 && catOf(x)===catOf({title:ap.type}); }).length;
     S.ui.rvr={code:z[0],key:z[1],label:ap.type+(ap.brand?" · "+ap.brand:"")+(ap.model?" "+ap.model:""),type:LIFE[ap.type]?ap.type:"Other",
