@@ -1311,3 +1311,15 @@ on conflict (key) do nothing;
 -- Reservations drop-down (Brandon 2026-10-28): Check lists + Reviews
 update hub_desks set label='Reservations · Check lists' where key='reservations';
 update hub_desks set label='Reservations · Reviews', sort=41 where key='reviews';
+
+-- Reports > Sync (Brandon 2026-10-28): three reports instead of one per source; nobody sees what they can't open.
+alter table hub_reports add column if not exists hidden boolean not null default false;
+drop policy if exists hub_read on hub_reports;
+create policy hub_read on hub_reports for select to authenticated using (not hidden and hub_can(desk_key) and (not admin_only or hub_is_admin()));
+update hub_reports set hidden = true where key like 'sync\_%' and key not in ('sync_manual','sync_recent','sync_errors');
+update hub_reports set hidden = true where key = 'hub_sync';
+insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
+ ('sync_manual','sync_status','Manual sync','Pick what to sync and run it','#/sync','live',false,1),
+ ('sync_recent','sync_status','Recent sync report','Every sync that ran lately: when, what and how it went','#/sync/recent','live',false,2),
+ ('sync_errors','sync_status','Error report','Data sources with problems or that have not synced lately','#/sync/errors','live',false,3)
+on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, desk_key=excluded.desk_key, hidden=false, status='live';
