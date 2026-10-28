@@ -1346,7 +1346,7 @@ async function pennyView(v){
     <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
   const [c, k] = await Promise.all([ sb.from("penny_chats").select("*").order("id", { ascending:false }).limit(1000), sb.from("penny_kb").select("*").order("topic") ]);
   const needs = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test(x.answer || "");
-  const all = c.data || []; pennyInsights(all, needs);
+  const all = (c.data || []).filter(x => !/^accuracy check/.test(x.note || "")); pennyInsights(all, needs);   // check runs are not staff questions
   const rows = (missedOnly ? all.filter(needs) : all.slice(0, 200)).filter(x => !/^accuracy check/.test(x.note || "")).sort((a, b) => needs(b) - needs(a)), tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
   if(missedOnly){ $("#pins").remove(); v.querySelector("h2").textContent = "Penny — missed & 👎"; }
   $("#plog").innerHTML = `<b style="font-size:17px">Questions</b> <span class="muted">${rows.filter(needs).length} to teach first · ${rows.length} shown · $${tot.toFixed(2)} · 👍 ${rows.filter(x => x.helpful === true).length} · 👎 ${rows.filter(x => x.helpful === false).length}</span>` +
