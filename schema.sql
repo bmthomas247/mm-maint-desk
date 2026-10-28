@@ -1174,3 +1174,19 @@ begin
     select id into v from hub_sync_requests where done_at is null and coalesce(source_key,'*') = coalesce(p_key,'*') order by id desc limit 1; return v; end if;
   insert into hub_sync_requests (requested_by, source_key) values ((select name from allowed_users where id = hub_uid()), p_key) returning id into v; return v; end $$;
 revoke all on function hub_sync_request(text) from public, anon; grant execute on function hub_sync_request(text) to authenticated;
+
+-- Sync in Reports (Brandon 2026-10-28): a "Sync" section in Reports with a last-sync report per data source.
+-- Managers (owner relations, maintenance, office, housekeeping) + admins can read it. "Sync now" stays admins only (hub_sync_request).
+insert into hub_desks (key,label,icon,url,sort,status,note) values
+ ('sync_status','Sync','spark',null,0,'section','Last sync reports in Reports: managers + admins. Running a sync stays admins only.')
+on conflict (key) do update set label=excluded.label, status=excluded.status, note=excluded.note;
+insert into hub_desk_access (desk_key, team_key)
+select 'sync_status', t from unnest(array['owner_relations','maint_manager','office_manager','hk_manager']) t on conflict do nothing;
+drop policy if exists hub_read on hub_sync_sources;
+create policy hub_read on hub_sync_sources for select to authenticated using (hub_is_admin() or hub_can('sync_status'));
+drop policy if exists hub_read on hub_sync_requests;
+create policy hub_read on hub_sync_requests for select to authenticated using (hub_is_admin() or hub_can('sync_status'));
+update hub_reports set desk_key='sync_status', admin_only=false, label='All sources — last sync', note='Every data source A-Z: last run, status and what it feeds', url='#/sync', sort=0 where key='hub_sync';
+insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort)
+select 'sync_'||s.key, 'sync_status', s.label, coalesce('Feeds: '||s.feeds, 'Last sync'), '#/sync/'||s.key, 'live', false, 10 from hub_sync_sources s
+on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, desk_key=excluded.desk_key;
