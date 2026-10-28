@@ -105,7 +105,7 @@
     // same header as the Claude artifact: show who is signed in instead of the name picker
     var brand = document.querySelector("header.top .brand");
     if(brand){ brand.insertAdjacentHTML("afterbegin", '<img class="mlogo" src="moose-logo.png" alt="">');
-      var mk = brand.querySelector(".mk"); if(mk && ONLY) mk.textContent = ({homes:"Homes", vendors:"Vendors", fire:"Licensing"})[ONLY] || mk.textContent; }
+      var mk = brand.querySelector(".mk"); if(mk && ONLY) mk.textContent = ({homes:"Property Details", vendors:"Vendors", fire:"Licensing"})[ONLY] || mk.textContent; }
     var who = document.querySelector("label.who");
     if(who){ who.innerHTML = '<span class="lbl">You</span><b style="padding:0 6px">' + me.name + "</b>"; }
     var hdr = document.querySelector("header.top");
