@@ -400,6 +400,9 @@ async function boot(){
   const mD = DESKS.find(x => x.key === "maintenance" && x.status === "live");
   if(mD){ DESKS.push({ key:"maint_projects", label:"Maintenance · Projects", icon:mD.icon, url:"desk.html?only=projects", status:"live", sort:mD.sort + 0.1 });
     try { if((await sb.rpc("hub_can", { p_desk:"maint_money" })).data) DESKS.push({ key:"maint_money", label:"Maintenance · Expenses & Time", icon:mD.icon, url:"desk.html?only=money", status:"live", sort:mD.sort + 0.2 }); } catch(e){} }
+  // Housekeeping drop-down (Brandon 2026-10-28): Desk · Linen Calculator (soon). Linen Calculator follows the housekeeping desk's access.
+  const hD = DESKS.find(x => x.key === "housekeeping");
+  if(hD) DESKS.push({ key:"linen_calc", label:"Housekeeping · Linen Calculator", icon:hD.icon, url:null, status:"soon", sort:hD.sort + 0.1 });
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
   PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k);   // Maintenance became a drop-down 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
@@ -417,6 +420,7 @@ function shell(){
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time" } },
+                   hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator" } },
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
@@ -538,10 +542,7 @@ function route(){
   if(d && k === "res_report") return resReportView(v);
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
-  // Tools planned for a "soon" desk (Brandon 2026-10-28: Housekeeping gets a Linen Calculator; the rest of the HK desk comes later)
-  const PLANNED = { housekeeping:["Linen Calculator"] }, plan = PLANNED[k] || [];
   if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
-      ${plan.length ? `<div style="margin:10px 0">${plan.map(t => `<div><b>${esc(t)}</b> <span class="pill amber">soon</span></div>`).join("")}</div>` : ""}
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a bug / upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
   const arg = hashArg(), sep = d.url.includes("?") ? "&" : "?";
   if(k === "maintenance"){ const to = { projects:"maint_projects", money:"maint_money" }[arg];
@@ -854,8 +855,8 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", competitor:"competitor", competitor_add:"competitor" },
-    GL = { maint:["Maintenance","wrench"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", housekeeping:"hk", linen_calc:"hk", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", competitor:"competitor", competitor_add:"competitor" },
+    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"],locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = G[x.key];
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
