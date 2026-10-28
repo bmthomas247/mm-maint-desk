@@ -401,7 +401,7 @@ var ONLY=(function(){ try{ return new URLSearchParams(location.search).get("only
 if(!window.MM_MONEY) TABS=TABS.filter(function(x){ return x[0]!=="money"; });
 if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
 else TABS=TABS.filter(function(x){ return ["homes","vendors","fire"].indexOf(x[0])<0; });
-try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; }catch(e){}
+try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; if(ONLY==="vendors" && location.hash==="#preferred") S.ui.vmode="pref"; }catch(e){}
 if(!ONLY && !TABS.some(function(t){return t[0]===S.tab;}) && ["jobs","homes","vendors","fire"].indexOf(S.tab)<0) S.tab="today";
 
 /* ---- derived ---- */
@@ -1145,7 +1145,7 @@ function resRow(r){ return '<div class="vcard"><div class="vtop"><h3>'+esc(r.nam
   '<div class="links">'+r.urls.map(function(u){ var href=/^https?:/.test(u)?u:"https://"+u; return '<a class="golink" href="'+esc(href)+'" target="_blank" rel="noopener">'+esc(u.replace(/^https?:\/\/(www\.)?/i,"").slice(0,40))+' ↗</a>'; }).join("")+'</div></div>'; }
 function vendUse(v){ var t=today(); return vendorJobs(v).filter(function(j){ var d=j.finished||j.due||j.when||""; return d && daysBetween(d,t)<=365 && daysBetween(d,t)>=-30; }); }
 function vendorsTop(){ var m=S.ui.vmode||"find";
-  return '<div class="chiprow" style="margin-bottom:12px">'+[["find","Find a vendor"],["rank","Ranked by use"],["used","Vendors used this month"],["changes","Added & removed"]].map(function(c){ return '<button class="chip" data-vmode="'+c[0]+'" aria-pressed="'+(m===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>'; }
+  return '<div class="chiprow" style="margin-bottom:12px">'+[["find","Find a vendor"],["pref","Preferred vendors"],["rank","Ranked by use"],["used","Vendors used this month"],["changes","Added & removed"]].map(function(c){ return '<button class="chip" data-vmode="'+c[0]+'" aria-pressed="'+(m===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>'; }
 function vRank(){ var rows=D.vendors.map(function(v){ var js=vendUse(v); return {v:v,n:js.length,last:js[0]?(js[0].finished||js[0].due||js[0].when):""}; }).filter(function(r){ return r.n>0; });
   var tot=rows.reduce(function(a,r){ return a+r.n; },0)||1; rows.sort(function(a,b){ return b.n-a.n || a.v.name.localeCompare(b.v.name); });
   var mx=rows.length?rows[0].n:1;
@@ -1154,7 +1154,19 @@ function vRank(){ var rows=D.vendors.map(function(v){ var js=vendUse(v); return 
     rows.map(function(r,i){ var pct=r.n/tot*100; return '<tr><td class="num">'+(i+1)+'</td><td><a href="#" data-vprof="'+esc(r.v.id)+'">'+esc(r.v.name)+'</a>'+(isPref(r.v)?' <span class="badge ok">use first</span>':'')+'</td><td class="muted">'+esc(vTrades(r.v).slice(0,2).join(", "))+'</td><td class="num">'+r.n+'</td>'+
       '<td><div style="display:flex;gap:8px;align-items:center"><span style="flex:1;height:8px;background:var(--sunk);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:'+(r.n/mx*100)+'%;background:var(--accent)"></i></span><b class="mono" style="min-width:44px;text-align:right">'+pct.toFixed(1)+'%</b></div></td>'+
       '<td class="mono">'+esc(r.last?fmtD(r.last):"")+'</td></tr>'; }).join("")+'</tbody></table></div></section>'; }
-function vVendors(){ var m=S.ui.vmode||"find"; if(m==="rank") return vendorsTop()+vRank(); if(m==="used") return vendorsTop()+vVused(); if(m==="changes") return vendorsTop()+vVendChanges(); return vVendorsFind(); }
+/* 2026-10-28 (Brandon): Preferred vendors report - every "use first" vendor (isPref) by kind of work, with contact, use and source */
+function vPref(){ var rows=D.vendors.filter(isPref), by={};
+  rows.forEach(function(v){ var t=vTrades(v)[0]||"Other"; (by[t]=by[t]||[]).push(v); });
+  var fu=(S.feeds.vendors||{}).updatedAt, trades=Object.keys(by).sort();
+  return '<div class="sechead"><h2>Preferred vendors</h2><p>'+rows.length+' vendors marked <b>use first</b>, by kind of work. Source: our Asana vendor list'+(fu?' (pulled '+esc(fmtD(new Date(fu).toISOString().slice(0,10)))+')':'')+' plus changes made here with Edit.</p></div>'+
+    (rows.length?trades.map(function(t){ return '<section class="panel"><h3 style="margin:0 0 8px">'+esc(t)+' <span class="muted">· '+by[t].length+'</span></h3><div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Vendor</th><th>Contact</th><th class="num">Jobs (12 mo)</th><th>Last used</th><th>Source</th></tr></thead><tbody>'+
+      by[t].sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(v){ var ci=vContact(v), js=vendUse(v), last=js[0]?(js[0].finished||js[0].due||js[0].when):"";
+        return '<tr><td><a href="#" data-vprof="'+esc(v.id)+'"><b>'+esc(v.name)+'</b></a>'+(ci.person?'<div class="muted">'+esc(ci.person)+'</div>':'')+'</td>'+
+          '<td>'+ci.phones.slice(0,1).map(function(p){ return '<div><a href="tel:'+esc(p.replace(/[^\d+]/g,""))+'"><b>'+esc(p)+'</b></a></div>'; }).join("")+(ci.emails[0]?'<div><a href="mailto:'+esc(ci.emails[0])+'">'+esc(ci.emails[0])+'</a></div>':'')+(!ci.phones.length&&!ci.emails.length?'<span class="muted">Nothing on file</span>':'')+'</td>'+
+          '<td class="num">'+js.length+'</td><td class="mono">'+esc(last?fmtD(last):"")+'</td>'+
+          '<td>'+(v.asanaTask||v.asanaProject?'<a class="golink" href="'+esc(v.asanaTask||v.asanaProject)+'" target="_blank" rel="noopener">Asana ↗</a>':(v.edit&&v.edit.preferred?'<span class="muted">Set here</span>':''))+'</td></tr>'; }).join("")+'</tbody></table></div></section>'; }).join("")
+    :'<p class="muted">No vendors are marked use first yet. Open a vendor and use Edit to mark one.</p>'); }
+function vVendors(){ var m=S.ui.vmode||"find"; if(m==="pref") return vendorsTop()+vPref(); if(m==="rank") return vendorsTop()+vRank(); if(m==="used") return vendorsTop()+vVused(); if(m==="changes") return vendorsTop()+vVendChanges(); return vVendorsFind(); }
 /* Hub 2026-10-28 (Brandon): report of vendors added to / removed from the list (and brought back), with who and why. */
 function vVendChanges(){ var w=S.ui.vcm||"m0", t=today(), m0=t.slice(0,7), m1=monthAdd(m0,-1), ev=[];
   var inWin=function(ms){ if(!ms) return false; var d=ymd(ms); return w==="m0"?d.slice(0,7)===m0:w==="m1"?d.slice(0,7)===m1:w==="y"?daysBetween(d,t)<=365:true; };
