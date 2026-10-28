@@ -131,3 +131,5 @@ body.locklook .vcard{border-radius:18px;box-shadow:var(--shadow)}
 a.ldoc.more{background:var(--sunk);color:var(--ink-2)} a.ldoc:hover{text-decoration:underline}
 .ldocrow{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)} .ldocrow a.ldoc{background:none;padding:0;font-size:14px}
 .lcard .lh b{white-space:nowrap}
+/* clickable license pills (2026-10-28) */
+.lpills .pill[data-licf]{cursor:pointer} .lpills .pill[data-licf]:hover{filter:brightness(.95);outline:2px solid currentColor;outline-offset:1px}
