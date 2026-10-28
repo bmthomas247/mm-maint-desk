@@ -280,6 +280,27 @@ table.t .mono{font-size:12px}
 @media print{#sect,.newhere,button,input[type=date],.topbar,header{display:none!important} body{background:#fff} .panel{break-inside:avoid;box-shadow:none}}
 .thumbs{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}.thumbs img{width:auto;max-width:180px;border-radius:5px;object-fit:cover;border:1px solid var(--line);background:var(--surface-2)}.row .thumbs{grid-column:1/-1}
 .caret{width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transition:transform .15s}
+/* crew charts on Expenses & Time (2026-10-28) */
+.crewcharts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start}
+@media (max-width:900px){.crewcharts{grid-template-columns:1fr}}
+.cchart{padding:12px 14px}
+.clegend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--ink-2);margin-bottom:10px}
+.clegend span{display:inline-flex;align-items:center;gap:6px}
+.clegend i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.clegend i.tline{width:2px;height:14px;border-radius:0;background:var(--ink-2)}
+.crow{display:grid;grid-template-columns:108px 1fr;gap:10px;align-items:center;padding:6px 4px;border-radius:6px;cursor:default}
+.crow:hover,.crow:focus-visible{background:var(--surface-2)}
+.crow .cn{font-size:13px;line-height:1.2;overflow:hidden;text-overflow:ellipsis}
+.crow .cn small{display:block;font-weight:500;font-size:11px;color:var(--muted)}
+.cbar{position:relative;width:calc(100% - 64px);display:flex;align-items:center;gap:6px;height:12px;margin:2px 0}
+.cbar.one{height:16px}
+.cbar i{display:block;height:100%;border-radius:0 4px 4px 0;flex:none}
+.cbar span{font-size:11.5px;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+i.gain{background:var(--accent)}
+i.cost{background:var(--sunk);box-shadow:inset 0 0 0 1.5px var(--ink-2)}
+.cbar .tl{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink-2);opacity:.7}
+#ctip{position:fixed;z-index:80;pointer-events:none;max-width:280px;background:var(--ink);color:var(--surface);font-size:12px;line-height:1.5;padding:8px 10px;border-radius:8px;white-space:pre-line;box-shadow:0 6px 20px rgba(0,0,0,.25);display:none}
+#ctip b{display:block;font-size:12.5px}
 tr.xtr:hover td{background:var(--surface-2)} tr.xtr.open td{background:var(--accent-soft)}
 .dhead{cursor:pointer} .dhead:hover b{text-decoration:underline}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;padding:12px}
@@ -1388,6 +1409,9 @@ function vMoney(){
   var mOpts=[]; var d=new Date(); for(var i=0;i<13;i++){ var dd=new Date(d.getFullYear(),d.getMonth()-i,1); mOpts.push(dd.getFullYear()+"-"+p2(dd.getMonth()+1)); }
   var h='<div class="toolbar"><select id="mmonth" aria-label="Month">'+mOpts.map(function(x){ return '<option'+(x===m?' selected':'')+' value="'+x+'">'+new Date(x+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"})+'</option>'; }).join("")+'</select>'+
     '<button class="btn sm" data-act="exprefresh" title="Load the newest Breezeway, receipt and fee files now and start the Breezeway run">↻ Update this page</button><button class="btn sm pri" data-act="newexp">+ Expense</button><button class="btn sm" data-act="newtime">+ Time on site</button><button class="btn sm ghost" data-act="rates">Rates & budget</button></div>';
+  // Reports open the full crew tables (?full=gain|eff); the page itself shows them as charts
+  var FULL=""; try{ FULL=new URLSearchParams(location.search).get("full")||""; }catch(e){}
+  if(FULL==="gain"||FULL==="eff") return h.replace('<div class="toolbar">','<div class="toolbar"><a class="golink" href="desk.html?only=money">← Charts</a>')+(FULL==="gain"?hsGainPanel(m):crewEffPanel(m));
   Object.keys(per).forEach(function(w){ per[w].allMin=(per[w].min||0)+(per[w].bwMin||0); });
   var labor=0, bill=0; Object.keys(per).forEach(function(w){ var c=(+R.techCost[w]||R.defaultCost); labor+=per[w].allMin/60*c+per[w].miles*R.mileage; bill+=per[w].allMin/60*R.billRate; });
   h+='<div class="stats">'+
@@ -1459,7 +1483,7 @@ function vMoney(){
   G.pb+=billingPanel(m,bwDone)+projectedPanel(m);
   if(tm.length) G.vis+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Visits logged</h3><span class="ct">'+tm.length+'</span></div><div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Date</th><th>Who</th><th>Home</th><th class="num">Time</th><th class="num">Trips</th><th class="num">Miles</th><th>Note</th><th></th></tr></thead><tbody>'+
     tm.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(e.date))+'</td><td>'+esc(e.who||"")+'</td><td>'+propLink(e.prop)+'</td><td class="num">'+((+e.minutes||0)/60).toFixed(1)+'h</td><td class="num">'+(+e.trips||0)+'</td><td class="num">'+(+e.miles||0)+'</td><td>'+esc(e.note||"")+'</td><td><button class="btn sm ghost" data-tmedit="'+esc(e.id)+'">Edit</button></td></tr>'; }).join("")+'</tbody></table></div></section>';
-  h+=hsGainPanel(m)+crewEffPanel(m)+readyPanel(m)+G.bw+'<div style="height:14px"></div>'+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew;
+  h+='<div class="crewcharts">'+crewEffPanel(m,1)+hsGainPanel(m,1)+'</div>'+readyPanel(m)+G.bw+'<div style="height:14px"></div>'+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew;
   return h;
 }
 
@@ -1990,7 +2014,7 @@ function isReceiptTask(j){ return /daily receipts?|\breceipts?\b\s*$/i.test(j.ti
 /* Hub 2026-10-28 (Brandon): Chris (maintenance manager) + admins — each tech's Hubstaff hours (cost) vs what their Breezeway work bills (gain).
    Pay cost per tech lives in desk_docs paycost/rates (money: maintenance manager + admins only, RLS). */
 function hsTechs(){ var o={}; TECH_LIST.forEach(function(w){ o[w]=1; }); Object.keys(((S.feeds["hs-time"]||{}).techs)||{}).forEach(function(w){ o[w]=1; }); return Object.keys(o); }
-function hsGainPanel(m){ var R=rates(), techs=hsTechs(), per={};
+function hsGainPanel(m,chart){ var R=rates(), techs=hsTechs(), per={}, pts=[];
   techs.forEach(function(w){ per[w]={hs:hsMonth(w,m), task:0, billed:0, est:0, n:0}; });
   D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.finished||"").slice(0,7)===m && !j.vendorVisit && !j.schedNote && !j.officeOnly; })
    .forEach(function(j){ var crew=(j.crew||[]).filter(function(w){ return per[w]; }); if(!crew.length) return;
@@ -2000,9 +2024,23 @@ function hsGainPanel(m){ var R=rates(), techs=hsTechs(), per={};
   var rows=techs.filter(function(w){ var x=per[w]; return (x.hs||0)>0||x.n>0; }), T={hs:0,cost:0,gain:0};
   var body=rows.map(function(w){ var x=per[w], c=+R.techCost[w]||R.defaultCost, hs=x.hs, cost=hs!=null&&c?hs*c:null, gain=x.billed+x.est, net=cost!=null?gain-cost:null, idle=hs!=null?Math.max(0,hs-x.task):null;
     T.hs+=hs||0; T.cost+=cost||0; T.gain+=gain;
+    pts.push({w:w,hs:hs,c:c,cost:cost,task:x.task,idle:idle,billed:x.billed,est:x.est,gain:gain,net:net,n:x.n});
     return '<tr><td><b>'+esc(w)+'</b></td><td class="num">'+(hs==null?'<span class="muted">not in Hubstaff</span>':hs.toFixed(1))+'</td><td class="num">'+(c?money2(c)+'/h'+'<div class="muted" style="font-size:11px">'+((((S.paycost||{}).rates||{}).techCost||{})[w]!=null?'set here':(((S.paycost||{}).hubstaff||{}).techCost||{})[w]!=null?'Hubstaff':'default')+'</div>':'<span class="muted">set pay cost</span>')+'</td><td class="num">'+(cost!=null?money(cost):'—')+'</td>'+
       '<td class="num">'+x.task.toFixed(1)+'</td><td class="num">'+(idle!=null?idle.toFixed(1):'—')+'</td><td class="num">'+money(x.billed)+'</td><td class="num">'+money(x.est)+'</td>'+
       '<td class="num"><b style="color:'+(net==null?'inherit':net>=0?'var(--go)':'var(--stop)')+'">'+(net==null?'—':money(net))+'</b></td><td class="num">'+(cost?(gain/cost).toFixed(2)+'×':'—')+'</td></tr>'; }).join("");
+  /* Chart (Brandon 2026-10-28): gain vs. cost per tech, hover for the details; the full table is the Reports version (?full=gain) */
+  if(chart){ var mx=Math.max.apply(null,[1].concat(pts.map(function(p){ return Math.max(p.gain,p.cost||0); })));
+    pts.sort(function(a,b){ return b.gain-a.gain; });
+    var bar=function(cls,v){ return '<div class="cbar"><i class="'+cls+'" style="width:'+(v>0?Math.max(1,v/mx*100):0)+'%"></i><span>'+(v==null?'—':money(v))+'</span></div>'; };
+    return '<section class="panel"><div class="ph"><h3>Crew cost vs. gain</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}))+'</span>'+
+      '<a class="golink" href="desk.html?only=money&full=gain" style="margin-left:auto">Full table</a><button class="btn sm ghost" data-act="paycost">Pay cost per tech</button></div>'+
+      (pts.length?'<div class="cchart"><div class="clegend"><span><i class="gain"></i>Gain (billed + estimate)</span><span><i class="cost"></i>Cost (Hubstaff hours × pay)</span></div>'+
+        pts.map(function(p){ var tip=[p.w,"Hubstaff hours: "+(p.hs==null?"not in Hubstaff":p.hs.toFixed(1)),"Pay cost: "+(p.c?money2(p.c)+"/h":"not set"),"Cost: "+(p.cost!=null?money(p.cost):"—"),
+            "Breezeway tasks: "+p.n+" ("+p.task.toFixed(1)+" h)","Hours not on a task: "+(p.idle!=null?p.idle.toFixed(1):"—"),"Billed (confirmed): "+money(p.billed),"Billable (estimate): "+money(p.est),
+            "Gain − cost: "+(p.net==null?"—":money(p.net)),"Return per $1: "+(p.cost?(p.gain/p.cost).toFixed(2)+"×":"—")].join("\n");
+          return '<div class="crow" tabindex="0" data-tip="'+esc(tip)+'"><b class="cn">'+esc(p.w)+'<small>'+(p.net==null?'no cost yet':(p.net>=0?'+':'−')+money(Math.abs(p.net))+' net')+'</small></b><div>'+bar("gain",p.gain)+bar("cost",p.cost)+'</div></div>'; }).join("")+
+        '<div class="note" style="margin-top:8px">Total: gain '+money(T.gain)+' · cost '+money(T.cost)+(T.cost?' · net '+money(T.gain-T.cost):'')+'. Hover a tech for hours and billing. Sources: Hubstaff (hs-time), Breezeway tasks, task billing.</div></div>'
+        :'<div class="empty">No Hubstaff hours or finished Breezeway tasks this month.</div>')+'</section>'; }
   return '<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>Crew cost vs. gain (Hubstaff)</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}))+'</span>'+
     '<button class="btn sm ghost" data-act="paycost" style="margin-left:auto">Pay cost per tech</button></div>'+
     (rows.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Tech</th><th class="num">Hubstaff hours</th><th class="num">Pay cost</th><th class="num">Cost</th><th class="num">Task hours (Breezeway)</th><th class="num">Hours not on a task</th><th class="num">Billed (confirmed)</th><th class="num">Billable (estimate)</th><th class="num">Gain − cost</th><th class="num">Return per $1</th></tr></thead><tbody>'+body+
@@ -2010,7 +2048,7 @@ function hsGainPanel(m){ var R=rates(), techs=hsTechs(), per={};
     '<div class="pad note">Cost = Hubstaff hours × each tech\'s pay cost (Hubstaff pay rate unless Chris or an admin sets one; only the maintenance manager and admins can see it). Gain = labor + fees on the tech\'s finished Breezeway tasks this month: "confirmed" from the billing on Expenses &amp; Time, "estimate" = task time at the home\'s plan rate (rounded the way we bill), split evenly when several techs share a task. Parts are left out — they pass through to the owner. Sources: Hubstaff (hs-time feed), Breezeway tasks, task billing.</div></section>'; }
 
 /* Crew efficiency (Brandon 2026-10-28): finished Breezeway tasks per tech vs. their Hubstaff hours. Rating = tasks per clocked hour vs. the team. */
-function crewEffPanel(m){ var techs=hsTechs(), per={};
+function crewEffPanel(m,chart){ var techs=hsTechs(), per={};
   techs.forEach(function(w){ per[w]={n:0,min:0,days:{},hs:hsMonth(w,m),hsDays:hsDays(w,m).length}; });
   D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.finished||"").slice(0,7)===m && !j.vendorVisit && !j.schedNote && !j.officeOnly && !isReceiptTask(j); })
    .forEach(function(j){ (j.crew||[]).forEach(function(w){ var x=per[w]; if(!x) return; x.n++; var mm=+j.minutes||0; if(mm<=720) x.min+=mm; x.days[j.finished]=1; }); });
@@ -2021,10 +2059,33 @@ function crewEffPanel(m){ var techs=hsTechs(), per={};
   rows.forEach(function(r){ r.idx=(team&&r.perHr!=null)?Math.round(r.perHr/team*100):null; });
   rows.sort(function(a,b){ return (b.idx==null?-1:b.idx)-(a.idx==null?-1:a.idx) || b.n-a.n; });
   var pill=function(i,r){ if(i==null) return '<span class="muted">'+(r&&r.hs?'no tasks yet':'no Hubstaff hours')+'</span>'; var k=i>=110?["done","Above team"]:i>=90?["","On par"]:["waiting","Below team"]; return '<b>'+i+'</b> <span class="pill '+k[0]+'">'+k[1]+'</span>'; };
+  /* Chart (Brandon 2026-10-28): rating per tech against the team line at 100; hover for the details, full table in Reports (?full=eff) */
+  if(chart){ var hi=Math.max.apply(null,[130].concat(rows.map(function(r){ return r.idx||0; })))*1.08, at=function(v){ return v/hi*100; };
+    return '<section class="panel"><div class="ph"><h3>Crew efficiency</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}))+(team?' · team: '+team.toFixed(2)+' tasks per clocked hour':'')+'</span>'+
+      '<a class="golink" href="desk.html?only=money&full=eff" style="margin-left:auto">Full table</a></div>'+
+      (rows.length?'<div class="cchart"><div class="clegend"><span><i class="gain"></i>Rating (tasks per clocked hour, team = 100)</span><span><i class="tline"></i>Team average</span></div>'+
+        rows.map(function(r){ var word=r.idx==null?'':r.idx>=110?'Above team':r.idx>=90?'On par':'Below team';
+          var tip=[r.w,"Rating: "+(r.idx==null?"—":r.idx+" ("+word+")"),"Breezeway tasks done: "+r.n,"Days worked: "+(r.days||"—"),"Tasks / day: "+(r.perDay!=null?r.perDay.toFixed(1):"—"),
+            "Hubstaff hours: "+(r.hs!=null?r.hs.toFixed(1):"—"),"Tasks / clocked hour: "+(r.perHr!=null?r.perHr.toFixed(2):"—"),"Clock time on tasks: "+(r.onTask!=null?Math.round(r.onTask*100)+"%":"—"),"Avg time / task: "+(r.avg!=null?Math.round(r.avg)+"m":"—")].join("\n");
+          return '<div class="crow" tabindex="0" data-tip="'+esc(tip)+'"><b class="cn">'+esc(r.w)+'<small>'+(r.idx==null?(r.hs?'no tasks yet':'no Hubstaff hours'):esc(word))+'</small></b>'+
+            '<div class="cbar one"><em class="tl" style="left:'+at(100)+'%"></em><i class="gain" style="width:'+(r.idx?at(r.idx):0)+'%"></i><span>'+(r.idx==null?'—':r.idx)+'</span></div></div>'; }).join("")+
+        '<div class="note" style="margin-top:8px">100 = team average; 110+ above, under 90 below. Big jobs count the same as quick ones. Hover a tech for tasks and hours. Sources: Breezeway tasks, Hubstaff (hs-time).</div></div>'
+        :'<div class="empty">No finished Breezeway tasks or Hubstaff hours this month.</div>')+'</section>'; }
   return '<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>Crew efficiency</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}))+(team?' · team: '+team.toFixed(2)+' tasks per clocked hour':'')+'</span></div>'+
     (rows.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Tech</th><th class="num">Breezeway tasks done</th><th class="num">Days worked</th><th class="num">Tasks / day</th><th class="num">Hubstaff hours</th><th class="num">Tasks / clocked hour</th><th class="num">Clock time on tasks</th><th class="num">Avg time / task</th><th>Rating (100 = team)</th></tr></thead><tbody>'+
       rows.map(function(r){ return '<tr><td><b>'+esc(r.w)+'</b></td><td class="num"><b>'+r.n+'</b></td><td class="num">'+(r.days||'—')+'</td><td class="num">'+(r.perDay!=null?r.perDay.toFixed(1):'—')+'</td><td class="num">'+(r.hs!=null?r.hs.toFixed(1):'—')+'</td><td class="num">'+(r.perHr!=null?r.perHr.toFixed(2):'—')+'</td><td class="num">'+(r.onTask!=null?Math.round(r.onTask*100)+'%':'—')+'</td><td class="num">'+(r.avg!=null?Math.round(r.avg)+'m':'—')+'</td><td>'+pill(r.idx,r)+'</td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">No finished Breezeway tasks or Hubstaff hours this month.</div>')+
     '<div class="pad note">Counts each tech\'s finished Breezeway tasks this month (vendor visits, scheduling notes, office-only and receipt check-ins left out; a shared task counts for everyone on it). Rating = the tech\'s tasks per Hubstaff hour against the whole crew (100 = team average; 110+ above, under 90 below). "Clock time on tasks" = Breezeway task time ÷ Hubstaff hours — the rest is driving, shopping and gaps. Big jobs count the same as quick ones, so use it with the job list. Sources: Breezeway tasks, Hubstaff (hs-time).</div></section>'; }
+/* hover / focus tooltip for the crew charts: [data-tip] = lines, first line bold */
+(function(){ var tip=null;
+  function show(el,x,y){ if(!tip){ tip=document.createElement("div"); tip.id="ctip"; document.body.appendChild(tip); }
+    var L=el.getAttribute("data-tip").split("\n"); tip.innerHTML='<b>'+esc(L[0])+'</b>'+esc(L.slice(1).join("\n")); tip.style.display="block";
+    var w=tip.offsetWidth, hh=tip.offsetHeight, px=x+14, py=y+14;
+    if(px+w>window.innerWidth-8) px=x-w-14; if(py+hh>window.innerHeight-8) py=Math.max(8,y-hh-14);
+    tip.style.left=Math.max(8,px)+"px"; tip.style.top=py+"px"; }
+  function hide(){ if(tip) tip.style.display="none"; }
+  document.addEventListener("mousemove",function(e){ var el=e.target.closest&&e.target.closest("[data-tip]"); if(el) show(el,e.clientX,e.clientY); else hide(); });
+  document.addEventListener("focusin",function(e){ var el=e.target.closest&&e.target.closest("[data-tip]"); if(!el) return hide(); var r=el.getBoundingClientRect(); show(el,r.left+110,r.bottom-6); });
+  document.addEventListener("focusout",hide); window.addEventListener("scroll",hide,{passive:true}); })();
 function mPayCost(){ if(!window.MM_MONEY) return toast("Maintenance manager or admin only"); var r=((S.paycost||{}).rates)||{}, tc=r.techCost||{}, techs=hsTechs();
   openModal("Pay cost per tech",'<div class="note">What one hour of each tech costs Moose. Leave a box blank to use the tech\'s Hubstaff pay rate (pulled every Hubstaff sync)'+(((S.paycost||{}).hubstaff||{}).at?', last pulled '+esc(fmtD(String(S.paycost.hubstaff.at).slice(0,10))):'')+'. Only the maintenance manager and admins can see these.</div><div class="fields" style="margin-top:8px">'+
     techs.map(function(w,i){ var hsr=(((S.paycost||{}).hubstaff||{}).techCost||{})[w]; return fld("pc_"+i,w+" ($/hour)"+(hsr!=null?" · Hubstaff "+money2(hsr):""),tc[w]!=null?tc[w]:"","number",'min="0" step="0.01"'); }).join("")+fld("pc_def","Anyone else ($/hour)",r.defaultCost||"","number",'min="0" step="0.01"')+'</div>',
