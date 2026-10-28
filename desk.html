@@ -416,13 +416,13 @@ var S={db:null, me:ls("me")||"", tab:(location.hash||"").replace("#","")||"today
   ui:{q:"", st:{open:1,scheduled:1,waiting:1}, src:{}, kind:{}, who:"", vendor:"", hideOld:true, hideInfo:true,
       sel:"", home:"", hq:"", vq:"", vtrade:"", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
 var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["money","Expenses & Time"],["care","Home care"],["projects","Projects"],["routines","Seasonal & yearly"],["homes","Homes"],
-  ["vendors","Vendors"],["repeats","Repeats"],["recalls","Recalls"],["fire","Fire & licenses"]];
+  ["vendors","Vendors"],["repeats","Repeats"],["recalls","Recalls"],["fire","Fire & licenses"],["firesys","Fire suppression"],["lease","Leases"]];
 /* Moose Hub (2026-10-27): Expenses & Time = maintenance manager + admins (MM_MONEY from hub_can, enforced in RLS);
    Homes, Vendors and Fire & licenses are their own hub desks (desk.html?only=<tab>). */
 var ONLY=(function(){ try{ return new URLSearchParams(location.search).get("only")||""; }catch(e){ return ""; } })();
 if(!window.MM_MONEY) TABS=TABS.filter(function(x){ return x[0]!=="money"; });
 if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
-else TABS=TABS.filter(function(x){ return ["homes","vendors","fire"].indexOf(x[0])<0; });
+else TABS=TABS.filter(function(x){ return ["homes","vendors","fire","firesys","lease"].indexOf(x[0])<0; });
 /* 2026-10-28 (Brandon): in the hub, Projects and Expenses & Time are their own Maintenance drop-down items (?split=1 on the Workbench) */
 /* Inside the hub this holds even without ?split (old cached hub pages); a report link to #money / #projects keeps just that tab */
 try{ var _emb=window.top!==window.self, _sp=["projects","money"];
@@ -510,7 +510,8 @@ function derive(){
     j.officeOnly=!j.vendorVisit && !j.schedNote && noTech; });
   D.npi=null; D.photos={}; Object.keys(S.feeds).forEach(function(k){ if(k.indexOf("bw-photos-")===0){ var t=S.feeds[k].tasks||{}; Object.keys(t).forEach(function(id){ D.photos[id]=t[id]; }); } });
   D.reports={}; Object.keys(S.feeds).forEach(function(k){ if(k.indexOf("bw-reports-")===0) (S.feeds[k].reports||[]).forEach(function(r){ D.reports[r.id]=r; }); });
-  D.homes=Object.keys(S.profiles).map(function(k){ var p=S.profiles[k]; if(ALIAS[p.code]){ p=Object.assign({},p,{code:ALIAS[p.code],trackCode:p.code}); } return p; }).filter(function(p){ return p.active; }).concat([COMPANY_HOME])
+  /* 2026-10-28: the one Track home list (desk-lic.js, hub_homes) when it has loaded; the Asana profiles alone until then */
+  D.homes=(LIC&&LIC.homes(S.profiles,ALIAS,COMPANY_HOME))||Object.keys(S.profiles).map(function(k){ var p=S.profiles[k]; if(ALIAS[p.code]){ p=Object.assign({},p,{code:ALIAS[p.code],trackCode:p.code}); } return p; }).filter(function(p){ return p.active; }).concat([COMPANY_HOME])
     .sort(function(a,b){ return a.code.localeCompare(b.code,undefined,{numeric:true}); });
 }
 function profile(code){ if(code==="Moose company") return COMPANY_HOME; code=canon(code); for(var i=0;i<D.homes.length;i++) if(D.homes[i].code===code) return D.homes[i]; for(var k in S.profiles) if(S.profiles[k].code===code) return S.profiles[k]; return null; }
@@ -611,7 +612,7 @@ function render0(){
   $("sect").style.display=S.ui.meeting?"none":"";
   if(S.ui.meeting){ $("view").innerHTML=vMeet(); if(typeof autoQueueRepeats==="function") autoQueueRepeats(); return; }
   var v=$("view"); var f={today:vToday,check:vCheck,care:vCare,jobs:vJobs,projects:vProjects,routines:vRoutines,homes:vHomes,vendors:vVendors,vused:vVused,repeats:vRepeats,
-    money:vMoney,recalls:vRecalls,rvr:vRvr,fire:vFire}[S.tab];
+    money:vMoney,recalls:vRecalls,rvr:vRvr,fire:vFire,firesys:function(){ return LIC?LIC.vFireSys():""; },lease:function(){ return LIC?LIC.vLease():""; }}[S.tab];
   // keep focus + caret in text inputs across re-render
   var a=document.activeElement, aid=a&&a.id, ss=a&&a.selectionStart, se=a&&a.selectionEnd;
   var sc=document.querySelector(".listp .rows"), st=sc?sc.scrollTop:0;
@@ -1059,7 +1060,6 @@ function homeDetail(code){
         '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+(i.url?'\n<a href="'+esc(i.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>'; }).join(""):'<div class="note">No property info in Asana.</div>')+'</div>';
   return h+'</div>';
 }
-
 
 /* ===== Moose company page (Brandon 2026-10-28): jobs list gone (those were reminders); Vehicles, Moose office info, Employees,
    Logos & colors, General Moose info. CO_FACTS were read from Dropbox / Track and each keeps its source; anything typed on the
@@ -2754,6 +2754,10 @@ function replyNow(id){ var j=D.byId[id]; if(!j||!need()) return; var th=slackThr
   var src=slackSource(j); var d={kind:"close",replyOnly:true,jobId:j.id,prop:j.prop,title:j.title,channel:th.channel,threadTs:th.ts,text:(src&&src.tag?src.tag+" ":""),fromLine:fromLine(j),status:"queued",by:S.me||"desk",at:Date.now()};
   return slackEditor(sid("reply_"+j.id+"_"+Date.now()),d,function(){ toast("Replied — job stays open"); }); }
 /* ================= FIRE SUPPRESSION + LICENSES ================= */
+/* Licensing round 2 (2026-10-28) lives in desk-lic.js: Track home list, Fire suppression + Leases tabs, New properties */
+var LIC=window.MM_LIC?window.MM_LIC({S:S,D:D,ONLY:ONLY,esc:esc,fmtD:fmtD,today:today,addDays:addDays,addYear:addYear,derive:derive,render:render,
+  dueState:dueState,duePill:duePill,fireInfo:fireInfo,licInfo:licInfo,licState:licState,needsLicense:needsLicense,fireQ:fireQ,fireBtn:fireBtn,
+  openModal:openModal,closeModal:closeModal,fld:fld,sel:sel,fv:fv,toast:toast}):null;
 function usDate(s){ var m=String(s||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(!m) return ""; var y=+m[3]; if(y<100) y+=2000; return y+"-"+p2(+m[1])+"-"+p2(+m[2]); }
 function addYear(d){ if(!d) return ""; var y=+d.slice(0,4)+1; return y+d.slice(4); }
 function fireInfo(code){ var pe=pedit(code), p=profile(code)||{}, o={has:null,last:"",exp:"",why:[],tasks:[]};
@@ -2767,7 +2771,7 @@ function fireInfo(code){ var pe=pedit(code), p=profile(code)||{}, o={has:null,la
   if(pe.fireLast) o.last=pe.fireLast;
   o.exp=pe.fireExp||addYear(o.last);
   var bw=fromFeed(((S.feeds["bw-homeinfo"]||{}).homes)||{},code)||{}; o.bwListed=!!bw.fireSystem;
-  return o; }
+  return LIC?LIC.fireOverlay(code,o):o; }
 function licInfo(code){ var pe=pedit(code), p=profile(code)||{}, o={no:"",exp:"",why:[]};
   (p.info||[]).forEach(function(i){ var n=(i.notes||"").replace(/\s+/g," "); if(i.archived) return;
     if(/licen/i.test(i.cat||"")){ var d=usDate(n); if(d && d>o.exp){ o.exp=d; o.why.push("Asana: "+n.slice(0,80)); } }
@@ -2836,19 +2840,16 @@ function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(fun
   var fire=rows.filter(function(r){ return r.f.has!==false; }), cnt=function(a,key,k){ return a.filter(function(r){ return r[key].k===k; }).length; };
   var pick=function(a,key){ return a.filter(function(r){ return flt==="all"||(flt==="due"?(r[key].k==="late"||r[key].k==="soon"):r[key].k===flt); }).sort(function(a1,b1){ return (a1[key==="fs"?"f":"l"].exp||"9999").localeCompare(b1[key==="fs"?"f":"l"].exp||"9999"); }); };
   var chips='<div class="chiprow">'+[["due","Expired or due in 60 days"],["late","Expired"],["soon","Due soon"],["none","No date"],["ok","Up to date"],["all","All"]].map(function(c){ return '<button class="chip" data-firef="'+c[0]+'" aria-pressed="'+(flt===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>';
-  var h=licOverview(rows0)+'<div class="sechead"><h2>Fire &amp; licenses'+(u.licHood?' · '+esc(u.licHood):u.licCounty?' · '+esc(u.licCounty):'')+'</h2><p>Which homes have a fire suppression system, when its tag runs out (a year after the last Pye-Barker inspection), and when each home\'s license expires. Fix any home on its Homes page.</p>'+chips+'</div>';
+  /* 2026-10-28 (Brandon): fire suppression is its own tab (Licensing ▸ Fire suppression); New properties sit on top here */
+  var h=(LIC?LIC.newSection():'')+licOverview(rows0)+'<div class="sechead"><h2>Licenses'+(u.licHood?' · '+esc(u.licHood):u.licCounty?' · '+esc(u.licCounty):'')+'</h2><p>When each home\'s license expires. A license can\'t be renewed without a current fire system tag, so those homes say so here. Fix any home on its Homes page.</p>'+chips+'</div>';
   var F=pick(fire.filter(function(r){ return r.f.has===true||flt==="all"||flt==="none"; }),"fs"), L=pick(lrows,"ls");
   var fneed=F.filter(function(r){ return r.fs.k!=="ok" && !fireQ(r.code); }).map(function(r){ return r.code; });
-  h+='<div class="grid2"><section class="panel"><div class="ph"><h3>Fire suppression</h3><span class="ct">'+fire.filter(function(r){return r.f.has===true;}).length+' homes have one · '+cnt(fire,"fs","late")+' expired · '+cnt(fire,"fs","soon")+' due soon</span>'+
-    (fneed.length?'<button class="btn sm pri" data-fireall="'+esc(fneed.join(","))+'">Create '+fneed.length+' check tasks in Breezeway</button>':'')+'</div>'+
-    (F.length?'<div class="appl" style="border:0;border-radius:0;max-height:640px;overflow-y:auto"><table class="t"><thead><tr><th>Home</th><th>System</th><th>Last inspection</th><th>Tag</th><th></th></tr></thead><tbody>'+F.map(function(r){ return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a></td><td>'+(r.f.has===true?'Yes':r.f.bwListed?'<span class="muted">listed in Breezeway — check</span>':'<span class="muted">not sure</span>')+'</td><td class="mono">'+esc(r.f.last?fmtD(r.f.last):"—")+'</td><td>'+duePill(r.fs)+'</td><td>'+fireBtn(r.code)+'</td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
-    '<div class="pad note">Yes = Asana says there\'s a system, or there are Pye-Barker / fire suppression tasks for the home. The Breezeway home page lists a fire suppression item on most homes by default, so on its own that only means "check".</div></section>';
   var askable=L.filter(function(r){ return r.ls.k!=="ok"; }).map(function(r){ return r.code; });
   h+='<section class="panel"><div class="ph"><h3>Licenses</h3><span class="ct">'+cnt(lrows,"ls","late")+' expired · '+cnt(lrows,"ls","soon")+' due soon · '+cnt(lrows,"ls","none")+' no date</span>'+
     (askable.length?'<button class="btn sm pri" data-licall="'+esc(askable.join(","))+'">Message Haylee about '+askable.length+'</button>':'')+'</div>'+
     (L.length?'<div class="appl" style="border:0;border-radius:0;max-height:640px;overflow-y:auto"><table class="t"><thead><tr><th>Home</th><th>License #</th><th>Expires</th><th>Haylee</th></tr></thead><tbody>'+L.map(function(r){ var q=licQ(r.code);
-      return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a>'+licDocLinks(r.code,1)+'</td><td class="mono">'+esc(r.l.no||"—")+'</td><td>'+duePill(r.ls)+(r.l.county?' <span class="note">'+esc(r.l.county)+(r.l.summit?' · renews every Jan 15':'')+'</span>':'')+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':'')+(r.l.notes?'<div class="note">'+esc(r.l.notes)+'</div>':'')+(!r.l.sheet&&(r.l.county||needsLicense(r.code))?'<div class="note">Not on the Dropbox license sheet</div>':'')+'</td><td>'+(q?licAsk(q)+' ':'')+'<button class="btn sm ghost" data-licask="'+esc(r.code)+'">'+(q?'Ask again':'Ask Haylee')+'</button></td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
-    '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept) every morning. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out.</div></section></div>';
+      return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a>'+licDocLinks(r.code,1)+'</td><td class="mono">'+esc(r.l.no||"—")+'</td><td>'+duePill(r.ls)+(r.l.county?' <span class="note">'+esc(r.l.county)+(r.l.summit?' · renews every Jan 15':'')+'</span>':'')+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':'')+(r.l.notes?'<div class="note">'+esc(r.l.notes)+'</div>':'')+(!r.l.sheet&&(r.l.county||needsLicense(r.code))?'<div class="note">Not on the Dropbox license sheet</div>':'')+(LIC?LIC.fireBlock(r.code,r.l):'')+'</td><td>'+(q?licAsk(q)+' ':'')+'<button class="btn sm ghost" data-licask="'+esc(r.code)+'">'+(q?'Ask again':'Ask Haylee')+'</button></td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
+    '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept) every morning. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out (lease licenses: Licensing ▸ Leases).</div></section>';
   return h; }
 
 /* Licensing main page (Brandon 2026-10-28): property status by county, then by neighborhood. Click to drill in; the tables below follow. */
@@ -2859,11 +2860,10 @@ function licOverview(rows){ var u=S.ui, needs=function(r){ return needsLicense(r
     return '<div class="lbar">'+seg("ok","var(--go)")+seg("soon","var(--wait)")+seg("late","var(--stop)")+seg("none","var(--line-2)")+'</div>'; };
   /* pills filter the tables below when clicked (Brandon 2026-10-28); c/hd = the county / neighborhood the pill belongs to */
   var pills=function(t,c,hd){ var at=function(k){ return ' role="button" tabindex="0" title="Show these below" data-licf="'+k+'"'+(c!=null?' data-licfc="'+esc(c)+'" data-licfh="'+esc(hd||"")+'"':''); };
-    return '<div class="lpills">'+(t.late?'<span class="pill late"'+at("late")+'>'+t.late+' expired</span>':'')+(t.soon?'<span class="pill soon"'+at("soon")+'>'+t.soon+' due soon</span>':'')+(t.none?'<span class="pill mute"'+at("none")+'>'+t.none+' no date</span>':'')+(t.ok?'<span class="pill ok"'+at("ok")+'>'+t.ok+' good</span>':'')+
-    (t.fire?'<span class="pill'+(t.fireBad?' soon':' ok')+'"'+at("fire")+'>🔥 '+t.fire+' fire system'+(t.fire===1?'':'s')+(t.fireBad?' · '+t.fireBad+' tag due':'')+'</span>':'')+'</div>'; };
+    return '<div class="lpills">'+(t.late?'<span class="pill late"'+at("late")+'>'+t.late+' expired</span>':'')+(t.soon?'<span class="pill soon"'+at("soon")+'>'+t.soon+' due soon</span>':'')+(t.none?'<span class="pill mute"'+at("none")+'>'+t.none+' no date</span>':'')+(t.ok?'<span class="pill ok"'+at("ok")+'>'+t.ok+' good</span>':'')+'</div>'; };
   var by=function(list,key){ var g={}; list.forEach(function(r){ (g[r[key]]=g[r[key]]||[]).push(r); }); return Object.keys(g).sort(function(a,b){ return (/not set/.test(a)?1:0)-(/not set/.test(b)?1:0)||a.localeCompare(b); }).map(function(k){ return {k:k,list:g[k],t:tally(g[k])}; }); };
   var all=tally(rows), counties=by(rows,"county");
-  var h='<div class="sechead"><h2>Property status</h2><p>Every home by county, then by neighborhood: rental license status (second homes and leases don\'t need one) and fire suppression tags. Click a county, then a neighborhood, to see its homes below.</p>'+
+  var h='<div class="sechead"><h2>Property status</h2><p>Every home by county, then by neighborhood: rental license status (second homes and leases don\'t need one). Click a county, then a neighborhood, to see its homes below.</p>'+
     '<div class="lsum">'+pills(all)+'</div></div><div class="lgrid">'+counties.map(function(c){ var on=u.licCounty===c.k;
       return '<button class="lcard'+(on?' on':'')+'" data-liccounty="'+esc(c.k)+'"><div class="lh"><b>'+esc(c.k)+'</b><span class="muted">'+c.t.n+' home'+(c.t.n===1?'':'s')+'</span></div>'+bar(c.t)+pills(c.t,c.k,"")+'</button>'; }).join("")+'</div>';
   if(u.licCounty){ var hoods=by(rows.filter(function(r){ return r.county===u.licCounty; }),"hood");
@@ -2874,7 +2874,7 @@ function licOverview(rows){ var u=S.ui, needs=function(r){ return needsLicense(r
       h+='<div class="sechead" style="margin-top:14px"><h2>'+esc(u.licHood)+' · homes</h2><p><a href="#" data-lichood="'+esc(u.licHood)+'">← All '+esc(u.licCounty)+' neighborhoods</a></p></div><div class="lgrid">'+hs.map(function(r){ var need=needsLicense(r.code);
         return '<div class="lcard home"><div class="lh"><b>'+esc(r.code)+'</b>'+(need?duePill(r.ls):'<span class="pill mute">No license needed</span>')+'</div>'+
           (need?'<div class="lrow"><span class="ql">License #</span><b>'+esc(r.l.no||"—")+'</b></div>'+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':''):'')+
-          (r.f.has===true?'<div class="lrow"><span class="ql">Fire system tag</span>'+duePill(r.fs)+'</div>':'')+
+          (need&&LIC?LIC.fireBlock(r.code,r.l):'')+
           licDocLinks(r.code,2)+'<div class="lrow"><a href="./#/homes/'+encodeURIComponent(r.code)+'" target="_top" class="muted" style="font-size:12.5px">Open in Property Details →</a></div></div>'; }).join("")+'</div>'; } }
   return h+'<div style="height:14px"></div>'; }
 /* ---- ask Haylee in Slack about a license (single home or all shown) ---- */
@@ -3349,7 +3349,7 @@ document.addEventListener("click",function(ev){
     if(hit.length){ hit.forEach(function(x){ x.open=true; }); hit[0].scrollIntoView({behavior:"smooth",block:"start"}); } else { var hb=[].slice.call(document.querySelectorAll(".block h4")).filter(function(h){ return /Home information/.test(h.textContent); })[0]; if(hb) hb.scrollIntoView({behavior:"smooth"}); } return; }
   if(d.licf){ ev.preventDefault(); ev.stopPropagation(); S.ui.fireF=d.licf==="fire"?"due":d.licf;
     if(d.licfc!=null){ S.ui.licCounty=d.licfc; S.ui.licHood=d.licfh||""; }
-    render(); var tg=document.querySelectorAll(".grid2 .panel")[d.licf==="fire"?0:1]; if(tg) tg.scrollIntoView({behavior:"smooth",block:"start"}); return; }
+    render(); var tg=document.querySelector("[data-licall]")||document.querySelectorAll(".panel")[1]; if(tg) tg.scrollIntoView({behavior:"smooth",block:"start"}); return; }
   if(d.ldoc){ ev.preventDefault(); return openLicDoc(d.ldoc); }
   if(d.ldocs){ ev.preventDefault(); return mLicDocs(d.ldocs); }
   if(d.liccounty!=null){ ev.preventDefault(); S.ui.licCounty=(S.ui.licCounty===d.liccounty?"":d.liccounty); S.ui.licHood=""; return render(); }
@@ -3610,7 +3610,7 @@ derive(); render();
 (async function(){
   var db=null; try{ db=await window.MMDB.ready(); }catch(e){ db=null; }
   if(!db){ setSync(false,"Offline — can't load the board here"); return; }
-  S.db=db; setSync(true,"Live");
+  S.db=db; setSync(true,"Live"); if(LIC) LIC.load();
   ["feeds","edits","deskjobs","profiles","propedits","vendoredits","deskvendors","recurring","rlog","expenses","time","config","bwq","taskbill","projedits","slackq","deskprojects","asanaq","asks","ownercontacts","paycost"].forEach(function(c){
     var key={paycost:"paycost",ownercontacts:"ownercontacts",asks:"asks",asanaq:"asanaq",deskprojects:"deskprojects",slackq:"slackq",bwq:"bwq",taskbill:"taskbill",projedits:"projedits",feeds:"feeds",edits:"edits",deskjobs:"deskjobs",profiles:"profiles",propedits:"propedits",vendoredits:"vendoredits",deskvendors:"deskvendors",
       recurring:"recurring",rlog:"rlog",expenses:"expenses",time:"time",config:"config"}[c];
@@ -3620,5 +3620,6 @@ derive(); render();
 })();
 })();
 </script>
+<script src="desk-lic.js"></script>
 <script src="desk-shim.js"></script>
 </body></html>
