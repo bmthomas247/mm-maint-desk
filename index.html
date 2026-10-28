@@ -637,9 +637,18 @@ async function feedbackView(v){
   box.innerHTML = r.data.map(x => `<div class="fb" data-kind="${x.kind}" data-mine="${x.mine ? 1 : 0}"><div class="hd"><b>${label[x.kind]||x.kind}</b><span class="pill ${tone[x.status]||""}">${esc(x.status)}</span>
       <span class="muted">#${x.id} · ${esc(x.user_name||"")} · ${esc(deskName(x.desk_key))} · ${new Date(x.created_at).toLocaleString()}</span>
       ${ME.admin ? `<select data-id="${x.id}" style="width:auto;min-height:34px;padding:4px 8px;margin-left:auto">${["new","seen","doing","done","wont"].map(s => `<option ${s===x.status?"selected":""}>${s}</option>`).join("")}</select>` : ""}</div>
-      <p>${esc(x.body)}</p>${x.page_url ? `<p class="muted" style="margin-top:4px">📍 ${esc(String(x.page_url).split(" | ")[0])}</p>` : ""}${x.admin_note ? `<p class="muted">Brandon: ${esc(x.admin_note)}</p>` : ""}</div>`).join("");
+      <p>${esc(x.body)}</p>${x.page_url ? `<p class="muted" style="margin-top:4px">📍 ${esc(String(x.page_url).split(" | ")[0])}</p>` : ""}${x.admin_note ? `<p class="muted">${x.kind === "ask" ? "Answer" : "Brandon"}: ${esc(x.admin_note)}</p>` : ""}
+      ${ME.admin && x.kind === "ask" ? `<details class="acc2" style="margin-top:6px"${x.admin_note ? "" : " open"}><summary>${x.admin_note ? "Change the answer" : "✍️ Answer this"}</summary>
+        <label class="field"><span>Your answer (they see it the next time they open Penny; no codes or passwords)</span><textarea data-ans="${x.id}">${esc(x.admin_note || "")}</textarea></label>
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-teach="${x.id}" style="width:auto;min-height:0" checked> 🎓 Teach Penny this answer</label>
+        <label class="field"><span>Penny shares it with</span><select data-tdesk="${x.id}"><option value="">Everyone</option>${DESKS.map(d => `<option value="${esc(d.key)}">People who can open ${esc(d.label)}</option>`).join("")}</select></label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn primary small" data-asave="${x.id}">Save answer</button><span class="muted" data-amsg="${x.id}"></span></div></details>` : ""}</div>`).join("");
   document.querySelectorAll("#fbf button").forEach(b => b.onclick = () => { document.querySelectorAll("#fbf button").forEach(x => x.classList.toggle("on", x === b));
     box.querySelectorAll(".fb").forEach(el => el.style.display = b.dataset.f === "all" || (b.dataset.f === "mine" ? el.dataset.mine === "1" : el.dataset.kind === b.dataset.f) ? "" : "none"); });
+  box.querySelectorAll("[data-asave]").forEach(b => b.onclick = async () => { const id = +b.dataset.asave, m = box.querySelector(`[data-amsg="${id}"]`);
+    const r = await sb.rpc("penny_answer_ask", { p_id:id, p_answer:box.querySelector(`[data-ans="${id}"]`).value, p_teach:box.querySelector(`[data-teach="${id}"]`).checked,
+      p_desk:box.querySelector(`[data-tdesk="${id}"]`).value, p_topic:null });
+    m.textContent = r.error ? "Couldn't save: " + r.error.message : "Saved ✓" + (box.querySelector(`[data-teach="${id}"]`).checked ? " · Penny knows it now" : ""); });
   box.querySelectorAll("select[data-id]").forEach(s => s.onchange = async () => {
     const u = await sb.from("hub_feedback").update({ status:s.value }).eq("id", s.dataset.id);
     if(u.error){ s.insertAdjacentHTML("afterend", `<span class="muted"> couldn't save: ${esc(u.error.message)}</span>`); } });
@@ -1100,7 +1109,7 @@ async function hubReportsView(v){
     if(n && $("#rpwait")) $("#rpwait").innerHTML = `<div class="card" style="border-color:var(--amber)"><b>⏳ ${n} sync request${n === 1 ? "" : "s"} waiting for your OK</b> <a href="#/sync" style="margin-left:8px">Review →</a></div>`; });
   const r = await sb.from("hub_reports").select("*").order("sort");
   if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
-  const name = k => k === "home" ? "Hub" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
+  const name = k => k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = sb ? sb[0] : x.desk_key; (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
@@ -1196,11 +1205,11 @@ function pennyMount(){
   if($("#pennyBtn")) return;
   document.body.insertAdjacentHTML("beforeend", `<button id="pennyBtn" aria-label="Ask Penny"><span class="pav"><img src="penny-face.png" alt="Penny"></span><span class="plb">Ask Penny</span></button>
     <div id="pennyHi" role="status"><button class="x" aria-label="Close">✕</button><img class="phimg" src="penny-hello.jpg" alt="Penny the moose"><b>Hi ${esc((ME.name||"").split(" ")[0])}! I'm Penny 👋</b>What can I help you with today?
-      <div class="chips"><button>How do I add a property?</button><button>How do I find a vendor?</button><button>How do I report a bug?</button></div></div>
+      <div class="chips"><button>Catch me up on today</button><button>What do we tell a guest about early check-in?</button><button>How do I find a vendor?</button></div></div>
     <div id="pennyBox" role="dialog" aria-label="Ask Penny"><div class="ph"><span class="pav" style="width:38px;height:38px"><img src="penny-face.png" alt="Penny"></span>
       <b>Ask Penny<small>Your Moose Hub helper</small></b><button id="pennyNew" title="Clear this chat and start fresh">↺ New chat</button><button id="pennyClose" aria-label="Close">✕</button></div>
       <div id="pennyLog"></div>
-      <form id="pennyForm"><textarea id="pennyQ" placeholder="Ask how to do something…" aria-label="Your question"></textarea><button class="btn primary small" style="min-height:44px">Ask</button></form></div>`);
+      <form id="pennyForm"><textarea id="pennyQ" placeholder="Ask me anything about Moose…" aria-label="Your question"></textarea><button class="btn primary small" style="min-height:44px">Ask</button></form></div>`);
   $("#pennyBtn").onclick = () => pennyOpen(!PENNY.open);
   $("#pennyClose").onclick = () => pennyOpen(false);
   $("#pennyHi .x").onclick = () => $("#pennyHi").classList.remove("on");
@@ -1212,8 +1221,16 @@ function pennyMount(){
 }
 function pennyOpen(on){
   PENNY.open = on; $("#pennyBox").classList.toggle("on", on); $("#pennyHi").classList.remove("on");
-  if(on && !$("#pennyLog").children.length) pennySay("assistant", `Hi ${(ME.name||"").split(" ")[0]}! What can I help you with today? Ask me how to do anything in the Moose Hub.`);
+  if(on && !$("#pennyLog").children.length){ pennySay("assistant", `Hi ${(ME.name||"").split(" ")[0]}! What can I help you with today? Ask me anything about Moose: homes, guests, maintenance, who handles what, or how to do something in the hub.`); pennyAnswers(); }
   if(on) setTimeout(() => $("#pennyQ").focus(), 50);
+}
+/* 2026-10-28 (Brandon): when an admin answers your "Ask an admin" question, Penny tells you the next time you open her (seen ids kept per browser) */
+async function pennyAnswers(){
+  let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
+  const r = await sb.rpc("hub_feedback_board"); if(r.error) return;
+  (r.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id)).slice(0, 3).forEach(x => {
+    pennySay("assistant", `📬 You asked: "${String(x.body || "").replace(/^Asked Penny:\s*/, "").slice(0, 160)}"\n\nThe answer: ${x.admin_note}`); seen.push(x.id); });
+  try { localStorage.setItem("penny_seen_answers", JSON.stringify(seen.slice(-200))); } catch(e){}
 }
 function pennySay(role, text, id, links){
   const el = document.createElement("div"); el.className = "pmsg" + (role === "user" ? " me" : "");
@@ -1277,15 +1294,54 @@ function pennyInsights(all, needs){
       <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Missed by team (train or build here first)</div>${bars(tally(x => needs(x) ? ((x.teams || []).length ? x.teams.map(t => PENNY_TEAM[t] || t) : ["No team"]) : null))}</div>
     </div><p class="muted" style="font-size:12px;margin:8px 0 0">Source: Ask Penny log (penny_chats). "Missed" = 👎 or an answer saying she didn't know.</p>`;
 }
+/* Reports > Ask Patrick & Penny > Penny accuracy checks (#/penny/checks, Brandon 2026-10-28): re-ask questions with known answers.
+   A check passes when every "must" item (alternatives split by |) is in the answer and no "must not" item is. Runs cost like normal questions. */
+async function pennyChecksView(v){
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a> · <a href="#/penny">Ask Penny log</a></p><h2>Penny — accuracy checks</h2>
+    <p class="muted">Questions with a known right answer. Run them after Penny changes, or weekly, to catch wrong answers early. Each run asks Penny for real (about 2–10¢ a question).</p>
+    <div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:17px;flex:1">Checks</b><button class="btn primary small" id="pcrun">▶ Run all checks</button><button class="btn small" id="pcadd">+ Check</button></div><div id="pcform"></div><div id="pclist"><p class="muted">Loading…</p></div></div></div>`;
+  const load = async () => {
+    const [c, r] = await Promise.all([ sb.from("penny_checks").select("*").eq("off", false).order("id"), sb.from("penny_check_runs").select("*").order("id", { ascending:false }).limit(500) ]);
+    const last = {}; (r.data || []).forEach(x => { if(!last[x.check_id]) last[x.check_id] = x; });
+    const runs = [...new Set((r.data || []).map(x => x.run_id))].slice(0, 8).map(id => { const L = (r.data || []).filter(x => x.run_id === id); return { id, at:L[0].run_at, by:L[0].by_name, pass:L.filter(x => x.pass).length, n:L.length }; });
+    $("#pclist").innerHTML = (c.data || []).map(x => { const l = last[x.id]; return `<div class="fb"><div class="hd"><b>${esc(x.question)}</b>${l ? `<span class="pill ${l.pass ? "green" : "red"}">${l.pass ? "pass" : "fail"}</span><span class="muted">${new Date(l.run_at).toLocaleString()}</span>` : `<span class="pill">not run yet</span>`}<button class="btn small" data-off="${x.id}" style="margin-left:auto">Turn off</button></div>
+      <p class="muted" style="margin:2px 0">Must say: ${x.must.length ? x.must.map(m => `<span class="pill">${esc(m)}</span>`).join(" ") : "—"} · Must not say: ${x.must_not.length ? x.must_not.map(m => `<span class="pill">${esc(m)}</span>`).join(" ") : "—"}</p>
+      <p class="muted" style="font-size:12px;margin:2px 0">${esc(x.why || "")} · Source: ${esc(x.source)}</p>
+      ${l && !l.pass ? `<p style="margin:4px 0"><b>Missing:</b> ${esc((l.missing || []).join(", "))}</p><details class="acc2"><summary>Penny's answer</summary><p style="white-space:pre-wrap">${esc(l.answer || "")}</p></details>` : ""}</div>`; }).join("") +
+      (runs.length ? `<div class="muted" style="margin-top:10px;font-size:13px"><b>Recent runs:</b> ${runs.map(x => `${new Date(x.at).toLocaleDateString()} ${esc(x.by || "")} ${x.pass}/${x.n}`).join(" · ")}</div>` : "");
+    $("#pclist").querySelectorAll("[data-off]").forEach(b => b.onclick = async () => { await sb.from("penny_checks").update({ off:true }).eq("id", b.dataset.off); load(); });
+    return c.data || [];
+  };
+  let checks = await load();
+  $("#pcadd").onclick = () => { $("#pcform").innerHTML = `<div class="card" style="margin-top:10px"><label class="field"><span>Question</span><input id="pc_q"></label>
+      <label class="field"><span>Answer must say (one per line; use | for "either", e.g. unassigned|no one)</span><textarea id="pc_m"></textarea></label>
+      <label class="field"><span>Answer must NOT say (one per line)</span><textarea id="pc_n"></textarea></label>
+      <label class="field"><span>Where the right answer comes from (required)</span><input id="pc_s" placeholder="e.g. Freshdesk canned reply …, work order #…, Brandon said on …"></label>
+      <div style="display:flex;gap:8px"><button class="btn primary small" id="pc_save">Save check</button><span class="muted" id="pc_msg"></span></div></div>`;
+    $("#pc_save").onclick = async () => { const lines = id => $(id).value.split("\n").map(t => t.trim().toLowerCase()).filter(Boolean);
+      if(!$("#pc_q").value.trim() || !$("#pc_s").value.trim()) return $("#pc_msg").textContent = "Question and source are required.";
+      const r = await sb.from("penny_checks").insert({ question:$("#pc_q").value.trim(), must:lines("#pc_m"), must_not:lines("#pc_n"), source:$("#pc_s").value.trim(), created_by:ME.name });
+      if(r.error) return $("#pc_msg").textContent = r.error.message; $("#pcform").innerHTML = ""; checks = await load(); }; };
+  $("#pcrun").onclick = async () => { const b = $("#pcrun"); b.disabled = true; const run = "run-" + Date.now();
+    for(const [i, x] of checks.entries()){ b.textContent = `Running ${i + 1} of ${checks.length}…`;
+      const r = await sb.functions.invoke("penny", { body:{ question:x.question, page:"Reports › Penny accuracy checks", check:true } });
+      const ans = String(r.data?.answer || r.error?.message || ""), low = ans.toLowerCase();
+      const missing = x.must.filter(m => !m.split("|").some(alt => low.includes(alt.trim()))).concat(x.must_not.filter(m => low.includes(m)).map(m => "said: " + m));
+      await sb.from("penny_check_runs").insert({ run_id:run, check_id:x.id, by_name:ME.name, answer:ans.slice(0, 4000), pass:!missing.length && !!r.data?.ok, missing }); }
+    b.disabled = false; b.textContent = "▶ Run all checks"; checks = await load(); };
+}
 /* admins: what staff asked Penny + edit what she knows (#/penny) */
 async function pennyView(v){
   if(!ME.admin){ location.hash = "#/home"; return; }
+  if(hashArg() === "checks") return pennyChecksView(v);
+  const missedOnly = hashArg() === "missed";
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
     <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
   const [c, k] = await Promise.all([ sb.from("penny_chats").select("*").order("id", { ascending:false }).limit(1000), sb.from("penny_kb").select("*").order("topic") ]);
   const needs = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test(x.answer || "");
   const all = c.data || []; pennyInsights(all, needs);
-  const rows = all.slice(0, 200).sort((a, b) => needs(b) - needs(a)), tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
+  const rows = (missedOnly ? all.filter(needs) : all.slice(0, 200)).filter(x => !/^accuracy check/.test(x.note || "")).sort((a, b) => needs(b) - needs(a)), tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
+  if(missedOnly){ $("#pins").remove(); v.querySelector("h2").textContent = "Penny — missed & 👎"; }
   $("#plog").innerHTML = `<b style="font-size:17px">Questions</b> <span class="muted">${rows.filter(needs).length} to teach first · ${rows.length} shown · $${tot.toFixed(2)} · 👍 ${rows.filter(x => x.helpful === true).length} · 👎 ${rows.filter(x => x.helpful === false).length}</span>` +
     (rows.length ? rows.map((x, i) => `<div class="fb"><div class="hd"><b>${esc(x.user_name || "")}</b>${needs(x) ? `<span class="pill amber">teach her</span>` : ""}<span class="muted">${new Date(x.created_at).toLocaleString()} · ${esc(x.page || "")}</span>${x.helpful === true ? `<span class="pill green">👍</span>` : x.helpful === false ? `<span class="pill red">👎</span>` : ""}<span class="muted" style="margin-left:auto">$${(+x.cost_usd || 0).toFixed(4)}</span></div>
       <p><b>Q:</b> ${esc(x.question)}</p><p class="muted"><b>Penny:</b> ${esc(x.answer || "")}</p><button class="btn small" data-teach="${i}">🎓 Teach Penny</button></div>`).join("") : `<p class="muted">No questions yet.</p>`);
