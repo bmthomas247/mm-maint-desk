@@ -133,3 +133,4 @@ a.ldoc.more{background:var(--sunk);color:var(--ink-2)} a.ldoc:hover{text-decorat
 .lcard .lh b{white-space:nowrap}
 /* clickable license pills (2026-10-28) */
 .lpills .pill[data-licf]{cursor:pointer} .lpills .pill[data-licf]:hover{filter:brightness(.95);outline:2px solid currentColor;outline-offset:1px}
+.qv a.qinfo{display:inline-block;margin-top:6px;font-size:12.5px;font-weight:700}
