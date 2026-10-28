@@ -46,8 +46,9 @@ const folioUrl = r => "https://moosemanagement.trackhs.com/pms/guest-folio/view/
 
 async function load(force){
   if(B && !force && Date.now() - loadedAt < 60000) return B;
-  const r = await sb.rpc("res_board"); if(r.error) throw r.error;
+  const [r, al] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts")]); if(r.error) throw r.error;
   B = r.data; loadedAt = Date.now();
+  if(B) B.alerts = al.data || [];   // home heads-ups (hub_penny_3.sql, Brandon 2026-10-28): warn before booking a home with a big open problem
   if(B) B.stays.forEach(prep);
   return B;
 }
@@ -141,6 +142,8 @@ function prep(s){
   const c = conds(s), ticks = s.ticks || {};
   s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
   s.area = area(s.unit);
+  const uk = String(s.unit || "").replace(/^(L-|2H-)/i, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  s.heads = (B.alerts || []).filter(a => a.key === uk);
   s.steps = B.steps.filter(t => t.chans.includes(s.chan) && t.cond.every(k => c[k]))
     .map(t => { const k = ticks[t.key], au = t.auto && autoOk(s, t.auto);
       return { ...t, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : null, done:k ? k.d : !!au }; });
@@ -157,13 +160,18 @@ function css(){ if(!document.getElementById("rescss")){ const st = document.crea
 const fresh = () => `<p class="muted" style="margin:4px 0 10px">Source: Track reservations, updated ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost, updated ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway, updated ${esc(when(B.bwUpdated))}` : ""}</p>`;
 
 /* ---------- queue */
-const F = { q:"", chan:"", area:"", stage:"in_progress", held:"" };
+const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"arrive", from:"", to:"" };
+// Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
+const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Booking date" };
 async function queue(v){
   v.innerHTML = `<div class="page rpage"><h2>Check lists</h2><p class="muted">Loading…</p></div>`;
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load the check lists: ${esc(e.message)}</p></div></div>`; return; }
   if(!B){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   const draw = () => {
-    const base = B.stays.filter(s => (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase())));
+    const dk = s => String(s[F.by] || "").slice(0, 10);
+    const base = B.stays.filter(s => (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
+      && (!F.from || dk(s) >= F.from) && (!F.to || (dk(s) && dk(s) <= F.to)))
+      .sort((x, y) => F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : 0) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first
     const inStage = base.filter(s => s.stage === F.stage);
     const rows = inStage.filter(s => !F.held || s.blockers.includes(F.held) || s.waiting.includes(F.held));
     const cnt = k => base.filter(s => s.stage === k).length;
@@ -173,7 +181,7 @@ async function queue(v){
       ${Object.keys(held).length ? `<div class="rchips"><span class="muted" style="align-self:center">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}<span class="n">${n}</span></button>`).join("")}</div>` : ""}
       <div class="card" style="padding:6px 12px">${rows.length ? rows.map(s => { const why = [...s.waiting, ...s.blockers];
         return `<a class="rrow rq3" href="#/reservations/${encodeURIComponent(s.res)}">
-        <span class="who"><b>${esc(s.guest || "#" + s.res)}</b>${s.vip ? ` <span class="pill blue">VIP</span>` : ""}${s.dnr ? ` <span class="pill red">DNR</span>` : ""}
+        <span class="who"><b>${esc(s.guest || "#" + s.res)}</b>${s.vip ? ` <span class="pill blue">VIP</span>` : ""}${s.dnr ? ` <span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? ` <span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
           <span class="sub">${esc(s.unit || "")}${HOODS[s.area] ? ` · ${esc(HOODS[s.area])}` : ""}</span><span class="sub">${esc(s.type || CH[s.chan])}</span></span>
         <span class="when"><span><span class="k">Booked</span> ${esc(dayY(s.bookedAt))}</span><span><span class="k">Stay</span> <b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> <span class="muted"> · ${esc(s.nights)} nights</span></span></span>
         <span class="st"><span style="display:flex;gap:8px;align-items:center;justify-content:flex-end"><span class="pill ${s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "" : s.state === "Cancelling" ? "red" : "amber"}">${esc(s.state)}</span>
@@ -189,10 +197,18 @@ async function queue(v){
       <select id="rq_c"><option value="">All types</option>${Object.entries(CH).map(([k, l]) => `<option value="${k}" ${F.chan === k ? "selected" : ""}>${l}</option>`).join("")}</select>
       <select id="rq_a"><option value="">All neighborhoods</option>${[...new Set(B.stays.map(s => s.area).filter(Boolean))].map(a => [a, HOODS[a] || a]).sort((x, y) => x[1].localeCompare(y[1]))
         .map(([a, n]) => `<option value="${a}" ${F.area === a ? "selected" : ""}>${esc(n)}${n !== a ? " (" + a + ")" : ""}</option>`).join("")}</select></div>
+    <div class="rqbar"><label class="muted" style="display:flex;gap:6px;align-items:center">Sort by <select id="rq_by" style="width:auto">${Object.entries(BY).map(([k, l]) => `<option value="${k}" ${F.by === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="muted" style="display:flex;gap:6px;align-items:center">from <input type="date" id="rq_from" value="${esc(F.from)}" style="width:auto"></label>
+      <label class="muted" style="display:flex;gap:6px;align-items:center">to <input type="date" id="rq_to" value="${esc(F.to)}" style="width:auto"></label>
+      ${F.from || F.to ? `<button class="btn small" id="rq_clr">Clear dates</button>` : ""}</div>
     <div id="rqbody"></div></div>`;
   $("#rq_q").oninput = e => { F.q = e.target.value; draw(); };
   $("#rq_c").onchange = e => { F.chan = e.target.value; draw(); };
   $("#rq_a").onchange = e => { F.area = e.target.value; draw(); };
+  $("#rq_by").onchange = e => { F.by = e.target.value; draw(); };
+  $("#rq_from").onchange = e => { F.from = e.target.value; queue(v); };
+  $("#rq_to").onchange = e => { F.to = e.target.value; queue(v); };
+  if($("#rq_clr")) $("#rq_clr").onclick = () => { F.from = F.to = ""; queue(v); };
   draw();
 }
 
@@ -224,6 +240,7 @@ async function card(v, res){
             <span class="pill ${t.st === "done" ? "green" : t.st === "started" ? "blue" : ""}">${esc(t.st)}</span><span class="muted">${esc((t.who || []).join(", "))}</span></div>`).join("")}</div>`
         : bwKnown(s) ? `<div class="rmoney"><span class="muted">Breezeway</span><span>No tasks at this home from 5 days before arrival to the day after checkout.</span></div>` : ""}
       ${s.hk && s.hk.length ? `<div class="rmoney"><span class="muted">#housekeeping @Cheree</span>${s.hk.slice(-4).map(m => `<a href="${esc(m.link)}" target="_blank" rel="noopener">${esc(when(m.at))}${m.by ? " · " + esc(m.by) : ""} ↗</a>`).join("")}</div>` : ""}
+      ${s.heads.length ? `<div class="rrule warn" style="background:var(--amber-soft)"><div>⚠️ Heads-up for ${esc(s.unit)} before you book</div>${s.heads.map(a => `<div style="font-weight:${a.level === "warn" ? 600 : 400};margin-top:3px">• ${esc(a.text)} <span style="font-weight:400;opacity:.8">· ${esc(a.source)}</span></div>`).join("")}</div>` : ""}
       ${s.rules.map(r => `<div class="rrule ${r.kind}">${esc(r.text)} <span style="font-weight:400;opacity:.8">· ${esc(r.source)}</span></div>`).join("")}
     </div>
     <div class="card">
