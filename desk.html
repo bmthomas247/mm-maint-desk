@@ -2790,7 +2790,7 @@ function licInfo(code){ var pe=pedit(code), p=profile(code)||{}, o={no:"",exp:""
 
 /* License copies (Brandon 2026-10-28): files from the Dropbox 2b-Licenses folders, uploaded by licenses_sync.py to the private
    Storage bucket license-docs (Licensing desk only). Opens a 5-minute signed link. */
-function licDocs(code){ var h=((S.feeds["license-docs"]||{}).homes)||{}; return h[code]||h[String(code).replace(/^(2H-|L-)/,"")]||[]; }
+function licDocs(code){ var h=((S.feeds["license-docs"]||{}).homes)||{}; return h[code]||h[String(code).replace(/^(2H-|L-)/,"")]||fromFeed(h,code)||[]; }
 function licDocLinks(code,max){ var d=licDocs(code); if(!d.length) return '<span class="muted" style="font-size:12.5px">No license copy on file</span>';
   var lic=d.filter(function(x){ return x.kind==="License"; }), ins=d.filter(function(x){ return x.kind!=="License"; }), show=lic.slice(0,max||2);
   return '<div class="ldocs">'+show.map(function(x){ return '<a href="#" class="ldoc" data-ldoc="'+esc(x.path)+'" title="'+esc(x.name)+'">📄 License'+(x.year?' '+x.year:'')+'</a>'; }).join("")+
@@ -2802,7 +2802,8 @@ function mLicDocs(code){ var d=licDocs(code);
   openModal("License copies · "+code,'<div class="note">From the Dropbox 2b-Licenses folders. Copies open for 5 minutes.</div>'+
     ['License','Inspection report'].map(function(k){ var l=d.filter(function(x){ return x.kind===k; }); if(!l.length) return "";
       return '<div class="lbl" style="margin-top:10px">'+(k==="License"?"Licenses":"Inspection reports")+'</div>'+l.map(function(x){ return '<div class="ldocrow"><a href="#" class="ldoc" data-ldoc="'+esc(x.path)+'">📄 '+esc(x.name)+'</a><span class="muted">'+(x.year||"")+'</span></div>'; }).join(""); }).join(""),null); }
-function licFeed(code){ var f=(S.feeds.licenses||{}).homes||{}; return f[code]||f[canon(code)]||null; }
+/* 2026-10-28: the feed is keyed by Track code now (licenses_sync.py maps Haylee's sheet codes), so try the home's aliases too (CR 1914 = Track 1914) */
+function licFeed(code){ var f=(S.feeds.licenses||{}).homes||{}; return f[code]||f[canon(code)]||fromFeed(f,code)||null; }
 function licState(l){ if(l.pending && !l.exp) return {k:"late",t:"Not licensed yet"}; var st=dueState(l.exp); if(l.pending && st.k==="ok") return {k:"soon",t:"One license still pending"}; return st; }
 function jan15After(d){ var y=+String(d).slice(0,4); var j=y+"-01-15"; return d<j?j:(y+1)+"-01-15"; }
 /* second-home (2H-) and long-term lease homes don't need a rental license */
@@ -2849,7 +2850,7 @@ function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(fun
     (askable.length?'<button class="btn sm pri" data-licall="'+esc(askable.join(","))+'">Message Haylee about '+askable.length+'</button>':'')+'</div>'+
     (L.length?'<div class="appl" style="border:0;border-radius:0;max-height:640px;overflow-y:auto"><table class="t"><thead><tr><th>Home</th><th>License #</th><th>Expires</th><th>Haylee</th></tr></thead><tbody>'+L.map(function(r){ var q=licQ(r.code);
       return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a>'+licDocLinks(r.code,1)+'</td><td class="mono">'+esc(r.l.no||"—")+'</td><td>'+duePill(r.ls)+(r.l.county?' <span class="note">'+esc(r.l.county)+(r.l.summit?' · renews every Jan 15':'')+'</span>':'')+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':'')+(r.l.notes?'<div class="note">'+esc(r.l.notes)+'</div>':'')+(!r.l.sheet&&(r.l.county||needsLicense(r.code))?'<div class="note">Not on the Dropbox license sheet</div>':'')+(LIC?LIC.fireBlock(r.code,r.l):'')+'</td><td>'+(q?licAsk(q)+' ':'')+'<button class="btn sm ghost" data-licask="'+esc(r.code)+'">'+(q?'Ask again':'Ask Haylee')+'</button></td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
-    '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept) every morning. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out (lease licenses: Licensing ▸ Leases).</div></section>';
+    '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept) within 30 minutes of each save. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out (lease licenses: Licensing ▸ Leases).</div></section>';
   return h; }
 
 /* Licensing main page (Brandon 2026-10-28): property status by county, then by neighborhood. Click to drill in; the tables below follow. */
