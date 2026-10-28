@@ -73,6 +73,11 @@ a.mlink:hover .nm{text-decoration:underline}
 .avbig{width:88px;height:88px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-weight:800;font-size:28px;flex:none;overflow:hidden}
 .ment{display:block;padding:9px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit} .ment:last-child{border-bottom:0}
 .ment .mt{font-size:14.5px;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.bday{background:linear-gradient(135deg,#fff4d6,var(--card));border-color:#f1d48a}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .bday{background:linear-gradient(135deg,#3a2f12,var(--card));border-color:#5a4a1c} }
+.bday .big{font-size:20px;font-weight:800;margin:6px 0 2px}
+.bdrow{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)} .bdrow:last-child{border-bottom:0}
+.bdsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .bdsel select{width:auto;min-height:40px}
 .me button{background:none;border:0;color:#fff;opacity:.7;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer}
 main.view{min-width:0;min-height:0;display:flex;flex-direction:column}
 iframe.desk{border:0;width:100%;flex:1;background:var(--ground)}
@@ -544,7 +549,17 @@ function shrinkPic(file){ return new Promise((ok, bad) => { const r = new FileRe
     const n = 160, c = document.createElement("canvas"); c.width = c.height = n; const x = c.getContext("2d"), m = Math.min(im.width, im.height);
     x.drawImage(im, (im.width - m) / 2, (im.height - m) / 2, m, m, 0, 0, n, n); ok(c.toDataURL("image/jpeg", 0.85)); }; im.src = r.result; };
   r.readAsDataURL(file); }); }
-function settingsView(v){
+function bdSelects(id, cur){ cur = cur || {};
+  return `<select id="${id}_m" aria-label="Month"><option value="">Month</option>${MONTHS.map((m, i) => `<option value="${i + 1}" ${cur.month === i + 1 ? "selected" : ""}>${m}</option>`).join("")}</select>
+    <select id="${id}_d" aria-label="Day"><option value="">Day</option>${[...Array(31)].map((_, i) => `<option ${cur.day === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select>`; }
+function alertMsg(t){ const m = $("#bdmsg"); if(m) m.textContent = t; }
+let BD = { mine:null, people:[] };
+async function settingsView(v){
+  const [a, b] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] })]);
+  BD = { mine:(a.data || []).find(x => x.me) || null, people:b.data || [] };
+  settingsView2(v);
+}
+function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
   const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick" }, GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"] };
   const seen = {}, items = [];
@@ -560,6 +575,10 @@ function settingsView(v){
     <div class="card"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
+    <div class="card"><b style="font-size:17px">🎂 My birthday</b><p class="muted" style="margin:4px 0 8px">Month and day only — so the team can celebrate you.</p>
+      <div class="bdsel">${bdSelects("bd", BD.mine)}<button class="btn small" id="bdsave">Save birthday</button><span class="muted" id="bdmsg"></span></div>
+      ${ME.admin ? `<details class="acc2"><summary><b>Everyone's birthdays</b><span class="muted">(Brandon & Kim) ${BD.people.filter(x => x.month).length} of ${BD.people.length} set</span></summary>
+        ${BD.people.map((x, i) => `<div class="bdrow"><b style="flex:1">${esc(x.name)}</b><span class="bdsel">${bdSelects("bp" + i, x)}<button class="btn small" data-bdp="${i}">Save</button></span></div>`).join("")}</details>` : ""}</div>
     <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Move the desks you use most to the top.</p>
       <div id="ordl">${list.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
         <button class="btn small" data-up="${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${i}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("")}</div>
@@ -578,6 +597,11 @@ function settingsView(v){
       try { const d = await shrinkPic(f); const r = await sb.rpc("hub_set_avatar", { p_avatar:d }); if(r.error) throw r.error;
         PREFS.avatar = d; shell(); route(); } catch(err){ $("#avmsg").textContent = "Couldn't save: " + (err.message || err); } };
     if($("#avdel")) $("#avdel").onclick = async () => { const r = await sb.rpc("hub_set_avatar", { p_avatar:null }); if(!r.error){ PREFS.avatar = null; shell(); route(); } };
+    $("#bdsave").onclick = async () => { const r = await sb.rpc("hub_set_birthday", { p_user:null, p_month:+$("#bd_m").value || null, p_day:+$("#bd_d").value || null });
+      $("#bdmsg").textContent = r.error ? "Couldn't save: " + r.error.message : "Saved 🎉"; if(!r.error) BD.mine = { month:+$("#bd_m").value, day:+$("#bd_d").value }; };
+    v.querySelectorAll("[data-bdp]").forEach(b => b.onclick = async () => { const i = +b.dataset.bdp, x = BD.people[i];
+      const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
+      b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
     $("#ordreset").onclick = () => { list = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k); list.custom = false; draw(); };
     $("#prefsave").onclick = async () => { $("#prefsave").disabled = true;
       const std = items.slice().sort((a, b) => a.sort - b.sort).map(x => x.k).join(), order = list.join() === std ? [] : list.slice();
@@ -601,9 +625,27 @@ async function loadMentions(){
       <div class="mt">${esc(x.body || "")}</div></a>`).join("") : `<p class="muted">No @-mentions in public channels in the last two weeks.</p>`)
     + `<p class="muted" style="font-size:12px;margin:8px 0 0">Source: Slack public channels (private channels and DMs aren't included)${j.updated ? ", checked " + ago(j.updated) : ""}. Tap one to open it in Slack.</p>`;
 }
+/* Birthdays (2026-10-28): on the day, the week of (Mon-Sun), and the whole month during its first 7 days */
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+async function loadBirthdays(){
+  const box = $("#bdays"); if(!box) return;
+  const r = await sb.rpc("hub_birthdays_all"); const all = r.data || []; if(!all.length) return;
+  const t = new Date(); t.setHours(12,0,0,0); const y = t.getFullYear(), mo = t.getMonth() + 1, d = t.getDate();
+  const mon = new Date(t); mon.setDate(d - ((t.getDay() + 6) % 7)); const wk = [...Array(7)].map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return x; });
+  const isDay = (b, x) => b.month === x.getMonth() + 1 && b.day === x.getDate();
+  const today = all.filter(b => isDay(b, t)), week = all.filter(b => wk.some(x => isDay(b, x)) && !isDay(b, t)), month = d <= 7 ? all.filter(b => b.month === mo) : [];
+  if(!today.length && !week.length && !month.length) return;
+  const first = n => esc(String(n || "").split(" ")[0]), when = b => new Date(y, b.month - 1, b.day, 12).toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" });
+  box.innerHTML = `<div class="card bday">
+    ${today.length ? `<div class="big">🎂 Happy birthday, ${today.map(b => first(b.name)).join(" & ")}!</div><p class="muted" style="margin:0 0 6px">${today.some(b => b.me) ? "From all of us at Moose — have a great one!" : "Give them a shout-out below 🎉"}</p>` : ""}
+    ${week.length ? `<b>🎈 Birthdays this week</b>${week.map(b => `<div class="bdrow"><b>${esc(b.name)}</b><span class="muted" style="margin-left:auto">${when(b)}</span></div>`).join("")}` : ""}
+    ${month.length ? `<details class="acc2" ${today.length || week.length ? "" : "open"}><summary><b>🎉 ${MONTHS[mo - 1]} birthdays</b><span class="pill green">${month.length}</span></summary>${month.map(b => `<div class="bdrow"><b>${esc(b.name)}</b><span class="muted" style="margin-left:auto">${when(b)}</span></div>`).join("")}</details>` : ""}
+  </div>`;
+}
 async function homeView(v){
   const first = (ME.name||"").split(" ")[0];
   v.innerHTML = `<div class="page"><h2>Hi ${esc(first)} 👋</h2><p class="muted">${new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p>
+    <div id="bdays"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
     <div class="card" id="wx"><p class="muted">Loading Park City weather…</p></div>
@@ -617,7 +659,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
-  loadStays(); dailyPick(0); loadMentions();
+  loadStays(); dailyPick(0); loadMentions(); loadBirthdays();
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
