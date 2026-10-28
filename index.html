@@ -506,6 +506,48 @@ async function messagesView(v){
 /* Home: weather (Open-Meteo, no key), company news + shout-outs (hub_posts) */
 const WX = { 0:"Clear",1:"Mostly clear",2:"Partly cloudy",3:"Cloudy",45:"Fog",48:"Fog",51:"Drizzle",53:"Drizzle",55:"Drizzle",61:"Rain",63:"Rain",65:"Heavy rain",
   66:"Freezing rain",67:"Freezing rain",71:"Snow",73:"Snow",75:"Heavy snow",77:"Snow grains",80:"Showers",81:"Showers",82:"Heavy showers",85:"Snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm",99:"Thunderstorm" };
+const WXI = c => c === 0 || c === 1 ? "☀️" : c === 2 ? "⛅" : c === 3 ? "☁️" : c <= 48 ? "🌫️" : c >= 71 && c <= 77 || c === 85 || c === 86 ? "🌨️" : c >= 95 ? "⛈️" : "🌧️";
+/* 2026-10-28 (Brandon): weather chip next to the greeting; click -> full forecast + snow report pop-up.
+   Town = Open-Meteo at Park City (40.6461,-111.4980). Snow = Open-Meteo model at ~8,860 ft on Park City Mountain (40.6514,-111.508,
+   elevation 2700 m) - an ESTIMATE, not the resort's measured report, which is linked for the real numbers. */
+const WX_TOWN = "https://api.open-meteo.com/v1/forecast?latitude=40.6461&longitude=-111.4980&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m&hourly=temperature_2m,weather_code,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,snowfall_sum,wind_speed_10m_max,sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FDenver&forecast_days=10";
+const WX_MTN = "https://api.open-meteo.com/v1/forecast?latitude=40.6514&longitude=-111.508&elevation=2700&current=temperature_2m,snow_depth&daily=snowfall_sum,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=America%2FDenver&past_days=7&forecast_days=10";
+async function loadWeather(){
+  const chip = $("#wxchip"), m = $("#wxm"); if(!chip) return;
+  const close = () => m.classList.remove("on");
+  $("#wxback").onclick = $("#wxx").onclick = close;
+  m.onclick = e => { if(e.target === m) close(); };   // view-only pop-up: click outside closes
+  chip.onclick = () => m.classList.add("on");
+  let w, s;
+  try { [w, s] = await Promise.all([fetch(WX_TOWN).then(r => r.json()), fetch(WX_MTN).then(r => r.json()).catch(() => null)]); }
+  catch(e){ chip.innerHTML = `<span class="muted">Weather didn't load</span>`; $("#wxbody").innerHTML = `<p class="muted">Weather didn't load.</p>`; return; }
+  const c = w.current, d = w.daily, h = w.hourly, at = new Date().toLocaleTimeString([], { hour:"numeric", minute:"2-digit" });
+  chip.innerHTML = `<span style="font-size:20px">${WXI(c.weather_code)}</span><b style="font-size:18px">${Math.round(c.temperature_2m)}°</b><span class="muted">${WX[c.weather_code] || ""} · Park City</span>`;
+  const day = (t, i) => i ? new Date(t + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }) : "Today";
+  const tm = t => new Date(t).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" });
+  const now = Date.now(), hi = h.time.map((t, i) => i).filter(i => new Date(h.time[i]).getTime() >= now - 36e5).slice(0, 12);
+  const hours = `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">${hi.map(i => `<div style="text-align:center;padding:6px 8px;border:1px solid var(--line);border-radius:12px;min-width:56px">
+      <div class="muted" style="font-size:12px">${new Date(h.time[i]).toLocaleTimeString([], { hour:"numeric" })}</div><div>${WXI(h.weather_code[i])}</div><b>${Math.round(h.temperature_2m[i])}°</b>
+      <div class="muted" style="font-size:11px">${h.precipitation_probability[i] ?? 0}%</div></div>`).join("")}</div>`;
+  const days = d.time.map((t, i) => `<div class="bdrow" style="display:flex;align-items:center;gap:4px 10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)">
+      <b style="width:110px">${day(t, i)}</b><span style="width:26px">${WXI(d.weather_code[i])}</span><span style="flex:1;min-width:120px">${WX[d.weather_code[i]] || ""}${d.snowfall_sum[i] >= 0.05 ? ` · <b>${d.snowfall_sum[i].toFixed(1)}" snow</b>` : ""}</span>
+      <span class="muted" style="font-size:12px">💧${d.precipitation_probability_max[i] ?? 0}% · 💨${Math.round(d.wind_speed_10m_max[i])} mph</span><b style="width:80px;text-align:right">${Math.round(d.temperature_2m_max[i])}° / ${Math.round(d.temperature_2m_min[i])}°</b></div>`).join("");
+  let snow = `<p class="muted">Mountain snow model didn't load.</p>`;
+  if(s && s.daily){
+    const sd = s.daily, ti = sd.time.indexOf(d.time[0]), sum = (a, b) => sd.snowfall_sum.slice(Math.max(a, 0), b).reduce((x, y) => x + (y || 0), 0);
+    const tile = (label, val) => `<div style="text-align:center;padding:8px 10px;border:1px solid var(--line);border-radius:12px;min-width:96px;flex:1"><div class="muted" style="font-size:12px">${label}</div><b style="font-size:20px">${val}</b></div>`;
+    snow = `<div style="display:flex;gap:8px;flex-wrap:wrap">${tile("Yesterday", sum(ti - 1, ti).toFixed(1) + '"')}${tile("Last 7 days", sum(ti - 7, ti).toFixed(1) + '"')}${tile("Next 3 days", sum(ti, ti + 3).toFixed(1) + '"')}${tile("Next 10 days", sum(ti, ti + 10).toFixed(1) + '"')}${tile("Snow on ground", s.current && s.current.snow_depth != null ? Math.round(s.current.snow_depth * 12) + '"' : "–")}${tile("Up top now", s.current ? Math.round(s.current.temperature_2m) + "°" : "–")}</div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0"><b>ESTIMATE</b> from the Open-Meteo weather model at about 8,860 ft on Park City Mountain, not the resort's measured report.
+      Lifts, runs and measured snow: <a href="https://www.parkcitymountain.com/the-mountain/mountain-conditions/snow-and-weather-report.aspx" target="_blank" rel="noopener">Park City Mountain snow report ↗</a></p>`;
+  }
+  $("#wxbody").innerHTML = `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0"><span style="font-size:40px">${WXI(c.weather_code)}</span>
+      <div><div style="font-size:34px;font-weight:800;line-height:1">${Math.round(c.temperature_2m)}°</div><div>${WX[c.weather_code] || ""} · feels like ${Math.round(c.apparent_temperature)}°</div></div>
+      <div class="muted" style="margin-left:auto;text-align:right">Wind ${Math.round(c.wind_speed_10m)} mph, gusts ${Math.round(c.wind_gusts_10m)}<br>☀️ ${tm(d.sunrise[0])} · 🌙 ${tm(d.sunset[0])}</div></div>
+    <h3 style="margin:14px 0 6px">❄️ Snow report</h3>${snow}
+    <h3 style="margin:16px 0 6px">Next 12 hours</h3>${hours}
+    <h3 style="margin:16px 0 6px">10-day forecast</h3>${days}
+    <p class="muted" style="margin:10px 0 0;font-size:12px">Source: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> forecast for Park City, loaded ${at}</p>`;
+}
 /* Home: next 14 days of occupancy + today's / tomorrow's check-ins (hub_home_stays: Track reservations, no guest names) */
 async function loadStays(pick){
   const box = $("#stays"); if(!box) return;
@@ -814,11 +856,15 @@ async function loadBirthdays(){
 }
 async function homeView(v){
   const first = (ME.name||"").split(" ")[0];
-  v.innerHTML = `<div class="page"><h2>Hi ${esc(first)} 👋</h2><p class="muted">${new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p>
+  // 2026-10-28 (Brandon): weather sits next to the greeting; click it for the full forecast + snow report
+  v.innerHTML = `<div class="page"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><h2>Hi ${esc(first)} 👋</h2><p class="muted">${new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"})}</p></div>
+      <button class="btn" id="wxchip" title="Full forecast and snow report" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px"><span class="muted">Park City</span> <span class="muted">Loading…</span></button></div>
+    <div class="modal" id="wxm"><div class="card" style="width:min(720px,100%);max-height:90vh;overflow:auto">
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="wxback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Park City weather + snow</h2><button class="btn small" id="wxx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
+      <div id="wxbody"><p class="muted">Loading…</p></div></div></div>
     <div id="bdays"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
-    <div class="card" id="wx"><p class="muted">Loading Park City weather…</p></div>
     <div class="card" id="stays"><b style="font-size:17px">🏠 Who's in house · next 14 days</b><p class="muted">Loading…</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎉 Shout-outs</b><button class="btn small" style="margin-left:auto" id="soadd">Give a shout-out</button></div>
       <div id="soform" style="display:none"><label class="field"><span>Who?</span><input id="soabout" placeholder="Example: Dave"></label>
@@ -843,12 +889,7 @@ async function homeView(v){
       <p class="muted" style="margin-top:4px">${new Date(n.at).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</p></div>`).join("") : `<p class="muted">No headlines right now.</p>`)
       + `<p class="muted" style="font-size:12px;margin:8px 0 0">Sources: <a href="https://www.parkrecord.com/" target="_blank" rel="noopener">The Park Record</a> and <a href="https://www.kpcw.org/local-news" target="_blank" rel="noopener">KPCW</a> news feeds</p>`;
   });
-  fetch("https://api.open-meteo.com/v1/forecast?latitude=40.6461&longitude=-111.4980&current=temperature_2m,weather_code,wind_speed_10m,snowfall&daily=weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FDenver&forecast_days=4")
-    .then(r => r.json()).then(w => { const c = w.current, d = w.daily;
-      $("#wx").innerHTML = `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div><div class="muted">Park City now</div><div style="font-size:34px;font-weight:800">${Math.round(c.temperature_2m)}°</div><div>${WX[c.weather_code]||""} · wind ${Math.round(c.wind_speed_10m)} mph</div></div>
-        <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">${d.time.map((t,i) => `<div style="text-align:center;padding:8px 10px;border:1px solid var(--line);border-radius:12px;min-width:74px"><div class="muted">${i ? new Date(t+"T12:00").toLocaleDateString(undefined,{weekday:"short"}) : "Today"}</div><b>${Math.round(d.temperature_2m_max[i])}° / ${Math.round(d.temperature_2m_min[i])}°</b><div class="muted" style="font-size:12px">${WX[d.weather_code[i]]||""}${d.snowfall_sum[i] > 0 ? " · " + d.snowfall_sum[i].toFixed(1) + '" snow' : ""}</div></div>`).join("")}</div></div>
-        <p class="muted" style="margin:8px 0 0;font-size:12px">Source: Open-Meteo forecast for Park City, ${new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</p>`; })
-    .catch(() => $("#wx").innerHTML = `<p class="muted">Weather didn't load.</p>`);
+  loadWeather();
   const r = await sb.from("hub_posts").select("*").eq("hidden", false).order("pinned", {ascending:false}).order("created_at", {ascending:false}).limit(60);
   const rows = r.data || [], when = t => new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric"});
   const so = rows.filter(x => x.kind === "shoutout"), nw = rows.filter(x => x.kind === "news");
