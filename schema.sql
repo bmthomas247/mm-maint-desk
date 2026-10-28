@@ -1281,3 +1281,29 @@ grant execute on function penny_feedback(bigint,boolean,text), penny_kb_save(tex
 insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
  ('penny_log','home','Ask Penny — questions & answers','What staff asked Penny, her answers, thumbs up/down and cost','#/penny','live',true,30)
 on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, admin_only=excluded.admin_only;
+
+-- Licensing: license copies (Brandon 2026-10-28). Private Storage bucket; only people who can open the Licensing desk can read.
+insert into storage.buckets (id, name, public) values ('license-docs','license-docs', false) on conflict (id) do update set public = false;
+drop policy if exists license_docs_read on storage.objects;
+create policy license_docs_read on storage.objects for select to authenticated using (bucket_id = 'license-docs' and hub_can('licensing'));
+-- the index of copies (feeds/license-docs) follows the same rule; sheets feed (feeds/licenses) unchanged
+create or replace function desk_can_read(c text, i text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when (c = 'feeds' and i = 'owners') or c = 'ownercontacts' then hub_can('owner_contacts')
+    when c = 'feeds' and i = 'license-docs' then hub_can('licensing')
+    when desk_is_money(c, i) then hub_can('maint_money')
+    when c in ('vendoredits','deskvendors') or (c = 'feeds' and i = 'vendors') then hub_can('vendors') or hub_can('maintenance')
+    when hub_can('licensing') and ((c = 'slackq' and i like 'lic\_%') or (c = 'bwq' and i like 'fire\_%')) then true
+    else case app_role()
+      when 'admin' then true
+      when 'tech'   then not (c in ('asks','slackq','bwq','config','raw') or (c = 'feeds' and i = 'usage'))
+      when 'viewer' then not (c in ('asks','slackq','bwq','config','raw') or (c = 'feeds' and i = 'usage'))
+      else false end
+  end $$;
+insert into hub_sync_sources (key,label,runs_on,schedule,sort,feeds,can_run,cost) values
+ ('licenses','Licenses (Dropbox sheets + license copies)','ThinkStation','daily (inside Maintenance sync)',150,'Licensing (license #, expirations, license copies, inspection reports)',true,'free')
+on conflict (key) do update set label=excluded.label, feeds=excluded.feeds, can_run=excluded.can_run, cost=excluded.cost;
+insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort)
+select 'sync_licenses','sync_status','Licenses (Dropbox sheets + license copies)','Feeds: Licensing','#/sync/licenses','live',false,10
+on conflict (key) do nothing;
