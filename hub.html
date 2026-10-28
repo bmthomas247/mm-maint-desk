@@ -669,6 +669,23 @@ async function loadMentions(){
       <div class="mt">${esc(x.body || "")}</div></a>`).join("") : `<p class="muted">No @-mentions in public channels in the last two weeks.</p>`)
     + `<p class="muted" style="font-size:12px;margin:8px 0 0">Source: Slack public channels (private channels and DMs aren't included)${j.updated ? ", checked " + ago(j.updated) : ""}. Tap one to open it in Slack.</p>`;
 }
+/* Office staff: report a reservation whose rate looks off by Track folio number (rates_flag_folio; no prices shown here) */
+async function loadRateFlag(){
+  const box = $("#rflag"); if(!box) return;
+  const ok = (await sb.rpc("hub_can", { p_desk:"rates_flag" })).data; if(!ok) return;
+  box.innerHTML = `<details class="card acc"><summary><b style="font-size:17px">🚩 Report an odd reservation rate</b></summary>
+    <p class="muted" style="margin:4px 0 8px">See a reservation in Track whose rate looks wrong? Enter the folio number and we'll take a look.</p>
+    <label class="field"><span>Track folio number</span><input id="rf_f" inputmode="numeric" placeholder="Example: 123456"></label>
+    <label class="field"><span>What looks off?</span><select id="rf_k"><option value="looks_low">Rate looks too low</option><option value="looks_high">Rate looks too high</option><option value="booked_too_low">Booked for too little</option><option value="other">Something else</option></select></label>
+    <label class="field"><span>Note (optional)</span><textarea id="rf_n" style="min-height:60px"></textarea></label>
+    <button class="btn primary" id="rf_s">Send</button> <span class="muted" id="rf_m"></span></details>`;
+  $("#rf_s").onclick = async () => { const f = $("#rf_f").value.trim(); if(!f) return $("#rf_m").textContent = "Enter the folio number.";
+    $("#rf_s").disabled = true; $("#rf_m").textContent = "Sending…";
+    const r = await sb.rpc("rates_flag_folio", { p_folio:f, p_kind:$("#rf_k").value, p_note:$("#rf_n").value });
+    $("#rf_s").disabled = false;
+    if(r.error){ $("#rf_m").textContent = "Couldn't send: " + r.error.message; return; }
+    $("#rf_f").value = ""; $("#rf_n").value = ""; $("#rf_m").textContent = "Sent ✓ Thanks — it's been passed along."; };
+}
 /* Birthdays (2026-10-28): on the day, the week of (Mon-Sun), and the whole month during its first 7 days */
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 async function loadBirthdays(){
@@ -692,6 +709,7 @@ async function homeView(v){
     <div id="bdays"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
+    <div id="rflag"></div>
     <div class="card" id="wx"><p class="muted">Loading Park City weather…</p></div>
     <div class="card" id="stays"><b style="font-size:17px">🏠 Who's in house · next 14 days</b><p class="muted">Loading…</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎉 Shout-outs</b><button class="btn small" style="margin-left:auto" id="soadd">Give a shout-out</button></div>
@@ -703,7 +721,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
-  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello();
+  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); loadRateFlag(); pennyHello();
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
