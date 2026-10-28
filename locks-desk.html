@@ -1612,7 +1612,7 @@ async function accountView(){
       <div class="muted">${esc((S.me||{}).name||"")} · ${esc((S.me||{}).role||"")}</div></div>
     <div class="card"><b>Change password</b>
       <label class="field" style="margin-top:8px"><span>Current password <span class="muted">(leave blank only if you just signed in with an email link and never set one)</span></span><input type="password" id="np0" autocomplete="current-password"></label>
-      <label class="field"><span>New password <span class="muted">(at least 10 characters)</span></span><input type="password" id="np1" autocomplete="new-password"></label>
+      <label class="field"><span>New password <span class="muted">(12+ characters, with a capital, a small letter, a number and a symbol)</span></span><input type="password" id="np1" autocomplete="new-password"></label>
       <label class="field"><span>Type it again</span><input type="password" id="np2" autocomplete="new-password"></label>
       <button class="btn primary wide" id="npsave">Save new password</button><p id="npmsg" class="muted"></p></div>
     <div class="card"><b>2-step sign-in</b><div class="muted" style="margin:4px 0 8px">On - you type a code from your authenticator app when you sign in. Got a new phone? Tap below, then set it up again on the new phone.</div>
@@ -1620,7 +1620,7 @@ async function accountView(){
     <div class="card"><b>Forgot your password?</b><div class="muted" style="margin:4px 0 8px">Sign out, type your email on the sign-in page and tap "Email me a link".</div>
       <button class="btn wide" id="signout">Sign out</button></div>`, "My account", "Password and sign-in");
   $("#npsave").onclick = async () => { const old = $("#np0").value, a = $("#np1").value, b = $("#np2").value;
-    if(a.length < 10) return $("#npmsg").textContent = "Use at least 10 characters.";
+    if(a.length < 12 || !/[a-z]/.test(a) || !/[A-Z]/.test(a) || !/\d/.test(a) || !/[^A-Za-z0-9]/.test(a)) return $("#npmsg").textContent = "12+ characters with a capital, a small letter, a number and a symbol.";
     if(a !== b) return $("#npmsg").textContent = "The two passwords don't match.";
     if(old){ const chk = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:false, autoRefreshToken:false, storageKey:"mm-pwcheck" } });   // checks the old password without touching this sign-in
       const { error:e0 } = await chk.auth.signInWithPassword({ email:(user||{}).email, password:old }); try{ await chk.auth.signOut({ scope:"local" }); }catch(e){}
@@ -1629,7 +1629,10 @@ async function accountView(){
       let ok = false; try{ const tok = (await sb.auth.getSession()).data.session.access_token, pl = JSON.parse(atob(tok.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
         ok = (pl.amr||[]).some(m => ["otp","magiclink","recovery"].includes(m.method) && Date.now()/1000 - m.timestamp < 900); }catch(e){}
       if(!ok) return $("#npmsg").textContent = "Type your current password. Forgot it? Sign out and use \"Email me a link\", then come back here within 15 minutes."; }
-    const { error } = await sb.auth.updateUser({ password: a });
+    let { error } = await sb.auth.updateUser({ password: a });
+    if(error && (error.code === "reauthentication_needed" || /reauthenticat/i.test(error.message))){   // signed in 24h+ ago: Supabase emails a 6-digit code first
+      await sb.auth.reauthenticate(); const n = (prompt("For safety we just emailed you a 6-digit code. Type it here:") || "").replace(/\D/g,"");
+      if(n) ({ error } = await sb.auth.updateUser({ password: a, nonce: n })); }
     $("#npmsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Use the new password next time you sign in.";
     if(!error){ $("#np1").value = $("#np2").value = ""; } };
   $("#signout").onclick = async () => { await sb.auth.signOut(); S.me = null; S.aal2 = false; S.mustChange = undefined; location.hash = "#/"; route(); };
@@ -1882,11 +1885,11 @@ async function officeHomeView(pid){
 /* ------------------------------------------------ temporary password: must pick their own before anything else */
 function mustChangeView(){
   mfaShell(`<h2>Pick your own password</h2><p class="muted">You signed in with a temporary password. Choose your own now - only you will know it.</p>
-    <label class="field"><span>New password <span class="muted">(at least 10 characters)</span></span><input type="password" id="mc1" autocomplete="new-password"></label>
+    <label class="field"><span>New password <span class="muted">(12+ characters, with a capital, a small letter, a number and a symbol)</span></span><input type="password" id="mc1" autocomplete="new-password"></label>
     <label class="field"><span>Type it again</span><input type="password" id="mc2" autocomplete="new-password"></label>
     <button class="btn primary wide" id="mcgo">Save my password</button><p id="mcmsg" class="muted"></p>`);
   $("#mcgo").onclick = async () => { const a = $("#mc1").value, b2 = $("#mc2").value;
-    if(a.length < 10) return $("#mcmsg").textContent = "At least 10 characters.";
+    if(a.length < 12 || !/[a-z]/.test(a) || !/[A-Z]/.test(a) || !/\d/.test(a) || !/[^A-Za-z0-9]/.test(a)) return $("#mcmsg").textContent = "12+ characters with a capital, a small letter, a number and a symbol.";
     if(a !== b2) return $("#mcmsg").textContent = "The two don't match.";
     if(/^moose-/i.test(a)) return $("#mcmsg").textContent = "Pick something different from the temporary one.";
     $("#mcmsg").textContent = "Saving…";
