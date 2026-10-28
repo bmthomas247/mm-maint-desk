@@ -164,6 +164,15 @@ details.acc[open]>summary{margin-bottom:6px}
 .login .logo{width:84px;height:84px;margin:0 auto 12px}.login .logo img{width:84px;height:84px}
 .modal{position:fixed;inset:0;background:rgba(10,20,14,.45);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}
 .modal.on{display:flex} .modal .card{width:min(520px,100%);margin:0}
+/* 2-step sign-in (2026-10-28), Moose Locks look */
+.tsbar{display:flex;justify-content:flex-start;margin:-36px 0 12px}
+.login .logo{position:relative} .login .logo .lk{position:absolute;right:-4px;bottom:-4px;width:32px;height:32px;border-radius:50%;background:var(--forest-2);color:#fff;display:grid;place-items:center;box-shadow:0 0 0 3px var(--ground)}
+.login .logo .lk svg{width:17px;height:17px}
+.how{margin:8px 0 4px;padding:0;list-style:none;display:grid;gap:6px;text-align:left}
+.how li{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.35}
+.how .key{flex:0 0 auto;min-width:44px;text-align:center;padding:6px 8px;border-radius:10px;background:var(--card);border:2px solid var(--line);font-weight:900;font-size:16px}
+.pwr{list-style:none;margin:2px 0 8px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;text-align:left;font-size:13.5px;color:var(--muted);font-weight:700}
+.pwr li.ok{color:var(--forest-2)}
 .seg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px} .seg button{flex:1;min-width:110px}
 .seg button.on{background:var(--moose-soft);border-color:var(--moose);color:var(--moose-ink)}
 .fb{border-top:1px solid var(--line);padding:12px 0}.fb:first-child{border-top:0}
@@ -263,8 +272,10 @@ function loginView(msg){
     <p id="msg" class="muted">${esc(msg||"")}</p></div>`;
   const fixEm = () => { let e = $("#em").value.trim().toLowerCase().replace(/\s+/g,"");
     e = e.replace(/@m[o0]+s[e]?m[a-z]*ment\.c[o0]m?$/, "@moosemanagement.com"); $("#em").value = e; return e; };
-  $("#go").onclick = async () => { const { error } = await sb.auth.signInWithPassword({ email:fixEm(), password:$("#pw").value });
-    if(error) $("#msg").textContent = "Wrong email or password."; else boot(); };
+  $("#go").onclick = async () => { const { data, error } = await sb.auth.signInWithPassword({ email:fixEm(), password:$("#pw").value });
+    if(error) return $("#msg").textContent = "Wrong email or password.";
+    if(data && data.weakPassword) TS.weak = true;   // older password that doesn't meet today's rules -> must pick a new one
+    boot(); };
   $("#pw").addEventListener("keydown", e => { if(e.key === "Enter") $("#go").click(); });
   $("#link").onclick = async () => { const email = fixEm(); if(!email) return $("#msg").textContent = "Type your email first.";
     $("#msg").textContent = "Sending…";
@@ -275,12 +286,113 @@ function loginView(msg){
     if(error) $("#msg").textContent = "That code didn't work - send a new one."; else boot(); };
 }
 
+/* ---------- 2-step sign-in (authenticator app), same as Moose Locks. hub_two_step.sql decides when it's required:
+   anyone who set up the app always types a code; with the switch on "all", everyone without it sets it up first.
+   The code is asked once per device - the session stays at 2-step until they sign out. */
+const TS = { ok:false, weak:false, mc:undefined, busy:false };
+const PW_SYM = /[!@#$%^&*()_+\-=\[\]{};'\\:"|<>?,./`~]/;
+const qrSrc = q => { const i = q.indexOf(","); return q.startsWith("data:") && i > 0 && !/;base64,/.test(q.slice(0, i+1)) ? "data:image/svg+xml;charset=utf-8," + encodeURIComponent(q.slice(i+1)) : q; };
+const codeIn = `<input id="tsc" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" style="font-size:24px;letter-spacing:6px;text-align:center">`;
+function tsShell(title, inner, help = true){
+  app.innerHTML = `<div class="login" style="max-width:440px"><div class="tsbar"><button class="btn small" id="tsback">← Back</button></div>
+    <div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${ICON.lock}</span></div><h2>${title}</h2>${inner}
+    ${help ? `<p class="muted" style="margin-top:14px"><a href="#" id="tshelp">New phone or lost it?</a></p>` : ""}</div>
+    <div class="modal" id="tsm"><div class="card" style="text-align:left">
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="tsmback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">New phone or lost it?</h2><button class="btn small" id="tsmx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
+      <p>Ask Brandon or Kim to reset your 2-step sign-in. The next time you sign in you'll scan a new QR code with the new phone.</p>
+      <p class="muted">Code keeps failing? The code changes every 30 seconds - type the newest one. Check your phone's clock is set automatically.</p></div></div>`;
+  $("#tsback").onclick = async () => { await sb.auth.signOut(); };   // SIGNED_OUT -> back to the sign-in screen
+  if(help) $("#tshelp").onclick = e => { e.preventDefault(); $("#tsm").classList.add("on"); };
+  $("#tsmback").onclick = $("#tsmx").onclick = () => $("#tsm").classList.remove("on");
+}
+async function twoStep(){
+  if(TS.ok) return true;
+  let lv = null; try{ lv = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data; }catch(e){}
+  if(lv && lv.currentLevel === "aal2") return TS.ok = true;
+  if(lv && lv.nextLevel === "aal2"){ tsCodeView(); return false; }
+  let mode = "off"; try{ mode = (await sb.rpc("hub_two_step_mode")).data || "off"; }catch(e){}
+  if(mode === "all"){ tsSetupView(); return false; }
+  return TS.ok = true;
+}
+function tsCodeView(){
+  tsShell("Enter your 6-digit code", `<p class="muted">Open your authenticator app (Google or Microsoft Authenticator) and type the Moose code - the same one you use for Moose Locks.</p>
+    <label class="field"><span>Code</span>${codeIn}</label>
+    <button class="btn primary wide" id="tsgo">Continue</button><p id="tsmsg" class="muted"></p>`);
+  const go = async () => { $("#tsgo").disabled = true;
+    try{ const { data:f } = await sb.auth.mfa.listFactors(); const t = (f.totp || [])[0];
+      const { error } = await sb.auth.mfa.challengeAndVerify({ factorId:t.id, code:$("#tsc").value.replace(/\D/g,"") });
+      if(error){ $("#tsgo").disabled = false; return $("#tsmsg").textContent = "That code didn't work - type the newest one from the app."; }
+      TS.ok = true; boot(); }catch(e){ $("#tsgo").disabled = false; $("#tsmsg").textContent = "Something went wrong - try again."; } };
+  $("#tsgo").onclick = go; $("#tsc").onkeyup = e => { if(e.key === "Enter" || $("#tsc").value.replace(/\D/g,"").length === 6) go(); }; $("#tsc").focus();
+}
+async function tsSetupView(){
+  if(TS.busy) return; TS.busy = true; setTimeout(() => TS.busy = false, 4000);   // sign-in can fire twice; set up once
+  tsShell("Turn on 2-step sign-in", `<p class="muted">One time only. After this you'll type a 6-digit code from your phone when you sign in on a new device.</p><div id="tsbox"><p class="muted">Getting your QR code…</p></div>`);
+  try{
+    const { data:f } = await sb.auth.mfa.listFactors();
+    for(const x of (f.all || []).filter(x => x.status !== "verified")) await sb.auth.mfa.unenroll({ factorId:x.id });
+    const { data, error } = await sb.auth.mfa.enroll({ factorType:"totp", friendlyName:"Moose Hub " + new Date().toISOString().slice(0,16).replace("T"," ") + " " + Math.random().toString(36).slice(2,6) });
+    if(error) throw error;
+    $("#tsbox").innerHTML = `<ol class="how">
+        <li><span class="key">1</span><span>Install <b>Google Authenticator</b> or <b>Microsoft Authenticator</b> from the App Store / Google Play.</span></li>
+        <li><span class="key">2</span><span>In the app tap <b>+</b> → <b>Scan a QR code</b> and scan this:</span></li></ol>
+      <img src="${qrSrc(data.totp.qr_code)}" alt="QR code" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:12px;margin:6px auto;display:block">
+      <details style="margin:6px 0"><summary class="muted">Can't scan? Type this key instead</summary><code style="word-break:break-all">${esc(data.totp.secret)}</code></details>
+      <ol class="how" start="3"><li><span class="key">3</span><span>Type the 6-digit code the app shows:</span></li></ol>
+      ${codeIn}<button class="btn primary wide" id="tsgo" style="margin-top:8px">Turn it on</button><p id="tsmsg" class="muted"></p>`;
+    const go = async () => { $("#tsgo").disabled = true;
+      const { error:e2 } = await sb.auth.mfa.challengeAndVerify({ factorId:data.id, code:$("#tsc").value.replace(/\D/g,"") });
+      $("#tsgo").disabled = false;
+      if(e2) return $("#tsmsg").textContent = "That code didn't work - type the newest one from the app.";
+      TS.ok = true; boot(); };
+    $("#tsgo").onclick = go; $("#tsc").onkeyup = e => { if(e.key === "Enter") go(); };
+  }catch(e){ $("#tsbox").innerHTML = `<p class="muted">Couldn't start 2-step setup (${esc(e.message || e)}). Ask Brandon or Kim.</p>`; }
+}
+/* new password: when an admin asked for it (allowed_users.must_change_pw) or the old one doesn't meet today's rules */
+function pwMissing(p){ return [[p.length >= 12, "12+ characters"], [/[a-z]/.test(p), "a small letter"], [/[A-Z]/.test(p), "a capital letter"],
+  [/\d/.test(p), "a number"], [PW_SYM.test(p), "a symbol like ! # ? @"]]; }
+function pwView(){
+  tsShell("Pick a new password", `<p class="muted">Moose passwords got stronger. Choose a new one now - only you will know it. It works for the Hub and Moose Locks.</p>
+    <label class="field"><span>New password</span><input type="password" id="pw1" autocomplete="new-password"></label>
+    <ul class="pwr" id="pwr"></ul>
+    <label class="field"><span>Type it again</span><input type="password" id="pw2" autocomplete="new-password"></label>
+    <div id="nonce" style="display:none"><label class="field"><span>Code we just emailed you</span><input id="pwn" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="font-size:22px;letter-spacing:6px;text-align:center"></label></div>
+    <button class="btn primary wide" id="pwgo">Save my password</button><p id="pwmsg" class="muted"></p>`, false);
+  const show = () => $("#pwr").innerHTML = pwMissing($("#pw1").value).map(([ok, t]) => `<li class="${ok ? "ok" : ""}">${ok ? "✓" : "○"} ${t}</li>`).join("");
+  $("#pw1").oninput = show; show(); $("#pw1").focus();
+  $("#pwgo").onclick = async () => { const a = $("#pw1").value, b = $("#pw2").value, n = $("#pwn").value.replace(/\D/g,"");
+    if(pwMissing(a).some(([ok]) => !ok)) return $("#pwmsg").textContent = "Needs every item on the list.";
+    if(a !== b) return $("#pwmsg").textContent = "The two don't match.";
+    $("#pwmsg").textContent = "Saving…"; $("#pwgo").disabled = true;
+    const { error } = await sb.auth.updateUser(n ? { password:a, nonce:n } : { password:a });
+    $("#pwgo").disabled = false;
+    if(error){
+      if(error.code === "reauthentication_needed" || /reauthenticat/i.test(error.message)){
+        await sb.auth.reauthenticate(); $("#nonce").style.display = "block"; $("#pwn").focus();
+        return $("#pwmsg").textContent = "For safety we emailed you a 6-digit code. Type it above, then Save again."; }
+      if(error.code === "same_password") return $("#pwmsg").textContent = "Pick something different from your old password.";
+      if(/pwned|leak|breach/i.test(error.message)) return $("#pwmsg").textContent = "That password has shown up in a data leak online - pick a different one.";
+      return $("#pwmsg").textContent = "Couldn't save (" + error.message + ")."; }
+    try{ await sb.rpc("lock_pw_changed"); }catch(e){}
+    TS.weak = false; TS.mc = false; boot(); };
+}
+/* old Maintenance site sends people here to finish 2-step, then gets them back */
+const NEXT_OK = ["maint.html"];
+
 /* ---------- shell */
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
   if(!session) return loginView();
+  if(!(await twoStep())) return;
+  if(TS.mc === undefined){ try{ TS.mc = !!(await sb.rpc("lock_must_change_pw")).data; }catch(e){ TS.mc = false; } }
+  if(TS.mc || TS.weak) return pwView();
+  const nx = new URLSearchParams(location.search).get("next");
+  if(nx && NEXT_OK.includes(nx)) return location.replace(nx);
   const me = await sb.rpc("hub_me");
-  if(me.error || !me.data) return noAccess(me.error ? me.error.message : "");
+  if(me.error || !me.data){   // an admin may have signed this device out (hub_admin_access.sql): its session is gone
+    const r = await sb.auth.refreshSession();
+    if(r.error){ await sb.auth.signOut({ scope:"local" }); return loginView("You were signed out. Sign in again."); }
+    return noAccess(me.error ? me.error.message : ""); }
   ME = me.data; ME.canNews = !!(await sb.rpc("hub_can_post_news")).data;
   const d = await sb.rpc("hub_my_desks"); DESKS = d.data || [];
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
@@ -693,10 +805,38 @@ function bdSelects(id, cur){ cur = cur || {};
   return `<select id="${id}_m" aria-label="Month"><option value="">Month</option>${MONTHS.map((m, i) => `<option value="${i + 1}" ${cur.month === i + 1 ? "selected" : ""}>${m}</option>`).join("")}</select>
     <select id="${id}_d" aria-label="Day"><option value="">Day</option>${[...Array(31)].map((_, i) => `<option ${cur.day === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select>`; }
 function alertMsg(t){ const m = $("#bdmsg"); if(m) m.textContent = t; }
-let BD = { mine:null, people:[] };
+let BD = { mine:null, people:[] }, ACC = [];
+/* Sign-in control (hub admins only, hub_admin_access.sql): sign a person out of every device, or lock them out */
+function accCard(){
+  if(!ME.admin || !ACC.length) return "";
+  const ago = t => t ? new Date(t).toLocaleDateString([], { month:"short", day:"numeric" }) : "never";
+  return `<details class="card acc" id="acccard"><summary><b style="font-size:17px">🔐 Sign-in control</b><span class="muted">${ACC.filter(x => !x.active).length} locked out</span></summary>
+    <p class="muted" style="margin:4px 0 8px">Sign someone out of every phone and computer, or lock them out until you let them back in. Every change is logged.</p>
+    ${ACC.map(x => `<div class="ord"><b>${esc(x.name)}${x.active ? "" : ` <span class="pill red">Locked out</span>`}
+        <div class="muted" style="font-weight:600;font-size:13px">2-step ${x.two_step ? "✓" : "not yet"} · signed in on ${x.devices} device${x.devices === 1 ? "" : "s"} · last sign-in ${ago(x.last_sign_in)}${x.last_action ? ` · ${{ sign_out:"signed out", lock:"locked", unlock:"let back in" }[x.last_action]} ${ago(x.last_action_at)}` : ""}</div></b>
+      ${x.active ? `<button class="btn small" data-acc="out:${x.id}" ${x.devices ? "" : "disabled"}>Sign out everywhere</button>${x.admin ? "" : `<button class="btn small" data-acc="lock:${x.id}" style="color:var(--red)">Lock out</button>`}`
+        : `<button class="btn small" data-acc="unlock:${x.id}">Let back in</button>`}</div>`).join("")}</details>`;
+}
+function accAsk(act, x, done){
+  const T = { out:["Sign " + x.name + " out everywhere?", "Every phone and computer they're signed in on stops working right away. They can sign straight back in.", "Sign out everywhere"],
+    lock:["Lock " + x.name + " out?", "They're signed out everywhere and can't open the Hub, Moose Locks or the Maintenance site until you let them back in.", "Lock out"],
+    unlock:["Let " + x.name + " back in?", "Their access comes back the way it was. They sign in again as usual.", "Let back in"] }[act];
+  document.querySelectorAll("#accm").forEach(e => e.remove());
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="accm"><div class="card">
+    <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="accback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">${esc(T[0])}</h2><button class="btn small" id="accx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
+    <p>${esc(T[1])}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="accgo" ${act === "lock" ? `style="background:var(--red);border-color:var(--red)"` : ""}>${esc(T[2])}</button><button class="btn" id="accno">Cancel</button></div>
+    <p class="muted" id="accmsg"></p></div></div>`);
+  const close = () => $("#accm").remove();
+  $("#accback").onclick = $("#accx").onclick = $("#accno").onclick = close;
+  $("#accgo").onclick = async () => { $("#accgo").disabled = true; $("#accmsg").textContent = "Working…";
+    const r = act === "out" ? await sb.rpc("hub_admin_sign_out", { p_person:x.id }) : await sb.rpc("hub_admin_lock", { p_person:x.id, p_lock:act === "lock" });
+    if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + r.error.message; }
+    close(); done(act === "unlock" ? x.name + " can sign in again." : x.name + " was signed out of " + r.data + " device" + (r.data === 1 ? "" : "s") + "."); };
+}
 async function settingsView(v){
-  const [a, b] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] })]);
-  BD = { mine:(a.data || []).find(x => x.me) || null, people:b.data || [] };
+  const [a, b, c] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] }),
+    ME.admin ? sb.rpc("hub_admin_people") : Promise.resolve({ data:[] })]);
+  BD = { mine:(a.data || []).find(x => x.me) || null, people:b.data || [] }; ACC = c.data || [];
   settingsView2(v);
 }
 function settingsView2(v){
@@ -742,6 +882,7 @@ function settingsView2(v){
       <div class="ints">${KINDS.map(([k, l]) => `<label class="${ks.includes(k) ? "on" : ""}"><input type="checkbox" data-kind="${k}" ${ks.includes(k) ? "checked" : ""}>${l}</label>`).join("")}</div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Every fact and stat shows where it came from.</p></div>
     ${BD.mine ? bdCard() : ""}
+    ${accCard()}
     <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
     const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; draw(); };
     v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => mv(b.dataset.up, -1));
@@ -759,6 +900,8 @@ function settingsView2(v){
     v.querySelectorAll("[data-bdp]").forEach(b => b.onclick = async () => { const i = +b.dataset.bdp, x = BD.people[i];
       const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
       b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
+    v.querySelectorAll("[data-acc]").forEach(b => b.onclick = () => { const [act, id] = b.dataset.acc.split(":"), x = ACC.find(p => p.id === id);
+      accAsk(act, x, async msg => { ACC = (await sb.rpc("hub_admin_people")).data || []; draw(); const c = $("#acccard"); if(c) c.open = true; $("#prefmsg").textContent = msg; }); });
     $("#ordreset").onclick = () => { ilist = std(ilist); dlist = std(dlist); desksFirst = false; draw(); };
     $("#intown").onchange = () => { const own = $("#intown").value.split(",").map(x => x.trim().replace(/\s+/g, " ").slice(0, 40)).filter(x => x.length > 1);
       ints = ints.filter(x => INTERESTS.some(([k]) => k === x)).concat([...new Set(own.map(x => x.toLowerCase()))]).slice(0, 20); };
@@ -1091,7 +1234,7 @@ async function pennyView(v){
 }
 window.addEventListener("hashchange", route);
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
-sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { ME = null; loginView(); } });
+sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { ME = null; TS.ok = false; TS.weak = false; TS.mc = undefined; loginView(); } });
 boot();
 </script>
 </body>
