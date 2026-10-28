@@ -1255,15 +1255,17 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
-    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+qCard("Owner closet",closet.v,closet.s,"codes","closet")+
+    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(window.MM_CODES===false?'':qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
     qCard("Key box",hi.keybox,hi.src&&hi.src.keybox?"From "+hi.src.keybox:"","")+'</div>'+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
 function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
   openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div>'+
-    area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Leave blank to show the Asana note")+area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note")+
+    (window.MM_CODES===false?'':area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Leave blank to show the Asana note")+area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note"))+
     (o.can?'<div class="lbl" style="margin-top:10px">Owner contact <span class="muted">(blank = use Track)</span></div><div class="fields">'+fld("o_name","Owner name",oc.name||"")+fld("o_phone","Phone",oc.phone||"","tel")+fld("o_email","Email",oc.email||"","email")+'</div>'+area("o_notes","Owner notes",oc.notes||"","e.g. prefers text, second contact"):''),
   function(){ var k=sid(code);
-    var a=put("propedits",k,{wifiName:fv("q_wn"),wifiPass:fv("q_wp"),lockoutCode:fv("q_lo"),garageCode:fv("q_gc"),ownerCloset:fv("q_oc"),qBy:S.me},S.propedits[k]);
+    var qp={wifiName:fv("q_wn"),wifiPass:fv("q_wp"),qBy:S.me};
+    if(window.MM_CODES!==false){ qp.lockoutCode=fv("q_lo"); qp.garageCode=fv("q_gc"); qp.ownerCloset=fv("q_oc"); }
+    var a=put("propedits",k,qp,S.propedits[k]);
     var b=o.can?put("ownercontacts",k,{code:code,name:fv("o_name"),phone:fv("o_phone"),email:fv("o_email"),notes:fv("o_notes")},(S.ownercontacts||{})[k]):Promise.resolve();
     return Promise.all([a,b]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
 function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i);
