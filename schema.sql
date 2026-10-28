@@ -1190,3 +1190,8 @@ update hub_reports set desk_key='sync_status', admin_only=false, label='All sour
 insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort)
 select 'sync_'||s.key, 'sync_status', s.label, coalesce('Feeds: '||s.feeds, 'Last sync'), '#/sync/'||s.key, 'live', false, 10 from hub_sync_sources s
 on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, desk_key=excluded.desk_key;
+
+-- Crew efficiency report (Brandon 2026-10-28): Maintenance > Expenses & Time (same access as Hubstaff hours).
+insert into hub_reports (key, desk_key, label, note, url, status, admin_only, sort) values
+ ('maint_crew_eff','maint_money','Crew efficiency','Breezeway tasks each tech finished vs. their Hubstaff hours, rated against the crew','desk.html#money','live',false,6)
+on conflict (key) do update set label=excluded.label, note=excluded.note, url=excluded.url, desk_key=excluded.desk_key;
