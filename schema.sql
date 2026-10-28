@@ -1139,3 +1139,38 @@ begin
 end $$;
 revoke all on function hub_birthdays_all(), hub_birthday_people(), hub_set_birthday(uuid,int,int) from public, anon;
 grant execute on function hub_birthdays_all(), hub_birthday_people(), hub_set_birthday(uuid,int,int) to authenticated;
+
+-- Sync per data source (Brandon 2026-10-28): A-Z list, what each source feeds, and a "Sync now" per source (admins).
+alter table hub_sync_sources add column if not exists feeds text;
+alter table hub_sync_sources add column if not exists can_run boolean not null default true;
+alter table hub_sync_requests add column if not exists source_key text;
+insert into hub_sync_sources (key,label,runs_on,schedule,sort) values
+ ('track_owners','Track owners','ThinkStation','daily (inside Maintenance sync)',130),
+ ('slack_mentions','Slack mentions','ThinkStation','every 30 min (inside Maintenance sync)',140)
+on conflict (key) do nothing;
+update hub_sync_sources s set feeds = v.feeds, can_run = v.can_run from (values
+ ('asana','Maintenance (Asana jobs, owner-relations jobs, trash routines) · Vendors (vendor info)', true),
+ ('autohost','Reservation Desk', true),
+ ('breezeway','Maintenance (jobs, receipts, fees) · Locks (door-code tasks) · Licensing (fire suppression tasks) · Property Details (Breezeway home info, last 3 done)', true),
+ ('estimator','Revenue Estimator', false),
+ ('freshdesk','Maintenance (owner/guest tickets)', true),
+ ('hubstaff','Maintenance · Expenses & Time (timesheets, crew cost vs. gain)', true),
+ ('locks','Locks · Office and Field (Track door codes, hubs)', true),
+ ('maint','Maintenance (all program feeds) · Home (Who''s in house) · new tickets to Breezeway', true),
+ ('patrick','Ask Patrick', false),
+ ('rates','Rates', false),
+ ('slack','Maintenance (jobs from #maintenance_action_items and #maintenance_updates)', true),
+ ('slack_mentions','Home (Your Slack mentions)', true),
+ ('track_owners','Property Details (owner contact)', true),
+ ('track_res','Home (Who''s in house) · Reservation Desk', true)
+) v(key, feeds, can_run) where s.key = v.key;
+drop function if exists hub_sync_request();
+create or replace function hub_sync_request(p_key text default null) returns bigint language plpgsql security definer set search_path = public as $$
+declare v bigint;
+begin
+  if not hub_is_admin() then raise exception 'admins only'; end if;
+  if p_key is not null and not exists (select 1 from hub_sync_sources where key = p_key and can_run) then raise exception 'that source can''t be run from the hub'; end if;
+  if exists (select 1 from hub_sync_requests where done_at is null and coalesce(source_key,'*') = coalesce(p_key,'*') and requested_at > now() - interval '15 minutes') then
+    select id into v from hub_sync_requests where done_at is null and coalesce(source_key,'*') = coalesce(p_key,'*') order by id desc limit 1; return v; end if;
+  insert into hub_sync_requests (requested_by, source_key) values ((select name from allowed_users where id = hub_uid()), p_key) returning id into v; return v; end $$;
+revoke all on function hub_sync_request(text) from public, anon; grant execute on function hub_sync_request(text) to authenticated;
