@@ -2615,7 +2615,7 @@ var SUMMIT_RX=/\b(park city|kamas|oakley|coalville|peoa|henefer|wanship|francis|
 var SUMMIT_COMM=/^(BHL|BHV|BHR|CV|PW|RC|EH|MFL|SL|PL)\b/;
 /* Brandon 2026-10-28: Bear Hollow Lodges + Discovery Ridge = Summit, Prospector Lodge = Park City (city limits), Fox Bay = Wasatch.
    Other neighborhoods take the county most of their homes have on the license sheets. */
-var COMM_COUNTY_FIXED={"bear hollow lodges":"Summit","discovery ridge":"Summit","prospector lodge":"Park City","fox bay":"Wasatch"};
+var COMM_COUNTY_FIXED={"bear hollow lodges":"Summit","discovery ridge":"Summit","prospector lodge":"Park City","fox bay":"Wasatch","sunspot":"Park City","westgate":"Summit"};  // Brandon 2026-10-28
 var _cc=null, _ccAt=0;
 function commCounty(comm){ var f=(S.feeds.licenses||{}), k=String(comm||"").toLowerCase().trim(); if(!k) return "";
   if(COMM_COUNTY_FIXED[k]) return COMM_COUNTY_FIXED[k];
