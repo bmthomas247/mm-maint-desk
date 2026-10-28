@@ -437,7 +437,7 @@ function noAccess(err){
 }
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics","advertising"];   // advertising shows as its Owners · Guest drop-down
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics","advertising","patrick_log","patrick_fix"];   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
   const anD = DESKS.some(x => x.key === "analytics");
@@ -449,7 +449,6 @@ function shell(){
                    guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist" } },
                    adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest" } },   // Brandon 2026-10-28
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
-                   patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
                    competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } } };   // Brandon 2026-10-28
@@ -571,6 +570,7 @@ function route(){
   if(k === "home") return homeView(v);
   if(k === "settings") return settingsView(v);
   if(k === "penny") return pennyView(v);
+  if(k === "patrick" || k === "patrick_log" || k === "patrick_fix") return patrickView(v);   // Reports > Ask Patrick (no sidebar entry, Brandon 2026-10-28)
   if(k === "messages") return messagesView(v);
   if(d && k === "res_report") return resReportView(v);
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
@@ -1368,6 +1368,81 @@ async function pennyView(v){
   $("#plog").querySelectorAll("[data-teach]").forEach(b => b.onclick = () => { const x = rows[+b.dataset.teach];
     form({ topic:String(x.question || "").slice(0, 80), body:x.answer || "", active:true }); $("#pkbform").scrollIntoView({ behavior:"smooth" }); });
   $("#pkb").querySelectorAll("[data-pkb]").forEach(b => b.onclick = () => { form(kb[+b.dataset.pkb]); $("#pkbform").scrollIntoView({ behavior:"smooth" }); });
+}
+/* Reports > Ask Patrick & Penny > Ask Patrick (#/patrick, #/patrick/week; Brandon 2026-10-28): the website's Ask Patrick log
+   (WP admin > Ask Patrick > Log), copied into patrick_chats every 5 min by patrick-desk (hub_patrick.sql). Read by RLS hub_can('patrick_log'). */
+async function patrickView(v){
+  if(!DESKS.some(x => x.key === "patrick_log")){ location.hash = "#/home"; return; }
+  $("#ttl").textContent = "Reports & Analytics";
+  const week = hashArg() === "week", P = window.PAT = window.PAT || { days: week ? 7 : 30, q:"", topic:"", outcome:"", todo:false };
+  if(week) P.days = 7;
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Patrick${week ? " — weekly" : ""}</h2>
+    <p class="muted">What guests asked Patrick on vacationrentalsparkcity.com, his answers, sources, outcome and cost. Source: the website's Ask Patrick log, copied here every 5 minutes. <span id="pwhen"></span></p>
+    <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"></div><div id="plists"></div></div>`;
+  const [c, rv, l] = await Promise.all([ sb.from("patrick_chats").select("*").order("id", { ascending:false }).limit(5000),
+    sb.from("patrick_reviews").select("*").order("id", { ascending:false }).limit(2000), sb.rpc("patrick_lists") ]);
+  if(c.error) return $("#pins").innerHTML = `<p class="muted">Couldn't load: ${esc(c.error.message)}</p>`;
+  const L = (l.data || [])[0] || {}, all = c.data || [], revs = rv.data || [];
+  $("#pwhen").textContent = L.last_pull ? "Last copied " + new Date(L.last_pull).toLocaleString() + "." : "";
+  if(!all.length){ $("#pins").innerHTML = `<p class="muted">No chats copied from the website yet${L.paired ? "" : " — the website isn't connected to the hub yet"}.</p>`; $("#plog").remove(); return; }
+  const since = P.days ? Date.now() - P.days * 864e5 : 0, inP = all.filter(x => !since || new Date(x.created_at) >= since);
+  const usd = n => "$" + (+n || 0).toFixed(2), top = (list, f, n = 8) => { const m = {}; list.forEach(x => { const k = (f(x) || "").trim(); if(k) m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n); };
+  const bar = (rows, tot) => rows.length ? rows.map(([k, n]) => `<div style="display:flex;gap:8px;align-items:center;font-size:13.5px;margin:3px 0"><span style="flex:0 0 42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(k)}">${esc(k)}</span>
+      <span style="flex:1;background:var(--line);border-radius:4px;height:8px"><span style="display:block;height:8px;border-radius:4px;background:var(--moose);width:${Math.max(3, Math.round(100 * n / tot))}%"></span></span><b style="min-width:34px;text-align:right">${n}</b></div>`).join("") : `<p class="muted">—</p>`;
+  const pagePath = x => { try { return new URL(x.page).pathname; } catch(e){ return x.page || ""; } };
+  const sess = new Set(inP.map(x => x.session).filter(Boolean)).size, cost = inP.reduce((a, x) => a + (+x.cost || 0), 0);
+  $("#pins").innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:17px">At a glance</b>
+      <select id="pdays" style="width:auto;margin-left:auto">${[[7,"Last 7 days"],[30,"Last 30 days"],[90,"Last 90 days"],[0,"All time"]].map(([d, t]) => `<option value="${d}" ${P.days === d ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+    <div class="rpgrid" style="margin-top:10px"><section class="rpg"><h3>Totals</h3><p style="margin:4px 0"><b>${inP.length}</b> questions · <b>${sess}</b> chats · <b>${usd(cost)}</b> spend</p>
+      <p class="muted" style="margin:4px 0">${inP.length ? usd(cost / inP.length) : "$0.00"} per question · ${inP.filter(x => x.reviewed).length} reviewed</p></section>
+      <section class="rpg"><h3>Outcome</h3>${bar(top(inP, x => x.outcome || "(none)"), inP.length)}</section>
+      <section class="rpg"><h3>Topics</h3>${bar(top(inP, x => x.topic), inP.length)}</section>
+      <section class="rpg"><h3>Pages asked from</h3>${bar(top(inP, pagePath), inP.length)}</section>
+      <section class="rpg"><h3>Tools Patrick used</h3>${bar(top(inP.flatMap(x => String(x.tools || "").split(/[,;|]\s*/).map(t => ({ t }))), x => x.t), inP.length)}</section>
+      <section class="rpg"><h3>Device</h3>${bar(top(inP, x => x.device), inP.length)}</section></div>`;
+  $("#pdays").onchange = e => { P.days = +e.target.value; if(week){ location.hash = "#/patrick"; } else patrickView(v); };
+  const topics = [...new Set(all.map(x => x.topic).filter(Boolean))].sort(), outs = [...new Set(all.map(x => x.outcome).filter(Boolean))].sort();
+  const byChat = {}; revs.forEach(r => { if(r.chat_id) (byChat[r.chat_id] = byChat[r.chat_id] || []).push(r); });
+  const draw = () => {
+    const q = P.q.toLowerCase(), rows = inP.filter(x => (!q || [x.question, x.answer, x.page, x.session].some(s => String(s || "").toLowerCase().includes(q)))
+      && (!P.topic || x.topic === P.topic) && (!P.outcome || x.outcome === P.outcome) && (!P.todo || !x.reviewed)), shown = rows.slice(0, 200);
+    $("#plist").innerHTML = `<p class="muted" style="margin:8px 0">${rows.length} match${rows.length > 200 ? " · newest 200 shown" : ""}</p>` + (shown.length ? shown.map(x => {
+      const rr = byChat[x.id] || [], pill = /wrong|bad|fail/i.test(x.reviewed || x.outcome || "") ? "red" : /ok|right|good|book|lead/i.test(x.reviewed || x.outcome || "") ? "green" : "";
+      return `<div class="fb"><div class="hd"><span class="muted">${x.created_at ? new Date(x.created_at).toLocaleString() : ""}</span>${x.topic ? `<span class="pill">${esc(x.topic)}</span>` : ""}${x.outcome ? `<span class="pill ${pill}">${esc(x.outcome)}</span>` : ""}${x.reviewed ? `<span class="pill green">✓ ${esc(x.reviewed)}</span>` : ""}
+        <span class="muted" style="margin-left:auto">${esc(x.device || "")} · ${x.cost != null ? "$" + (+x.cost).toFixed(4) : ""}</span></div>
+        <p><b>Q:</b> ${esc(x.question || "")}</p><details><summary class="muted" style="cursor:pointer"><b>Patrick:</b> ${esc(String(x.answer || "").slice(0, 160))}${String(x.answer || "").length > 160 ? "…" : ""}</summary>
+        <p style="white-space:pre-wrap">${esc(x.answer || "")}</p>${x.sources || x.source ? `<p class="muted" style="font-size:12.5px"><b>Sources:</b> ${esc([x.source, x.sources].filter(Boolean).join(" · "))}</p>` : ""}
+        ${x.tools ? `<p class="muted" style="font-size:12.5px"><b>Tools:</b> ${esc(x.tools)}</p>` : ""}${x.buttons ? `<p class="muted" style="font-size:12.5px"><b>Buttons shown:</b> ${esc(x.buttons)}</p>` : ""}
+        <p class="muted" style="font-size:12.5px">${x.page ? `Page: ${esc(pagePath(x))}` : ""}${x.session ? ` · chat ${esc(String(x.session).slice(0, 8))}` : ""}</p></details>
+        ${rr.map(r => `<p class="muted" style="font-size:12.5px;margin:4px 0">${esc(r.by_name || "")} · ${esc({ ok:"marked right", wrong:"marked wrong", crew:"gave a better answer", note:"note" }[r.kind] || r.kind)}${r.answer && r.kind === "crew" ? ": " + esc(r.answer) : ""}${r.note ? " — " + esc(r.note) : ""}${r.apply_error ? ` <span class="pill red">not saved on the website</span>` : ""}</p>`).join("")}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn small" data-pa="ok" data-id="${x.id}">✓ Right</button><button class="btn small" data-pa="wrong" data-id="${x.id}">✗ Wrong</button>
+          <button class="btn small" data-pa="crew" data-id="${x.id}">✍ Better answer</button><button class="btn small" data-pa="note" data-id="${x.id}">📝 Note</button><span class="muted" data-pm="${x.id}"></span></div></div>`; }).join("")
+      : `<p class="muted">Nothing matches.</p>`);
+    $("#plist").querySelectorAll("[data-pa]").forEach(b => b.onclick = async () => { const x = all.find(y => y.id === +b.dataset.id), kind = b.dataset.pa, m = $(`[data-pm="${x.id}"]`);
+      let answer = "", note = "";
+      if(kind === "crew"){ answer = prompt("The answer Patrick should give for:\n\n" + (x.question || "") + "\n\n(no codes or passwords)", ""); if(!answer) return; }
+      if(kind === "note" || kind === "wrong"){ note = prompt(kind === "wrong" ? "What's wrong with it? (optional)" : "Note", "") || ""; if(kind === "note" && !note) return; }
+      m.textContent = "Saving…";
+      const r = await sb.functions.invoke("patrick-desk", { body:{ action:"apply", kind, chat_id:x.id, question:x.question, answer, note } });
+      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || r.error.message : r.data && r.data.error;
+      if(err){ m.textContent = err; return; } patrickView(v); }); };
+  $("#plog").innerHTML = `<b style="font-size:17px">Questions</b><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><input id="pq" placeholder="Search questions, answers, pages" value="${esc(P.q)}" style="flex:1 1 220px">
+      <select id="ptopic" style="width:auto"><option value="">All topics</option>${topics.map(t => `<option ${P.topic === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
+      <select id="pout" style="width:auto"><option value="">All outcomes</option>${outs.map(t => `<option ${P.outcome === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
+      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ptodo" style="width:auto;min-height:0" ${P.todo ? "checked" : ""}> Not reviewed</label></div><div id="plist"></div>`;
+  $("#pq").oninput = e => { P.q = e.target.value; draw(); }; $("#ptopic").onchange = e => { P.topic = e.target.value; draw(); };
+  $("#pout").onchange = e => { P.outcome = e.target.value; draw(); }; $("#ptodo").onchange = e => { P.todo = e.target.checked; draw(); };
+  draw();
+  if(ME.admin){   // the crew-answer and avoid lists change what Patrick tells every guest: hub admins only (patrick-desk enforces it too)
+    const box = (k, t, h, val) => `<details class="acc2"><summary><b>${t}</b><span class="muted">${h}</span></summary><textarea id="pl_${k}" style="min-height:180px">${esc(val || "")}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary small" data-pl="${k}">Save to the website</button><span class="muted" id="plm_${k}"></span></div></details>`;
+    $("#plists").innerHTML = `<div class="card"><b style="font-size:17px">What Patrick is told</b>${box("crew", "Crew answers", "answers staff gave him", L.crew_answers)}${box("avoid", "Avoid list", "things he must not say", L.avoid)}</div>`;
+    $("#plists").querySelectorAll("[data-pl]").forEach(b => b.onclick = async () => { const k = b.dataset.pl, m = $("#plm_" + k); m.textContent = "Saving…";
+      const r = await sb.functions.invoke("patrick-desk", { body:{ action:"apply", kind: k + "_set", answer: $("#pl_" + k).value } });
+      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || r.error.message : r.data && r.data.error;
+      m.textContent = err || "Saved."; });
+  }
 }
 window.addEventListener("hashchange", route);
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
