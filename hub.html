@@ -405,8 +405,12 @@ async function boot(){
   // Housekeeping drop-down (Brandon 2026-10-28): Desk · Linen Calculator (soon). Linen Calculator follows the housekeeping desk's access.
   const hD = DESKS.find(x => x.key === "housekeeping");
   if(hD) DESKS.push({ key:"linen_calc", label:"Housekeeping · Linen Calculator", icon:hD.icon, url:null, status:"soon", sort:hD.sort + 0.1 });
+  // Licensing drop-down (Brandon 2026-10-28): Licenses · Fire suppression · Leases. Both follow licensing's access (lic_fire / lic_lease RLS: hub_can('licensing'))
+  const lD = DESKS.find(x => x.key === "licensing" && x.status === "live");
+  if(lD) DESKS.push({ key:"lic_fire", label:"Licensing · Fire suppression", icon:lD.icon, url:"desk.html?only=firesys", status:"live", sort:lD.sort + 0.1 },
+                    { key:"lic_lease", label:"Licensing · Leases", icon:lD.icon, url:"desk.html?only=lease", status:"live", sort:lD.sort + 0.2 });
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
-  PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k);   // Maintenance became a drop-down 2026-10-28; keep each person's order
+  PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
 }
 function noAccess(err){
@@ -425,6 +429,7 @@ function shell(){
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time" } },
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator" } },
+                   lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
                    guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist" } },
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
@@ -572,7 +577,12 @@ async function hubSearchLoad(){
   if(SIDX) return SIDX; SIDX = { homes:[], vendors:[] };
   const can = k => DESKS.some(x => x.key === k);
   if(can("homes")){ const r = await sb.from("desk_docs").select("id,code:data->>code,community:data->>community").eq("collection","profiles").limit(1000);
-    SIDX.homes = (r.data || []).filter(x => x.code).map(x => ({ code:x.code, sub:x.community || "" })); }
+    SIDX.homes = (r.data || []).filter(x => x.code).map(x => ({ code:x.code, sub:x.community || "" }));
+    // 2026-10-28: the Track home list (hub_homes) is the one list; Track decides what's active, new Track homes show up too
+    const t = await sb.from("hub_homes").select("code,community,active,kind").limit(5000);
+    if(t.data && t.data.length){ const on = {}; t.data.forEach(x => { if(x.active && x.kind !== "other") on[x.code] = x; });
+      SIDX.homes = SIDX.homes.filter(x => on[x.code] || !t.data.some(y => y.code === x.code));
+      Object.keys(on).forEach(c => { if(!SIDX.homes.some(x => x.code === c)) SIDX.homes.push({ code:c, sub:on[c].community || "" }); }); } }
   if(can("vendors")){ const r = await sb.from("desk_docs").select("v:data->vendors").eq("collection","feeds").eq("id","vendors").maybeSingle();
     const d = await sb.from("desk_docs").select("id,name:data->>name,trade:data->>trade").eq("collection","deskvendors").limit(500);
     const seen = {};
@@ -865,8 +875,8 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", housekeeping:"hk", linen_calc:"hk", guest_desk:"guest", breezeway_assist:"guest", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", competitor:"competitor", competitor_add:"competitor" },
-    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], guest:["Guest","chat"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", housekeeping:"hk", linen_calc:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", competitor:"competitor", competitor_add:"competitor" },
+    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = G[x.key];
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
