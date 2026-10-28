@@ -277,7 +277,7 @@ const sb = supabase.createClient(window.MM_CONFIG.url, window.MM_CONFIG.anonKey,
   const from00 = sb.from.bind(sb);
   sb.from = t => { const q = from00(t); if (t === "comps") { const s0 = q.select.bind(q); q.select = (c, o) => s0(fix(c), o); } return q; }; }
 // Until the nightly pull writes to the hub, changes are made in the old Rates Desk (Brandon 2026-10-28). Reading is all live.
-const EDITS_ON = false;
+const EDITS_ON = true;
 if (!EDITS_ON) {
   const HELD = "Not saved: changes go live here after the switch-over. For now, make this change in the old Rates Desk.";
   const held = () => { const p = Promise.resolve({ data:null, error:{ message:HELD } }); setTimeout(() => { try { alert(HELD); } catch (e) {} }, 0);
