@@ -297,7 +297,8 @@ function shell(){
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
-                   patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } } };
+                   patrick:{ label:"Ask Patrick", icon:"chat", kids:{ patrick_log:"Full log", patrick_fix:"Fix an answer" } },
+                   res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews" } } };   // Brandon 2026-10-28
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
   const soonTag = `<span class="soon">soon</span>`;
   const navList = (list, isSoon) => { const done = {}; return list.map(x => { const g = grouped(x.key);
@@ -598,7 +599,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync"];
-  const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick" }, GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"] };
+  const G = { locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res" }, GL = { locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key)).forEach(x => { const g = G[x.key];
     if(g){ if(seen[g]) return; seen[g] = 1; items.push({ k:"g:" + g, label:GL[g][0], icon:GL[g][1], sort:x.sort }); }
