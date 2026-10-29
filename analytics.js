@@ -691,4 +691,80 @@ window.anView = function(v){ css(); const a = hashArg();
   if(a.startsWith("home/")) return home(v, decodeURIComponent(a.slice(5)));
   if(a.startsWith("worst/")) return worstOne(v, decodeURIComponent(a.slice(6)));
   return (VIEWS[a] || market)(v); };
+
+/* Good guest reviews (Brandon 2026-10-29: "anyone can run good reviews"): Reports ▸ Guest reviews ▸ Good guest reviews (#/good_reviews).
+   Data: reviews_good(p_since) (hub_reviews_reports.sql) — every hub user; 4-5 stars, public text only, with staff guests named (review_kudos). */
+const GDA = {};
+window.goodReviewsView = async function(v){ css();
+  v.innerHTML = `<div class="page wide">${back}<h2>Good guest reviews</h2><p class="muted">Loading…</p></div>`;
+  const since = (() => { try { return localStorage.getItem("gd_rv_since") || "365"; } catch(e){ return "365"; } })();
+  const load = async d => { if(!GDA[d]){ const r = await sb.rpc("reviews_good", { p_since:d === "all" ? null : new Date(Date.now() - d * 864e5).toISOString().slice(0, 10) });
+      if(r.error) throw r.error; GDA[d] = (r.data || []).map(x => Object.assign(x, { hood:x.community || String(x.code || "").split(" ")[0] })); }
+    return GDA[d]; };
+  let A; try { A = await load(since); } catch(e){ return fail(v, e); }
+  const hoods = [...new Set(A.map(x => x.hood).filter(Boolean))].sort(), homes = [...new Set(A.map(x => x.code).filter(Boolean))].sort();
+  v.innerHTML = `<div class="page wide">${back}<h2>Good guest reviews</h2>
+    <p class="muted">What guests loved: every 4 and 5 star review in Track (Airbnb + Vrbo) with written text. Pick a home or neighborhood, or tick "Names our team" to see who guests called out.</p>
+    <div class="anbar">
+      <select id="gds"><option value="90">Last 3 months</option><option value="365">Last 12 months</option><option value="730">Last 2 years</option><option value="all">All (since Nov 2022)</option></select>
+      <select id="gdh"><option value="">All neighborhoods</option>${hoods.map(h => `<option>${esc(h)}</option>`).join("")}</select>
+      <input id="gdu" list="gdul" placeholder="Home (e.g. PL 805)"><datalist id="gdul">${homes.map(h => `<option value="${esc(h)}">`).join("")}</datalist>
+      <select id="gdr"><option value="5">5 stars</option><option value="4">4 and 5 stars</option></select>
+      <select id="gdc"><option value="">Airbnb + Vrbo</option><option>Airbnb</option><option>Vrbo</option></select>
+      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="gdt" style="width:auto;min-height:0"> Names our team</label>
+      <input id="gdq" type="search" placeholder="Words in the review"></div>
+    <div id="gdk"></div><h3 class="anh3">By home</h3><div id="gdht"></div>
+    <h3 class="anh3">Reviews <button class="btn small" id="gdcsv" style="margin-left:8px">Download CSV</button></h3><div id="gdl"></div>
+    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py); homes and neighborhoods from Track (hub_homes); team names from review_kudos.py. Public review text only. Guest names aren't stored.</p></div>`;
+  $("#gds").value = since;
+  let shown = 30, cur = [];
+  const draw = () => {
+    const h = $("#gdh").value, u = $("#gdu").value.trim().toLowerCase(), mn = +$("#gdr").value, ch = $("#gdc").value, tm = $("#gdt").checked, q = $("#gdq").value.trim().toLowerCase();
+    cur = A.filter(x => +x.overall >= mn && (!h || x.hood === h) && (!u || String(x.code).toLowerCase() === u || String(x.name).toLowerCase().includes(u))
+      && (!ch || x.channel === ch) && (!tm || (x.team || []).length) && (!q || String(x.text).toLowerCase().includes(q)));
+    $("#gdk").innerHTML = `<div class="ankpi"><div class="card"><small>Good reviews</small><b>${cur.length.toLocaleString()}</b><small>${new Set(cur.map(x => x.code)).size} homes</small></div>
+      <div class="card"><small>5 stars</small><b>${cur.length ? Math.round(cur.filter(x => +x.overall >= 5).length / cur.length * 100) + "%" : "—"}</b><small>of these reviews</small></div>
+      <div class="card"><small>Name our team</small><b>${cur.filter(x => (x.team || []).length).length}</b><small>${[...new Set(cur.flatMap(x => x.team || []))].map(esc).join(", ") || "no one yet"}</small></div></div>`;
+    const by = {}; cur.forEach(x => { const b = by[x.code] || (by[x.code] = { code:x.code, hood:x.hood, n:0, five:0, last:"" }); b.n++; if(+x.overall >= 5) b.five++; if((x.check_in || "") > b.last) b.last = x.check_in; });
+    table($("#gdht"), [{ k:"code", t:"Home", l:1, f:r => `<a class="anlink" href="#" data-u="${esc(r.code)}">${esc(r.code)}</a>` }, { k:"hood", t:"Neighborhood", l:1 },
+      { k:"n", t:"Good reviews" }, { k:"five", t:"5 stars" }, { k:"last", t:"Latest stay", f:r => r.last ? esc(dt(r.last + "T12:00")) : "—" }], Object.values(by), "n");
+    const L = cur.slice(0, shown);
+    $("#gdl").innerHTML = (L.length ? L.map(r => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="pill green">${(+r.overall).toFixed(0)} ★</span><b>${esc(r.code)}</b><span class="muted" style="font-size:13px">${esc(dt(r.check_in + "T12:00"))} · ${r.nights || "?"} nights · ${esc(r.channel)}</span>
+        ${(r.team || []).map(n => `<span class="pill">🌟 ${esc(n)}</span>`).join("")}</div><p style="margin:6px 0 2px">${esc(r.text)}</p></div>`).join("") : `<p class="muted">No reviews match.</p>`)
+      + (cur.length > L.length ? `<button class="btn small" id="gdmore">Show ${Math.min(30, cur.length - L.length)} more (${cur.length - L.length} left)</button>` : "");
+    if($("#gdmore")) $("#gdmore").onclick = () => { shown += 30; draw(); };
+    v.querySelectorAll("[data-u]").forEach(a => a.onclick = e => { e.preventDefault(); $("#gdu").value = a.dataset.u; shown = 30; draw(); $("#gdk").scrollIntoView(); });
+  };
+  ["gdh", "gdr", "gdc", "gdt"].forEach(id => $("#" + id).onchange = () => { shown = 30; draw(); });
+  $("#gdu").oninput = $("#gdq").oninput = () => { shown = 30; draw(); };
+  $("#gds").onchange = async () => { const d = $("#gds").value; try { localStorage.setItem("gd_rv_since", d); } catch(e){}
+    $("#gdl").innerHTML = `<p class="muted">Loading…</p>`; try { A = await load(d); } catch(e){ return fail(v, e); } shown = 30; draw(); };
+  $("#gdcsv").onclick = () => { const cell = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
+    const rows = [["Home", "Neighborhood", "Check-in", "Nights", "Channel", "Stars", "Team named", "Review"]].concat(cur.map(r =>
+      [r.code, r.hood, r.check_in, r.nights, r.channel, r.overall, (r.team || []).join("; "), r.text]));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + rows.map(r => r.map(cell).join(",")).join("\r\n")], { type:"text/csv" }));
+    a.download = `good-guest-reviews-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
+  draw();
+};
+
+/* Staff named in bad reviews (Brandon 2026-10-29: "reports of bad reviews that can only be seen by admin"). #/staff_bad_reviews.
+   Data: review_staff_flags (admins only, RLS hub_is_admin()); those reviews are hidden from everyone else's review pages. */
+window.staffBadView = async function(v){ css();
+  v.innerHTML = `<div class="page wide">${back}<h2>Staff named in bad reviews</h2><p class="muted">Loading…</p></div>`;
+  const r = await sb.from("review_staff_flags").select("*").eq("off", false).order("submitted_at", { ascending:false });
+  if(r.error) return fail(v, r.error);
+  const F = r.data || [], by = {};
+  F.forEach(k => { const b = by[k.person] || (by[k.person] = { person:k.person, n:0, reviews:new Set(), last:"" }); b.n++; b.reviews.add(k.review_id); if((k.submitted_at || "") > b.last) b.last = k.submitted_at; });
+  v.innerHTML = `<div class="page wide">${back}<h2>Staff named in bad reviews</h2>
+    <p class="muted">Guest reviews that name one of our team in a complaint. Only admins can see this list, and these reviews are left out of everyone else's review pages (the Reviews tab, Good guest reviews, Analytics).</p>
+    <h3 class="anh3">By person</h3><div id="sbt"></div><h3 class="anh3">Reviews</h3>
+    ${F.length ? F.map(k => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        ${k.stars != null ? `<span class="pill ${+k.stars >= 4 ? "" : +k.stars >= 3 ? "amber" : "red"}">${+k.stars} ★</span>` : ""}<b>${esc(k.person)}</b>
+        <span class="muted" style="font-size:13px">${esc(k.home || "")} · ${esc(dt(k.submitted_at))} · ${esc(k.channel || "")}</span>${k.field === "private" ? `<span class="pill">private note</span>` : ""}</div>
+        <p style="margin:6px 0 2px">“${esc(k.quote)}”</p></div>`).join("") : `<p class="muted">No reviews name our team in a complaint.</p>`}
+    <p class="ansrc">Source: Track guest reviews (track_reviews), checked nightly by review_kudos.py: a team member's name in a sentence with complaint words, or in a review of 3 stars or less with no praise in that sentence. Read the full review before acting.</p></div>`;
+  table($("#sbt"), [{ k:"person", t:"Person", l:1 }, { k:"rv", t:"Reviews", v:r => r.reviews.size, f:r => r.reviews.size }, { k:"n", t:"Mentions" },
+    { k:"last", t:"Latest", f:r => esc(dt(r.last)) }], Object.values(by), "n");
+};
 })();
