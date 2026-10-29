@@ -227,6 +227,28 @@ body.only-trash header.top{position:static}
 .tnear{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
 .tnear .tnote{margin-top:0}
 .tnear .chip{min-height:40px}
+/* Property Details = Moose Locks look (2026-10-29): tiles by neighborhood + home pop-up */
+.hhood{padding:16px 4px 8px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);margin-bottom:12px}
+.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+.htile{position:relative;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 16px 14px 22px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;overflow:hidden;min-width:0}
+.htile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--accent)}
+.htile.s-open::before{background:var(--info,#2463a0)} .htile.s-owner::before{background:var(--wait,#b5770a)}
+.htile:hover{border-color:var(--accent)} .htile:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.hth{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.htt{display:flex;flex-direction:column;min-width:0} .htc{font-size:21px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
+.hts{font-size:13.5px;color:var(--ink-2);margin-top:2px;overflow-wrap:anywhere}
+.htp{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto}
+.htq{display:flex;flex-direction:column;border:1px solid var(--line-2);border-radius:14px;background:var(--surface-2);cursor:text}
+.hql{padding:9px 12px;border-top:1px solid var(--line);min-width:0;overflow-wrap:anywhere} .hql:first-child{border-top:0}
+.hql .qvh{margin-bottom:3px} .hql .qrow{margin-bottom:3px} .hql .muted{font-size:13px}
+.htmore{font-size:13px;font-weight:800;color:var(--accent-ink);align-self:flex-end}
+.hpop{position:fixed;inset:0;z-index:50;background:rgba(8,14,17,.5);overflow-y:auto;padding:24px 16px}
+.hpbox{max-width:1000px;margin:0 auto;background:var(--ground);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
+.hpbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+.hpbody{padding:12px}
+.hpbar .mx{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);width:36px;height:36px;border-radius:50%;font-size:16px;font-weight:800;cursor:pointer;flex:none}
+body.hpopen{overflow:hidden}
+@media (max-width:640px){.hpop{padding:0}.hpbox{border-radius:0;border:0;min-height:100%}.hgrid{grid-template-columns:1fr}}
 .thood{padding:10px 4px 6px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .tcard{border:1px solid var(--line);border-radius:18px;padding:16px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;margin-bottom:10px;scroll-margin:110px}
 .tcard.tdone{opacity:.65;background:var(--surface-2);box-shadow:none;padding:12px 16px;gap:4px}
@@ -671,8 +693,9 @@ function render0(){
     money:vMoney,recalls:vRecalls,rvr:vRvr,fire:vFire,firesys:function(){ return LIC?LIC.vFireSys():""; },lease:function(){ return LIC?LIC.vLease():""; }}[S.tab];
   // keep focus + caret in text inputs across re-render
   var a=document.activeElement, aid=a&&a.id, ss=a&&a.selectionStart, se=a&&a.selectionEnd;
-  var sc=document.querySelector(".listp .rows"), st=sc?sc.scrollTop:0;
+  var sc=document.querySelector(".listp .rows"), st=sc?sc.scrollTop:0, hp=$("hpop"), hst=hp?hp.scrollTop:0, hpc=hp&&hp.getAttribute("aria-label");
   v.innerHTML=f();
+  var hp2=$("hpop"); if(hp2 && hp2.getAttribute("aria-label")===hpc) hp2.scrollTop=hst; document.body.classList.toggle("hpopen",!!hp2);
   if(aid && $(aid)){ var n=$(aid); n.focus(); try{ if(ss!=null) n.setSelectionRange(ss,se); }catch(e){} }
   var sc2=document.querySelector(".listp .rows"); if(sc2) sc2.scrollTop=st;
   if(typeof rotImgs==="function") rotImgs();
@@ -1034,22 +1057,35 @@ function vHomes(){
   var ht=u.htype||"str", cnt={str:0,lease:0,"2h":0,co:0};
   D.homes.forEach(function(p){ if(!HOME_HIDE[p.code]) cnt[homeType(p.code)]++; });
   var list=D.homes.filter(function(p){ return !HOME_HIDE[p.code] && homeType(p.code)===ht &&(!q || (coName(p.code)+" "+p.code+" "+p.community).toLowerCase().indexOf(q)>-1); });
-  if(u.home && !list.some(function(p){ return p.code===u.home; })) u.home="";
-  if(!u.home && list.length && window.innerWidth>1000) u.home=list[0].code;
+  if(u.home && D.homes.length && !D.homes.some(function(p){ return p.code===u.home; })) u.home="";
   var h='<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
       return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div>'+
     '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search home or community…" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
     '<span class="qcount">'+list.length+' shown</span><button class="btn sm pri" data-act="newhome">+ Add property</button></div>';
-  h+='<div class="cols"><aside class="panel listp"><div class="rows">'+list.map(function(p){
-      var jobs=(D.byProp[p.code]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
-      var rc=p.appliances.some(function(a){ return a.recalls&&a.recalls.length; }), os=ownerStay(p.code), occ=os&&os.in<=today();
-      return '<button class="row" data-home="'+esc(p.code)+'" aria-current="'+(p.code===u.home)+'"><span class="rt"><span class="rcode">'+esc(coName(p.code))+'</span> <span class="muted">'+esc(p.community)+'</span></span>'+
-        '<span>'+(jobs.length?'<span class="pill open">'+jobs.length+' open</span>':'')+'</span><span class="rm">'+
-        (rc?'<span class="badge recall">Recall</span>':'')+(occ?'<span class="pill waiting">Owner in</span>':'')+
-        '<span>'+homeAppl(p.code,p).length+' appliances</span>'+(homeInfo(p.code).heatTape?'<span>· heat tape</span>':'')+'</span></button>'; }).join("")+
-    '</div></aside><section class="panel detail">'+(u.home?homeDetail(u.home):'<div class="empty">Pick a home.</div>')+'</section></div>';
+  /* Moose Office is one page, not a list: it stays open on its own tab */
+  if(ht==="co") return h+'<section class="panel detail">'+homeDetail(list.length?list[0].code:"Moose company")+'</section>';
+  /* Moose Locks look (Brandon 2026-10-29): one tile per home grouped by neighborhood, codes + Wi-Fi on the tile; the full home opens in a pop-up */
+  var by={}; list.forEach(function(p){ var c=(p.community||"").trim()||"Other"; (by[c]=by[c]||[]).push(p); });
+  h+=Object.keys(by).sort().map(function(c){ var L=by[c], pre=(L[0].code.replace(/^(L-|2H-)/i,"").match(/^[A-Za-z]+/)||[""])[0];
+      return '<div class="hhood">'+esc(c)+(pre&&pre.toUpperCase()!==c.toUpperCase()?' · '+esc(pre):'')+' · '+L.length+' home'+(L.length===1?'':'s')+'</div><div class="hgrid">'+L.map(homeTile).join("")+'</div>'; }).join("")||'<div class="empty">No homes match.</div>';
+  if(u.home && homeType(u.home)!=="co") h+='<div class="hpop" id="hpop" role="dialog" aria-modal="true" aria-label="'+esc(coName(u.home))+'"><div class="hpbox"><div class="hpbar"><button class="btn sm" data-act="hclose">← All homes</button><button class="mx" data-act="hclose" aria-label="Close" title="Close">✕</button></div>'+
+    '<div class="hpbody"><section class="panel detail">'+homeDetail(u.home)+'</section></div></div></div>';
   return h;
 }
+/* the codes + Wi-Fi people look up most — same sources as the Quick view (hub edit first, else the Asana note); codes only for home_codes people */
+function homeQuick(code,p){ var pe=pedit(code), a=function(rx){ var n=infoNote(p,rx); return n?n.text:""; };
+  var r={wifi:pe.wifiName||pe.wifiPass?(pe.wifiName?"Network: "+pe.wifiName:"")+(pe.wifiPass?(pe.wifiName?"\n":"")+"Password: "+pe.wifiPass:""):a(/^(wifi|wi-fi|stay[- ]?fi)/i), keybox:homeInfo(code).keybox||""};
+  if(window.MM_CODES!==false){ r.entry=pe.lockoutCode||a(/^lockout info/i); r.garage=pe.garageCode||a(/^parking\/? ?garage info$|^parking$/i); }
+  return r; }
+function htLine(label,val){ return '<div class="hql"><div class="qvh">'+esc(label)+'</div>'+(val?qShort(val).html:'<div class="muted">Not recorded</div>')+'</div>'; }
+function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=homeQuick(c,p);
+  var jobs=(D.byProp[c]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
+  var rc=(p.appliances||[]).some(function(a){ return a.recalls&&a.recalls.length; });
+  var st=occ?"owner":jobs.length?"open":"ok", sub=(p.track&&p.track.name)||p.community||"";
+  return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'</div>'+
+    '<div class="htp">'+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'</div></div>'+
+    '<div class="htq">'+htLine("Wi-Fi",q.wifi)+(window.MM_CODES!==false?htLine("Door / lockout",q.entry)+htLine("Garage / parking",q.garage):'')+(q.keybox?htLine("Key box",q.keybox):'')+'</div>'+
+    '<div class="htmore">Home details →</div></div>'; }
 /* Heads-up (Brandon 2026-10-28): big open/recent problems + active projects at this home, from hub_home_alerts (hub_penny_3.sql).
    Same list Penny and the reservation check list use. Loaded once, then the page redraws. */
 function homeHeads(code){ var sb=window.MM_SB; if(!sb) return "";
@@ -3650,6 +3686,7 @@ document.addEventListener("click",function(ev){
   if(d.mopen){ S.ui.mOpen=S.ui.mOpen||{}; if(S.ui.mOpen[d.mopen]) delete S.ui.mOpen[d.mopen]; else S.ui.mOpen[d.mopen]=1; return render(); }
   if(d.job){ ev.preventDefault(); S.ui.sel=d.job; if(S.tab!=="jobs"){ S.ui.q=""; S.ui.st={}; S.ui.kind={}; S.ui.src={}; S.ui.hideOld=false; S.ui.hideInfo=false; S.ui.who=""; S.ui.vendor=""; return go("jobs"); }
     render(); if(window.innerWidth<=1000){ var el=$("jdetail"); if(el) el.scrollIntoView({behavior:"smooth"}); } return; }
+  if(d.home && t.classList.contains("htile") && String(window.getSelection&&getSelection()||"")) return;
   if(d.home){ ev.preventDefault(); S.ui.home=d.home; S.ui.htype=homeType(d.home); if(S.tab!=="homes") return go("homes"); render(); return; }
   if(d.chip){ var g=S.ui[d.chip]; if(g[d.k]) delete g[d.k]; else g[d.k]=1; S.ui.sel=""; return render(); }
   if(d.rwin){ S.ui.rwin=+d.rwin; return render(); }
@@ -3799,6 +3836,7 @@ document.addEventListener("click",function(ev){
     case "newvendor": return mVendor();
     case "vback": S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return;
     case "newhome": return mNewHome();
+    case "hclose": S.ui.home=""; return render();
     case "editquick": return mQuick(d.code);
     case "savehoa": var hc=d.code, hk=sid(hc); return put("propedits",hk,{hoaName:fv("hoa_name"),hoaMgmt:fv("hoa_mgmt"),hoaContact:fv("hoa_contact"),hoaPhone:fv("hoa_phone"),hoaEmail:fv("hoa_email"),hoaPortal:fv("hoa_portal"),hoaRules:fv("hoa_rules")},S.propedits[hk]).then(function(){ toast("HOA saved"); });
     case "newexp": return mExpense();
@@ -3892,7 +3930,10 @@ document.addEventListener("input",function(ev){
   var m={r_age:"age",r_life:"life",r_rep:"repair",r_new:"replace",r_calls:"calls"}[t.id];
   if(m){ S.ui.rvr[m]=t.value; clearTimeout(t._d); t._d=setTimeout(render,250); }
 });
-document.addEventListener("keydown",function(ev){ if(ev.key==="Escape" && $("scrim").classList.contains("open")) closeModal(); });
+document.addEventListener("keydown",function(ev){ if(ev.key==="Escape" && $("scrim").classList.contains("open")) closeModal();
+  else if(ev.key==="Escape" && $("hpop")){ S.ui.home=""; render(); }   /* Property Details home pop-up */
+  else if((ev.key==="Enter"||ev.key===" ") && ev.target.classList && ev.target.classList.contains("htile")){ ev.preventDefault(); ev.target.click(); } });
+document.addEventListener("click",function(ev){ if(ev.target && ev.target.id==="hpop"){ S.ui.home=""; render(); } });
 $("scrim").addEventListener("click",function(ev){ if(ev.target===$("scrim")) closeModal(); });
 
 /* ================= boot ================= */
