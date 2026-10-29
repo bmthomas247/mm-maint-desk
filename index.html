@@ -251,6 +251,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="reservations.js"></script>
 <script src="analytics.js"></script>
 <script src="meetings.js"></script>
+<script src="calendar.js"></script>
 <script>
 const C = window.MM_CONFIG;
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
@@ -450,6 +451,12 @@ async function boot(){
   // Reviews also sits in the Guest drop-down (Brandon 2026-10-28); follows the reviews desk's access and status
   const rvD = DESKS.find(x => x.key === "reviews");
   if(rvD) DESKS.push({ key:"guest_reviews", label:"Guest · Reviews", icon:rvD.icon, url:rvD.url, status:rvD.status, sort:46 });
+  // Calendar drop-down (Brandon 2026-10-29): Reservations · Office · Personal · Meetings (calendar.js). The weekly meetings are tiles under Meetings.
+  const cD = DESKS.find(x => x.key === "calendar" && x.status === "live");
+  if(cD) DESKS.push({ key:"cal_res", label:"Calendar · Reservations", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.1 },
+    { key:"cal_office", label:"Calendar · Office", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.2 },
+    { key:"cal_me", label:"Calendar · Personal", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.3 },
+    { key:"cal_meet", label:"Calendar · Meetings", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.4 });
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
   PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
@@ -462,7 +469,7 @@ function noAccess(err){
 }
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics","advertising","patrick_log","patrick_fix"];   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
   const anD = DESKS.some(x => x.key === "analytics");
@@ -477,7 +484,7 @@ function shell(){
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
                    competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } },   // Brandon 2026-10-28
-                   meet:{ label:"Meetings", icon:"people", kids:{ meet_maint:"Monday maintenance", meet_or:"Tue · Owner Relations", meet_bd:"Wed · Business Development", meet_kd:"Wed · Key Data (every other)", meet_beyond:"Thu · Beyond Pricing", meet_mgr:"Thu · Managers" } } };   // Brandon 2026-10-28; Tue–Thu meetings 2026-10-29 (meetings.js)
+                   cal:{ label:"Calendar", icon:"calendar", kids:{ cal_res:"Reservations", cal_office:"Office", cal_me:"Personal", cal_meet:"Meetings" } } };   // Brandon 2026-10-29: the Meetings drop-down moved into Calendar ▸ Meetings (tiles)
   // Damage claims + Vehicles sit under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; others keep them on their own
   if(DESKS.some(x => x.key === "maintenance")) Object.assign(GROUPS.maint.kids, { damage_claims:"Damage claims", vehicles:"Vehicles", trash:"Trash" });   // crew without Maintenance see Trash on its own
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
@@ -583,9 +590,10 @@ function route(){
   document.body.classList.remove("open");
   let k = current();
   if(!k){ const first = DESKS.find(x => x.status === "live"); k = first ? first.key : "feedback"; history.replaceState(null, "", "#/" + k); }
-  document.querySelectorAll(".dk[data-k]").forEach(a => a.classList.toggle("on", a.dataset.k === k));
+  const hk = /^meet_/.test(k) && DESKS.some(x => x.key === "cal_meet") ? "cal_meet" : k;   // a meeting page lights up Calendar ▸ Meetings
+  document.querySelectorAll(".dk[data-k]").forEach(a => a.classList.toggle("on", a.dataset.k === hk));
   document.querySelectorAll(".mgear").forEach(g => g.classList.toggle("on", k === "settings"));
-  document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
+  document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${hk}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
   const v = $("#view"), d = DESKS.find(x => x.key === k);
   $("#ttl").textContent = $("#utl").textContent = d ? d.label : (k === "feedback" ? "Bugs & Upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   document.querySelectorAll(".mjoin").forEach(x => x.remove());
@@ -593,6 +601,7 @@ function route(){
   if(k === "feedback") return feedbackView(v);
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "advertising" && d){ location.replace("#/adv_owners"); return; }   // Advertising became a drop-down 2026-10-28
+  if(k === "calendar" && d){ location.replace("#/cal_res"); return; }   // Calendar is a drop-down (2026-10-29)
   if(k === "reports") return hubReportsView(v);
   if(k === "an" && window.anView){ $("#ttl").textContent = "Reports & Analytics"; return anView(v); }   // analytics.js (2026-10-28); data gated by hub_can('analytics')
   if(k === "sync"){ const a = hashArg(); return a === "recent" || a === "errors" ? syncReport(v, a) : syncView(v, a); }
@@ -602,6 +611,7 @@ function route(){
   if(k === "patrick" || k === "patrick_log" || k === "patrick_fix") return patrickView(v);   // Reports > Ask Patrick (no sidebar entry, Brandon 2026-10-28)
   if(k === "messages") return messagesView(v);
   if(d && k === "res_report") return resReportView(v);
+  if(d && /^cal_(res|office|me|meet)$/.test(k) && window.calView) return calView(v, k);   // calendar.js (2026-10-29)
   if(d && /^meet_(or|bd|kd|beyond|mgr)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
   if(d && (k === "reviews" || k === "guest_reviews") && d.status === "live" && window.reviewsDesk) return reviewsDesk(v);   // analytics.js reviews report (Brandon 2026-10-29)
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
@@ -934,8 +944,8 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","advertising"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet" },
-    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], meet:["Meetings","people"] };
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal" },
+    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], meet:["Meetings","people"], cal:["Calendar","calendar"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
@@ -1101,6 +1111,7 @@ async function homeView(v){
     <div id="bdays"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
+    ${DESKS.some(x => x.key === "cal_me") ? `<div class="card" id="mywk"><b style="font-size:17px">🗓️ Your week</b><p class="muted">Loading…</p></div>` : ""}
     <div class="card" id="stays"><b style="font-size:17px">🏠 Who's in house · next 14 days</b><p class="muted">Loading…</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎉 Shout-outs</b><button class="btn small" style="margin-left:auto" id="soadd">Give a shout-out</button></div>
       <div id="soform" style="display:none"><label class="field"><span>Who?</span><input id="soabout" placeholder="Example: Dave"></label>
@@ -1111,6 +1122,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
+  if(window.calHomeCard && $("#mywk")) calHomeCard($("#mywk"));   // calendar.js (2026-10-29)
   loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello();
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
