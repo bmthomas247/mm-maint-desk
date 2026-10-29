@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>QR Code Generator</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Property Set Up ▸ QR Code Generator (hub key psu_qr; follows property_setup's access). Brandon 2026-10-29.
+     Made in this browser (qrcode-generator), nothing is sent anywhere. Typical use: the guest book frame in each home (Touch Stay link). -->
+<style>
+:root{--forest:#3c5f12;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;--red:#c8382b;--radius:16px;
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33}}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);line-height:1.5}
+.wrap{max-width:980px;margin:0 auto;padding:18px 16px 40px}h1{font-size:22px;margin:0 0 4px}.muted{color:var(--muted)}.small{font-size:13px}
+.cols{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
+label{display:block;font-weight:800;font-size:13px;margin:12px 0 6px;color:var(--ink-2)}
+input,select{width:100%;font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
+.btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn:disabled{opacity:.55}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.prev{background:#fff;color:#15201a;border-radius:var(--radius);border:1px solid var(--line);padding:22px;text-align:center}
+.prev .cap{font-weight:800;font-size:18px;margin-top:10px}.prev .sub{color:#3d4a42;font-size:14px}
+.prev canvas{width:100%;max-width:280px;height:auto;image-rendering:pixelated}
+.err{color:var(--red);font-weight:700}
+@media print{body *{visibility:hidden}#card,#card *{visibility:visible}#card{position:absolute;left:0;top:0;width:100%;border:0}#card canvas{max-width:4in}#card .cap{font-size:26pt}#card .sub{font-size:16pt}}
+</style>
+</head><body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const S = { text:"", cap:"Scan for your Guest Book", sub:"", px:1024, ec:"M", qr:null };
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/psu_qr" target="_top">Go to the Moose Hub →</a></p>`; return; }
+  if(!(await sb.rpc("hub_can", { p_desk:"property_setup" })).data){ $("#app").innerHTML = `<h1>No access</h1><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
+  $("#app").innerHTML = `<h1>QR Code Generator</h1>
+    <p class="muted small">Paste a link (a home's Touch Stay guest book, a listing, a form) and get a QR code to download or print. Made in your browser; nothing is sent anywhere. Don't put door codes or Wi-Fi passwords in a QR code that sits in a home.</p>
+    <div class="cols"><div class="card">
+      <label for="text">Link or text</label><input id="text" placeholder="https://…" autocomplete="off">
+      <label for="cap">Big line under the code (optional)</label><input id="cap" value="${esc(S.cap)}">
+      <label for="sub">Small line (optional)</label><input id="sub" placeholder="e.g. Prospector Lodge 406">
+      <div class="row" style="margin-top:0"><div style="flex:1;min-width:140px"><label for="px">Download size</label><select id="px">${[512,1024,2048].map(n => `<option ${n === S.px ? "selected" : ""} value="${n}">${n} px</option>`).join("")}</select></div>
+        <div style="flex:1;min-width:140px"><label for="ec">Damage tolerance</label><select id="ec"><option value="L">Low (smallest)</option><option value="M" selected>Medium</option><option value="Q">High</option><option value="H">Highest</option></select></div></div>
+      <div class="row"><button class="btn pri" id="png" disabled>Download PNG</button><button class="btn" id="svg" disabled>Download SVG</button><button class="btn" id="print" disabled>Print card</button></div>
+      <p id="msg" class="small"></p></div>
+      <div><div class="prev" id="card"><canvas id="cv" width="280" height="280"></canvas><div class="cap" id="pc"></div><div class="sub" id="ps"></div></div>
+        <p class="muted small" id="len"></p></div></div>`;
+  ["text","cap","sub","px","ec"].forEach(id => $("#" + id).oninput = $("#" + id).onchange = e => { S[id] = id === "px" ? +e.target.value : e.target.value; draw(); });
+  $("#png").onclick = png; $("#svg").onclick = svg; $("#print").onclick = () => window.print();
+  draw();
+}
+function make(){
+  if(!S.text.trim()) return null;
+  try { const q = qrcode(0, S.ec); q.addData(S.text.trim(), "Byte"); q.make(); return q; } catch(e){ return "toolong"; }
+}
+function paintTo(cv, q, px){
+  const n = q.getModuleCount(), m = 4, cell = Math.max(1, Math.floor(px / (n + m * 2))), size = cell * (n + m * 2);
+  cv.width = cv.height = size; const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, size, size); g.fillStyle = "#000";
+  for(let r = 0; r < n; r++) for(let c = 0; c < n; c++) if(q.isDark(r, c)) g.fillRect((c + m) * cell, (r + m) * cell, cell, cell);
+}
+function draw(){
+  const q = make(), ok = q && q !== "toolong";
+  ["png","svg","print"].forEach(id => $("#" + id).disabled = !ok);
+  $("#msg").innerHTML = q === "toolong" ? `<span class="err">Too long for a QR code — use a shorter link.</span>` : "";
+  $("#pc").textContent = S.cap; $("#ps").textContent = S.sub;
+  const cv = $("#cv");
+  if(ok){ paintTo(cv, q, 560); } else { cv.width = cv.height = 280; const g = cv.getContext("2d"); g.fillStyle = "#f1f3ee"; g.fillRect(0, 0, 280, 280); }
+  $("#len").textContent = ok ? `${S.text.trim().length} characters · ${q.getModuleCount()}×${q.getModuleCount()} squares` : "";
+  S.qr = ok ? q : null;
+}
+const fname = ext => (S.sub || S.cap || "qr-code").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60) + "." + ext;
+function dl(blob, name){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+function png(){ const cv = document.createElement("canvas"); paintTo(cv, S.qr, S.px); cv.toBlob(b => dl(b, fname("png")), "image/png"); }
+function svg(){ dl(new Blob([S.qr.createSvgTag({ cellSize:8, margin:32, scalable:true })], { type:"image/svg+xml" }), fname("svg")); }
+boot().catch(e => { $("#app").innerHTML = `<h1>Something went wrong</h1><p>${esc(e && e.message || e)}</p>`; });
+</script>
+</body></html>
