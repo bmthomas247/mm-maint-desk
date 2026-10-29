@@ -42,7 +42,7 @@ function nextDay(m){
     const add = n <= 0 ? -n : (m.every - n % m.every) % m.every; d.setDate(d.getDate() + add); return ymd(d); }
   d.setDate(d.getDate() + (m.dow - d.getDay() + 7) % 7); return ymd(d);
 }
-const ST = { day:{}, data:{}, people:null, drafts:{} };
+const ST = { day:{}, data:{}, people:null, drafts:{}, sched:{} };
 async function people(){
   if(ST.people) return ST.people; ST.people = [];
   try { const r = await sb.rpc("hub_staff_directory"); ST.people = (r.data || []).map(x => x.name).filter(Boolean).sort(); } catch(e){}
@@ -61,7 +61,8 @@ window.meetView = async function(v, key){
   css(); const m = MEET[key]; if(!m) return;
   if(!ST.day[key]) ST.day[key] = nextDay(m);
   v.innerHTML = `<div class="page mtg"><p class="muted">Building the agenda…</p></div>`;
-  const [data, ppl] = await Promise.all([load(v, key), people()]);
+  const [data, ppl, sc] = await Promise.all([load(v, key), people(), sb.from("hub_meeting_sched").select("start_time,minutes,source").eq("meet", key).maybeSingle()]);
+  if(sc && sc.data) ST.sched[key] = sc.data;   // times set on Calendar ▸ Meetings (hub_calendar.sql) win over the defaults here
   if(!data) return; render(v, key, data, ppl);
 };
 /* Monday maintenance (desk.html in a frame, Brandon 2026-10-29): Join button in the green banner next to the page name.
@@ -78,8 +79,12 @@ window.meetJoin = async function(key){
     if(w.error) return alert("Couldn't save: " + w.error.message);
     document.querySelectorAll(".mjoin").forEach(x => x.remove()); meetJoin(key); });
 };
+const t12 = t => { const [h, mi] = t.split(":").map(Number); return (h % 12 || 12) + (mi ? ":" + String(mi).padStart(2, "0") : "") + (h < 12 ? " am" : " pm"); };
+function schedWhen(key){ const s = ST.sched[key]; if(!s || !s.start_time) return {};
+  const st = s.start_time.slice(0, 5), x = st.split(":").map(Number), e = s.minutes ? x[0] * 60 + x[1] + s.minutes : null;
+  return { when: t12(st) + (e != null ? "–" + t12(String(Math.floor(e / 60) % 24).padStart(2, "0") + ":" + String(e % 60).padStart(2, "0")) : "") + " Mountain" + (s.source ? " (" + s.source + ")" : "") }; }
 function render(v, key, data, ppl){
-  const m = MEET[key], day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
+  const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
   const noteFor = (d, k) => notes.find(n => n.day === d && n.item === k);
   const past = [...new Set(notes.map(n => n.day))].filter(d => d < day).sort().reverse();
   const covered = items.filter(it => (noteFor(day, it.key) || {}).text).length;
