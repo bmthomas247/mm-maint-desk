@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Photo Compressor</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Property Set Up ▸ Photo Compressor (hub key psu_photos; follows property_setup's access). Brandon 2026-10-29.
+     Everything happens in this browser: photos are never uploaded anywhere. Default 1920 px on the long side = the size of the
+     Estabrook "COMPRESSED" sets we upload to Track ("MM - Property Set Up" playbook, PL 406 photos 2026-10-22/27). -->
+<style>
+:root{--forest:#3c5f12;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;--green:#3a7d44;--green-soft:#e6f1ea;--red:#c8382b;--radius:16px;
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;--green-soft:#16301f}}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding:18px 16px 40px}h1{font-size:22px;margin:0 0 4px}.muted{color:var(--muted)}.small{font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
+.drop{border:2px dashed var(--line-2);border-radius:var(--radius);padding:34px 16px;text-align:center;cursor:pointer;background:var(--card)}
+.drop.on{border-color:var(--forest);background:var(--green-soft)}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
+.btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn:disabled{opacity:.55;cursor:default}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+label{font-weight:800;font-size:13px;color:var(--ink-2)} select,input[type=text]{font:inherit;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;background:var(--card);color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.ph{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:12.5px}
+.ph img{width:100%;aspect-ratio:3/2;object-fit:cover;display:block;background:var(--line)}
+.ph .t{padding:8px 10px}.ph b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ph a{font-weight:800;color:var(--forest)}
+.save{color:var(--green);font-weight:800}.err{color:var(--red);font-weight:700}
+</style>
+</head><body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+const S = { items:[], edge:1920, q:0.82, prefix:"" };
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/psu_photos" target="_top">Go to the Moose Hub →</a></p>`; return; }
+  if(!(await sb.rpc("hub_can", { p_desk:"property_setup" })).data){ $("#app").innerHTML = `<h1>No access</h1><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
+  $("#app").innerHTML = `<h1>Photo Compressor</h1>
+    <p class="muted small">Shrinks listing photos for Track and the OTAs. It all happens in your browser — nothing is uploaded. 1920 px matches the Estabrook compressed sets we use.</p>
+    <div class="card row">
+      <label>Long side <select id="edge">${[1280,1600,1920,2400,3000].map(n => `<option ${n === S.edge ? "selected" : ""}>${n}</option>`).join("")}</select> px</label>
+      <label>Quality <select id="q">${[[0.7,"Smaller"],[0.82,"Normal"],[0.9,"Best"]].map(([v,l]) => `<option value="${v}" ${v === S.q ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label>Name start (optional) <input type="text" id="prefix" placeholder="e.g. PL 406 " style="width:150px"></label>
+    </div>
+    <div class="drop" id="drop"><b>Drop photos here</b><br><span class="muted small">or click to pick them · JPG, PNG, WebP (iPhone HEIC: export as JPG first)</span>
+      <input type="file" id="pick" accept="image/*" multiple hidden></div>
+    <div class="row" style="margin:14px 0"><button class="btn pri" id="zip" disabled>Download all (.zip)</button><button class="btn" id="clear" disabled>Clear</button><span id="sum" class="muted small"></span></div>
+    <div class="grid" id="grid"></div>`;
+  $("#edge").onchange = e => { S.edge = +e.target.value; redo(); };
+  $("#q").onchange = e => { S.q = +e.target.value; redo(); };
+  $("#prefix").oninput = e => { S.prefix = e.target.value; paint(); };
+  const drop = $("#drop"), pick = $("#pick");
+  drop.onclick = () => pick.click();
+  pick.onchange = () => add([...pick.files]);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("on"); };
+  drop.ondragleave = () => drop.classList.remove("on");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("on"); add([...e.dataTransfer.files]); };
+  $("#zip").onclick = zipAll;
+  $("#clear").onclick = () => { S.items.forEach(i => i.url && URL.revokeObjectURL(i.url)); S.items = []; paint(); };
+}
+const outName = (it, i) => (S.prefix ? S.prefix.trim() + " " + String(i + 1).padStart(3, "0") : it.file.name.replace(/\.[^.]+$/, "")) + ".jpg";
+async function shrink(file){
+  const bmp = await createImageBitmap(file, { imageOrientation:"from-image" });
+  const k = Math.min(1, S.edge / Math.max(bmp.width, bmp.height)), w = Math.round(bmp.width * k), h = Math.round(bmp.height * k);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"); g.imageSmoothingQuality = "high"; g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); g.drawImage(bmp, 0, 0, w, h); bmp.close();
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", S.q));
+  return { blob, w, h };
+}
+async function run(it){
+  try { const r = await shrink(it.file); if(it.url) URL.revokeObjectURL(it.url); Object.assign(it, r, { url:URL.createObjectURL(r.blob), err:"" }); }
+  catch(e){ it.err = "Can't read this file in the browser"; }
+  paint();
+}
+async function add(files){
+  const list = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name));
+  list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true }));
+  const fresh = list.map(f => ({ file:f })); S.items.push(...fresh); paint();
+  for(const it of fresh) await run(it);
+}
+async function redo(){ for(const it of S.items) await run(it); }
+function paint(){
+  const done = S.items.filter(i => i.blob), before = done.reduce((s, i) => s + i.file.size, 0), after = done.reduce((s, i) => s + i.blob.size, 0);
+  $("#zip").disabled = !done.length; $("#clear").disabled = !S.items.length;
+  $("#sum").innerHTML = done.length ? `${done.length} of ${S.items.length} done · ${kb(before)} → <span class="save">${kb(after)}</span>` : S.items.length ? "Working…" : "";
+  $("#grid").innerHTML = S.items.map((it, i) => `<div class="ph">${it.url ? `<img src="${it.url}" alt="">` : `<img alt="">`}<div class="t"><b title="${esc(outName(it, i))}">${esc(outName(it, i))}</b>
+    ${it.err ? `<span class="err">${esc(it.err)}</span>` : it.blob ? `${it.w}×${it.h} · ${kb(it.file.size)} → <span class="save">${kb(it.blob.size)}</span><br><a href="${it.url}" download="${esc(outName(it, i))}">Download</a>` : `<span class="muted">Working…</span>`}</div></div>`).join("");
+}
+async function zipAll(){
+  const z = new JSZip(); S.items.forEach((it, i) => { if(it.blob) z.file(outName(it, i), it.blob); });
+  const b = await z.generateAsync({ type:"blob" }), a = document.createElement("a");
+  a.href = URL.createObjectURL(b); a.download = (S.prefix.trim() || "photos") + " compressed.zip"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+boot().catch(e => { $("#app").innerHTML = `<h1>Something went wrong</h1><p>${esc(e && e.message || e)}</p>`; });
+</script>
+</body></html>
