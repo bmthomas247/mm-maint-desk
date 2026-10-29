@@ -66,8 +66,13 @@ aside.rail{overflow-y:auto;overscroll-behavior:contain}
 .foot{border-top:1px solid rgba(255,255,255,.14);padding-top:8px;margin-top:8px;display:flex;flex-direction:column;gap:3px}
 /* profile, settings, sign out: top right (2026-10-28) - .ubar on computers, inside the green .topbar on phones */
 .mainwrap{display:flex;flex-direction:column;min-width:0;min-height:0}
-.ubar{display:flex;justify-content:flex-end;align-items:center;padding:6px 14px;background:var(--card);border-bottom:1px solid var(--line);flex:none}
-.me{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink)}
+/* the one green banner on every page (Brandon 2026-10-28): page name left, me right; desks inside drop their own header */
+.ubar{display:flex;align-items:center;gap:12px;padding:10px 18px;background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;box-shadow:0 2px 12px rgba(10,30,20,.18);flex:none;position:relative;z-index:1}
+.ubar #utl{flex:1;min-width:0;font-size:19px;font-weight:800;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ubar .me .nm small{color:rgba(255,255,255,.75)}
+.ubar a.mgear,.ubar .me button{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#fff}
+.ubar a.mgear:hover,.ubar a.mgear.on,.ubar .me button:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.4)}
+.me{display:flex;align-items:center;gap:10px;font-size:13.5px;color:#fff}
 .me .av{width:30px;height:30px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
 .me .nm{min-width:0;line-height:1.2;font-weight:700} .me .nm small{display:block;color:var(--muted);font-weight:600;font-size:11.5px;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
 a.mlink{display:flex;align-items:center;gap:9px;min-width:0;color:inherit;text-decoration:none;border-radius:10px}
@@ -267,6 +272,7 @@ const ICON = {
   spark: I('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
   bug: I('<rect x="7" y="7" width="10" height="13" rx="5"/><path d="M12 7V4M9 4l1.5 2M15 4l-1.5 2M3 12h4M17 12h4M4 18l3-2M20 18l-3-2M4 7l3 2M20 7l-3 2"/>'),
   list: I('<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'),
+  people: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2a5 5 0 0 1 5.5 5.8"/>'),
   trash: I('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/>'),
   truck: I('<path d="M1 4h13v12H1zM14 8h4l4 4v4h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>'),
   search: I('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>'),
@@ -421,7 +427,9 @@ async function boot(){
     try { if((await sb.rpc("hub_can", { p_desk:"maint_money" })).data) DESKS.push({ key:"maint_money", label:"Maintenance · Expenses & Time", icon:mD.icon, url:"desk.html?only=money", status:"live", sort:mD.sort + 0.2 }); } catch(e){}
     // 2026-10-28 (Brandon): Seasonal & yearly and Recalls moved out of the Workbench into the drop-down (after Damage claims 32 / Vehicles 33)
     DESKS.push({ key:"maint_routines", label:"Maintenance · Seasonal & yearly", icon:mD.icon, url:"desk.html?only=routines", status:"live", sort:32.5 },
-               { key:"maint_recalls", label:"Maintenance · Recalls", icon:mD.icon, url:"desk.html?only=recalls", status:"live", sort:33.5 }); }
+               { key:"maint_recalls", label:"Maintenance · Recalls", icon:mD.icon, url:"desk.html?only=recalls", status:"live", sort:33.5 });
+    // 2026-10-28 (Brandon): meetings are their own tab (was the Workbench's "Monday meeting" button). Follows Maintenance; more meetings join this drop-down later
+    DESKS.push({ key:"meet_maint", label:"Meetings · Monday maintenance", icon:"people", url:"desk.html?meet=1", status:"live", sort:mD.sort + 0.9 }); }
   // Trash is a real desk (hub_trash.sql) so field crew can have it without the rest of Maintenance
   // Brandon 2026-10-28: in the Maintenance drop-down, Trash sits right under Projects (crew without Maintenance keep it on its own, sort 34)
   const tD = DESKS.find(x => x.key === "trash");
@@ -467,7 +475,8 @@ function shell(){
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
-                   competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } } };   // Brandon 2026-10-28
+                   competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } },   // Brandon 2026-10-28
+                   meet:{ label:"Meetings", icon:"people", kids:{ meet_maint:"Monday maintenance" } } };   // Brandon 2026-10-28
   // Damage claims + Vehicles sit under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; others keep them on their own
   if(DESKS.some(x => x.key === "maintenance")) Object.assign(GROUPS.maint.kids, { damage_claims:"Damage claims", vehicles:"Vehicles", trash:"Trash" });   // crew without Maintenance see Trash on its own
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
@@ -512,7 +521,7 @@ function shell(){
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a Bug / Upgrade</span></a>
       </div>
     </aside>
-    <div class="mainwrap"><header class="ubar">${meHtml}</header><main class="view" id="view"></main></div>
+    <div class="mainwrap"><header class="ubar"><b id="utl">Moose Hub</b>${meHtml}</header><main class="view" id="view"></main></div>
   </div>
   <div class="modal" id="fb"><div class="card">
     <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="fbback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Tell Brandon</h2><button class="btn small" id="fbx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
@@ -577,7 +586,7 @@ function route(){
   document.querySelectorAll(".mgear").forEach(g => g.classList.toggle("on", k === "settings"));
   document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
   const v = $("#view"), d = DESKS.find(x => x.key === k);
-  $("#ttl").textContent = d ? d.label : (k === "feedback" ? "Bugs & Upgrades" : k === "settings" ? "My settings" : "Moose Hub");
+  $("#ttl").textContent = $("#utl").textContent = d ? d.label : (k === "feedback" ? "Bugs & Upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   if(k === "feedback") return feedbackView(v);
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "advertising" && d){ location.replace("#/adv_owners"); return; }   // Advertising became a drop-down 2026-10-28
@@ -604,7 +613,7 @@ function route(){
   const f = $("#deskframe");
   f.addEventListener("load", () => { try {   // same site: hide the old "jump to other desk" header buttons - the sidebar does that now
     const doc = f.contentDocument, st = doc.createElement("style");
-    st.textContent = `header.top .deskbtn{display:none!important}`; doc.head.appendChild(st);
+    st.textContent = `header.top .deskbtn{display:none!important} body.inhub header.top,body.inhub #helpbtn{display:none!important}`; doc.head.appendChild(st);   // hub banner is the only header (2026-10-28)
   } catch(e){} });
 }
 /* ---------- sidebar search: desks, homes (Homes desk) and vendors (Vendors desk). Reads only what RLS lets this person read. */
@@ -920,8 +929,8 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","advertising"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor" },
-    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet" },
+    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], meet:["Meetings","people"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
