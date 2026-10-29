@@ -11,10 +11,13 @@
    Time off (Brandon 2026-10-29, "request time off in the hub" + "help with the PTO accrue"; hub_timeoff.sql): Calendar ▸ Time off = ask,
    your balances + what's coming, your requests; approvers (their manager, admins) approve/deny + team balances + "check Hubstaff's math".
    Approved requests go to Hubstaff by hubstaff_timeoff.py. Office shows approved time off (pending only to the person + approvers).
-   Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet · #/cal_off */
+   PTO reports (Brandon 2026-10-29: "managers and admin can run the reports on the reports page, managers can only see their teams pto";
+   hub_pto_reports.sql): Reports ▸ Team ▸ PTO balances (#/pto) + PTO: check Hubstaff's math (#/pto/check), window.ptoReport.
+   Only paid or unpaid time off (Brandon: no Sick in new requests).
+   Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet · #/cal_off · #/pto */
 (function(){
 const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
-const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"],["cal_off","Time off"]];
+const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"],["cal_off","Request time off"]];
 const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["month","Month"],["wm","Week + Month"]];
 const LAYERS = { cal_me:[["meet","Meetings"],["personal","My events"],["office","Office"],["checkins","Check-ins"]], cal_office:[["events","Work events"],["meet","Meetings"],["sched","Schedules"],["people","Who's in / out"]] };
 const LAYER_ON = { meet:true, personal:true, office:true, checkins:false, events:true, people:true, sched:true };
@@ -394,7 +397,7 @@ function whoPanel(ppl, evs, sel, ox, fn){
 }
 
 /* ---------- Time off (hub_timeoff.sql). Balances + requests are RLS-limited to you, the people you approve, and admins. ---------- */
-const TK = { pto:"Paid time off", unpaid:"Unpaid", sick:"Sick" };
+const TK = { pto:"Paid time off", unpaid:"Unpaid time off", sick:"Sick" };
 const hrs = x => x == null ? "—" : (Math.round(x * 100) / 100) + " h";
 const whenR = r => (r.day === r.end_day ? fday(r.day) : fday(r.day) + " – " + fday(r.end_day)) + (r.all_day ? "" : ", " + ftime(r.start_time.slice(0, 5)) + "–" + ftime(r.end_time.slice(0, 5)));
 const stPill = r => r.status === "approved" ? `<span class="pill green">Approved</span>` : r.status === "denied" ? `<span class="pill red">Not approved</span>` : r.status === "cancelled" ? `<span class="pill">Cancelled</span>` : `<span class="pill amber">Waiting</span>`;
@@ -415,7 +418,7 @@ async function timeOff(v){
   if(current() !== "cal_off") return;
   const myId = (ppl.find(p => p.name === ME.name) || {}).id, who = id => (ppl.find(p => p.id === id) || {}).name || "Someone";
   const bals = br.data || [], pols = pr.data || [], reqs = rr.data || [], pol = id => pols.find(p => p.id === id) || {};
-  const myB = bals.filter(b => b.user_id === myId), mine = reqs.filter(r => r.user_id === myId), others = reqs.filter(r => r.user_id !== myId);
+  const myB = bals.filter(b => b.user_id === myId && pol(b.policy_id).kind !== "sick"), mine = reqs.filter(r => r.user_id === myId), others = reqs.filter(r => r.user_id !== myId);
   const approver = ME.admin || (ar.data || []).some(a => a.approver === myId), wait = others.filter(r => r.status === "pending");
   const by = ST.ptoBy || (new Date().getFullYear() + "-12-31");
   const balCard = b => { const p = pol(b.policy_id), f = ptoBy(b, p, by), c = p.config || {};
@@ -435,19 +438,14 @@ async function timeOff(v){
   const teamRow = id => teamB.filter(b => b.user_id === id).sort((x, y) => (pol(y.policy_id).paid ? 1 : 0) - (pol(x.policy_id).paid ? 1 : 0)).map((b, i) =>
     `<tr><td>${i ? "" : `<b>${esc(who(id))}</b>`}</td><td>${esc(pol(b.policy_id).name || "")}</td><td>${hrs(b.hours)}${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}</td><td>${pol(b.policy_id).policy_type === "hours_worked" ? hrs(b.worked_ytd) : ""}</td><td>${b.earned_ytd != null ? hrs(b.earned_ytd) : ""}</td><td>${hrs(b.used_ytd)}</td></tr>`).join("");
   v.innerHTML = `<div class="page cal">${tabs("cal_off")}
-    <div class="chead"><h2>Time off</h2><button class="btn primary" id="askoff">🌴 Ask for time off</button></div>
+    <div class="chead"><h2>Request time off</h2><button class="btn primary" id="askoff">🌴 Ask for time off</button></div>
     ${approver && wait.length ? `<div class="card" style="border-left:4px solid var(--amber,#8a5a00)"><b style="font-size:16px">Waiting for you (${wait.length})</b>${table(wait, "wait")}</div>` : ""}
     <div class="card"><b style="font-size:16px">Your balances</b>
       ${myB.length ? `<div style="margin:8px 0;font-size:13px">See what you'll have by <input type="date" id="ptoby" value="${esc(by)}" style="width:auto;display:inline-block;min-height:32px"></div>
         <div class="bal">${myOrder.map(balCard).join("")}</div>`
       : `<p class="muted" style="margin:6px 0 0">You're not set up in Hubstaff time off yet, so there's no balance to show. You can still ask for time off; your manager will see it.</p>`}</div>
     <div class="card"><b style="font-size:16px">Your requests</b>${table(mine, "mine")}</div>
-    ${teamIds.length ? `<div class="card"><b style="font-size:16px">${ME.admin ? "Everyone's" : "Your team's"} balances</b>
-      <div class="tow"><table class="to"><tr><th>Who</th><th>Policy</th><th>Balance</th><th>Worked this year</th><th>Earned this year</th><th>Used this year</th></tr>${teamIds.map(teamRow).join("")}</table></div></div>` : ""}
-    ${flagged.length ? `<div class="card"><b style="font-size:16px">Check Hubstaff's math (${flagged.length})</b>
-      <p class="muted" style="font-size:12.5px;margin:4px 0">Estimate: hours tracked in Hubstaff this year × the policy's rate, compared with Hubstaff's balance. A gap can mean the person joined the policy later in the year, hit the max at some point, or Hubstaff isn't counting all hours. Check in Hubstaff before changing anything.</p>
-      ${flagged.map(b => `<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px"><b>${esc(who(b.user_id))}</b> · ${esc(pol(b.policy_id).name || "")}: ${esc(b.check_note || "")}</div>`).join("")}</div>` : ""}
-    ${approver && others.some(r => r.status !== "pending") ? `<div class="card"><b style="font-size:16px">${ME.admin ? "Everyone's" : "Your team's"} requests</b>${table(others.filter(r => r.status !== "pending").slice(0, 60), "team")}</div>` : ""}
+    ${approver && others.some(r => r.status !== "pending") ? `<div class="card"><b style="font-size:16px">Requests you approved or denied</b>${table(others.filter(r => r.status !== "pending" && r.decided_by === ME.name).slice(0, 30), "team")}</div>` : ""}
     <p class="muted" style="font-size:12px">Balances and policies: Hubstaff (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")}). Approved requests are added to Hubstaff by the hub (paid time off under your PTO policy). Your reason is seen only by you, the person who approves, and Brandon or Kim.</p>
     <div class="modal" id="tom"><div class="card" id="tocard"></div></div></div>`;
   const reload = () => timeOff(v), act = async (fnm, args) => { const r = await sb.rpc(fnm, args); if(r.error) alert(r.error.message); else reload(); };
@@ -459,7 +457,7 @@ async function timeOff(v){
   const ask = () => {
     const left = k => { const b = myB.find(x => pol(x.policy_id).kind === k); return b && k === "pto" ? ` (${hrs(b.hours)} left)` : ""; };
     $("#tocard").innerHTML = `<div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">Ask for time off</h2><button class="btn small" id="tox" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
-      <label class="field"><span>Type</span><select id="to_k">${["pto","unpaid","sick"].map(k => `<option value="${k}">${TK[k]}${left(k)}</option>`).join("")}</select></label>
+      <label class="field"><span>Type</span><select id="to_k">${["pto","unpaid"].map(k => `<option value="${k}">${TK[k]}${left(k)}</option>`).join("")}</select></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>From</span><input type="date" id="to_d" value="${esc(addD(today(), 1))}"></label><label class="field" style="flex:1"><span>To (last day off)</span><input type="date" id="to_e"></label></div>
       <label class="lyr" style="margin:4px 0"><input type="checkbox" id="to_all" checked>All day (8 h a day)</label>
       <div id="to_hr" style="display:none;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>From time</span><input type="time" id="to_s" value="13:00"></label><label class="field" style="flex:1"><span>To time</span><input type="time" id="to_f" value="17:00"></label></div>
@@ -477,6 +475,43 @@ async function timeOff(v){
   v.querySelector("#askoff").onclick = ask;
   if(ST.askOff){ ST.askOff = false; ask(); }
 }
+
+/* ---------- Reports ▸ Team ▸ PTO (hub_pto_reports.sql): balances + requests (#/pto) and the math check (#/pto/check).
+   Rows come through RLS (hub_pto_sees): admins everyone, managers their own team, approvers the people they approve. ---------- */
+window.ptoReport = async function(v, sub){
+  css(); const chk = sub === "check";
+  v.innerHTML = `<div class="page cal wide"><p class="muted">Loading…</p></div>`;
+  const [ppl, br, pr, rr] = await Promise.all([people(), sb.from("hub_pto_balances").select("*"), sb.from("hub_pto_policies").select("*"),
+    sb.from("hub_timeoff_requests").select("*").order("day", { ascending:false }).limit(500)]);
+  const who = id => (ppl.find(p => p.id === id) || {}).name || "Someone", pols = pr.data || [], pol = id => pols.find(p => p.id === id) || {};
+  const bals = (br.data || []).filter(b => pol(b.policy_id).kind !== "sick"), reqs = rr.data || [];
+  const ids = [...new Set(bals.map(b => b.user_id).concat(reqs.map(r => r.user_id)))].sort((x, y) => who(x).localeCompare(who(y)));
+  const scope = ME.admin ? "Everyone" : "Your team";
+  const head = `<div style="padding:0 0 8px"><a href="#/reports">← All reports</a></div><div class="chead"><h2>${chk ? "PTO: check Hubstaff's math" : "PTO balances"}</h2>
+    <a class="btn small" href="${chk ? "#/pto" : "#/pto/check"}">${chk ? "PTO balances" : "Check Hubstaff's math"}</a></div>
+    <p class="muted" style="margin:0 0 10px">${scope}${ME.admin ? "" : " (and you)"} · source: Hubstaff (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")})</p>`;
+  if(chk){
+    const f = bals.filter(b => b.check_flag), pto = bals.filter(b => pol(b.policy_id).policy_type === "hours_worked");
+    v.innerHTML = `<div class="page cal wide">${head}
+      <div class="card"><p class="muted" style="font-size:13px;margin:0 0 8px">Estimate: hours tracked in Hubstaff this year × the policy's rate (${esc(pto[0] ? pol(pto[0].policy_id).config.hours_per + " h per " + pol(pto[0].policy_id).config.hours_worked + " h worked" : "PTO rate")}), compared with Hubstaff's balance. A gap can mean the person joined the policy later in the year, hit the max at some point, or Hubstaff isn't counting all hours. Check in Hubstaff before changing anything.</p>
+      <div class="tow"><table class="to"><tr><th>Who</th><th>Policy</th><th>Worked this year</th><th>Should have earned</th><th>Used</th><th>Hubstaff balance</th><th>Looks</th></tr>
+      ${bals.filter(b => b.earned_ytd != null).sort((x, y) => who(x.user_id).localeCompare(who(y.user_id))).map(b => `<tr><td><b>${esc(who(b.user_id))}</b></td><td>${esc(pol(b.policy_id).name || "")}</td><td>${pol(b.policy_id).policy_type === "hours_worked" ? hrs(b.worked_ytd) : "—"}</td><td>${hrs(b.earned_ytd)}</td><td>${hrs(b.used_ytd)}</td><td>${hrs(b.hours)}</td>
+        <td>${b.check_flag ? `<span class="pill amber">Check</span><div class="muted" style="font-size:12px">${esc(b.check_note || "")}</div>` : `<span class="pill green">OK</span>`}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nobody on your team has a Hubstaff PTO balance.</td></tr>`}</table></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">${f.length} of ${bals.filter(b => b.earned_ytd != null).length} to check.</p></div></div>`;
+    return;
+  }
+  const yr = String(new Date().getFullYear());
+  const row = id => { const bs = bals.filter(b => b.user_id === id).sort((x, y) => (pol(x.policy_id).kind === "pto" ? 0 : 1) - (pol(y.policy_id).kind === "pto" ? 0 : 1));
+    const rs = reqs.filter(r => r.user_id === id), wait = rs.filter(r => r.status === "pending").length, taken = rs.filter(r => r.status === "approved" && r.day.slice(0, 4) === yr);
+    return `<tr><td><b>${esc(who(id))}</b></td><td>${bs.map(b => `${esc(pol(b.policy_id).name || "")}: <b>${hrs(b.hours)}</b>${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}`).join("<br>") || `<span class="muted">Not in Hubstaff time off</span>`}</td>
+      <td>${bs.filter(b => pol(b.policy_id).policy_type === "hours_worked").map(b => hrs(b.worked_ytd)).join("<br>")}</td>
+      <td>${["pto","unpaid"].map(k => { const h = taken.filter(r => r.kind === k).reduce((a, r) => a + +r.hours, 0); return h ? `${TK[k]}: ${hrs(h)}` : ""; }).filter(Boolean).join("<br>") || "—"}</td>
+      <td>${wait ? `<a href="#/cal_off" class="pill amber" style="text-decoration:none">${wait} waiting</a>` : "—"}</td></tr>`; };
+  v.innerHTML = `<div class="page cal wide">${head}
+    <div class="card"><div class="tow"><table class="to"><tr><th>Who</th><th>Balances</th><th>Worked this year</th><th>Approved in the hub this year</th><th>Requests</th></tr>${ids.map(row).join("") || `<tr><td colspan="5" class="muted">Nobody on your team yet.</td></tr>`}</table></div></div>
+    <div class="card"><b style="font-size:16px">Time-off requests</b>${reqs.length ? `<div class="tow"><table class="to"><tr><th>Who</th><th>When</th><th>Hours</th><th>Status</th></tr>${reqs.slice(0, 150).map(r => `<tr><td><b>${esc(who(r.user_id))}</b></td><td>${esc(whenR(r))}</td><td>${hrs(r.hours)} · ${esc(TK[r.kind])}</td><td>${stPill(r)}${hsPill(r)}${r.decided_by && r.status !== "cancelled" ? `<div class="muted" style="font-size:12px">by ${esc(r.decided_by)}${r.response ? ": " + esc(r.response) : ""}</div>` : ""}</td></tr>`).join("")}</table></div>` : `<p class="muted" style="margin:4px 0 0">No requests made in the hub yet.</p>`}</div>
+    <p class="muted" style="font-size:12px">Time off asked in Hubstaff itself (before the hub) is in Hubstaff's balance but not in this list.</p></div>`;
+};
 
 /* ---------- Home: your next 7 days (meetings you can open, office events, your own events) ---------- */
 window.calHomeCard = async function(el){
