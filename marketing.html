@@ -137,8 +137,9 @@ async function load(){
 
 function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`];
-  if(TAB === "guest") h.push(guestHtml());
-  h.push(campsHtml(), listsHtml(), boardHtml());
+  if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(top, campsHtml(), "<h2>Guests</h2>" + list); }   // campaigns above the long guest list
+  else h.push(campsHtml());
+  h.push(listsHtml(), boardHtml());
   $("#app").innerHTML = h.join("");
 }
 
