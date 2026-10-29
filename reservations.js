@@ -65,9 +65,10 @@ window.resCtx = r => { const s = B && B.stays.find(x => String(x.res) === String
   return s ? { res:String(s.res), home:s.unit, guest:s.guest, arrive:s.arrive, depart:s.depart, status:s.status } : { res:String(r) }; };
 async function load(force){
   if(B && !force && Date.now() - loadedAt < 60000) return B;
-  const [r, al] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts")]); if(r.error) throw r.error;
+  const [r, al, ch] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts"), sb.rpc("res_charge_allowed")]); if(r.error) throw r.error;
   B = r.data; loadedAt = Date.now();
   if(B) B.alerts = al.data || [];   // home heads-ups (hub_penny_3.sql, Brandon 2026-10-28): warn before booking a home with a big open problem
+  if(B) B.canCharge = ch.data === true;   // charge-the-balance button (hub_res_charge.sql switch + access)
   if(B) B.stays.forEach(prep);
   return B;
 }
@@ -261,7 +262,7 @@ async function card(v, res){
       <div class="rmoney"><span class="muted">From Track</span><span>Campaign: <b>${esc(s.campaign || "—")}</b></span><span>Res agent: <b>${esc(s.agent || "—")}</b></span>
         <span>Guarantee: <b>${esc(s.guarantee || "—")}</b></span><span>Agreement: <b>${esc(s.agreement || "—")}</b></span>
         ${B.money ? `<span>Rent ${money(s.rent)}</span><span>Fees ${money(s.fees)}</span><span>Taxes ${money(s.taxes)}</span><span>Total <b>${money(s.total)}</b></span>` : ""}
-        <span>Paid <b>${money(s.paid)}</b></span><span>Balance <b>${money(s.balance)}</b></span></div>
+        <span>Paid <b>${money(s.paid)}</b></span><span>Balance <b>${money(s.balance)}</b></span>${chargeBtn(s)}</div>
       ${s.ah ? `<div class="rmoney"><span class="muted">Autohost</span><span>Status: <b>${esc(s.ah.verify || "unknown")}</b></span>${s.ah.reason ? `<span>${esc(s.ah.reason)}</span>` : ""}<span>Portal: <b>${s.ah.portal ? "done" : "not done"}</b></span></div>` : ""}
       ${(B.bwMissing || []).includes(s.unit) ? `<div class="rmoney"><span class="muted">Breezeway</span><span>This home has no Breezeway id in the hub's home list, so its tasks can't be checked here.</span></div>`
         : s.bw && s.bw.length ? `<div class="rmoney" style="display:block"><span class="muted">Breezeway, ${esc(day(addDay(s.arrive, -5)))} to ${esc(day(addDay(s.depart, 1)))}</span>
@@ -282,7 +283,7 @@ async function card(v, res){
       ${Object.entries(grp).map(([g, ts]) => `<div class="rgrp"><h3>${esc(g)} <span class="muted" style="font-weight:600">${ts.filter(t => !t.opt && t.done).length}/${ts.filter(t => !t.opt).length}</span></h3>
         ${ts.map(t => `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" ${t.done ? "checked" : ""}>
           <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}</span>
-          ${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`).join("")}</div>`).join("")}
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
@@ -296,6 +297,7 @@ async function card(v, res){
     if(r.error){ cb.checked = !cb.checked; cb.disabled = false; return msg("Couldn't save: " + r.error.message); }
     s.ticks = { ...(s.ticks || {}), [cb.dataset.step]:r.data }; prep(s); card(v, res);
   });
+  v.querySelectorAll("[data-charge]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); charge(s, v, res); });
   $("#rx_stage").onchange = e => set({ p_stage:e.target.value });
   $("#rx_ext").onchange = e => set({ p_extending:e.target.checked });
   v.querySelectorAll("[data-wait]").forEach(b => b.onclick = () => { const w = b.dataset.wait, now = s.waiting.includes(w) ? s.waiting.filter(x => x !== w) : [...s.waiting, w]; set({ p_waiting:now }); });
@@ -306,6 +308,41 @@ async function card(v, res){
                  ...h.log.map(l => ({ at:l.at, t:{ stage:"Stage → " + (STAGE[l.text] || l.text), waiting:"Waiting on: " + (l.text || "nothing"), extending:"Extending " + l.text, hold:"Note: " + (l.text || "(cleared)"), note:"Note: " + l.text, import:l.text }[l.kind] || l.text, by:l.by, src:l.src }))]
       .sort((a, b) => b.at < a.at ? -1 : 1);
     $("#rx_hl").innerHTML = all.length ? all.map(x => `<div class="rhist">${esc(when(x.at))} · <b>${esc(x.by || "")}</b>${x.src && x.src !== "hub" ? " (" + esc(x.src) + ")" : ""} — ${esc(x.t)}</div>`).join("") : "Nothing yet."; };
+}
+
+/* ---------- Charge the balance to the card on file (Brandon 2026-10-29; res-charge function + hub_res_charge.sql).
+   Amount only, never the breakdown; Track is re-read live and the person confirms the exact amount first. */
+const chargeBtn = s => B.canCharge && s.status !== "Cancelled" && (s.balance || 0) > 0
+  ? `<button class="btn small" data-charge="1" style="margin-left:auto">💳 Charge balance</button>` : "";
+async function fnCall(body){
+  const r = await sb.functions.invoke("res-charge", { body });
+  if(!r.error) return r.data || {};
+  try { return await r.error.context.json(); } catch(_) { return { ok:false, error:"Couldn't reach the hub. Try again." }; }
+}
+async function charge(s, v, res){
+  document.getElementById("rchm")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="rchm"><div class="card" style="text-align:left">
+    <h3 style="margin:0 0 8px">💳 Charge the balance</h3><div id="rch_b"><p class="muted">Checking the balance in Track…</p></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn small" id="rch_x">Cancel</button><button class="btn small primary" id="rch_go" hidden></button></div></div></div>`);
+  const m = document.getElementById("rchm"), body = m.querySelector("#rch_b"), go = m.querySelector("#rch_go"), close = () => m.remove();
+  m.querySelector("#rch_x").onclick = close; m.onclick = e => { if(e.target === m) close(); };
+  const q = await fnCall({ action:"quote", res:s.res });
+  if(!q.ok) return body.innerHTML = `<p>${esc(q.error || "Couldn't check Track.")}</p>`;
+  if(!q.card) return body.innerHTML = `<p>There is no card on file in Track for this stay, so the hub can't charge it.</p>`;
+  if(!(q.balance > 0)) return body.innerHTML = `<p>The balance in Track is $0 — nothing to charge.</p>`;
+  const amt = Number(q.balance).toFixed(2);
+  body.innerHTML = `<p style="margin:0 0 6px"><b>${esc(s.unit || "")} · ${esc(s.guest || "")}</b> · Res #${esc(s.res)}</p>
+    <p style="font-size:22px;margin:6px 0"><b>$${esc(Number(amt).toLocaleString("en-US", { minimumFractionDigits:2 }))}</b></p>
+    <p class="muted" style="margin:0">This is the balance in Track right now. The guest's card on file in Track is charged straight away, and it's logged on this stay's history with your name.</p>`;
+  go.hidden = false; go.textContent = `Charge $${Number(amt).toLocaleString("en-US", { minimumFractionDigits:2 })}`;
+  go.onclick = async () => {
+    go.disabled = true; m.querySelector("#rch_x").disabled = true; go.textContent = "Charging…";
+    const c = await fnCall({ action:"charge", res:s.res, amount:Number(amt) });
+    m.querySelector("#rch_x").disabled = false; m.querySelector("#rch_x").textContent = "Close"; go.hidden = true;
+    body.innerHTML = c.ok ? `<p>✅ Charged <b>$${esc(Number(c.charged).toLocaleString("en-US", { minimumFractionDigits:2 }))}</b> to the card on file.${c.payment ? ` Track payment #${esc(c.payment)}.` : ""}</p><p class="muted" style="margin:0">It shows in Track now; the check list catches up on the next pull.</p>`
+      : `<p>${c.unknown ? "⚠️" : "❌"} ${esc(c.error || "Not charged.")}</p>`;
+    m.querySelector("#rch_x").onclick = async () => { close(); await load(true); card(v, res); };
+  };
 }
 
 /* ---------- Held up report: open check lists by what holds them up */
