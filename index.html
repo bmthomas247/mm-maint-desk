@@ -451,6 +451,12 @@ async function boot(){
     { key:"adv_guest", label:"Advertising · Guest", icon:aD.icon, url:aU("guest"), status:aD.status, sort:aD.sort + 0.2 },
     { key:"adv_realtor", label:"Advertising · Realtor", icon:aD.icon, url:aU("realtor"), status:aD.status, sort:aD.sort + 0.3 },
     { key:"adv_general", label:"Advertising · General", icon:aD.icon, url:aU("general"), status:aD.status, sort:aD.sort + 0.4 });
+  // Property Set Up drop-down (Brandon 2026-10-29): Launch Pad (the board) · AI Description Tool · Photo Compressor · QR Code Generator.
+  // The three tools follow property_setup's access (each page checks hub_can('property_setup'); psu-describe too) and are live now; the board waits for cut-over.
+  const psD = DESKS.find(x => x.key === "property_setup");
+  if(psD) DESKS.push({ key:"psu_desc", label:"Property Set Up · AI Description Tool", icon:psD.icon, url:"psu_desc.html", status:"live", sort:psD.sort + 0.1 },
+    { key:"psu_photos", label:"Property Set Up · Photo Compressor", icon:psD.icon, url:"psu_photos.html", status:"live", sort:psD.sort + 0.2 },
+    { key:"psu_qr", label:"Property Set Up · QR Code Generator", icon:psD.icon, url:"psu_qr.html", status:"live", sort:psD.sort + 0.3 });
   // Licensing drop-down (Brandon 2026-10-28): Licenses · Fire suppression · Leases. Both follow licensing's access (lic_fire / lic_lease RLS: hub_can('licensing'))
   const lD = DESKS.find(x => x.key === "licensing" && x.status === "live");
   if(lD) DESKS.push({ key:"lic_fire", label:"Licensing · Fire suppression", icon:lD.icon, url:"desk.html?only=firesys", status:"live", sort:lD.sort + 0.1 },
@@ -466,7 +472,7 @@ async function boot(){
     { key:"cal_meet", label:"Calendar · Meetings", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.4 },
     { key:"cal_off", label:"Calendar · Request time off", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.5 });   // time off + PTO (2026-10-29)
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
-  PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
+  PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:psu" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
 }
 function noAccess(err){
@@ -492,7 +498,8 @@ function shell(){
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
-                   competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } },   // Brandon 2026-10-28
+                   competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } },
+                   psu:{ label:"Property Set Up", icon:"home", kids:{ property_setup:"Launch Pad", psu_desc:"AI Description Tool", psu_photos:"Photo Compressor", psu_qr:"QR Code Generator" } },   // Brandon 2026-10-29   // Brandon 2026-10-28
                    cal:{ label:"Calendar", icon:"calendar", kids:{ cal_res:"Reservations", cal_office:"Office", cal_me:"Personal", cal_meet:"Meetings", cal_off:"Request time off" } } };   // Brandon 2026-10-29: the Meetings drop-down moved into Calendar ▸ Meetings (tiles)
   // Damage claims + Vehicles sit under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; others keep them on their own
   if(DESKS.some(x => x.key === "maintenance")) Object.assign(GROUPS.maint.kids, { damage_claims:"Damage claims", vehicles:"Vehicles", trash:"Trash" });   // crew without Maintenance see Trash on its own
@@ -639,7 +646,7 @@ function route(){
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
-  if(d.status !== "live" || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
+  if((d.status !== "live" && !ME.admin) || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a Bug / Upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
   const arg = hashArg(), sep = d.url.includes("?") ? "&" : "?";
   if(k === "maintenance"){ const to = { projects:"maint_projects", money:"maint_money", routines:"maint_routines", recalls:"maint_recalls", trash:"trash" }[arg];
@@ -983,8 +990,8 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","sync","advertising"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
-    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], meet:["Meetings","people"], cal:["Calendar","calendar"] };
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
+    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], meet:["Meetings","people"], cal:["Calendar","calendar"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
