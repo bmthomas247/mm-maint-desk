@@ -321,7 +321,7 @@ function campsHtml(){
   const row = c => { const st = c.stats || {}, del = st.delivered || st.sent || 0, [tone, lab] = CST[c.status] || ["", c.status];
     const when = c.status === "sent" ? c.sent_at : c.status === "scheduled" || c.status === "queued" ? c.scheduled_at : c.created_at;
     return `<tr><td><b>${esc(c.name)}</b><div class="muted">${esc(c.subject || "")}</div></td><td><span class="pill ${tone}">${esc(lab)}</span>${c.draft_id ? ` <span class="pill">made in hub</span>` : ""}</td>
-      <td>${esc(fmtDT(when))}</td><td class="wrapc" style="min-width:160px">${esc((c.list_names || []).join(", ") || "—")}</td>
+      <td>${esc(fmtDT(when))}</td><td class="wrapc" style="min-width:160px">${(c.list_names || []).length > 2 ? `<span title="${esc(c.list_names.join(", "))}" style="text-decoration:underline dotted">${c.list_names.length} lists</span>` : esc((c.list_names || []).join(", ") || "—")}</td>
       <td class="n">${c.status === "sent" ? (st.sent || 0).toLocaleString() : ""}</td><td class="n">${c.status === "sent" ? pct(st.uniqueViews || 0, del) : ""}</td>
       <td class="n">${c.status === "sent" ? pct(st.uniqueClicks || 0, del) : ""}</td><td class="n">${c.status === "sent" ? (st.unsubscriptions || 0) : ""}</td>
       <td><button class="btn small" data-pv="${c.brevo_id}">👁 Preview</button> <button class="btn small" data-copy="${c.brevo_id}" title="Start a new hub design from this email">⧉ Use as start</button></td></tr>`; };
