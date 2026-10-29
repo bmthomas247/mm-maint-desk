@@ -601,7 +601,7 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
   let K = []; try { const k = await sb.from("review_kudos").select("*").order("submitted_at", { ascending:false }).limit(300); K = k.data || []; } catch(e){}
   const TN = Object.fromEntries(THEMES.map(t => [t[0], t[1]])), hoods = [...new Set(A.map(x => x.hood).filter(Boolean))].sort(), homes = [...new Set(A.map(x => x.code).filter(Boolean))].sort();
   v.innerHTML = `<div class="page wide">${bk}<h2>${h2}</h2>
-    <p class="muted">Every guest review (Airbnb, Vrbo, our website, Google) with what guests bring up, by home and neighborhood. Topics are a keyword count: a <b>complaint</b> is a sentence that reads negative ("the hot tub was cold"), a <b>mention</b> is any sentence with the topic's words. Read the reviews before acting on a count. Click a topic or a home to filter.</p>
+    <p class="muted">Every guest review (Airbnb, Vrbo, our website, Google, Trustpilot) with what guests bring up, by home and neighborhood. Topics are a keyword count: a <b>complaint</b> is a sentence that reads negative ("the hot tub was cold"), a <b>mention</b> is any sentence with the topic's words. Read the reviews before acting on a count. Click a topic or a home to filter.</p>
     <div class="anbar">
       <select id="rvs"><option value="365">Last 12 months</option><option value="730">Last 2 years</option><option value="all">All (since Nov 2022)</option></select>
       <select id="rvh"><option value="">All neighborhoods</option>${hoods.map(h => `<option>${esc(h)}</option>`).join("")}</select>
@@ -609,7 +609,7 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
       <select id="rvt"><option value="">All topics</option>${THEMES.map(t => `<option value="${t[0]}">${esc(t[1])}</option>`).join("")}</select>
       <select id="rvm"><option value="c">Complaints</option><option value="m">Any mention</option></select>
       <select id="rvr"><option value="">All stars</option><option value="4">4★ or less</option><option value="3">3★ or less</option><option value="p">Has a private note</option><option value="n">No reply from us</option></select>
-      <select id="rvc"><option value="">All channels</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option><option value="Website">Our website</option><option value="Google">Google</option></select>
+      <select id="rvc"><option value="">All channels</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option><option value="Website">Our website</option><option value="Google">Google</option><option value="Trustpilot">Trustpilot</option></select>
       <select id="rva"><option value="">Homes + Moose company</option><option value="home">Home reviews</option><option value="company">Moose company reviews</option><option value="neighborhood">Neighborhood Google listings</option></select>
       <input id="rvq" type="search" placeholder="Words in the review"></div>
     <div id="rvk"></div>
@@ -617,7 +617,7 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
     <h3 class="anh3">Topics</h3><div id="rvtt"></div>
     <h3 class="anh3">By home</h3><div id="rvht"></div>
     <h3 class="anh3">Reviews <button class="btn small" id="rvcsv" style="margin-left:8px">Download CSV</button></h3><div id="rvl"></div>
-    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py) + reviews shown only on our website (Track direct reviews, website_reviews_sync.py) + Google reviews of our 3 Google listings (google_reviews_sync.py: SerpApi daily, older ones read once from Google Maps with APPROXIMATE dates). Website and Google reviews show the review date, not a stay date. A Google review is a home review when it or our reply names the home, else a Moose company review; homes and neighborhoods from Track (hub_homes). Vrbo shows as "Homeaway" in Track; its categories are renamed to Airbnb's. Guest names aren't stored.</p></div>`;
+    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py) + reviews shown only on our website (Track direct reviews, website_reviews_sync.py) + Google reviews of our 3 Google listings (google_reviews_sync.py: SerpApi daily, older ones read once from Google Maps with APPROXIMATE dates). Website and Google reviews show the review date, not a stay date. A Google review is a home review when it or our reply names the home, else a Moose company review; Trustpilot (3 reviews) read once by hand (other_reviews_load.py); homes and neighborhoods from Track (hub_homes). Vrbo shows as "Homeaway" in Track; its categories are renamed to Airbnb's. Guest names aren't stored.</p></div>`;
   $("#rvs").value = since; if(pre) $("#rvu").value = pre;
   const stars = s => s == null ? "" : `<span class="pill ${+s >= 5 ? "green" : +s >= 4 ? "" : +s >= 3 ? "amber" : "red"}">${(+s).toFixed(0)} ★</span>`;
   let shown = 30, cur = [];
