@@ -388,7 +388,40 @@ async function worstData(){
 }
 const RCAT = [["r_overall","Overall"],["r_clean","Cleanliness"],["r_accuracy","Accuracy"],["r_checkin","Check-in"],["r_comm","Communication"],["r_location","Location"],["r_value","Value"]];
 const ownerOf = label => { const m = /\(([^)]+)\)\s*$/.exec(label || ""); return m ? m[1] : ""; };
-function recommend(h, x){
+/* What guests wrote (Track reviews, Airbnb + Vrbo; analytics_reviews(), hub_track_reviews.sql). Themes are a keyword count over the
+   low-score reviews and private notes of the last 2 years — not AI. [key, name, words, area, owner?, what to do, owner wording] */
+const THEMES = [
+  ["clean", "Cleaning", /\b(dirty|filthy|not clean|unclean|stain(s|ed)?|hairs|hair (on|in)|dust(y)?|crumbs|grime|mold|mildew|smell(s|ed|y)?|odou?r)\b/i, "Guest experience", false, "Guests mention cleaning problems — do a quality inspection after the next turn and go over what guests flagged with the cleaners."],
+  ["hottub", "Hot tub", /\bhot ?tubs?\b|jacuzzi/i, "Guest experience", false, "Guests mention the hot tub — check temperature, water, the cover and when it was last serviced."],
+  ["beds", "Beds and pillows", /mattress(es)?|pillows?|uncomfortable bed|beds? (was|were) (hard|old|uncomfortable|saggy)|sofa ?bed|pull[- ]?out/i, "Owner", true, "Guests mention uncomfortable beds or pillows — new mattresses, toppers or pillows.", "beds or pillows"],
+  ["linens", "Linens and towels", /\b(sheets|linens?|towels?|blankets?|bedding)\b/i, "Guest experience", false, "Guests mention linens or towels — check stock and condition with housekeeping."],
+  ["heat", "Heat / cold", /\b(cold|freezing|heat(er|ing)?|thermostat|furnace|air condition\w*|too hot)\b/i, "Guest experience", false, "Guests mention the temperature — check the heat, thermostat settings and arrival instructions."],
+  ["access", "Check-in / access / parking", /door ?code|keypad|lock(ed)? out|\block\b|\bkeys?\b|parking|garage|directions|hard to find/i, "Guest experience", false, "Guests mention check-in, access or parking — check the arrival instructions, codes and parking notes."],
+  ["broken", "Things not working", /broken|not working|didn'?t work|did not work|doesn'?t work|leak(s|ing|ed)?|needs? repair/i, "Guest experience", false, "Guests mention things not working — open maintenance tasks for each item and check them at the next inspection."],
+  ["wifi", "Wi-Fi / TV", /wi-?fi|internet|\btv\b|television|streaming|remote/i, "Guest experience", false, "Guests mention Wi-Fi or the TV — test the internet speed and TV inputs, and add simple instructions."],
+  ["kitchen", "Kitchen supplies", /kitchen|dishes|pots|pans|utensils|coffee|dishwasher|knives/i, "Guest experience", false, "Guests mention the kitchen — restock dishes, pans, coffee supplies and basics."],
+  ["noise", "Noise", /\bnois(e|y)\b|\bloud\b|thin walls/i, "Listing", false, "Guests mention noise — set expectations in the listing and check the quiet-hours note."],
+  ["dated", "Dated or worn", /\b(dated|outdated|worn|tired|run[- ]?down|shabby|needs? (an? )?updat\w*)\b/i, "Owner", true, "Guests call the home dated or worn — a refresh of furniture, finishes or decor.", "the home feeling dated or worn"],
+  ["listing", "Not as pictured", /not as (pictured|described|advertised)|misleading|smaller than|than (the )?(reality|pictured|photos|pictures|advertised)|more polished|(photos|pictures) (were|are) (old|outdated|misleading)/i, "Listing", false, "Guests say the home isn't as pictured — update photos and the description so they match."],
+  ["pests", "Pests", /\b(bugs?|ants|mice|mouse|spiders?|flies|cockroach\w*|pests?)\b/i, "Guest experience", false, "Guests mention pests — schedule pest control and check at the next inspection."]];
+const RVCAT = { r_clean:"cleanliness", r_accuracy:"accuracy", r_checkin:"checkin", r_comm:"communication", r_location:"location", r_value:"value" };
+// a mention counts only when its sentence reads as a complaint ("Lots of good cookware" is praise, not a kitchen problem)
+const NEG = /\b(not|no|never|wasn'?t|weren'?t|isn'?t|aren'?t|didn'?t|don'?t|doesn'?t|couldn'?t|could use|could have|should|needs?|needed|missing|lack\w*|only|issues?|problems?|concerns?|however|but|unfortunately|wish|would have|would be nice|uncomfortable|hard|old|broken|dirty|cold|poor|bad|terrible|disappoint\w*|complain\w*|annoy\w*|stain\w*|smell\w*|leak\w*|filthy|mold|dated|worn)\b/i;
+const HARD = new Set(["clean", "broken", "pests", "dated", "listing"]);   // themes whose words are complaints on their own
+const sentences = t => String(t || "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
+const hitSent = (t, re, k) => sentences(t).find(s => re.test(s) && (HARD.has(k) || NEG.test(s))) || "";
+function rvThemes(RV){
+  const since = new Date(Date.now() - 730 * 864e5).toISOString().slice(0, 10), out = [];
+  const low = r => (r.overall != null && +r.overall <= 4) || Object.values(r.ratings || {}).some(s => s != null && +s <= 3);
+  const pool = ((RV && RV.reviews) || []).filter(r => (r.check_in || "") >= since).map(r => ({ r, pub:low(r) ? r.text || "" : "", priv:r.private || "" })).filter(z => z.pub || z.priv);
+  THEMES.forEach(([k, name, re, area, owner, text, ownerWord]) => {
+    const hits = pool.map(z => ({ ...z, sp:hitSent(z.pub, re, k), sv:hitSent(z.priv, re, k) })).filter(z => z.sp || z.sv); if(!hits.length) return;
+    const pub = hits.find(z => z.sp), cut = s => s.length > 170 ? s.slice(0, 167).trim() + "…" : s;
+    out.push({ k, name, area, owner, text, ownerWord, n:hits.length, of:pool.length, since, latest:hits[0].r, quote:cut(hits[0].sp || hits[0].sv), pubQuote:pub ? cut(pub.sp) : "" });
+  });
+  return out.sort((a, b) => b.n - a.n);
+}
+function recommend(h, x, RV){
   const o = (x && x.ours) || {}, c = (x && x.comps) || {}, R = [], KD = "Key Data listing KPIs (like for like)", KDL = "Key Data listing details (Airbnb)";
   const add = (area, text, evidence, source, owner, ownerText) => R.push({ area, text, evidence, source, owner:!!owner, ownerText:ownerText || text });
   const n = v => v == null ? null : +v, minRule = (x && x.rules || []).find(r => r.min_price), stayRule = (x && x.rules || []).find(r => r.min_stay);
@@ -434,6 +467,15 @@ function recommend(h, x){
     `About ${Math.round(c.hot_tub * 100)}% of similar homes nearby offer a hot tub, and it's one of the most-searched amenities in Park City. Is adding one something you'd consider?`);
   if(h.owner_nights > 60) add("Owner", "Heavy owner use — owner and blocked nights cut into rentable peak dates; ask whether some can move to slower weeks.", `${h.owner_nights} owner/blocked nights in the window (Track).`, "Track stays", true,
     `The home was blocked for owner use or holds on ${h.owner_nights} nights over the last year. Moving some of those to slower weeks would open up the dates that earn the most.`);
+  // what guests wrote (Track reviews): a theme in 2+ low-score reviews or private notes in the last 2 years
+  const TR = "Track guest reviews (Airbnb + Vrbo), keyword count";
+  rvThemes(RV).filter(t => t.n >= 2).forEach(t => add(t.area, t.text,
+    `${t.n} of ${t.of} low-score reviews or private notes since ${dt(t.since + "T12:00")} mention it — latest ${dt(t.latest.check_in + "T12:00")} (${t.latest.channel}): “${t.quote}”`, TR, t.owner,
+    t.owner ? `${t.n} guests over the last two years mentioned ${t.ownerWord} in their reviews${t.pubQuote ? ` — for example: “${t.pubQuote}”` : ""}. We'd like to talk about addressing that.` : ""));
+  // unanswered public reviews (last 12 months)
+  const yr = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10), pubs = ((RV && RV.reviews) || []).filter(r => r.text && (r.check_in || "") >= yr), noResp = pubs.filter(r => !r.response);
+  if(pubs.length >= 3 && noResp.length / pubs.length >= .3) add("Guest experience", "Many public reviews have no reply from us — reply to every review, especially the low ones; future guests read the replies.",
+    `${noResp.length} of ${pubs.length} public reviews in the last 12 months have no response.`, "Track guest reviews (Airbnb + Vrbo)");
   return R;
 }
 async function worst(v){
@@ -464,7 +506,8 @@ async function worstOne(v, id){
   v.innerHTML = `<div class="page wide">${back}<h2>Home</h2><p class="muted">Loading…</p></div>`;
   let H; try { H = await worstData(); } catch(e){ return fail(v, e); }
   const h = H.find(x => x.home_id === id), x = DX[id]; if(!h || !x) return noAccess(v);
-  const o = x.ours || {}, c = x.comps || {}, R = recommend(h, x), own = ownerOf(h.home), nm = h.home.replace(/\s*\([^)]*\)\s*$/, "");
+  let RV = null; try { const r = await sb.rpc("analytics_reviews", { p_home:id }); if(!r.error) RV = r.data; } catch(e){}
+  const o = x.ours || {}, c = x.comps || {}, R = recommend(h, x, RV), TH = rvThemes(RV), own = ownerOf(h.home), nm = h.home.replace(/\s*\([^)]*\)\s*$/, "");
   const f2 = v => v == null ? "—" : (+v).toFixed(2), cmp = (a, b, hi) => a == null || b == null ? "" : (+a >= +b - (hi || 0) ? "anup" : "andn");
   // owner draft: owner-facing points in full; our own work summed up by area in plain words (no internal tool names)
   const OR = R.filter(r => r.owner), OURS = { Pricing:"fine-tuning your nightly rates and minimum stays against the market", Listing:"improving the listing — description, photos and how it shows up in search",
@@ -486,16 +529,38 @@ async function worstOne(v, id){
     <div id="wr">${R.length ? R.map(r => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill">${esc(r.area)}</span>${r.owner ? `<span class="pill amber">talk to owner</span>` : ""}</div>
       <p style="margin:6px 0 2px;font-weight:600">${esc(r.text)}</p><p class="muted" style="margin:0;font-size:13px">${esc(r.evidence)}${r.evidence ? " · " : ""}Source: ${esc(r.source)}</p></div>`).join("") : `<div class="card"><p class="muted">No clear cause in the data — it may be a one-off season. Check the month-by-month page.</p></div>`}</div>
     <h3 class="anh3">Guest reviews vs. comps (Airbnb)</h3><div id="wrv"></div>
+    ${RV ? `<h3 class="anh3">What guests wrote</h3>
+    <p class="muted" style="margin:0 0 6px">${RV.count ? `${RV.count} rated reviews in Track (Airbnb + Vrbo), average ${f2(RV.avg)} of 5.` : "No rated reviews in Track for this home yet."} Repeat complaints = low-score reviews (4 stars or less, or a category at 3 or less) and private notes from the last 2 years that mention each topic — a keyword count, so open the reviews to read them.</p>
+    <div id="wth"></div>
+    <div class="anbar" style="margin-top:10px"><select id="wrf"><option value="low">Low scores and private notes</option><option value="all">All reviews</option></select></div>
+    <div id="wrl"></div>` : ""}
     <h3 class="anh3">Listing vs. comps</h3><div id="wls"></div>
     ${x.rules.length || x.feedback.length ? `<h3 class="anh3">Owner rules and past feedback</h3><div id="wow"></div>` : ""}
     <h3 class="anh3">Draft note for the owner</h3>
     <p class="muted" style="margin:0 0 6px">Edit before you use it. The hub doesn't send this — copy it into your email or Track. Check the numbers first; Key Data figures are estimates measured the same way for every home.</p>
     <textarea id="wdraft" rows="14" style="width:100%;font:inherit;font-size:14px">${esc(draft)}</textarea>
     <div style="display:flex;gap:8px;margin-top:6px"><button class="btn small" id="wcopy">Copy</button><span class="muted" id="wcopied"></span></div>
-    <p class="ansrc">Sources: Key Data listing KPIs and listing details for this home's Airbnb listing and the ${c.n || 0} Primary comps in its rate set (comp figures are medians; amenity shares leave out comps Key Data marks "Unknown"); Track stays; Rates desk checks; owner rules (Kolleen workbook) and owner feedback (Desk); photo score = home_ai (Claude ESTIMATE).</p></div>`;
+    <p class="ansrc">Sources: Key Data listing KPIs and listing details for this home's Airbnb listing and the ${c.n || 0} Primary comps in its rate set (comp figures are medians; amenity shares leave out comps Key Data marks "Unknown"); Track stays;${RV ? ` Track guest reviews (${esc(RV.source)}, read ${esc(dt(RV.synced))});` : ""} Rates desk checks; owner rules (Kolleen workbook) and owner feedback (Desk); photo score = home_ai (Claude ESTIMATE).</p></div>`;
+  const tc = (RV && RV.cats) || {};
   table($("#wrv"), [{ k:"cat", t:"Category", l:1 }, { k:"o", t:"This home", f:r => `<span class="${cmp(r.o, r.c, .15)}">${f2(r.o)}</span>` }, { k:"c", t:"Comps median", f:r => f2(r.c) },
-    { k:"d", t:"Gap", v:r => r.o == null || r.c == null ? null : r.o - r.c, f:r => r.o == null || r.c == null ? "—" : `<span class="${cmp(r.o, r.c, .15)}">${(r.o - r.c >= 0 ? "+" : "") + (r.o - r.c).toFixed(2)}</span>` }],
-    RCAT.map(([k, t]) => ({ cat:t, o:o[k] == null ? null : +o[k], c:c[k] == null ? null : +c[k] })).concat([{ cat:"Number of reviews", o:o.r_count, c:c.r_count == null ? null : Math.round(c.r_count) }]), null);
+    { k:"d", t:"Gap", v:r => r.o == null || r.c == null ? null : r.o - r.c, f:r => r.o == null || r.c == null ? "—" : `<span class="${cmp(r.o, r.c, .15)}">${(r.o - r.c >= 0 ? "+" : "") + (r.o - r.c).toFixed(2)}</span>` },
+    ...(RV ? [{ k:"t", t:"All our reviews (Track)", f:r => r.t == null ? "—" : f2(r.t) }] : [])],
+    RCAT.map(([k, t]) => ({ cat:t, o:o[k] == null ? null : +o[k], c:c[k] == null ? null : +c[k], t:k === "r_overall" ? RV && RV.avg : tc[RVCAT[k]] }))
+      .concat([{ cat:"Number of reviews", o:o.r_count, c:c.r_count == null ? null : Math.round(c.r_count), t:RV ? RV.count : null }]), null);
+  if(RV){
+    if(TH.length) table($("#wth"), [{ k:"name", t:"Repeat complaint", l:1 }, { k:"n", t:"Reviews / notes" }, { k:"quote", t:"Latest", l:1, f:r => `<span style="white-space:normal;display:inline-block;min-width:260px"><span class="muted">${esc(dt(r.latest.check_in + "T12:00"))} · ${esc(r.latest.channel)}</span> “${esc(r.quote)}”</span>` }], TH, null);
+    else $("#wth").innerHTML = `<p class="muted">No repeat complaints in the last 2 years.</p>`;
+    const stars = s => s == null ? "" : `<span class="pill ${+s >= 5 ? "green" : +s >= 4 ? "" : +s >= 3 ? "amber" : "red"}">${(+s).toFixed(0)} ★</span>`;
+    const low = r => (r.overall != null && +r.overall <= 4) || Object.values(r.ratings || {}).some(s => s != null && +s <= 3) || r.private;
+    const drawRv = (more) => { const L = (RV.reviews || []).filter(r => $("#wrf").value === "all" || low(r)), S = more ? L : L.slice(0, 8);
+      $("#wrl").innerHTML = (S.length ? S.map(r => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stars(r.overall)}<span class="muted" style="font-size:13px">${esc(dt(r.check_in + "T12:00"))} · ${r.nights || "?"} nights · ${esc(r.channel)} · res ${esc(r.res)}</span>
+          ${Object.entries(r.ratings || {}).filter(([, s]) => s != null && +s <= 3).map(([k, s]) => `<span class="pill amber">${esc(k)} ${+s}</span>`).join("")}</div>
+        ${r.text ? `<p style="margin:6px 0 2px">${esc(r.text)}</p>` : ""}${r.private ? `<p style="margin:6px 0 2px"><b>Private note to us:</b> ${esc(r.private)}</p>` : ""}
+        ${r.response ? `<p class="muted" style="margin:4px 0 0;font-size:13px">Our reply: ${esc(r.response)}</p>` : r.text ? `<p class="muted" style="margin:4px 0 0;font-size:13px">No reply from us</p>` : ""}</div>`).join("")
+        : `<p class="muted">No reviews to show.</p>`) + (!more && L.length > S.length ? `<button class="btn small" id="wrmore">Show all ${L.length}</button>` : "");
+      if($("#wrmore")) $("#wrmore").onclick = () => drawRv(1); };
+    $("#wrf").onchange = () => drawRv(); drawRv();
+  }
   const am = v => v == null ? "—" : v === "none" ? "No" : v === "unknown" ? "Not known" : v.replace(/_/g, " "), sh = s => s == null ? "not known" : Math.round(s * 100) + "%";
   table($("#wls"), [{ k:"t", t:"", l:1 }, { k:"o", t:"This home", l:1 }, { k:"c", t:"Comps", l:1 }], [
     { t:"Photos", o:o.photos ?? "—", c:c.photos == null ? "—" : "median " + Math.round(c.photos) },
