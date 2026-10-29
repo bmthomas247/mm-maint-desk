@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Vehicles</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Vehicles desk (hub key 'vehicles'; hub_vehicles_live.sql). Bouncie trackers (hub_bouncie.sql): trips, top speed, hard braking, idle,
+     time at Home Depot / Walmart / the office / Mister Car Wash (vehicle_places), oil change miles. Access is enforced in Supabase
+     (bouncie_can_read: admins + maintenance manager) - this page only shows what RLS already allows. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e; --pine:#4f7a18;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --radius:16px; --tap:44px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:17px;margin:26px 0 8px;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn:disabled{opacity:.5;cursor:default}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.chip{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:5px 12px;border-radius:999px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
+.chip.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+.bar label{font-size:13px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.bar input,.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:5px 8px;background:var(--card);color:var(--ink);min-height:34px}
+.bar input[type=number]{width:72px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;min-width:0}
+.card h3{margin:0 0 2px;font-size:17px;font-weight:800}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13.5px;margin-top:10px}
+.kv dt{color:var(--muted);font-weight:700} .kv dd{margin:0;overflow-wrap:anywhere}
+.meter{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:6px 0 2px} .meter i{display:block;height:100%;background:var(--moose)}
+.meter.amber i{background:var(--amber)} .meter.red i{background:var(--red)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+td.n,th.n{text-align:right}
+tr:last-child td{border-bottom:0}
+.empty{padding:18px;color:var(--muted);font-size:14px}
+.note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
+dialog{border:1px solid var(--line);border-radius:16px;padding:20px;max-width:420px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog input{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+.err{color:var(--red);font-size:13px;min-height:1em}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const fmtD = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const mi = n => n == null ? "" : Math.round(n).toLocaleString();
+const dur = s => { if(s == null) return ""; s = Math.round(s / 60); return s < 60 ? s + " min" : Math.floor(s / 60) + " h " + (s % 60) + " min"; };
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+
+const OIL_EVERY = 5000, OIL_WARN = 4000;          // Brandon 2026-10-29: change every 5,000 miles, plan it at 4,000
+const S = { days: 7, limit: 75, veh: "", vehicles: [], places: [], oil: {}, trips: [], visits: [] };
+
+function vname(v){ return v.nickname || [v.year, v.make, v.model].filter(Boolean).join(" ") || ("Tracker " + String(v.imei).slice(-4)); }
+
+/* ---------- distance + Bouncie polyline (precision 5; falls back to 6 if the points land off the map) ---------- */
+function meters(a, b, c, d){ const R = 6371000, r = Math.PI / 180, x = (c - a) * r, y = (d - b) * r;
+  const h = Math.sin(x / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(y / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+function decode(str, p){
+  const out = []; let i = 0, lat = 0, lng = 0, f = Math.pow(10, p);
+  while(i < str.length){
+    for(const k of [0, 1]){ let b, s = 0, r = 0; do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << s; s += 5; } while(b >= 32 && i <= str.length);
+      const d = (r & 1) ? ~(r >> 1) : (r >> 1); if(k === 0) lat += d; else lng += d; }
+    out.push({ lat: lat / f, lon: lng / f });
+  }
+  return out;
+}
+function route(t){
+  if(!t.gps || t.gps === "null") return [];
+  if(/^\s*\{\s*"/.test(t.gps)){   // geojson, if ever stored that way (a polyline can also start with "{" or "[", so only real JSON counts)
+    try { const g = JSON.parse(t.gps), cs = g.coordinates || (g.geometry && g.geometry.coordinates) || []; if(cs.length) return cs.map(c => ({ lat: c[1], lon: c[0] })); } catch {}
+  }
+  let pts = decode(t.gps, 5);
+  if(pts.some(p => Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180) || (pts[0] && Math.abs(pts[0].lat) < 1)) pts = decode(t.gps, 6);
+  return pts;
+}
+
+/* ---------- time at places: parked stops (trip ends inside a place until the next trip starts) + slow drive-throughs from live points ---------- */
+function computeVisits(){
+  const byV = {}, live = {};
+  for(const p of S.points){ for(const x of (p.points || [])){
+      const g = x.gps || {}; if(g.lat == null) continue;
+      (live[p.transaction_id] = live[p.transaction_id] || new Map()).set(x.timestamp, { t: Date.parse(x.timestamp), lat: +g.lat, lon: +g.lon, mph: x.speed == null ? null : +x.speed }); } }
+  for(const t of S.trips) (byV[t.imei] = byV[t.imei] || []).push(t);
+  const ivs = [];   // {imei, key, a, b, parked}
+  const where = (lat, lon) => S.places.find(pl => meters(lat, lon, pl.lat, pl.lon) <= pl.radius_m);
+  for(const [imei, ts] of Object.entries(byV)){
+    ts.sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at));
+    ts.forEach((t, i) => {
+      const pts = live[t.transaction_id] ? [...live[t.transaction_id].values()].sort((a, b) => a.t - b.t) : null;
+      // where it parked: the trip's full route (REST polyline) first; live points can be partial
+      const first = x => { const r = route(x); if(r.length) return r[0]; const l = live[x.transaction_id]; return l ? [...l.values()].sort((a, b) => a.t - b.t)[0] : null; };
+      const poly = route(t), rt = poly.length ? poly : (pts || []), next = ts[i + 1];
+      const end = rt[rt.length - 1], nstart = next ? first(next) : null;
+      const pl = (end && where(end.lat, end.lon)) || (nstart && where(nstart.lat, nstart.lon));
+      if(pl && t.ended_at){
+        // parked longer than 12 h (overnight, weekend) isn't "time at" a place; a stop with no later trip counts up to now while under 12 h
+        const a = Date.parse(t.ended_at), b = next ? Date.parse(next.started_at) : Date.now();
+        if(b > a && b - a <= 12 * 3600000) ivs.push({ imei, key: pl.key, a, b, parked: true, open: !next });
+      }
+      if(pts){   // engine running inside a place at walking pace (car wash tunnel, a quick stop with the engine on)
+        let run = null;
+        for(const p of pts){
+          const at = where(p.lat, p.lon), slow = p.mph == null || p.mph <= 10;
+          if(at && slow && run && run.key === at.key) run.b = p.t;
+          else { if(run && run.b - run.a >= 60000) ivs.push(run); run = at && slow ? { imei, key: at.key, a: p.t, b: p.t } : null; }
+        }
+        if(run && run.b - run.a >= 60000) ivs.push(run);
+      }
+    });
+  }
+  ivs.sort((x, y) => (x.imei + x.key).localeCompare(y.imei + y.key) || x.a - y.a);
+  const out = [];
+  for(const v of ivs){ const last = out[out.length - 1];
+    if(last && last.imei === v.imei && last.key === v.key && v.a - last.b <= 5 * 60000){ last.b = Math.max(last.b, v.b); last.open = last.open || v.open; }
+    else out.push({ ...v }); }
+  const from = Date.now() - S.days * 86400000;
+  S.visits = out.filter(v => v.b - v.a >= 60000 && v.b >= from);
+}
+
+/* ---------- data ---------- */
+async function load(){
+  const from = new Date(Date.now() - (S.days + 1) * 86400000).toISOString();
+  const [v, p, o, t] = await Promise.all([
+    sb.from("bouncie_vehicles").select("*").order("nickname"),
+    sb.from("vehicle_places").select("*").eq("off", false),
+    sb.from("vehicle_oil").select("*").order("entered_at", { ascending: false }),
+    sb.from("bouncie_trips").select("*").gte("started_at", from).order("started_at", { ascending: false }).limit(2000)]);
+  const bad = [v, p, o, t].find(x => x.error); if(bad) throw bad.error;
+  S.vehicles = v.data; S.places = p.data; S.trips = t.data; S.oil = {};
+  for(const r of o.data) if(!S.oil[r.imei]) S.oil[r.imei] = r;   // newest per vehicle
+  S.points = [];
+  const ids = S.trips.map(x => x.transaction_id);
+  for(let i = 0; i < ids.length; i += 80){
+    const r = await sb.from("bouncie_points").select("transaction_id,points").in("transaction_id", ids.slice(i, i + 80)).limit(5000);
+    if(r.error) throw r.error; S.points.push(...r.data);
+  }
+  computeVisits();
+}
+
+/* ---------- page ---------- */
+function oilBlock(v){
+  const o = S.oil[v.imei];
+  if(!o) return `<dt>Oil change</dt><dd><button class="btn" data-oil="${esc(v.imei)}">+ Add last oil change</button></dd>`;
+  const since = v.odometer == null ? null : v.odometer - o.odometer, cls = since == null ? "" : since >= OIL_EVERY ? "red" : since >= OIL_WARN ? "amber" : "";
+  const pct = since == null ? 0 : Math.max(0, Math.min(100, since / OIL_EVERY * 100));
+  const word = since == null ? "waiting for the odometer" : since >= OIL_EVERY ? `<span class="pill red">Due now</span> ${mi(since)} mi since the last change`
+    : since >= OIL_WARN ? `<span class="pill amber">Plan it</span> ${mi(since)} mi since · due in ${mi(OIL_EVERY - since)} mi` : `${mi(since)} mi since · due in ${mi(OIL_EVERY - since)} mi`;
+  return `<dt>Oil change</dt><dd>${word}<div class="meter ${cls}"><i style="width:${pct}%"></i></div>
+    <span class="muted">Last: ${mi(o.odometer)} mi${o.done_on ? " on " + fmtD(o.done_on) : ""} · entered by ${esc((o.entered_name || "").split(" ")[0])}</span>
+    <button class="btn" data-oil="${esc(v.imei)}" style="margin-top:6px">+ New oil change</button></dd>`;
+}
+function lastAt(imei, kind){
+  const keys = S.places.filter(p => p.kind === kind).map(p => p.key);
+  return S.visits.filter(x => x.imei === imei && keys.includes(x.key)).sort((a, b) => b.b - a.b)[0];
+}
+function render(){
+  const vs = S.vehicles;
+  let h = `<h1>Vehicles</h1><p class="muted">Bouncie trackers · trips, speed, hard braking, idle time, time at places, oil changes</p>`;
+  if(!vs.length){
+    $("#app").innerHTML = h + `<div class="note">Waiting for the trackers. Once they're plugged in, added in the Bouncie app and authorized for the Moose Hub,
+      each vehicle shows up here with its trips.</div>`; return;
+  }
+  h += `<div class="bar">${[7, 30, 90].map(d => `<button class="chip${S.days === d ? " on" : ""}" data-days="${d}">Last ${d} days</button>`).join("")}
+    <label>Vehicle <select id="veh"><option value="">All</option>${vs.map(v => `<option value="${esc(v.imei)}"${S.veh === v.imei ? " selected" : ""}>${esc(vname(v))}</option>`).join("")}</select></label>
+    <label>Flag trips over <input id="lim" type="number" min="30" max="120" step="5" value="${S.limit}"> mph</label></div>`;
+
+  h += `<div class="cards">` + vs.filter(v => !S.veh || v.imei === S.veh).map(v => {
+    const wash = lastAt(v.imei, "car_wash");
+    return `<div class="card"><h3>${esc(vname(v))}</h3>
+      <div>${v.is_running ? `<span class="pill green">Driving${v.speed ? " · " + Math.round(v.speed) + " mph" : ""}</span>` : `<span class="pill">Parked</span>`}
+        ${v.mil_on ? `<span class="pill red">Check engine</span>` : ""}${v.battery && !/normal/i.test(v.battery) ? `<span class="pill amber">Battery: ${esc(v.battery)}</span>` : ""}</div>
+      <dl class="kv"><dt>Odometer</dt><dd>${v.odometer == null ? "" : mi(v.odometer) + " mi"}</dd>
+        <dt>Last seen</dt><dd>${fmtDT(v.last_seen)}${v.last_address ? "<br><span class='muted'>" + esc(v.last_address) + "</span>" : ""}</dd>
+        <dt>Car wash</dt><dd>${wash ? fmtDT(wash.a) + " · " + dur((wash.b - wash.a) / 1000) : `<span class="muted">none in the last ${S.days} days</span>`}</dd>
+        ${oilBlock(v)}</dl></div>`;
+  }).join("") + `</div>`;
+
+  // time at places
+  const rows = [];
+  for(const v of vs.filter(v => !S.veh || v.imei === S.veh)) for(const p of S.places){
+    const vis = S.visits.filter(x => x.imei === v.imei && x.key === p.key);
+    if(vis.length) rows.push({ v, p, n: vis.length, total: vis.reduce((s, x) => s + (x.b - x.a), 0) / 1000, last: Math.max(...vis.map(x => x.b)), open: vis.some(x => x.open) });
+  }
+  h += `<h2>Time at places · last ${S.days} days</h2><div class="box">` + (rows.length ? `<table><thead><tr><th>Vehicle</th><th>Place</th><th class="n">Visits</th><th class="n">Total time</th><th class="n">Avg visit</th><th>Last visit</th></tr></thead><tbody>` +
+    rows.map(r => `<tr><td>${esc(vname(r.v))}</td><td>${esc(r.p.name)}</td><td class="n">${r.n}</td><td class="n">${dur(r.total)}</td><td class="n">${dur(r.total / r.n)}</td>
+      <td>${fmtDT(r.last)}${r.open ? ` <span class="pill blue">there now</span>` : ""}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">No time at ${S.places.map(p => esc(p.name)).join(", ")} in the last ${S.days} days.</div>`) + `</div>
+    <p class="muted">A visit = parked inside the place's circle between two trips, or moving slower than 10 mph inside it for a minute or more (car wash tunnel).
+    The office circle also covers the Lodges at Bear Hollow homes in the same building.</p>`;
+
+  // trips
+  const from = Date.now() - S.days * 86400000, byImei = Object.fromEntries(vs.map(v => [v.imei, v]));
+  const trips = S.trips.filter(t => Date.parse(t.started_at) >= from && (!S.veh || t.imei === S.veh));
+  const fast = trips.filter(t => (t.max_mph || 0) > S.limit), brakes = trips.reduce((s, t) => s + (t.hard_brakes || 0), 0);
+  const miles = trips.reduce((s, t) => s + (+t.miles || 0), 0), idle = trips.reduce((s, t) => s + (t.idle_s || 0), 0);
+  h += `<h2>Trips · last ${S.days} days</h2>
+    <div class="bar"><span class="pill">${trips.length} trips</span><span class="pill">${mi(miles)} mi</span><span class="pill">${dur(idle)} idling</span>
+      <span class="pill ${fast.length ? "red" : "green"}">${fast.length} over ${S.limit} mph</span><span class="pill ${brakes ? "amber" : "green"}">${brakes} hard brakes</span></div>
+    <div class="box">` + (trips.length ? `<table><thead><tr><th>Started</th><th>Vehicle</th><th class="n">Miles</th><th class="n">Drive time</th><th class="n">Idle</th>
+      <th class="n">Top mph</th><th class="n">Avg mph</th><th class="n">Hard brakes</th><th class="n">Hard accel.</th></tr></thead><tbody>` +
+    trips.slice(0, 500).map(t => `<tr><td>${fmtDT(t.started_at)}</td><td>${esc(byImei[t.imei] ? vname(byImei[t.imei]) : t.imei)}</td><td class="n">${t.miles == null ? "" : (+t.miles).toFixed(1)}</td>
+      <td class="n">${dur(t.trip_s)}</td><td class="n">${dur(t.idle_s)}</td>
+      <td class="n">${t.max_mph == null ? "" : (t.max_mph > S.limit ? `<span class="pill red">${Math.round(t.max_mph)}</span>` : Math.round(t.max_mph))}</td>
+      <td class="n">${t.avg_mph == null ? "" : Math.round(t.avg_mph)}</td>
+      <td class="n">${t.hard_brakes ? `<span class="pill amber">${t.hard_brakes}</span>` : (t.hard_brakes ?? "")}</td><td class="n">${t.hard_accels || (t.hard_accels ?? "")}</td></tr>`).join("") +
+    `</tbody></table>` : `<div class="empty">No trips in the last ${S.days} days.</div>`) + `</div>
+    <p class="muted">Source: Bouncie trackers (top speed, hard braking and idle time per trip). Who was driving and posted speed limits come next.</p>`;
+  $("#app").innerHTML = h;
+}
+
+function oilDialog(imei){
+  const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg");
+  d.innerHTML = `<h3 style="margin:0 0 4px">Oil change · ${esc(vname(v))}</h3>
+    <p class="muted" style="margin:0">From the windshield sticker or the shop receipt. Odometer now: ${v.odometer == null ? "not known yet" : mi(v.odometer) + " mi"}.</p>
+    <label>Odometer at the oil change<input id="oo" type="number" inputmode="numeric" min="0" step="1" value="${v.odometer == null ? "" : Math.round(v.odometer)}"></label>
+    <label>Date (optional)<input id="od" type="date"></label>
+    <label>Note (optional)<input id="on" maxlength="300" placeholder="e.g. Jiffy Lube, synthetic"></label>
+    <div class="err" id="oe"></div>
+    <div class="bar"><button class="btn primary" id="os">Save</button><button class="btn" id="oc">Cancel</button></div>`;
+  d.showModal();
+  $("#oc", d).onclick = () => d.close();
+  $("#os", d).onclick = async () => {
+    const odo = Number($("#oo", d).value);
+    if(!$("#oo", d).value || !(odo >= 0)){ $("#oe", d).textContent = "Type the odometer reading."; return; }
+    $("#os", d).disabled = true;
+    const r = await sb.rpc("vehicle_oil_add", { p_imei: imei, p_odometer: odo, p_done: $("#od", d).value || null, p_note: $("#on", d).value || null });
+    if(r.error){ $("#oe", d).textContent = errText(r.error); $("#os", d).disabled = false; return; }
+    d.close(); await refresh();
+  };
+}
+
+async function refresh(){
+  try { await load(); render(); }
+  catch(e){ $("#app").innerHTML = `<h1>Vehicles</h1><div class="note">Couldn't load: ${esc(errText(e))}</div>`; }
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-days],[data-oil]"); if(!b) return;
+  if(b.dataset.days){ S.days = +b.dataset.days; refresh(); }
+  else oilDialog(b.dataset.oil);
+});
+document.addEventListener("change", e => {
+  if(e.target.id === "veh"){ S.veh = e.target.value; render(); }
+  if(e.target.id === "lim"){ S.limit = Math.max(30, Math.min(120, +e.target.value || 75)); render(); }
+});
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("bouncie_can_read");
+  if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Vehicles</h1><p class="muted">Nothing to show.</p>`; return; }
+  refresh();
+})();
+window.__veh = { S, decode, meters, computeVisits, render };   // for the stub test
+</script>
+</body>
+</html>
