@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Advertising</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Advertising / marketing desk (hub key 'advertising'; hub_marketing.sql). Tabs (?tab=): guest · owners · realtor · general.
+     Guest = 5-star return renters (mkt_rr, rebuilt nightly by mkt_return_renters.py from Track reviews + stays + Brevo lists).
+     Every tab has a plan board (mkt_ideas, never deleted). Access is enforced in Supabase (hub_can('advertising')). -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e; --pine:#4f7a18;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:17px;margin:26px 0 8px;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.small{min-height:30px;font-size:12.5px;padding:0 9px}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.chip{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:5px 12px;border-radius:999px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
+.chip.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+.bar label{font-size:13px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.bar input,.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:5px 8px;background:var(--card);color:var(--ink);min-height:34px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr));gap:10px;margin:12px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.kpi small{display:block;color:var(--muted);font-size:12px;font-weight:700} .kpi b{display:block;font-size:24px;font-weight:800;line-height:1.2}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+td.wrapc{white-space:normal;min-width:240px;max-width:420px;color:var(--ink-2);font-size:12.5px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+td.n,th.n{text-align:right}
+tr:last-child td{border-bottom:0}
+.empty{padding:18px;color:var(--muted);font-size:14px}
+.note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
+.src{color:var(--muted);font-size:12px;margin:8px 2px 0}
+.mbars{display:grid;gap:4px;padding:12px 14px}
+.mb{display:grid;grid-template-columns:76px 1fr 46px;gap:8px;align-items:center;font-size:12.5px}
+.mb i{display:block;height:12px;border-radius:4px;background:var(--moose);min-width:2px} .mb i.c{background:var(--amber)}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:12px}
+.col{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;min-width:0}
+.col h3{margin:2px 4px 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.it{border:1px solid var(--line);border-radius:12px;padding:9px 11px;margin-bottom:8px;background:var(--ground);cursor:pointer}
+.it b{display:block;font-size:14px} .it p{margin:3px 0 0;font-size:12.5px;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.it .meta{font-size:11.5px;color:var(--muted);margin-top:4px}
+dialog{border:1px solid var(--line);border-radius:16px;padding:20px;max-width:480px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog input,dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog textarea{min-height:110px}
+.err{color:var(--red);font-size:13px;min-height:1em}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtD = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const today = () => new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+const TABS = { guest:"Guest", owners:"Owners", realtor:"Realtor", general:"General" };
+const TAB = TABS[new URLSearchParams(location.search).get("tab")] ? new URLSearchParams(location.search).get("tab") : "guest";
+// Which Brevo lists belong to which tab (by list name). Lists that match nothing show under General.
+const LIST_TAB = n => /owner/i.test(n) ? "owners" : /realtor|agent|broker/i.test(n) ? "realtor"
+  : /return renter|rental guest|guest of guest|cart aband|stayfi|non-booked|tns opt-in from website guest/i.test(n) ? "guest" : "general";
+const STATUS = [["idea","Ideas"],["planned","Planned"],["doing","Doing"],["done","Done"],["parked","Parked"]];
+const KINDS = { idea:"💡 Idea", campaign:"📣 Campaign", task:"✅ Task", question:"❓ Question", list:"📋 List" };
+const S = { rr:[], run:null, ideas:[], f:{ when:"30", brevo:"all", back:"all", q:"" } };
+
+async function load(){
+  const jobs = [sb.from("mkt_ideas").select("*").eq("tab", TAB).eq("off", false).order("created_at"),
+                sb.from("mkt_runs").select("ran_at,summary").order("ran_at", { ascending:false }).limit(1)];
+  if(TAB === "guest") jobs.push(sb.from("mkt_rr").select("*").order("send_on").limit(5000));
+  const [i, r, rr] = await Promise.all(jobs);
+  if(i.error) throw i.error;
+  S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
+}
+
+function render(){
+  const h = [`<h1>${esc(TABS[TAB])}</h1>`];
+  if(TAB === "guest") h.push(guestHtml());
+  h.push(listsHtml(), boardHtml());
+  $("#app").innerHTML = h.join("");
+}
+
+/* ---------- Guest: 5-star return renters ---------- */
+function guestRows(){
+  const t = today(), end = new Date(Date.now() + (+S.f.when || 0) * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" }), q = S.f.q.trim().toLowerCase();
+  return S.rr.filter(x => !x.excluded
+    && (S.f.when === "all" || x.send_on <= end)
+    && (S.f.brevo === "all" || (S.f.brevo === "in" ? x.brevo_list : S.f.brevo === "unsub" ? x.brevo_unsub : !x.brevo_list))
+    && (S.f.back === "all" || (S.f.back === "yes" ? x.came_back_booked : !x.came_back_booked))
+    && (!q || [x.guest, x.home, x.channel].some(v => String(v || "").toLowerCase().includes(q))));
+}
+function guestHtml(){
+  const sm = (S.run && S.run.summary) || {}, ok = S.rr.filter(x => !x.excluded), t = today();
+  const in30 = new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+  const inB = ok.filter(x => x.brevo_list), uns = inB.filter(x => x.brevo_unsub), back = ok.filter(x => x.came_back_booked);
+  const due = ok.filter(x => x.send_on <= in30 && !x.brevo_list && !x.came_back_booked);
+  const months = Object.entries(sm.by_month || {}), mx = Math.max(1, ...months.map(m => m[1]));
+  const rows = guestRows();
+  return `<p class="muted">⭐ <b>5-star return renters.</b> Guests who gave us a 5-star Airbnb or Vrbo review, with the day to email them: just before they usually book, aimed at the anniversary of their stay.
+    ${S.run ? `Rebuilt ${esc(fmtDT(S.run.ran_at))}.` : "Not built yet."}</p>
+  <div class="kpis">
+    <div class="kpi"><small>Guests on the list</small><b>${ok.length.toLocaleString()}</b><small>${(S.rr.length - ok.length)} left out (Do Not Rent)</small></div>
+    <div class="kpi"><small>To email in the next 30 days</small><b>${due.length.toLocaleString()}</b><small>not in Brevo yet, not booked again</small></div>
+    <div class="kpi"><small>Already in a Brevo batch</small><b>${inB.length.toLocaleString()}</b><small>${esc(Object.keys(sm.brevo_lists || {}).length)} "Return Renters" lists</small></div>
+    <div class="kpi"><small>Unsubscribed in Brevo</small><b>${uns.length.toLocaleString()}</b><small>${inB.length ? Math.round(uns.length / inB.length * 100) + "% of those in a batch" : ""}</small></div>
+    <div class="kpi"><small>Booked with us again</small><b>${back.length.toLocaleString()}</b><small>${back.filter(x => x.brevo_list).length} of them were in a Brevo batch</small></div>
+  </div>
+  <h2>When to email (by month)</h2>
+  <div class="box"><div class="mbars">${months.map(([m, n]) => `<div class="mb"><span>${esc(m)}</span><i style="width:${n / mx * 100}%" class="${m === t.slice(0,7) ? "c" : ""}"></i><span class="n">${n}</span></div>`).join("") || `<div class="empty">Nothing yet.</div>`}</div></div>
+  <p class="src">This month includes ${sm.catch_up || 0} catch-ups: guests whose best email date already passed, so the date is today. Lead time = their typical days booked ahead + ${sm.lead_weeks || 3} weeks.</p>
+  <h2>Guests</h2>
+  <div class="bar">
+    <label>Email by <select data-f="when"><option value="30">next 30 days</option><option value="60">next 60 days</option><option value="90">next 90 days</option><option value="all">any time</option></select></label>
+    <label>Brevo <select data-f="brevo"><option value="all">all</option><option value="not">not in a batch</option><option value="in">in a batch</option><option value="unsub">unsubscribed</option></select></label>
+    <label>Booked again <select data-f="back"><option value="all">all</option><option value="yes">yes</option><option value="no">no</option></select></label>
+    <label>Find <input data-f="q" placeholder="guest, home, channel" value="${esc(S.f.q)}"></label>
+    <button class="btn small" id="csv">⬇ Download CSV</button><span class="muted">${rows.length.toLocaleString()} guests</span>
+  </div>
+  <div class="box"><table><thead><tr><th>Guest</th><th>Channel</th><th>Home</th><th>Last 5★ stay</th><th class="n">5★</th><th class="n">Stays</th><th class="n">Books ahead</th><th>Target stay</th><th>Email on</th><th>Brevo</th><th>Booked again</th><th>What they wrote</th></tr></thead>
+  <tbody>${rows.slice(0, 300).map(x => `<tr><td><b>${esc(x.guest)}</b></td><td>${esc(x.channel)}</td><td>${esc(x.home)}</td><td>${esc(fmtD(x.last_five_in))}</td>
+    <td class="n">${x.five_reviews}</td><td class="n">${x.stays}</td><td class="n">${x.typical_lead} d</td><td>${esc(fmtD(x.target_stay))}</td>
+    <td>${esc(fmtD(x.send_on))}${x.timing === "catch-up" ? ` <span class="pill amber">catch-up</span>` : ""}</td>
+    <td>${x.brevo_list ? `<span class="pill ${x.brevo_unsub ? "red" : "green"}" title="${esc(x.brevo_list)}">${x.brevo_unsub ? "unsubscribed" : esc(x.brevo_list.replace(/^Return Renters - 5 Star - /, ""))}</span>` : ""}</td>
+    <td>${x.came_back_booked ? `<span class="pill blue">${esc(x.came_back_home || "")} · ${esc(fmtD(x.came_back_in))}</span>` : ""}</td>
+    <td class="wrapc">${esc(x.review_excerpt || "")}</td></tr>`).join("") || `<tr><td colspan="12" class="empty">No guests match.</td></tr>`}</tbody></table>
+  ${rows.length > 300 ? `<div class="empty">Showing the first 300. Download the CSV for all ${rows.length.toLocaleString()}.</div>` : ""}</div>
+  <p class="src">Sources: ${esc(Object.values((sm.sources) || {}).join(" · ") || "Track reviews + Track reservations + Brevo lists")}. ${sm.reviews_not_matched ? `${sm.reviews_not_matched} older 5-star reviews couldn't be tied to a stay in the Track history pull yet.` : ""}
+    No emails are kept in the hub: the emails go out from Brevo.</p>`;
+}
+function csv(){
+  const cols = ["guest","channel","home","last_five_in","five_reviews","stays","typical_lead","target_stay","send_on","timing","brevo_list","brevo_unsub","came_back_booked","came_back_in","came_back_home","review_excerpt"];
+  const q = v => /[",\n]/.test(String(v ?? "")) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? "");
+  const blob = new Blob([[cols.join(",")].concat(guestRows().map(r => cols.map(c => q(r[c])).join(","))).join("\n")], { type:"text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `return-renters-${today()}.csv`; a.click();
+}
+
+/* ---------- Brevo lists for this tab ---------- */
+function listsHtml(){
+  const all = ((S.run && S.run.summary && S.run.summary.brevo_all) || []).filter(l => LIST_TAB(l.name) === TAB);
+  return `<h2>Brevo lists</h2>${all.length ? `<div class="box"><table><thead><tr><th>List</th><th class="n">Contacts</th></tr></thead><tbody>
+    ${all.map(l => `<tr><td>${esc(l.name)}</td><td class="n">${(l.size ?? 0).toLocaleString()}</td></tr>`).join("")}</tbody></table></div>`
+    : `<p class="muted">No Brevo lists for ${esc(TABS[TAB])} yet.</p>`}
+    ${S.run ? `<p class="src">Source: Brevo contact lists (read only), ${esc(fmtDT(S.run.ran_at))}.</p>` : ""}`;
+}
+
+/* ---------- plan board (every tab) ---------- */
+function boardHtml(){
+  const by = s => S.ideas.filter(x => x.status === s);
+  return `<h2>Plan for ${esc(TABS[TAB])}</h2>
+  <div class="bar"><button class="btn primary" data-new="1">+ Add an idea, campaign, task or question</button>
+    <span class="muted">Shape this tab here. Nothing is ever deleted; park what you don't want.</span></div>
+  <div class="board">${STATUS.filter(([s]) => s !== "parked" || by("parked").length).map(([s, label]) => `<div class="col"><h3>${label} · ${by(s).length}</h3>
+    ${by(s).map(x => `<div class="it" data-id="${x.id}"><span class="pill">${KINDS[x.kind] || x.kind}</span><b>${esc(x.title)}</b>${x.details ? `<p>${esc(x.details)}</p>` : ""}
+      <div class="meta">${[x.owner_name && "👤 " + esc(x.owner_name), x.due && "📅 " + esc(fmtD(x.due)), "by " + esc(x.created_name || "?"), esc(fmtD(x.created_at))].filter(Boolean).join(" · ")}</div></div>`).join("")
+      || `<p class="muted" style="margin:4px">Nothing here.</p>`}</div>`).join("")}</div>`;
+}
+function ideaDialog(x){
+  const d = $("#dlg"), it = x || { kind:"idea", status:"idea" };
+  d.innerHTML = `<form method="dialog" id="f"><h3 style="margin:0 0 6px">${x ? "Edit" : "Add to"} ${esc(TABS[TAB])} plan</h3>
+    <label>What is it <select name="kind">${Object.entries(KINDS).map(([k, l]) => `<option value="${k}" ${it.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label>Title <input name="title" maxlength="200" required value="${esc(it.title || "")}"></label>
+    <label>Details <textarea name="details" maxlength="4000">${esc(it.details || "")}</textarea></label>
+    <label>Status <select name="status">${STATUS.map(([s, l]) => `<option value="${s}" ${it.status === s ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label>Who's on it <input name="owner_name" maxlength="80" value="${esc(it.owner_name || "")}"></label>
+    <label>Due <input name="due" type="date" value="${esc(it.due || "")}"></label>
+    <p class="err" id="err"></p>
+    <div class="bar" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="save" value="save">Save</button></div>
+    ${x ? `<p class="src">Added by ${esc(x.created_name || "?")} ${esc(fmtDT(x.created_at))}${x.updated_name ? ` · last change ${esc(x.updated_name)} ${esc(fmtDT(x.updated_at))}` : ""}</p>` : ""}</form>`;
+  d.showModal();
+  $("#save", d).onclick = async e => {
+    e.preventDefault(); const f = new FormData($("#f", d)), row = Object.fromEntries(f.entries());
+    row.title = row.title.trim(); if(!row.title){ $("#err", d).textContent = "Give it a title."; return; }
+    row.due = row.due || null; row.owner_name = row.owner_name.trim() || null; row.details = row.details.trim() || null;
+    const r = x ? await sb.from("mkt_ideas").update(row).eq("id", x.id) : await sb.from("mkt_ideas").insert(Object.assign(row, { tab:TAB }));
+    if(r.error){ $("#err", d).textContent = "Couldn't save: " + r.error.message; return; }
+    d.close(); await refresh();
+  };
+}
+
+async function refresh(){ try { await load(); render(); } catch(e){ $("#app").innerHTML = `<h1>${esc(TABS[TAB])}</h1><p class="muted">Couldn't load: ${esc(e.message || e)}</p>`; } }
+document.addEventListener("click", e => {
+  if(e.target.closest("[data-new]")) return ideaDialog(null);
+  const it = e.target.closest(".it[data-id]"); if(it) return ideaDialog(S.ideas.find(x => x.id == it.dataset.id));
+  if(e.target.id === "csv") csv();
+});
+document.addEventListener("change", e => { const f = e.target.dataset && e.target.dataset.f; if(f && f !== "q"){ S.f[f] = e.target.value; render(); restoreFilters(); } });
+document.addEventListener("input", e => { if(e.target.dataset && e.target.dataset.f === "q"){ S.f.q = e.target.value; const pos = e.target.selectionStart; render(); restoreFilters(); const i = $('[data-f="q"]'); i.focus(); i.setSelectionRange(pos, pos); } });
+function restoreFilters(){ $$("select[data-f]").forEach(s => s.value = S.f[s.dataset.f]); }
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"advertising" });
+  if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Advertising</h1><p class="muted">Nothing to show.</p>`; return; }
+  await refresh(); restoreFilters();
+})();
+window.__mkt = { S, guestRows, render };   // for the stub test
+</script>
+</body>
+</html>
