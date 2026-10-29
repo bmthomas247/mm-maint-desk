@@ -1275,9 +1275,9 @@ function pennyAdmin(el, ab){
 /* 2026-10-28 (Brandon): Penny knows what you're looking at - the home on Property Details, or the stay on a reservation check list */
 function pennyCtx(){
   const k = current(), arg = hashArg(), c = { desk:k };
-  try { const f = document.getElementById("deskframe"), S = f && f.contentWindow.S;
-    if(S && S.tab === "homes" && S.ui && S.ui.home) c.home = S.ui.home;
-    if(S && S.tab === "jobs" && S.ui && S.ui.sel) c.job = String(S.ui.sel); } catch(e){}
+  try { const f = document.getElementById("deskframe"), S = f && f.contentWindow.deskCtx && f.contentWindow.deskCtx();
+    if(S && S.home && ["homes", "lease", "fire", "firesys"].includes(S.tab)) c.home = S.home;
+    if(S && S.sel && ["jobs", "today", "check", "projects"].includes(S.tab)) c.job = S.sel; } catch(e){}
   if(!c.home && k === "homes" && arg) c.home = arg;
   if(k === "reservations" && /^\d+$/.test(arg)) Object.assign(c, typeof window.resCtx === "function" ? window.resCtx(arg) : { res:arg });
   return c;
