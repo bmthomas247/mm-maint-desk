@@ -119,7 +119,7 @@ const LIST_TAB = n => /owner/i.test(n) ? "owners" : /realtor|agent|broker/i.test
   : /return renter|rental guest|guest of guest|cart aband|stayfi|non-booked|tns opt-in from website guest/i.test(n) ? "guest" : "general";
 const STATUS = [["idea","Ideas"],["planned","Planned"],["doing","Doing"],["done","Done"],["parked","Parked"]];
 const KINDS = { idea:"💡 Idea", campaign:"📣 Campaign", task:"✅ Task", question:"❓ Question", list:"📋 List" };
-const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], f:{ when:"30", brevo:"all", back:"all", q:"" } };
+const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], own:null, f:{ when:"30", brevo:"all", back:"all", q:"" } };
 
 async function load(){
   const jobs = [sb.from("mkt_ideas").select("*").eq("tab", TAB).eq("off", false).order("created_at"),
@@ -130,6 +130,7 @@ async function load(){
     for(let from = 0; from < 20000; from += 1000){ const r = await sb.from("mkt_rr").select("*").order("contact_id").range(from, from + 999);
       if(r.error) return r; all = all.concat(r.data || []); if((r.data || []).length < 1000) break; }
     return { data:all.sort((a, b) => String(a.send_on).localeCompare(String(b.send_on))) }; })());
+  if(TAB === "owners") jobs.push(Promise.resolve(null), loadOwners());
   const [i, r, cp, dr, rr] = await Promise.all(jobs);
   if(i.error) throw i.error;
   S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
@@ -137,8 +138,9 @@ async function load(){
 }
 
 function render(){
-  const h = [`<h1>${esc(TABS[TAB])}</h1>`];
+  const h = [`<h1>${esc(TABS[TAB])}</h1>`, statsHtml()];
   if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(top, campsHtml(), "<h2>Guests</h2>" + list); }   // campaigns above the long guest list
+  else if(TAB === "owners") h.push(ownersHtml(), campsHtml());
   else h.push(campsHtml());
   h.push(listsHtml(), boardHtml());
   $("#app").innerHTML = h.join("");
@@ -244,6 +246,67 @@ function ideaDialog(x){
     if(r.error){ $("#err", d).textContent = "Couldn't save: " + r.error.message; return; }
     d.close(); await refresh();
   };
+}
+
+/* ---------- quick stats for this tab's emails (Brandon 2026-10-29: "results and quick stats like last sent email") ---------- */
+function statsHtml(){
+  const mine = S.camps.filter(c => campTab(c).includes(TAB)), sent = mine.filter(c => c.status === "sent" && c.sent_at).sort((a, b) => b.sent_at.localeCompare(a.sent_at));
+  const next = mine.filter(c => (c.status === "scheduled" || c.status === "queued") && c.scheduled_at).sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
+  if(!sent.length && !next) return "";
+  const last = sent[0], st = c => c.stats || {}, del = c => st(c).delivered || st(c).sent || 0;
+  const d90 = new Date(Date.now() - 90 * 864e5).toISOString(), d180 = new Date(Date.now() - 180 * 864e5).toISOString();
+  const recent = sent.filter(c => c.sent_at >= d90), prev = sent.filter(c => c.sent_at < d90 && c.sent_at >= d180);
+  const sum = (a, f) => a.reduce((n, c) => n + (+f(c) || 0), 0), D = sum(recent, del), PD = sum(prev, del);
+  const rate = (a, k, dd) => dd ? sum(a, c => st(c)[k]) / dd : null, fmtR = v => v == null ? "—" : Math.round(v * 1000) / 10 + "%";
+  const trend = (now, before) => now == null || before == null ? "" : now > before ? `<span class="pill green">▲ vs ${fmtR(before)}</span>` : now < before ? `<span class="pill amber">▼ vs ${fmtR(before)}</span>` : "";
+  const o = rate(recent, "uniqueViews", D), cl = rate(recent, "uniqueClicks", D), un = rate(recent, "unsubscriptions", D);
+  return `<div class="kpis">
+    ${last ? `<div class="kpi" style="grid-column:span 2"><small>Last email sent · ${esc(fmtDT(last.sent_at))}</small><b style="font-size:16px">${esc(last.name)}</b>
+      <small>${(st(last).sent || 0).toLocaleString()} sent · ${pct(st(last).uniqueViews || 0, del(last))} opened · ${pct(st(last).uniqueClicks || 0, del(last))} clicked · ${st(last).unsubscriptions || 0} unsubscribed</small></div>` : ""}
+    <div class="kpi"><small>Next scheduled</small><b style="font-size:16px">${next ? esc(fmtDT(next.scheduled_at)) : "Nothing"}</b><small>${next ? esc(next.name) : "Schedule in Brevo"}</small></div>
+    <div class="kpi"><small>Emails sent, last 90 days</small><b>${recent.length}</b><small>${D.toLocaleString()} delivered</small></div>
+    <div class="kpi"><small>Opened (90 days)</small><b>${fmtR(o)}</b><small>${trend(o, rate(prev, "uniqueViews", PD)) || "unique opens ÷ delivered"}</small></div>
+    <div class="kpi"><small>Clicked (90 days)</small><b>${fmtR(cl)}</b><small>${trend(cl, rate(prev, "uniqueClicks", PD)) || "unique clicks ÷ delivered"}</small></div>
+    <div class="kpi"><small>Unsubscribed (90 days)</small><b>${fmtR(un)}</b><small>${sum(recent, c => st(c).unsubscriptions)} people</small></div>
+  </div>
+  <p class="src">Emails sent to ${esc(TABS[TAB])} lists in Brevo. ▲▼ compare with the 90 days before. Apple Mail privacy makes opens look higher than they are; clicks are the surer sign.</p>`;
+}
+
+/* ---------- Owners tab: list check (mkt_owner_check.py), owners in town (feeds/owner-stays), owners coming and going (Property Set Up) ---------- */
+async function loadOwners(){
+  const [chk, stays, psu] = await Promise.all([
+    sb.from("mkt_owner_check").select("ran_at,summary").order("ran_at", { ascending:false }).limit(1),
+    sb.from("desk_docs").select("data").eq("collection", "feeds").eq("id", "owner-stays").maybeSingle(),
+    sb.from("pd_docs").select("id,code:data->>code,kind:data->>kind").eq("collection", "jobs")]);
+  S.own = { chk:(chk.data || [])[0] || null, stays:stays.error ? null : (stays.data && stays.data.data) || null, psu:psu.error ? null : psu.data || [] };
+}
+function ownersHtml(){
+  const O = S.own || {}, c = O.chk && O.chk.summary, out = [];
+  if(c){ const codes = a => (a || []).length ? `<div class="muted" style="margin-top:4px">${a.map(esc).join(" · ")}</div>` : "";
+    const card = (n, t, sub, a, tone) => `<div class="kpi"><small>${t}</small><b ${tone ? `style="color:var(--${tone})"` : ""}>${n}</b><small>${sub}</small>${codes(a)}</div>`;
+    out.push(`<h2>Owner list check</h2><p class="muted">Are the owners of our ${c.active_homes} active homes on the right Brevo list, so they get owner emails?</p>
+    <div class="kpis">
+      ${card(c.missing.length, "Not on any current owner list", "homes whose Track owner isn't on Current Short Term, Lease or 2nd Home", c.missing, c.missing.length ? "amber" : "")}
+      ${card(c.unsubscribed.length, "Owner unsubscribed", "they won't get owner emails from Brevo", c.unsubscribed, c.unsubscribed.length ? "red" : "")}
+      ${card(c.wrong_list.length, "On a different owner list", "e.g. a lease home's owner on the short-term list", c.wrong_list)}
+      ${card(c.also_previous.length, "Also on Previous Owners", "a current owner still on the Previous Owners list", c.also_previous)}
+      ${card(c.no_owner_email.length, "No owner email in Track", "add one in Track", c.no_owner_email)}
+      ${card(c.on_current_not_owner, "On a current list, not an owner now", "contacts that match no active home's Track owner: co-owners, old emails or former owners")}
+    </div>
+    <p class="src">Source: Track owners of active homes vs Brevo owner lists, compared without keeping emails (mkt_owner_check.py), ${esc(fmtDT(O.chk.ran_at))}. Fix the lists in Brevo; the hub doesn't change them.</p>`); }
+  if(O.stays && O.stays.units){ const t = today(), end = new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+    const rows = []; Object.entries(O.stays.units).forEach(([home, a]) => (a || []).forEach(x => { if(x.out >= t && x.in <= end) rows.push(Object.assign({ home }, x)); }));
+    rows.sort((a, b) => a.in.localeCompare(b.in));
+    out.push(`<h2>Owners in town (next 30 days)</h2>${rows.length ? `<div class="box"><table><thead><tr><th>Home</th><th>Who</th><th>Stay</th><th>Type</th></tr></thead><tbody>
+      ${rows.map(x => `<tr><td><b>${esc(x.home)}</b></td><td>${esc(x.who || "")}</td><td>${esc(fmtD(x.in))} – ${esc(fmtD(x.out))}</td><td>${esc(x.label || "")}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="muted">No owner stays in the next 30 days.</p>`}
+    <p class="src">Source: Track owner stays (feeds/owner-stays). A good time for a hello, a welcome gift or a quick walk-through.</p>`); }
+  if(O.psu && O.psu.length){ const K = { str:"New homes being set up", h2:"New 2nd-home owners", off:"Leaving us", sale:"Home sales" };
+    const by = {}; O.psu.forEach(j => (by[j.kind] = by[j.kind] || []).push(j));
+    out.push(`<h2>Owners coming and going</h2><div class="kpis">${Object.keys(K).filter(k => by[k]).map(k => `<div class="kpi"><small>${K[k]}</small><b>${by[k].length}</b>
+      <div class="muted" style="margin-top:4px">${by[k].map(j => esc(j.code || "?")).join(" · ")}</div></div>`).join("")}</div>
+    <p class="src">Source: Property Set Up jobs. Ideas: a welcome email for new owners; move owners who leave to the Previous Owners list in Brevo.</p>`); }
+  return out.join("");
 }
 
 /* ---------- Brevo email campaigns (mkt_campaigns, read by mkt_brevo_sync.py) + hub drafts (mkt_drafts) ---------- */
