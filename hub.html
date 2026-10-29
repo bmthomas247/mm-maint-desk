@@ -253,6 +253,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="meetings.js"></script>
 <script src="calendar.js"></script>
 <script src="checks.js"></script>
+<script src="calls.js"></script>
 <script src="signals.js"></script>
 <script>
 const C = window.MM_CONFIG;
@@ -482,7 +483,7 @@ function shell(){
   const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_recalls:"Recalls" } },
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
-                   guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", guest_reviews:"Reviews" } },
+                   guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", guest_reviews:"Reviews", call_review:"Call review" } },
                    adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest" } },   // Brandon 2026-10-28
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
@@ -628,6 +629,7 @@ function route(){
   if(d && /^cal_(res|office|me|meet|off)$/.test(k) && window.calView) return calView(v, k);   // calendar.js (2026-10-29)
   if(d && /^meet_(or|bd|kd|beyond|mgr|fd|track|trackmk)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
   if(d && (k === "reviews" || k === "guest_reviews") && d.status === "live" && window.reviewsDesk) return reviewsDesk(v);   // analytics.js reviews report (Brandon 2026-10-29)
+  if(d && k === "call_review" && d.status === "live" && window.callsView) return callsView(v);   // calls.js: Track Pulse calls + transcripts (Brandon 2026-10-29); data RLS hub_can('call_review')
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
@@ -975,7 +977,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","sync","advertising"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], meet:["Meetings","people"], cal:["Calendar","calendar"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
