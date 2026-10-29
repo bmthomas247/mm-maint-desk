@@ -125,7 +125,10 @@ async function load(){
                 sb.from("mkt_runs").select("ran_at,summary").order("ran_at", { ascending:false }).limit(1),
                 sb.from("mkt_campaigns").select("brevo_id,name,subject,status,list_ids,list_names,created_at,scheduled_at,sent_at,stats,draft_id,gone,synced_at").order("created_at", { ascending:false }).limit(500),
                 sb.from("mkt_drafts").select("id,tab,name,subject,preview_text,list_ids,design,status,brevo_id,brevo_note,pushed_at,created_name,created_at,updated_name,updated_at").eq("off", false).order("updated_at", { ascending:false })];
-  if(TAB === "guest") jobs.push(sb.from("mkt_rr").select("*").order("send_on").limit(5000));
+  if(TAB === "guest") jobs.push((async () => { let all = [];   // the API returns at most 1,000 rows per request, so read in pages
+    for(let from = 0; from < 20000; from += 1000){ const r = await sb.from("mkt_rr").select("*").order("contact_id").range(from, from + 999);
+      if(r.error) return r; all = all.concat(r.data || []); if((r.data || []).length < 1000) break; }
+    return { data:all.sort((a, b) => String(a.send_on).localeCompare(String(b.send_on))) }; })());
   const [i, r, cp, dr, rr] = await Promise.all(jobs);
   if(i.error) throw i.error;
   S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
