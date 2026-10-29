@@ -195,8 +195,8 @@ details.acc[open]>summary{margin-bottom:6px}
   background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;border-radius:999px;padding:8px 16px 8px 8px;font:inherit;font-weight:800;font-size:15px;box-shadow:0 6px 20px rgba(20,40,25,.3)}
 #pennyBtn .pav,.pmsg .pav{width:38px;height:38px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-size:20px;flex:none}
 #pennyBtn:hover{filter:brightness(1.08)}
-#pennyHi{position:fixed;right:18px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:50;max-width:300px;background:var(--card);border:1px solid var(--line);border-radius:18px 18px 4px 18px;box-shadow:var(--shadow);padding:12px 14px;font-size:15px;display:none}
-#pennyHi.on{display:block} #pennyHi .phimg{float:left;height:110px;margin:-4px 8px 0 -6px;border-radius:12px}
+#pennyHi,#pennyNudge{position:fixed;right:18px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:50;max-width:300px;background:var(--card);border:1px solid var(--line);border-radius:18px 18px 4px 18px;box-shadow:var(--shadow);padding:12px 14px;font-size:15px;display:none}
+#pennyHi.on,#pennyNudge.on{display:block} #pennyNudge .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} #pennyNudge .chips button{border:1px solid var(--line-2);background:var(--card);border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer} #pennyNudge .x{position:absolute;top:6px;right:8px;border:0;background:none;cursor:pointer;color:var(--muted);font-size:14px} #pennyNudge b{display:block;margin-bottom:4px} #pennyHi .phimg{float:left;height:110px;margin:-4px 8px 0 -6px;border-radius:12px}
 #pennyBtn .pav img,.pmsg .pav img,#pennyBox .ph .pav img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 #pennyBtn .pav,.pmsg .pav{overflow:hidden;background:#eef5e0} #pennyHi b{display:block;margin-bottom:4px} #pennyHi .x{position:absolute;top:6px;right:8px;border:0;background:none;cursor:pointer;color:var(--muted);font-size:14px}
 #pennyHi .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} #pennyHi .chips button{border:1px solid var(--line-2);background:var(--card);border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
@@ -288,7 +288,7 @@ let ME = null, DESKS = [], PREFS = { desk_order:[], interests:[], kinds:[] };
 
 /* ---------- sign in (same accounts as Moose Locks and the Maintenance site) */
 function loginView(msg){
-  document.querySelectorAll("#pennyBtn,#pennyHi,#pennyBox").forEach(e => e.remove());
+  document.querySelectorAll("#pennyBtn,#pennyHi,#pennyNudge,#pennyBox").forEach(e => e.remove());
   app.innerHTML = `<div class="login"><div class="logo"><img src="moose-logo.png" alt="Moose Management"></div><h2>Moose Hub</h2>
     <p class="muted">Same sign-in as Moose Locks.</p>
     <label class="field"><span>Email</span><input type="email" id="em" autocomplete="username"></label>
@@ -1122,6 +1122,7 @@ async function homeView(v){
       <div id="wxbody"><p class="muted">Loading…</p></div></div></div>
     <div id="bdays"></div>
     <div id="chk"></div>
+    <div id="ptips"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
     ${DESKS.some(x => x.key === "cal_me") ? `<div class="card" id="mywk"><b style="font-size:17px">🗓️ Your week</b><p class="muted">Loading…</p></div>` : ""}
@@ -1136,7 +1137,7 @@ async function homeView(v){
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
   if(window.calHomeCard && $("#mywk")) calHomeCard($("#mywk"));   // calendar.js (2026-10-29)
-  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello();
+  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello(); pennyTips($("#ptips"));
   if(window.checksHome) checksHome($("#chk"));   // checks.js: my checks + issues warning (Brandon 2026-10-29)
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
@@ -1373,6 +1374,42 @@ async function pennyAsk(q){
     el.querySelector(".bub").after(box); $("#pennyLog").scrollTop = 1e9; }
   PENNY.hist.push({ role:"user", text:q }, { role:"assistant", text:a }); PENNY.hist = PENNY.hist.slice(-8);
 }
+/* Penny's coaching tips (Brandon 2026-10-29: "she'll remind Jeff … now's the time to call that owner"). penny_tips.py finds them;
+   each person reads only their own (RLS). Done / 👍 / 👎 / Hide are saved, and that's how Penny learns which tips help. */
+async function pennyTips(box){
+  if(!box) return;
+  const r = await sb.from("penny_tips").select("id, title, body, source, link, due").eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(8);
+  const T = r.data || []; if(!T.length){ box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="card"><div class="shead"><b style="font-size:17px">🦌 Penny's tips for you</b><span class="muted" style="margin-left:auto">${T.length}</span></div>
+    ${T.map(t => `<div class="fb" data-tip="${t.id}"><div class="hd"><b>${esc(t.title)}</b></div><p style="margin:4px 0">${esc(t.body)}</p>
+      <p class="muted" style="font-size:12px;margin:0 0 6px">Source: ${esc(t.source)}</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${t.link ? `<a class="btn small" href="${esc(t.link)}">Open</a>` : ""}<button class="btn small" data-ask="${t.id}">Ask Penny about it</button>
+        <button class="btn small" data-mk="done">✓ Done</button><button class="btn small" data-mk="useful" title="This tip helped">👍</button><button class="btn small" data-mk="not_useful" title="Not useful">👎</button><button class="btn small" data-mk="dismissed">Hide</button></div></div>`).join("")}</div>`;
+  box.querySelectorAll("[data-mk]").forEach(b => b.onclick = async () => { const row = b.closest("[data-tip]");
+    const x = await sb.rpc("penny_tip_mark", { p_id:+row.dataset.tip, p_status:b.dataset.mk });
+    if(!x.error) row.innerHTML = `<p class="muted" style="margin:0">${{ done:"Marked done ✓", useful:"Thanks, that helps Penny learn 👍", not_useful:"Got it, Penny will learn from that 👎", dismissed:"Hidden" }[b.dataset.mk]}</p>`; });
+  box.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => { const t = T.find(x => x.id === +b.dataset.ask); pennyOpen(true); pennyAsk("Help me with this tip: " + t.title + ". What should I do, step by step?"); });
+}
+/* On a stay's check list, Penny pops in with what's left to finish it (reservations.js window.resCtx(res).left). Once a day per stay. */
+function pennyNudge(){
+  const el = document.getElementById("pennyNudge"); if(el) el.classList.remove("on");
+  if(current() !== "reservations" || !/^\d+$/.test(hashArg()) || typeof window.resCtx !== "function") return;
+  const res = hashArg();
+  setTimeout(() => {
+    if(current() !== "reservations" || hashArg() !== res || PENNY.open) return;
+    const c = window.resCtx(res) || {}, left = c.left || [];
+    if(!left.length && !(c.heads || []).length) return;
+    const k = "penny_nudge_" + res + "_" + new Date().toDateString(); try { if(localStorage.getItem(k)) return; localStorage.setItem(k, "1"); } catch(e){}
+    let n = document.getElementById("pennyNudge");
+    if(!n){ document.body.insertAdjacentHTML("beforeend", `<div id="pennyNudge" role="status"></div>`); n = document.getElementById("pennyNudge"); }
+    n.innerHTML = `<button class="x" aria-label="Close">✕</button><b>Penny here 👋</b>${(c.heads || []).length ? `⚠️ Heads-up on ${esc(c.home || "this home")} before you book. ` : ""}${left.length ? `${left.length} step${left.length > 1 ? "s" : ""} left on this check list${(c.blockers || []).length ? `, held up by ${esc(c.blockers.join(", "))}` : ""}.` : ""}
+      <div class="chips"><button data-go="1">Walk me through it</button><button data-go="0">Not now</button></div>`;
+    n.classList.add("on");
+    n.querySelector(".x").onclick = () => n.classList.remove("on");
+    n.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { n.classList.remove("on"); if(b.dataset.go === "1"){ pennyOpen(true); pennyAsk("What do I still need to do to finish this check list? Walk me through it step by step."); } });
+  }, 1800);
+}
+window.addEventListener("hashchange", () => setTimeout(pennyNudge, 300));
 function pennyHello(){ // Home: Penny pops up once a day asking what she can help with
   const k = "penny_hi_" + new Date().toDateString(); let seen = null; try { seen = localStorage.getItem(k); } catch(e){}
   if(seen || PENNY.open) return; setTimeout(() => { if(current() === "home" && !PENNY.open) $("#pennyHi").classList.add("on"); }, 900);
