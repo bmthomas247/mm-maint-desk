@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Launch Pad code</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Property Set Up ▸ Launch Pad code (Brandon 2026-10-29: Jeff updates the page with code himself, from his own Claude).
+     Only pd_role() = 'admin' (Jeff, Brandon, Kim) can read or use it: psu_app_versions RLS + psu_save_draft / psu_publish (hub_psu_dev.sql).
+     Not in the sidebar on purpose; the Launch Pad links here for those three only. Every upload is kept; publishing an older one = roll back. -->
+<style>
+:root{--forest:#3c5f12;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;
+  --amber:#b5770a;--amber-soft:#fbf0d9;--red:#c8382b;--red-soft:#fbe7e4;--green:#3a7d44;--green-soft:#e6f1ea;--radius:16px;
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;--amber-soft:#33270c;--green-soft:#16301f;--red-soft:#3a1714}}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding:18px 16px 40px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 8px}.muted{color:var(--muted)}.small{font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:40px;padding:0 14px;font:inherit;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn.sm{min-height:32px;padding:0 10px;font-size:13px;border-radius:9px}.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+textarea,input[type=text]{width:100%;font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
+.drop{border:2px dashed var(--line-2);border-radius:12px;padding:18px;text-align:center;cursor:pointer}.drop.on{border-color:var(--forest);background:var(--green-soft)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.pill{font-size:12px;font-weight:800;padding:2px 8px;border-radius:999px;background:var(--green-soft);color:var(--green)}
+.ok{color:var(--green);font-weight:700}.bad{color:var(--red);font-weight:700}.warn{background:var(--amber-soft);border-color:#ecd9b6}
+ol.how li{margin:4px 0}
+code{background:var(--ground);border:1px solid var(--line);border-radius:6px;padding:0 4px;font-size:13px}
+</style>
+</head><body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const when = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const S = { me:null, live:null, rows:[], up:null, msg:"" };
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/property_setup" target="_top">Go to the Moose Hub →</a></p>`; return; }
+  S.me = ((await sb.rpc("pd_identity")).data || [])[0];
+  if(!S.me || S.me.pd_role !== "admin"){ $("#app").innerHTML = `<h1>No access</h1><p class="muted">Ask Brandon or Kim.</p>`; return; }
+  await load();
+}
+async function load(){
+  const [a, v] = await Promise.all([sb.from("pd_app").select("version,updated_at").eq("name","desk").maybeSingle(),
+    sb.from("psu_app_versions").select("id,note,made_by,made_at,bytes,sha,published_at,published_by").order("id", { ascending:false })]);
+  S.live = a.data || {}; S.rows = v.data || [];
+  draw();
+}
+const liveId = () => +(String(S.live.version || "").match(/^v(\d+)$/) || [0, 1])[1];
+function draw(){
+  const lid = liveId(), U = S.up;
+  $("#app").innerHTML = `<h1>Launch Pad code</h1>
+    <p class="muted small">Only Jeff, Brandon and Kim see this page. Live now: <b>version ${lid}</b> (since ${esc(when(S.live.updated_at))}). Every upload is kept, so you can always go back.</p>
+    <div class="card"><h2>How to change the Launch Pad</h2><ol class="how small">
+      <li><b>Download the live code</b> and give it to Claude with what you want changed.</li>
+      <li>Claude edits the file and checks it (all <code>&lt;script&gt;</code> parts must still run; keep job ids, step ids and dotted sub-step keys the same so old ticks carry over).</li>
+      <li><b>Upload</b> the new file here with a short note, then <b>Preview</b> it. The preview uses the real data, so ticks you make there are real.</li>
+      <li>Looks right? <b>Publish</b>. Everyone gets it the next time they open Launch Pad. Something wrong? Publish the version before it.</li>
+      <li>Don't publish on a Thursday before the managers meeting.</li></ol>
+      <div class="row"><button class="btn" id="dl">Download the live code (version ${lid})</button></div></div>
+    <div class="card"><h2>Upload a new version</h2>
+      <div class="drop" id="drop"><b>Drop the new board file here</b> or click to pick (.html)<input type="file" id="pick" accept=".html,.htm,.txt" hidden></div>
+      ${U ? `<p class="small"><b>${esc(U.name)}</b> · ${(U.html.length / 1024).toFixed(0)} KB${U.stripped ? " · page wrapper removed (kept only what's inside &lt;body&gt;)" : ""}</p>
+        <ul class="small">${U.checks.map(c => `<li class="${c[0] ? "ok" : "bad"}">${c[0] ? "✓" : "✗"} ${esc(c[1])}</li>`).join("")}</ul>
+        <label class="small" style="font-weight:800">What changed?</label><input type="text" id="note" placeholder="e.g. Checklist trim: 95 → 60 steps on STR (Jeff's plan of Oct 29)">
+        <div class="row" style="margin-top:10px"><button class="btn pri" id="save" ${U.checks.every(c => c[0]) ? "" : "disabled"}>Save as a new version</button>
+          ${U.checks.every(c => c[0]) ? "" : `<span class="bad small">Fix the ✗ items first.</span>`}</div>` : ""}
+      ${S.msg ? `<p class="small">${S.msg}</p>` : ""}</div>
+    <div class="card"><h2>Versions</h2><table><thead><tr><th>#</th><th>What changed</th><th>Saved</th><th>Size</th><th></th></tr></thead><tbody>
+      ${S.rows.map(r => `<tr><td><b>${r.id}</b> ${r.id === lid ? `<span class="pill">live</span>` : ""}</td><td>${esc(r.note)}${r.published_at ? `<div class="muted small">published ${esc(when(r.published_at))} by ${esc(r.published_by)}</div>` : ""}</td>
+        <td class="small">${esc(when(r.made_at))}<br><span class="muted">${esc(r.made_by)}</span></td><td class="small">${Math.round(r.bytes / 1024)} KB</td>
+        <td><div class="row"><a class="btn sm" href="psu.html?v=${r.id}" target="_blank" rel="noopener">Preview</a><button class="btn sm" data-get="${r.id}">Download</button>
+          ${r.id === lid ? "" : `<button class="btn sm pri" data-pub="${r.id}">${r.id < lid ? "Roll back to this" : "Publish"}</button>`}</div></td></tr>`).join("")}
+    </tbody></table></div>`;
+  $("#dl").onclick = () => get(lid);
+  document.querySelectorAll("[data-get]").forEach(b => b.onclick = () => get(+b.dataset.get));
+  document.querySelectorAll("[data-pub]").forEach(b => b.onclick = () => publish(+b.dataset.pub));
+  const drop = $("#drop"), pick = $("#pick");
+  drop.onclick = () => pick.click(); pick.onchange = () => pick.files[0] && take(pick.files[0]);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("on"); }; drop.ondragleave = () => drop.classList.remove("on");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("on"); e.dataTransfer.files[0] && take(e.dataTransfer.files[0]); };
+  const sv = $("#save"); if(sv) sv.onclick = save;
+}
+async function get(id){
+  const r = await sb.from("psu_app_versions").select("html").eq("id", id).maybeSingle();
+  if(!r.data) return;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([r.data.html], { type:"text/html" }));
+  a.download = `launch-pad-v${id}.html`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+// same checks the database makes (psu_save_draft), plus: every script still parses
+async function take(file){
+  let html = await file.text(), stripped = false;
+  const m = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  if(m){ html = m[1].trim(); stripped = true; }
+  const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(x => x[1]);
+  const bad = scripts.map((s, i) => { try { new Function(s); return null; } catch(e){ return `script ${i + 1}: ${e.message}`; } }).filter(Boolean);
+  const checks = [
+    [/<header class="top"/.test(html) && /claude\.use\("db"\)/.test(html), "It's the Launch Pad board (board header + window.claude.use(\"db\"))"],
+    [!/<(html|head)[\s>]|<!doctype/i.test(html), "Only what's inside <body> (no <html>, <head> or doctype)"],
+    [scripts.length > 0 && !bad.length, scripts.length ? (bad.length ? "Code error — " + bad[0] : `All ${scripts.length} script blocks parse`) : "No script blocks found"],
+    [html.length < 3000000, "Under 3 MB"]];
+  S.up = { name:file.name, html, stripped, checks }; S.msg = ""; draw();
+}
+async function save(){
+  const note = ($("#note").value || "").trim();
+  if(!note){ $("#note").focus(); return; }
+  const r = await sb.rpc("psu_save_draft", { p_html:S.up.html, p_note:note });
+  if(r.error){ S.msg = `<span class="bad">${esc(r.error.message)}</span>`; draw(); return; }
+  S.up = null; S.msg = `<span class="ok">Saved as version ${r.data}.</span> <a class="btn sm" href="psu.html?v=${r.data}" target="_blank" rel="noopener">Preview it</a> then Publish below.`;
+  await load();
+}
+async function publish(id){
+  const lid = liveId();
+  if(!confirm(id < lid ? `Roll back: make version ${id} live for everyone?` : `Publish version ${id} to everyone on Property Set Up?`)) return;
+  const r = await sb.rpc("psu_publish", { p_id:id });
+  S.msg = r.error ? `<span class="bad">${esc(r.error.message)}</span>` : `<span class="ok">Version ${id} is live.</span>`;
+  await load();
+}
+boot().catch(e => { $("#app").innerHTML = `<h1>Something went wrong</h1><p>${esc(e && e.message || e)}</p>`; });
+</script>
+</body></html>
