@@ -48,7 +48,7 @@ body.only #meetbtn,body.only #newjob,body.only #helpbtn,body.only a[href="locks-
 body.only nav.sect{display:none!important}
 body.only main#view{margin-top:16px}
 /* inside the hub frame: the hub sidebar handles moving between desks and signing out */
-body.inhub a[href="locks-desk.html"],body.inhub #mm_signout,body.inhub a[title="Phone view"]{display:none!important}
+body.inhub a[href="locks-desk.html"],body.inhub #mm_signout,body.inhub a[title="Phone view"],body.inhub label.who{display:none!important}
 /* Property Details quick view (2026-10-28): owner, Wi-Fi, codes at the top of each home */
 .block.quick{background:var(--accent-soft);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 .qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
