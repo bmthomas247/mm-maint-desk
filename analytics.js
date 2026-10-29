@@ -791,21 +791,28 @@ window.peopleScoresView = async function(v){ css();
     office:{ t:"Office", who:"Office & front desk", cols:[{ k:"steps", t:"Check list steps", f:x => n1(x.metrics.steps) + ix(x, "steps") }, { k:"fd_resolved", t:"Freshdesk resolved", f:x => n1(x.metrics.fd_resolved) + ix(x, "fd_resolved") },
       { k:"fd_handled", t:"Freshdesk handled" }, { k:"fd_first_hrs", t:"First reply (median hrs)", f:x => n1(x.metrics.fd_first_hrs) + ix(x, "fd_first_hrs") }, { k:"rv", t:"Named in reviews", f:rv }],
       how:"Check list steps = Reservation check list steps they ticked (including ticks carried over from Asana). Freshdesk = tickets assigned to them, how many are resolved, and the median hours to the first reply (lower is better). Roles differ, so compare people who do the same job. Owners (hub admins) aren't rated." },
-    cleaner:{ t:"Cleaners", who:"Cleaning crews (everyone assigned to the clean in Breezeway)", cols:[{ k:"cleans", t:"Cleans done" }, { k:"reviewed", t:"Reviewed stays" },
+    cleaner:{ t:"Cleaners", who:ME.admin ? "Cleaning crews (everyone assigned to the clean in Breezeway)" : "In-house cleaning crews", cols:[{ k:"cleans", t:"Cleans done" }, { k:"reviewed", t:"Reviewed stays" },
       { k:"clean_stars", t:"Cleanliness ★", f:x => n1(x.metrics.clean_stars) + ix(x, "clean_stars") }, { k:"dirty_share", t:"Cleaning complaints", f:x => pc(x.metrics.dirty_share) + ix(x, "dirty_share") }],
       how:"Each guest review is tied to the last finished clean at that home in the 14 days before check-in. Cleanliness ★ = the guest's cleanliness category stars. Cleaning complaints = reviews of 4★ or less that mention dirt, hair, stains, smells or bugs (lower is better). HK manager pre/post checks and assessments don't count as cleans." },
     vendor:{ t:"Vendors", who:"Vendors named on jobs", cols:[{ k:"jobs", t:"Jobs" }, { k:"done", t:"Done" }, { k:"days", t:"Days to finish (median)", f:x => n1(x.metrics.days) + ix(x, "days") },
       { k:"cost", t:"Cost on jobs", f:x => x.metrics.cost ? usd(x.metrics.cost) : "—" }],
-      how:"Jobs = Breezeway, Asana, Freshdesk and Slack jobs that name the vendor. Days to finish = opened to done (lower is better). Cost = the cost on those jobs where one is recorded." } };
-  const g = G[grp] ? grp : "tech", D = G[g], rows = ALL.filter(x => x.grp === g && x.period === per);
-  v.innerHTML = `<div class="page wide">${back}<h2>Team & vendor ratings</h2>
-    <p class="muted">Each person is compared with their own group. <b>100 = the group's average</b> for the period; the small numbers are each measure's index. A score needs enough data, and numbers can't see everything (training, special jobs, time off), so read the notes and talk to the person before acting. Only admins can see this page.</p>
+      how:"Jobs = Breezeway, Asana, Freshdesk and Slack jobs that name the vendor. Days to finish = opened to done (lower is better). Cost = the cost on those jobs where one is recorded." },
+    gps:{ t:"GPS check", who:"Hubstaff GPS by tech", cols:[],
+      how:"From Hubstaff: paid hours per day and GPS stops of 5+ minutes, matched to one of our homes within 150 m. No GPS = 2+ paid hours and no stop at all (tracking off, phone off or no signal). Low GPS = stops cover under a quarter of paid hours (lots of driving, or GPS gaps). Long stop away = 90+ minutes stopped somewhere that isn't one of our homes (lunch, the shop and supply runs count here too). Task without a visit = a Breezeway task they finished that day at a home where GPS never stopped (it may have been closed from elsewhere, or the stop was under 5 minutes); only checked on days GPS worked. Times are as Hubstaff records them. Flags are things to look at, not proof." } };
+  // tabs: admins all; maintenance managers Techs + GPS check; housekeeping managers in-house Cleaners (hub_people_scope(), RLS enforces it)
+  const sc = await sb.rpc("hub_people_scope"), scope = (sc.data || []);
+  Object.keys(G).forEach(k => { if(!scope.includes(k)) delete G[k]; });
+  if(!Object.keys(G).length){ location.replace("#/home"); return; }
+  const g = G[grp] ? grp : Object.keys(G)[0], D = G[g], rows = ALL.filter(x => x.grp === g && x.period === per);
+  v.innerHTML = `<div class="page wide">${back}<h2>${ME.admin ? "Team & vendor ratings" : "Team ratings"}</h2>
+    <p class="muted">Each person is compared with their own group. <b>100 = the group's average</b> for the period; the small numbers are each measure's index. A score needs enough data, and numbers can't see everything (training, special jobs, time off), so read the notes and talk to the person before acting.${ME.admin ? " Admins see every tab; Chris (maintenance) sees Techs and GPS check, Cheree (housekeeping) sees in-house cleaners." : ""}</p>
     <div class="anbar">${Object.entries(G).map(([k, x]) => `<a class="btn small${k === g ? " primary" : ""}" href="#/people_scores/${k}">${esc(x.t)}</a>`).join("")}
       <select id="psp" style="margin-left:auto"><option value="30d">Last 30 days</option><option value="90d">Last 90 days</option><option value="365d">Last 12 months</option></select></div>
     <div id="psk"></div><h3 class="anh3">${esc(D.who)}</h3><div id="pst"></div><div id="psn"></div>
     <p class="ansrc"><b>How it's worked out:</b> ${esc(D.how)} Score = the average of the indexes (each capped 30–170). Sources: ${esc((rows[0] || {}).source || "")}. Updated ${asOf ? esc(dt(asOf + "T12:00")) : "—"} by people_scores.py (nightly).</p></div>`;
   $("#psp").value = per; $("#psp").onchange = () => { try { localStorage.setItem("ps_per", $("#psp").value); } catch(e){} peopleScoresView(v); };
-  const rated = rows.filter(x => x.score != null), above = rated.filter(x => x.score >= 110).length, below = rated.filter(x => x.score < 90).length;
+  if(g === "gps") return gpsCheck(rows, pc);
+  const rated =rows.filter(x => x.score != null), above = rated.filter(x => x.score >= 110).length, below = rated.filter(x => x.score < 90).length;
   $("#psk").innerHTML = `<div class="ankpi"><div class="card"><small>Rated</small><b>${rated.length}</b><small>of ${rows.length} with any data</small></div>
     <div class="card"><small>Above the group (110+)</small><b>${above}</b></div><div class="card"><small>Below the group (under 90)</small><b>${below}</b></div></div>`;
   const pill = s => s == null ? `<span class="muted">not enough data</span>` : `<b>${s}</b> <span class="pill ${s >= 110 ? "green" : s < 90 ? "amber" : ""}">${s >= 110 ? "Above" : s < 90 ? "Below" : "On par"}</span>`;
@@ -818,4 +825,31 @@ window.peopleScoresView = async function(v){ css();
   $("#psn").innerHTML = noted.length ? `<h3 class="anh3">Notes</h3>` + noted.map(x => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><b>${esc(x.person)}</b>
       <ul style="margin:4px 0 0;padding-left:18px">${x.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>`).join("") : "";
 };
+
+/* GPS check tab (Brandon 2026-10-29): per tech summary + their days, flagged days first. Rows: hub_people_scores grp 'gps'
+   (people_scores.py gps(); metrics.daylist = one entry per day). No score — flags are things to look at. */
+const FLAG = { no_gps:["No GPS", "red"], low_gps:["Low GPS", "amber"], long_away:["Long stop away", "amber"], no_visit:["Task without a visit", ""] };
+function gpsCheck(rows, pc){
+  $("#psk").innerHTML = `<div class="ankpi">${[["no_gps_days", "Days with no GPS"], ["low_gps_days", "Days with low GPS"], ["long_away", "Long stops away"], ["no_visit_tasks", "Tasks without a visit"]]
+    .map(([k, t]) => `<div class="card"><small>${t}</small><b>${rows.reduce((a, x) => a + ((x.metrics || {})[k] || 0), 0)}</b><small>all techs</small></div>`).join("")}</div>`;
+  table($("#pst"), [{ k:"person", t:"Tech", l:1, f:x => `<a class="anlink" href="#" data-gp="${esc(x.person)}">${esc(x.person)}</a>` }, { k:"days", t:"Work days", v:x => x.metrics.days, f:x => x.metrics.days },
+    { k:"hours", t:"Paid hrs", v:x => x.metrics.hours, f:x => x.metrics.hours }, { k:"gps_cover", t:"GPS covers", v:x => x.metrics.gps_cover, f:x => pc(x.metrics.gps_cover) },
+    { k:"no_gps_days", t:"No GPS days", v:x => x.metrics.no_gps_days, f:x => x.metrics.no_gps_days || "—" }, { k:"low_gps_days", t:"Low GPS days", v:x => x.metrics.low_gps_days, f:x => x.metrics.low_gps_days || "—" },
+    { k:"long_away", t:"Long stops away", v:x => x.metrics.long_away, f:x => x.metrics.long_away || "—" }, { k:"no_visit_tasks", t:"Tasks without a visit", v:x => x.metrics.no_visit_tasks, f:x => x.metrics.no_visit_tasks || "—" }],
+    rows, "no_gps_days");
+  if(!rows.length){ $("#pst").innerHTML = `<div class="card"><p class="muted">No Hubstaff days in this period.</p></div>`; return; }
+  const draw = (who, all) => { const x = rows.find(r => r.person === who) || rows[0], L = (x.metrics.daylist || []).slice().reverse().filter(d => all || d.flags.length);
+    $("#psn").innerHTML = `<h3 class="anh3">${esc(x.person)} — ${all ? "every day" : "flagged days"} <label style="font-size:13px;font-weight:400;margin-left:10px"><input type="checkbox" id="gpall" style="width:auto;min-height:0" ${all ? "checked" : ""}> Show every day</label></h3>
+      ${(x.notes || []).length ? `<ul style="margin:0 0 8px;padding-left:18px">${x.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
+      <div id="gpd"></div>`;
+    table($("#gpd"), [{ k:"d", t:"Day", l:1, f:d => esc(dt(d.d + "T12:00")) }, { k:"hrs", t:"Paid hrs" }, { k:"stops", t:"GPS stops" }, { k:"stop_hrs", t:"Stopped hrs" },
+      { k:"home_hrs", t:"At our homes" }, { k:"proj_hrs", t:"At project homes" }, { k:"first", t:"First stop", f:d => esc(d.first || "—") }, { k:"last", t:"Last stop ends", f:d => esc(d.last || "—") },
+      { k:"tasks", t:"Tasks done" }, { k:"flags", t:"Flags", l:1, v:d => d.flags.length, f:d => d.flags.map(f => `<span class="pill ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join(" ")
+        + (d.away.length ? ` <small class="muted">away ${d.away.map(a => `${esc(a.from)}–${esc(a.to)}`).join(", ")}</small>` : "")
+        + (d.novisit.length ? ` <small class="muted">no stop at ${d.novisit.map(esc).join(", ")}</small>` : "") }], L, null);
+    if(!L.length) $("#gpd").innerHTML = `<p class="muted">No flagged days in this period.</p>`;
+    $("#gpall").onchange = () => draw(x.person, $("#gpall").checked); };
+  document.querySelectorAll("[data-gp]").forEach(a => a.onclick = e => { e.preventDefault(); draw(a.dataset.gp, false); $("#psn").scrollIntoView(); });
+  draw(rows.slice().sort((a, b) => (b.metrics.no_gps_days + b.metrics.low_gps_days) - (a.metrics.no_gps_days + a.metrics.low_gps_days))[0].person, false);
+}
 })();
