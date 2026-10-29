@@ -460,7 +460,7 @@ async function boot(){
     { key:"cal_office", label:"Calendar · Office", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.2 },
     { key:"cal_me", label:"Calendar · Personal", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.3 },
     { key:"cal_meet", label:"Calendar · Meetings", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.4 },
-    { key:"cal_off", label:"Calendar · Time off", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.5 });   // time off + PTO (2026-10-29)
+    { key:"cal_off", label:"Calendar · Request time off", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.5 });   // time off + PTO (2026-10-29)
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
   PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
@@ -473,7 +473,7 @@ function noAccess(err){
 }
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","pto_reports","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const CALK = ["cal_res","cal_office","cal_me","cal_meet","cal_off"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key) && !CALK.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
@@ -489,7 +489,7 @@ function shell(){
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
                    competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } },   // Brandon 2026-10-28
-                   cal:{ label:"Calendar", icon:"calendar", kids:{ cal_res:"Reservations", cal_office:"Office", cal_me:"Personal", cal_meet:"Meetings", cal_off:"Time off" } } };   // Brandon 2026-10-29: the Meetings drop-down moved into Calendar ▸ Meetings (tiles)
+                   cal:{ label:"Calendar", icon:"calendar", kids:{ cal_res:"Reservations", cal_office:"Office", cal_me:"Personal", cal_meet:"Meetings", cal_off:"Request time off" } } };   // Brandon 2026-10-29: the Meetings drop-down moved into Calendar ▸ Meetings (tiles)
   // Damage claims + Vehicles sit under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; others keep them on their own
   if(DESKS.some(x => x.key === "maintenance")) Object.assign(GROUPS.maint.kids, { damage_claims:"Damage claims", vehicles:"Vehicles", trash:"Trash" });   // crew without Maintenance see Trash on its own
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
@@ -613,6 +613,8 @@ function route(){
   if(k === "calendar" && d){ location.replace("#/cal_res"); return; }   // Calendar is a drop-down (2026-10-29)
   if(k === "reports") return hubReportsView(v);
   if(k === "good_reviews" && window.goodReviewsView){ $("#ttl").textContent = $("#utl").textContent = "Good guest reviews"; return goodReviewsView(v); }   // analytics.js, every hub user (Brandon 2026-10-29)
+  if(k === "pto" || k === "pto_reports"){ if(!(ME.admin || DESKS.some(x => x.key === "pto_reports")) || !window.ptoReport){ location.replace("#/home"); return; }   // PTO reports (2026-10-29)
+    if(k === "pto_reports"){ location.replace("#/pto"); return; } $("#ttl").textContent = $("#utl").textContent = "PTO reports"; return ptoReport(v, hashArg()); }
   if(k === "people_scores" || k === "team_ratings"){ if(!(ME.admin || DESKS.some(x => x.key === "team_ratings")) || !window.peopleScoresView){ location.replace("#/home"); return; }
     if(k === "team_ratings"){ location.replace("#/people_scores"); return; }
     $("#ttl").textContent = $("#utl").textContent = ME.admin ? "Team & vendor ratings" : "Team ratings"; return peopleScoresView(v); }   // admins + maint/HK managers (hub_people_scope); data RLS
@@ -1202,7 +1204,7 @@ async function hubReportsView(v){
   const name = k => k === "g_reviews" ? "Guest reviews" : k === "g_team" ? "Team" : k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
-  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team" };   // Guest reviews section (Brandon 2026-10-29)
+  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team" };   // Guest reviews section (Brandon 2026-10-29)
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = GRP[x.key] || (sb ? sb[0] : x.desk_key); (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => (b === "analytics") - (a === "analytics") || name(a).localeCompare(name(b)));   // Analytics first
   const link = x => x.status === "live"
