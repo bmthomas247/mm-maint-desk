@@ -406,10 +406,12 @@ const THEMES = [
   ["pests", "Pests", /\b(bugs?|ants|mice|mouse|spiders?|flies|cockroach\w*|pests?)\b/i, "Guest experience", false, "Guests mention pests — schedule pest control and check at the next inspection."]];
 const RVCAT = { r_clean:"cleanliness", r_accuracy:"accuracy", r_checkin:"checkin", r_comm:"communication", r_location:"location", r_value:"value" };
 // a mention counts only when its sentence reads as a complaint ("Lots of good cookware" is praise, not a kitchen problem)
-const NEG = /\b(not|no|never|wasn'?t|weren'?t|isn'?t|aren'?t|didn'?t|don'?t|doesn'?t|couldn'?t|could use|could have|should|needs?|needed|missing|lack\w*|only|issues?|problems?|concerns?|however|but|unfortunately|wish|would have|would be nice|uncomfortable|hard|old|broken|dirty|cold|poor|bad|terrible|disappoint\w*|complain\w*|annoy\w*|stain\w*|smell\w*|leak\w*|filthy|mold|dated|worn)\b/i;
+const NEG = /\b(not|no|never|wasn'?t|weren'?t|isn'?t|aren'?t|didn'?t|don'?t|doesn'?t|couldn'?t|could use|could have|should|(needs?|needed) (to be|a|an|new|more|some|repair\w*|replac\w*|clean\w*|updat\w*|fix\w*)|missing|lack\w*|only|issues?|problems?|concerns?|however|but|unfortunately|wish|would have|would be nice|uncomfortable|hard|old|broken|dirty|cold|poor|bad|terrible|disappoint\w*|complain\w*|annoy\w*|stain\w*|smell\w*|leak\w*|filthy|mold|dated|worn)\b/i;
 const HARD = new Set(["clean", "broken", "pests", "dated", "listing"]);   // themes whose words are complaints on their own
 const sentences = t => String(t || "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
-const hitSent = (t, re, k) => sentences(t).find(s => re.test(s) && (HARD.has(k) || NEG.test(s))) || "";
+// praise that uses negative words ("no issues", "everything we needed", "would stay again") is taken out before the NEG check
+const OKP = /\b(no|not any|without|zero) (issues?|problems?|complaints?|concerns?)\b|\b(everything|all|anything)\b[^.!?]{0,40}\b(we|you|i) (could )?(need|needed|want|wanted)\b|\bdid(n'?t| not) disappoint\b|\bnot only\b|\bno doubt\b|\bcan'?t wait\b|\bcould(n'?t| not) (be|have been|ask for) (any )?(better|happier|more)\b|\bwould (definitely |absolutely )?(stay|come|book|recommend|return)\b[^.!?]{0,20}\bagain\b|\bdid(n'?t| not) (need|have) to (buy|bring)\b/gi;
+const hitSent = (t, re, k) => sentences(t).find(s => re.test(s) && (HARD.has(k) || NEG.test(s.replace(OKP, " ")))) || "";
 function rvThemes(RV){
   const since = new Date(Date.now() - 730 * 864e5).toISOString().slice(0, 10), out = [];
   const low = r => (r.overall != null && +r.overall <= 4) || Object.values(r.ratings || {}).some(s => s != null && +s <= 3);
@@ -529,7 +531,7 @@ async function worstOne(v, id){
     <div id="wr">${R.length ? R.map(r => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill">${esc(r.area)}</span>${r.owner ? `<span class="pill amber">talk to owner</span>` : ""}</div>
       <p style="margin:6px 0 2px;font-weight:600">${esc(r.text)}</p><p class="muted" style="margin:0;font-size:13px">${esc(r.evidence)}${r.evidence ? " · " : ""}Source: ${esc(r.source)}</p></div>`).join("") : `<div class="card"><p class="muted">No clear cause in the data — it may be a one-off season. Check the month-by-month page.</p></div>`}</div>
     <h3 class="anh3">Guest reviews vs. comps (Airbnb)</h3><div id="wrv"></div>
-    ${RV ? `<h3 class="anh3">What guests wrote</h3>
+    ${RV ? `<h3 class="anh3">What guests wrote <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#/an/reviews/${encodeURIComponent(nm)}">All reviews report →</a></h3>
     <p class="muted" style="margin:0 0 6px">${RV.count ? `${RV.count} rated reviews in Track (Airbnb + Vrbo), average ${f2(RV.avg)} of 5.` : "No rated reviews in Track for this home yet."} Repeat complaints = low-score reviews (4 stars or less, or a category at 3 or less) and private notes from the last 2 years that mention each topic — a keyword count, so open the reviews to read them.</p>
     <div id="wth"></div>
     <div class="anbar" style="margin-top:10px"><select id="wrf"><option value="low">Low scores and private notes</option><option value="all">All reviews</option></select></div>
@@ -578,8 +580,93 @@ async function worstOne(v, id){
   $("#wcopy").onclick = async () => { try { await navigator.clipboard.writeText($("#wdraft").value); $("#wcopied").textContent = "Copied."; } catch(e){ $("#wdraft").select(); $("#wcopied").textContent = "Press Ctrl+C to copy."; } };
 }
 
-const VIEWS = { comps, demand, pace, top, channels, worst };
+/* Guest reviews — what guests say (Brandon 2026-10-28): every Track review (Airbnb + Vrbo) by home, neighborhood and topic.
+   Data: analytics_reviews_all(p_since) (hub_track_reviews.sql). Topics = THEMES keyword count: a "complaint" is a sentence that
+   reads negative (hitSent), a "mention" is any sentence with the topic's words. #/an/reviews/<home code> opens one home. */
+const RVA = {};
+async function reviews(v, pre){
+  v.innerHTML = `<div class="page wide">${back}<h2>Guest reviews — what guests say</h2><p class="muted">Loading…</p></div>`;
+  const since = (() => { try { return localStorage.getItem("an_rv_since") || "730"; } catch(e){ return "730"; } })();
+  const load = async d => { if(!RVA[d]){ const r = await sb.rpc("analytics_reviews_all", { p_since:d === "all" ? null : new Date(Date.now() - d * 864e5).toISOString().slice(0, 10) });
+      if(r.error) throw r.error; if(r.data == null) return null;
+      RVA[d] = r.data.map(x => { const t = [x.text, x.private].filter(Boolean).join(" \n ");
+        x.tc = new Set(THEMES.filter(([k, , re]) => hitSent(x.text, re, k) || hitSent(x.private, re, k)).map(z => z[0]));
+        x.tm = new Set(THEMES.filter(([, , re]) => re.test(t)).map(z => z[0])); x.hood = x.community || String(x.code || "").split(" ")[0]; return x; }); }
+    return RVA[d]; };
+  let A; try { A = await load(since); } catch(e){ return fail(v, e); }
+  if(!A) return noAccess(v);
+  const TN = Object.fromEntries(THEMES.map(t => [t[0], t[1]])), hoods = [...new Set(A.map(x => x.hood).filter(Boolean))].sort(), homes = [...new Set(A.map(x => x.code).filter(Boolean))].sort();
+  v.innerHTML = `<div class="page wide">${back}<h2>Guest reviews — what guests say</h2>
+    <p class="muted">Every guest review in Track (Airbnb + Vrbo) with what guests bring up, by home and neighborhood. Topics are a keyword count: a <b>complaint</b> is a sentence that reads negative ("the hot tub was cold"), a <b>mention</b> is any sentence with the topic's words. Read the reviews before acting on a count. Click a topic or a home to filter.</p>
+    <div class="anbar">
+      <select id="rvs"><option value="365">Last 12 months</option><option value="730">Last 2 years</option><option value="all">All (since Nov 2022)</option></select>
+      <select id="rvh"><option value="">All neighborhoods</option>${hoods.map(h => `<option>${esc(h)}</option>`).join("")}</select>
+      <input id="rvu" list="rvul" placeholder="Home (e.g. PL 805)"><datalist id="rvul">${homes.map(h => `<option value="${esc(h)}">`).join("")}</datalist>
+      <select id="rvt"><option value="">All topics</option>${THEMES.map(t => `<option value="${t[0]}">${esc(t[1])}</option>`).join("")}</select>
+      <select id="rvm"><option value="c">Complaints</option><option value="m">Any mention</option></select>
+      <select id="rvr"><option value="">All stars</option><option value="4">4★ or less</option><option value="3">3★ or less</option><option value="p">Has a private note</option></select>
+      <select id="rvc"><option value="">Airbnb + Vrbo</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option></select>
+      <input id="rvq" type="search" placeholder="Words in the review"></div>
+    <div id="rvk"></div>
+    <h3 class="anh3">Topics</h3><div id="rvtt"></div>
+    <h3 class="anh3">By home</h3><div id="rvht"></div>
+    <h3 class="anh3">Reviews <button class="btn small" id="rvcsv" style="margin-left:8px">Download CSV</button></h3><div id="rvl"></div>
+    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py); homes and neighborhoods from Track (hub_homes). Vrbo shows as "Homeaway" in Track; its categories are renamed to Airbnb's. Guest names aren't stored.</p></div>`;
+  $("#rvs").value = since; if(pre) $("#rvu").value = pre;
+  const stars = s => s == null ? "" : `<span class="pill ${+s >= 5 ? "green" : +s >= 4 ? "" : +s >= 3 ? "amber" : "red"}">${(+s).toFixed(0)} ★</span>`;
+  let shown = 30, cur = [];
+  const draw = () => {
+    const h = $("#rvh").value, u = $("#rvu").value.trim().toLowerCase(), t = $("#rvt").value, m = $("#rvm").value, rs = $("#rvr").value, ch = $("#rvc").value, q = $("#rvq").value.trim().toLowerCase();
+    const has = (x, k) => (m === "c" ? x.tc : x.tm).has(k);
+    const base = A.filter(x => (!h || x.hood === h) && (!u || String(x.code).toLowerCase() === u || String(x.name).toLowerCase().includes(u)) && (!ch || x.channel === ch)
+      && (!rs || (rs === "p" ? !!x.private : x.overall != null && +x.overall <= +rs)) && (!q || [x.text, x.private].join(" ").toLowerCase().includes(q)));
+    cur = base.filter(x => !t || has(x, t));
+    const rated = cur.filter(x => x.overall != null), avg = rated.length ? rated.reduce((a, x) => a + +x.overall, 0) / rated.length : null;
+    $("#rvk").innerHTML = `<div class="ankpi"><div class="card"><small>Reviews</small><b>${cur.length.toLocaleString()}</b><small>${new Set(cur.map(x => x.code)).size} homes</small></div>
+      <div class="card"><small>Average stars</small><b>${avg == null ? "—" : avg.toFixed(2)}</b><small>${rated.length} rated</small></div>
+      <div class="card"><small>5-star share</small><b>${rated.length ? Math.round(rated.filter(x => +x.overall >= 5).length / rated.length * 100) + "%" : "—"}</b><small>of rated reviews</small></div>
+      <div class="card"><small>With a complaint</small><b>${cur.filter(x => x.tc.size).length}</b><small>${cur.filter(x => x.private).length} private notes</small></div></div>`;
+    // topics: counted over the filtered reviews before the topic filter, so every topic stays comparable
+    table($("#rvtt"), [{ k:"name", t:"Topic", l:1, f:r => `<a class="anlink" href="#" data-t="${r.k}">${esc(r.name)}</a>` }, { k:"c", t:"Complaints" }, { k:"m", t:"Mentions" }, { k:"homes", t:"Homes with a complaint" },
+      { k:"top", t:"Most complaints", l:1, f:r => r.top ? `<a class="anlink" href="#" data-u="${esc(r.top[0])}">${esc(r.top[0])}</a> <span class="muted">(${r.top[1]})</span>` : "—" }],
+      THEMES.map(([k, name]) => { const c = base.filter(x => x.tc.has(k)), by = {}; c.forEach(x => by[x.code] = (by[x.code] || 0) + 1);
+        return { k, name, c:c.length, m:base.filter(x => x.tm.has(k)).length, homes:Object.keys(by).length, top:Object.entries(by).sort((a, b) => b[1] - a[1])[0] }; }), "c");
+    const by = {}; cur.forEach(x => { const b = by[x.code] || (by[x.code] = { code:x.code, hood:x.hood, comp:x.comp, n:0, s:0, rn:0, low:0, cmp:0, t:{} });
+      b.n++; if(x.overall != null){ b.rn++; b.s += +x.overall; if(+x.overall <= 4) b.low++; } if(x.tc.size) b.cmp++; x.tc.forEach(k => b.t[k] = (b.t[k] || 0) + 1); });
+    table($("#rvht"), [{ k:"code", t:"Home", l:1, f:r => `<a class="anlink" href="#" data-u="${esc(r.code)}">${esc(r.code)}</a>${r.comp ? ` <a class="muted" style="font-size:12px" href="#/an/worst/${encodeURIComponent(r.comp)}">vs. comps</a>` : ""}` },
+      { k:"hood", t:"Neighborhood", l:1 }, { k:"n", t:"Reviews" }, { k:"avg", t:"Avg stars", v:r => r.rn ? r.s / r.rn : null, f:r => r.rn ? (r.s / r.rn).toFixed(2) : "—" },
+      { k:"low", t:"4★ or less" }, { k:"cmp", t:"With a complaint" },
+      { k:"tops", t:"Top complaints", l:1, v:r => Object.keys(r.t).length, f:r => Object.entries(r.t).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `<span class="pill">${esc(TN[k])} ${n}</span>`).join(" ") || "—" }],
+      Object.values(by), "cmp");
+    const L = cur.slice(0, shown), re = t ? THEMES.find(z => z[0] === t)[2] : null;
+    const mark = s => { s = esc(s); if(!re) return s; const sent = (m === "c" ? hitSent : (x, r) => sentences(x).find(y => r.test(y)) || "")(s, re, t); return sent ? s.replace(sent, `<mark>${sent}</mark>`) : s; };
+    $("#rvl").innerHTML = (L.length ? L.map(r => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stars(r.overall)}
+        <b>${esc(r.code)}</b><span class="muted" style="font-size:13px">${esc(dt(r.check_in + "T12:00"))} · ${r.nights || "?"} nights · ${esc(r.channel === "Homeaway" ? "Vrbo" : r.channel)} · res ${esc(r.res)}</span>
+        ${Object.entries(r.ratings || {}).filter(([, s]) => s != null && +s <= 3).map(([k, s]) => `<span class="pill amber">${esc(k)} ${+s}</span>`).join("")}
+        ${[...r.tc].map(k => `<span class="pill red">${esc(TN[k])}</span>`).join("")}</div>
+      ${r.text ? `<p style="margin:6px 0 2px">${mark(r.text)}</p>` : ""}${r.private ? `<p style="margin:6px 0 2px"><b>Private note to us:</b> ${mark(r.private)}</p>` : ""}
+      ${r.text && !r.response ? `<p class="muted" style="margin:4px 0 0;font-size:13px">No reply from us</p>` : ""}</div>`).join("") : `<p class="muted">No reviews match.</p>`)
+      + (cur.length > L.length ? `<button class="btn small" id="rvmore">Show ${Math.min(30, cur.length - L.length)} more (${cur.length - L.length} left)</button>` : "");
+    if($("#rvmore")) $("#rvmore").onclick = () => { shown += 30; draw(); };
+    v.querySelectorAll("[data-t]").forEach(a => a.onclick = e => { e.preventDefault(); $("#rvt").value = a.dataset.t; shown = 30; draw(); });
+    v.querySelectorAll("[data-u]").forEach(a => a.onclick = e => { e.preventDefault(); $("#rvu").value = a.dataset.u; shown = 30; draw(); $("#rvk").scrollIntoView(); });
+  };
+  ["rvh", "rvt", "rvm", "rvr", "rvc"].forEach(id => $("#" + id).onchange = () => { shown = 30; draw(); });
+  $("#rvu").oninput = $("#rvq").oninput = () => { shown = 30; draw(); };
+  $("#rvs").onchange = async () => { const d = $("#rvs").value; try { localStorage.setItem("an_rv_since", d); } catch(e){}
+    $("#rvl").innerHTML = `<p class="muted">Loading…</p>`; try { A = await load(d); } catch(e){ return fail(v, e); } shown = 30; draw(); };
+  $("#rvcsv").onclick = () => { const cell = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
+    const rows = [["Home", "Neighborhood", "Check-in", "Nights", "Channel", "Stars", "Low categories", "Complaints", "Review", "Private note", "Reservation"]].concat(cur.map(r =>
+      [r.code, r.hood, r.check_in, r.nights, r.channel === "Homeaway" ? "Vrbo" : r.channel, r.overall, Object.entries(r.ratings || {}).filter(([, s]) => s != null && +s <= 3).map(([k, s]) => k + " " + s).join("; "),
+       [...r.tc].map(k => TN[k]).join("; "), r.text, r.private, r.res]));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + rows.map(r => r.map(cell).join(",")).join("\r\n")], { type:"text/csv" }));
+    a.download = `guest-reviews-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
+  draw();
+}
+
+const VIEWS = { comps, demand, pace, top, channels, worst, reviews };
 window.anView = function(v){ css(); const a = hashArg();
+  if(a.startsWith("reviews/")) return reviews(v, decodeURIComponent(a.slice(8)));
   if(a.startsWith("home/")) return home(v, decodeURIComponent(a.slice(5)));
   if(a.startsWith("worst/")) return worstOne(v, decodeURIComponent(a.slice(6)));
   return (VIEWS[a] || market)(v); };
