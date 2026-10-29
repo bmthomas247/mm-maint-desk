@@ -238,6 +238,7 @@ body.only-trash header.top{position:static}
 .twhy{font-size:14px;color:var(--ink-2);line-height:1.45}
 .tgar{border:1px solid var(--line-2);border-radius:14px;padding:12px 14px;background:var(--surface-2)}
 .tbig{border-radius:14px;padding:10px 14px;background:var(--wait-soft);color:var(--ink);font-size:14px;line-height:1.45;border-left:4px solid var(--wait)}
+.tbig.theavy{margin:0 0 12px;font-size:15px;background:var(--red-soft,var(--wait-soft));border-left-color:var(--red,var(--wait))}
 .tgar .qrow{font-size:17px}
 .tgar.none{font-size:13.5px;color:var(--muted)}
 .tbtns{display:flex;gap:8px}
@@ -2390,7 +2391,8 @@ function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.u
   var todo=p?p.out.concat(p.check):[], n=p?todo.filter(function(x){ return trashTick(r.id,p.day,x.c); }).length:0, gap=daysBetween(t,r._day);
   var when=gap===0?'<span class="pill soon">Today</span>':gap===1?'<span class="pill mute">Tomorrow</span>':'<span class="pill mute">'+esc(fmtD(r._day))+'</span>';
   var name=String(r.title||"").replace(/^Trash\s*[-–—:]?\s*/i,"")||r.title;
-  var bar='<button class="tbarbtn" data-ttoggle="'+rid+'" aria-expanded="'+!!isOpen+'"><span class="tname">'+esc(name)+'</span>'+when+
+  var hv=p?trashHeavy(p):[];
+  var bar='<button class="tbarbtn" data-ttoggle="'+rid+'" aria-expanded="'+!!isOpen+'"><span class="tname">'+esc(name)+'</span>'+when+(hv.length?'<span class="pill late">Heavy trash</span>':'')+
     '<span class="tct">'+(p?n+' / '+todo.length:'—')+'</span><span class="tchev" aria-hidden="true">'+(isOpen?'▾':'▸')+'</span>'+
     '<span class="tbar"><i style="width:'+(todo.length?Math.round(n*100/todo.length):(p?100:0))+'%"></i></span></button>';
   if(!isOpen) return '<section class="troute closed" data-troute="'+rid+'">'+bar+'</section>';
@@ -2403,7 +2405,8 @@ function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.u
   var byHood={}; todo.forEach(function(x){ var h=((trashProf(x.c)||{}).community||"").trim()||"Other"; (byHood[h]=byHood[h]||[]).push(x); });
   var cards=Object.keys(byHood).sort().map(function(h){ return '<div class="thood">'+esc(h)+'</div>'+
     byHood[h].sort(function(a,b){ return a.c.localeCompare(b.c,undefined,{numeric:true}); }).map(function(x){ return trashCard(r,p,x); }).join(""); }).join("");
-  return '<section class="troute" data-troute="'+rid+'">'+bar+(todo.length&&n<todo.length?trashGpsRow(r,p,todo,at):'')+
+  var heavy=hv.length?'<div class="tbig theavy"><b>Heavy trash day — first pickup after '+esc(hv.map(function(h){ return h.k+" ("+fmtD(h.d)+")"; }).join(" and "))+'.</b> One of our worst trash days: bring extra bags, check every bin, the garage and the curb, and plan extra time.</div>':'';
+  return '<section class="troute" data-troute="'+rid+'">'+bar+heavy+(todo.length&&n<todo.length?trashGpsRow(r,p,todo,at):'')+
     (todo.length?cards:'<div class="tcard"><div class="twhy">Nothing to take out — nobody stayed and no work was finished since '+esc(fmtD(p.from))+'.</div></div>')+
     (p.skip.length?'<details class="tskip"><summary>Skip '+p.skip.length+' — no stay or finished work since '+esc(fmtD(p.from))+'</summary>'+
       p.skip.map(function(x){ return esc(x.c); }).join(", ")+trashAsanaState(r,p)+'</details>':'')+foot+'</section>'; }
@@ -2411,10 +2414,10 @@ function trashCard(r,p,x){ var tk=trashTick(r.id,p.day,x.c), key=esc(r.id+"|"+p.
   var far=x._m!=null?'<span class="tfar">'+esc(trashFar(x._m))+'</span>':'';
   if(tk) return '<div class="tcard tdone" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill '+(tk.state==="out"?'ok':'mute')+'">'+(tk.state==="out"?'Out':'N/A')+'</span></div>'+
     '<div class="tdid">'+(tk.state==="out"?'Taken out':'Not needed')+' by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tundo="'+key+'">Undo</button></div></div>';
-  var heads=[]; if(x.big) heads.push('Long stay — '+x.big.n+' nights'); if(x.xmas) heads.push('Stay over Christmas');
-  var bg=heads.length?'<div class="tbig"><b>'+esc(heads.join(" · "))+'.</b> Expect extra trash'+(x.xmas?' (boxes and wrapping)':'')+': bring spare bags and check the bins and garage.'+
+  var heads=[]; if(x.big) heads.push('Long stay — '+x.big.n+' nights'); var hols=x.hols||[]; if(hols.length) heads.push('Stay over '+hols.join(" and "));
+  var bg=heads.length?'<div class="tbig"><b>'+esc(heads.join(" · "))+'.</b> Expect extra trash'+(hols.indexOf("Christmas")>-1?' (boxes and wrapping)':hols.length?' (food and party trash)':'')+': bring spare bags and check the bins and garage.'+
     (x.still?' Guests are still there until '+esc(fmtD(x.still))+' — knock first.':'')+'</div>':'';
-  return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+(x.big?'<span class="pill waiting">Long stay</span>':'')+(x.xmas?'<span class="pill waiting">Christmas</span>':'')+'</div>'+
+  return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+(x.big?'<span class="pill waiting">Long stay</span>':'')+hols.map(function(k){ return '<span class="pill waiting">'+esc(k)+'</span>'; }).join("")+'</div>'+
     '<div class="twhy">'+(x.whys||[x.why]).map(esc).join("<br>")+'</div>'+bg+trashGarage(x.c)+
     '<div class="tbtns"><button class="btn tgo" data-tout="'+key+'">✓ Out</button><button class="btn tna" data-tna="'+key+'">N/A → next</button></div></div>'; }
 /* 📍 I'm at the home: GPS of our homes = Track unit latitude/longitude (locks/locks_sync.py → lock_places; every Trash person reads it,
@@ -2456,8 +2459,16 @@ function trashGarage(c){ if(window.MM_CODES===false) return "";
 function trashProf(c){ var bare=c.replace(/^(L-|2H-)/,""), hit=null;
   (D.homes||[]).forEach(function(h){ if(!hit && (h.code===c||h.code===bare)) hit=h; }); return hit; }
 var TRASH_LONG=7;   // nights — a stay this long gets the "Long stay" warning
-var TRASH_XMAS=["12-20","01-02"];   // Christmas time (month-day, crosses New Year) — a stay touching it gets the "Christmas" warning
-function trashXmas(s){ var y=+String(s.in).slice(0,4); return [y-1,y].some(function(a){ var f=a+"-"+TRASH_XMAS[0], t=(a+1)+"-"+TRASH_XMAS[1]; return s.in<=t && s.out>=f; }); }
+/* Thanksgiving, Christmas and New Year's Eve are our worst trash days (Brandon 2026-10-29). Each has its day (d) and the days around it
+   (f..t) — a stay touching f..t gets a warning on its card, and the first pickup after d gets "Heavy trash day" on the whole route. */
+function trashHols(y){ var n=new Date(y,10,1).getDay(), tg=1+(4-n+7)%7+21, d=function(m,x){ return y+"-"+p2(m)+"-"+p2(x); };
+  return [{k:"Thanksgiving",d:d(11,tg),f:d(11,tg-1),t:d(11,tg+3)},
+          {k:"Christmas",d:d(12,25),f:d(12,20),t:d(12,27)},
+          {k:"New Year's Eve",d:d(12,31),f:d(12,28),t:(y+1)+"-01-02"}]; }
+function trashHolsNear(day){ var y=+String(day).slice(0,4); return trashHols(y-1).concat(trashHols(y)); }
+function trashStayHols(s){ return trashHolsNear(s.in).filter(function(h){ return s.in<=h.t && s.out>=h.f; }).map(function(h){ return h.k; }); }
+function trashHeavy(p){ var lo=new Date(Date.parse(p.day+"T12:00:00")-7*864e5).toISOString().slice(0,10);   // the 7 days before trash day, so each holiday lands on one pickup
+  return trashHolsNear(p.day).filter(function(h){ return h.d>=lo && h.d<p.day; }); }
 function trashKey(rid,day,c){ return sid(rid)+"__"+day+"__"+sid(c); }
 function trashTick(rid,day,c){ var x=S.rlog[trashKey(rid,day,c)]; return x&&!x.undone?x:null; }
 function trashTime(ms){ try{ return new Date(ms).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); }catch(e){ return ""; } }
@@ -2487,10 +2498,10 @@ function trashPlan(r){ var occ=(S.feeds.occupancy||{}).units; if(!occ) return nu
     trashWork(c,from,day).slice(0,2).forEach(function(j){ whys.push("Work done "+fmtD(j.finished)+": "+String(j.title||"").slice(0,60)+(j.doneByName?" ("+j.doneByName+")":"")); });
     /* long stays leave a lot of trash (Brandon 2026-10-29): warn at 7+ nights; say so if they're still there on trash day */
     var big=null; if(!lease) st.forEach(function(s){ var n=daysBetween(s.in,s.out); if(n>=TRASH_LONG && (!big||n>big.n)) big={n:n,in:s.in,out:s.out,still:s.in<day&&s.out>day}; });
-    /* stays over Christmas time leave extra trash too (Brandon 2026-10-29): any stay touching TRASH_XMAS */
-    var xmas=!lease && st.some(trashXmas);
+    /* stays over Thanksgiving / Christmas / New Year's leave extra trash too (Brandon 2026-10-29) */
+    var hols=[]; if(!lease) st.forEach(function(s){ trashStayHols(s).forEach(function(k){ if(hols.indexOf(k)<0) hols.push(k); }); });
     if(lease) out.push({c:c,why:"lease — tenant lives there",whys:["Lease — tenant lives there"].concat(whys)});
-    else if(whys.length) out.push({c:c,why:whys.join("; "),whys:whys,big:big,xmas:xmas,still:(st.filter(function(s){ return s.in<day&&s.out>day; })[0]||{}).out||""});
+    else if(whys.length) out.push({c:c,why:whys.join("; "),whys:whys,big:big,hols:hols,still:(st.filter(function(s){ return s.in<day&&s.out>day; })[0]||{}).out||""});
     else if(second) check.push({c:c,why:"second home — owner may not book in Track",whys:["Second home — the owner may not book in Track. Check it."],check:true});
     else skip.push({c:c,why:"empty "+fmtD(from)+"–"+fmtD(day)}); });
   return {day:day,from:from,out:out,skip:skip,check:check}; }
