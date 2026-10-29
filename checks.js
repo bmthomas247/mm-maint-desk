@@ -25,6 +25,7 @@ function css(){
 .chk table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px} .chk td,.chk th{padding:5px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
 .chk th{font-weight:600;color:var(--muted)} .chkwarn{border-color:var(--amber)!important;background:color-mix(in srgb,var(--amber) 10%,var(--card))}
 .tbanner{background:#7a4b00;color:#fff;padding:8px 18px;font-weight:600;font-size:14px;flex:none}
+.kbanner{background:#7a4b00;color:#fff;padding:8px 18px;font-weight:600;font-size:14px;flex:none;border-top:1px solid rgba(255,255,255,.25)} .kbanner a{color:#fff;text-decoration:underline;margin-left:8px;white-space:nowrap}
 @media (max-width:640px){.chk .ttl{min-width:0;flex-basis:100%}.chk table{font-size:12px}}`;
   document.head.appendChild(s);
 }
@@ -88,4 +89,22 @@ window.trackBanner = function(){
   b.textContent = h >= 21 ? "🛠️ Track is down now (weekly maintenance, back about 11 pm)." : "🛠️ Track is down tonight 9–11 pm for weekly maintenance.";
   const v = document.getElementById("view"); if(v && v.parentNode) v.parentNode.insertBefore(b, v);
 };
+// Daily checks banner (Brandon 2026-10-29: "stays as a warning across all pages"): same people + same list as the Home warning
+// (hub_checks_alerts(): admins + office managers; empty for everyone else). Starts itself after sign-in, re-checks every 5 minutes.
+let KB = { at:0, a:[] };
+function kbDraw(){
+  css(); document.querySelectorAll(".kbanner").forEach(x => x.remove());
+  const a = KB.a, v = document.getElementById("view");
+  if(!a.length || !v || !v.parentNode || /^#\/(checks|daily_checks)\b/.test(location.hash)) return;   // the Daily checks page shows it all already
+  const one = x => esc(x.title) + ": " + esc(x.summary || (x.status ? x.status : "not done yet (due " + fday(x.due) + ")"));
+  const b = document.createElement("div"); b.className = "kbanner"; b.setAttribute("role", "status");
+  b.innerHTML = `⚠️ Daily checks need attention: ${one(a[0])}${a.length > 1 ? ` (+${a.length - 1} more)` : ""}<a href="#/checks">Open Daily checks →</a>`;
+  v.parentNode.insertBefore(b, v);
+}
+window.checksBanner = async function(force){
+  if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
+  if(force || Date.now() - KB.at > 5 * 60e3){ const r = await sb.rpc("hub_checks_alerts"); KB = { at:Date.now(), a: r.error ? [] : (r.data || []) }; }
+  kbDraw();
+};
+const kboot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(kboot); checksBanner(true); setInterval(() => checksBanner(false), 60e3); window.addEventListener("hashchange", () => checksBanner(false)); } }, 1000);
 })();
