@@ -597,6 +597,8 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
   const oops = e => desk ? v.innerHTML = `<div class="page"><div class="card"><p class="muted">Couldn't load reviews: ${esc(e.message || e)}</p></div></div>` : fail(v, e);
   let A; try { A = await load(since); } catch(e){ return oops(e); }
   if(!A) return noAccess(v);
+  // staff praised by name (review_kudos, found nightly by review_kudos.py; same readers as the reviews)
+  let K = []; try { const k = await sb.from("review_kudos").select("*").order("submitted_at", { ascending:false }).limit(300); K = k.data || []; } catch(e){}
   const TN = Object.fromEntries(THEMES.map(t => [t[0], t[1]])), hoods = [...new Set(A.map(x => x.hood).filter(Boolean))].sort(), homes = [...new Set(A.map(x => x.code).filter(Boolean))].sort();
   v.innerHTML = `<div class="page wide">${bk}<h2>${h2}</h2>
     <p class="muted">Every guest review in Track (Airbnb + Vrbo) with what guests bring up, by home and neighborhood. Topics are a keyword count: a <b>complaint</b> is a sentence that reads negative ("the hot tub was cold"), a <b>mention</b> is any sentence with the topic's words. Read the reviews before acting on a count. Click a topic or a home to filter.</p>
@@ -610,6 +612,7 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
       <select id="rvc"><option value="">Airbnb + Vrbo</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option></select>
       <input id="rvq" type="search" placeholder="Words in the review"></div>
     <div id="rvk"></div>
+    <h3 class="anh3">Highlights</h3><div id="rvhl"></div>
     <h3 class="anh3">Topics</h3><div id="rvtt"></div>
     <h3 class="anh3">By home</h3><div id="rvht"></div>
     <h3 class="anh3">Reviews <button class="btn small" id="rvcsv" style="margin-left:8px">Download CSV</button></h3><div id="rvl"></div>
@@ -629,6 +632,20 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
       <div class="card"><small>5-star share</small><b>${rated.length ? Math.round(rated.filter(x => +x.overall >= 5).length / rated.length * 100) + "%" : "—"}</b><small>of rated reviews</small></div>
       <div class="card"><small>With a complaint</small><b>${cur.filter(x => x.tc.size).length}</b><small>${cur.filter(x => x.private).length} private notes</small></div>
       <div class="card"><small>No reply from us</small><b>${cur.filter(x => x.text && !x.response).length}</b><small>public reviews</small></div></div>`;
+    // highlights (Brandon 2026-10-29): team named as great (review_kudos) + the best line from recent 5-star reviews, both following the home/neighborhood/channel filters
+    const HL = /\b(amazing|awesome|wonderful|fantastic|excellent|incredible|outstanding|perfect|beautiful|loved|love|spotless|immaculate|cozy|stunning|best|highly recommend|would (?:definitely )?(?:stay|come back|return))\b/i;
+    const inF = x => (!h || x.hood === h) && (!u || String(x.code || x.home).toLowerCase() === u || String(x.name || "").toLowerCase().includes(u)) && (!ch || (x.channel === ch || (ch === "Homeaway" && x.channel === "Vrbo")));
+    const hoodOf = {}; A.forEach(x => hoodOf[x.code] = x.hood);
+    const KK = K.filter(k => inF({ code:k.home, hood:hoodOf[k.home] || String(k.home || "").split(" ")[0], channel:k.channel })).slice(0, 6);
+    const best = r => sentences(r.text).filter(s => HL.test(s) && s.length >= 25 && s.length <= 260).sort((a, b) => (b.match(new RegExp(HL.source, "gi")) || []).length - (a.match(new RegExp(HL.source, "gi")) || []).length)[0];
+    const five = base.filter(x => +x.overall >= 5 && x.text).map(x => ({ x, s:best(x) })).filter(z => z.s).slice(0, 6);
+    const quote = (who, s, meta) => `<div class="card" style="margin:0;padding:10px 14px">${who}<p style="margin:4px 0">“${esc(s)}”</p><small class="muted">${meta}</small></div>`;
+    $("#rvhl").innerHTML = `<div class="anch2">
+      <div><h4 style="margin:0 0 6px">🌟 Team named in reviews</h4><div style="display:grid;gap:8px">${KK.length ? KK.map(k => quote(`<b>${esc(k.person)}</b>${k.field === "private" ? ` <span class="pill">private note</span>` : ""}`, k.quote,
+          `${esc(k.home || "")} · ${esc(k.channel || "")}${k.stars != null ? ` · ${+k.stars}★` : ""} · ${esc(dt(k.submitted_at))}`)).join("") : `<p class="muted">No one named as great in these reviews yet.</p>`}</div></div>
+      <div><h4 style="margin:0 0 6px">⭐ Recent 5-star highlights</h4><div style="display:grid;gap:8px">${five.length ? five.map(({ x, s }) => quote(`<b>${esc(x.code)}</b>`, s,
+          `${esc(x.channel === "Homeaway" ? "Vrbo" : x.channel)} · ${esc(dt(x.check_in + "T12:00"))}`)).join("") : `<p class="muted">No 5-star reviews with text match these filters.</p>`}</div></div></div>
+      <p class="ansrc">Team: staff named next to a praise word in a review (review_kudos.py, nightly). New public ones go on Home as a shout-out for 3 weeks. 5-star lines: the sentence with the most praise words, newest first.</p>`;
     // topics: counted over the filtered reviews before the topic filter, so every topic stays comparable
     table($("#rvtt"), [{ k:"name", t:"Topic", l:1, f:r => `<a class="anlink" href="#" data-t="${r.k}">${esc(r.name)}</a>` }, { k:"c", t:"Complaints" }, { k:"m", t:"Mentions" }, { k:"homes", t:"Homes with a complaint" },
       { k:"top", t:"Most complaints", l:1, f:r => r.top ? `<a class="anlink" href="#" data-u="${esc(r.top[0])}">${esc(r.top[0])}</a> <span class="muted">(${r.top[1]})</span>` : "—" }],
