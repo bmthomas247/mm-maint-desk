@@ -609,14 +609,14 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
       <select id="rvt"><option value="">All topics</option>${THEMES.map(t => `<option value="${t[0]}">${esc(t[1])}</option>`).join("")}</select>
       <select id="rvm"><option value="c">Complaints</option><option value="m">Any mention</option></select>
       <select id="rvr"><option value="">All stars</option><option value="4">4★ or less</option><option value="3">3★ or less</option><option value="p">Has a private note</option><option value="n">No reply from us</option></select>
-      <select id="rvc"><option value="">Airbnb + Vrbo</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option></select>
+      <select id="rvc"><option value="">All channels</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option><option value="Website">Our website</option></select>
       <input id="rvq" type="search" placeholder="Words in the review"></div>
     <div id="rvk"></div>
     <h3 class="anh3">Highlights</h3><div id="rvhl"></div>
     <h3 class="anh3">Topics</h3><div id="rvtt"></div>
     <h3 class="anh3">By home</h3><div id="rvht"></div>
     <h3 class="anh3">Reviews <button class="btn small" id="rvcsv" style="margin-left:8px">Download CSV</button></h3><div id="rvl"></div>
-    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py); homes and neighborhoods from Track (hub_homes). Vrbo shows as "Homeaway" in Track; its categories are renamed to Airbnb's. Guest names aren't stored.</p></div>`;
+    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py) + reviews shown only on our website (Track direct reviews, website_reviews_sync.py; their date is the review date, the site gives no stay dates); homes and neighborhoods from Track (hub_homes). Vrbo shows as "Homeaway" in Track; its categories are renamed to Airbnb's. Guest names aren't stored.</p></div>`;
   $("#rvs").value = since; if(pre) $("#rvu").value = pre;
   const stars = s => s == null ? "" : `<span class="pill ${+s >= 5 ? "green" : +s >= 4 ? "" : +s >= 3 ? "amber" : "red"}">${(+s).toFixed(0)} ★</span>`;
   let shown = 30, cur = [];
