@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>AI Description Tool</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Property Set Up ▸ AI Description Tool (hub key psu_desc; follows property_setup's access, hub_psu.sql). Brandon 2026-10-29.
+     Claude writes the four listing texts for one set-up job via the psu-describe Edge Function (gated by hub_can('property_setup')).
+     Drafts only: a person copies them into Track, or saves them on the job (pd_docs desc.ai) for the checklist. -->
+<style>
+:root{--forest:#3c5f12;--pine:#4f7a18;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;
+  --amber:#b5770a;--amber-soft:#fbf0d9;--red:#c8382b;--green:#3a7d44;--green-soft:#e6f1ea;--radius:16px;
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;--amber-soft:#33270c;--green-soft:#16301f}}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);line-height:1.5}
+.wrap{max-width:980px;margin:0 auto;padding:18px 16px 40px}
+h1{font-size:22px;margin:0 0 4px}.muted{color:var(--muted)}.small{font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
+label{display:block;font-weight:800;font-size:13px;margin:0 0 6px;color:var(--ink-2)}
+select,textarea{width:100%;font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
+textarea{min-height:90px;resize:vertical}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
+.btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn:disabled{opacity:.55;cursor:default}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.out h3{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2)}
+.out pre{white-space:pre-wrap;font:inherit;margin:8px 0 0;background:var(--ground);border:1px solid var(--line);border-radius:12px;padding:12px}
+.cnt{font-size:12px;font-weight:800;padding:2px 8px;border-radius:999px;background:var(--green-soft);color:var(--green)}.cnt.bad{background:var(--amber-soft);color:var(--amber)}
+.check{background:var(--amber-soft);border-color:#ecd9b6}.check li{margin:4px 0}
+.facts span{display:inline-block;margin:0 12px 4px 0}
+</style>
+</head><body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const KIND = { str:"STR onboarding", lease:"Lease onboarding", h2:"2nd home" };
+// limits = the house style on our live listings ("MM - Property Set Up" playbook, 2026-10-26)
+const PARTS = [["short_headline","Short description / Airbnb headline",0,50],["vrbo_headline","VRBO headline",0,80],
+  ["airbnb_description","Airbnb description",255,345],["long_description","Website long description",0,0]];
+const S = { jobs:[], me:null, res:null, job:null, busy:false };
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/psu_desc" target="_top">Go to the Moose Hub →</a></p>`; return; }
+  const can = (await sb.rpc("hub_can", { p_desk:"property_setup" })).data;
+  if(!can){ $("#app").innerHTML = `<h1>No access</h1><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
+  S.me = ((await sb.rpc("pd_identity")).data || [])[0] || {};
+  const r = await sb.from("pd_docs").select("id,code:data->>code,home:data->>home,kind:data->>kind,stage:data->>stage").eq("collection","jobs");
+  S.jobs = (r.data || []).filter(j => KIND[j.kind] && j.stage !== "closed").sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  const want = decodeURIComponent(location.hash.slice(1));
+  S.job = S.jobs.find(j => j.id === want || j.code === want) || null;
+  draw();
+}
+function draw(){
+  const j = S.job, R = S.res;
+  $("#app").innerHTML = `<h1>AI Description Tool</h1>
+    <p class="muted small">Claude writes the listing texts from Track, the owner's questionnaire and our live listings in the same community. Drafts only: check them, then copy them into Track. Codes and Wi-Fi are never sent to Claude.</p>
+    <div class="card"><label for="job">Property</label>
+      <select id="job"><option value="">Pick a property on the set-up desk…</option>${S.jobs.map(x => `<option value="${esc(x.id)}" ${j && j.id === x.id ? "selected" : ""}>${esc(x.code)} — ${esc(x.home || "")} (${esc(KIND[x.kind])})</option>`).join("")}</select>
+      <label for="notes" style="margin-top:12px">Anything to add (optional)</label>
+      <textarea id="notes" placeholder="e.g. new queen sleeper sofa, ground floor, remodeled kitchen 2026, walk to Main Street trolley">${esc(S.notes || "")}</textarea>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="go" ${!j || S.busy ? "disabled" : ""}>${S.busy ? "Writing… (about a minute)" : R ? "Write it again" : "Write it"}</button>
+        ${S.err ? `<span style="color:var(--red);font-weight:700">${esc(S.err)}</span>` : ""}</div></div>
+    ${R ? `<div class="card small facts muted"><b>Used:</b> <span>Track unit: ${R.used.track_unit ? "yes" : "not found"}</span><span>Community text: ${R.used.community_text ? "yes" : "no"}</span>
+        <span>Questionnaire: ${R.used.questionnaire ? "yes" : "none on the job"}</span><span>Style from: ${R.used.examples.length ? esc(R.used.examples.join(", ")) : "no live listing in this community"}</span></div>
+      ${R.check_these && R.check_these.length ? `<div class="card check"><b>Check before it goes live</b><ul>${R.check_these.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+      ${PARTS.map(([k, label, lo, hi]) => { const t = R[k] || "", n = t.length, bad = (hi && n > hi) || (lo && n < lo);
+        return `<div class="card out"><div class="row"><h3>${label}</h3><span class="cnt ${bad ? "bad" : ""}">${n} characters${hi ? ` · ${lo ? lo + "–" : "max "}${hi}` : ""}</span>
+          <button class="btn" data-copy="${k}" style="margin-left:auto">Copy</button></div><pre>${esc(t)}</pre></div>`; }).join("")}
+      <div class="row"><button class="btn pri" id="save">Save to the job</button><span class="muted small">Keeps these drafts on ${esc(j.code)}'s set-up job (nothing goes to Track).</span></div>` : ""}`;
+  $("#job").onchange = e => { S.job = S.jobs.find(x => x.id === e.target.value) || null; S.res = null; S.err = ""; history.replaceState(null, "", "#" + (S.job ? S.job.id : "")); draw(); };
+  $("#notes").oninput = e => { S.notes = e.target.value; };
+  $("#go").onclick = write;
+  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => { await navigator.clipboard.writeText(R[b.dataset.copy] || ""); b.textContent = "Copied ✓"; setTimeout(() => b.textContent = "Copy", 1500); });
+  const sv = $("#save"); if(sv) sv.onclick = save;
+}
+async function write(){
+  S.busy = true; S.err = ""; draw();
+  const r = await sb.functions.invoke("psu-describe", { body:{ job_id:S.job.id, notes:S.notes || "" } });
+  S.busy = false;
+  if(r.error || !r.data || !r.data.ok){ S.err = (r.data && r.data.error) || "Couldn't reach Claude — try again."; let m = ""; try { m = (await r.error.context.json()).error; } catch(e){} if(m) S.err = m; draw(); return; }
+  S.res = r.data; draw();
+}
+async function save(){
+  const R = S.res, ai = { short:R.short_headline, vrbo:R.vrbo_headline, airbnb:R.airbnb_description, long:R.long_description, check:R.check_these || [],
+    at:Date.now(), by:S.me.initials || S.me.name || "" };
+  const r = await sb.rpc("pd_update", { p_collection:"jobs", p_id:S.job.id, p_patch:{ desc:{ ai }, updatedAt:Date.now(), updatedBy:S.me.initials || "" } });
+  const b = $("#save");
+  if(r.error){ b.textContent = /row-level|permission/i.test(r.error.message) ? "Your login can't change this" : "Couldn't save"; return; }
+  b.textContent = "Saved ✓"; b.disabled = true;
+}
+boot().catch(e => { $("#app").innerHTML = `<h1>Something went wrong</h1><p>${esc(e && e.message || e)}</p>`; });
+</script>
+</body></html>
