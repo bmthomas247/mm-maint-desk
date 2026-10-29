@@ -2571,7 +2571,7 @@ async function buildColleenSheet() {
 // Accept"). findings.py writes them nightly (Supabase findings); Accept / Reject / Later go to findings_decisions (who + when,
 // append-only). Accepted rate + minimum changes go on a Kolleen list (homes, dates, current, new - never comp data).
 const FD = { rows: null, dec: [], busy: false, kind: "*", show: "open" };
-const FD_KIND = { not_booking: "🔴 Not booking", fast_booking: "🟡 Booking fast", fast_filling: "🟡 Comps filling fast", booked_low: "🟡 Booked too low",
+const FD_KIND = { rated_high_priced_low: "🟡 Rated high, priced low (Moose Hub signal)", not_booking: "🔴 Not booking", fast_booking: "🟡 Booking fast", fast_filling: "🟡 Comps filling fast", booked_low: "🟡 Booked too low",
   stuck_at_min: "At Beyond's minimum", min_stay: "Minimum stay", segment_pace: "Neighborhood pace", owner_min_block: "Owner minimum above market", gap_blocked: "🟡 Gap nobody can book", channel_fee: "Channel fees (what we keep)", total_price: "🟡 Airbnb total vs comps", event_gone: "Event that moved away", data_stale: "🔴 Data out of date" };
 const FD_DATED = ["fast_filling", "booked_low", "owner_min_block", "gap_blocked"];
 // Why a decision was made (hotel research: log every override with a reason, then check it after the stay)
