@@ -445,8 +445,12 @@ async function boot(){
     { key:"hk_routines", label:"Housekeeping · Seasonal & yearly", icon:hD.icon, url:null, status:"soon", sort:hD.sort + 0.2 });   // Brandon 2026-10-28
   // Advertising drop-down (Brandon 2026-10-28): Owners · Guest, our two main advertising sections. Both follow the advertising desk's access.
   const aD = DESKS.find(x => x.key === "advertising");
-  if(aD) DESKS.push({ key:"adv_owners", label:"Advertising · Owners", icon:aD.icon, url:null, status:aD.status, sort:aD.sort + 0.1 },
-    { key:"adv_guest", label:"Advertising · Guest", icon:aD.icon, url:null, status:aD.status, sort:aD.sort + 0.2 });
+  // 2026-10-29 (Brandon): + Realtor + General; all four open marketing.html (hub_marketing.sql) on their own tab
+  const aU = t => aD.url ? aD.url + "?tab=" + t : null;
+  if(aD) DESKS.push({ key:"adv_owners", label:"Advertising · Owners", icon:aD.icon, url:aU("owners"), status:aD.status, sort:aD.sort + 0.1 },
+    { key:"adv_guest", label:"Advertising · Guest", icon:aD.icon, url:aU("guest"), status:aD.status, sort:aD.sort + 0.2 },
+    { key:"adv_realtor", label:"Advertising · Realtor", icon:aD.icon, url:aU("realtor"), status:aD.status, sort:aD.sort + 0.3 },
+    { key:"adv_general", label:"Advertising · General", icon:aD.icon, url:aU("general"), status:aD.status, sort:aD.sort + 0.4 });
   // Licensing drop-down (Brandon 2026-10-28): Licenses · Fire suppression · Leases. Both follow licensing's access (lic_fire / lic_lease RLS: hub_can('licensing'))
   const lD = DESKS.find(x => x.key === "licensing" && x.status === "live");
   if(lD) DESKS.push({ key:"lic_fire", label:"Licensing · Fire suppression", icon:lD.icon, url:"desk.html?only=firesys", status:"live", sort:lD.sort + 0.1 },
@@ -484,7 +488,7 @@ function shell(){
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
                    guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", guest_reviews:"Reviews", call_review:"Call review" } },
-                   adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest" } },   // Brandon 2026-10-28
+                   adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest", adv_realtor:"Realtor", adv_general:"General" } },   // Brandon 2026-10-28; Realtor + General 2026-10-29
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
                    rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
@@ -979,7 +983,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","sync","advertising"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], meet:["Meetings","people"], cal:["Calendar","calendar"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
