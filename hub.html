@@ -1630,7 +1630,7 @@ async function patrickView(v){
   if(week) P.days = 7;
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Patrick${week ? " — weekly" : ""}</h2>
     <p class="muted">What guests asked Patrick on vacationrentalsparkcity.com, his answers, sources, outcome and cost. Source: the website's Ask Patrick log, copied here every 5 minutes. <span id="pwhen"></span></p>
-    <div class="card" id="pbook" style="display:none"></div><div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"></div><div id="plists"></div></div>`;
+    <div class="card" id="pbook" style="display:none"></div><div class="card" id="pclk" style="display:none"></div><div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"></div><div id="plists"></div></div>`;
   const [c, rv, l, bk] = await Promise.all([ sb.from("patrick_chats").select("*").order("id", { ascending:false }).limit(5000),
     sb.from("patrick_reviews").select("*").order("id", { ascending:false }).limit(2000), sb.rpc("patrick_lists"), sb.rpc("patrick_bookings") ]);
   if(c.error) return $("#pins").innerHTML = `<p class="muted">Couldn't load: ${esc(c.error.message)}</p>`;
@@ -1657,6 +1657,21 @@ async function patrickView(v){
       <p class="muted" style="font-size:12.5px;margin:8px 0 0">Source: the website's Ask Patrick log + the Track reservations feed. Counts when the home was shown, liked or clicked in a Patrick chat, the arrival is within 3 days of the chat's dates, and it was booked within 14 days after the chat (not cancelled). Patrick helped; the reservations team or the guest made the booking.</p>`;
     $("#pbook").querySelectorAll("[data-sess]").forEach(a => a.onclick = e => { e.preventDefault(); P.q = a.dataset.sess; P.days = 0; patrickView(v); });
   }
+  // Booking clicks (website records the home + dates from 2026-10-29; older rows only have outcome "booking")
+  const hk = t => String(t || "").toLowerCase().replace(/[^a-z0-9]/g, ""), nice = t => /^[a-z0-9-]+$/.test(t || "") ? String(t).split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : (t || "");
+  const CK = all.flatMap(c => (c.booking_clicks || []).map(k => Object.assign({}, k, { session:c.session }))).sort((a, b) => String(b.at_utc).localeCompare(String(a.at_utc)));
+  const oldClicks = all.filter(c => c.outcome === "booking" && !(c.booking_clicks || []).length).length;
+  if(CK.length || oldClicks){
+    const dd = s => s ? new Date(s.length > 10 ? s : s + "T12:00").toLocaleDateString(undefined, { month:"short", day:"numeric" }) : "";
+    const booked = k => B.find(b => b.session === k.session && [hk(b.home), hk(b.unit)].includes(hk(k.home)));
+    $("#pclk").style.display = "";
+    $("#pclk").innerHTML = `<b style="font-size:17px">Booking clicks</b> <span class="muted">${CK.length} with the home recorded${oldClicks ? ` · ${oldClicks} earlier click${oldClicks === 1 ? "" : "s"} (before Oct 29, home not recorded)` : ""}</span>
+      ${CK.length ? `<style>#pclk table{width:100%;border-collapse:collapse;font-size:13.5px}#pclk th,#pclk td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}#pclk th{font-size:12px;color:var(--muted);font-weight:700}</style>
+      <div style="overflow-x:auto;margin-top:8px"><table><thead><tr><th>Home</th><th>Dates</th><th>Clicked</th><th>In Track?</th></tr></thead><tbody>
+      ${CK.slice(0, 50).map(k => { const b = booked(k); return `<tr><td><a href="#" data-sess="${esc(k.session)}">${esc(nice(k.home))}</a></td><td>${k.arrive ? dd(k.arrive) + " – " + dd(k.depart) : "—"}</td><td>${k.at_utc ? new Date(k.at_utc).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : ""}</td><td>${b ? `<span class="pill green">Booked ${esc(dd(b.booked_on))}</span>` : `<span class="muted">Not yet</span>`}</td></tr>`; }).join("")}</tbody></table></div>` : ""}
+      <p class="muted" style="font-size:12.5px;margin:8px 0 0">Source: the website's Ask Patrick log (guest clicked "See home & book"). "In Track?" uses the same match as the bookings above.</p>`;
+    $("#pclk").querySelectorAll("[data-sess]").forEach(a => a.onclick = e => { e.preventDefault(); P.q = a.dataset.sess; P.days = 0; patrickView(v); });
+  }
   const since = P.days ? Date.now() - P.days * 864e5 : 0, inP = all.filter(x => !since || new Date(x.created_at) >= since);
   const usd = n => "$" + (+n || 0).toFixed(2), top = (list, f, n = 8) => { const m = {}; list.forEach(x => { const k = (f(x) || "").trim(); if(k) m[k] = (m[k] || 0) + 1; });
     return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n); };
@@ -1666,7 +1681,7 @@ async function patrickView(v){
   const sess = new Set(inP.map(x => x.session).filter(Boolean)).size, cost = inP.reduce((a, x) => a + (+x.cost || 0), 0);
   $("#pins").innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:17px">At a glance</b>
       <select id="pdays" style="width:auto;margin-left:auto">${[[7,"Last 7 days"],[30,"Last 30 days"],[90,"Last 90 days"],[0,"All time"]].map(([d, t]) => `<option value="${d}" ${P.days === d ? "selected" : ""}>${t}</option>`).join("")}</select></div>
-    <div class="rpgrid" style="margin-top:10px"><section class="rpg"><h3>Totals</h3><p style="margin:4px 0"><b>${inP.length}</b> questions · <b>${sess}</b> chats · <b>${usd(cost)}</b> spend</p>
+    <div class="rpgrid" style="margin-top:10px"><section class="rpg"><h3>Totals</h3><p style="margin:4px 0"><b>${inP.length}</b> questions · <b>${sess}</b> chats · <b>${inP.reduce((a, x) => a + Math.max((x.booking_clicks || []).length, x.outcome === "booking" ? 1 : 0), 0)}</b> booking clicks · <b>${usd(cost)}</b> spend</p>
       <p class="muted" style="margin:4px 0">${inP.length ? usd(cost / inP.length) : "$0.00"} per question · ${inP.filter(x => x.reviewed).length} reviewed</p></section>
       <section class="rpg"><h3>Outcome</h3>${bar(top(inP, x => x.outcome || "(none)"), inP.length)}</section>
       <section class="rpg"><h3>Topics</h3>${bar(top(inP, x => x.topic), inP.length)}</section>
@@ -1686,6 +1701,7 @@ async function patrickView(v){
         <p><b>Q:</b> ${esc(x.question || "")}</p><details><summary class="muted" style="cursor:pointer"><b>Patrick:</b> ${esc(String(x.answer || "").slice(0, 160))}${String(x.answer || "").length > 160 ? "…" : ""}</summary>
         <p style="white-space:pre-wrap">${esc(x.answer || "")}</p>${x.sources || x.source ? `<p class="muted" style="font-size:12.5px"><b>Sources:</b> ${esc([x.source, x.sources].filter(Boolean).join(" · "))}</p>` : ""}
         ${x.tools ? `<p class="muted" style="font-size:12.5px"><b>Tools:</b> ${esc(x.tools)}</p>` : ""}${x.buttons ? `<p class="muted" style="font-size:12.5px"><b>Buttons shown:</b> ${esc(x.buttons)}</p>` : ""}
+        ${(x.homes_shown || []).length ? `<p class="muted" style="font-size:12.5px"><b>Homes shown:</b> ${esc(x.homes_shown.join(", "))}</p>` : ""}${(x.booking_clicks || []).length ? `<p style="font-size:12.5px"><b>🖱 Clicked to book:</b> ${esc(x.booking_clicks.map(k => (/^[a-z0-9-]+$/.test(k.home || "") ? k.home.replace(/-/g, " ") : k.home) + (k.arrive ? " (" + k.arrive + " to " + k.depart + ")" : "")).join(", "))}</p>` : ""}
         <p class="muted" style="font-size:12.5px">${x.page ? `Page: ${esc(pagePath(x))}` : ""}${x.session ? ` · chat ${esc(String(x.session).slice(0, 8))}` : ""}</p></details>
         ${rr.map(r => `<p class="muted" style="font-size:12.5px;margin:4px 0">${esc(r.by_name || "")} · ${esc({ ok:"marked right", wrong:"marked wrong", crew:"gave a better answer", note:"note" }[r.kind] || r.kind)}${r.answer && r.kind === "crew" ? ": " + esc(r.answer) : ""}${r.note ? " — " + esc(r.note) : ""}${r.apply_error ? ` <span class="pill red">not saved on the website</span>` : ""}</p>`).join("")}
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn small" data-pa="ok" data-id="${x.id}">✓ Right</button><button class="btn small" data-pa="wrong" data-id="${x.id}">✗ Wrong</button>
