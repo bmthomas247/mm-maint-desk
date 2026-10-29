@@ -429,6 +429,9 @@ async function boot(){
   const lD = DESKS.find(x => x.key === "licensing" && x.status === "live");
   if(lD) DESKS.push({ key:"lic_fire", label:"Licensing · Fire suppression", icon:lD.icon, url:"desk.html?only=firesys", status:"live", sort:lD.sort + 0.1 },
                     { key:"lic_lease", label:"Licensing · Leases", icon:lD.icon, url:"desk.html?only=lease", status:"live", sort:lD.sort + 0.2 });
+  // Reviews also sits in the Guest drop-down (Brandon 2026-10-28); follows the reviews desk's access and status
+  const rvD = DESKS.find(x => x.key === "reviews");
+  if(rvD) DESKS.push({ key:"guest_reviews", label:"Guest · Reviews", icon:rvD.icon, url:rvD.url, status:rvD.status, sort:46 });
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
   PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
@@ -450,7 +453,7 @@ function shell(){
   const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_recalls:"Recalls" } },
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
-                   guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist" } },
+                   guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", guest_reviews:"Reviews" } },
                    adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest" } },   // Brandon 2026-10-28
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
@@ -907,7 +910,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","advertising"];
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", adv_owners:"adv", adv_guest:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", competitor:"competitor", competitor_add:"competitor" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
