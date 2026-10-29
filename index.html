@@ -1455,6 +1455,48 @@ async function pennyCleanupView(v){
   $("#pclean").querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => { const L = Object.values(by)[+b.dataset.copy];
     try { await navigator.clipboard.writeText("Data cleanup from the Moose Hub (" + new Date().toLocaleDateString() + "):\n" + text(L)); b.textContent = "Copied ✓"; } catch(e){ b.textContent = "Couldn't copy"; } });
 }
+/* Reports > Ask Patrick & Penny > Penny — patterns she noticed (#/penny/patterns, Brandon 2026-10-29: "grow from the patterns that she notices").
+   The penny-patterns function lists what keeps repeating; admins approve = Penny learns it (penny_docs 'taught', sourced) and/or the team gets a tip. */
+async function pennyPatternsView(v){
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Penny — patterns she noticed</h2>
+    <p class="muted">Every day Penny reads what people asked her, maintenance jobs, low guest reviews, Freshdesk items, bugs &amp; ideas and check list notes, and lists what keeps repeating. <b>Approve</b> and she learns it, with your name as the source; tick <b>Tip on their Home</b> to also coach that team. Nothing goes live until you approve.</p>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><select id="ppf"><option value="new">To review</option><option value="approved">Approved</option><option value="done">Already handled</option><option value="rejected">Not useful</option><option value="all">All</option></select><button class="btn small" id="pprun">🔍 Look for patterns now</button><span class="muted" id="ppmsg"></span></div>
+    <div id="pplist"><div class="card"><p class="muted">Loading…</p></div></div><p class="muted" style="font-size:12px" id="ppfoot"></p></div>`;
+  const KIND = { teach:["Teach Penny","green"], question:["Needs your answer","amber"], tip:["Team tip","blue"], fix:["Fix","red"], process:["Process","amber"], watch:["Watch",""] };
+  const TL = { admin:"Admins", front_desk:"Front desk", office_manager:"Office managers", owner_relations:"Owner relations", maint_manager:"Maintenance manager", maint_crew:"Maintenance crew", hk_manager:"Housekeeping manager", licensing:"Licensing", leasing:"Leasing", track_review:"Track review" };
+  const load = async () => {
+    const f = $("#ppf").value; let q = sb.from("penny_patterns").select("*").order("last_seen", { ascending:false }).order("id", { ascending:false }).limit(200);
+    if(f !== "all") q = q.eq("status", f);
+    const [r, runs] = await Promise.all([q, sb.from("penny_pattern_runs").select("*").order("id", { ascending:false }).limit(1)]);
+    const L = r.data || [], last = (runs.data || [])[0];
+    $("#ppfoot").textContent = last ? `Last look: ${new Date(last.ran_at).toLocaleString()} by ${last.by_name} · read ${Object.entries(last.read || {}).map(([k, n]) => n + " " + k.replace(/_/g, " ")).join(", ")} · ${last.found} patterns (${last.new_count} new) · $${(+last.cost_usd || 0).toFixed(2)}${last.error ? " · problem: " + last.error : ""}` : "Penny hasn't looked yet.";
+    $("#pplist").innerHTML = L.length ? L.map(p => `<div class="card" data-pp="${p.id}"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill ${(KIND[p.kind] || [])[1] || ""}">${esc((KIND[p.kind] || [p.kind])[0])}</span><b style="font-size:16px;flex:1;min-width:200px">${esc(p.title)}</b>${p.seen_count > 1 ? `<span class="muted">seen ${p.seen_count}×</span>` : ""}<span class="muted">${esc(p.last_seen)}</span>${p.status !== "new" ? `<span class="pill">${esc({ rejected:"not useful", done:"already handled" }[p.status] || p.status)}${p.decided_by ? " · " + esc(p.decided_by) : ""}</span>` : ""}</div>
+      <p style="margin:6px 0">${esc(p.detail)}</p>
+      ${p.suggestion ? `<p style="margin:6px 0"><b>Suggestion:</b> ${esc(p.suggestion)}</p>` : ""}
+      <details class="acc2"><summary>Evidence (${(p.evidence || []).length})</summary><ul style="margin:4px 0 0 18px;padding:0">${(p.evidence || []).map(e => `<li style="font-size:13.5px"><b>${esc(e.source)}</b>: ${esc(e.what)}${e.count ? ` (${e.count})` : ""}${(e.ids || []).length ? ` <span class="muted">ids ${esc(e.ids.slice(0, 12).join(", "))}</span>` : ""}</li>`).join("")}</ul></details>
+      ${p.audience && p.audience.length ? `<p class="muted" style="font-size:13px;margin:6px 0">For: ${p.audience.map(t => esc(TL[t] || t)).join(", ")}</p>` : ""}
+      ${p.status === "new" ? `<label class="field"><span>What Penny learns (edit it first if you like; leave it empty if she shouldn't learn anything)</span><textarea data-pl="${p.id}">${esc(p.lesson || "")}</textarea></label>
+      <label class="field"><span>Who may read it</span><select data-pd="${p.id}"><option value="">Everyone</option>${DESKS.map(d => `<option value="${esc(d.key)}"${d.key === p.desk_key ? " selected" : ""}>People who can open ${esc(d.label)}</option>`).join("")}</select></label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${p.audience && p.audience.length ? `<label style="display:flex;gap:6px;align-items:center;font-size:13.5px"><input type="checkbox" data-pt="${p.id}"${p.kind === "tip" ? " checked" : ""}> Tip on their Home</label>` : ""}<button class="btn primary small" data-pa="approved">✓ Approve</button><button class="btn small" data-pa="done">Already handled</button><button class="btn small" data-pa="rejected">✗ Not useful</button><span class="muted" data-pm></span></div>` : (p.lesson ? `<details class="acc2"><summary>What Penny learned</summary><p style="white-space:pre-wrap">${esc(p.lesson)}</p></details>` : "")}</div>`).join("")
+      : `<div class="card"><p>Nothing here${f === "new" ? " to review. 🎉" : "."}</p></div>`;
+    $("#pplist").querySelectorAll("[data-pa]").forEach(b => b.onclick = async () => { const card = b.closest("[data-pp]"), id = +card.dataset.pp, m = card.querySelector("[data-pm]"), tip = card.querySelector("[data-pt]");
+      b.disabled = true;
+      const r = await sb.rpc("penny_pattern_decide", { p_id:id, p_status:b.dataset.pa, p_lesson:b.dataset.pa === "approved" ? card.querySelector("[data-pl]").value : null, p_desk:card.querySelector("[data-pd]").value, p_tip:!!(tip && tip.checked), p_note:null });
+      if(r.error){ b.disabled = false; return m.textContent = "Couldn't save: " + r.error.message; }
+      m.textContent = b.dataset.pa === "approved" ? `Approved ✓${r.data && r.data.doc ? " — Penny knows it now" : ""}${r.data && r.data.tips ? ` · tip on ${r.data.tips} people's Home` : ""}` : "Saved ✓";
+      setTimeout(load, 1500); });
+  };
+  $("#ppf").onchange = load;
+  $("#pprun").onclick = async () => { const b = $("#pprun"), m = $("#ppmsg"); b.disabled = true; m.textContent = "Penny is looking… (2–4 minutes; this page updates when she's done)";
+    const before = ((await sb.from("penny_pattern_runs").select("id").order("id", { ascending:false }).limit(1)).data || [])[0]?.id || 0;
+    const r = await sb.functions.invoke("penny-patterns", { body:{} });
+    if(r.error){ b.disabled = false; return m.textContent = "Couldn't start: " + r.error.message; }
+    for(let i = 0; i < 60; i++){ await new Promise(z => setTimeout(z, 8000)); if(current() !== "penny") return;
+      const x = ((await sb.from("penny_pattern_runs").select("id, found, new_count, error").order("id", { ascending:false }).limit(1)).data || [])[0];
+      if(x && x.id > before){ b.disabled = false; m.textContent = x.error ? "Penny hit a problem: " + x.error : `Done: ${x.found} patterns, ${x.new_count} new.`; return load(); } }
+    b.disabled = false; m.textContent = "Still working — check back in a few minutes."; };
+  load();
+}
 /* Reports > Ask Patrick & Penny > Penny — teach her this week (#/penny/teach): last 7 days of missed / 👎 questions, one tap to teach or make a check */
 async function pennyTeachView(v){
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a> · <a href="#/penny/missed">All missed</a></p><h2>Penny — teach her this week</h2>
@@ -1524,6 +1566,7 @@ async function pennyView(v){
   if(hashArg().startsWith("checks")) return pennyChecksView(v);
   if(hashArg() === "cleanup") return pennyCleanupView(v);
   if(hashArg() === "teach") return pennyTeachView(v);
+  if(hashArg() === "patterns") return pennyPatternsView(v);
   const missedOnly = hashArg() === "missed";
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
     <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
