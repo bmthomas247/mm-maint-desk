@@ -14,7 +14,8 @@
    PTO reports (Brandon 2026-10-29: "managers and admin can run the reports on the reports page, managers can only see their teams pto";
    hub_pto_reports.sql): Reports ▸ Team ▸ PTO balances (#/pto) + PTO: check Hubstaff's math (#/pto/check), window.ptoReport.
    Only paid or unpaid time off (Brandon: no Sick in new requests). Salaried people (a Hubstaff policy named "Salaried") only get
-   "Salaried time off", 80 h a year (Brandon 2026-10-29; hub_pto_salaried.sql).
+   "Salaried time off", 80 h a year (Brandon 2026-10-29; hub_pto_salaried.sql). Hourly PTO balance = the hub's own number
+   (calc_hours: tracked h x 0.77/40 since the policy started, max 52, minus PTO used; Brandon "Yes, hub calculates"), Hubstaff's alongside.
    Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet · #/cal_off · #/pto */
 (function(){
 const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
@@ -403,6 +404,7 @@ const isSal = p => /salaried/i.test((p && p.name) || "");
 /* which balances a person sees: salaried -> only the salaried policy; others -> paid + unpaid (never sick) */
 const shownBals = (bs, pol) => { const sal = bs.some(b => isSal(pol(b.policy_id))); return bs.filter(b => sal ? isSal(pol(b.policy_id)) : pol(b.policy_id).kind !== "sick"); };
 const polName = p => isSal(p) ? "Salaried time off" : (p.name || "");
+const balOf = b => b.calc_hours != null ? +b.calc_hours : +b.hours;   // the hub's number for hourly PTO, else Hubstaff's
 const hrs = x => x == null ? "—" : (Math.round(x * 100) / 100) + " h";
 const whenR = r => (r.day === r.end_day ? fday(r.day) : fday(r.day) + " – " + fday(r.end_day)) + (r.all_day ? "" : ", " + ftime(r.start_time.slice(0, 5)) + "–" + ftime(r.end_time.slice(0, 5)));
 const stPill = r => r.status === "approved" ? `<span class="pill green">Approved</span>` : r.status === "denied" ? `<span class="pill red">Not approved</span>` : r.status === "cancelled" ? `<span class="pill">Cancelled</span>` : `<span class="pill amber">Waiting</span>`;
@@ -414,7 +416,7 @@ function ptoBy(b, pol, by){
   const c = pol.config || {}; if(pol.policy_type !== "hours_worked" || !c.hours_worked || b.worked_ytd == null) return null;
   const t = new Date(), y0 = new Date(t.getFullYear(), 0, 1), wks = Math.max(1, (t - y0) / 6048e5), perWk = b.worked_ytd / wks, ahead = Math.max(0, (D(by) - t) / 6048e5);
   const add = perWk * ahead * c.hours_per / c.hours_worked, cap = c.maximum_to_accrue ? +c.maximum_to_accrue : Infinity;
-  return { h:Math.min(cap, b.hours + add), perWk, capped:b.hours + add > cap, cap };
+  return { h:Math.min(cap, balOf(b) + add), perWk, capped:balOf(b) + add > cap, cap };
 }
 async function timeOff(v){
   v.innerHTML = `<div class="page cal">${tabs("cal_off")}<p class="muted">Loading…</p></div>`;
@@ -427,7 +429,8 @@ async function timeOff(v){
   const approver = ME.admin || (ar.data || []).some(a => a.approver === myId), wait = others.filter(r => r.status === "pending");
   const by = ST.ptoBy || (new Date().getFullYear() + "-12-31");
   const balCard = b => { const p = pol(b.policy_id), f = ptoBy(b, p, by), c = p.config || {};
-    return `<div class="card"><div class="muted" style="font-size:12.5px">${esc(polName(p))}</div><b class="n">${hrs(b.hours)}</b>
+    return `<div class="card"><div class="muted" style="font-size:12.5px">${esc(polName(p))}</div><b class="n">${hrs(balOf(b))}</b>
+      ${b.calc_hours != null ? `<div class="muted" style="font-size:11.5px">Worked out by the hub: ${esc(b.calc_note || "")} Hubstaff shows ${hrs(b.hours)}.</div>` : ""}
       <div style="font-size:12.5px">${p.policy_type === "hours_worked" ? `Earns ${esc(c.hours_per)} h for every ${esc(c.hours_worked)} h worked${c.maximum_to_accrue ? `, up to ${esc(c.maximum_to_accrue)} h` : ""}.`
         : p.policy_type === "annual" ? `${esc(c.hours_per_year)} h a year.` : p.policy_type === "joined_date" ? `${esc(c.hours_per_year)} h a year from your start date.` : ""}</div>
       ${f ? `<div style="font-size:13px;margin-top:6px">By ${esc(fday(by))}: <b>about ${hrs(f.h)}</b>${f.capped ? ` (the ${f.cap} h max)` : ""}<div class="muted" style="font-size:11.5px">Estimate at your pace this year (${Math.round(f.perWk)} h a week tracked in Hubstaff), if you don't use any.</div></div>` : ""}</div>`; };
@@ -461,7 +464,7 @@ async function timeOff(v){
   v.querySelectorAll("[data-no]").forEach(b => b.onclick = () => { const why = prompt("Short reason for saying no (they'll see it):"); if(why && why.trim()) act("timeoff_decide", { p_id:+b.dataset.no, p_status:"denied", p_response:why.trim() }); });
   v.querySelectorAll("[data-resend]").forEach(b => b.onclick = () => confirm("Check Hubstaff first: is this time off already there? Send it again only if it isn't.") && act("timeoff_resend", { p_id:+b.dataset.resend }));
   const ask = () => {
-    const left = k => { const b = myB.find(x => pol(x.policy_id).kind === k); return b && k === "pto" ? ` (${hrs(b.hours)} left)` : ""; };
+    const left = k => { const b = myB.find(x => pol(x.policy_id).kind === k); return b && k === "pto" ? ` (${hrs(balOf(b))} left)` : ""; };
     $("#tocard").innerHTML = `<div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">Ask for time off</h2><button class="btn small" id="tox" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
       <label class="field"><span>Type</span><select id="to_k">${(sal ? [["pto","Salaried time off"]] : [["pto",TK.pto],["unpaid",TK.unpaid]]).map(([k, l]) => `<option value="${k}">${l}${left(k)}</option>`).join("")}</select></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>From</span><input type="date" id="to_d" value="${esc(addD(today(), 1))}"></label><label class="field" style="flex:1"><span>To (last day off)</span><input type="date" id="to_e"></label></div>
@@ -500,17 +503,17 @@ window.ptoReport = async function(v, sub){
   if(chk){
     const f = bals.filter(b => b.check_flag), pto = bals.filter(b => pol(b.policy_id).policy_type === "hours_worked");
     v.innerHTML = `<div class="page cal wide">${head}
-      <div class="card"><p class="muted" style="font-size:13px;margin:0 0 8px">Estimate: hours tracked in Hubstaff this year × the policy's rate (${esc(pto[0] ? pol(pto[0].policy_id).config.hours_per + " h per " + pol(pto[0].policy_id).config.hours_worked + " h worked" : "PTO rate")}), compared with Hubstaff's balance. A gap can mean the person joined the policy later in the year, hit the max at some point, or Hubstaff isn't counting all hours. Check in Hubstaff before changing anything.</p>
-      <div class="tow"><table class="to"><tr><th>Who</th><th>Policy</th><th>Worked this year</th><th>Should have earned</th><th>Used</th><th>Hubstaff balance</th><th>Looks</th></tr>
-      ${bals.filter(b => b.earned_ytd != null).sort((x, y) => who(x.user_id).localeCompare(who(y.user_id))).map(b => `<tr><td><b>${esc(who(b.user_id))}</b></td><td>${esc(polName(pol(b.policy_id)))}</td><td>${pol(b.policy_id).policy_type === "hours_worked" ? hrs(b.worked_ytd) : "—"}</td><td>${hrs(b.earned_ytd)}</td><td>${hrs(b.used_ytd)}</td><td>${hrs(b.hours)}</td>
-        <td>${b.check_flag ? `<span class="pill amber">Check</span><div class="muted" style="font-size:12px">${esc(b.check_note || "")}</div>` : `<span class="pill green">OK</span>`}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">Nobody on your team has a Hubstaff PTO balance.</td></tr>`}</table></div>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">${f.length} of ${bals.filter(b => b.earned_ytd != null).length} to check.</p></div></div>`;
+      <div class="card"><p class="muted" style="font-size:13px;margin:0 0 8px">The hub works out hourly PTO itself: ${esc(pto[0] ? pol(pto[0].policy_id).config.hours_per + " h for every " + pol(pto[0].policy_id).config.hours_worked + " h tracked in Hubstaff" : "the PTO rate")} since the policy started, never more than the max, minus PTO used. That is the balance people see and ask against. "Hubstaff balance" is what Hubstaff shows; fix Hubstaff to match if you want them to agree. Salaried: ${esc("80 h a year minus hours used")}.</p>
+      <div class="tow"><table class="to"><tr><th>Who</th><th>Policy</th><th>Worked this year</th><th>Earned this year</th><th>Used this year</th><th>Hub balance</th><th>Hubstaff balance</th><th>Looks</th></tr>
+      ${bals.filter(b => b.earned_ytd != null).sort((x, y) => who(x.user_id).localeCompare(who(y.user_id))).map(b => `<tr><td><b>${esc(who(b.user_id))}</b></td><td>${esc(polName(pol(b.policy_id)))}</td><td>${pol(b.policy_id).policy_type === "hours_worked" ? hrs(b.worked_ytd) : "—"}</td><td>${hrs(b.earned_ytd)}</td><td>${hrs(b.used_ytd)}</td><td><b>${hrs(b.calc_hours != null ? b.calc_hours : (pol(b.policy_id).config.hours_per_year || 0) - b.used_ytd)}</b></td><td>${hrs(b.hours)}</td>
+        <td>${b.check_flag ? `<span class="pill amber">Check</span><div class="muted" style="font-size:12px">${esc(b.check_note || "")}</div>` : `<span class="pill green">Same</span>`}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Nobody on your team has a Hubstaff PTO balance.</td></tr>`}</table></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">${f.length} of ${bals.filter(b => b.earned_ytd != null).length} where Hubstaff doesn't match.</p></div></div>`;
     return;
   }
   const yr = String(new Date().getFullYear());
   const row = id => { const bs = bals.filter(b => b.user_id === id).sort((x, y) => (pol(x.policy_id).kind === "pto" ? 0 : 1) - (pol(y.policy_id).kind === "pto" ? 0 : 1));
     const rs = reqs.filter(r => r.user_id === id), wait = rs.filter(r => r.status === "pending").length, taken = rs.filter(r => r.status === "approved" && r.day.slice(0, 4) === yr);
-    return `<tr><td><b>${esc(who(id))}</b></td><td>${bs.map(b => `${esc(polName(pol(b.policy_id)))}: <b>${hrs(b.hours)}</b>${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}`).join("<br>") || `<span class="muted">Not in Hubstaff time off</span>`}</td>
+    return `<tr><td><b>${esc(who(id))}</b></td><td>${bs.map(b => `${esc(polName(pol(b.policy_id)))}: <b>${hrs(balOf(b))}</b>${b.calc_hours != null ? ` <span class="muted">(Hubstaff ${hrs(b.hours)})</span>` : ""}${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}`).join("<br>") || `<span class="muted">Not in Hubstaff time off</span>`}</td>
       <td>${bs.filter(b => pol(b.policy_id).policy_type === "hours_worked").map(b => hrs(b.worked_ytd)).join("<br>")}</td>
       <td>${[...new Set(taken.map(kl))].map(l => `${esc(l)}: ${hrs(taken.filter(r => kl(r) === l).reduce((a, r) => a + +r.hours, 0))}`).join("<br>") || "—"}</td>
       <td>${wait ? `<a href="#/cal_off" class="pill amber" style="text-decoration:none">${wait} waiting</a>` : "—"}</td></tr>`; };
