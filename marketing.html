@@ -100,6 +100,7 @@ dialog.big[open]{display:flex}
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
 <dialog id="big" class="big"></dialog>
+<input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -385,9 +386,12 @@ async function shrink(file){   // photos -> max 1200 px wide; PNG stays PNG (log
   const type = png ? "image/png" : "image/jpeg", blob = await new Promise(r => c.toBlob(r, type, 0.85));
   return { blob, ext:png ? "png" : "jpg", type };
 }
-function uploadPic(i, k){
-  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/jpeg,image/png,image/gif,image/webp,image/heic";
-  inp.onchange = async () => { const file = inp.files[0]; if(!file) return;
+// one file input kept in the page (phones need it attached); DES.up = the block + field it fills, or none = add a new picture block
+function uploadPic(i, k){ DES.up = { i, k }; $("#picfile").value = ""; $("#picfile").click(); }
+document.addEventListener("change", async e => { if(e.target.id !== "picfile" || !DES.d) return;
+    const inp = e.target, file = inp.files[0]; if(!file) return;
+    let { i, k } = DES.up || {}; DES.up = null;
+    if(i == null){ const B = DES.d.design.blocks, at = Math.max(0, B.length - (B.at(-1)?.t === "footer" ? 1 : 0)); B.splice(at, 0, newBlock("image")); i = at; k = "src"; drawDesigner(); }
     $("#dst").textContent = "Uploading picture…";
     try {
       const { blob, ext, type } = await shrink(file);
@@ -397,9 +401,7 @@ function uploadPic(i, k){
       if(up.error) throw up.error;
       setPic(i, k, sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl, file.name);
     } catch(e){ $("#dst").textContent = "Upload didn't work: " + (e.message || e); }
-  };
-  inp.click();
-}
+});
 function setPic(i, k, url, name){
   const b = DES.d.design.blocks[i]; b[k] = url;
   if(k === "src" && !b.alt && name) b.alt = name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").slice(0, 120);
