@@ -99,6 +99,7 @@ function autoOk(s, a){
     // every extra guest with an email (Autohost portal) is on Brevo "AH Guest of Guest" — or there are none (brevo_guests.py, counts only)
     case "brevo_ok": return !!(s.brevo && (s.brevo.extra === 0 || s.brevo.inBrevo >= s.brevo.extra));
     case "balance_zero": return s.balance != null && Math.abs(s.balance) < 0.005;
+    case "ah_portal": return !!(s.ah && s.ah.portal === true);
     // Breezeway (bw_res_tasks.py): matched by home + scheduled date, names as the team uses them (Oct 2026 tasks)
     case "bw_pre_out": return bwHas(s, "housekeeping", /pre-?clean/i, addDay(s.arrive, -5), s.arrive) && bwClean(s);
     case "bw_owner_next_chris": return bwHas(s, "inspection", /owner next/i, addDay(s.arrive, -4), s.arrive, /chris robinson/i);
@@ -151,6 +152,13 @@ const TD_RULES = {
   td_no_beyond:    s => !fee(s, /beyond/i),
   td_ext_clean:    s => fee(s, /extended stay cleaning/i),
   td_adv:          s => s.td.advantage === true,
+  // round 3 (2026-10-29): travel agent id, folio payments/refunds (counts + dates only), extra guests named in the notes
+  td_ta:           s => s.chan === "abnb" ? s.td.taId === 210 : s.td.taId != null && ![209, 210].includes(s.td.taId),   // 210 AIRBNB, 209 VRBO in Track
+  td_earn:         s => !!(s.td.tx && s.td.tx.comm > 0),
+  // refunded = a credit memo (Track's Refund Transaction), or nothing was ever collected; a voided payment alone does NOT count
+  td_refund:       s => s.status === "Cancelled" && !!s.td.tx && (s.td.tx.credit > 0 || (s.td.tx.pay === 0 && s.td.tx.void === 0)),
+  td_ext_paid:     s => !!(s.list && s.list.extAt && s.td.tx) && doc(s, /change addendum/i, true) && (s.td.tx.payDates || []).some(d => d >= s.list.extAt.slice(0, 10)),
+  td_extra_notes:  s => !!(s.td.notes && s.td.notes.extra && s.td.notes.extra[0] >= s.td.notes.extra[1]),
 };
 const addDay =(d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
 const bwHas = (s, dp, re, from, to, who) => (s.bw || []).some(t => t.dp === dp && t.sd >= from && t.sd <= to && re.test(t.n) && (!who || (t.who || []).some(w => who.test(w))));
@@ -158,7 +166,7 @@ const bwClean = s => bwHas(s, "housekeeping", /^(?!.*(assessment|spring)).*(clea
 const bwInOut = s => bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart);
 // Only trust "no clean left" when this home was in the Breezeway pull (it has a Breezeway id and the stay is in the window)
 const bwKnown = s => !!B.bwUpdated && !(B.bwMissing || []).includes(s.unit) && s.depart >= addDay(B.today, -7) && s.arrive <= addDay(B.today, 75);
-const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
+const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
 function prep(s){
   const c = conds(s), ticks = s.ticks || {};
   s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
