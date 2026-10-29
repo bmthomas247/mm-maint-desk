@@ -28,10 +28,14 @@ textarea{min-height:90px;resize:vertical}
 .cnt{font-size:12px;font-weight:800;padding:2px 8px;border-radius:999px;background:var(--green-soft);color:var(--green)}.cnt.bad{background:var(--amber-soft);color:var(--amber)}
 .check{background:var(--amber-soft);border-color:#ecd9b6}.check li{margin:4px 0}
 .facts span{display:inline-block;margin:0 12px 4px 0}
+.drop{border:2px dashed var(--line-2);border-radius:12px;padding:16px;text-align:center;cursor:pointer;font-size:14px}.drop.on{border-color:var(--forest);background:var(--green-soft)}
+.ups{margin:10px 0 0;padding-left:18px}.ups li{margin:4px 0}.btn.sm{min-height:28px;padding:0 9px;font-size:12px;border-radius:8px}
 </style>
 </head><body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script src="config.js"></script>
 <script>
 "use strict";
@@ -43,7 +47,7 @@ const KIND = { str:"STR onboarding", lease:"Lease onboarding", h2:"2nd home" };
 // limits = the house style on our live listings ("MM - Property Set Up" playbook, 2026-10-26)
 const PARTS = [["short_headline","Short description / Airbnb headline",0,50],["vrbo_headline","VRBO headline",0,80],
   ["airbnb_description","Airbnb description",255,345],["long_description","Website long description",0,0]];
-const S = { jobs:[], me:null, res:null, job:null, busy:false };
+const S = { jobs:[], me:null, res:null, job:null, busy:false, up:[] };
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -60,15 +64,19 @@ async function boot(){
 function draw(){
   const j = S.job, R = S.res;
   $("#app").innerHTML = `<h1>AI Description Tool</h1>
-    <p class="muted small">Claude writes the listing texts from Track, the owner's questionnaire and our live listings in the same community. Drafts only: check them, then copy them into Track. Codes and Wi-Fi are never sent to Claude.</p>
+    <p class="muted small">Claude writes the listing texts from Track, the owner's questionnaire and our live listings in the same community. Drafts only: check them, then copy them into Track. Lines with codes or Wi-Fi are removed from typed text before it goes to Claude; a scan or photo goes as it is (Claude is told never to copy codes). Uploads aren't saved anywhere.</p>
     <div class="card"><label for="job">Property</label>
       <select id="job"><option value="">Pick a property on the set-up desk…</option>${S.jobs.map(x => `<option value="${esc(x.id)}" ${j && j.id === x.id ? "selected" : ""}>${esc(x.code)} — ${esc(x.home || "")} (${esc(KIND[x.kind])})</option>`).join("")}</select>
       <label for="notes" style="margin-top:12px">Anything to add (optional)</label>
       <textarea id="notes" placeholder="e.g. new queen sleeper sofa, ground floor, remodeled kitchen 2026, walk to Main Street trolley">${esc(S.notes || "")}</textarea>
+      <label style="margin-top:12px">Owner's questionnaire or notes (optional)</label>
+      <div class="drop" id="drop"><b>Drop files here</b> or click to pick · PDF, Word, text, or photos of a paper form
+        <input type="file" id="pick" accept=".pdf,.docx,.txt,.md,.eml,image/jpeg,image/png,image/webp" multiple hidden></div>
+      ${S.up.length ? `<ul class="ups">${S.up.map((u, i) => `<li><b>${esc(u.name)}</b> <span class="muted small">${esc(u.how)}</span> <button class="btn sm" data-rm="${i}" aria-label="Remove">✕</button></li>`).join("")}</ul>` : ""}
       <div class="row" style="margin-top:12px"><button class="btn pri" id="go" ${!j || S.busy ? "disabled" : ""}>${S.busy ? "Writing… (about a minute)" : R ? "Write it again" : "Write it"}</button>
         ${S.err ? `<span style="color:var(--red);font-weight:700">${esc(S.err)}</span>` : ""}</div></div>
     ${R ? `<div class="card small facts muted"><b>Used:</b> <span>Track unit: ${R.used.track_unit ? "yes" : "not found"}</span><span>Community text: ${R.used.community_text ? "yes" : "no"}</span>
-        <span>Questionnaire: ${R.used.questionnaire ? "yes" : "none on the job"}</span><span>Style from: ${R.used.examples.length ? esc(R.used.examples.join(", ")) : "no live listing in this community"}</span></div>
+        <span>Questionnaire: ${R.used.questionnaire ? "yes" : "none on the job"}</span><span>Style from: ${R.used.examples.length ? esc(R.used.examples.join(", ")) : "no live listing in this community"}</span>${(R.used.uploads || []).length ? `<span>Uploaded: ${esc(R.used.uploads.join(", "))}</span>` : ""}</div>
       ${R.check_these && R.check_these.length ? `<div class="card check"><b>Check before it goes live</b><ul>${R.check_these.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
       ${PARTS.map(([k, label, lo, hi]) => { const t = R[k] || "", n = t.length, bad = (hi && n > hi) || (lo && n < lo);
         return `<div class="card out"><div class="row"><h3>${label}</h3><span class="cnt ${bad ? "bad" : ""}">${n} characters${hi ? ` · ${lo ? lo + "–" : "max "}${hi}` : ""}</span>
@@ -76,13 +84,48 @@ function draw(){
       <div class="row"><button class="btn pri" id="save">Save to the job</button><span class="muted small">Keeps these drafts on ${esc(j.code)}'s set-up job (nothing goes to Track).</span></div>` : ""}`;
   $("#job").onchange = e => { S.job = S.jobs.find(x => x.id === e.target.value) || null; S.res = null; S.err = ""; history.replaceState(null, "", "#" + (S.job ? S.job.id : "")); draw(); };
   $("#notes").oninput = e => { S.notes = e.target.value; };
+  const drop = $("#drop"), pick = $("#pick");
+  drop.onclick = () => pick.click(); pick.onchange = () => addFiles([...pick.files]);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("on"); }; drop.ondragleave = () => drop.classList.remove("on");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("on"); addFiles([...e.dataTransfer.files]); };
+  document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { S.up.splice(+b.dataset.rm, 1); draw(); });
   $("#go").onclick = write;
   document.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => { await navigator.clipboard.writeText(R[b.dataset.copy] || ""); b.textContent = "Copied ✓"; setTimeout(() => b.textContent = "Copy", 1500); });
   const sv = $("#save"); if(sv) sv.onclick = save;
 }
+/* uploads: text is read here in the browser (PDF text layer, Word, plain text) so code / Wi-Fi lines can be dropped before Claude sees them
+   (psu-describe filters them); a scan or photo has no text, so it goes as a PDF/image once. Nothing is stored. */
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+const b64 = buf => { let s = ""; const a = new Uint8Array(buf); for(let i = 0; i < a.length; i += 32768) s += String.fromCharCode.apply(null, a.subarray(i, i + 32768)); return btoa(s); };
+async function shrinkImg(file){
+  const bmp = await createImageBitmap(file, { imageOrientation:"from-image" }), k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close();
+  return c.toDataURL("image/jpeg", 0.85).split(",")[1];
+}
+async function readOne(f){
+  const n = f.name, ext = (n.split(".").pop() || "").toLowerCase();
+  if(f.size > 10 * 1048576) return { name:n, how:"too big (10 MB max) — not used", skip:true };
+  if(/^(txt|md|eml)$/.test(ext)) { const t = await f.text(); return { name:n, text:t, how:`text · ${t.length.toLocaleString()} characters` }; }
+  if(ext === "docx"){ const r = await mammoth.extractRawText({ arrayBuffer:await f.arrayBuffer() }); return { name:n, text:r.value, how:`Word · ${r.value.length.toLocaleString()} characters` }; }
+  if(ext === "pdf"){
+    const buf = await f.arrayBuffer(), pdf = await pdfjsLib.getDocument({ data:buf.slice(0) }).promise; let t = "";
+    for(let i = 1; i <= Math.min(pdf.numPages, 80); i++){ const c = await (await pdf.getPage(i)).getTextContent(); t += c.items.map(x => x.str + (x.hasEOL ? "\n" : " ")).join("") + "\n"; }
+    if(t.replace(/\s/g, "").length > 200) return { name:n, text:t, how:`PDF · ${pdf.numPages} pages · ${t.length.toLocaleString()} characters` };
+    if(buf.byteLength > 9 * 1048576) return { name:n, how:"scanned PDF over 9 MB — split it or take photos", skip:true };
+    return { name:n, file:{ name:n, media_type:"application/pdf", data:b64(buf) }, how:`scanned PDF · ${pdf.numPages} pages · Claude reads the pages` };
+  }
+  if(/^image\//.test(f.type)) return { name:n, file:{ name:n, media_type:"image/jpeg", data:await shrinkImg(f) }, how:"photo · Claude reads it" };
+  return { name:n, how:"can't read this kind of file — use PDF, Word, text or a photo", skip:true };
+}
+async function addFiles(list){
+  for(const f of list){ let u; try { u = await readOne(f); } catch(e){ u = { name:f.name, how:"couldn't read it", skip:true }; } S.up.push(u); draw(); }
+}
 async function write(){
   S.busy = true; S.err = ""; draw();
-  const r = await sb.functions.invoke("psu-describe", { body:{ job_id:S.job.id, notes:S.notes || "" } });
+  const use = S.up.filter(u => !u.skip);
+  const r = await sb.functions.invoke("psu-describe", { body:{ job_id:S.job.id, notes:S.notes || "",
+    docs:use.filter(u => u.text).map(u => ({ name:u.name, text:u.text })), files:use.filter(u => u.file).map(u => u.file) } });
   S.busy = false;
   if(r.error || !r.data || !r.data.ok){ S.err = (r.data && r.data.error) || "Couldn't reach Claude — try again."; let m = ""; try { m = (await r.error.context.json()).error; } catch(e){} if(m) S.err = m; draw(); return; }
   S.res = r.data; draw();
