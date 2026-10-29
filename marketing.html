@@ -296,9 +296,10 @@ function ownersHtml(){
     <p class="src">Source: Track owners of active homes vs Brevo owner lists, compared without keeping emails (mkt_owner_check.py), ${esc(fmtDT(O.chk.ran_at))}. Fix the lists in Brevo; the hub doesn't change them.</p>`); }
   if(O.stays && O.stays.units){ const t = today(), end = new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
     const rows = []; Object.entries(O.stays.units).forEach(([home, a]) => (a || []).forEach(x => { if(x.out >= t && x.in <= end) rows.push(Object.assign({ home }, x)); }));
-    rows.sort((a, b) => a.in.localeCompare(b.in));
-    out.push(`<h2>Owners in town (next 30 days)</h2>${rows.length ? `<div class="box"><table><thead><tr><th>Home</th><th>Who</th><th>Stay</th><th>Type</th></tr></thead><tbody>
-      ${rows.map(x => `<tr><td><b>${esc(x.home)}</b></td><td>${esc(x.who || "")}</td><td>${esc(fmtD(x.in))} – ${esc(fmtD(x.out))}</td><td>${esc(x.label || "")}</td></tr>`).join("")}</tbody></table></div>`
+    rows.sort((a, b) => (a.in < t) - (b.in < t) || a.in.localeCompare(b.in));   // arrivals first, then owners already here
+    out.push(`<h2>Owners in town (next 30 days)</h2>${rows.length ? `<div class="box"><table><thead><tr><th>Home</th><th>Who</th><th>Stay</th><th>Type</th><th></th></tr></thead><tbody>
+      ${rows.map(x => `<tr><td><b>${esc(x.home)}</b></td><td>${esc(x.who || "")}</td><td>${esc(fmtD(x.in))} – ${esc(fmtD(x.out))}</td><td>${esc(x.label || "")}</td>
+        <td>${x.in < t ? `<span class="pill">here now</span>` : `<span class="pill green">arrives ${esc(fmtD(x.in).replace(/, \d{4}$/, ""))}</span>`}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="muted">No owner stays in the next 30 days.</p>`}
     <p class="src">Source: Track owner stays (feeds/owner-stays). A good time for a hello, a welcome gift or a quick walk-through.</p>`); }
   if(O.psu && O.psu.length){ const K = { str:"New homes being set up", h2:"New 2nd-home owners", off:"Leaving us", sale:"Home sales" };
@@ -310,7 +311,8 @@ function ownersHtml(){
 }
 
 /* ---------- Brevo email campaigns (mkt_campaigns, read by mkt_brevo_sync.py) + hub drafts (mkt_drafts) ---------- */
-const campTab = c => { const t = (c.list_names || []).map(LIST_TAB); return t.length ? t : ["general"]; };
+// a campaign sent to more than one kind of list (e.g. Moose Magazine: guests + owners + everyone) files under General only
+const campTab = c => { const t = [...new Set((c.list_names || []).map(LIST_TAB))]; return t.length === 1 ? t : ["general"]; };
 const CST = { sent:["green","Sent"], scheduled:["blue","Scheduled"], queued:["blue","Scheduled"], in_process:["blue","Sending"], draft:["","Draft"], suspended:["red","Suspended"], archive:["","Archived"] };
 const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 + "%" : "—";
 function campsHtml(){
