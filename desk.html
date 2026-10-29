@@ -206,30 +206,49 @@ button.row:hover{background:var(--surface-2)}
 .cb:checked{background:var(--go);border-color:var(--go)}
 .cb:checked::after{content:"";position:absolute;left:5px;top:1.5px;width:4px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg)}
 .rbtns{display:flex;flex-wrap:wrap;gap:4px;grid-column:2;margin-top:3px}
-/* Trash field view — like the Locks field site (Brandon 2026-10-28) */
-.troute{margin-bottom:14px}
-.tbar{flex-basis:100%;height:8px;border-radius:99px;background:var(--line-2);overflow:hidden}
+/* Trash — mobile first like the Locks field app (Brandon 2026-10-28): one 760px column everywhere, sticky route bar, big taps */
+body.only-trash.locklook main#view,body.only-trash main#view{max-width:760px;padding:0 16px}
+body.only-trash header.top{position:static}
+.ttop{padding:6px 2px 12px}
+.ttop h2{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:0}
+.ttop p{font-size:14px;color:var(--muted);margin:4px 0 0;line-height:1.45}
+.troute{margin-bottom:16px}
+.tbarbtn{appearance:none;font:inherit;color:var(--ink);width:100%;text-align:left;cursor:pointer;position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;
+  background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px 12px;box-shadow:var(--shadow);margin-bottom:10px;min-height:56px}
+.troute.closed .tbarbtn{margin-bottom:0}
+.tname{font-size:16px;font-weight:800;line-height:1.25;flex:1 1 100%}
+.tct{margin-left:auto;font-size:14px;font-weight:800;color:var(--ink-2)}
+.tchev{font-size:14px;color:var(--muted);width:14px;text-align:center}
+.tbar{flex-basis:100%;height:8px;border-radius:99px;background:var(--line-2);overflow:hidden;display:block}
 .tbar i{display:block;height:100%;background:var(--go);border-radius:99px;transition:width .2s}
-.thood{padding:12px 16px 2px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:8px 16px 14px}
-.tcard{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:8px;scroll-margin:80px}
-.tcard.tdone{opacity:.6;background:var(--surface-2)}
-.tcard.tnext{box-shadow:0 0 0 3px var(--accent) inset}
+.tgpsrow{margin:0 0 10px}
+.tgps{width:100%;min-height:52px;font-size:16px;border-radius:14px}
+.tnote{font-size:13.5px;color:var(--muted);line-height:1.45;margin-top:8px}
+.tnear{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.tnear .tnote{margin-top:0}
+.tnear .chip{min-height:40px}
+.thood{padding:10px 4px 6px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tcard{border:1px solid var(--line);border-radius:18px;padding:16px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;margin-bottom:10px;scroll-margin:110px}
+.tcard.tdone{opacity:.65;background:var(--surface-2);box-shadow:none;padding:12px 16px;gap:4px}
+.tcard.tnext{box-shadow:0 0 0 3px var(--accent) inset,var(--shadow)}
 .tch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.tcode{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-right:auto}
-.twhy{font-size:13px;color:var(--ink-2);line-height:1.45}
-.tgar{border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--surface-2)}
-.tgar .qrow{font-size:15px}
-.tgar.none{font-size:13px;color:var(--muted)}
+.tcode{font-size:21px;font-weight:800;letter-spacing:-.01em;margin-right:auto}
+.tdone .tcode{font-size:16px}
+.tfar{font-size:13px;font-weight:700;color:var(--accent-ink)}
+.twhy{font-size:14px;color:var(--ink-2);line-height:1.45}
+.tgar{border:1px solid var(--line-2);border-radius:14px;padding:12px 14px;background:var(--surface-2)}
+.tgar .qrow{font-size:17px}
+.tgar.none{font-size:13.5px;color:var(--muted)}
 .tbtns{display:flex;gap:8px}
-.tbtns .btn{min-height:52px;font-size:16px;flex:1}
-.tbtns .tgo{flex:2}
-.tdid{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.tfoot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--line-2)}
-.tall{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;cursor:pointer}
-.tskip{padding:10px 16px;border-top:1px solid var(--line-2);font-size:13px;color:var(--muted);line-height:1.5}
-.tskip summary{cursor:pointer;font-weight:700}
-@media (max-width:640px){.tgrid{grid-template-columns:1fr;padding:8px 12px 12px}.thood{padding:12px 12px 2px}}
+.tbtns .btn{min-height:56px;font-size:17px;flex:1;border-radius:14px}
+.tbtns .btn:active,.tgps:active{transform:scale(.98)}
+.tbtns .tgo{flex:2;background:var(--moose);border-color:var(--moose);color:#16220a}
+.tdid{font-size:13.5px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tfoot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 4px}
+.tall{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px}
+.tskip{padding:12px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);font-size:13.5px;color:var(--muted);line-height:1.5;margin-top:4px}
+.tskip summary{cursor:pointer;font-weight:700;min-height:28px}
+.tadd{padding:4px 2px 24px}
 
 /* homes */
 .appl{overflow-x:auto;border:1px solid var(--line-2);border-radius:8px}
@@ -2344,34 +2363,73 @@ function timesheetPanel(m){
    Field view like the Locks field site: one card per home, big "✓ Out" / "N/A → next", the garage code on the card
    (home_codes people only — everyone else gets the code-free profiles, so nothing shows). Per-home ticks live in rlog
    as <route>__<trash day>__<home> with a "home" field; the route ticks itself done when every home is done. */
+/* Mobile first like the Locks field app (Brandon 2026-10-28): one phone-width column on every screen, today's route open and the
+   other days folded, a sticky route bar with progress, "📍 I'm at the home" to jump to the closest home, compact done cards. */
 function vTrash(){
   var rs=routines().filter(isTrash).map(function(r){ var p=trashPlan(r); r._day=p?p.day:trashDay(r); return r; })
     .sort(function(a,b){ return a._day.localeCompare(b._day)||String(a.title).localeCompare(String(b.title)); });
-  return '<div class="sechead"><h2>Trash</h2><p>Take out only the homes on the list: someone stayed there (Track) or we finished work there (Breezeway) in the 7 days up to trash day. '+
-    'Leases always go out; second homes get a check. Tap <b>✓ Out</b> at each home and it moves you to the next one.</p>'+
-    '<button class="btn pri" data-act="newroutine">+ Routine</button></div>'+
-    (rs.length?rs.map(trashRoute).join(""):'<section class="panel"><div class="empty">No trash routes yet. Add one with + Routine: weekly, a title that starts with "Trash", the day, and its homes.</div></section>'); }
-function trashRoute(r){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.undone, t=today();
-  var foot='<div class="tfoot"><label class="tall"><input type="checkbox" class="cb" data-rtick="'+esc(r.id)+'"'+(done?' checked':'')+' aria-label="Whole route done"> Whole route done'+
+  var open=S.ui.trashOpen=S.ui.trashOpen||{}, t=today(), first=rs.filter(function(r){ return r._day===t; }).length?t:(rs[0]||{})._day;
+  return '<div class="ttop"><h2>Trash</h2><p>Only homes with a stay or finished work in the last 7 days. Tap <b>✓ Out</b> at each home.</p></div>'+
+    (rs.length?rs.map(function(r){ return trashRoute(r, open[r.id]!=null?open[r.id]:r._day===first); }).join(""):'<div class="tcard"><div class="twhy">No trash routes yet. Add one with + Trash route: weekly, a title that starts with "Trash", the day, and its homes.</div></div>')+
+    '<div class="tadd"><button class="btn sm ghost" data-act="newroutine">+ Trash route</button></div>'; }
+function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.undone, t=today(), rid=esc(r.id);
+  var todo=p?p.out.concat(p.check):[], n=p?todo.filter(function(x){ return trashTick(r.id,p.day,x.c); }).length:0, gap=daysBetween(t,r._day);
+  var when=gap===0?'<span class="pill soon">Today</span>':gap===1?'<span class="pill mute">Tomorrow</span>':'<span class="pill mute">'+esc(fmtD(r._day))+'</span>';
+  var name=String(r.title||"").replace(/^Trash\s*[-–—:]?\s*/i,"")||r.title;
+  var bar='<button class="tbarbtn" data-ttoggle="'+rid+'" aria-expanded="'+!!isOpen+'"><span class="tname">'+esc(name)+'</span>'+when+
+    '<span class="tct">'+(p?n+' / '+todo.length:'—')+'</span><span class="tchev" aria-hidden="true">'+(isOpen?'▾':'▸')+'</span>'+
+    '<span class="tbar"><i style="width:'+(todo.length?Math.round(n*100/todo.length):(p?100:0))+'%"></i></span></button>';
+  if(!isOpen) return '<section class="troute closed" data-troute="'+rid+'">'+bar+'</section>';
+  var foot='<div class="tfoot"><label class="tall"><input type="checkbox" class="cb" data-rtick="'+rid+'"'+(done?' checked':'')+' aria-label="Whole route done"> Whole route done'+
     (done?' <span class="muted">· '+esc(nameFor(lg.by))+(lg.auto?' (every home ticked)':'')+'</span>':'')+'</label>'+
-    '<span style="margin-left:auto"></span><button class="btn sm ghost" data-redit="'+esc(r.id)+'">Edit route</button>'+(r.url?'<a class="golink" href="'+esc(r.url)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'</div>';
-  if(!p) return '<section class="panel troute"><div class="ph"><h3>'+esc(r.title)+'</h3></div><div class="empty">Stays from Track aren\'t loaded yet — take all '+(r.props||[]).length+' homes.</div>'+foot+'</section>';
-  var todo=p.out.concat(p.check), n=todo.filter(function(x){ return trashTick(r.id,p.day,x.c); }).length, gap=daysBetween(t,p.day);
-  var when=gap===0?'<span class="pill soon">Today</span>':gap===1?'<span class="pill mute">Tomorrow</span>':'<span class="pill mute">'+esc(fmtD(p.day))+'</span>';
+    '<span style="margin-left:auto"></span><button class="btn sm ghost" data-redit="'+rid+'">Edit route</button>'+(r.url?'<a class="golink" href="'+esc(r.url)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'</div>';
+  if(!p) return '<section class="troute" data-troute="'+rid+'">'+bar+'<div class="tcard"><div class="twhy">Stays from Track aren\'t loaded yet — take all '+(r.props||[]).length+' homes.</div></div>'+foot+'</section>';
+  var at=S.ui.trashAt&&S.ui.trashAt.rid===r.id?S.ui.trashAt:null, dist=at&&at.lat!=null?trashDists(todo,at):{};
+  todo.forEach(function(x){ x._m=dist[x.c]; });
   var byHood={}; todo.forEach(function(x){ var h=((trashProf(x.c)||{}).community||"").trim()||"Other"; (byHood[h]=byHood[h]||[]).push(x); });
-  var cards=Object.keys(byHood).sort().map(function(h){ return '<div class="thood">'+esc(h)+'</div><div class="tgrid">'+
-    byHood[h].sort(function(a,b){ return a.c.localeCompare(b.c,undefined,{numeric:true}); }).map(function(x){ return trashCard(r,p,x); }).join("")+'</div>'; }).join("");
-  return '<section class="panel troute" data-troute="'+esc(r.id)+'"><div class="ph"><h3>'+esc(r.title)+'</h3>'+when+(r.who?'<span class="note">'+esc(r.who)+'</span>':'')+
-    '<span class="ct">'+n+' / '+todo.length+' done</span><div class="tbar"><i style="width:'+(todo.length?Math.round(n*100/todo.length):100)+'%"></i></div></div>'+
-    (todo.length?cards:'<div class="empty">Nothing to take out — nobody stayed and no work was finished since '+esc(fmtD(p.from))+'.</div>')+
+  var cards=Object.keys(byHood).sort().map(function(h){ return '<div class="thood">'+esc(h)+'</div>'+
+    byHood[h].sort(function(a,b){ return a.c.localeCompare(b.c,undefined,{numeric:true}); }).map(function(x){ return trashCard(r,p,x); }).join(""); }).join("");
+  return '<section class="troute" data-troute="'+rid+'">'+bar+(todo.length&&n<todo.length?trashGpsRow(r,p,todo,at):'')+
+    (todo.length?cards:'<div class="tcard"><div class="twhy">Nothing to take out — nobody stayed and no work was finished since '+esc(fmtD(p.from))+'.</div></div>')+
     (p.skip.length?'<details class="tskip"><summary>Skip '+p.skip.length+' — no stay or finished work since '+esc(fmtD(p.from))+'</summary>'+
       p.skip.map(function(x){ return esc(x.c); }).join(", ")+trashAsanaState(r,p)+'</details>':'')+foot+'</section>'; }
 function trashCard(r,p,x){ var tk=trashTick(r.id,p.day,x.c), key=esc(r.id+"|"+p.day+"|"+x.c);
-  return '<div class="tcard'+(tk?' tdone':'')+'" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+
-    (x.check?'<span class="pill waiting">Check</span>':'')+(tk?'<span class="pill '+(tk.state==="out"?'ok':'mute')+'">'+(tk.state==="out"?'Out':'N/A')+'</span>':'')+'</div>'+
+  var far=x._m!=null?'<span class="tfar">'+esc(trashFar(x._m))+'</span>':'';
+  if(tk) return '<div class="tcard tdone" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill '+(tk.state==="out"?'ok':'mute')+'">'+(tk.state==="out"?'Out':'N/A')+'</span></div>'+
+    '<div class="tdid">'+(tk.state==="out"?'Taken out':'Not needed')+' by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tundo="'+key+'">Undo</button></div></div>';
+  return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+'</div>'+
     '<div class="twhy">'+(x.whys||[x.why]).map(esc).join("<br>")+'</div>'+trashGarage(x.c)+
-    (tk?'<div class="tdid">'+(tk.state==="out"?'Taken out':'Not needed')+' by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tundo="'+key+'">Undo</button></div>'
-      :'<div class="tbtns"><button class="btn pri tgo" data-tout="'+key+'">✓ Out</button><button class="btn tna" data-tna="'+key+'">N/A → next</button></div>')+'</div>'; }
+    '<div class="tbtns"><button class="btn tgo" data-tout="'+key+'">✓ Out</button><button class="btn tna" data-tna="'+key+'">N/A → next</button></div></div>'; }
+/* 📍 I'm at the home: GPS of our homes = Track unit latitude/longitude (locks/locks_sync.py → lock_places; every Trash person reads it,
+   checked 2026-10-28). Distances are worked out on the phone; the location is never saved. */
+function trashPlaces(){ if(D._tpP) return D._tpP; var sb=window.MM_SB; if(!sb) return Promise.resolve({});
+  D._tpP=sb.from("lock_places").select("lat,lng,properties(code)").limit(2000).then(function(r){ var m={};
+    ((r&&r.data)||[]).forEach(function(x){ var c=x.properties&&x.properties.code; if(c&&x.lat!=null&&x.lng!=null) m[canon(c)]={lat:+x.lat,lng:+x.lng}; }); D._tp=m; return m; },
+    function(){ D._tpP=null; return {}; }); return D._tpP; }
+function trashDists(todo,at){ var m={}, pl=D._tp||{};
+  todo.forEach(function(x){ var g=pl[x.c]||pl[x.c.replace(/^(L-|2H-)/,"")]; if(!g) return;
+    var R=6371000, k=Math.PI/180, a=Math.sin((g.lat-at.lat)*k/2), b=Math.sin((g.lng-at.lng)*k/2);
+    m[x.c]=Math.round(2*R*Math.asin(Math.sqrt(a*a+Math.cos(at.lat*k)*Math.cos(g.lat*k)*b*b))); }); return m; }
+function trashFar(m){ return m<1000?m+" m away":(m/1609).toFixed(1)+" mi away"; }
+function trashGpsRow(r,p,todo,at){ var rid=esc(r.id), msg="";
+  if(at&&at.busy) msg='<div class="tnote">Finding you…</div>';
+  else if(at&&at.err) msg='<div class="tnote">Couldn\'t get your location ('+esc(at.err)+'). Allow location for this site in your phone\'s settings.</div>';
+  else if(at&&at.lat!=null){ var near=todo.filter(function(x){ return x._m!=null && !trashTick(r.id,p.day,x.c); }).sort(function(a,b){ return a._m-b._m; }).slice(0,3);
+    msg=near.length?'<div class="tnear"><span class="tnote">Closest'+(at.acc>150?' (GPS ±'+at.acc+' m)':'')+':</span>'+near.map(function(x){ return '<button class="chip" data-tjump="'+esc(x.c)+'" data-trid="'+rid+'">'+esc(x.c)+' · '+esc(trashFar(x._m))+'</button>'; }).join("")+'</div>'
+      :'<div class="tnote">None of the homes left on this route have a location in Track.</div>'; }
+  return '<div class="tgpsrow"><button class="btn tgps" data-tgps="'+rid+'">📍 I\'m at the home — find it</button>'+msg+'</div>'; }
+function trashJump(rid,c){ var root=document.querySelector('[data-troute="'+CSS.escape(rid)+'"]'); if(!root) return;
+  [].forEach.call(document.querySelectorAll(".tcard.tnext"),function(e){ e.classList.remove("tnext"); });
+  var el=root.querySelector('.tcard[data-thome="'+CSS.escape(c)+'"]'); if(el){ el.classList.add("tnext"); el.scrollIntoView({behavior:"smooth",block:"center"}); } }
+document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-ttoggle],[data-tgps],[data-tjump]"); if(!b) return; ev.preventDefault(); var d=b.dataset;
+  if(d.ttoggle!=null){ S.ui.trashOpen=S.ui.trashOpen||{}; S.ui.trashOpen[d.ttoggle]=b.getAttribute("aria-expanded")!=="true"; return render(); }
+  if(d.tjump!=null) return trashJump(d.trid,d.tjump);
+  var rid=d.tgps; if(!navigator.geolocation) return toast("This phone can't share location");
+  S.ui.trashAt={rid:rid,busy:true}; render(); trashPlaces();
+  navigator.geolocation.getCurrentPosition(function(pos){
+    trashPlaces().then(function(){ S.ui.trashAt={rid:rid,lat:pos.coords.latitude,lng:pos.coords.longitude,acc:Math.round(pos.coords.accuracy||0)}; render();
+      var c=document.querySelector('[data-trid="'+CSS.escape(rid)+'"][data-tjump]'); if(c) trashJump(rid,c.dataset.tjump); }); },
+    function(err){ S.ui.trashAt={rid:rid,err:err.message||"blocked"}; render(); }, {enableHighAccuracy:true,timeout:15000,maximumAge:30000}); });
 /* garage / parking code — same source as Property Details' quick view: the hub edit first, else the Asana "Parking/Garage Info" note */
 function trashGarage(c){ if(window.MM_CODES===false) return "";
   var pr=trashProf(c), pe=pedit((pr||{}).code||c), v=pe.garageCode||"", src=v?"Edited in the hub":"";
@@ -2394,9 +2452,9 @@ document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-t
   S.rlog[k]=doc; S.db.doc("rlog/"+k).set(doc).catch(function(){ toast("Not saved — check your signal and try again"); });
   trashRouteDone(rid); render(); if(d.tundo!=null) return;
   /* → next: the next home on this route that isn't done yet */
-  var cs=[].slice.call(document.querySelectorAll('[data-troute="'+rid.replace(/"/g,'\\"')+'"] .tcard')), i=cs.map(function(e){ return e.dataset.thome; }).indexOf(c);
+  var cs=[].slice.call(document.querySelectorAll('[data-troute="'+CSS.escape(rid)+'"] .tcard')), i=cs.map(function(e){ return e.dataset.thome; }).indexOf(c);
   var nx=cs.slice(i+1).concat(cs.slice(0,i+1)).filter(function(e){ return !e.classList.contains("tdone"); })[0];
-  if(nx){ nx.classList.add("tnext"); nx.scrollIntoView({behavior:"smooth",block:"center"}); } else toast("Route done — nice work"); });
+  if(nx) trashJump(rid,nx.dataset.thome); else toast("Route done — nice work"); });
 function isTrash(r){ return /trash/i.test(r.title||"") && r.cadence==="weekly" && (r.props||[]).length>0; }
 function trashDay(r){ var w=(r.when||r.title||"").toLowerCase(), d=new Date();
   for(var i=0;i<7;i++){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+i); if(w.indexOf(WD[x.getDay()].slice(0,3))>-1) return x.getFullYear()+"-"+p2(x.getMonth()+1)+"-"+p2(x.getDate()); }
