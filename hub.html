@@ -253,6 +253,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="meetings.js"></script>
 <script src="calendar.js"></script>
 <script src="checks.js"></script>
+<script src="signals.js"></script>
 <script>
 const C = window.MM_CONFIG;
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
@@ -613,6 +614,7 @@ function route(){
   if(k === "people_scores" || k === "team_ratings"){ if(!(ME.admin || DESKS.some(x => x.key === "team_ratings")) || !window.peopleScoresView){ location.replace("#/home"); return; }
     if(k === "team_ratings"){ location.replace("#/people_scores"); return; }
     $("#ttl").textContent = $("#utl").textContent = ME.admin ? "Team & vendor ratings" : "Team ratings"; return peopleScoresView(v); }   // admins + maint/HK managers (hub_people_scope); data RLS
+  if(k === "signals"){ if(!ME.admin || !window.signalsView){ location.replace("#/home"); return; } $("#ttl").textContent = $("#utl").textContent = "Signals & actions"; return signalsView(v); }   // signals.js, admins only; data RLS hub_is_admin()
   if(k === "staff_bad_reviews"){ if(!ME.admin || !window.staffBadView){ location.replace("#/home"); return; } $("#ttl").textContent = $("#utl").textContent = "Staff named in bad reviews"; return staffBadView(v); }   // admins only; data RLS hub_is_admin()
   if(k === "an" && window.anView){ $("#ttl").textContent = "Reports & Analytics"; return anView(v); }   // analytics.js (2026-10-28); data gated by hub_can('analytics')
   if(k === "sync"){ const a = hashArg(); return a === "recent" || a === "errors" ? syncReport(v, a) : syncView(v, a); }
@@ -1398,16 +1400,21 @@ async function pennyAsk(q){
    each person reads only their own (RLS). Done / 👍 / 👎 / Hide are saved, and that's how Penny learns which tips help. */
 async function pennyTips(box){
   if(!box) return;
-  const r = await sb.from("penny_tips").select("id, title, body, source, link, due").eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(8);
+  const r = await sb.from("penny_tips").select("id, title, body, source, link, due, signal_id, action_label").eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(8);
   const T = r.data || []; if(!T.length){ box.innerHTML = ""; return; }
   box.innerHTML = `<div class="card"><div class="shead"><b style="font-size:17px">🦌 Penny's tips for you</b><span class="muted" style="margin-left:auto">${T.length}</span></div>
     ${T.map(t => `<div class="fb" data-tip="${t.id}"><div class="hd"><b>${esc(t.title)}</b></div><p style="margin:4px 0">${esc(t.body)}</p>
       <p class="muted" style="font-size:12px;margin:0 0 6px">Source: ${esc(t.source)}</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${t.link ? `<a class="btn small" href="${esc(t.link)}">Open</a>` : ""}<button class="btn small" data-ask="${t.id}">Ask Penny about it</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${t.signal_id && t.action_label ? `<button class="btn primary small" data-do="${t.id}">✅ ${esc(t.action_label)}</button>` : ""}${t.link ? `<a class="btn small" href="${esc(t.link)}">Open</a>` : ""}<button class="btn small" data-ask="${t.id}">Ask Penny about it</button>
         <button class="btn small" data-mk="done">✓ Done</button><button class="btn small" data-mk="useful" title="This tip helped">👍</button><button class="btn small" data-mk="not_useful" title="Not useful">👎</button><button class="btn small" data-mk="dismissed">Hide</button></div></div>`).join("")}</div>`;
   box.querySelectorAll("[data-mk]").forEach(b => b.onclick = async () => { const row = b.closest("[data-tip]");
     const x = await sb.rpc("penny_tip_mark", { p_id:+row.dataset.tip, p_status:b.dataset.mk });
     if(!x.error) row.innerHTML = `<p class="muted" style="margin:0">${{ done:"Marked done ✓", useful:"Thanks, that helps Penny learn 👍", not_useful:"Got it, Penny will learn from that 👎", dismissed:"Hidden" }[b.dataset.mk]}</p>`; });
+  // signals.js rules (2026-10-29): "✅ Do it" approves the action; the hub does it within ~30 minutes (Breezeway task / Rates Findings)
+  box.querySelectorAll("[data-do]").forEach(b => b.onclick = async () => { const row = b.closest("[data-tip]"); b.disabled = true;
+    const x = await sb.rpc("signal_do", { p_tip:+b.dataset.do });
+    if(x.error){ b.disabled = false; return alert("Couldn't do it: " + x.error.message); }
+    row.innerHTML = `<p class="muted" style="margin:0">On it ✓ The hub will do this within about 30 minutes.</p>`; });
   box.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => { const t = T.find(x => x.id === +b.dataset.ask); pennyOpen(true); pennyAsk("Help me with this tip: " + t.title + ". What should I do, step by step?"); });
 }
 /* On a stay's check list, Penny pops in with what's left to finish it (reservations.js window.resCtx(res).left). Once a day per stay. */
