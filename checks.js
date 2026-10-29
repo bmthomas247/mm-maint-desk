@@ -30,10 +30,11 @@ function css(){
 }
 function itemsTable(items){
   if(!items || !items.length) return "";
-  const money = items.some(i => i.balance != null), adv = items.some(i => i.advantageFile), known = items.some(i => i.known), task = items.some(i => i.task != null);
-  return `<details><summary>Show the ${items.length} item${items.length === 1 ? "" : "s"}</summary><div style="overflow-x:auto"><table><tr><th>Home</th><th>Guest</th><th>Dates</th><th>What</th>${money ? "<th>Balance</th>" : ""}${known ? "<th>Known?</th>" : ""}${adv ? "<th>Advantage file</th>" : ""}${task ? "<th>Breezeway</th>" : ""}</tr>
+  const usd = n => n == null ? "" : "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const pay = items.some(i => "trackEarn" in i), money = items.some(i => i.balance != null), adv = items.some(i => i.advantageFile), known = items.some(i => i.known), task = items.some(i => i.task != null);
+  return `<details><summary>Show the ${items.length} item${items.length === 1 ? "" : "s"}</summary><div style="overflow-x:auto"><table><tr><th>Home</th><th>Guest</th><th>Dates</th><th>What</th>${pay ? "<th>Airbnb payout</th><th>Track You Earn</th>" : ""}${money ? "<th>Balance</th>" : ""}${known ? "<th>Known?</th>" : ""}${adv ? "<th>Advantage file</th>" : ""}${task ? "<th>Breezeway</th>" : ""}</tr>
     ${items.map(i => `<tr><td>${esc(i.home || "")}</td><td>${esc(i.guest || "")}</td><td>${i.arrive ? esc(i.arrive.slice(5) + (i.depart ? " → " + i.depart.slice(5) : "")) : ""}</td>
-      <td>${i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.what)}</a>` : esc(i.what)}</td>${money ? `<td>${i.balance != null ? "$" + Number(i.balance).toLocaleString() : ""}</td>` : ""}
+      <td>${i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.what)}</a>` : esc(i.what)}</td>${pay ? `<td title="${esc(i.payoutSrc || "")}">${usd(i.payout)}</td><td>${usd(i.trackEarn)}</td>` : ""}${money ? `<td>${i.balance != null ? "$" + Number(i.balance).toLocaleString() : ""}</td>` : ""}
       ${known ? `<td>${esc(i.known || "")}</td>` : ""}${adv ? `<td>${esc(i.advantageFile || "")}</td>` : ""}${task ? `<td>${i.task ? `<a href="${esc(i.task)}" target="_blank" rel="noopener">task</a>` : esc(i.taskStatus || "")}</td>` : ""}</tr>`).join("")}</table></div></details>`;
 }
 async function doneBtn(b, after){
