@@ -70,11 +70,36 @@ dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:va
 dialog input,dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
 dialog textarea{min-height:110px}
 .err{color:var(--red);font-size:13px;min-height:1em}
+/* preview + designer */
+dialog.big{max-width:1180px;width:calc(100% - 24px);height:calc(100% - 24px);max-height:none;padding:0;display:none;flex-direction:column}
+dialog.big[open]{display:flex}
+.dhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line)}
+.dhead h3{margin:0;font-size:16px;flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv{flex:1;display:flex;justify-content:center;background:var(--ground);overflow:auto;padding:12px}
+.pv iframe{border:1px solid var(--line-2);border-radius:10px;background:#fff;width:100%;max-width:760px;height:100%;min-height:400px}
+.pv.phone iframe{max-width:390px}
+.des{flex:1;display:grid;grid-template-columns:minmax(300px,420px) 1fr;min-height:0}
+.des .ed{overflow:auto;padding:12px 14px;border-right:1px solid var(--line)}
+.des .pv{padding:12px}
+#dpv{display:flex;min-height:0;min-width:0} #dpv .pv{height:100%}
+@media (max-width:800px){ .des{grid-template-columns:1fr;grid-template-rows:auto 1fr} .des .ed{max-height:52vh;border-right:0;border-bottom:1px solid var(--line)} }
+.ed label{display:block;margin:8px 0;font-size:12.5px;font-weight:800;color:var(--ink-2)}
+.ed input,.ed textarea,.ed select{display:block;width:100%;font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:9px;padding:6px 9px;margin-top:3px;background:var(--card);color:var(--ink)}
+.ed textarea{min-height:90px;font-size:13.5px}
+.ed .lists{display:grid;gap:2px;font-weight:600;font-size:13px;max-height:140px;overflow:auto;border:1px solid var(--line);border-radius:9px;padding:6px 8px}
+.ed .lists label{margin:0;font-weight:600;display:flex;gap:6px;align-items:center}
+.ed .lists input{width:auto;display:inline;margin:0}
+.blk{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:8px 0;background:var(--ground)}
+.blk .bh{display:flex;gap:4px;align-items:center;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.blk .bh span{flex:1}
+.blk .bh button{min-height:26px;padding:0 7px;font-size:12px}
+.status{font-size:12.5px;color:var(--muted)}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
+<dialog id="big" class="big"></dialog>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -93,21 +118,24 @@ const LIST_TAB = n => /owner/i.test(n) ? "owners" : /realtor|agent|broker/i.test
   : /return renter|rental guest|guest of guest|cart aband|stayfi|non-booked|tns opt-in from website guest/i.test(n) ? "guest" : "general";
 const STATUS = [["idea","Ideas"],["planned","Planned"],["doing","Doing"],["done","Done"],["parked","Parked"]];
 const KINDS = { idea:"💡 Idea", campaign:"📣 Campaign", task:"✅ Task", question:"❓ Question", list:"📋 List" };
-const S = { rr:[], run:null, ideas:[], f:{ when:"30", brevo:"all", back:"all", q:"" } };
+const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], f:{ when:"30", brevo:"all", back:"all", q:"" } };
 
 async function load(){
   const jobs = [sb.from("mkt_ideas").select("*").eq("tab", TAB).eq("off", false).order("created_at"),
-                sb.from("mkt_runs").select("ran_at,summary").order("ran_at", { ascending:false }).limit(1)];
+                sb.from("mkt_runs").select("ran_at,summary").order("ran_at", { ascending:false }).limit(1),
+                sb.from("mkt_campaigns").select("brevo_id,name,subject,status,list_ids,list_names,created_at,scheduled_at,sent_at,stats,draft_id,gone,synced_at").order("created_at", { ascending:false }).limit(500),
+                sb.from("mkt_drafts").select("id,tab,name,subject,preview_text,list_ids,design,status,brevo_id,brevo_note,pushed_at,created_name,created_at,updated_name,updated_at").eq("off", false).order("updated_at", { ascending:false })];
   if(TAB === "guest") jobs.push(sb.from("mkt_rr").select("*").order("send_on").limit(5000));
-  const [i, r, rr] = await Promise.all(jobs);
+  const [i, r, cp, dr, rr] = await Promise.all(jobs);
   if(i.error) throw i.error;
   S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
+  S.camps = (cp.data || []).filter(c => !c.gone); S.drafts = dr.data || [];
 }
 
 function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`];
   if(TAB === "guest") h.push(guestHtml());
-  h.push(listsHtml(), boardHtml());
+  h.push(campsHtml(), listsHtml(), boardHtml());
   $("#app").innerHTML = h.join("");
 }
 
@@ -208,11 +236,179 @@ function ideaDialog(x){
   };
 }
 
+/* ---------- Brevo email campaigns (mkt_campaigns, read by mkt_brevo_sync.py) + hub drafts (mkt_drafts) ---------- */
+const campTab = c => { const t = (c.list_names || []).map(LIST_TAB); return t.length ? t : ["general"]; };
+const CST = { sent:["green","Sent"], scheduled:["blue","Scheduled"], queued:["blue","Queued"], in_process:["blue","Sending"], draft:["","Draft"], suspended:["red","Suspended"], archive:["","Archived"] };
+const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 + "%" : "—";
+function campsHtml(){
+  const camps = S.camps.filter(c => campTab(c).includes(TAB)), drafts = S.drafts.filter(d => d.tab === TAB);
+  const last = S.camps.reduce((m, c) => c.synced_at > m ? c.synced_at : m, "");
+  const row = c => { const st = c.stats || {}, del = st.delivered || st.sent || 0, [tone, lab] = CST[c.status] || ["", c.status];
+    const when = c.status === "sent" ? c.sent_at : c.status === "scheduled" || c.status === "queued" ? c.scheduled_at : c.created_at;
+    return `<tr><td><b>${esc(c.name)}</b><div class="muted">${esc(c.subject || "")}</div></td><td><span class="pill ${tone}">${esc(lab)}</span>${c.draft_id ? ` <span class="pill">made in hub</span>` : ""}</td>
+      <td>${esc(fmtDT(when))}</td><td class="wrapc" style="min-width:160px">${esc((c.list_names || []).join(", ") || "—")}</td>
+      <td class="n">${c.status === "sent" ? (st.sent || 0).toLocaleString() : ""}</td><td class="n">${c.status === "sent" ? pct(st.uniqueViews || 0, del) : ""}</td>
+      <td class="n">${c.status === "sent" ? pct(st.uniqueClicks || 0, del) : ""}</td><td class="n">${c.status === "sent" ? (st.unsubscriptions || 0) : ""}</td>
+      <td><button class="btn small" data-pv="${c.brevo_id}">👁 Preview</button> <button class="btn small" data-copy="${c.brevo_id}" title="Start a new hub design from this email">⧉ Use as start</button></td></tr>`; };
+  return `<h2>Email campaigns</h2>
+  <div class="bar"><button class="btn primary" data-design="new">✏️ Design an email</button>
+    <span class="muted">Designs go to Brevo as drafts. Schedule and send them in Brevo.</span></div>
+  ${drafts.length ? `<div class="box" style="margin-bottom:12px"><table><thead><tr><th>Designed in the hub</th><th>Status</th><th>Last change</th><th></th></tr></thead><tbody>
+    ${drafts.map(d => `<tr><td><b>${esc(d.name)}</b><div class="muted">${esc(d.subject || "no subject yet")}</div></td>
+      <td>${d.status === "in_brevo" ? `<span class="pill green">In Brevo #${esc(d.brevo_id)}</span>` : d.status === "queued" ? `<span class="pill blue">Sending to Brevo…</span>` : d.status === "error" ? `<span class="pill red">Not saved to Brevo</span>` : `<span class="pill">Hub draft</span>`}
+        ${d.brevo_note && d.status === "error" ? `<div class="err">${esc(d.brevo_note)}</div>` : ""}</td>
+      <td>${esc(d.updated_name || d.created_name || "")} · ${esc(fmtDT(d.updated_at))}</td><td><button class="btn small" data-design="${d.id}">✏️ Open</button></td></tr>`).join("")}</tbody></table></div>` : ""}
+  ${camps.length ? `<div class="box"><table><thead><tr><th>Campaign</th><th>Status</th><th>When</th><th>Lists</th><th class="n">Sent</th><th class="n">Opened</th><th class="n">Clicked</th><th class="n">Unsubs</th><th></th></tr></thead>
+    <tbody>${camps.map(row).join("")}</tbody></table></div>`
+    : `<p class="muted">${S.camps.length ? `No campaigns for ${esc(TABS[TAB])} lists yet.` : "Brevo campaigns show here once the hub can read them from Brevo."}</p>`}
+  ${last ? `<p class="src">Source: Brevo email campaigns (read every 15 minutes), last read ${esc(fmtDT(last))}. Opened / clicked = unique opens or clicks ÷ delivered. Apple Mail privacy makes opens look higher than they are.</p>` : ""}`;
+}
+const SAMPLE = s => String(s || "").replace(/\{\{\s*contact\.FIRSTNAME\s*\}\}/gi, "Alex").replace(/\{\{\s*contact\.LASTNAME\s*\}\}/gi, "Sample")
+  .replace(/\{\{\s*params\.[^}]*\}\}/gi, "…");
+const frame = (html, phone) => `<div class="pv ${phone ? "phone" : ""}"><iframe sandbox="allow-popups allow-popups-to-escape-sandbox" title="Email preview" srcdoc="${esc(SAMPLE(html))}"></iframe></div>`;
+async function preview(id){
+  const d = $("#big"), c = S.camps.find(x => x.brevo_id == id);
+  d.innerHTML = `<div class="dhead"><h3>${esc(c.name)} — ${esc(c.subject || "")}</h3><button class="chip on" data-w="desk">Desktop</button><button class="chip" data-w="phone">Phone</button><button class="btn" data-close="1">Close</button></div><div id="pvb" class="pv"><p class="muted">Loading…</p></div>`;
+  d.showModal();
+  const r = await sb.from("mkt_campaigns").select("html").eq("brevo_id", id).maybeSingle();
+  const html = (r.data && r.data.html) || "<p style='font-family:sans-serif;padding:20px'>Brevo didn't return any HTML for this campaign.</p>";
+  const show = ph => { $("#pvb", d).outerHTML = frame(html, ph).replace('class="pv', 'id="pvb" class="pv'); };
+  show(false);
+  d.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { d.querySelectorAll("[data-w]").forEach(x => x.classList.toggle("on", x === b)); show(b.dataset.w === "phone"); });
+}
+
+/* ---------- email designer: blocks -> table-based email HTML (inline styles, 600px) ---------- */
+// Sign-off from the One Click Marketing playbook (Downloads\one-click-marketing-playbook.md): the brand is the sender.
+const SIGNOFF = "The Moose crew 🫎\nMoose Management · (435) 714-6544";
+const BTYPES = { header:"Logo bar", heading:"Heading", text:"Text", image:"Picture", button:"Button", divider:"Line", spacer:"Space", html:"HTML (advanced)", footer:"Footer + unsubscribe" };
+const newBlock = t => ({ header:{ t, logo:"https://crew.moosemanagement.com/moose-logo.png", bg:"#3c5f12" }, heading:{ t, text:"A heading", size:26 },
+  text:{ t, text:"Hi {{ contact.FIRSTNAME }},\n\nWrite your message here. **Bold** like this, links like [our homes](https://www.vacationrentalsparkcity.com)." },
+  image:{ t, src:"", alt:"", href:"" }, button:{ t, label:"Book your stay", href:"https://www.vacationrentalsparkcity.com", color:"#5b8a1e" },
+  divider:{ t }, spacer:{ t, h:24 }, html:{ t, html:"" }, footer:{ t, text:SIGNOFF } })[t];
+const START = {
+  guest: () => [newBlock("header"), { t:"heading", text:"Park City misses you", size:26 },
+    { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\nThank you again for the 5-star review. It means a lot to our whole crew.\n\nIt's about the time of year you stayed with us, so we wanted you to be first to know: your dates are open to book again. Book direct on our website and talk to our local team any time.\n\nWe'd love to have you back." },
+    { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=return-renters", color:"#5b8a1e" },
+    newBlock("spacer"), newBlock("footer")],
+  blank: () => [newBlock("header"), newBlock("heading"), newBlock("text"), newBlock("footer")] };
+const escT = s => esc(s).replace(/\{\{\s*([\w. ]+?)\s*\}\}/g, (m, k) => "{{ " + k + " }}");
+const inline = s => escT(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+  .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" style="color:#3c5f12;font-weight:bold">$1</a>');
+const FONT = "font-family:Helvetica,Arial,sans-serif;color:#15201a";
+function blockHtml(b){
+  const cell = (inner, pad = "12px 32px") => `<tr><td style="padding:${pad};${FONT}">${inner}</td></tr>`;
+  switch(b.t){
+    case "header": return `<tr><td style="background:${esc(b.bg || "#3c5f12")};padding:18px 32px" align="left">${b.logo ? `<img src="${esc(b.logo)}" alt="Moose Management" height="64" style="display:block;height:64px;border:0">` : ""}</td></tr>`;
+    case "heading": return cell(`<h1 style="margin:0;font-size:${+b.size || 26}px;line-height:1.25;${FONT}">${inline(b.text)}</h1>`, "24px 32px 6px");
+    case "text": return cell(String(b.text || "").split(/\n{2,}/).map(p => `<p style="margin:0 0 14px;font-size:16px;line-height:1.55">${inline(p).replace(/\n/g, "<br>")}</p>`).join(""), "8px 32px");
+    case "image": { if(!b.src) return ""; const img = `<img src="${esc(b.src)}" alt="${esc(b.alt || "")}" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:8px">`;
+      return cell(b.href ? `<a href="${esc(b.href)}">${img}</a>` : img); }
+    case "button": return cell(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${esc(b.color || "#5b8a1e")};border-radius:8px">
+      <a href="${esc(b.href || "#")}" style="display:inline-block;padding:13px 26px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none">${esc(b.label || "Click here")}</a></td></tr></table>`, "10px 32px 18px");
+    case "divider": return cell(`<hr style="border:0;border-top:1px solid #e1e7de;margin:0">`);
+    case "spacer": return `<tr><td style="height:${Math.min(120, +b.h || 24)}px;line-height:1px;font-size:1px">&nbsp;</td></tr>`;
+    case "html": return `<tr><td>${b.html || ""}</td></tr>`;
+    case "footer": return `<tr><td style="padding:20px 32px 28px;border-top:1px solid #e1e7de;${FONT};font-size:13px;line-height:1.5;color:#6b776f">${inline(b.text).replace(/\n/g, "<br>")}
+      <p style="margin:12px 0 0;font-size:12px;color:#6b776f">Don't want these emails? <a href="{{ unsubscribe }}" style="color:#6b776f">Unsubscribe</a></p></td></tr>`;
+  }
+  return "";
+}
+function emailHtml(D){
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(D.subject || "")}</title></head>
+<body style="margin:0;padding:0;background:#f5f7f0">${D.preview_text ? `<div style="display:none;max-height:0;overflow:hidden">${esc(D.preview_text)}</div>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7f0"><tr><td align="center" style="padding:20px 10px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden">
+${(D.design.blocks || []).map(blockHtml).join("\n")}
+</table></td></tr></table></body></html>`;
+}
+const DES = { d:null, phone:false, dirty:false };
+function design(id, fromCamp){
+  const ex = id && id !== "new" ? S.drafts.find(x => x.id == id) : null;
+  DES.d = ex ? JSON.parse(JSON.stringify(ex)) : { tab:TAB, name:"", subject:"", preview_text:"", list_ids:[], status:"draft",
+    design:{ blocks:(TAB === "guest" ? START.guest : START.blank)() } };
+  if(fromCamp){ DES.d.name = "Copy of " + fromCamp.name; DES.d.subject = fromCamp.subject || ""; DES.d.list_ids = fromCamp.list_ids || [];
+    DES.d.design = { blocks:[{ t:"html", html:fromCamp.html || "" }] }; }
+  DES.dirty = !ex; drawDesigner();
+  const d = $("#big"); if(!d.open) d.showModal();
+}
+function drawDesigner(){
+  const d = $("#big"), D = DES.d, lists = ((S.run && S.run.summary && S.run.summary.brevo_all) || []);
+  const f = (b, i, k, lab, type = "input", extra = "") => type === "textarea"
+    ? `<label>${lab}<textarea data-b="${i}" data-k="${k}">${esc(b[k] || "")}</textarea></label>`
+    : `<label>${lab}<input data-b="${i}" data-k="${k}" ${extra} value="${esc(b[k] ?? "")}"></label>`;
+  const fields = (b, i) => ({ header:() => f(b,i,"logo","Logo picture URL") + f(b,i,"bg","Bar color","input",'type="color"'),
+    heading:() => f(b,i,"text","Heading") + f(b,i,"size","Size","input",'type="number" min="16" max="44"'),
+    text:() => f(b,i,"text","Text (blank line = new paragraph · **bold** · [words](https://link) · {{ contact.FIRSTNAME }})","textarea"),
+    image:() => f(b,i,"src","Picture URL (https://…)") + f(b,i,"alt","Describe the picture") + f(b,i,"href","Link when tapped (optional)"),
+    button:() => f(b,i,"label","Button words") + f(b,i,"href","Link") + f(b,i,"color","Color","input",'type="color"'),
+    spacer:() => f(b,i,"h","Height (px)","input",'type="number" min="4" max="120"'),
+    html:() => f(b,i,"html","HTML","textarea"), footer:() => f(b,i,"text","Sign-off (the unsubscribe link is added under it)","textarea"), divider:() => "" })[b.t]();
+  const B = D.design.blocks || [];
+  d.innerHTML = `<div class="dhead"><h3>✏️ ${esc(D.name || "New email")}</h3>
+      <span class="status" id="dst">${D.status === "in_brevo" ? `In Brevo as draft #${esc(D.brevo_id)}` : D.status === "queued" ? "Sending to Brevo…" : D.status === "error" ? "Not saved to Brevo: " + esc(D.brevo_note || "") : DES.dirty ? "Not saved" : "Saved in the hub"}</span>
+      <button class="chip ${DES.phone ? "" : "on"}" data-dw="desk">Desktop</button><button class="chip ${DES.phone ? "on" : ""}" data-dw="phone">Phone</button>
+      <button class="btn" data-dsave="1">💾 Save</button><button class="btn primary" data-dbrevo="1">Save to Brevo</button><button class="btn" data-close="1">Close</button></div>
+    <div class="des"><div class="ed">
+      <label>Name (only we see this)<input data-top="name" maxlength="200" value="${esc(D.name)}"></label>
+      <label>Subject line<input data-top="subject" maxlength="250" value="${esc(D.subject || "")}"></label>
+      <label>Preview text (shows after the subject in the inbox)<input data-top="preview_text" maxlength="250" value="${esc(D.preview_text || "")}"></label>
+      <label>Send to (Brevo lists)</label><div class="lists">${lists.map(l => `<label><input type="checkbox" data-list="${l.id}" ${(D.list_ids || []).includes(l.id) ? "checked" : ""}> ${esc(l.name)} <span class="muted">(${(l.size ?? 0).toLocaleString()})</span></label>`).join("") || `<span class="muted">No lists yet.</span>`}</div>
+      <h3 style="margin:14px 0 4px;font-size:14px">Blocks</h3>
+      ${B.map((b, i) => `<div class="blk"><div class="bh"><span>${esc(BTYPES[b.t] || b.t)}</span>
+        <button class="btn" data-mv="${i}" data-dir="-1" ${i ? "" : "disabled"} title="Move up">↑</button><button class="btn" data-mv="${i}" data-dir="1" ${i < B.length - 1 ? "" : "disabled"} title="Move down">↓</button>
+        <button class="btn" data-rm="${i}" title="Take out">✕</button></div>${fields(b, i)}</div>`).join("")}
+      <label>Add a block <select id="addb"><option value="">Choose…</option>${Object.entries(BTYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></label>
+      <p class="src">Emails go out from Brevo, from the same sender as our latest campaign. "Save to Brevo" makes or updates a <b>draft</b> there in a minute or two; schedule and send it in Brevo. Changed blocks are kept in the hub's history.</p>
+    </div><div id="dpv"></div></div>`;
+  drawPreview();
+}
+function drawPreview(){ const box = $("#dpv"); if(box) box.innerHTML = frame(emailHtml(DES.d), DES.phone); }
+async function saveDraft(queue){
+  const D = DES.d; if(!D.name.trim()){ D.name = D.subject || "New email"; }
+  const row = { tab:D.tab, name:D.name.trim().slice(0, 200), subject:D.subject || null, preview_text:D.preview_text || null, list_ids:D.list_ids || [],
+    design:D.design, html:emailHtml(D), status:queue ? "queued" : "draft" };
+  const r = D.id ? await sb.from("mkt_drafts").update(row).eq("id", D.id).select().single() : await sb.from("mkt_drafts").insert(row).select().single();
+  if(r.error){ $("#dst").textContent = "Couldn't save: " + r.error.message; return; }
+  DES.d = Object.assign(DES.d, r.data); DES.dirty = false; await load(); drawDesigner(); render(); restoreFilters();
+  if(queue) pollDraft(DES.d.id, 0);
+}
+async function pollDraft(id, n){
+  if(n > 24 || !$("#big").open || !DES.d || DES.d.id !== id) return;
+  const r = await sb.from("mkt_drafts").select("status,brevo_id,brevo_note").eq("id", id).single();
+  if(r.data && r.data.status !== "queued"){ Object.assign(DES.d, r.data); drawDesigner(); await load(); render(); restoreFilters(); return; }
+  setTimeout(() => pollDraft(id, n + 1), 10000);
+}
+document.addEventListener("input", e => { const t = e.target; if(!DES.d || !t.closest("#big .ed")) return;
+  if(t.dataset.top){ DES.d[t.dataset.top] = t.value; }
+  else if(t.dataset.b != null){ DES.d.design.blocks[+t.dataset.b][t.dataset.k] = t.value; }
+  else return;
+  DES.dirty = true; if(DES.d.status !== "queued") DES.d.status = "draft"; $("#dst").textContent = "Not saved"; clearTimeout(DES.tm); DES.tm = setTimeout(drawPreview, 250); });
+document.addEventListener("change", e => { const t = e.target; if(!DES.d || !t.closest("#big .ed")) return;
+  if(t.dataset.list){ const id = +t.dataset.list; DES.d.list_ids = t.checked ? [...new Set([...(DES.d.list_ids || []), id])] : (DES.d.list_ids || []).filter(x => x !== id); DES.dirty = true; }
+  if(t.id === "addb" && t.value){ DES.d.design.blocks.splice(Math.max(0, DES.d.design.blocks.length - (DES.d.design.blocks.at(-1)?.t === "footer" ? 1 : 0)), 0, newBlock(t.value)); DES.dirty = true; drawDesigner(); } });
+document.addEventListener("click", async e => { const b = e.target.closest("button"); if(!b || !b.closest("#big")) return;
+  if(b.dataset.close){ if(DES.d && DES.dirty && !confirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
+  if(!DES.d) return;
+  const B = DES.d.design.blocks;
+  if(b.dataset.dw){ DES.phone = b.dataset.dw === "phone"; drawDesigner(); }
+  if(b.dataset.mv != null){ const i = +b.dataset.mv, j = i + +b.dataset.dir; [B[i], B[j]] = [B[j], B[i]]; DES.dirty = true; drawDesigner(); }
+  if(b.dataset.rm != null){ B.splice(+b.dataset.rm, 1); DES.dirty = true; drawDesigner(); }
+  if(b.dataset.dsave) saveDraft(false);
+  if(b.dataset.dbrevo){ if(!(DES.d.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
+    if(!B.some(x => x.t === "footer" || (x.t === "html" && /unsubscribe/i.test(x.html || "")))){ $("#dst").textContent = "Add the footer block (it has the unsubscribe link)."; return; }
+    saveDraft(true); }
+});
+
 async function refresh(){ try { await load(); render(); } catch(e){ $("#app").innerHTML = `<h1>${esc(TABS[TAB])}</h1><p class="muted">Couldn't load: ${esc(e.message || e)}</p>`; } }
 document.addEventListener("click", e => {
   if(e.target.closest("[data-new]")) return ideaDialog(null);
   const it = e.target.closest(".it[data-id]"); if(it) return ideaDialog(S.ideas.find(x => x.id == it.dataset.id));
   if(e.target.id === "csv") csv();
+  const pv = e.target.closest("[data-pv]"); if(pv) return preview(pv.dataset.pv);
+  const ds = e.target.closest("[data-design]"); if(ds) return design(ds.dataset.design);
+  const cp = e.target.closest("[data-copy]"); if(cp) return (async () => { const c = S.camps.find(x => x.brevo_id == cp.dataset.copy);
+    const r = await sb.from("mkt_campaigns").select("html").eq("brevo_id", c.brevo_id).maybeSingle(); design(null, Object.assign({}, c, { html:r.data && r.data.html })); })();
+  const cl = e.target.closest("#big [data-close]"); if(cl && !DES.d) $("#big").close();
 });
 document.addEventListener("change", e => { const f = e.target.dataset && e.target.dataset.f; if(f && f !== "q"){ S.f[f] = e.target.value; render(); restoreFilters(); } });
 document.addEventListener("input", e => { if(e.target.dataset && e.target.dataset.f === "q"){ S.f.q = e.target.value; const pos = e.target.selectionStart; render(); restoreFilters(); const i = $('[data-f="q"]'); i.focus(); i.setSelectionRange(pos, pos); } });
