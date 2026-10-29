@@ -149,7 +149,7 @@ function guestRows(){
   return S.rr.filter(x => !x.excluded
     && (S.f.when === "all" || x.send_on <= end)
     && (S.f.brevo === "all" || (S.f.brevo === "in" ? x.brevo_list : S.f.brevo === "unsub" ? x.brevo_unsub : !x.brevo_list))
-    && (S.f.back === "all" || (S.f.back === "yes" ? x.came_back_booked : !x.came_back_booked))
+    && (S.f.back === "all" || (S.f.back === "yes" ? x.came_back_booked : S.f.back === "email" ? x.email_booked : !x.came_back_booked))
     && (!q || [x.guest, x.home, x.channel].some(v => String(v || "").toLowerCase().includes(q))));
 }
 function guestHtml(){
@@ -167,7 +167,12 @@ function guestHtml(){
     <div class="kpi"><small>Already in a Brevo batch</small><b>${inB.length.toLocaleString()}</b><small>${esc(Object.keys(sm.brevo_lists || {}).length)} "Return Renters" lists</small></div>
     <div class="kpi"><small>Unsubscribed in Brevo</small><b>${uns.length.toLocaleString()}</b><small>${inB.length ? Math.round(uns.length / inB.length * 100) + "% of those in a batch" : ""}</small></div>
     <div class="kpi"><small>Booked with us again</small><b>${back.length.toLocaleString()}</b><small>${back.filter(x => x.brevo_list).length} of them were in a Brevo batch</small></div>
+    <div class="kpi"><small>Booked after our email</small><b>${ok.filter(x => x.email_booked).length}</b><small>of ${ok.filter(x => x.emailed_id).length} guests we emailed</small></div>
   </div>
+  ${(sm.by_campaign || []).length ? `<h2>Did the emails bring bookings?</h2>
+  <div class="box"><table><thead><tr><th>Return-renter email</th><th>Sent</th><th class="n">Guests emailed</th><th class="n">Booked since</th><th class="n">Booked direct</th><th class="n">Rate</th></tr></thead><tbody>
+    ${sm.by_campaign.map(c => `<tr><td><b>${esc(c.name)}</b></td><td>${esc(fmtDT(c.sent_at))}</td><td class="n">${c.emailed}</td><td class="n">${c.booked_after}</td><td class="n">${c.direct}</td><td class="n">${pct(c.booked_after, c.emailed)}</td></tr>`).join("")}</tbody></table></div>
+  <p class="src">Guests emailed = guests on this list who are on that campaign's Brevo list and not unsubscribed. Booked since = a Track reservation (not cancelled) booked on or after the send date; direct = not Airbnb, Vrbo or another channel. A guest who books under a different Track contact won't be counted. Sources: Brevo campaigns + Track reservations.</p>` : ""}
   <h2>When to email (by month)</h2>
   <div class="box"><div class="mbars">${months.map(([m, n]) => `<div class="mb"><span>${esc(m)}</span><i style="width:${n / mx * 100}%" class="${m === t.slice(0,7) ? "c" : ""}"></i><span class="n">${n}</span></div>`).join("") || `<div class="empty">Nothing yet.</div>`}</div></div>
   <p class="src">This month includes ${sm.catch_up || 0} catch-ups: guests whose best email date already passed, so the date is today. Lead time = their typical days booked ahead + ${sm.lead_weeks || 3} weeks.</p>
@@ -175,7 +180,7 @@ function guestHtml(){
   <div class="bar">
     <label>Email by <select data-f="when"><option value="30">next 30 days</option><option value="60">next 60 days</option><option value="90">next 90 days</option><option value="all">any time</option></select></label>
     <label>Brevo <select data-f="brevo"><option value="all">all</option><option value="not">not in a batch</option><option value="in">in a batch</option><option value="unsub">unsubscribed</option></select></label>
-    <label>Booked again <select data-f="back"><option value="all">all</option><option value="yes">yes</option><option value="no">no</option></select></label>
+    <label>Booked again <select data-f="back"><option value="all">all</option><option value="yes">yes</option><option value="email">after our email</option><option value="no">no</option></select></label>
     <label>Find <input data-f="q" placeholder="guest, home, channel" value="${esc(S.f.q)}"></label>
     <button class="btn small" id="csv">⬇ Download CSV</button><span class="muted">${rows.length.toLocaleString()} guests</span>
   </div>
@@ -184,7 +189,7 @@ function guestHtml(){
     <td class="n">${x.five_reviews}</td><td class="n">${x.stays}</td><td class="n">${x.typical_lead} d</td><td>${esc(fmtD(x.target_stay))}</td>
     <td>${esc(fmtD(x.send_on))}${x.timing === "catch-up" ? ` <span class="pill amber">catch-up</span>` : ""}</td>
     <td>${x.brevo_list ? `<span class="pill ${x.brevo_unsub ? "red" : "green"}" title="${esc(x.brevo_list)}">${x.brevo_unsub ? "unsubscribed" : esc(x.brevo_list.replace(/^Return Renters - 5 Star - /, ""))}</span>` : ""}</td>
-    <td>${x.came_back_booked ? `<span class="pill blue">${esc(x.came_back_home || "")} · ${esc(fmtD(x.came_back_in))}</span>` : ""}</td>
+    <td>${x.came_back_booked ? `<span class="pill blue">${esc(x.came_back_home || "")} · ${esc(fmtD(x.came_back_in))}</span>` : ""}${x.email_booked ? ` <span class="pill green" title="Booked ${esc(fmtD(x.email_booked))} (${esc(x.email_booked_channel || "")}), after ${esc(x.emailed_campaign || "")}">after email</span>` : ""}</td>
     <td class="wrapc">${esc(x.review_excerpt || "")}</td></tr>`).join("") || `<tr><td colspan="12" class="empty">No guests match.</td></tr>`}</tbody></table>
   ${rows.length > 300 ? `<div class="empty">Showing the first 300. Download the CSV for all ${rows.length.toLocaleString()}.</div>` : ""}</div>
   <p class="src">Sources: ${esc(Object.values((sm.sources) || {}).join(" · ") || "Track reviews + Track reservations + Brevo lists")}. ${sm.reviews_not_matched ? `${sm.reviews_not_matched} older 5-star reviews couldn't be tied to a stay in the Track history pull yet.` : ""}
