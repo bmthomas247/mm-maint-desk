@@ -1382,12 +1382,45 @@ function pennyShrink(f){ return new Promise((ok, bad) => { const im = new Image(
     c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); ok({ type:"image/jpeg", data:c.toDataURL("image/jpeg", 0.82).split(",")[1] }); };
   im.onerror = () => { URL.revokeObjectURL(u); bad(new Error("bad image")); }; im.src = u; }); }
 /* Penny's drafts (job / check-list tick / Freshdesk note) only happen when the person taps the button. Jobs and ticks save under their own login. */
+/* Penny hub updates (Brandon 2026-10-29: "Everything in the hub"): applied here with the person's own login, so the hub's access rules
+   decide exactly as if they edited it by hand; every try is logged (penny_log_update -> penny_updates, admins read). */
+async function pennyHubUpdate(d){
+  const log = (rec, field, old, nw, ok, note) => sb.rpc("penny_log_update", { p_system:"hub", p_record:rec, p_field:field, p_old:String(old ?? ""), p_new:String(nw ?? ""), p_ok:ok, p_note:note || null });
+  const deny = e => /row-level security|permission|not allowed/i.test(e || "") ? "your login can't change that" : e;
+  if(d.target === "job"){
+    let ok = true, err = "";
+    if(Object.keys(d.patch || {}).length){ const r = await sb.from("work_orders").update(d.patch).eq("id", d.id).select("id");
+      if(r.error || !(r.data || []).length){ ok = false; err = deny(r.error ? r.error.message : "not allowed"); } }
+    if(ok && d.note){ const u = (await sb.auth.getUser()).data.user;
+      const r2 = await sb.from("work_order_events").insert({ work_order_id:d.id, by_email:u && u.email, kind:"note", note:d.note + " (via Ask Penny)" });
+      if(r2.error){ ok = false; err = deny(r2.error.message); } }
+    await log("job " + d.id, Object.keys(d.patch || {}).concat(d.note ? ["note"] : []).join(","), JSON.stringify(d.old || {}), JSON.stringify(d.patch || {}) + (d.note ? " note: " + d.note : ""), ok, err);
+    return ok ? "✅ Job #" + d.id + " updated." : "Couldn't update the job: " + err;
+  }
+  if(d.target === "checklist_note"){ const r = await sb.rpc("res_note", { p_res:d.res, p_text:d.value + " (via Ask Penny)" });
+    await log("res " + d.res, "check list note", "", d.value, !r.error, r.error && r.error.message);
+    return r.error ? "Couldn't add the note: " + deny(r.error.message) : "✅ Note added to the check list."; }
+  if(["home", "owner_contact", "moose_office"].includes(d.target)){
+    const g = await sb.from("desk_docs").select("data").eq("collection", d.coll).eq("id", d.id).maybeSingle();
+    if(g.error) return "Couldn't read it: " + deny(g.error.message);
+    const cur = (g.data && g.data.data) || {}, now = String(d.target === "moose_office" ? ((cur[d.field] || {})[d.key] ?? "") : (cur[d.field] ?? ""));
+    if(now !== String(d.old ?? "")) return "It changed since Penny drafted this. Ask her again.";
+    let patch;
+    if(d.target === "moose_office"){ const m = Object.assign({}, cur[d.field] || {}); if(d.value) m[d.key] = d.value; else delete m[d.key];
+      patch = { [d.field]:m }; if(d.field === "co_ext" || d.field === "co_ext_lines") patch.co_ext_src = "edited in the hub by " + ME.name + " (via Ask Penny), " + new Date().toLocaleDateString("en-CA"); }
+    else patch = { [d.field]:d.value };
+    const r = await sb.from("desk_docs").upsert({ collection:d.coll, id:d.id, data:Object.assign({}, cur, patch, { at:Date.now(), by:ME.initials || ME.name }) }, { onConflict:"collection,id" });
+    await log(d.coll + "/" + d.id, d.target === "moose_office" ? d.field + "." + d.key : d.field, d.old, d.value, !r.error, r.error && r.error.message);
+    return r.error ? "Couldn't save it: " + deny(r.error.message) : "✅ Saved in the hub."; }
+  return "Penny drafted something the hub doesn't know how to do.";
+}
 async function pennyAct(a, btn, box){
   btn.disabled = true; btn.textContent = "Working…"; let r, msg;
   if(a.kind === "job"){ const id = "desk-penny-" + Date.now().toString(36), d = new Date().toLocaleDateString("en-CA");
     r = await sb.from("desk_docs").upsert({ collection:"deskjobs", id, data:{ id, src:"desk", title:a.data.title, prop:a.data.prop || "", kind:a.data.kind || "repair", who:"", vendor:"",
       due:a.data.due || "", detail:(a.data.detail || "") + "\n(Made with Ask Penny by " + ME.name + ")", status:"open", created:d, updated:d, list:"Desk", props:[], links:[], at:Date.now(), by:ME.name } }, { onConflict:"collection,id" });
     msg = r.error ? "Couldn't create it: " + r.error.message : "✅ Job created on the Maintenance desk."; }
+  else if(a.kind === "hub_update"){ try { msg = await pennyHubUpdate(a.data || {}); } catch(e){ msg = "Couldn't do it: " + e.message; } }
   else if(a.kind === "tick"){ r = await sb.rpc("res_tick", { p_res:a.data.res, p_step:a.data.step, p_done:true, p_note:a.data.note || "Ticked with Ask Penny" });
     msg = r.error ? "Couldn't tick it: " + r.error.message : "✅ Ticked on the check list."; }
   else if(a.kind === "fd_note" || a.kind === "slack_post" || a.kind === "track_update"){ r = await sb.functions.invoke("penny", { body:{ act:{ kind:a.kind, data:a.data } } }); let d = r.data || {};
@@ -1406,7 +1439,7 @@ async function pennyAsk(q){
   const el = pennySay("assistant", a, d.id, d.links);
   if(d.ok && (d.actions || []).length){ const box = document.createElement("div"); box.className = "pacts";
     d.actions.forEach(x => { const row = document.createElement("div"); row.className = "pa"; row.innerHTML = `<b>${esc(x.label)}</b>`;
-      const go = document.createElement("button"); go.className = "btn primary small"; go.textContent = { job:"✅ Create this job", tick:"✅ Tick it", fd_note:"✅ Add to the ticket", slack_post:"✅ Send it", track_update:"✅ Update Track" }[x.kind] || "✅ Do it";
+      const go = document.createElement("button"); go.className = "btn primary small"; go.textContent = { job:"✅ Create this job", tick:"✅ Tick it", fd_note:"✅ Add to the ticket", slack_post:"✅ Send it", track_update:"✅ Update Track", hub_update:"✅ Make this change" }[x.kind] || "✅ Do it";
       const no = document.createElement("button"); no.className = "btn small"; no.textContent = "Not now"; no.style.marginLeft = "6px";
       go.onclick = () => pennyAct(x, go, row); no.onclick = () => row.remove(); row.append(go, no); box.appendChild(row); });
     el.querySelector(".bub").after(box); $("#pennyLog").scrollTop = 1e9; }
