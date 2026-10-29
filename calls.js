@@ -2,7 +2,8 @@
    Loaded by hub.html; uses its sb / $ / esc / ME. Data (hub_calls.sql, RLS hub_can('call_review')):
    - track_calls: call details from Pulse ▸ Recent Calls ▸ Export, uploaded here (calls_upload RPC). Our Track API key can't read them.
    - track_call_transcripts: filled by track_calls_sync.py on the office computer every 10 minutes (Track API, read only).
-   - callsView(v): #/call_review — upload button + steps, numbers, by agent, call list, transcript pop-up. */
+   - callsView(v): #/call_review — upload button + steps (call_can_upload), numbers, by agent, call list, transcript pop-up.
+   Who sees which calls is decided by RLS: admins + office managers all, owner relations owner calls, everyone else their own. */
 (function(){
 const TRACK = "https://moosemanagement.trackhs.com";
 const dur = s => s == null ? "" : Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
@@ -102,14 +103,17 @@ async function showCall(c, tr){
 }
 window.callsView = async function(v){
   css(); $("#ttl").textContent = $("#utl").textContent = "Call review";
-  v.innerHTML = `<div class="page wide calls"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="flex:1;margin:0">Call review</h2>
-      <button class="btn primary" id="cub">⬆ Upload calls from Track</button></div>
+  v.innerHTML = `<div class="page wide calls"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap" id="chead"><h2 style="flex:1;margin:0">Call review</h2></div>
     <p class="muted" id="culast">Track Pulse calls with their transcripts. Source: Pulse Recent Calls export (call details) + Track API (transcripts).</p>
     <div class="flt" id="cflt"></div><div id="cbody"><p class="muted">Loading…</p></div></div>`;
-  const ups = await sb.from("track_call_uploads").select("at,by_name,last_day,first_day,rows_in").not("rows_in", "is", null).order("at", { ascending:false }).limit(1);
-  const last = (ups.data || [])[0];
-  if(last) $("#culast").innerHTML = `Track Pulse calls with their transcripts. Last upload ${esc(new Date(last.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} by ${esc((last.by_name || "").split(" ")[0])}, calls through ${esc(dayf(last.last_day))}. Source: Pulse Recent Calls export (call details) + Track API (transcripts).`;
-  $("#cub").onclick = () => uploadBox(last, () => callsView(v));
+  const canUp = !!(await sb.rpc("call_can_upload")).data;   // admins + office managers (hub_calls.sql); others never see the button
+  if(canUp){
+    $("#chead").insertAdjacentHTML("beforeend", `<button class="btn primary" id="cub">⬆ Upload calls from Track</button>`);
+    const ups = await sb.from("track_call_uploads").select("at,by_name,last_day,first_day,rows_in").not("rows_in", "is", null).order("at", { ascending:false }).limit(1);
+    const last = (ups.data || [])[0];
+    if(last) $("#culast").innerHTML = `Track Pulse calls with their transcripts. Last upload ${esc(new Date(last.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} by ${esc((last.by_name || "").split(" ")[0])}, calls through ${esc(dayf(last.last_day))}. Source: Pulse Recent Calls export (call details) + Track API (transcripts).`;
+    $("#cub").onclick = () => uploadBox(last, () => callsView(v));
+  }
   let calls, trs;
   try {
     calls = await all(() => sb.from("track_calls").select("call_id,call_at,call_day,direction,duration_s,hold_s,agents,queues,call_result,routing_result,caller_name,caller_city,caller_state")
@@ -129,7 +133,7 @@ window.callsView = async function(v){
     const has = c => T[c.call_id] && T[c.call_id].status === "ok";
     const list = calls.filter(c => (!S.agent || (c.agents || "").split(",").map(x => x.trim()).includes(S.agent)) && (!S.dir || dirName(c.direction) === S.dir)
       && (!S.result || c.call_result === S.result) && (!S.queue || (c.queues || "").split(",").map(x => x.trim()).includes(S.queue)) && (!S.tr || (S.tr === "y") === has(c)));
-    if(!calls.length) return $("#cbody").innerHTML = `<div class="card"><p class="muted">No calls uploaded for these dates yet. Press <b>⬆ Upload calls from Track</b>.</p></div>`;
+    if(!calls.length) return $("#cbody").innerHTML = `<div class="card"><p class="muted">No calls for these dates yet.${canUp ? " Press <b>⬆ Upload calls from Track</b>." : ""}</p></div>`;
     const inb = list.filter(c => dirName(c.direction) === "Inbound"), talk = list.filter(c => c.duration_s), avg = talk.length ? Math.round(talk.reduce((a, c) => a + c.duration_s, 0) / talk.length) : null;
     const ag = {}; list.forEach(c => (c.agents || "No agent").split(",").map(x => x.trim()).forEach(a => { const o = ag[a] = ag[a] || { n:0, i:0, o:0, t:0, tr:0 };
       o.n++; dirName(c.direction) === "Inbound" ? o.i++ : o.o++; o.t += c.duration_s || 0; if(has(c)) o.tr++; }));
