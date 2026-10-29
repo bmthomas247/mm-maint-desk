@@ -73,10 +73,11 @@ function draw(){
       <div class="drop" id="drop"><b>Drop files here</b> or click to pick · PDF, Word, text, or photos of a paper form
         <input type="file" id="pick" accept=".pdf,.docx,.txt,.md,.eml,image/jpeg,image/png,image/webp" multiple hidden></div>
       ${S.up.length ? `<ul class="ups">${S.up.map((u, i) => `<li><b>${esc(u.name)}</b> <span class="muted small">${esc(u.how)}</span> <button class="btn sm" data-rm="${i}" aria-label="Remove">✕</button></li>`).join("")}</ul>` : ""}
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600"><input type="checkbox" id="ph" ${S.photos !== false ? "checked" : ""} style="width:auto"> Look at the home's listing photos in Track (up to 16)</label>
       <div class="row" style="margin-top:12px"><button class="btn pri" id="go" ${!j || S.busy ? "disabled" : ""}>${S.busy ? "Writing… (about a minute)" : R ? "Write it again" : "Write it"}</button>
         ${S.err ? `<span style="color:var(--red);font-weight:700">${esc(S.err)}</span>` : ""}</div></div>
     ${R ? `<div class="card small facts muted"><b>Used:</b> <span>Track unit: ${R.used.track_unit ? "yes" : "not found"}</span><span>Community text: ${R.used.community_text ? "yes" : "no"}</span>
-        <span>Questionnaire: ${R.used.questionnaire ? "yes" : "none on the job"}</span><span>Style from: ${R.used.examples.length ? esc(R.used.examples.join(", ")) : "no live listing in this community"}</span>${(R.used.uploads || []).length ? `<span>Uploaded: ${esc(R.used.uploads.join(", "))}</span>` : ""}</div>
+        <span>Questionnaire: ${R.used.questionnaire ? "yes" : "none on the job"}</span><span>Track photos: ${R.used.photos || "none"}</span><span>Style from: ${R.used.examples.length ? esc(R.used.examples.join(", ")) : "no live listing in this community"}</span>${(R.used.uploads || []).length ? `<span>Uploaded: ${esc(R.used.uploads.join(", "))}</span>` : ""}</div>
       ${R.check_these && R.check_these.length ? `<div class="card check"><b>Check before it goes live</b><ul>${R.check_these.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
       ${PARTS.map(([k, label, lo, hi]) => { const t = R[k] || "", n = t.length, bad = (hi && n > hi) || (lo && n < lo);
         return `<div class="card out"><div class="row"><h3>${label}</h3><span class="cnt ${bad ? "bad" : ""}">${n} characters${hi ? ` · ${lo ? lo + "–" : "max "}${hi}` : ""}</span>
@@ -84,6 +85,7 @@ function draw(){
       <div class="row"><button class="btn pri" id="save">Save to the job</button><span class="muted small">Keeps these drafts on ${esc(j.code)}'s set-up job (nothing goes to Track).</span></div>` : ""}`;
   $("#job").onchange = e => { S.job = S.jobs.find(x => x.id === e.target.value) || null; S.res = null; S.err = ""; history.replaceState(null, "", "#" + (S.job ? S.job.id : "")); draw(); };
   $("#notes").oninput = e => { S.notes = e.target.value; };
+  $("#ph").onchange = e => { S.photos = e.target.checked; };
   const drop = $("#drop"), pick = $("#pick");
   drop.onclick = () => pick.click(); pick.onchange = () => addFiles([...pick.files]);
   drop.ondragover = e => { e.preventDefault(); drop.classList.add("on"); }; drop.ondragleave = () => drop.classList.remove("on");
@@ -125,7 +127,7 @@ async function write(){
   S.busy = true; S.err = ""; draw();
   const use = S.up.filter(u => !u.skip);
   const r = await sb.functions.invoke("psu-describe", { body:{ job_id:S.job.id, notes:S.notes || "",
-    docs:use.filter(u => u.text).map(u => ({ name:u.name, text:u.text })), files:use.filter(u => u.file).map(u => u.file) } });
+    photos:S.photos !== false, docs:use.filter(u => u.text).map(u => ({ name:u.name, text:u.text })), files:use.filter(u => u.file).map(u => u.file) } });
   S.busy = false;
   if(r.error || !r.data || !r.data.ok){ S.err = (r.data && r.data.error) || "Couldn't reach Claude — try again."; let m = ""; try { m = (await r.error.context.json()).error; } catch(e){} if(m) S.err = m; draw(); return; }
   S.res = r.data; draw();
