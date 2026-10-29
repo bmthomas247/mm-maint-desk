@@ -588,6 +588,8 @@ function route(){
   document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${k}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
   const v = $("#view"), d = DESKS.find(x => x.key === k);
   $("#ttl").textContent = $("#utl").textContent = d ? d.label : (k === "feedback" ? "Bugs & Upgrades" : k === "settings" ? "My settings" : "Moose Hub");
+  document.querySelectorAll(".mjoin").forEach(x => x.remove());
+  if(k === "meet_maint" && d && window.meetJoin) meetJoin(k);   // Monday meeting Join button in the banner (meetings.js, 2026-10-29)
   if(k === "feedback") return feedbackView(v);
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "advertising" && d){ location.replace("#/adv_owners"); return; }   // Advertising became a drop-down 2026-10-28
