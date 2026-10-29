@@ -469,7 +469,7 @@ function noAccess(err){
 }
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
   const anD = DESKS.some(x => x.key === "analytics");
@@ -612,7 +612,7 @@ function route(){
   if(k === "messages") return messagesView(v);
   if(d && k === "res_report") return resReportView(v);
   if(d && /^cal_(res|office|me|meet)$/.test(k) && window.calView) return calView(v, k);   // calendar.js (2026-10-29)
-  if(d && /^meet_(or|bd|kd|beyond|mgr)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
+  if(d && /^meet_(or|bd|kd|beyond|mgr|fd|track|trackmk)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
   if(d && (k === "reviews" || k === "guest_reviews") && d.status === "live" && window.reviewsDesk) return reviewsDesk(v);   // analytics.js reviews report (Brandon 2026-10-29)
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
