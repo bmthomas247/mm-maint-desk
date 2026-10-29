@@ -1367,7 +1367,7 @@ async function pennyTeachView(v){
     <p class="muted">Questions from the last 7 days she missed or got a 👎. Write the right answer once: <b>🎓 Teach</b> saves it with your name as the source, <b>+ Check</b> also adds it to the accuracy checks.</p><div id="pteach"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
   const since = new Date(Date.now() - 7 * 864e5).toISOString();
   const c = await sb.from("penny_chats").select("*").gte("created_at", since).order("id", { ascending:false }).limit(500);
-  const miss = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test(x.answer || "");
+  const miss = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test((x.answer || "").slice(0, 220));
   const rows = (c.data || []).filter(x => !/^(accuracy check|action)/.test(x.note || "") && miss(x));
   $("#pteach").innerHTML = rows.length ? rows.map(x => `<div class="card"><div class="hd" style="display:flex;gap:8px;flex-wrap:wrap"><b>${esc(x.user_name || "")}</b>${x.helpful === false ? `<span class="pill red">👎</span>` : `<span class="pill amber">didn't know</span>`}<span class="muted">${new Date(x.created_at).toLocaleString()}</span></div>
       <p><b>Q:</b> ${esc(x.question)}</p><details class="acc2"><summary>What Penny said</summary><p style="white-space:pre-wrap">${esc(x.answer || "")}</p></details>
@@ -1434,7 +1434,7 @@ async function pennyView(v){
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
     <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"><p class="muted">Loading…</p></div><div class="card" id="pkb"><p class="muted">Loading…</p></div></div>`;
   const [c, k] = await Promise.all([ sb.from("penny_chats").select("*").order("id", { ascending:false }).limit(1000), sb.from("penny_kb").select("*").order("topic") ]);
-  const needs = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test(x.answer || "");
+  const needs = x => x.helpful === false || /can.?t help|don.?t have|not sure|not in my notes|don.?t know|couldn.?t find/i.test((x.answer || "").slice(0, 220));
   const all = (c.data || []).filter(x => !/^accuracy check/.test(x.note || "")); pennyInsights(all, needs);   // check runs are not staff questions
   const rows = (missedOnly ? all.filter(needs) : all.slice(0, 200)).filter(x => !/^accuracy check/.test(x.note || "")).sort((a, b) => needs(b) - needs(a)), tot = rows.reduce((a, x) => a + (+x.cost_usd || 0), 0);
   if(missedOnly){ $("#pins").remove(); v.querySelector("h2").textContent = "Penny — missed & 👎"; }
