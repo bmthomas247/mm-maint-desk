@@ -164,7 +164,7 @@ window.callsView = async function(v){
 };
 let BN = { at:0, j:null };
 function bannerDraw(){
-  document.querySelectorAll(".cbanner").forEach(x => x.remove());
+  css(); document.querySelectorAll(".cbanner").forEach(x => x.remove());
   const j = BN.j, v = document.getElementById("view");
   if(!j || !j.due || !v || !v.parentNode) return;
   const b = document.createElement("div"); b.className = "cbanner"; b.setAttribute("role", "status");
