@@ -2384,7 +2384,7 @@ function vTrash(){
   var rs=routines().filter(isTrash).map(function(r){ var p=trashPlan(r); r._day=p?p.day:trashDay(r); return r; })
     .sort(function(a,b){ return a._day.localeCompare(b._day)||String(a.title).localeCompare(String(b.title)); });
   var open=S.ui.trashOpen=S.ui.trashOpen||{}, t=today(), first=rs.filter(function(r){ return r._day===t; }).length?t:(rs[0]||{})._day;
-  return '<div class="ttop"><h2>Trash</h2><p>Only homes with a stay or finished work in the last 7 days. Tap <b>✓ Out</b> at each home.</p></div>'+
+  return '<div class="ttop"><h2>Trash</h2><p>Only homes with a stay or finished work in the last 7 days, or a cleaner there on trash day (this week or last). Tap <b>✓ Out</b> at each home.</p></div>'+
     (rs.length?rs.map(function(r){ return trashRoute(r, open[r.id]!=null?open[r.id]:r._day===first); }).join(""):'<div class="tcard"><div class="twhy">No trash routes yet. Add one with + Trash route: weekly, a title that starts with "Trash", the day, and its homes.</div></div>')+
     '<div class="tadd"><button class="btn sm ghost" data-act="newroutine">+ Trash route</button></div>'; }
 function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.undone, t=today(), rid=esc(r.id);
@@ -2408,7 +2408,7 @@ function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.u
   var heavy=hv.length?'<div class="tbig theavy"><b>Heavy trash day — first pickup after '+esc(hv.map(function(h){ return h.k+" ("+fmtD(h.d)+")"; }).join(" and "))+'.</b> One of our worst trash days: bring extra bags, check every bin, the garage and the curb, and plan extra time.</div>':'';
   return '<section class="troute" data-troute="'+rid+'">'+bar+heavy+(todo.length&&n<todo.length?trashGpsRow(r,p,todo,at):'')+
     (todo.length?cards:'<div class="tcard"><div class="twhy">Nothing to take out — nobody stayed and no work was finished since '+esc(fmtD(p.from))+'.</div></div>')+
-    (p.skip.length?'<details class="tskip"><summary>Skip '+p.skip.length+' — no stay or finished work since '+esc(fmtD(p.from))+'</summary>'+
+    (p.skip.length?'<details class="tskip"><summary>Skip '+p.skip.length+' — no stay, clean or finished work since '+esc(fmtD(p.from))+'</summary>'+
       p.skip.map(function(x){ return esc(x.c); }).join(", ")+trashAsanaState(r,p)+'</details>':'')+foot+'</section>'; }
 function trashCard(r,p,x){ var tk=trashTick(r.id,p.day,x.c), key=esc(r.id+"|"+p.day+"|"+x.c);
   var far=x._m!=null?'<span class="tfar">'+esc(trashFar(x._m))+'</span>':'';
@@ -2469,6 +2469,14 @@ function trashHolsNear(day){ var y=+String(day).slice(0,4); return trashHols(y-1
 function trashStayHols(s){ return trashHolsNear(s.in).filter(function(h){ return s.in<=h.t && s.out>=h.f; }).map(function(h){ return h.k; }); }
 function trashHeavy(p){ var lo=new Date(Date.parse(p.day+"T12:00:00")-7*864e5).toISOString().slice(0,10);   // the 7 days before trash day, so each holiday lands on one pickup
   return trashHolsNear(p.day).filter(function(h){ return h.d>=lo && h.d<p.day; }); }
+/* a cleaner in the home on trash day adds trash or misses the pickup (Brandon 2026-10-29): take it out that day AND the next week,
+   in case the truck came before the clean was done. Dates = feeds/hk-cleans (Breezeway housekeeping, bw_res_tasks.py; Trash people only). */
+function trashCleans(c,day){ var hk=(S.feeds["hk-cleans"]||{}).homes; if(!hk) return [];
+  var cl=fromFeed(hk,c)||fromFeed(hk,c.replace(/^(L-|2H-)/,""))||[], last=new Date(Date.parse(day+"T12:00:00")-7*864e5).toISOString().slice(0,10), out=[];
+  var on=function(d){ return cl.some(function(x){ return x[0]===d||x[2]===d; }); };
+  if(on(day)) out.push("Cleaner in the home on trash day ("+fmtD(day)+") — take out what they leave");
+  if(on(last)) out.push("Cleaned on last trash day ("+fmtD(last)+") — the pickup may have come first");
+  return out; }
 function trashKey(rid,day,c){ return sid(rid)+"__"+day+"__"+sid(c); }
 function trashTick(rid,day,c){ var x=S.rlog[trashKey(rid,day,c)]; return x&&!x.undone?x:null; }
 function trashTime(ms){ try{ return new Date(ms).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); }catch(e){ return ""; } }
@@ -2495,6 +2503,7 @@ function trashPlan(r){ var occ=(S.feeds.occupancy||{}).units; if(!occ) return nu
   (r.props||[]).forEach(function(raw){ var c=canon(String(raw).replace(/\s+L$/," ").trim()), lease=/^L-/.test(c)||/\sL$/.test(raw), second=/^2H-/.test(c);
     var st=(fromFeed(occ,c)||fromFeed(occ,c.replace(/^(L-|2H-)/,""))||[]).filter(function(s){ return s.in<=day && s.out>=from; });
     var whys=st.length?[(st.some(function(s){return s.owner;})?"Owner":"Guest")+" stay "+fmtD(st[0].in)+"–"+fmtD(st[st.length-1].out)]:[];
+    trashCleans(c,day).forEach(function(w){ whys.push(w); });
     trashWork(c,from,day).slice(0,2).forEach(function(j){ whys.push("Work done "+fmtD(j.finished)+": "+String(j.title||"").slice(0,60)+(j.doneByName?" ("+j.doneByName+")":"")); });
     /* long stays leave a lot of trash (Brandon 2026-10-29): warn at 7+ nights; say so if they're still there on trash day */
     var big=null; if(!lease) st.forEach(function(s){ var n=daysBetween(s.in,s.out); if(n>=TRASH_LONG && (!big||n>big.n)) big={n:n,in:s.in,out:s.out,still:s.in<day&&s.out>day}; });
