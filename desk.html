@@ -415,6 +415,8 @@ var S={db:null, me:ls("me")||"", tab:(location.hash||"").replace("#","")||"today
   recurring:{}, rlog:{}, expenses:{}, time:{}, config:{}, bwq:{}, taskbill:{}, projedits:{}, slackq:{}, deskprojects:{}, asanaq:{}, asks:{},
   ui:{q:"", st:{open:1,scheduled:1,waiting:1}, src:{}, kind:{}, who:"", vendor:"", hideOld:true, hideInfo:true,
       sel:"", home:"", hq:"", vq:"", vtrade:"", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
+/* Ask Penny (hub.html pennyCtx) reads which tab / home / job is open - nothing else */
+window.deskCtx=function(){ return {tab:S.tab, home:S.ui.home||"", sel:String(S.ui.sel||"")}; };
 var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["money","Expenses & Time"],["care","Home care"],["projects","Projects"],["routines","Seasonal & yearly"],["trash","Trash"],["homes","Homes"],
   ["vendors","Vendors"],["repeats","Repeats"],["recalls","Recalls"],["fire","Fire & licenses"],["firesys","Fire suppression"],["lease","Leases"]];
 /* Moose Hub (2026-10-27): Expenses & Time = maintenance manager + admins (MM_MONEY from hub_can, enforced in RLS);
