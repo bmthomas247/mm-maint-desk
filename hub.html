@@ -471,7 +471,8 @@ function noAccess(err){
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
   const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
-  const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key)),
+  const CALK = ["cal_res","cal_office","cal_me","cal_meet"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
+  const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key) && !CALK.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
   const anD = DESKS.some(x => x.key === "analytics");
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
@@ -506,7 +507,9 @@ function shell(){
   const homeD = info.find(x => x.key === "home"), infoK = info.filter(x => x.key !== "home")
     .sort((a, b) => { const ia = ORD.indexOf("i:" + a.key), ib = ORD.indexOf("i:" + b.key); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
   // 2026-10-28 (Brandon): no "Moose Info" drop-down; Property Details, Vendors… sit under the Moose Info heading like the desks do
-  const infoBlock = infoK.map(y => item(y.key, y.label, y.icon)).join("");
+  const calKids = DESKS.filter(x => CALK.includes(x.key)).sort((a, b) => a.sort - b.sort);
+  const infoBlock = infoK.map(y => ({ k:"i:" + y.key, s:y.sort, h:item(y.key, y.label, y.icon) })).concat(calKids.length ? [{ k:"i:cal", s:999, h:navList(calKids) }] : [])
+    .sort((a, b) => { const ia = ORD.indexOf(a.k), ib = ORD.indexOf(b.k); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.s - b.s; }).map(x => x.h).join("");
   const deskBlock = live.length ? `<div class="grp">Desks</div>` + navList(byMine(live)) : "";
   const desksFirst = ORD.includes("@desks_first");
   const soonHtml = soon.length ? navList(soon, true) : "";   // a soon desk inside a live group (Damage claims) leaves this empty
@@ -954,6 +957,7 @@ function settingsView2(v){
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
+    if(/^cal_(res|office|me|meet)$/.test(x.key)){ if(!seen.cal){ seen.cal = 1; items.push({ k:"i:cal", label:"Calendar", icon:"calendar", sort:999, info:true }); } return; }   // Calendar sits under Moose Info (2026-10-29)
     if(g){ if(seen[g]) return; seen[g] = 1; items.push({ k:"g:" + g, label:GL[g][0], icon:GL[g][1], sort:x.sort }); }
     else items.push({ k:x.key, label:x.label, icon:x.icon, sort:x.sort }); });
   const ORD = PREFS.desk_order || [];
