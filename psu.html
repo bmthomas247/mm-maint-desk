@@ -251,8 +251,13 @@ body.inhub header.top{justify-content:flex-end}
     window.PD_ME = me;
     try{ localStorage.setItem("pd_me", me.initials || ""); }catch(e){}
 
-    var app = await sb.from("pd_app").select("html,version").eq("name", "desk").maybeSingle();
-    if(app.error || !app.data){ gate("<h2>Not loaded yet</h2><p>The desk's code isn't in the database yet (make_psu_app.py).</p>"); return; }
+    // ?v=<id> = preview a saved version (psu_dev.html; only desk admins can read psu_app_versions). It uses the REAL data.
+    var pv = new URLSearchParams(location.search).get("v"), app;
+    if(pv){
+      app = await sb.from("psu_app_versions").select("html,id,note").eq("id", pv).maybeSingle();
+      if(app.error || !app.data){ gate("<h2>Version not found</h2><p><a href=\"psu.html\">Open the live Launch Pad</a></p>"); return; }
+    } else app = await sb.from("pd_app").select("html,version").eq("name", "desk").maybeSingle();
+    if(app.error || !app.data){ gate("<h2>Not loaded yet</h2><p>The desk's code isn't in the database yet.</p>"); return; }
 
     SAMPLE = null;   // hub 2026-10-29: Claude writing/reading buttons stay off until Brandon decides (sampleReady() kept for then)
     var caps = { db:DB, mcp:MCP, sample:SAMPLE };
@@ -260,6 +265,14 @@ body.inhub header.top{justify-content:flex-end}
 
     document.getElementById("pd-loading") && document.getElementById("pd-loading").remove();
     runBoard(app.data.html);
+    // Jeff / Brandon / Kim (pd_role admin) get a Code button to psu_dev.html; nobody else sees it (rule 3)
+    var hdr = document.querySelector("header.top");
+    if(me.pd_role === "admin" && hdr){ var cb = document.createElement("a"); cb.className = "btn"; cb.href = "psu_dev.html"; cb.textContent = "</> Code";
+      cb.title = "Change the Launch Pad code"; hdr.appendChild(cb); }
+    if(pv){ var pb = document.createElement("div");
+      pb.setAttribute("style", "position:sticky;top:0;z-index:9999;background:#fbf0d9;color:#7a4b00;border-bottom:1px solid #ecd9b6;padding:8px 14px;font:700 13px Manrope,system-ui,sans-serif");
+      pb.textContent = "Preview of version " + app.data.id + " (" + (app.data.note || "") + ") — not live. It uses the real data: ticks and notes you make here are real.";
+      document.body.insertBefore(pb, document.body.firstChild); }
 
     // the name picker becomes "who is signed in"
     var who = document.getElementById("who");
