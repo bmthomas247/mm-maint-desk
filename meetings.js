@@ -9,7 +9,11 @@ const MEET = {
   meet_bd:     { name:"Business Development", dow:3, who:"Jeff and the admins" },
   meet_kd:     { name:"Key Data", dow:3, every:14, anchor:"2026-11-04", who:"Call with Cathy at Key Data", when:"10:15–10:45 am Mountain (11:15 Central), per Key Data's calendar invite" },
   meet_beyond: { name:"Beyond Pricing", dow:4, who:"Weekly call with Kolleen at Beyond", when:"2:30–3:30 pm Mountain (3:30 Central), per Beyond's calendar invite (moved from 3:15)" },
-  meet_mgr:    { name:"Managers", dow:4, who:"Weekly managers meeting" }
+  meet_mgr:    { name:"Managers", dow:4, who:"Weekly managers meeting" },
+  // monthly (Brandon 2026-10-29; hub_meetings_monthly.sql): nth weekday of the month
+  meet_fd:      { name:"Office Staff Monthly", dow:4, nth:1, anchor:"2027-01-07", who:"Front desk, office and managers" },
+  meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
+  meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
 const MCSS = `
 .mtg .mhead{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between;margin:0 0 12px}
@@ -38,6 +42,9 @@ const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Satur
 /* next meeting on or after today (Key Data: every 14 days from the anchor Wednesday) */
 function nextDay(m){
   const d = new Date(); d.setHours(12, 0, 0, 0);
+  if(m.nth){ if(m.anchor && ymd(d) < m.anchor) return m.anchor;   // monthly: nth weekday of this month, or next month once it has passed
+    for(let k = 0; k < 14; k++){ const f = new Date(d.getFullYear(), d.getMonth() + k, 1, 12); f.setDate(1 + (m.dow - f.getDay() + 7) % 7 + (m.nth - 1) * 7);
+      if(f.getMonth() === (d.getMonth() + k) % 12 && ymd(f) >= ymd(d)) return ymd(f); } }
   if(m.every){ const a = new Date(m.anchor + "T12:00"); const n = Math.round((d - a) / 864e5);
     const add = n <= 0 ? -n : (m.every - n % m.every) % m.every; d.setDate(d.getDate() + add); return ymd(d); }
   d.setDate(d.getDate() + (m.dow - d.getDay() + 7) % 7); return ymd(d);
@@ -96,7 +103,7 @@ function render(v, key, data, ppl){
   const taskForm = (k) => `<div class="mtask" data-tform="${esc(k)}"><input placeholder="New task: what needs to happen" data-tf="text"><input list="mppl" placeholder="Who" data-tf="who" style="max-width:170px"><input type="date" data-tf="due"><button class="btn small" data-tadd="${esc(k)}">+ Task</button></div>`;
   const grps = {}; items.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
   let h = `<div class="page mtg">${dl}<div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
-      <p class="muted">${esc(m.who)} · ${m.every ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}. Go down the list; write what was decided and add tasks.</p></div>
+      <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}. Go down the list; write what was decided and add tasks.</p></div>
     <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻ Refresh</button><button class="btn small" id="mprint">Print / PDF</button></div></div>
     <div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${covered} of ${items.length} covered</b><span class="muted" style="font-size:13px">${past[0] ? "Last meeting " + esc(fmt(past[0])) : "First meeting"}</span></div>
       <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div></div>
