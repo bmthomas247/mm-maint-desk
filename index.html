@@ -1390,9 +1390,9 @@ async function pennyAct(a, btn, box){
     msg = r.error ? "Couldn't create it: " + r.error.message : "✅ Job created on the Maintenance desk."; }
   else if(a.kind === "tick"){ r = await sb.rpc("res_tick", { p_res:a.data.res, p_step:a.data.step, p_done:true, p_note:a.data.note || "Ticked with Ask Penny" });
     msg = r.error ? "Couldn't tick it: " + r.error.message : "✅ Ticked on the check list."; }
-  else if(a.kind === "fd_note" || a.kind === "slack_post"){ r = await sb.functions.invoke("penny", { body:{ act:{ kind:a.kind, data:a.data } } }); let d = r.data || {};
+  else if(a.kind === "fd_note" || a.kind === "slack_post" || a.kind === "track_update"){ r = await sb.functions.invoke("penny", { body:{ act:{ kind:a.kind, data:a.data } } }); let d = r.data || {};
     if(r.error && r.error.context && r.error.context.json){ try { d = await r.error.context.json(); } catch(e){} }   // show the function's own reason, not "non-2xx"
-    msg = d.ok ? "✅ " + d.done : (a.kind === "slack_post" ? "Couldn't send it: " : "Couldn't add it: ") + (d.error || (r.error && r.error.message) || "error"); }
+    msg = d.ok ? "✅ " + d.done : (a.kind === "slack_post" ? "Couldn't send it: " : a.kind === "track_update" ? "Couldn't update Track: " : "Couldn't add it: ") + (d.error || (r.error && r.error.message) || "error"); }
   box.innerHTML = `<span>${esc(msg)}</span>`;
 }
 async function pennyAsk(q){
@@ -1406,7 +1406,7 @@ async function pennyAsk(q){
   const el = pennySay("assistant", a, d.id, d.links);
   if(d.ok && (d.actions || []).length){ const box = document.createElement("div"); box.className = "pacts";
     d.actions.forEach(x => { const row = document.createElement("div"); row.className = "pa"; row.innerHTML = `<b>${esc(x.label)}</b>`;
-      const go = document.createElement("button"); go.className = "btn primary small"; go.textContent = { job:"✅ Create this job", tick:"✅ Tick it", fd_note:"✅ Add to the ticket", slack_post:"✅ Send it" }[x.kind] || "✅ Do it";
+      const go = document.createElement("button"); go.className = "btn primary small"; go.textContent = { job:"✅ Create this job", tick:"✅ Tick it", fd_note:"✅ Add to the ticket", slack_post:"✅ Send it", track_update:"✅ Update Track" }[x.kind] || "✅ Do it";
       const no = document.createElement("button"); no.className = "btn small"; no.textContent = "Not now"; no.style.marginLeft = "6px";
       go.onclick = () => pennyAct(x, go, row); no.onclick = () => row.remove(); row.append(go, no); box.appendChild(row); });
     el.querySelector(".bub").after(box); $("#pennyLog").scrollTop = 1e9; }
