@@ -242,7 +242,7 @@ function ideaDialog(x){
 
 /* ---------- Brevo email campaigns (mkt_campaigns, read by mkt_brevo_sync.py) + hub drafts (mkt_drafts) ---------- */
 const campTab = c => { const t = (c.list_names || []).map(LIST_TAB); return t.length ? t : ["general"]; };
-const CST = { sent:["green","Sent"], scheduled:["blue","Scheduled"], queued:["blue","Queued"], in_process:["blue","Sending"], draft:["","Draft"], suspended:["red","Suspended"], archive:["","Archived"] };
+const CST = { sent:["green","Sent"], scheduled:["blue","Scheduled"], queued:["blue","Scheduled"], in_process:["blue","Sending"], draft:["","Draft"], suspended:["red","Suspended"], archive:["","Archived"] };
 const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 + "%" : "—";
 function campsHtml(){
   const camps = S.camps.filter(c => campTab(c).includes(TAB)), drafts = S.drafts.filter(d => d.tab === TAB);
@@ -267,7 +267,7 @@ function campsHtml(){
     : `<p class="muted">${S.camps.length ? `No campaigns for ${esc(TABS[TAB])} lists yet.` : "Brevo campaigns show here once the hub can read them from Brevo."}</p>`}
   ${last ? `<p class="src">Source: Brevo email campaigns (read every 15 minutes), last read ${esc(fmtDT(last))}. Opened / clicked = unique opens or clicks ÷ delivered. Apple Mail privacy makes opens look higher than they are.</p>` : ""}`;
 }
-const SAMPLE = s => String(s || "").replace(/\{\{\s*contact\.FIRSTNAME\s*\}\}/gi, "Alex").replace(/\{\{\s*contact\.LASTNAME\s*\}\}/gi, "Sample")
+const SAMPLE = s => String(s || "").replace(/\{\{\s*contact\.FIRSTNAME\b[^}]*\}\}/gi, "Alex").replace(/\{\{\s*contact\.LASTNAME\b[^}]*\}\}/gi, "Sample")
   .replace(/\{\{\s*params\.[^}]*\}\}/gi, "…");
 const frame = (html, phone) => `<div class="pv ${phone ? "phone" : ""}"><iframe sandbox="allow-popups allow-popups-to-escape-sandbox" title="Email preview" srcdoc="${esc(SAMPLE(html))}"></iframe></div>`;
 async function preview(id){
