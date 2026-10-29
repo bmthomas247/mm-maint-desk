@@ -1265,7 +1265,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var emp='<div class="coact"><button class="btn sm ghost" data-co="titles">Edit titles &amp; roles</button></div>'+
     (!D._staff?'<div class="note">'+(window.MM_SB?'Loading…':'Sign in to see the team.')+'</div>':
     '<table class="t"><thead><tr><th>Name</th><th>Title</th><th>What they handle</th><th>Hub teams</th></tr></thead><tbody>'+st.map(function(p){ var hd=(pe.co_handles||{})[p.name]; return '<tr><td>'+esc(p.name)+'</td><td>'+(ti[p.name]?esc(ti[p.name]):'<span class="muted">—</span>')+'</td><td>'+(hd?esc(hd):'<span class="muted">—</span>')+'</td><td>'+esc((p.teams||[]).join(", "))+'</td></tr>'; }).join("")+'</tbody></table>'+
-    '<div class="hint" style="margin-top:6px">Names and teams from the Moose Hub team list'+(pe.co_titles_by?' · titles edited in the hub by '+esc(nameFor(pe.co_titles_by)):'')+'</div>');
+    '<div class="hint" style="margin-top:6px">Names and teams from the Moose Hub team list'+(pe.co_titles_by?' · titles edited in the hub by '+esc(nameFor(pe.co_titles_by)):'')+(pe.co_titles_src && !pe.co_titles_by?' · titles from '+esc(pe.co_titles_src):'')+'</div>');
   // logos & colors
   var cols=(pe.co_colors||"").split("\n").map(function(l){ var m=/(#[0-9a-f]{6}|#[0-9a-f]{3})\b\s*[-–:]?\s*(.*)/i.exec(l); return m?{hex:m[1],name:m[2],src:"Edited in the hub"}:null; }).filter(Boolean);
   if(!cols.length) cols=CO_FACTS.colors;
