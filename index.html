@@ -1143,11 +1143,13 @@ async function homeView(v){
       + `<p class="muted" style="font-size:12px;margin:8px 0 0">Sources: <a href="https://www.parkrecord.com/" target="_blank" rel="noopener">The Park Record</a> and <a href="https://www.kpcw.org/local-news" target="_blank" rel="noopener">KPCW</a> news feeds</p>`;
   });
   loadWeather();
-  const r = await sb.from("hub_posts").select("*").eq("hidden", false).order("pinned", {ascending:false}).order("created_at", {ascending:false}).limit(60);
+  const r = await sb.from("hub_posts").select("*").eq("hidden", false).or("show_until.is.null,show_until.gt." + new Date().toISOString()).order("pinned", {ascending:false}).order("created_at", {ascending:false}).limit(60);
   const rows = r.data || [], when = t => new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric"});
   const so = rows.filter(x => x.kind === "shoutout"), nw = rows.filter(x => x.kind === "news");
-  $("#solist").innerHTML = so.length ? so.map(x => `<div class="fb"><div class="hd"><b>${esc(x.about_name||"")}</b><span class="muted">from ${esc(x.author_name||"")} · ${when(x.created_at)}</span></div><p>${esc(x.body)}</p></div>`).join("") : `<p class="muted">No shout-outs yet. Be the first.</p>`;
+  $("#solist").innerHTML = so.length ? so.map(x => `<div class="fb"><div class="hd"><b>${esc(x.about_name||"")}</b><span class="muted">${x.source === "Guest review" ? "⭐ from a guest review" : "from " + esc(x.author_name||"")} · ${when(x.created_at)}</span>${ME.admin ? `<button class="btn small" data-sohide="${x.id}" style="margin-left:auto">Hide</button>` : ""}</div><p>${esc(x.body)}</p></div>`).join("") : `<p class="muted">No shout-outs yet. Be the first.</p>`;
   $("#nwlist").innerHTML = nw.length ? nw.map(x => `<div class="fb"><div class="hd">${x.pinned ? `<span class="pill green">Pinned</span>` : ""}<b>${esc(x.title||"")}</b><span class="muted">${esc(x.author_name||"")} · ${when(x.created_at)}</span></div><p>${esc(x.body)}</p></div>`).join("") : `<p class="muted">No news yet.</p>`;
+  document.querySelectorAll("[data-sohide]").forEach(b => b.onclick = async () => { if(!confirm("Hide this shout-out from Home? (It's kept, not deleted.)")) return;
+    const u = await sb.from("hub_posts").update({ hidden:true }).eq("id", +b.dataset.sohide); if(u.error) alert("Couldn't hide: " + u.error.message); else homeView(v); });   // admins (hub_posts hub_admin_upd)
   $("#soadd").onclick = () => { $("#soform").style.display = "block"; $("#soabout").focus(); };
   $("#sosend").onclick = async () => { const p = await sb.rpc("hub_post", { p_kind:"shoutout", p_title:"", p_body:$("#sobody").value, p_about:$("#soabout").value });
     if(p.error) $("#somsg").textContent = "Couldn't post: " + p.error.message; else homeView(v); };
