@@ -48,12 +48,9 @@ async function doneBtn(b, after){
 }
 window.checksHome = async function(el){
   css(); if(!el) return;
-  const [m, a] = await Promise.all([sb.rpc("hub_checks_mine"), sb.rpc("hub_checks_alerts")]);
-  const mine = m.data || [], al = a.data || [];
+  const m = await sb.rpc("hub_checks_mine");   // the "needs attention" warning lives in the banner across the top (Brandon 2026-10-29), not on Home
+  const mine = m.data || [];
   let h = "";
-  if(al.length) h += `<div class="card chkwarn"><b style="font-size:17px">⚠️ Daily checks need attention</b>
-    ${al.map(x => `<div style="margin-top:6px">${esc(x.title)}: ${esc(x.summary || (x.status ? x.status : "not done yet (due " + fday(x.due) + ")"))}</div>`).join("")}
-    <a href="#/checks" style="display:inline-block;margin-top:8px">Open Daily checks →</a></div>`;
   if(mine.length) h += `<div class="card chk"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">☑️ Your checks today</b><a href="#/checks" style="margin-left:auto;font-size:14px">All checks →</a></div>
     ${mine.map(c => { const r = c.run, open = !r || !["ok","done"].includes(r.status);
       return `<div class="row"><div class="ttl"><b>${esc(c.title)}</b><span class="muted" style="font-size:13px">${c.due !== new Date().toLocaleDateString("en-CA") ? "Due " + fday(c.due) + " · " : ""}${esc(r && r.summary ? r.summary : c.how || "")}</span></div>
