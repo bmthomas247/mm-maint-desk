@@ -2408,9 +2408,10 @@ function trashCard(r,p,x){ var tk=trashTick(r.id,p.day,x.c), key=esc(r.id+"|"+p.
   var far=x._m!=null?'<span class="tfar">'+esc(trashFar(x._m))+'</span>':'';
   if(tk) return '<div class="tcard tdone" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill '+(tk.state==="out"?'ok':'mute')+'">'+(tk.state==="out"?'Out':'N/A')+'</span></div>'+
     '<div class="tdid">'+(tk.state==="out"?'Taken out':'Not needed')+' by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tundo="'+key+'">Undo</button></div></div>';
-  var bg=x.big?'<div class="tbig"><b>Long stay — '+x.big.n+' nights.</b> Expect extra trash: bring spare bags and check the bins and garage.'+
-    (x.big.still?' Guests are still there until '+esc(fmtD(x.big.out))+' — knock first.':'')+'</div>':'';
-  return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+(x.big?'<span class="pill waiting">Long stay</span>':'')+'</div>'+
+  var heads=[]; if(x.big) heads.push('Long stay — '+x.big.n+' nights'); if(x.xmas) heads.push('Stay over Christmas');
+  var bg=heads.length?'<div class="tbig"><b>'+esc(heads.join(" · "))+'.</b> Expect extra trash'+(x.xmas?' (boxes and wrapping)':'')+': bring spare bags and check the bins and garage.'+
+    (x.still?' Guests are still there until '+esc(fmtD(x.still))+' — knock first.':'')+'</div>':'';
+  return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+(x.big?'<span class="pill waiting">Long stay</span>':'')+(x.xmas?'<span class="pill waiting">Christmas</span>':'')+'</div>'+
     '<div class="twhy">'+(x.whys||[x.why]).map(esc).join("<br>")+'</div>'+bg+trashGarage(x.c)+
     '<div class="tbtns"><button class="btn tgo" data-tout="'+key+'">✓ Out</button><button class="btn tna" data-tna="'+key+'">N/A → next</button></div></div>'; }
 /* 📍 I'm at the home: GPS of our homes = Track unit latitude/longitude (locks/locks_sync.py → lock_places; every Trash person reads it,
@@ -2452,6 +2453,8 @@ function trashGarage(c){ if(window.MM_CODES===false) return "";
 function trashProf(c){ var bare=c.replace(/^(L-|2H-)/,""), hit=null;
   (D.homes||[]).forEach(function(h){ if(!hit && (h.code===c||h.code===bare)) hit=h; }); return hit; }
 var TRASH_LONG=7;   // nights — a stay this long gets the "Long stay" warning
+var TRASH_XMAS=["12-20","01-02"];   // Christmas time (month-day, crosses New Year) — a stay touching it gets the "Christmas" warning
+function trashXmas(s){ var y=+String(s.in).slice(0,4); return [y-1,y].some(function(a){ var f=a+"-"+TRASH_XMAS[0], t=(a+1)+"-"+TRASH_XMAS[1]; return s.in<=t && s.out>=f; }); }
 function trashKey(rid,day,c){ return sid(rid)+"__"+day+"__"+sid(c); }
 function trashTick(rid,day,c){ var x=S.rlog[trashKey(rid,day,c)]; return x&&!x.undone?x:null; }
 function trashTime(ms){ try{ return new Date(ms).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); }catch(e){ return ""; } }
@@ -2481,8 +2484,10 @@ function trashPlan(r){ var occ=(S.feeds.occupancy||{}).units; if(!occ) return nu
     trashWork(c,from,day).slice(0,2).forEach(function(j){ whys.push("Work done "+fmtD(j.finished)+": "+String(j.title||"").slice(0,60)+(j.doneByName?" ("+j.doneByName+")":"")); });
     /* long stays leave a lot of trash (Brandon 2026-10-29): warn at 7+ nights; say so if they're still there on trash day */
     var big=null; if(!lease) st.forEach(function(s){ var n=daysBetween(s.in,s.out); if(n>=TRASH_LONG && (!big||n>big.n)) big={n:n,in:s.in,out:s.out,still:s.in<day&&s.out>day}; });
+    /* stays over Christmas time leave extra trash too (Brandon 2026-10-29): any stay touching TRASH_XMAS */
+    var xmas=!lease && st.some(trashXmas);
     if(lease) out.push({c:c,why:"lease — tenant lives there",whys:["Lease — tenant lives there"].concat(whys)});
-    else if(whys.length) out.push({c:c,why:whys.join("; "),whys:whys,big:big});
+    else if(whys.length) out.push({c:c,why:whys.join("; "),whys:whys,big:big,xmas:xmas,still:(st.filter(function(s){ return s.in<day&&s.out>day; })[0]||{}).out||""});
     else if(second) check.push({c:c,why:"second home — owner may not book in Track",whys:["Second home — the owner may not book in Track. Check it."],check:true});
     else skip.push({c:c,why:"empty "+fmtD(from)+"–"+fmtD(day)}); });
   return {day:day,from:from,out:out,skip:skip,check:check}; }
