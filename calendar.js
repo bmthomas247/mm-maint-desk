@@ -4,7 +4,7 @@
    cal_meetings() (tiles for the meetings you can open) · meeting_sched_set (admins set times). Meeting pages: meetings.js.
    Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet */
 (function(){
-const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers" };
+const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
 const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"]];
 const MGR = ["owner_relations","maint_manager","office_manager","hk_manager"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -41,6 +41,11 @@ const canOffice = () => !!(ME && (ME.admin || (ME.teams || []).some(t => MGR.inc
 const ST = { month:{}, sel:{}, meets:null };
 /* meeting dates between a and b (inclusive) from its schedule row */
 function occurs(m, a, b){
+  if(m.nth){ const out = [];   // monthly: nth weekday (hub_meetings_monthly.sql)
+    for(let f = new Date(D(a).getFullYear(), D(a).getMonth(), 1, 12); ymd(f) <= b; f = new Date(f.getFullYear(), f.getMonth() + 1, 1, 12)){
+      const x = new Date(f); x.setDate(1 + (m.dow - x.getDay() + 7) % 7 + (m.nth - 1) * 7); const s = ymd(x);
+      if(x.getMonth() === f.getMonth() && s >= a && s <= b && (!m.anchor || s >= m.anchor) && (!m.until || s <= m.until)) out.push(s); }
+    return out; }
   const out = []; let d = D(a); d.setDate(d.getDate() + (m.dow - d.getDay() + 7) % 7);
   for(; ymd(d) <= b; d.setDate(d.getDate() + 7)){
     const s = ymd(d);
@@ -48,7 +53,7 @@ function occurs(m, a, b){
     out.push(s); }
   return out;
 }
-const mWhen = m => (m.every === 14 ? "Every other " : "Every ") + DAYS[m.dow] + (m.start ? " · " + ftime(m.start) + (m.minutes ? "–" + ftime(endTime(m.start, m.minutes)) : "") : "");
+const mWhen = m => (m.nth ? ["First","Second","Third","Fourth","Fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : (m.every === 14 ? "Every other " : "Every ") + DAYS[m.dow]) + (m.start ? " · " + ftime(m.start) + (m.minutes ? "–" + ftime(endTime(m.start, m.minutes)) : "") : "");
 const endTime = (t, min) => { const [h, m] = t.split(":").map(Number), x = h * 60 + m + min; return String(Math.floor(x / 60) % 24).padStart(2, "0") + ":" + String(x % 60).padStart(2, "0"); };
 async function meetings(force){ if(ST.meets && !force) return ST.meets; const r = await sb.rpc("cal_meetings"); ST.meets = r.data || []; return ST.meets; }
 async function events(a, b){
@@ -91,7 +96,7 @@ async function meetTiles(v){
   v.innerHTML = `<div class="page cal">${tabs("cal_meet")}<p class="muted">Loading meetings…</p></div>`;
   const ms = await meetings(true), t = today();
   if(current() !== "cal_meet") return;
-  const tile = m => { const nx = occurs(m, t, addD(t, 28))[0];
+  const tile = m => { const nx = occurs(m, t, addD(t, m.nth ? 120 : 28))[0];
     return `<div class="card tile" data-meet="${m.meet}"><a href="#/${m.meet}" style="text-decoration:none;color:inherit;display:block"><h3>${esc(NAMES[m.meet] || m.meet)}</h3>
       <div class="when">${esc(mWhen(m))}${m.start ? " (Mountain)" : ""}</div>
       <div class="when"><b>Next: ${nx ? esc(nx === t ? "Today" : fday(nx)) : "—"}</b>${m.last_day ? ` · last met ${esc(fday(m.last_day))}` : ""}</div>
