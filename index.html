@@ -423,6 +423,9 @@ async function boot(){
     DESKS.push({ key:"maint_routines", label:"Maintenance · Seasonal & yearly", icon:mD.icon, url:"desk.html?only=routines", status:"live", sort:32.5 },
                { key:"maint_recalls", label:"Maintenance · Recalls", icon:mD.icon, url:"desk.html?only=recalls", status:"live", sort:33.5 }); }
   // Trash is a real desk (hub_trash.sql) so field crew can have it without the rest of Maintenance
+  // Brandon 2026-10-28: in the Maintenance drop-down, Trash sits right under Projects (crew without Maintenance keep it on its own, sort 34)
+  const tD = DESKS.find(x => x.key === "trash");
+  if(mD && tD) tD.sort = mD.sort + 0.15;
   // Housekeeping drop-down (Brandon 2026-10-28): Desk · Linen Calculator (soon). Linen Calculator follows the housekeeping desk's access.
   const hD = DESKS.find(x => x.key === "housekeeping");
   if(hD) DESKS.push({ key:"linen_calc", label:"Housekeeping · Linen Calculator", icon:hD.icon, url:null, status:"soon", sort:hD.sort + 0.1 },
