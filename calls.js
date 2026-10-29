@@ -3,9 +3,13 @@
    - track_calls: call details from Pulse ▸ Recent Calls ▸ Export, uploaded here (calls_upload RPC). Our Track API key can't read them.
    - track_call_transcripts: filled by track_calls_sync.py on the office computer every 10 minutes (Track API, read only).
    - callsView(v): #/call_review — upload button + steps (call_can_upload), numbers, by agent, call list, transcript pop-up.
+   - callsBanner: admins + office managers get a banner on every hub page until yesterday's calls are uploaded and complete
+     (calls_upload_due(): an upload made today that covers yesterday, with no Pulse call ids missing). Others never see it.
    Who sees which calls is decided by RLS: admins + office managers all, owner relations owner calls, everyone else their own. */
 (function(){
 const TRACK = "https://moosemanagement.trackhs.com";
+const NEED = ["Call Id", "Created Date", "Created Time", "Direction", "Duration", "Agents", "Call Result", "Routing Result"];   // same list as calls_upload()
+const yday = () => iso(new Date(Date.now() - 864e5));
 const dur = s => s == null ? "" : Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 const ms = n => n == null ? "" : dur(Math.floor(n / 1000));
 const dayf = s => s ? new Date(s.slice(0, 10) + "T12:00:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }) : "";
@@ -26,6 +30,7 @@ function css(){
 .calls .drop{border:2px dashed var(--line-2);border-radius:14px;padding:22px;text-align:center;margin:10px 0;cursor:pointer}
 .calls .drop.on{border-color:var(--forest-2);background:color-mix(in srgb,var(--forest-2) 8%,transparent)}
 .calls ol{padding-left:20px;margin:8px 0} .calls ol li{margin:6px 0}
+.cbanner{background:#7a4b00;color:#fff;padding:8px 18px;font-weight:600;font-size:14px;flex:none} .cbanner a{color:#fff;text-decoration:underline;margin-left:8px;white-space:nowrap}
 .trl{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:14px} .trl .who{flex:none;width:86px;font-weight:700;font-size:12.5px}
 .trl .who small{display:block;font-weight:400;color:var(--muted)} .trl.agent .who{color:var(--forest-2)} .trl.customer .who{color:var(--blue)}
 @media (max-width:640px){.calls .hide-s{display:none}.trl .who{width:64px}}`;
@@ -47,14 +52,14 @@ function parseCsv(text){
   return { header: h, rows: rows.filter(r => r.some(x => x !== "")).map(r => Object.fromEntries(h.map((k, i) => [k, (r[i] || "").trim()]))) };
 }
 function uploadBox(last, done){
-  const since = last && last.last_day ? last.last_day : iso(new Date(Date.now() - 30 * 864e5));
+  const since = last && last.last_day ? (last.last_day < yday() ? last.last_day : yday()) : iso(new Date(Date.now() - 30 * 864e5));
   const sinceUs = new Date(since + "T12:00:00").toLocaleDateString("en-US", { month:"2-digit", day:"2-digit", year:"numeric" });
   document.querySelectorAll("#callup").forEach(e => e.remove());
   document.body.insertAdjacentHTML("beforeend", `<div class="modal on calls" id="callup"><div class="card" style="width:min(620px,100%);max-height:90vh;overflow:auto">
     <div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">Upload calls from Track</h2><button class="btn small" id="cux" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
     <ol>
       <li>Open <a href="${TRACK}/pulse/call-export/" target="_blank" rel="noopener"><b>Track ▸ Pulse ▸ Recent Calls ▸ Export</b></a> (opens in a new tab).</li>
-      <li>Under <b>Filter Criteria</b>: Value <b>Created</b>, Operand <b>Greater Than Equal</b>, Condition <b>${esc(sinceUs)}</b>${last && last.last_day ? " (the last day in the last upload, so nothing is missed)" : " (30 days back, for the first upload)"}.</li>
+      <li>Under <b>Filter Criteria</b>: Value <b>Created</b>, Operand <b>Greater Than Equal</b>, Condition <b>${esc(sinceUs)}</b>${last && last.last_day ? " (covers yesterday and anything since the last upload)" : " (30 days back, for the first upload)"}. Use only this one filter, so no calls are left out.</li>
       <li>Leave <b>Advanced Export Options</b> as they are (Comma, <code>"</code>, Linux, Output Header Yes).</li>
       <li>Click <b>Export Calls</b>. Track downloads a .csv file. Drop it below.</li>
     </ol>
@@ -71,7 +76,8 @@ function uploadBox(last, done){
   async function go(file){
     msg.textContent = "Reading " + file.name + "…";
     const p = parseCsv(await file.text());
-    if(!p.header.includes("Call Id") || !p.header.includes("Created Date")) return msg.textContent = "That doesn't look like the Pulse calls export (no \"Call Id\" / \"Created Date\" columns). Use Export Calls on the Recent Calls page.";
+    const miss = NEED.filter(k => !p.header.includes(k));
+    if(miss.length) return msg.textContent = "That doesn't look like the Pulse calls export (missing " + miss.join(", ") + "). Use Export Calls on the Pulse Export page with Output Header = Yes.";
     if(!p.rows.length) return msg.textContent = "The file has no calls in it. Check the date in step 2.";
     let n = 0, nw = 0, d1 = null, d2 = null;
     for(let i = 0; i < p.rows.length; i += 2000){
@@ -81,7 +87,7 @@ function uploadBox(last, done){
       n += r.data.rows; nw += r.data.new; d1 = d1 && d1 < r.data.first_day ? d1 : r.data.first_day; d2 = d2 && d2 > r.data.last_day ? d2 : r.data.last_day;
     }
     msg.innerHTML = `✅ Saved <b>${n}</b> calls (${nw} new, ${n - nw} already here), ${esc(dayf(d1))} – ${esc(dayf(d2))}. Transcripts show up within about 10 minutes.`;
-    done();
+    done(); callsBanner(true);
   }
 }
 async function showCall(c, tr){
@@ -113,6 +119,7 @@ window.callsView = async function(v){
     const last = (ups.data || [])[0];
     if(last) $("#culast").innerHTML = `Track Pulse calls with their transcripts. Last upload ${esc(new Date(last.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} by ${esc((last.by_name || "").split(" ")[0])}, calls through ${esc(dayf(last.last_day))}. Source: Pulse Recent Calls export (call details) + Track API (transcripts).`;
     $("#cub").onclick = () => uploadBox(last, () => callsView(v));
+    if(/\/upload$/.test(location.hash)){ history.replaceState(null, "", "#/call_review"); uploadBox(last, () => callsView(v)); }
   }
   let calls, trs;
   try {
@@ -155,4 +162,21 @@ window.callsView = async function(v){
   }
   draw();
 };
+let BN = { at:0, j:null };
+function bannerDraw(){
+  document.querySelectorAll(".cbanner").forEach(x => x.remove());
+  const j = BN.j, v = document.getElementById("view");
+  if(!j || !j.due || !v || !v.parentNode) return;
+  const b = document.createElement("div"); b.className = "cbanner"; b.setAttribute("role", "status");
+  b.innerHTML = (j.uploaded && j.missing ? `📞 Yesterday's calls (${esc(dayf(j.day))}) are incomplete: ${j.missing} call${j.missing === 1 ? " is" : "s are"} missing. Export again from Track with only the Created filter.`
+    : `📞 Upload yesterday's calls (${esc(dayf(j.day))}) from Track so Call review has them.`) + `<a href="#/call_review/upload">Upload now →</a>`;
+  v.parentNode.insertBefore(b, v);
+}
+window.callsBanner = async function(force){
+  if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
+  if(force || Date.now() - BN.at > 5 * 60e3){ const r = await sb.rpc("calls_upload_due"); BN = { at:Date.now(), j: r.error ? null : r.data }; }
+  bannerDraw();
+};
+// starts by itself once the hub is signed in; re-checks every 5 minutes and redraws if the page shell was rebuilt
+const boot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(boot); callsBanner(true); setInterval(() => callsBanner(false), 60e3); window.addEventListener("hashchange", () => callsBanner(false)); } }, 1000);
 })();
