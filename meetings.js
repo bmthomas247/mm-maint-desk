@@ -28,6 +28,7 @@ const MCSS = `
 .mtg .tk{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px} .mtg .tk:last-child{border-bottom:0}
 .mtg .tk input[type=checkbox]{width:20px;height:20px;margin-top:1px;flex:0 0 auto} .mtg .tk.done span.tx{text-decoration:line-through;color:var(--muted)}
 .mtg .tk small{display:block;color:var(--muted);font-size:12px}
+.mjoin{flex:none;background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.35);color:#fff;text-decoration:none;white-space:nowrap} a.mjoin{background:#fff;color:var(--forest,#1d3b2a);font-weight:800}
 @media print{ .rail,.topbar,.ubar,.mtools,.mrow,.mtask,.btn,#pennybtn{display:none!important} .mtg .mi{break-inside:avoid;box-shadow:none} }`;
 let cssDone = false;
 const css = () => { if(cssDone) return; cssDone = true; const s = document.createElement("style"); s.textContent = MCSS; document.head.appendChild(s); };
@@ -62,6 +63,20 @@ window.meetView = async function(v, key){
   v.innerHTML = `<div class="page mtg"><p class="muted">Building the agenda…</p></div>`;
   const [data, ppl] = await Promise.all([load(v, key), people()]);
   if(!data) return; render(v, key, data, ppl);
+};
+/* Monday maintenance (desk.html in a frame, Brandon 2026-10-29): Join button in the green banner next to the page name.
+   Link + admin flag from meeting_link() (hub_meetings_monday.sql); hub.html route() removes .mjoin when the page changes. */
+window.meetJoin = async function(key){
+  css(); const r = await sb.rpc("meeting_link", { p_meet:key });
+  if(r.error || !r.data || current() !== key) return;
+  const L = r.data.link, put = html => [$("#utl"), $("#ttl")].forEach(t => { if(t) t.insertAdjacentHTML("afterend", html); });
+  if(r.data.admin) put(`<button class="btn small mjoin mjset">${L ? "Change link" : "+ Join link"}</button>`);   // afterend: put this first so Join lands next to the title
+  if(L) put(`<a class="btn small mjoin" href="${esc(L.url)}" target="_blank" rel="noopener">▶ Join${L.label ? " " + esc(L.label) : ""}</a>`);
+  document.querySelectorAll(".mjset").forEach(b => b.onclick = async () => {
+    const u = prompt("Paste the meeting's join link (https://…). Only people who can open this meeting will see it.", ""); if(!u) return;
+    const w = await sb.rpc("meeting_link_set", { p_meet:key, p_url:u.trim(), p_label:/meet\.google/.test(u) ? "Google Meet" : /zoom\.us/.test(u) ? "Zoom" : "" });
+    if(w.error) return alert("Couldn't save: " + w.error.message);
+    document.querySelectorAll(".mjoin").forEach(x => x.remove()); meetJoin(key); });
 };
 function render(v, key, data, ppl){
   const m = MEET[key], day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
