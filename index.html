@@ -1623,13 +1623,33 @@ async function patrickView(v){
   if(week) P.days = 7;
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Patrick${week ? " — weekly" : ""}</h2>
     <p class="muted">What guests asked Patrick on vacationrentalsparkcity.com, his answers, sources, outcome and cost. Source: the website's Ask Patrick log, copied here every 5 minutes. <span id="pwhen"></span></p>
-    <div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"></div><div id="plists"></div></div>`;
-  const [c, rv, l] = await Promise.all([ sb.from("patrick_chats").select("*").order("id", { ascending:false }).limit(5000),
-    sb.from("patrick_reviews").select("*").order("id", { ascending:false }).limit(2000), sb.rpc("patrick_lists") ]);
+    <div class="card" id="pbook" style="display:none"></div><div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"></div><div id="plists"></div></div>`;
+  const [c, rv, l, bk] = await Promise.all([ sb.from("patrick_chats").select("*").order("id", { ascending:false }).limit(5000),
+    sb.from("patrick_reviews").select("*").order("id", { ascending:false }).limit(2000), sb.rpc("patrick_lists"), sb.rpc("patrick_bookings") ]);
   if(c.error) return $("#pins").innerHTML = `<p class="muted">Couldn't load: ${esc(c.error.message)}</p>`;
   const L = (l.data || [])[0] || {}, all = c.data || [], revs = rv.data || [];
   $("#pwhen").textContent = L.last_pull ? "Last copied " + new Date(L.last_pull).toLocaleString() + "." : "";
-  if(!all.length){ $("#pins").innerHTML = `<p class="muted">No chats copied from the website yet${L.paired ? "" : " — the website isn't connected to the hub yet"}.</p>`; $("#plog").remove(); return; }
+  if(!L.paired && ME.admin){   // one time: Brandon pastes the key from WordPress › Settings › Ask Patrick: Hub desk (shown there once)
+    $("#pins").innerHTML = `<b style="font-size:17px">Connect to the website</b><p class="muted">In WordPress go to Settings › Ask Patrick: Hub desk, click <b>Make the Hub desk key</b>, copy it and paste it here. It's shown there only once.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="pkey" type="password" autocomplete="off" placeholder="Hub desk key" style="flex:1 1 260px"><button class="btn primary small" id="pkgo">Connect</button></div><p class="muted" id="pkm"></p>`;
+    $("#pkgo").onclick = async () => { const k = $("#pkey").value.trim(); if(k.length < 32){ $("#pkm").textContent = "That key looks too short."; return; }
+      $("#pkm").textContent = "Connecting…"; $("#pkgo").disabled = true;
+      const r = await sb.functions.invoke("patrick-desk", { body:{ action:"pair", secret:k } }); $("#pkey").value = "";
+      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || r.error.message : r.data && r.data.error;
+      if(err){ $("#pkm").textContent = err; $("#pkgo").disabled = false; return; }
+      $("#pkm").textContent = "Connected. Copied " + ((r.data && r.data.pulled) || 0) + " chats."; setTimeout(() => patrickView(v), 800); };
+    $("#plog").remove(); return; }
+  if(!all.length){ $("#pins").innerHTML = `<p class="muted">No chats copied from the website yet.</p>`; $("#plog").remove(); return; }
+  const B = bk.data || [];
+  if(B.length){   // bookings Patrick helped make (patrick_bookings(): chat homes + dates vs Track reservations; money only for res_money people)
+    const money = B.some(x => x.total != null), $$ = n => "$" + Math.round(+n || 0).toLocaleString(), d = s => s ? new Date(s + "T12:00").toLocaleDateString(undefined, { month:"short", day:"numeric", year:"2-digit" }) : "";
+    $("#pbook").style.display = "";
+    $("#pbook").innerHTML = `<b style="font-size:17px">Bookings Patrick helped make</b> <span class="muted">${B.length} reservation${B.length === 1 ? "" : "s"} · ${B.reduce((a, x) => a + (+x.nights || 0), 0)} nights${money ? ` · <b>${$$(B.reduce((a, x) => a + (+x.rent || 0), 0))}</b> rent · <b>${$$(B.reduce((a, x) => a + (+x.total || 0), 0))}</b> total` : ""}</span>
+      <style>#pbook table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}#pbook th,#pbook td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}#pbook th{font-size:12px;color:var(--muted);font-weight:700}</style><div style="overflow-x:auto;margin-top:8px"><table><thead><tr><th style="text-align:left">Home</th><th style="text-align:left">Stay</th><th style="text-align:left">Booked</th><th style="text-align:left">Patrick chat</th><th style="text-align:left">How</th>${money ? `<th style="text-align:right">Rent</th><th style="text-align:right">Total</th>` : ""}</tr></thead><tbody>
+      ${B.map(x => `<tr><td style="text-align:left">${esc(x.unit)}</td><td style="text-align:left">${d(x.arrive)} – ${d(x.depart)}</td><td style="text-align:left">${d(x.booked_on)}</td><td style="text-align:left"><a href="#" data-sess="${esc(x.session)}">${d(x.chat_on)}</a></td><td style="text-align:left">${esc(x.how)}</td>${money ? `<td style="text-align:right">${$$(x.rent)}</td><td style="text-align:right">${$$(x.total)}</td>` : ""}</tr>`).join("")}</tbody></table></div>
+      <p class="muted" style="font-size:12.5px;margin:8px 0 0">Source: the website's Ask Patrick log + the Track reservations feed. Counts when the home was shown, liked or clicked in a Patrick chat, the arrival is within 3 days of the chat's dates, and it was booked within 14 days after the chat (not cancelled). Patrick helped; the reservations team or the guest made the booking.</p>`;
+    $("#pbook").querySelectorAll("[data-sess]").forEach(a => a.onclick = e => { e.preventDefault(); P.q = a.dataset.sess; P.days = 0; patrickView(v); });
+  }
   const since = P.days ? Date.now() - P.days * 864e5 : 0, inP = all.filter(x => !since || new Date(x.created_at) >= since);
   const usd = n => "$" + (+n || 0).toFixed(2), top = (list, f, n = 8) => { const m = {}; list.forEach(x => { const k = (f(x) || "").trim(); if(k) m[k] = (m[k] || 0) + 1; });
     return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n); };
