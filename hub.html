@@ -947,6 +947,23 @@ function accAsk(act, x, done){
     if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + r.error.message; }
     close(); done(act === "unlock" ? x.name + " can sign in again." : x.name + " was signed out of " + r.data + " device" + (r.data === 1 ? "" : "s") + "."); };
 }
+/* My settings: Penny's morning briefing (penny_brief_set, hub_penny_brief.sql). Brandon 2026-10-29: on for everyone at 7:30 am weekdays, anyone can turn it off. */
+async function pennyBriefCard(box){
+  if(!box) return;
+  const r = await sb.rpc("penny_brief_mine"); const p = r.data; if(!p) return box.innerHTML = "";
+  const times = []; for(let h = 5; h <= 11; h++) ["00", "30"].forEach(m => times.push(String(h).padStart(2, "0") + ":" + m));
+  const t12 = t => { const [h, m] = t.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} am`; };
+  box.innerHTML = `<div class="card"><b style="font-size:17px">☀️ Morning briefing from Penny</b>
+    <p class="muted" style="margin:4px 0 8px">A short Slack message each morning with your day: meetings, arrivals and cleans, your Breezeway tasks, your checks and Penny's tips. Only what you can already see in the hub.</p>
+    <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="pbon"${p.enabled ? " checked" : ""}> Send me the morning briefing</label>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0"><label>Time <select id="pbat">${times.map(t => `<option value="${t}"${t === p.send_at ? " selected" : ""}>${t12(t)}</option>`).join("")}</select></label>
+      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pbwk"${p.weekends ? " checked" : ""}> Weekends too</label></div>
+    <div style="display:flex;gap:8px;align-items:center"><button class="btn small" id="pbsave">Save</button><span class="muted" id="pbmsg"></span></div></div>`;
+  $("#pbsave").onclick = async () => { $("#pbsave").disabled = true;
+    const x = await sb.rpc("penny_brief_set", { p_enabled:$("#pbon").checked, p_send_at:$("#pbat").value, p_weekends:$("#pbwk").checked });
+    $("#pbsave").disabled = false;
+    $("#pbmsg").textContent = x.error ? "Couldn't save: " + x.error.message : (x.data.enabled ? `Saved. Next one at ${t12(x.data.send_at)}${x.data.weekends ? "" : " on a weekday"}.` : "Saved. You won't get the briefing."); };
+}
 async function settingsView(v){
   const [a, b, c] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] }),
     ME.admin ? sb.rpc("hub_admin_people") : Promise.resolve({ data:[] })]);
@@ -984,6 +1001,7 @@ function settingsView2(v){
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
     ${BD.mine ? "" : bdCard()}
+    <div id="pbrief"></div>
     <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Home always stays on top. Pick what comes next, then put things in the order you like.</p>
       <div class="seg" id="ordfirst" style="margin:0 0 10px"><span class="muted" style="align-self:center;margin-right:6px">Show first:</span><button class="btn small ${desksFirst ? "" : "on"}" data-first="info">Moose Info</button><button class="btn small ${desksFirst ? "on" : ""}" data-first="desks">Desks</button></div>
       ${ilist.length ? `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><b>Moose Info</b><button class="btn small" data-az="i" style="margin-left:auto">A–Z</button></div><div>${ordRows(ilist, "i")}</div>` : ""}
@@ -1026,6 +1044,7 @@ function settingsView2(v){
       $("#prefsave").disabled = false;
       if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
       PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks }); shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
+    pennyBriefCard($("#pbrief"));
   };
   draw();
 }
