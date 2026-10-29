@@ -62,7 +62,10 @@ const folioUrl = r => "https://moosemanagement.trackhs.com/pms/guest-folio/view/
 
 // for Ask Penny (hub.html pennyCtx): which stay this check list is about
 window.resCtx = r => { const s = B && B.stays.find(x => String(x.res) === String(r));
-  return s ? { res:String(s.res), home:s.unit, guest:s.guest, arrive:s.arrive, depart:s.depart, status:s.status } : { res:String(r) }; };
+  return s ? { res:String(s.res), home:s.unit, guest:s.guest, arrive:s.arrive, depart:s.depart, status:s.status, state:s.state,
+    // what's left (Penny coaches people through it, Brandon 2026-10-29): required steps not done, what holds it up, home heads-ups
+    left:(s.steps || []).filter(t => !t.opt && !t.done).map(t => `${t.grp}: ${t.label}`).slice(0, 30), blockers:s.blockers || [],
+    heads:(s.heads || []).map(a => a.title || a.text || a.what || "").filter(Boolean).slice(0, 3) } : { res:String(r) }; };
 async function load(force){
   if(B && !force && Date.now() - loadedAt < 60000) return B;
   const [r, al, ch] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts"), sb.rpc("res_charge_allowed")]); if(r.error) throw r.error;
