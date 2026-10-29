@@ -5,13 +5,16 @@
    cal_meetings() (tiles for the meetings you can open) · meeting_sched_set (admins set times). Meeting pages: meetings.js.
    Round 2 (Brandon 2026-10-29, "like Outlook"): views Day · Work week · Week · Month · Week + Month, weeks start Sunday,
    hourly grid, saved default view + layers per person, drag your own events to move them, Office shows who's working/out + contacts.
+   Round 3 (Brandon 2026-10-29, "the office is going to be the hub of all going on for everyone and when everyone is working"):
+   Office adds Hubstaff schedules + time off and every meeting with who's in it (cal_office, hub_calendar_3.sql; a meeting you can't
+   open shows as "In a meeting" + names). Work events get attendees (cal_event_save3) and show on each attendee's Personal calendar.
    Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet */
 (function(){
 const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
 const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"]];
 const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["month","Month"],["wm","Week + Month"]];
-const LAYERS = { cal_me:[["meet","Meetings"],["personal","My events"],["office","Office"],["checkins","Check-ins"]], cal_office:[["events","Work events"],["people","Who's in / out"]] };
-const LAYER_ON = { meet:true, personal:true, office:true, checkins:false, events:true, people:true };
+const LAYERS = { cal_me:[["meet","Meetings"],["personal","My events"],["office","Office"],["checkins","Check-ins"]], cal_office:[["events","Work events"],["meet","Meetings"],["sched","Schedules"],["people","Who's in / out"]] };
+const LAYER_ON = { meet:true, personal:true, office:true, checkins:false, events:true, people:true, sched:true };
 const MGR = ["owner_relations","maint_manager","office_manager","hk_manager"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const WS = 6, WE = 22, HPX = 44;   // hourly grid 6 am – 10 pm, 44px per hour
@@ -35,6 +38,9 @@ const CCSS = `
 .cal .ev.of,.cal .bk.of{background:var(--amber-soft,#fbf0dc);color:var(--amber,#8a5a00);border-left-color:var(--amber,#8a5a00)}
 .cal .ev.outp,.cal .bk.outp{background:var(--red-soft,#fbe7e5);color:var(--red,#b3261e);border-left-color:var(--red,#b3261e)}
 .cal .ev.work,.cal .bk.work{background:var(--moose-soft,#e5efe6);color:var(--moose-ink,#24452c)}
+.cal .ev.sh,.cal .bk.sh{background:var(--ground,#f6f4ef);color:var(--ink-2,#3d4a40);border-left-color:var(--muted,#7a857c)}
+.cal .pp .mts{font-size:12px;color:var(--blue,#1f4e8c);margin-top:2px}
+.cal .attp{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto;padding:4px 0} .cal .attp .lyr{font-size:12.5px}
 .cal .ev.ar{background:var(--moose-soft,#e5efe6)} .cal .ev.dp{background:var(--line);color:var(--ink-2)}
 .cal [data-drag]{cursor:grab;touch-action:none} .cal .dragging{opacity:.55}
 .cal .wk{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
@@ -257,25 +263,36 @@ async function evCal(v, key){
   v.innerHTML = `<div class="page cal wide">${tabs(key)}<p class="muted">Loading…</p></div>`;
   const [a, b] = curRange(key);
   const wantStays = isRes || (isMe && layerOn("checkins"));
-  const [evs, ms, ppl, sr] = await Promise.all([isRes ? [] : events(a, b), isMe && layerOn("meet") ? meetings() : [], isRes ? [] : people(),
-    wantStays ? sb.rpc("cal_stays", { p_from:a, p_to:b }) : null]);
+  const [evs, ms, ppl, sr, orr] = await Promise.all([isRes ? [] : events(a, b), isMe && layerOn("meet") ? meetings() : [], isRes ? [] : people(),
+    wantStays ? sb.rpc("cal_stays", { p_from:a, p_to:b }) : null, isOff ? sb.rpc("cal_office", { p_from:a, p_to:b }) : null]);
   if(current() !== key) return;
   const stays = (sr && sr.data && sr.data.stays) || [], who = id => (ppl.find(p => p.id === id) || {}).name || "Someone";
+  const fn = id => who(id).split(" ")[0], ox = (orr && orr.data) || { meetings:[], shifts:[], off:[] };
   const mine = evs.filter(e => isMe ? e.cal === "personal" : e.cal === "office");
   const canAdd = isMe || isOff, boss = canOffice();
   const mt = []; ms.forEach(m => occurs(m, a, b).forEach(s => mt.push({ meet:m.meet, day:s, start:m.start, minutes:m.minutes })));
   const myId = (ppl.find(p => p.name === ME.name) || {}).id;
   const canEdit = e => e.cal === "personal" || boss || (e.kind !== "event" && e.person_id === myId);
   const evItem = e => { const k = e.kind || "event", nm = k === "event" ? e.title : (k === "out" ? "Out" : "Working") + " · " + who(e.person_id) + (e.title && !/^(out|working)$/i.test(e.title) ? " · " + e.title : "");
-    return { start:e.start_time, end:e.end_time, title:nm, sub:e.location || "", cls:k === "out" ? "outp" : k === "working" ? "work" : isMe ? "" : "of", ev:e.id, drag:canEdit(e) }; };
+    return { start:e.start_time, end:e.end_time, title:nm, sub:[e.location, (e.attendees || []).map(fn).join(", ")].filter(Boolean).join(" · "), cls:k === "out" ? "outp" : k === "working" ? "work" : isMe ? "" : "of", ev:e.id, drag:canEdit(e) }; };
   const items = s => {
     const out = [];
     if(isRes || (isMe && layerOn("checkins"))){ stays.filter(x => x.in === s).forEach(x => out.push({ title:(x.owner ? "OWNER " : "") + "CHECK-IN " + x.unit + (x.guest ? " · " + x.guest : ""), cls:"ar", href:"#/cal_res" }));
       if(isRes) stays.filter(x => x.out === s).forEach(x => out.push({ title:"CHECK-OUT " + x.unit, cls:"dp", href:"#/cal_res" })); }
     if(isMe){ mt.filter(x => x.day === s).forEach(x => out.push({ start:x.start, end:x.start && x.minutes ? endTime(x.start, x.minutes) : null, title:NAMES[x.meet] + " meeting", cls:"mt", href:"#/" + x.meet }));
-      if(layerOn("personal")) mine.filter(e => evOn(e, s)).forEach(e => out.push(evItem(e)));
-      if(layerOn("office")) evs.filter(e => e.cal === "office" && (e.kind || "event") === "event" && evOn(e, s)).forEach(e => out.push(Object.assign(evItem(e), { cls:"of", drag:false }))); }
-    if(isOff) mine.filter(e => evOn(e, s) && ((e.kind || "event") === "event" ? layerOn("events") : layerOn("people"))).forEach(e => out.push(evItem(e)));
+      const att = e => (e.attendees || []).includes(myId);   // office events you're going to show with your own events
+      if(layerOn("personal")) mine.concat(evs.filter(e => e.cal === "office" && att(e))).filter(e => evOn(e, s)).forEach(e => out.push(e.cal === "office" ? Object.assign(evItem(e), { cls:"of", drag:false }) : evItem(e)));
+      if(layerOn("office")) evs.filter(e => e.cal === "office" && (e.kind || "event") === "event" && !(layerOn("personal") && att(e)) && evOn(e, s)).forEach(e => out.push(Object.assign(evItem(e), { cls:"of", drag:false }))); }
+    if(isOff){
+      mine.filter(e => evOn(e, s) && ((e.kind || "event") === "event" ? layerOn("events") : layerOn("people"))).forEach(e => out.push(evItem(e)));
+      if(layerOn("meet")) ox.meetings.filter(m => m.day === s).forEach(m => out.push({ start:m.start, end:m.end, title:m.meet ? NAMES[m.meet] + " meeting" : "In a meeting",
+        sub:(m.people || []).map(fn).join(", "), cls:"mt", href:m.meet ? "#/" + m.meet : "#/cal_office" }));
+      const timed = viewOf(key) === "day";   // week/month: schedules sit in the all-day row so the hours stay readable
+      if(layerOn("sched")) ox.shifts.filter(x => x.day === s).sort((x, y) => x.start.localeCompare(y.start)).forEach(x => out.push(timed
+        ? { start:x.start, end:x.end, title:fn(x.user_id), sub:"Scheduled", cls:"sh", href:"#/cal_office" }
+        : { title:fn(x.user_id) + " " + ftime(x.start) + "–" + ftime(x.end), cls:"sh", href:"#/cal_office" }));
+      if(layerOn("people")) ox.off.filter(x => x.day === s).forEach(x => out.push({ title:"Out · " + who(x.user_id) + (x.start ? " " + ftime(x.start) + "–" + ftime(x.end) : ""), cls:"outp", href:"#/cal_office" }));
+    }
     return out; };
   const draw = () => {
     const sel = ST.sel[key], day = items(sel).sort((x, y) => (x.start || "").localeCompare(y.start || ""));
@@ -284,8 +301,8 @@ async function evCal(v, key){
     const detail = isRes ? resDetail(stays, sel) : `<div class="card list"><b style="font-size:16px">${esc(fday(sel))}</b>${day.length ? day.map(x => `<div class="it"><span class="d">${x.start ? ftime(x.start.slice(0, 5)) + (x.end ? "–" + ftime(x.end.slice(0, 5)) : "") : "All day"}</span><span style="flex:1"><a ${attrs(Object.assign({}, x, { drag:false }))}><b>${esc(x.title)}</b></a>${x.sub ? ` <span class="muted">· ${esc(x.sub)}</span>` : ""}</span></div>`).join("") : `<p class="muted" style="margin:6px 0 0">Nothing on this day.</p>`}</div>`;
     const main = body(key, items, canAdd, !isRes) + (isRes ? `<p class="muted" style="font-size:12px">Source: ${esc((sr && sr.data && sr.data.source) || "Track reservations")}. Guest names only; contact info stays on Home for the teams that have it.</p>` : "");
     v.innerHTML = `<div class="page cal wide">${tabs(key)}${calNav(key, isRes ? "Reservations" : isOff ? "Office" : "My calendar", addBtns)}
-      ${isOff ? `<div class="cols"><div>${main}${detail}</div><div class="side">${whoPanel(ppl, mine, sel)}</div></div>` : main + detail}
-      <p class="muted" style="font-size:12px">${isOff ? "Everyone on the hub sees the Office calendar. Mark yourself out or working; managers and admins add work events and can mark anyone." : isMe ? "Only you see your personal events. Drag your own events to move them; click an empty time to add one. Meetings come from Calendar ▸ Meetings." : ""}</p>
+      ${isOff ? `<div class="cols"><div>${main}${detail}</div><div class="side">${whoPanel(ppl, mine, sel, ox, fn)}</div></div>` : main + detail}
+      <p class="muted" style="font-size:12px">${isOff ? "Everyone on the hub sees the Office calendar. Mark yourself out or working; managers and admins add work events (with who's going) and can mark anyone. Schedules and time off: " + (ox.source || "Hubstaff") + (ox.at ? " (updated " + new Date(ox.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) + ")" : "") + "; only people with a Hubstaff schedule show. Meetings: Calendar ▸ Meetings times; who's in each = everyone the meeting is for." : isMe ? "Only you see your personal events. Drag your own events to move them; click an empty time to add one. Meetings come from Calendar ▸ Meetings." : ""}</p>
       <div class="modal" id="evm"><div class="card" id="evcard"></div></div></div>`;
     wireNav(v, key, draw, () => evCal(v, key));
     wireGrid(v, canAdd && !isRes ? (d, s) => form(null, { day:d, start:s, kind:isOff ? (boss ? "event" : "working") : "event" }) : null,
@@ -305,11 +322,12 @@ async function evCal(v, key){
     pre = pre || {}; const kind = e ? (e.kind || "event") : (pre.kind || "event"), cal = e ? e.cal : (isOff ? "office" : "personal"), ro = e && !canEdit(e);
     const head = e ? (ro ? "Event" : "Change event") : kind === "out" ? "Mark out" : kind === "working" ? "Mark working" : cal === "office" ? "New work event" : "New personal event";
     const pick = cal === "office" && kind !== "event" && boss ? `<label class="field"><span>Who</span><select id="ev_p">${ppl.map(p => `<option value="${p.id}" ${(e ? e.person_id : myId) === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : "";
+    const attH = cal === "office" && kind === "event" ? `<div class="field"><span>Who's going (shows on their Personal calendar)</span><div class="attp">${ppl.map(p => `<label class="lyr"><input type="checkbox" data-att="${p.id}" ${e && (e.attendees || []).includes(p.id) ? "checked" : ""} ${ro ? "disabled" : ""}>${esc(p.name)}</label>`).join("")}</div></div>` : "";
     $("#evcard").innerHTML = `<div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${head}</h2><button class="btn small" id="evx" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
       ${pick}<label class="field"><span>${kind === "event" ? "What" : "Note (optional, e.g. PTO, sick, on call)"}</span><input id="ev_t" value="${esc(e && !/^(out|working)$/i.test(e.title) ? e.title : "")}" ${ro ? "disabled" : ""}></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>Day</span><input type="date" id="ev_d" value="${esc(e ? e.day : pre.day || ST.sel[key])}" ${ro ? "disabled" : ""}></label><label class="field" style="flex:1"><span>Until (optional)</span><input type="date" id="ev_e" value="${esc(e && e.end_day || "")}" ${ro ? "disabled" : ""}></label></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>Starts (blank = all day)</span><input type="time" id="ev_s" value="${esc(e && e.start_time ? e.start_time.slice(0, 5) : pre.start || "")}" ${ro ? "disabled" : ""}></label><label class="field" style="flex:1"><span>Ends</span><input type="time" id="ev_f" value="${esc(e && e.end_time ? e.end_time.slice(0, 5) : pre.start ? endTime(pre.start, 60) : "")}" ${ro ? "disabled" : ""}></label></div>
-      <label class="field"><span>Where</span><input id="ev_l" value="${esc(e && e.location || "")}" ${ro ? "disabled" : ""}></label>
+      <label class="field"><span>Where</span><input id="ev_l" value="${esc(e && e.location || "")}" ${ro ? "disabled" : ""}></label>${attH}
       <label class="field"><span>Notes</span><textarea id="ev_n" style="min-height:70px" placeholder="Don't type codes or passwords here." ${ro ? "disabled" : ""}>${esc(e && e.notes || "")}</textarea></label>
       ${ro ? "" : `<div style="display:flex;gap:8px"><button class="btn primary" style="flex:1" id="ev_go">Save</button>${e ? `<button class="btn" id="ev_off">Remove</button>` : ""}</div>`}<p class="muted" id="ev_m"></p>`;
     $("#evm").classList.add("on");
@@ -317,7 +335,8 @@ async function evCal(v, key){
     if(ro) return;
     const go = async off => { const t = $("#ev_t").value.trim(), d = $("#ev_d").value;
       if((kind === "event" && !t) || !d) return $("#ev_m").textContent = "Add what and which day.";
-      const r = await sb.rpc("cal_event_save2", { p_id:e ? e.id : null, p_cal:cal, p_kind:kind, p_person:$("#ev_p") ? $("#ev_p").value : null, p_title:t, p_day:d, p_end_day:$("#ev_e").value || null,
+      const att = cal === "office" && kind === "event" ? [...$("#evcard").querySelectorAll("[data-att]:checked")].map(x => x.dataset.att) : null;
+      const r = await sb.rpc("cal_event_save3", { p_attendees:att, p_id:e ? e.id : null, p_cal:cal, p_kind:kind, p_person:$("#ev_p") ? $("#ev_p").value : null, p_title:t, p_day:d, p_end_day:$("#ev_e").value || null,
         p_start:$("#ev_s").value || null, p_end:$("#ev_f").value || null, p_location:$("#ev_l").value, p_notes:$("#ev_n").value, p_off:!!off });
       if(r.error) return $("#ev_m").textContent = "Couldn't save: " + r.error.message;
       ST.sel[key] = d; evCal(v, key); };
@@ -334,20 +353,28 @@ function resDetail(st, sel){
     <h4 style="margin:10px 0 2px">Leaving (${dep.length})</h4>${dep.map(x => row(x, "since " + fday(x.in))).join("") || `<p class="muted" style="margin:2px 0">None</p>`}</div>`;
 }
 /* Office side panel: who's in / out on the selected day + everyone's contact info (Brandon 2026-10-29) */
-function whoPanel(ppl, evs, sel){
-  const on = evs.filter(e => evOn(e, sel) && e.kind && e.kind !== "event"), st = id => { const x = on.filter(e => e.person_id === id); return x.find(e => e.kind === "out") ? "out" : x.length ? "working" : null; };
-  const t = today(), clocked = p => sel === t && p.clocked;
+function whoPanel(ppl, evs, sel, ox, fn){
+  ox = ox || { meetings:[], shifts:[], off:[] };
+  const sh = id => ox.shifts.filter(x => x.day === sel && x.user_id === id), hoff = id => ox.off.filter(x => x.day === sel && x.user_id === id);
+  const mts = id => ox.meetings.filter(m => m.day === sel && (m.people || []).includes(id)).sort((x, y) => x.start.localeCompare(y.start));
+  const on = evs.filter(e => evOn(e, sel) && e.kind && e.kind !== "event"), st = id => { const x = on.filter(e => e.person_id === id);
+    return x.find(e => e.kind === "out") || hoff(id).length ? "out" : x.length || sh(id).length ? "working" : null; };
+  const t = today(), clocked = p => sel === t && p.clocked, nw = new Date(), nowT = hhmm(nw.getHours() * 60 + nw.getMinutes());
+  const inMeet = id => sel === t && mts(id).some(m => m.start <= nowT && nowT < m.end);
+  const rng = x => ftime(x.start) + "–" + ftime(x.end);
   const out = ppl.filter(p => st(p.id) === "out"), inn = ppl.filter(p => st(p.id) !== "out" && (st(p.id) === "working" || clocked(p)));
   const slackUrl = id => "https://slack.com/app_redirect?channel=" + encodeURIComponent(id);
   const person = p => { const s = st(p.id); return `<div class="pp" data-n="${esc((p.name + " " + (p.title || "") + " " + (p.teams || []).join(" ")).toLowerCase())}">
-    <div><span class="dot" style="background:${s === "out" ? "var(--red,#b3261e)" : s === "working" || clocked(p) ? "var(--forest-2,#2f5d3a)" : "var(--line)"}"></span><b>${esc(p.name)}</b>${s === "out" ? ` <span class="pill red">Out</span>` : clocked(p) ? ` <span class="pill green">On the clock</span>` : s === "working" ? ` <span class="pill green">Working</span>` : ""}</div>
+    <div><span class="dot" style="background:${s === "out" ? "var(--red,#b3261e)" : s === "working" || clocked(p) ? "var(--forest-2,#2f5d3a)" : "var(--line)"}"></span><b>${esc(p.name)}</b>${s === "out" ? ` <span class="pill red">Out</span>` : clocked(p) ? ` <span class="pill green">On the clock</span>` : s === "working" ? ` <span class="pill green">Working</span>` : ""}${inMeet(p.id) ? ` <span class="pill blue">In a meeting</span>` : ""}</div>
     <div class="ttl">${esc([p.title, (p.teams || []).join(" · ")].filter(Boolean).join(" — "))}</div>
+    ${sh(p.id).length || hoff(p.id).length ? `<div class="ttl">${sh(p.id).map(x => "Scheduled " + rng(x)).concat(hoff(p.id).map(x => "Time off" + (x.start ? " " + rng(x) : " all day"))).map(esc).join(" · ")}</div>` : ""}
+    ${mts(p.id).length ? `<div class="mts">🗓 ${mts(p.id).map(m => esc(ftime(m.start) + " " + (m.meet ? NAMES[m.meet] : "Meeting"))).join(" · ")}</div>` : ""}
     <div class="ct">${p.ext ? `<span>☎ Ext. ${esc(p.ext)}</span>` : ""}${p.slack ? `<a href="${esc(slackUrl(p.slack))}" target="_blank" rel="noopener">💬 Slack</a>` : ""}${p.email ? `<a data-mailto href="mailto:${esc(p.email)}">✉ ${esc(p.email)}</a>` : ""}</div></div>`; };
   return `<div class="card"><b style="font-size:16px">${sel === t ? "Today" : esc(fday(sel))}</b>
       <p class="muted" style="margin:4px 0 6px;font-size:13px">${inn.length} working${out.length ? ` · ${out.length} out` : ""}</p>
       ${out.length ? `<div style="font-size:13.5px;margin-bottom:4px"><b>Out:</b> ${out.map(p => esc(p.name)).join(", ")}</div>` : ""}
       ${inn.length ? `<div style="font-size:13.5px"><b>Working:</b> ${inn.map(p => esc(p.name)).join(", ")}</div>` : ""}
-      <p class="muted" style="font-size:11.5px;margin:6px 0 0">"On the clock" = clocked in today in Hubstaff (field techs). Others mark themselves working or out.</p></div>
+      <p class="muted" style="font-size:11.5px;margin:6px 0 0">Working = Hubstaff schedule, clocked in today in Hubstaff ("On the clock"), or marked working here. Out = approved Hubstaff time off or marked out here.</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px;flex:1">How to reach someone</b></div>
       <input id="ppq" type="search" placeholder="Search name, title or team" style="margin:6px 0">
       ${ppl.map(person).join("")}
