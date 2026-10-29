@@ -767,4 +767,55 @@ window.staffBadView = async function(v){ css();
   table($("#sbt"), [{ k:"person", t:"Person", l:1 }, { k:"rv", t:"Reviews", v:r => r.reviews.size, f:r => r.reviews.size }, { k:"n", t:"Mentions" },
     { k:"last", t:"Latest", f:r => esc(dt(r.last)) }], Object.values(by), "n");
 };
+
+/* Team & vendor ratings (Brandon 2026-10-29: admin-only "employee rating report … which ones are actually working hard").
+   #/people_scores · data: hub_people_scores (RLS hub_is_admin()), written nightly by people_scores.py. Every measure is an index
+   where 100 = the group's average for the period; the score is the average of a person's indexes. */
+window.peopleScoresView = async function(v){ css();
+  const per = (() => { try { return localStorage.getItem("ps_per") || "90d"; } catch(e){ return "90d"; } })(), grp = hashArg() || "tech";
+  v.innerHTML = `<div class="page wide">${back}<h2>Team & vendor ratings</h2><p class="muted">Loading…</p></div>`;
+  const last = await sb.from("hub_people_scores").select("as_of").order("as_of", { ascending:false }).limit(1);
+  if(last.error) return fail(v, last.error);
+  const asOf = (last.data[0] || {}).as_of;
+  const r = asOf ? await sb.from("hub_people_scores").select("*").eq("as_of", asOf) : { data:[] };
+  if(r.error) return fail(v, r.error);
+  const ALL = r.data || [], pc = x => x == null ? "—" : Math.round(x * 100) + "%", n1 = x => x == null ? "—" : (+x).toLocaleString(undefined, { maximumFractionDigits:2 });
+  const ix = (row, k) => { const i = ((row.metrics || {}).idx || {})[k]; return i == null ? "" : ` <small class="${i >= 115 ? "anup" : i <= 85 ? "andn" : "muted"}">${i}</small>`; };
+  const rv = r => { const m = r.metrics || {}; return (m.reviews_good ? `<span class="pill green">+${m.reviews_good}</span> ` : "") + (m.reviews_bad ? `<span class="pill red">−${m.reviews_bad}</span>` : "") || "—"; };
+  const G = {
+    tech:{ t:"Techs", who:"Maintenance techs", cols:[{ k:"tasks", t:"Tasks done" }, { k:"hours", t:"Hubstaff hrs" }, { k:"days_worked", t:"Days" },
+      { k:"tasks_per_hr", t:"Tasks / paid hr", f:x => n1(x.metrics.tasks_per_hr) + ix(x, "tasks_per_hr") }, { k:"at_home", t:"Paid time at homes", f:x => pc(x.metrics.at_home) + ix(x, "at_home") },
+      { k:"on_task", t:"Task time / paid hr", f:x => pc(x.metrics.on_task) + ix(x, "on_task") }, { k:"callback", t:"Callbacks (14 days)", f:x => pc(x.metrics.callback) + ix(x, "callback") },
+      { k:"rv", t:"Named in reviews", f:rv }],
+      how:"Tasks = finished Breezeway maintenance tasks they're on. Paid time at homes = Hubstaff GPS minutes stopped at one of our homes ÷ Hubstaff hours. Task time = Breezeway task minutes ÷ Hubstaff hours. Callbacks = another job opened at the same home within 14 days of their finished task (lower is better). Hubstaff goes back to Sep 1, 2026." },
+    office:{ t:"Office", who:"Office & front desk", cols:[{ k:"steps", t:"Check list steps", f:x => n1(x.metrics.steps) + ix(x, "steps") }, { k:"fd_resolved", t:"Freshdesk resolved", f:x => n1(x.metrics.fd_resolved) + ix(x, "fd_resolved") },
+      { k:"fd_handled", t:"Freshdesk handled" }, { k:"fd_first_hrs", t:"First reply (median hrs)", f:x => n1(x.metrics.fd_first_hrs) + ix(x, "fd_first_hrs") }, { k:"rv", t:"Named in reviews", f:rv }],
+      how:"Check list steps = Reservation check list steps they ticked (including ticks carried over from Asana). Freshdesk = tickets assigned to them, how many are resolved, and the median hours to the first reply (lower is better). Roles differ, so compare people who do the same job." },
+    cleaner:{ t:"Cleaners", who:"Cleaners (Breezeway assignees)", cols:[{ k:"cleans", t:"Cleans done" }, { k:"reviewed", t:"Reviewed stays" },
+      { k:"clean_stars", t:"Cleanliness ★", f:x => n1(x.metrics.clean_stars) + ix(x, "clean_stars") }, { k:"dirty_share", t:"Cleaning complaints", f:x => pc(x.metrics.dirty_share) + ix(x, "dirty_share") }],
+      how:"Each guest review is tied to the last finished clean at that home in the 14 days before check-in. Cleanliness ★ = the guest's cleanliness category stars. Cleaning complaints = reviews of 4★ or less that mention dirt, hair, stains, smells or bugs (lower is better). HK manager pre/post checks and assessments don't count as cleans." },
+    vendor:{ t:"Vendors", who:"Vendors named on jobs", cols:[{ k:"jobs", t:"Jobs" }, { k:"done", t:"Done" }, { k:"days", t:"Days to finish (median)", f:x => n1(x.metrics.days) + ix(x, "days") },
+      { k:"callback", t:"Callbacks (30 days)", f:x => pc(x.metrics.callback) + ix(x, "callback") }, { k:"cost", t:"Cost on jobs", f:x => x.metrics.cost ? usd(x.metrics.cost) : "—" }],
+      how:"Jobs = Breezeway, Asana, Freshdesk and Slack jobs that name the vendor. Days to finish = opened to done (lower is better). Callbacks = another job at the same home within 30 days of theirs (lower is better). Cost = the cost on those jobs where one is recorded." } };
+  const g = G[grp] ? grp : "tech", D = G[g], rows = ALL.filter(x => x.grp === g && x.period === per);
+  v.innerHTML = `<div class="page wide">${back}<h2>Team & vendor ratings</h2>
+    <p class="muted">Each person is compared with their own group. <b>100 = the group's average</b> for the period; the small numbers are each measure's index. A score needs enough data, and numbers can't see everything (training, special jobs, time off), so read the notes and talk to the person before acting. Only admins can see this page.</p>
+    <div class="anbar">${Object.entries(G).map(([k, x]) => `<a class="btn small${k === g ? " primary" : ""}" href="#/people_scores/${k}">${esc(x.t)}</a>`).join("")}
+      <select id="psp" style="margin-left:auto"><option value="30d">Last 30 days</option><option value="90d">Last 90 days</option><option value="365d">Last 12 months</option></select></div>
+    <div id="psk"></div><h3 class="anh3">${esc(D.who)}</h3><div id="pst"></div><div id="psn"></div>
+    <p class="ansrc"><b>How it's worked out:</b> ${esc(D.how)} Score = the average of the indexes (each capped 30–170). Sources: ${esc((rows[0] || {}).source || "")}. Updated ${asOf ? esc(dt(asOf + "T12:00")) : "—"} by people_scores.py (nightly).</p></div>`;
+  $("#psp").value = per; $("#psp").onchange = () => { try { localStorage.setItem("ps_per", $("#psp").value); } catch(e){} peopleScoresView(v); };
+  const rated = rows.filter(x => x.score != null), above = rated.filter(x => x.score >= 110).length, below = rated.filter(x => x.score < 90).length;
+  $("#psk").innerHTML = `<div class="ankpi"><div class="card"><small>Rated</small><b>${rated.length}</b><small>of ${rows.length} with any data</small></div>
+    <div class="card"><small>Above the group (110+)</small><b>${above}</b></div><div class="card"><small>Below the group (under 90)</small><b>${below}</b></div></div>`;
+  const pill = s => s == null ? `<span class="muted">not enough data</span>` : `<b>${s}</b> <span class="pill ${s >= 110 ? "green" : s < 90 ? "amber" : ""}">${s >= 110 ? "Above" : s < 90 ? "Below" : "On par"}</span>`;
+  table($("#pst"), [{ k:"rank", t:"#", v:x => x.rank ?? 999, f:x => x.rank ?? "—" }, { k:"person", t:"Name", l:1 }, { k:"score", t:"Score", v:x => x.score ?? -1, f:x => pill(x.score) }]
+    .concat(D.cols.map(c => ({ k:c.k, t:c.t, v:x => (x.metrics || {})[c.k] ?? null, f:c.f || (x => n1((x.metrics || {})[c.k])) }))), rows, "score");
+  if(!rows.length) $("#pst").innerHTML = `<div class="card"><p class="muted">${g === "vendor"
+    ? "No vendor data to rate yet: none of our recent jobs record which vendor did the work (the only vendor names are on old, open Asana jobs). Vendors will show here once jobs carry the vendor."
+    : "Nothing to rate in this period yet."}</p></div>`;
+  const noted = rows.filter(x => (x.notes || []).length).sort((a, b) => (a.score ?? 999) - (b.score ?? 999));
+  $("#psn").innerHTML = noted.length ? `<h3 class="anh3">Notes</h3>` + noted.map(x => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><b>${esc(x.person)}</b>
+      <ul style="margin:4px 0 0;padding-left:18px">${x.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>`).join("") : "";
+};
 })();
