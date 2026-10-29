@@ -237,6 +237,7 @@ body.only-trash header.top{position:static}
 .tfar{font-size:13px;font-weight:700;color:var(--accent-ink)}
 .twhy{font-size:14px;color:var(--ink-2);line-height:1.45}
 .tgar{border:1px solid var(--line-2);border-radius:14px;padding:12px 14px;background:var(--surface-2)}
+.tbig{border-radius:14px;padding:10px 14px;background:var(--wait-soft);color:var(--ink);font-size:14px;line-height:1.45;border-left:4px solid var(--wait)}
 .tgar .qrow{font-size:17px}
 .tgar.none{font-size:13.5px;color:var(--muted)}
 .tbtns{display:flex;gap:8px}
@@ -2407,8 +2408,10 @@ function trashCard(r,p,x){ var tk=trashTick(r.id,p.day,x.c), key=esc(r.id+"|"+p.
   var far=x._m!=null?'<span class="tfar">'+esc(trashFar(x._m))+'</span>':'';
   if(tk) return '<div class="tcard tdone" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill '+(tk.state==="out"?'ok':'mute')+'">'+(tk.state==="out"?'Out':'N/A')+'</span></div>'+
     '<div class="tdid">'+(tk.state==="out"?'Taken out':'Not needed')+' by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tundo="'+key+'">Undo</button></div></div>';
-  return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+'</div>'+
-    '<div class="twhy">'+(x.whys||[x.why]).map(esc).join("<br>")+'</div>'+trashGarage(x.c)+
+  var bg=x.big?'<div class="tbig"><b>Long stay — '+x.big.n+' nights.</b> Expect extra trash: bring spare bags and check the bins and garage.'+
+    (x.big.still?' Guests are still there until '+esc(fmtD(x.big.out))+' — knock first.':'')+'</div>':'';
+  return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+(x.big?'<span class="pill waiting">Long stay</span>':'')+'</div>'+
+    '<div class="twhy">'+(x.whys||[x.why]).map(esc).join("<br>")+'</div>'+bg+trashGarage(x.c)+
     '<div class="tbtns"><button class="btn tgo" data-tout="'+key+'">✓ Out</button><button class="btn tna" data-tna="'+key+'">N/A → next</button></div></div>'; }
 /* 📍 I'm at the home: GPS of our homes = Track unit latitude/longitude (locks/locks_sync.py → lock_places; every Trash person reads it,
    checked 2026-10-28). Distances are worked out on the phone; the location is never saved. */
@@ -2448,6 +2451,7 @@ function trashGarage(c){ if(window.MM_CODES===false) return "";
   return '<div class="tgar"><div class="qvh">Garage / parking</div>'+qShort(v).html+'<div class="hint">'+src+'</div></div>'; }
 function trashProf(c){ var bare=c.replace(/^(L-|2H-)/,""), hit=null;
   (D.homes||[]).forEach(function(h){ if(!hit && (h.code===c||h.code===bare)) hit=h; }); return hit; }
+var TRASH_LONG=7;   // nights — a stay this long gets the "Long stay" warning
 function trashKey(rid,day,c){ return sid(rid)+"__"+day+"__"+sid(c); }
 function trashTick(rid,day,c){ var x=S.rlog[trashKey(rid,day,c)]; return x&&!x.undone?x:null; }
 function trashTime(ms){ try{ return new Date(ms).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); }catch(e){ return ""; } }
@@ -2475,8 +2479,10 @@ function trashPlan(r){ var occ=(S.feeds.occupancy||{}).units; if(!occ) return nu
     var st=(fromFeed(occ,c)||fromFeed(occ,c.replace(/^(L-|2H-)/,""))||[]).filter(function(s){ return s.in<=day && s.out>=from; });
     var whys=st.length?[(st.some(function(s){return s.owner;})?"Owner":"Guest")+" stay "+fmtD(st[0].in)+"–"+fmtD(st[st.length-1].out)]:[];
     trashWork(c,from,day).slice(0,2).forEach(function(j){ whys.push("Work done "+fmtD(j.finished)+": "+String(j.title||"").slice(0,60)+(j.doneByName?" ("+j.doneByName+")":"")); });
+    /* long stays leave a lot of trash (Brandon 2026-10-29): warn at 7+ nights; say so if they're still there on trash day */
+    var big=null; if(!lease) st.forEach(function(s){ var n=daysBetween(s.in,s.out); if(n>=TRASH_LONG && (!big||n>big.n)) big={n:n,in:s.in,out:s.out,still:s.in<day&&s.out>day}; });
     if(lease) out.push({c:c,why:"lease — tenant lives there",whys:["Lease — tenant lives there"].concat(whys)});
-    else if(whys.length) out.push({c:c,why:whys.join("; "),whys:whys});
+    else if(whys.length) out.push({c:c,why:whys.join("; "),whys:whys,big:big});
     else if(second) check.push({c:c,why:"second home — owner may not book in Track",whys:["Second home — the owner may not book in Track. Check it."],check:true});
     else skip.push({c:c,why:"empty "+fmtD(from)+"–"+fmtD(day)}); });
   return {day:day,from:from,out:out,skip:skip,check:check}; }
