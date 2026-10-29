@@ -610,6 +610,7 @@ function route(){
   if(k === "calendar" && d){ location.replace("#/cal_res"); return; }   // Calendar is a drop-down (2026-10-29)
   if(k === "reports") return hubReportsView(v);
   if(k === "good_reviews" && window.goodReviewsView){ $("#ttl").textContent = $("#utl").textContent = "Good guest reviews"; return goodReviewsView(v); }   // analytics.js, every hub user (Brandon 2026-10-29)
+  if(k === "people_scores"){ if(!ME.admin || !window.peopleScoresView){ location.replace("#/home"); return; } $("#ttl").textContent = $("#utl").textContent = "Team & vendor ratings"; return peopleScoresView(v); }   // admins only; data RLS hub_is_admin()
   if(k === "staff_bad_reviews"){ if(!ME.admin || !window.staffBadView){ location.replace("#/home"); return; } $("#ttl").textContent = $("#utl").textContent = "Staff named in bad reviews"; return staffBadView(v); }   // admins only; data RLS hub_is_admin()
   if(k === "an" && window.anView){ $("#ttl").textContent = "Reports & Analytics"; return anView(v); }   // analytics.js (2026-10-28); data gated by hub_can('analytics')
   if(k === "sync"){ const a = hashArg(); return a === "recent" || a === "errors" ? syncReport(v, a) : syncView(v, a); }
@@ -1171,10 +1172,10 @@ async function hubReportsView(v){
     if(n && $("#rpwait")) $("#rpwait").innerHTML = `<div class="card" style="border-color:var(--amber)"><b>⏳ ${n} sync request${n === 1 ? "" : "s"} waiting for your OK</b> <a href="#/sync" style="margin-left:8px">Review →</a></div>`; });
   const r = await sb.from("hub_reports").select("*").order("sort");
   if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
-  const name = k => k === "g_reviews" ? "Guest reviews" : k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
+  const name = k => k === "g_reviews" ? "Guest reviews" : k === "g_team" ? "Team" : k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
-  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews" };   // Guest reviews section (Brandon 2026-10-29)
+  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team" };   // Guest reviews section (Brandon 2026-10-29)
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = GRP[x.key] || (sb ? sb[0] : x.desk_key); (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => (b === "analytics") - (a === "analytics") || name(a).localeCompare(name(b)));   // Analytics first
   const link = x => x.status === "live"
