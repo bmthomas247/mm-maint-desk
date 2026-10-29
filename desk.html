@@ -964,6 +964,8 @@ function vRoutines(){
 
 /* ================= HOMES ================= */
 var HTYPES=[["str","Short-term rentals"],["lease","Lease"],["2h","Second homes"],["co","Moose Office"]];
+/* Track units that aren't homes: kept in the data, left out of the Property Details list (Brandon 2026-10-28: BHL 1101 is just the office address) */
+var HOME_HIDE={"BHL 1101":1};
 function homeType(code){ if(code==="Moose company") return "co"; return /^2H-/i.test(code)?"2h":/^L-/i.test(code)?"lease":"str"; }
 function yearOf(s){ s=String(s||""); var m=s.match(/(19|20)\d\d/); if(m) return +m[0];
   m=s.match(/^(\d{1,2})\s*[\/\-]\s*(\d{2})$/); if(m){ var y=+m[2]; return y>40?1900+y:2000+y; } return null; }
@@ -1000,8 +1002,8 @@ function lifeBar(x){ if(x.age==null) return '<span class="muted">age unknown</sp
 function vHomes(){
   var u=S.ui, q=u.hq.trim().toLowerCase();
   var ht=u.htype||"str", cnt={str:0,lease:0,"2h":0,co:0};
-  D.homes.forEach(function(p){ cnt[homeType(p.code)]++; });
-  var list=D.homes.filter(function(p){ return homeType(p.code)===ht && (!q || (coName(p.code)+" "+p.code+" "+p.community).toLowerCase().indexOf(q)>-1); });
+  D.homes.forEach(function(p){ if(!HOME_HIDE[p.code]) cnt[homeType(p.code)]++; });
+  var list=D.homes.filter(function(p){ return !HOME_HIDE[p.code] && homeType(p.code)===ht && (!q || (coName(p.code)+" "+p.code+" "+p.community).toLowerCase().indexOf(q)>-1); });
   if(u.home && !list.some(function(p){ return p.code===u.home; })) u.home="";
   if(!u.home && list.length && window.innerWidth>1000) u.home=list[0].code;
   var h='<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
