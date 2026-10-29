@@ -323,7 +323,7 @@ async function charge(s, v, res){
   document.getElementById("rchm")?.remove();
   document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="rchm"><div class="card" style="text-align:left">
     <h3 style="margin:0 0 8px">💳 Charge the balance</h3><div id="rch_b"><p class="muted">Checking the balance in Track…</p></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn small" id="rch_x">Cancel</button><button class="btn small primary" id="rch_go" hidden></button></div></div></div>`);
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn small" id="rch_x">Cancel</button><button class="btn small primary" id="rch_go" style="display:none"></button></div></div></div>`);
   const m = document.getElementById("rchm"), body = m.querySelector("#rch_b"), go = m.querySelector("#rch_go"), close = () => m.remove();
   m.querySelector("#rch_x").onclick = close; m.onclick = e => { if(e.target === m) close(); };
   const q = await fnCall({ action:"quote", res:s.res });
@@ -334,11 +334,11 @@ async function charge(s, v, res){
   body.innerHTML = `<p style="margin:0 0 6px"><b>${esc(s.unit || "")} · ${esc(s.guest || "")}</b> · Res #${esc(s.res)}</p>
     <p style="font-size:22px;margin:6px 0"><b>$${esc(Number(amt).toLocaleString("en-US", { minimumFractionDigits:2 }))}</b></p>
     <p class="muted" style="margin:0">This is the balance in Track right now. The guest's card on file in Track is charged straight away, and it's logged on this stay's history with your name.</p>`;
-  go.hidden = false; go.textContent = `Charge $${Number(amt).toLocaleString("en-US", { minimumFractionDigits:2 })}`;
+  go.style.display = ""; go.textContent = `Charge $${Number(amt).toLocaleString("en-US", { minimumFractionDigits:2 })}`;
   go.onclick = async () => {
     go.disabled = true; m.querySelector("#rch_x").disabled = true; go.textContent = "Charging…";
     const c = await fnCall({ action:"charge", res:s.res, amount:Number(amt) });
-    m.querySelector("#rch_x").disabled = false; m.querySelector("#rch_x").textContent = "Close"; go.hidden = true;
+    m.querySelector("#rch_x").disabled = false; m.querySelector("#rch_x").textContent = "Close"; go.style.display = "none";
     body.innerHTML = c.ok ? `<p>✅ Charged <b>$${esc(Number(c.charged).toLocaleString("en-US", { minimumFractionDigits:2 }))}</b> to the card on file.${c.payment ? ` Track payment #${esc(c.payment)}.` : ""}</p><p class="muted" style="margin:0">It shows in Track now; the check list catches up on the next pull.</p>`
       : `<p>${c.unknown ? "⚠️" : "❌"} ${esc(c.error || "Not charged.")}</p>`;
     m.querySelector("#rch_x").onclick = async () => { close(); await load(true); card(v, res); };
