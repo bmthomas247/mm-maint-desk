@@ -345,10 +345,11 @@ function drawDesigner(){
   const f = (b, i, k, lab, type = "input", extra = "") => type === "textarea"
     ? `<label>${lab}<textarea data-b="${i}" data-k="${k}">${esc(b[k] || "")}</textarea></label>`
     : `<label>${lab}<input data-b="${i}" data-k="${k}" ${extra} value="${esc(b[k] ?? "")}"></label>`;
-  const fields = (b, i) => ({ header:() => f(b,i,"logo","Logo picture URL") + f(b,i,"bg","Bar color","input",'type="color"'),
+  const pics = (i, k) => `<div class="bar" style="margin:2px 0 6px"><button class="btn small" data-up="${i}" data-pk="${k}">📷 Upload a photo</button><button class="btn small" data-lib="${i}" data-pk="${k}">🖼 Our pictures</button></div>`;
+  const fields = (b, i) => ({ header:() => f(b,i,"logo","Logo picture URL") + pics(i, "logo") + f(b,i,"bg","Bar color","input",'type="color"'),
     heading:() => f(b,i,"text","Heading") + f(b,i,"size","Size","input",'type="number" min="16" max="44"'),
     text:() => f(b,i,"text","Text (blank line = new paragraph · **bold** · [words](https://link) · {{ contact.FIRSTNAME }})","textarea"),
-    image:() => f(b,i,"src","Picture URL (https://…)") + f(b,i,"alt","Describe the picture") + f(b,i,"href","Link when tapped (optional)"),
+    image:() => f(b,i,"src","Picture URL (https://…)") + pics(i, "src") + f(b,i,"alt","Describe the picture") + f(b,i,"href","Link when tapped (optional)"),
     button:() => f(b,i,"label","Button words") + f(b,i,"href","Link") + f(b,i,"color","Color","input",'type="color"'),
     spacer:() => f(b,i,"h","Height (px)","input",'type="number" min="4" max="120"'),
     html:() => f(b,i,"html","HTML","textarea"), footer:() => f(b,i,"text","Sign-off (the unsubscribe link is added under it)","textarea"), divider:() => "" })[b.t]();
@@ -372,6 +373,53 @@ function drawDesigner(){
   drawPreview();
 }
 function drawPreview(){ const box = $("#dpv"); if(box) box.innerHTML = frame(emailHtml(DES.d), DES.phone); }
+/* ---------- pictures: upload to the public mkt-images bucket (hub_marketing_images.sql), or pick one already uploaded ---------- */
+const BUCKET = "mkt-images";
+async function shrink(file){   // photos -> max 1200 px wide; PNG stays PNG (logos keep their see-through parts); GIF untouched (may be animated)
+  if(file.type === "image/gif") return { blob:file, ext:"gif", type:"image/gif" };
+  let bmp; try { bmp = await createImageBitmap(file); } catch(e){ throw new Error("That picture type can't be read here. Use a JPG or PNG."); }
+  const png = file.type === "image/png", scale = Math.min(1, 1200 / bmp.width);
+  if(scale === 1 && file.size < 600000 && /^image\/(jpeg|png)$/.test(file.type)) return { blob:file, ext:png ? "png" : "jpg", type:file.type };
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const type = png ? "image/png" : "image/jpeg", blob = await new Promise(r => c.toBlob(r, type, 0.85));
+  return { blob, ext:png ? "png" : "jpg", type };
+}
+function uploadPic(i, k){
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/jpeg,image/png,image/gif,image/webp,image/heic";
+  inp.onchange = async () => { const file = inp.files[0]; if(!file) return;
+    $("#dst").textContent = "Uploading picture…";
+    try {
+      const { blob, ext, type } = await shrink(file);
+      if(blob.size > 5242880) throw new Error("That picture is over 5 MB even after shrinking.");
+      const path = `${today().slice(0, 7)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType:type, upsert:false, cacheControl:"31536000" });
+      if(up.error) throw up.error;
+      setPic(i, k, sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl, file.name);
+    } catch(e){ $("#dst").textContent = "Upload didn't work: " + (e.message || e); }
+  };
+  inp.click();
+}
+function setPic(i, k, url, name){
+  const b = DES.d.design.blocks[i]; b[k] = url;
+  if(k === "src" && !b.alt && name) b.alt = name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").slice(0, 120);
+  DES.dirty = true; drawDesigner(); $("#dst").textContent = "Picture added (not saved yet)";
+}
+async function picLibrary(i, k){
+  const d = $("#dlg"); d.innerHTML = `<h3 style="margin:0 0 8px">Our pictures</h3><div id="plib" class="muted">Loading…</div><div class="bar" style="justify-content:flex-end"><button class="btn" id="pclose">Close</button></div>`;
+  d.showModal(); $("#pclose", d).onclick = () => d.close();
+  const top = await sb.storage.from(BUCKET).list("", { limit:100, sortBy:{ column:"name", order:"desc" } });
+  const months = (top.data || []).filter(x => !x.id).map(x => x.name).slice(0, 6);
+  let files = [];
+  for(const m of months){ const r = await sb.storage.from(BUCKET).list(m, { limit:100, sortBy:{ column:"created_at", order:"desc" } });
+    files = files.concat((r.data || []).filter(x => x.id).map(x => ({ path:m + "/" + x.name, at:x.created_at }))); }
+  files.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  $("#plib", d).outerHTML = files.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;max-height:60vh;overflow:auto">${files.slice(0, 60).map(f => {
+      const u = sb.storage.from(BUCKET).getPublicUrl(f.path).data.publicUrl;
+      return `<button class="btn" data-pick="${esc(u)}" style="padding:4px;min-height:0;height:96px;justify-content:center" title="${esc(fmtDT(f.at))}"><img src="${esc(u)}" alt="" style="max-width:100%;max-height:86px;object-fit:contain"></button>`; }).join("")}</div>`
+    : `<p class="muted">No pictures uploaded yet. Use 📷 Upload a photo.</p>`;
+  d.querySelectorAll("[data-pick]").forEach(btn => btn.onclick = () => { d.close(); setPic(i, k, btn.dataset.pick); });
+}
 async function saveDraft(queue){
   const D = DES.d; if(!D.name.trim()){ D.name = D.subject || "New email"; }
   const row = { tab:D.tab, name:D.name.trim().slice(0, 200), subject:D.subject || null, preview_text:D.preview_text || null, list_ids:D.list_ids || [],
@@ -402,6 +450,8 @@ document.addEventListener("click", async e => { const b = e.target.closest("butt
   if(b.dataset.dw){ DES.phone = b.dataset.dw === "phone"; drawDesigner(); }
   if(b.dataset.mv != null){ const i = +b.dataset.mv, j = i + +b.dataset.dir; [B[i], B[j]] = [B[j], B[i]]; DES.dirty = true; drawDesigner(); }
   if(b.dataset.rm != null){ B.splice(+b.dataset.rm, 1); DES.dirty = true; drawDesigner(); }
+  if(b.dataset.up != null) return uploadPic(+b.dataset.up, b.dataset.pk);
+  if(b.dataset.lib != null) return picLibrary(+b.dataset.lib, b.dataset.pk);
   if(b.dataset.dsave) saveDraft(false);
   if(b.dataset.dbrevo){ if(!(DES.d.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
     if(!B.some(x => x.t === "footer" || (x.t === "html" && /unsubscribe/i.test(x.html || "")))){ $("#dst").textContent = "Add the footer block (it has the unsubscribe link)."; return; }
