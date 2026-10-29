@@ -584,8 +584,9 @@ async function worstOne(v, id){
    Data: analytics_reviews_all(p_since) (hub_track_reviews.sql). Topics = THEMES keyword count: a "complaint" is a sentence that
    reads negative (hitSent), a "mention" is any sentence with the topic's words. #/an/reviews/<home code> opens one home. */
 const RVA = {};
-async function reviews(v, pre){
-  v.innerHTML = `<div class="page wide">${back}<h2>Guest reviews — what guests say</h2><p class="muted">Loading…</p></div>`;
+async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ Reviews tab (#/reviews, Brandon 2026-10-29): same report, no Reports back link
+  const bk = desk ? "" : back, h2 = desk ? "Guest reviews" : "Guest reviews — what guests say";
+  v.innerHTML = `<div class="page wide">${bk}<h2>${h2}</h2><p class="muted">Loading…</p></div>`;
   const since = (() => { try { return localStorage.getItem("an_rv_since") || "730"; } catch(e){ return "730"; } })();
   const load = async d => { if(!RVA[d]){ const r = await sb.rpc("analytics_reviews_all", { p_since:d === "all" ? null : new Date(Date.now() - d * 864e5).toISOString().slice(0, 10) });
       if(r.error) throw r.error; if(r.data == null) return null;
@@ -593,10 +594,11 @@ async function reviews(v, pre){
         x.tc = new Set(THEMES.filter(([k, , re]) => hitSent(x.text, re, k) || hitSent(x.private, re, k)).map(z => z[0]));
         x.tm = new Set(THEMES.filter(([, , re]) => re.test(t)).map(z => z[0])); x.hood = x.community || String(x.code || "").split(" ")[0]; return x; }); }
     return RVA[d]; };
-  let A; try { A = await load(since); } catch(e){ return fail(v, e); }
+  const oops = e => desk ? v.innerHTML = `<div class="page"><div class="card"><p class="muted">Couldn't load reviews: ${esc(e.message || e)}</p></div></div>` : fail(v, e);
+  let A; try { A = await load(since); } catch(e){ return oops(e); }
   if(!A) return noAccess(v);
   const TN = Object.fromEntries(THEMES.map(t => [t[0], t[1]])), hoods = [...new Set(A.map(x => x.hood).filter(Boolean))].sort(), homes = [...new Set(A.map(x => x.code).filter(Boolean))].sort();
-  v.innerHTML = `<div class="page wide">${back}<h2>Guest reviews — what guests say</h2>
+  v.innerHTML = `<div class="page wide">${bk}<h2>${h2}</h2>
     <p class="muted">Every guest review in Track (Airbnb + Vrbo) with what guests bring up, by home and neighborhood. Topics are a keyword count: a <b>complaint</b> is a sentence that reads negative ("the hot tub was cold"), a <b>mention</b> is any sentence with the topic's words. Read the reviews before acting on a count. Click a topic or a home to filter.</p>
     <div class="anbar">
       <select id="rvs"><option value="365">Last 12 months</option><option value="730">Last 2 years</option><option value="all">All (since Nov 2022)</option></select>
@@ -604,7 +606,7 @@ async function reviews(v, pre){
       <input id="rvu" list="rvul" placeholder="Home (e.g. PL 805)"><datalist id="rvul">${homes.map(h => `<option value="${esc(h)}">`).join("")}</datalist>
       <select id="rvt"><option value="">All topics</option>${THEMES.map(t => `<option value="${t[0]}">${esc(t[1])}</option>`).join("")}</select>
       <select id="rvm"><option value="c">Complaints</option><option value="m">Any mention</option></select>
-      <select id="rvr"><option value="">All stars</option><option value="4">4★ or less</option><option value="3">3★ or less</option><option value="p">Has a private note</option></select>
+      <select id="rvr"><option value="">All stars</option><option value="4">4★ or less</option><option value="3">3★ or less</option><option value="p">Has a private note</option><option value="n">No reply from us</option></select>
       <select id="rvc"><option value="">Airbnb + Vrbo</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option></select>
       <input id="rvq" type="search" placeholder="Words in the review"></div>
     <div id="rvk"></div>
@@ -619,13 +621,14 @@ async function reviews(v, pre){
     const h = $("#rvh").value, u = $("#rvu").value.trim().toLowerCase(), t = $("#rvt").value, m = $("#rvm").value, rs = $("#rvr").value, ch = $("#rvc").value, q = $("#rvq").value.trim().toLowerCase();
     const has = (x, k) => (m === "c" ? x.tc : x.tm).has(k);
     const base = A.filter(x => (!h || x.hood === h) && (!u || String(x.code).toLowerCase() === u || String(x.name).toLowerCase().includes(u)) && (!ch || x.channel === ch)
-      && (!rs || (rs === "p" ? !!x.private : x.overall != null && +x.overall <= +rs)) && (!q || [x.text, x.private].join(" ").toLowerCase().includes(q)));
+      && (!rs || (rs === "p" ? !!x.private : rs === "n" ? !!x.text && !x.response : x.overall != null && +x.overall <= +rs)) && (!q || [x.text, x.private].join(" ").toLowerCase().includes(q)));
     cur = base.filter(x => !t || has(x, t));
     const rated = cur.filter(x => x.overall != null), avg = rated.length ? rated.reduce((a, x) => a + +x.overall, 0) / rated.length : null;
     $("#rvk").innerHTML = `<div class="ankpi"><div class="card"><small>Reviews</small><b>${cur.length.toLocaleString()}</b><small>${new Set(cur.map(x => x.code)).size} homes</small></div>
       <div class="card"><small>Average stars</small><b>${avg == null ? "—" : avg.toFixed(2)}</b><small>${rated.length} rated</small></div>
       <div class="card"><small>5-star share</small><b>${rated.length ? Math.round(rated.filter(x => +x.overall >= 5).length / rated.length * 100) + "%" : "—"}</b><small>of rated reviews</small></div>
-      <div class="card"><small>With a complaint</small><b>${cur.filter(x => x.tc.size).length}</b><small>${cur.filter(x => x.private).length} private notes</small></div></div>`;
+      <div class="card"><small>With a complaint</small><b>${cur.filter(x => x.tc.size).length}</b><small>${cur.filter(x => x.private).length} private notes</small></div>
+      <div class="card"><small>No reply from us</small><b>${cur.filter(x => x.text && !x.response).length}</b><small>public reviews</small></div></div>`;
     // topics: counted over the filtered reviews before the topic filter, so every topic stays comparable
     table($("#rvtt"), [{ k:"name", t:"Topic", l:1, f:r => `<a class="anlink" href="#" data-t="${r.k}">${esc(r.name)}</a>` }, { k:"c", t:"Complaints" }, { k:"m", t:"Mentions" }, { k:"homes", t:"Homes with a complaint" },
       { k:"top", t:"Most complaints", l:1, f:r => r.top ? `<a class="anlink" href="#" data-u="${esc(r.top[0])}">${esc(r.top[0])}</a> <span class="muted">(${r.top[1]})</span>` : "—" }],
@@ -654,7 +657,7 @@ async function reviews(v, pre){
   ["rvh", "rvt", "rvm", "rvr", "rvc"].forEach(id => $("#" + id).onchange = () => { shown = 30; draw(); });
   $("#rvu").oninput = $("#rvq").oninput = () => { shown = 30; draw(); };
   $("#rvs").onchange = async () => { const d = $("#rvs").value; try { localStorage.setItem("an_rv_since", d); } catch(e){}
-    $("#rvl").innerHTML = `<p class="muted">Loading…</p>`; try { A = await load(d); } catch(e){ return fail(v, e); } shown = 30; draw(); };
+    $("#rvl").innerHTML = `<p class="muted">Loading…</p>`; try { A = await load(d); } catch(e){ return oops(e); } shown = 30; draw(); };
   $("#rvcsv").onclick = () => { const cell = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
     const rows = [["Home", "Neighborhood", "Check-in", "Nights", "Channel", "Stars", "Low categories", "Complaints", "Review", "Private note", "Reservation"]].concat(cur.map(r =>
       [r.code, r.hood, r.check_in, r.nights, r.channel === "Homeaway" ? "Vrbo" : r.channel, r.overall, Object.entries(r.ratings || {}).filter(([, s]) => s != null && +s <= 3).map(([k, s]) => k + " " + s).join("; "),
@@ -665,6 +668,7 @@ async function reviews(v, pre){
 }
 
 const VIEWS = { comps, demand, pace, top, channels, worst, reviews };
+window.reviewsDesk = function(v){ css(); return reviews(v, hashArg(), true); };   // #/reviews · #/guest_reviews (· /<home code>); data: hub_can('reviews') or analytics
 window.anView = function(v){ css(); const a = hashArg();
   if(a.startsWith("reviews/")) return reviews(v, decodeURIComponent(a.slice(8)));
   if(a.startsWith("home/")) return home(v, decodeURIComponent(a.slice(5)));
