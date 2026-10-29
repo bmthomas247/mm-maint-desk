@@ -252,6 +252,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="analytics.js"></script>
 <script src="meetings.js"></script>
 <script src="calendar.js"></script>
+<script src="checks.js"></script>
 <script>
 const C = window.MM_CONFIG;
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
@@ -469,7 +470,7 @@ function noAccess(err){
 }
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
   const anD = DESKS.some(x => x.key === "analytics");
@@ -598,6 +599,8 @@ function route(){
   $("#ttl").textContent = $("#utl").textContent = d ? d.label : (k === "feedback" ? "Bugs & Upgrades" : k === "settings" ? "My settings" : "Moose Hub");
   document.querySelectorAll(".mjoin").forEach(x => x.remove());
   if(k === "meet_maint" && d && window.meetJoin) meetJoin(k);   // Monday meeting Join button in the banner (meetings.js, 2026-10-29)
+  if(window.trackBanner) trackBanner();   // checks.js: Wednesdays 4-11 pm Track maintenance banner (Brandon 2026-10-29)
+  if((k === "checks" || k === "daily_checks") && window.checksView) return checksView(v);   // checks.js: Reports ▸ Daily checks; RLS decides what each person sees
   if(k === "feedback") return feedbackView(v);
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "advertising" && d){ location.replace("#/adv_owners"); return; }   // Advertising became a drop-down 2026-10-28
@@ -1109,6 +1112,7 @@ async function homeView(v){
       <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="wxback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Park City weather + snow</h2><button class="btn small" id="wxx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
       <div id="wxbody"><p class="muted">Loading…</p></div></div></div>
     <div id="bdays"></div>
+    <div id="chk"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
     ${DESKS.some(x => x.key === "cal_me") ? `<div class="card" id="mywk"><b style="font-size:17px">🗓️ Your week</b><p class="muted">Loading…</p></div>` : ""}
@@ -1124,6 +1128,7 @@ async function homeView(v){
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
   if(window.calHomeCard && $("#mywk")) calHomeCard($("#mywk"));   // calendar.js (2026-10-29)
   loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello();
+  if(window.checksHome) checksHome($("#chk"));   // checks.js: my checks + issues warning (Brandon 2026-10-29)
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
