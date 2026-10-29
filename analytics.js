@@ -774,29 +774,28 @@ window.staffBadView = async function(v){ css();
 window.peopleScoresView = async function(v){ css();
   const per = (() => { try { return localStorage.getItem("ps_per") || "90d"; } catch(e){ return "90d"; } })(), grp = hashArg() || "tech";
   v.innerHTML = `<div class="page wide">${back}<h2>Team & vendor ratings</h2><p class="muted">Loading…</p></div>`;
-  const last = await sb.from("hub_people_scores").select("as_of").order("as_of", { ascending:false }).limit(1);
+  const last = await sb.from("hub_people_scores").select("as_of,computed_at").order("computed_at", { ascending:false }).limit(1);   // latest run only
   if(last.error) return fail(v, last.error);
-  const asOf = (last.data[0] || {}).as_of;
-  const r = asOf ? await sb.from("hub_people_scores").select("*").eq("as_of", asOf) : { data:[] };
+  const asOf = (last.data[0] || {}).as_of, run = (last.data[0] || {}).computed_at;
+  const r = run ? await sb.from("hub_people_scores").select("*").eq("computed_at", run) : { data:[] };
   if(r.error) return fail(v, r.error);
   const ALL = r.data || [], pc = x => x == null ? "—" : Math.round(x * 100) + "%", n1 = x => x == null ? "—" : (+x).toLocaleString(undefined, { maximumFractionDigits:2 });
   const ix = (row, k) => { const i = ((row.metrics || {}).idx || {})[k]; return i == null ? "" : ` <small class="${i >= 115 ? "anup" : i <= 85 ? "andn" : "muted"}">${i}</small>`; };
   const rv = r => { const m = r.metrics || {}; return (m.reviews_good ? `<span class="pill green">+${m.reviews_good}</span> ` : "") + (m.reviews_bad ? `<span class="pill red">−${m.reviews_bad}</span>` : "") || "—"; };
   const G = {
     tech:{ t:"Techs", who:"Maintenance techs", cols:[{ k:"tasks", t:"Tasks done" }, { k:"hours", t:"Hubstaff hrs" }, { k:"days_worked", t:"Days" },
-      { k:"tasks_per_hr", t:"Tasks / paid hr", f:x => n1(x.metrics.tasks_per_hr) + ix(x, "tasks_per_hr") }, { k:"at_home", t:"Paid time at homes", f:x => pc(x.metrics.at_home) + ix(x, "at_home") },
-      { k:"on_task", t:"Task time / paid hr", f:x => pc(x.metrics.on_task) + ix(x, "on_task") }, { k:"callback", t:"Callbacks (14 days)", f:x => pc(x.metrics.callback) + ix(x, "callback") },
-      { k:"rv", t:"Named in reviews", f:rv }],
-      how:"Tasks = finished Breezeway maintenance tasks they're on. Paid time at homes = Hubstaff GPS minutes stopped at one of our homes ÷ Hubstaff hours. Task time = Breezeway task minutes ÷ Hubstaff hours. Callbacks = another job opened at the same home within 14 days of their finished task (lower is better). Hubstaff goes back to Sep 1, 2026." },
+      { k:"tasks_per_hr", t:"Tasks / paid hr", f:x => n1(x.metrics.tasks_per_hr) + ix(x, "tasks_per_hr") }, { k:"at_home", t:"GPS time at homes (info)", f:x => pc(x.metrics.at_home) },
+      { k:"on_task", t:"Task minutes / paid hr (info)", f:x => pc(x.metrics.on_task) }, { k:"rv", t:"Named in reviews", f:rv }],
+      how:"Scored on tasks per paid hour only: finished Breezeway maintenance tasks they're on (during Hubstaff dates) ÷ Hubstaff hours, 20+ hours needed. Shown for information, not scored: GPS time at homes (Hubstaff GPS stops at our homes ÷ hours; matching differs a lot by phone) and task minutes per paid hour (shared tasks count their full minutes for each tech, so it can pass 100%). Hubstaff goes back to Sep 1, 2026." },
     office:{ t:"Office", who:"Office & front desk", cols:[{ k:"steps", t:"Check list steps", f:x => n1(x.metrics.steps) + ix(x, "steps") }, { k:"fd_resolved", t:"Freshdesk resolved", f:x => n1(x.metrics.fd_resolved) + ix(x, "fd_resolved") },
       { k:"fd_handled", t:"Freshdesk handled" }, { k:"fd_first_hrs", t:"First reply (median hrs)", f:x => n1(x.metrics.fd_first_hrs) + ix(x, "fd_first_hrs") }, { k:"rv", t:"Named in reviews", f:rv }],
-      how:"Check list steps = Reservation check list steps they ticked (including ticks carried over from Asana). Freshdesk = tickets assigned to them, how many are resolved, and the median hours to the first reply (lower is better). Roles differ, so compare people who do the same job." },
-    cleaner:{ t:"Cleaners", who:"Cleaners (Breezeway assignees)", cols:[{ k:"cleans", t:"Cleans done" }, { k:"reviewed", t:"Reviewed stays" },
+      how:"Check list steps = Reservation check list steps they ticked (including ticks carried over from Asana). Freshdesk = tickets assigned to them, how many are resolved, and the median hours to the first reply (lower is better). Roles differ, so compare people who do the same job. Owners (hub admins) aren't rated." },
+    cleaner:{ t:"Cleaners", who:"Cleaning crews (everyone assigned to the clean in Breezeway)", cols:[{ k:"cleans", t:"Cleans done" }, { k:"reviewed", t:"Reviewed stays" },
       { k:"clean_stars", t:"Cleanliness ★", f:x => n1(x.metrics.clean_stars) + ix(x, "clean_stars") }, { k:"dirty_share", t:"Cleaning complaints", f:x => pc(x.metrics.dirty_share) + ix(x, "dirty_share") }],
       how:"Each guest review is tied to the last finished clean at that home in the 14 days before check-in. Cleanliness ★ = the guest's cleanliness category stars. Cleaning complaints = reviews of 4★ or less that mention dirt, hair, stains, smells or bugs (lower is better). HK manager pre/post checks and assessments don't count as cleans." },
     vendor:{ t:"Vendors", who:"Vendors named on jobs", cols:[{ k:"jobs", t:"Jobs" }, { k:"done", t:"Done" }, { k:"days", t:"Days to finish (median)", f:x => n1(x.metrics.days) + ix(x, "days") },
-      { k:"callback", t:"Callbacks (30 days)", f:x => pc(x.metrics.callback) + ix(x, "callback") }, { k:"cost", t:"Cost on jobs", f:x => x.metrics.cost ? usd(x.metrics.cost) : "—" }],
-      how:"Jobs = Breezeway, Asana, Freshdesk and Slack jobs that name the vendor. Days to finish = opened to done (lower is better). Callbacks = another job at the same home within 30 days of theirs (lower is better). Cost = the cost on those jobs where one is recorded." } };
+      { k:"cost", t:"Cost on jobs", f:x => x.metrics.cost ? usd(x.metrics.cost) : "—" }],
+      how:"Jobs = Breezeway, Asana, Freshdesk and Slack jobs that name the vendor. Days to finish = opened to done (lower is better). Cost = the cost on those jobs where one is recorded." } };
   const g = G[grp] ? grp : "tech", D = G[g], rows = ALL.filter(x => x.grp === g && x.period === per);
   v.innerHTML = `<div class="page wide">${back}<h2>Team & vendor ratings</h2>
     <p class="muted">Each person is compared with their own group. <b>100 = the group's average</b> for the period; the small numbers are each measure's index. A score needs enough data, and numbers can't see everything (training, special jobs, time off), so read the notes and talk to the person before acting. Only admins can see this page.</p>
