@@ -1102,7 +1102,8 @@ function homeDetail(code){
   var open=jobs.filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
   var recent=jobs.filter(function(j){ return j.kind!=="info" && !j.autoDone; }).slice(0,8);
   var h='<div class="dhead"><div class="dtitle"><h2 class="mono">'+esc(code)+'</h2><span class="tag">'+esc({str:"STR",lease:"Lease","2h":"Second home",co:"Company"}[homeType(code)])+'</span><span class="muted">'+esc(p.community)+'</span>'+
-    (p.asanaUrl?'<a class="golink" href="'+esc(p.asanaUrl)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+dbxLink(code)+'</div>'+
+    (p.asanaUrl?'<a class="golink" href="'+esc(p.asanaUrl)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+dbxLink(code)+
+    (ONLY==="homes" && canAddJob()?'<button class="btn sm pri" style="margin-left:auto" data-newjobfor="'+esc(code)+'|">+ Job</button>':'')+'</div>'+
     '<div class="dsub">'+(yb?'<span>Built '+esc(yb)+' · '+(new Date().getFullYear()-(+yb))+' years old</span>':'<span>Year built not recorded</span>')+
     (pe.sqft||p.sqft||bh.sqft?'<span>· '+esc(pe.sqft||p.sqft||bh.sqft)+' sq ft</span>':'')+(homeInfo(code).beds?'<span>· '+esc(homeInfo(code).beds)+' bd</span>':'')+
     '<span>· '+open.length+' open job'+(open.length===1?'':'s')+'</span></div></div><div class="dbody">';
@@ -1245,6 +1246,10 @@ var CO_SHAPE={
 function carSvg(body,color){ var c=String(color||"").trim(); c=/^#[0-9a-f]{3,6}$/i.test(c)||/^[a-z]{3,20}$/i.test(c)?c:"#9aa3a0";
   var w=function(x){ return '<circle cx="'+x+'" cy="62" r="11" fill="#2b2f2d"/><circle cx="'+x+'" cy="62" r="5" fill="#cfd5d2"/>'; };
   return '<svg class="vcar" viewBox="0 0 164 76" aria-hidden="true"><ellipse cx="82" cy="71" rx="72" ry="4" fill="#00000018"/><g fill="'+esc(c)+'" stroke="#00000055" stroke-width="1.2">'+(CO_SHAPE[body]||CO_SHAPE.car)+'</g>'+w(40)+w(126)+'<rect x="146" y="40" width="7" height="5" rx="2" fill="#ffe9a6"/></svg>'; }
+/* Property Details "+ Job" (Brandon 2026-10-29: front desk can create jobs). hub_can_add_job() is the same rule the
+   desk_docs insert policy uses (hub_job_add_front_desk.sql): front desk may add a new job, not change one. */
+function canAddJob(){ if(D._caj!=null) return D._caj; D._caj=false; var sb=window.MM_SB; if(!sb) return false;
+  sb.rpc("hub_can_add_job").then(function(r){ D._caj=!!(r&&r.data); if(D._caj) schedule(); }); return false; }
 function coCanMaint(){ if(D._cm!=null) return D._cm; D._cm=false; var sb=window.MM_SB; if(!sb) return false;
   sb.rpc("hub_can",{p_desk:"maintenance"}).then(function(r){ D._cm=!!(r&&r.data); if(D._cm) coLoadVT(); schedule(); }); return false; }
 function coLoadVT(){ var sb=window.MM_SB; if(!sb) return; sb.from("desk_docs").select("id,data").eq("collection","vehtasks").limit(1000).then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ m[x.id]=x.data; }); D._vt=m; schedule(); }); }
@@ -3550,10 +3555,11 @@ function mNewJob(prefill){ prefill=prefill||{};
   openModal("New job",'<div class="fields">'+fld("m_title","What needs doing",prefill.title||"")+fld("m_prop","Home",prefill.prop||"","text",'list="dl_units" autocomplete="off"')+
     sel("m_kind","Kind",KINDS.filter(function(k){return k[0]!=="info";}),"repair")+'<label class="f"><span>Who</span><select id="m_who">'+whoOptions("","Unassigned")+'</select></label>'+
     fld("m_vendor","Vendor","","text",'list="dl_vendors" autocomplete="off"')+fld("m_due","Due","","date")+area("m_detail","Details","","What was reported, access notes, parts")+'</div>'+
-    '<div class="note">Book the visit in Breezeway as usual — this puts it on the desk so it can be tracked with everything else.</div>',
+    '<div class="note">'+(ONLY?'Maintenance sees it on the Workbench.':'Book the visit in Breezeway as usual — this puts it on the desk so it can be tracked with everything else.')+'</div>',
   function(){ var t=fv("m_title"); if(!t){ toast("Say what needs doing"); return; } var id=uid("desk-");
     return put("deskjobs",id,{id:id,src:"desk",title:t,prop:fv("m_prop"),kind:fv("m_kind"),who:fv("m_who"),vendor:fv("m_vendor"),due:fv("m_due"),detail:fv("m_detail"),
-      status:"open",created:today(),updated:today(),list:"Desk",props:[],links:[]}).then(function(){ S.ui.sel=id; toast("Job added"); go("jobs"); }); },"Add job"); }
+      status:"open",created:today(),updated:today(),list:"Desk",props:[],links:[]}).then(function(){ if(ONLY){ toast("Job added — Maintenance sees it on the Workbench"); schedule(); return; }
+      S.ui.sel=id; toast("Job added"); go("jobs"); }); },"Add job"); }
 
 /* pick the job at that home the money or time belongs to */
 function jobOptions(prop,sel){ var js=(D.byProp[prop]||[]).filter(function(j){ return j.kind!=="info" && !bwNoise(j) && !j.autoDone && (j.status!=="done" || daysBetween((j.finished||j.when||"2000-01-01"),today())<=45); })
