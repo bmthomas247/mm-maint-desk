@@ -49,6 +49,7 @@ const CCSS = `
 .cal .ev.work,.cal .bk.work{background:var(--moose-soft,#e5efe6);color:var(--moose-ink,#24452c)}
 .cal .ev.sh,.cal .bk.sh{background:var(--ground,#f6f4ef);color:var(--ink-2,#3d4a40);border-left-color:var(--muted,#7a857c)}
 .cal .pp .mts{font-size:12px;color:var(--blue,#1f4e8c);margin-top:2px}
+.cal #evcard{max-height:calc(100dvh - 32px);overflow-y:auto;padding-top:0;padding-bottom:0} .cal #evcard .evhd,.cal #evcard .evft{position:sticky;background:inherit;z-index:3} .cal #evcard .evhd{top:0;padding:16px 0 8px} .cal #evcard .evft{bottom:0;padding:10px 0 14px}
 .cal .attp{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto;padding:4px 0} .cal .attp .lyr{font-size:12.5px}
 .cal .ev.req,.cal .bk.req{background:transparent;border:1px dashed var(--red,#b3261e);color:var(--red,#b3261e)}
 .cal table.to{width:100%;border-collapse:collapse;font-size:13.5px} .cal table.to th{text-align:left;font-size:12px;color:var(--muted);font-weight:700;padding:6px 6px;border-bottom:1px solid var(--line)}
@@ -358,15 +359,17 @@ async function evCal(v, key){
         : `<label class="field"><span>Meeting link (Zoom, Google Meet, Teams…)</span><input id="ev_link" type="url" placeholder="https://zoom.us/j/…" value="${esc(lk0)}"></label>${lk0 ? `<a class="btn small" href="${esc(lk0)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}`}
         <p class="muted" style="font-size:12px;margin:4px 0 0">The link shows to the people on the meeting, managers and admins (on an office event with nobody picked, everyone).</p></div>` : "";
     const attH = (cal === "office" || boss) && kind === "event" ? `<div class="field" id="ev_att" style="display:${cal === "office" ? "block" : "none"}"><span>Who's going (shows on their Personal calendar)</span><div class="attp">${ppl.map(p => `<label class="lyr"><input type="checkbox" data-att="${p.id}" ${(e ? (e.attendees || []).includes(p.id) : isMe && p.id === myId) ? "checked" : ""} ${ro ? "disabled" : ""}>${esc(p.name)}</label>`).join("")}</div></div>` : "";
-    $("#evcard").innerHTML = `<div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${head}</h2><button class="btn small" id="evx" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
+    $("#evcard").innerHTML = `<div class="evhd" style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${head}</h2><button class="btn small" id="evx" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
       ${pick}<label class="field"><span>${kind === "event" ? "What" : "Note (optional, e.g. PTO, sick, on call)"}</span><input id="ev_t" value="${esc(e && !/^(out|working)$/i.test(e.title) ? e.title : "")}" ${ro ? "disabled" : ""}></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>Day</span><input type="date" id="ev_d" value="${esc(e ? e.day : pre.day || ST.sel[key])}" ${ro ? "disabled" : ""}></label><label class="field" style="flex:1"><span>Until (optional)</span><input type="date" id="ev_e" value="${esc(e && e.end_day || "")}" ${ro ? "disabled" : ""}></label></div>
       ${timeH}${showOn}${whereH}
       <label class="field"><span>Where (optional)</span><input id="ev_l" value="${esc(e && e.location || "")}" ${ro ? "disabled" : ""}></label>${attH}
       <label class="field"><span>Notes</span><textarea id="ev_n" style="min-height:70px" placeholder="Don't type codes or passwords here." ${ro ? "disabled" : ""}>${esc(e && e.notes || "")}</textarea></label>
-      ${ro ? "" : `<div style="display:flex;gap:8px"><button class="btn primary" style="flex:1" id="ev_go">Save</button>${e ? `<button class="btn" id="ev_off">Remove</button>` : ""}</div>`}<p class="muted" id="ev_m"></p>`;
+      <div class="evft">${ro ? "" : `<div style="display:flex;gap:8px"><button class="btn primary" style="flex:1" id="ev_go">Save</button>${e ? `<button class="btn" id="ev_off">Remove</button>` : ""}</div>`}<p class="muted" id="ev_m" style="margin:6px 0 0"></p></div>`;
     $("#evm").classList.add("on");
     $("#evx").onclick = () => $("#evm").classList.remove("on");
+    $("#evm").onclick = x => { if(x.target === $("#evm")) $("#evm").classList.remove("on"); };   // click outside the form closes it
+    $("#evcard").scrollTop = 0;
     if(ro) return;
     const calNow = () => { const r = $("#evcard").querySelector("[name=ev_cal]:checked"); return r ? r.value : cal; };
     $("#evcard").querySelectorAll("[name=ev_cal]").forEach(r => r.onchange = () => { const a = $("#ev_att"); if(a) a.style.display = calNow() === "office" ? "block" : "none"; });
