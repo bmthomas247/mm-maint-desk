@@ -94,6 +94,9 @@ const WG_NOTE = "No cleaning by Westgate. Moose Management team to clean upon ch
 const formText = (s, wg) => { const o = s.occ || {};
   return [`Guest: ${s.guest || ""}`, `Unit: ${s.unit || ""}`, `Arrive: ${s.arrive}`, `Depart: ${s.depart}`, `Guests: ${o.adults || 0} adults${o.children ? ", " + o.children + " kids" : ""}`, `Reservation #${s.res}`,
     ...(wg ? ["", "Comments: " + WG_NOTE, ...(o.pets ? ["Pet: please charge the management company, not the guest, for pet fees."] : [])] : [])].join("\n"); };
+const FD_T = n => `https://moosemanagement.freshdesk.com/a/tickets/${n}`;
+const fdLink = (t, s) => { const f = s.td && s.td.fdc; const x = f && (t === "pl_form" || t === "pl_conf" ? f.pl : t === "wg_form" || t === "wg_pet" ? f.wg : null);
+  return x ? `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${FD_T(x.t)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Freshdesk #${x.t} ↗</a>` : ""; };
 const copyBtn = (t, s) => (t === "pl_form" || t === "wg_form") && !s.steps.find(x => x.key === t).done
   ? `<button class="btn small" data-copyform="${t}" style="min-height:28px;padding:0 9px;font-size:12px">📋 Copy details</button>` : "";
 let B = null, loadedAt = 0;
@@ -126,6 +129,14 @@ async function load(force){
 const SAFELY_NO = /^(owner stay|owner guest \(guest pays fees\)|3month\+ 10% commission)$/i;
 // Autohost review a front desk person may approve: only "Guest under 25" (and "Last minute reservation") at a studio-2 BR (Kim 2026-10-30)
 const UNDER25_OK = /^\s*(guest under 25|last minute reservation)\s*$/i;
+// Stays booked before the Oct 30 rules (Brandon 2026-10-30: "yes" to grandfathering) keep what the old steps said, so the team isn't
+// asked to redo work: names = contract came back; Autohost review = the old "Under review" tick or Autohost Verified; contact = address + email.
+const GF_DAY = "2026-10-30";
+const GRANDFATHER = {
+  c_sig:       s => autoOk(s, "agreement_received"),
+  ah_rev_mgr:  (s, k) => !!(k.ah_review && k.ah_review.d) || autoOk(s, "ah_verified"),
+  ah_rev_easy: (s, k) => !!(k.ah_review && k.ah_review.d) || autoOk(s, "ah_verified"),
+  c_addr:      s => tdOk(s, "td_contact_addr") };
 // What applies to this stay, what is done, what holds it up.
 function conds(s){
   const u = (s.unit || "").toUpperCase(), occ = s.occ || {}, cx = s.status === "Cancelled" || (s.list && s.list.stage === "cancelling");
@@ -227,6 +238,11 @@ const TD_RULES = {
   td_door_keycard: s => s.td.doorKind === "keycard",
   td_door_meet:    s => s.td.doorKind === "meet",
   td_addendum_ok:  s => doc(s, /change addendum/i, true),
+  // Freshdesk (fd_confirm.py): Prospector's "Unit Access Authorization Form Result" reply; Westgate's form receipt (+ pet line)
+  td_pl_conf:      s => !!(s.td.fdc && s.td.fdc.pl),
+  td_pl_noted:     s => !!(s.td.fdc && s.td.fdc.pl && s.td.notes && s.td.notes.ticket),
+  td_wg_sent:      s => !!(s.td.fdc && s.td.fdc.wg),
+  td_wg_pet:       s => !!(s.td.fdc && s.td.fdc.wg && s.td.fdc.wg.pet),
   td_extra_notes:  s => !!(s.td.notes && s.td.notes.extra && s.td.notes.extra[0] >= s.td.notes.extra[1]),
 };
 const addDay =(d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
@@ -235,7 +251,7 @@ const bwClean = s => bwHas(s, "housekeeping", /^(?!.*(assessment|spring)).*(clea
 const bwInOut = s => bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart);
 // Only trust "no clean left" when this home was in the Breezeway pull (it has a Breezeway id and the stay is in the window)
 const bwKnown = s => !!B.bwUpdated && !(B.bwMissing || []).includes(s.unit) && s.depart >= addDay(B.today, -7) && s.arrive <= addDay(B.today, 75);
-const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
+const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", td_pl_conf:"Freshdesk", td_pl_noted:"Freshdesk", td_wg_sent:"Freshdesk", td_wg_pet:"Freshdesk", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
 function prep(s){
   const c = conds(s), ticks = s.ticks || {};
   s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
@@ -243,8 +259,8 @@ function prep(s){
   const uk = String(s.unit || "").replace(/^(L-|2H-)/i, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
   s.heads = (B.alerts || []).filter(a => a.key === uk);
   s.steps = B.steps.filter(t => t.chans.includes(s.chan) && t.cond.every(k => c[k]))
-    .map(t => { const k = ticks[t.key], au = t.auto && autoOk(s, t.auto);
-      return { ...t, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : null, done:k ? k.d : !!au }; });
+    .map(t => { const k = ticks[t.key], au = t.auto && autoOk(s, t.auto), gf = !au && !k && GRANDFATHER[t.key] && (s.bookedAt || "") < GF_DAY && GRANDFATHER[t.key](s, ticks);
+      return { ...t, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : gf ? "Earlier rule" : null, done:k ? k.d : !!(au || gf) }; });
   const req = s.steps.filter(t => !t.opt);
   s.need = req.length; s.got = req.filter(t => t.done).length;
   s.blockers = [...new Set(req.filter(t => !t.done && t.blocker).map(t => t.blocker))];
@@ -275,6 +291,10 @@ const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1
   sync:RSV('<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>') };
 // Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
 const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Booking date" };
+// "Held up by" groups (Brandon 2026-10-30): pick the group, then filter down to one of its members
+const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management" };
+const heldKey = b => HELD_GROUP[b] || b;
+const heldHas = (s, k) => [...s.blockers, ...s.waiting].some(b => b === k || heldKey(b) === k);
 async function queue(v){
   v.innerHTML = `<div class="page rpage rlk"><p class="muted">Loading…</p></div>`;
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load the check lists: ${esc(e.message)}</p></div></div>`; return; }
@@ -286,7 +306,7 @@ async function queue(v){
   const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k;
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
-  const tile = s => { const why = [...s.waiting, ...s.blockers], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
+  const tile = s => { const why = [...new Set([...s.waiting, ...s.blockers].map(b => HELD_GROUP[b] ? HELD_GROUP[b] + " · " + b : b))], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
     return `<a class="card rhome k-${kindOf(s)}" href="#/reservations/${encodeURIComponent(s.res)}">
       <div class="rtop"><div style="min-width:0"><div class="rcode">${esc(s.guest || "#" + s.res)}</div>
         <div class="rsub"><b>${esc(s.unit || "")}</b>${HOODS[s.area] ? " · " + esc(HOODS[s.area]) : ""}</div></div>
@@ -301,9 +321,12 @@ async function queue(v){
       && (!F.from || dk(s) >= F.from) && (!F.to || (dk(s) && dk(s) <= F.to)))
       .sort((x, y) => F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : 0) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first
     const inStage = base.filter(s => s.stage === F.stage);
-    const rows = inStage.filter(s => !F.held || s.blockers.includes(F.held) || s.waiting.includes(F.held));
+    const rows = inStage.filter(s => !F.held || heldHas(s, F.held));
     const cnt = k => base.filter(s => s.stage === k).length;
-    const held = {}; inStage.forEach(s => [...s.blockers, ...s.waiting].forEach(b => held[b] = (held[b] || 0) + 1));
+    const held = {}, sub = {};
+    inStage.forEach(s => { const bs = [...s.blockers, ...s.waiting]; new Set(bs.map(heldKey)).forEach(b => held[b] = (held[b] || 0) + 1);
+      bs.filter(b => HELD_GROUP[b]).forEach(b => sub[b] = (sub[b] || 0) + 1); });
+    const grpOn = F.held && (Object.values(HELD_GROUP).includes(F.held) ? F.held : HELD_GROUP[F.held]);
     const ip = base.filter(s => s.stage === "in_progress"), soon = base.filter(s => s.status !== "Cancelled" && s.stage !== "closed" && s.arrive >= today && s.arrive <= in7);   // any stage: Asana moves stays to Checkout once booking steps are done
     $("#rq_sub").textContent = `${ip.length} in progress · ${ip.filter(s => s.blockers.length || s.waiting.length).length} held up`;
     $("#rq_tabs").innerHTML = Object.entries(STAGE).map(([k, l]) => `<button class="${F.stage === k ? "on" : ""}" data-stage="${k}">${RI[k]}<span>${l}</span><span class="badge">${cnt(k)}</span></button>`).join("");
@@ -313,7 +336,9 @@ async function queue(v){
       .map(([n, l, w]) => `<div class="stat ${w && n ? "warn" : ""}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
     const kc = {}; B.stays.filter(s => s.stage === F.stage).forEach(s => kc[kindOf(s)] = (kc[kindOf(s)] || 0) + 1);
     $("#rq_kinds").innerHTML = Object.entries(KIND).map(([k, l]) => `<button class="kpill k-${k} ${F.kind === k ? "on" : ""} ${F.kind && F.kind !== k ? "dim" : ""}" data-kind="${k}">${l}<span class="n">${kc[k] || 0}</span></button>`).join("");
-    $("#rq_held").innerHTML = Object.keys(held).length ? `<span class="muted" style="align-self:center;font-weight:700;font-size:13px">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}<span class="n">${n}</span></button>`).join("")}` : "";
+    $("#rq_held").innerHTML = Object.keys(held).length ? `<span class="muted" style="align-self:center;font-weight:700;font-size:13px">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k || grpOn === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}${Object.values(HELD_GROUP).includes(k) ? " ▾" : ""}<span class="n">${n}</span></button>`).join("")}`
+      + (grpOn ? `<div class="rchips" style="width:100%;margin:6px 0 0;padding-left:12px;border-left:3px solid var(--line-2)"><span class="muted" style="align-self:center;font-size:13px">${esc(grpOn)}:</span>
+        ${Object.keys(HELD_GROUP).filter(b => HELD_GROUP[b] === grpOn).map(b => `<button class="rchip ${F.held === b ? "on" : ""}" data-held="${esc(b)}">${esc(b)}<span class="n">${sub[b] || 0}</span></button>`).join("")}</div>` : "") : "";
     const groups = []; rows.forEach(s => { const k = gKey(s), g = groups.find(x => x.k === k); g ? g.s.push(s) : groups.push({ k, s:[s] }); });
     if(F.group === "hood") groups.sort((a, b) => gName(a.k).localeCompare(gName(b.k)));
     $("#rqbody").innerHTML = rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
@@ -322,7 +347,8 @@ async function queue(v){
       : `<div class="card"><p class="muted" style="margin:0">Nothing here${F.q || F.chan || F.held || F.area || F.kind ? " with these filters" : ""}.</p></div>`;
     v.querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; draw(); });
     v.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => { F.kind = F.kind === b.dataset.kind ? "" : b.dataset.kind; draw(); });
-    v.querySelectorAll("[data-held]").forEach(b => b.onclick = () => { F.held = F.held === b.dataset.held ? "" : b.dataset.held; draw(); });
+    v.querySelectorAll("[data-held]").forEach(b => b.onclick = () => { const k = b.dataset.held;
+      F.held = F.held === k ? (HELD_GROUP[k] || "") : (grpOn === k && F.held !== k ? "" : k); draw(); });
     v.querySelectorAll("[data-g]").forEach(h => h.onclick = () => { const k = F.stage + "|" + F.group + "|" + h.dataset.g; RSHUT.has(k) ? RSHUT.delete(k) : RSHUT.add(k); draw(); });
   };
   const sel = (id, opts, cur) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}" ${cur === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
@@ -403,7 +429,7 @@ async function card(v, res){
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
           <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
