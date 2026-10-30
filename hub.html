@@ -953,7 +953,7 @@ function bdSelects(id, cur){ cur = cur || {};
   return `<select id="${id}_m" aria-label="Month"><option value="">Month</option>${MONTHS.map((m, i) => `<option value="${i + 1}" ${cur.month === i + 1 ? "selected" : ""}>${m}</option>`).join("")}</select>
     <select id="${id}_d" aria-label="Day"><option value="">Day</option>${[...Array(31)].map((_, i) => `<option ${cur.day === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select>`; }
 function alertMsg(t){ const m = $("#bdmsg"); if(m) m.textContent = t; }
-let BD = { mine:null, people:[] }, ACC = [], PDWHO = null;
+let BD = { mine:null, people:[] }, ACC = [], PDWHO = null, PDMODE = "person", PDTEAM = null;
 /* Sign-in control (hub admins only, hub_admin_access.sql): sign a person out of every device, or lock them out */
 function accCard(){
   if(!ME.admin || !ACC.length) return "";
@@ -985,6 +985,7 @@ function accAsk(act, x, done){
    on top of what their teams give. Show / Hide / Team (= back to their teams). The database (hub_can) enforces it. */
 async function pdCard(box){
   if(!box || !ME.admin) return;
+  if(PDMODE === "team") return ptCard(box);
   const people = ACC.filter(x => x.active && !x.admin);
   if(!people.length) return box.innerHTML = "";
   let who = null, rows = [], hist = [];   // PDWHO keeps the picked person when My settings redraws
@@ -995,12 +996,14 @@ async function pdCard(box){
   const draw = () => {
     const desks = rows.filter(r => r.status !== "section"), secs = rows.filter(r => r.status === "section"), n = rows.filter(r => r.mode !== "team").length;
     box.innerHTML = `<details class="card acc" id="pdcard" open><summary><b style="font-size:17px">👥 Who sees which desk</b><span class="muted">Brandon & Kim</span></summary>
+      ${pdModeBar("person")}
       <p class="muted" style="margin:4px 0 8px">Pick a person. <b>Team</b> = what their teams give them. <b>Show</b> opens a desk just for them; <b>Hide</b> takes one away just for them. Every change is logged.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="pdwho" aria-label="Person"><option value="">Choose a person…</option>${people.map(p => `<option value="${p.id}" ${p.id === who ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
         <input id="pdnote" placeholder="Why (optional, saved with the change)" style="flex:1;min-width:180px"><span class="muted" id="pdmsg">${who ? n + " change" + (n === 1 ? "" : "s") + " from their team" : ""}</span></div>
       ${who ? `<div style="margin-top:10px">${desks.map(row).join("")}</div>
         <details class="acc2" style="margin-top:8px"><summary><b>Extra access inside desks</b><span class="muted">codes, money, contacts…</span></summary>${secs.map(row).join("")}</details>
         ${hist.length ? `<details class="acc2"><summary><b>History</b><span class="muted">${hist.length}</span></summary>${hist.map(h => `<div class="muted" style="font-size:13px;margin:3px 0">${new Date(h.set_at).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })} · ${esc(h.set_by || "?")} · ${esc(h.label || h.desk_key)} → ${{ allow:"Show", block:"Hide", team:"Team" }[h.mode]}${h.note ? " — " + esc(h.note) : ""}</div>`).join("")}</details>` : ""}` : ""}</details>`;
+    pdModeWire(box);
     $("#pdwho").onchange = () => load($("#pdwho").value || null);
     box.querySelectorAll("[data-pd]").forEach(b => b.onclick = async () => { const [k, m] = b.dataset.pd.split(":"), note = $("#pdnote").value;
       box.querySelectorAll("[data-pd]").forEach(x => x.disabled = true);
@@ -1012,6 +1015,41 @@ async function pdCard(box){
     if(id){ const [a, b] = await Promise.all([sb.rpc("hub_person_desks_get", { p_person:id }), sb.rpc("hub_person_desk_history", { p_person:id })]); rows = a.data || []; hist = b.data || []; }
     draw(); };
   PDWHO && people.some(p => p.id === PDWHO) ? load(PDWHO) : draw();
+}
+/* By team (hub_team_desks.sql, Brandon 2026-10-30): admins turn a desk on/off for a whole team (hub_desk_access.off, never deleted, logged).
+   A person's own Show/Hide still wins over their team. */
+const pdModeBar = m => `<span class="seg" style="margin:2px 0 6px">${[["person","By person"],["team","By team"]].map(([k, l]) => `<button class="btn small ${m === k ? "on" : ""}" data-pdm="${k}">${l}</button>`).join("")}</span>`;
+const pdModeWire = box => box.querySelectorAll("[data-pdm]").forEach(b => b.onclick = () => { if(PDMODE === b.dataset.pdm) return; PDMODE = b.dataset.pdm; pdCard(box); });
+async function ptCard(box){
+  const tl = await sb.rpc("hub_team_list"), teams = tl.data || [];
+  let team = teams.some(t => t.key === PDTEAM) ? PDTEAM : null, rows = [], hist = [];
+  const row = r => `<div class="ord" style="flex-wrap:wrap"><b style="flex:1;min-width:180px">${esc(r.label)}${r.status === "soon" ? ` <span class="muted" style="font-weight:600">(coming soon)</span>` : ""}
+      <div class="muted" style="font-weight:600;font-size:13px">${r.team_on ? "✓ This team sees it" : "This team doesn't see it"}${r.set_at ? ` · changed by ${esc(r.set_by || "?")} ${new Date(r.set_at).toLocaleDateString([], { month:"short", day:"numeric" })}${r.note ? " — " + esc(r.note) : ""}` : ""}</div></b>
+    <span class="seg">${[[true,"On"],[false,"Off"]].map(([v, l]) => `<button class="btn small ${r.team_on === v ? "on" : ""}" data-pt="${esc(r.key)}:${v ? 1 : 0}">${l}</button>`).join("")}</span></div>`;
+  const draw = () => {
+    const t = teams.find(x => x.key === team), desks = rows.filter(r => r.status !== "section"), secs = rows.filter(r => r.status === "section");
+    box.innerHTML = `<details class="card acc" id="pdcard" open><summary><b style="font-size:17px">👥 Who sees which desk</b><span class="muted">Brandon & Kim</span></summary>
+      ${pdModeBar("team")}
+      <p class="muted" style="margin:4px 0 8px">Pick a team. <b>On</b> gives everyone on that team the desk; <b>Off</b> takes it away from the team. Someone's own Show / Hide (By person) still wins. Every change is logged.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="ptteam" aria-label="Team"><option value="">Choose a team…</option>${teams.map(x => `<option value="${esc(x.key)}" ${x.key === team ? "selected" : ""}>${esc(x.label)} (${x.members.length})</option>`).join("")}</select>
+        <input id="ptnote" placeholder="Why (optional, saved with the change)" style="flex:1;min-width:180px"><span class="muted" id="ptmsg">${t ? desks.filter(r => r.team_on).length + " desks on" : ""}</span></div>
+      ${t ? `<div class="muted" style="font-size:13px;margin-top:6px">On this team: ${t.members.length ? t.members.map(esc).join(", ") : "nobody yet"}</div>
+        <div style="margin-top:10px">${desks.map(row).join("")}</div>
+        <details class="acc2" style="margin-top:8px"><summary><b>Extra access inside desks</b><span class="muted">codes, money, contacts…</span></summary>${secs.map(row).join("")}</details>
+        ${hist.length ? `<details class="acc2"><summary><b>History</b><span class="muted">${hist.length}</span></summary>${hist.map(h => `<div class="muted" style="font-size:13px;margin:3px 0">${new Date(h.set_at).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })} · ${esc(h.set_by || "?")} · ${esc(h.label || h.desk_key)} → ${h.turned_on ? "On" : "Off"}${h.note ? " — " + esc(h.note) : ""}</div>`).join("")}</details>` : ""}` : ""}</details>`;
+    pdModeWire(box);
+    $("#ptteam").onchange = () => load($("#ptteam").value || null);
+    box.querySelectorAll("[data-pt]").forEach(b => b.onclick = async () => { const [k, v] = b.dataset.pt.split(":"), note = $("#ptnote").value, r0 = rows.find(x => x.key === k);
+      if(v === "0" && t.members.length && !confirm(`Take "${r0.label}" away from ${t.label} (${t.members.length} ${t.members.length === 1 ? "person" : "people"})? Anyone given it under By person keeps it.`)) return;
+      box.querySelectorAll("[data-pt]").forEach(x => x.disabled = true);
+      const r = await sb.rpc("hub_team_desk_set", { p_team:team, p_desk:k, p_on:v === "1", p_note:note || null });
+      if(r.error){ box.querySelectorAll("[data-pt]").forEach(x => x.disabled = false); return $("#ptmsg").textContent = "Didn't save: " + r.error.message; }
+      await load(team); $("#ptmsg").textContent = "Saved. It takes effect the next time each person opens or reloads the hub."; });
+  };
+  const load = async k => { team = PDTEAM = k; rows = []; hist = [];
+    if(k){ const [a, b] = await Promise.all([sb.rpc("hub_team_desks_get", { p_team:k }), sb.rpc("hub_team_desk_history", { p_team:k })]); rows = a.data || []; hist = b.data || []; }
+    draw(); };
+  team ? load(team) : draw();
 }
 /* My settings: Penny's morning briefing (penny_brief_set, hub_penny_brief.sql). Brandon 2026-10-29: on for everyone at 7:30 am weekdays, anyone can turn it off. */
 async function pennyBriefCard(box){
