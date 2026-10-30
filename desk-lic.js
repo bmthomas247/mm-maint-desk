@@ -14,7 +14,7 @@ window.MM_LIC = function(A){
   function sb(){ return window.MM_SB; }
   function load(){ var c = sb(); if(!c) return Promise.resolve();
     var lic = ["fire","firesys","lease"].indexOf(A.ONLY) >= 0;
-    var jobs = [c.from("hub_homes").select("code,track_id,name,active,bookable,kind,community,address,city,postal,beds,baths,track_created").limit(5000)];
+    var jobs = [c.from("hub_homes").select("code,track_id,name,active,bookable,kind,community,neighborhood,address,city,postal,beds,baths,track_created").limit(5000)];
     if(lic) jobs.push(c.from("lic_fire").select("*").limit(5000), c.from("lic_lease").select("*").limit(5000),
                       c.from("lic_new_homes").select("*").eq("off", false).order("added_at", { ascending:false }).limit(500));
     return Promise.all(jobs).then(function(r){
