@@ -483,7 +483,7 @@ function noAccess(err){
 }
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","pto_reports","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","pto_reports","work_check","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const CALK = ["cal_res","cal_office","cal_me","cal_meet","cal_off"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
   const CMPK = ["competitor","competitor_add"];   // Brandon 2026-10-29: the Competitor Playbook drop-down sits under Moose Info too
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key) && !CALK.includes(x.key) && !CMPK.includes(x.key)),
@@ -627,6 +627,8 @@ function route(){
   if(k === "calendar" && d){ location.replace("#/cal_res"); return; }   // Calendar is a drop-down (2026-10-29)
   if(k === "reports") return hubReportsView(v);
   if(k === "good_reviews" && window.goodReviewsView){ $("#ttl").textContent = $("#utl").textContent = "Good guest reviews"; return goodReviewsView(v); }   // analytics.js, every hub user (Brandon 2026-10-29)
+  if(k === "work_check"){ if(!(ME.admin || DESKS.some(x => x.key === "work_check")) || !window.workCheck){ location.replace("#/home"); return; }   // Work check (2026-10-29)
+    $("#ttl").textContent = $("#utl").textContent = "Work check"; return workCheck(v); }
   if(k === "pto" || k === "pto_reports"){ if(!(ME.admin || DESKS.some(x => x.key === "pto_reports")) || !window.ptoReport){ location.replace("#/home"); return; }   // PTO reports (2026-10-29)
     if(k === "pto_reports"){ location.replace("#/pto"); return; } $("#ttl").textContent = $("#utl").textContent = "PTO reports"; return ptoReport(v, hashArg()); }
   if(k === "people_scores" || k === "team_ratings"){ if(!(ME.admin || DESKS.some(x => x.key === "team_ratings")) || !window.peopleScoresView){ location.replace("#/home"); return; }
@@ -1221,7 +1223,7 @@ async function hubReportsView(v){
   const name = k => k === "g_reviews" ? "Guest reviews" : k === "g_team" ? "Team" : k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
-  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team" };   // Guest reviews section (Brandon 2026-10-29)
+  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team", work_check:"g_team" };   // Guest reviews section (Brandon 2026-10-29)
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = GRP[x.key] || (sb ? sb[0] : x.desk_key); (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => (b === "analytics") - (a === "analytics") || name(a).localeCompare(name(b)));   // Analytics first
   const link = x => x.status === "live"
