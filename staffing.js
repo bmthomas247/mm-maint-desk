@@ -186,7 +186,7 @@ window.staffingView = async function(v){
   } else if(!meOn) h += `<div class="card"><p class="muted" style="margin:0">Nobody on your team clocks in on the hub yet. People move here from Hubstaff one at a time.</p></div>`;
   h += `<p class="muted sm">Hours count from each clock-in to the next clock-out, on the day of the clock-in (Park City time). Source: the hub time clock.</p></div>`;
   v.innerHTML = h;
-  const re = () => staffingView(v), err = r => { if(r.error){ alert(r.error.message.replace(/^.*?: /, "")); return true; } return false; };
+  const re = () => staffingView(v), err = r => { if(r.error){ alert(/failed to fetch|networkerror|load failed/i.test(r.error.message) ? "No signal right now. Try again when you have service (a missed clock-in can be added later)." : r.error.message.replace(/^.*?: /, "")); return true; } return false; };
   v.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { const n = +b.dataset.w; SS.week = n ? addK(w, n) : null; re(); });
   v.querySelectorAll("details[data-du]").forEach(d => d.ontoggle = () => d.open ? SS.open.add(d.dataset.du) : SS.open.delete(d.dataset.du));
   const rf = v.querySelector("[data-rf]"); if(rf) rf.onclick = re;
