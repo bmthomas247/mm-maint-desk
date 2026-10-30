@@ -45,7 +45,14 @@ const CSS = `
 .rgh{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;letter-spacing:.04em;color:var(--muted);margin:16px 2px 8px;cursor:pointer;user-select:none}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px} .rgrid>.card{margin:0}
 .rhome{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px!important} .rhome:hover{border-color:var(--forest-2)}
-.rhome::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--line-2)} .rhome.ok::before{background:var(--moose)} .rhome.bad::before{background:var(--red)} .rhome.todo::before{background:var(--amber)}
+.rhome::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--kc,var(--line-2))}
+.k-airbnb{--kc:#e0565b;--ks:#fde8e8} .k-vrbo{--kc:#2463a0;--ks:#e3edf8} .k-direct{--kc:#4f7a18;--ks:#eaf3da} .k-ota{--kc:#7a6a55;--ks:#efebe5} .k-oguest{--kc:#0f8a84;--ks:#dff3f1} .k-owner{--kc:#7a4bb0;--ks:#efe7f8}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .kpill{--ks:color-mix(in srgb,var(--kc) 22%,transparent)} }
+:root[data-theme="dark"] .kpill{--ks:color-mix(in srgb,var(--kc) 22%,transparent)}
+.kpill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 9px;font:inherit;font-size:11.5px;font-weight:800;background:var(--ks);color:var(--kc);border:1px solid transparent;white-space:nowrap}
+.kpill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--kc)}
+.rkinds{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px} .rkinds .kpill{font-size:13px;padding:5px 11px;cursor:pointer} .rkinds .kpill .n{opacity:.7;font-weight:700}
+.rkinds .kpill.on{border-color:var(--kc)} .rkinds .kpill.dim{opacity:.45}
 .rhome .rtop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start} .rhome .rtop>.pill{flex:none} .rhome .rcode{font-size:20px;font-weight:800;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rhome .rsub{font-size:13.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rhome .rdates{font-size:13.5px;margin-top:6px}
 .rhome .rmeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} .rhome .rmeta .pill{font-size:11.5px;padding:2px 8px}
@@ -219,8 +226,11 @@ function css(){ if(!document.getElementById("rescss")){ const st = document.crea
 const fresh = () => `<p class="muted" style="margin:4px 0 10px">Source: Track reservations, updated ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost, updated ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway, updated ${esc(when(B.bwUpdated))}` : ""}</p>`;
 
 /* ---------- queue */
-const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"arrive", from:"", to:"", group:"date" };
-const RSHUT = new Set();   // folded groups on the queue
+const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"arrive", from:"", to:"", group:"date", kind:"" };
+const RSHUT = new Set();
+// how they booked (Brandon 2026-10-30: a color each); chan "vrbo" = VRBO + direct, split by the Track type
+const KIND = { airbnb:"Airbnb", vrbo:"VRBO", direct:"Direct", ota:"Other sites", oguest:"Owner guest", owner:"Owner stay" };
+const kindOf = s => s.chan === "abnb" ? "airbnb" : s.chan === "owner" ? "owner" : s.chan === "oguest" ? "oguest" : s.chan === "ws" ? "ota" : /vrbo|homeaway/i.test(s.type || "") ? "vrbo" : "direct";   // folded groups on the queue
 // icons (same stroke style as the Locks office tabs)
 const RSV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2"/><circle cx="5" cy="19" r="1"/>'),
@@ -239,24 +249,23 @@ async function queue(v){
   if(!B){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
   const today = B.today, in7 = new Date(new Date(today + "T12:00").getTime() + 7 * 864e5).toISOString().slice(0, 10);
   const stateCls = s => s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "grey" : s.state === "Cancelling" ? "red" : "amber";
-  const stripe = s => ({ green:"ok", red:"bad", amber:"todo", grey:"" })[stateCls(s)];
   // groups (like the Locks office neighborhoods): day of the sort date (month for the past lists) or neighborhood
   const gKey = s => { if(F.group === "hood") return s.area || "~"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" ? d : d.slice(0, 7); };
   const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k;
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
   const tile = s => { const why = [...s.waiting, ...s.blockers], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
-    return `<a class="card rhome ${stripe(s)}" href="#/reservations/${encodeURIComponent(s.res)}">
+    return `<a class="card rhome k-${kindOf(s)}" href="#/reservations/${encodeURIComponent(s.res)}">
       <div class="rtop"><div style="min-width:0"><div class="rcode">${esc(s.guest || "#" + s.res)}</div>
-        <div class="rsub"><b>${esc(s.unit || "")}</b>${HOODS[s.area] ? " · " + esc(HOODS[s.area]) : ""} · ${esc(s.type || CH[s.chan] || "")}</div></div>
+        <div class="rsub"><b>${esc(s.unit || "")}</b>${HOODS[s.area] ? " · " + esc(HOODS[s.area]) : ""}</div></div>
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))} · #${esc(s.res)}</span></div>
-      <div class="rmeta">${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
+      <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^Owner Guest\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
         <span class="pill plain grey">${s.got} of ${s.need} steps</span>${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill amber">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
       <div class="progress"><i style="width:${pct}%"></i></div></a>`; };
   const draw = () => {
     const dk = s => String(s[F.by] || "").slice(0, 10);
-    const base = B.stays.filter(s => (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
+    const base = B.stays.filter(s => (!F.kind || kindOf(s) === F.kind) && (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
       && (!F.from || dk(s) >= F.from) && (!F.to || (dk(s) && dk(s) <= F.to)))
       .sort((x, y) => F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : 0) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first
     const inStage = base.filter(s => s.stage === F.stage);
@@ -270,14 +279,17 @@ async function queue(v){
       [soon.filter(s => s.got < s.need).length, "Arriving in 7 days, steps left", true],
       [ip.filter(s => s.blockers.length || s.waiting.length).length, "Held up", true]]
       .map(([n, l, w]) => `<div class="stat ${w && n ? "warn" : ""}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+    const kc = {}; B.stays.filter(s => s.stage === F.stage).forEach(s => kc[kindOf(s)] = (kc[kindOf(s)] || 0) + 1);
+    $("#rq_kinds").innerHTML = Object.entries(KIND).map(([k, l]) => `<button class="kpill k-${k} ${F.kind === k ? "on" : ""} ${F.kind && F.kind !== k ? "dim" : ""}" data-kind="${k}">${l}<span class="n">${kc[k] || 0}</span></button>`).join("");
     $("#rq_held").innerHTML = Object.keys(held).length ? `<span class="muted" style="align-self:center;font-weight:700;font-size:13px">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}<span class="n">${n}</span></button>`).join("")}` : "";
     const groups = []; rows.forEach(s => { const k = gKey(s), g = groups.find(x => x.k === k); g ? g.s.push(s) : groups.push({ k, s:[s] }); });
     if(F.group === "hood") groups.sort((a, b) => gName(a.k).localeCompare(gName(b.k)));
     $("#rqbody").innerHTML = rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
       return `<div class="rgh" data-g="${esc(g.k)}"><span>${esc(gName(g.k).toUpperCase())} · ${g.s.length} ${g.s.length === 1 ? "STAY" : "STAYS"}</span><span>${shut ? "▾" : "▴"}</span></div>
       ${shut ? "" : `<div class="rgrid">${g.s.map(tile).join("")}</div>`}`; }).join("")
-      : `<div class="card"><p class="muted" style="margin:0">Nothing here${F.q || F.chan || F.held || F.area ? " with these filters" : ""}.</p></div>`;
+      : `<div class="card"><p class="muted" style="margin:0">Nothing here${F.q || F.chan || F.held || F.area || F.kind ? " with these filters" : ""}.</p></div>`;
     v.querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; draw(); });
+    v.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => { F.kind = F.kind === b.dataset.kind ? "" : b.dataset.kind; draw(); });
     v.querySelectorAll("[data-held]").forEach(b => b.onclick = () => { F.held = F.held === b.dataset.held ? "" : b.dataset.held; draw(); });
     v.querySelectorAll("[data-g]").forEach(h => h.onclick = () => { const k = F.stage + "|" + F.group + "|" + h.dataset.g; RSHUT.has(k) ? RSHUT.delete(k) : RSHUT.add(k); draw(); });
   };
@@ -288,6 +300,7 @@ async function queue(v){
       <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a></div>
     <nav class="rtabs" id="rq_tabs"></nav>
     <div class="stats" id="rq_stats"></div>
+    <div class="rkinds" id="rq_kinds"></div>
     <div class="card syncbar"><span class="ic">${RI.sync}</span><div style="flex:1;min-width:0"><b>Data sync</b>
       <div class="muted" style="font-size:13px">Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""} · steps tick themselves as these update</div></div></div>
     <div class="card"><div class="rfg">
