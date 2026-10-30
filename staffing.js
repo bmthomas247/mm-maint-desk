@@ -62,6 +62,9 @@ function weekTable(rows, w, pl, boss){
     <tr><td colspan="2"><b>Week</b></td><td class="r"><b>${hm(weekHours(s, w))}</b></td></tr></table></div>
     ${odd.length ? `<p class="sm" style="color:#b45309;margin:6px 0 0">⚠ ${odd.map(p => `${dnm(dkey(p.at))} ${tm(p.at)}: clocked ${p.kind} with no matching clock-${p.kind === "in" ? "out" : "in"}${boss ? offBtn(p) : ""}`).join(" · ")}. ${boss ? "Add the missing punch or set this one off." : "Use “Forgot to clock in or out?” below."}</p>` : ""}`;
 }
+// admins (Brandon 2026-10-30: "kim should be able to trump anyones approval or denial"): punches that don't count, with "Count it"
+const notCounted = (rows, w) => { const l = rows.filter(p => (p.status === "denied" || p.status === "off") && wk(dkey(p.at)) === w);
+  return l.length ? `<p class="sm" style="margin:6px 0 0">Not counted: ${l.map(p => `${dnm(dkey(p.at))} ${tm(p.at)} clock ${p.kind} (${p.status === "off" ? "set off" : "denied"}${p.decided_by ? ` by ${esc(p.decided_by)}` : ""}${p.decide_note ? `: ${esc(p.decide_note)}` : ""}) <button class="btn small" data-ok="${p.id}">Count it</button>`).join(" · ")}</p>` : ""; };
 const offBtn = p => ` <button class="btn small" data-off="${p.id}" title="Set this punch off (it stops counting; kept in the log)">✕</button>`;
 const pendRow = (p, nm, boss) => `<tr><td>${nm ? `<b>${esc(nm)}</b><br>` : ""}${dnm(dkey(p.at))} ${tm(p.at)} · clock ${p.kind}</td><td class="sm">${esc(p.note || "")}</td>
   <td class="r">${boss ? `<button class="btn small primary" data-ok="${p.id}">Approve</button> <button class="btn small" data-no="${p.id}">Deny</button>` : `<span class="pill amber">Waiting for your manager</span>`}</td></tr>`;
@@ -109,7 +112,7 @@ window.staffingView = async function(v){
         const hh = hsOn(p.user_id) ? Math.round(hsH(p.user_id) * 100) / 100 : null, gap = hh == null ? 0 : hrs - hh;
         return `<details style="margin:8px 0" ${team.length === 1 ? "open" : ""}><summary><b>${esc(p.name)}</b> · ${hm(hrs)}${hh != null ? ` <span class="pill ${Math.abs(gap) > 0.5 ? "amber" : ""}" title="Hours Hubstaff tracked this week, side by side until Hubstaff is cancelled">Hubstaff ${hm(hh)}${Math.abs(gap) > 0.5 ? ` · ${gap > 0 ? "+" : "−"}${hm(Math.abs(gap))} on the hub` : ""}</span>` : ""} ${now ? `<span class="pill green">clocked in since ${tm(last.at)}</span>` : ""}
           ${ok ? `<span class="pill ${changed ? "amber" : "green"}">${changed ? `approved at ${hm(+ok.hours)}, changed since` : `approved by ${esc(ok.approved_by)}`}</span>` : ""}</summary>
-          ${weekTable(rows, w, pl, true)}
+          ${weekTable(rows, w, pl, true)}${ME.admin ? notCounted(rows, w) : ""}
           <div class="row" style="margin-top:6px">${(!ok || changed) && w < wk(today) ? `<button class="btn small primary" data-wok="${p.user_id}" data-h="${hrs}">Approve ${hm(hrs)} for this week</button>` : w >= wk(today) ? `<span class="muted sm">Approve the week once it's over.</span>` : ""}</div>
           ${addForm(p.user_id, true)}</details>`; }).join("")}</div>`;
   } else if(!meOn) h += `<div class="card"><p class="muted" style="margin:0">Nobody on your team clocks in on the hub yet. People move here from Hubstaff one at a time.</p></div>`;
@@ -127,7 +130,7 @@ window.staffingView = async function(v){
     const r = await sb.rpc("clock_add", { p_user:u, p_kind:v.querySelector(`[data-ak="${u}"]`).value, p_at:new Date(at).toISOString(), p_note:v.querySelector(`[data-an="${u}"]`).value });
     if(!err(r)) re(); });
   v.querySelectorAll("[data-ok]").forEach(b => b.onclick = async () => { if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.ok, p_status:"ok", p_note:null }))) re(); });
-  v.querySelectorAll("[data-no]").forEach(b => b.onclick = async () => { const n = prompt("Why? (optional)"); if(n === null) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.no, p_status:"denied", p_note:n }))) re(); });
+  v.querySelectorAll("[data-no]").forEach(b => b.onclick = async () => { const n = prompt("Why? (they'll see it)"); if(n === null) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.no, p_status:"denied", p_note:n }))) re(); });
   v.querySelectorAll("[data-off]").forEach(b => b.onclick = async () => { const n = prompt("Why should this punch stop counting? (kept in the log)"); if(!n) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.off, p_status:"off", p_note:n }))) re(); });
   v.querySelectorAll("[data-wok]").forEach(b => b.onclick = async () => { if(!confirm(`Approve ${hm(+b.dataset.h)} for the week of ${dnm(w)}?`)) return;
     if(!err(await sb.rpc("clock_week_ok", { p_user:b.dataset.wok, p_week:w, p_hours:+b.dataset.h, p_note:null }))) re(); });
