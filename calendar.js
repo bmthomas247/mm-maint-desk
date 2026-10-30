@@ -436,10 +436,11 @@ async function timeOff(v){
         : p.policy_type === "annual" ? `${esc(c.hours_per_year)} h a year.` : p.policy_type === "joined_date" ? `${esc(c.hours_per_year)} h a year from your start date.` : ""}</div>
       ${f ? `<div style="font-size:13px;margin-top:6px">By ${esc(fday(by))}: <b>about ${hrs(f.h)}</b>${f.capped ? ` (the ${f.cap} h max)` : ""}<div class="muted" style="font-size:11.5px">Estimate at your pace this year (${Math.round(f.perWk)} h a week tracked in Hubstaff), if you don't use any.</div></div>` : ""}</div>`; };
   const kl = r => r.kind === "pto" && isSal(pol(r.policy_id)) ? "Salaried time off" : TK[r.kind];
-  const reqRow = (r, act) => `<tr><td>${act === "team" || act === "wait" ? `<b>${esc(who(r.user_id))}</b><br>` : ""}${esc(whenR(r))}</td><td>${hrs(r.hours)}<br><span class="muted">${esc(kl(r))}</span></td>
+  const reqRow = (r, act) => `<tr><td>${act === "team" || act === "wait" || act === "admin" ? `<b>${esc(who(r.user_id))}</b><br>` : ""}${esc(whenR(r))}</td><td>${hrs(r.hours)}<br><span class="muted">${esc(kl(r))}</span></td>
       <td>${stPill(r)}${hsPill(r)}${r.decided_by && r.status !== "cancelled" ? `<div class="muted" style="font-size:12px">by ${esc(r.decided_by)}${r.response ? ": " + esc(r.response) : ""}</div>` : ""}${r.reason ? `<div class="muted" style="font-size:12px">“${esc(r.reason)}”</div>` : ""}</td>
       <td style="white-space:nowrap">${act === "mine" && r.status === "pending" ? `<button class="btn small" data-cancel="${r.id}">Cancel</button>` : ""}
         ${act === "wait" ? `<button class="btn small primary" data-ok="${r.id}">Approve</button> <button class="btn small" data-no="${r.id}">Deny</button>` : ""}
+        ${act === "admin" && r.status === "approved" ? `<button class="btn small" data-no="${r.id}">Change to not approved</button>` : act === "admin" && r.status === "denied" ? `<button class="btn small" data-ok="${r.id}">Change to approved</button>` : ""}
         ${ME.admin && r.status === "approved" && (r.hs_status === "failed" || r.hs_status === "sending") ? `<button class="btn small" data-resend="${r.id}">Send again</button>` : ""}</td></tr>`;
   const table = (rows, act) => rows.length ? `<div class="tow"><table class="to"><tr><th>When</th><th>Hours</th><th>Status</th><th></th></tr>${rows.map(r => reqRow(r, act)).join("")}</table></div>` : `<p class="muted" style="margin:4px 0 0">None.</p>`;
   const teamB = bals.filter(b => b.user_id !== myId), teamIds = [...new Set(teamB.map(b => b.user_id))].sort((x, y) => who(x).localeCompare(who(y)));
@@ -455,7 +456,8 @@ async function timeOff(v){
         <div class="bal">${myOrder.map(balCard).join("")}</div>`
       : `<p class="muted" style="margin:6px 0 0">You're not set up in Hubstaff time off yet, so there's no balance to show. You can still ask for time off; your manager will see it.</p>`}</div>
     <div class="card"><b style="font-size:16px">Your requests</b>${table(mine, "mine")}</div>
-    ${approver && others.some(r => r.status !== "pending") ? `<div class="card"><b style="font-size:16px">Requests you approved or denied</b>${table(others.filter(r => r.status !== "pending" && r.decided_by === ME.name).slice(0, 30), "team")}</div>` : ""}
+    ${ME.admin ? (dec => dec.length ? `<div class="card"><b style="font-size:16px">Decided requests</b><p class="muted" style="font-size:12.5px;margin:2px 0 0">You can change anyone's approval or denial. The person gets a Slack DM; if it was already added to Hubstaff, remove it there by hand.</p>${table(dec, "admin")}</div>` : "")(others.filter(r => (r.status === "approved" || r.status === "denied") && r.end_day >= addD(today(), -14)).slice(0, 40))
+      : approver && others.some(r => r.status !== "pending") ? `<div class="card"><b style="font-size:16px">Requests you approved or denied</b>${table(others.filter(r => r.status !== "pending" && r.decided_by === ME.name).slice(0, 30), "team")}</div>` : ""}
     <p class="muted" style="font-size:12px">Balances and policies: Hubstaff (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")}). Approved requests are added to Hubstaff by the hub (paid time off under your PTO policy). Your reason is seen only by you, the person who approves, and Brandon or Kim.</p>
     <div class="modal" id="tom"><div class="card" id="tocard"></div></div></div>`;
   const reload = () => timeOff(v), act = async (fnm, args) => { const r = await sb.rpc(fnm, args); if(r.error) alert(r.error.message); else reload(); };
