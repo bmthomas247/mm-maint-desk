@@ -476,7 +476,7 @@ async function boot(){
     { key:"cal_meet", label:"Calendar · Meetings", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.4 },
     { key:"cal_off", label:"Staffing · Request Time Off", icon:"clock", url:"#cal", status:"live", sort:60.5 },   // time off + PTO (2026-10-29); in the Staffing drop-down since 2026-10-29
     { key:"stf_sched", label:"Staffing · Schedule", icon:"clock", url:"#/stf_sched", status:"live", sort:60.3 });   // staffing.js; same people as Calendar
-  try { const mp = await sb.rpc("my_performance"); if((mp.data || []).length) DESKS.push({ key:"stf_perf", label:"Staffing · My performance", icon:"clock", url:"#/stf_perf", status:"live", sort:60.7 }); } catch(e){}   // only people who have scores (Brandon 2026-10-29)
+  try { const [mp, mt] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto")]); if((mp.data || []).length || (mt.data || []).length) DESKS.push({ key:"stf_perf", label:"Staffing · My performance", icon:"clock", url:"#/stf_perf", status:"live", sort:60.7 }); } catch(e){}   // only people with scores or PTO (Brandon 2026-10-29)
   try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
   PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:psu" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
   shell(); pennyMount(); route();
