@@ -285,13 +285,16 @@ async function evCal(v, key){
   // time off asked in the hub: approved ones until Hubstaff has them (then they come from the Hubstaff feed), pending for the person + approvers
   ((tor && tor.data) || []).filter(r => !(r.status === "approved" && r.hs_request_id)).forEach(r => { for(let s = r.day; s <= r.end_day; s = addD(s, 1))
     ox.off.push({ user_id:r.user_id, day:s, start:r.start, end:r.end, req:r.status === "pending" }); });
+  const vids = evs.filter(e => e.virtual).map(e => e.id), links = {};   // join links: cal_links() gives only the ones this person may see
+  if(vids.length){ const lr = await sb.rpc("cal_links", { p_ids:vids }); ((lr && lr.data) || []).forEach(x => links[x.event_id] = x.url); }
+  if(current() !== key) return;
   const mine = evs.filter(e => isMe ? e.cal === "personal" : e.cal === "office");
   const canAdd = isMe || isOff, boss = canOffice();
   const mt = []; ms.forEach(m => occurs(m, a, b).forEach(s => mt.push({ meet:m.meet, day:s, start:m.start, minutes:m.minutes })));
   const myId = (ppl.find(p => p.name === ME.name) || {}).id;
   const canEdit = e => e.cal === "personal" || boss || (e.kind !== "event" && e.person_id === myId);
   const evItem = e => { const k = e.kind || "event", nm = k === "event" ? e.title : (k === "out" ? "Out" : "Working") + " · " + who(e.person_id) + (e.title && !/^(out|working)$/i.test(e.title) ? " · " + e.title : "");
-    return { start:e.start_time, end:e.end_time, title:nm, sub:[e.location, (e.attendees || []).map(fn).join(", ")].filter(Boolean).join(" · "), cls:k === "out" ? "outp" : k === "working" ? "work" : isMe ? "" : "of", ev:e.id, drag:canEdit(e) }; };
+    return { start:e.start_time, end:e.end_time, title:nm, sub:[e.virtual ? "💻 Virtual" : "", e.location, (e.attendees || []).map(fn).join(", ")].filter(Boolean).join(" · "), join:links[e.id], cls:k === "out" ? "outp" : k === "working" ? "work" : isMe ? "" : "of", ev:e.id, drag:canEdit(e) }; };
   const items = s => {
     const out = [];
     if(isRes || (isMe && layerOn("checkins"))){ stays.filter(x => x.in === s).forEach(x => out.push({ title:(x.owner ? "OWNER " : "") + "CHECK-IN " + x.unit + (x.guest ? " · " + x.guest : ""), cls:"ar", href:"#/cal_res" }));
@@ -315,7 +318,7 @@ async function evCal(v, key){
     const sel = ST.sel[key], day = items(sel).sort((x, y) => (x.start || "").localeCompare(y.start || ""));
     const addBtns = isMe ? `<button class="btn small primary" data-add="event">+ Event</button>`
       : isOff ? (boss ? `<button class="btn small primary" data-add="event">+ Work event</button>` : "") + `<a class="btn small" href="#/cal_off" data-askoff>🌴 Ask for time off</a><button class="btn small" data-add="out">I'm out</button><button class="btn small" data-add="working">I'm working</button>` : "";
-    const detail = isRes ? resDetail(stays, sel) : `<div class="card list"><b style="font-size:16px">${esc(fday(sel))}</b>${day.length ? day.map(x => `<div class="it"><span class="d">${x.start ? ftime(x.start.slice(0, 5)) + (x.end ? "–" + ftime(x.end.slice(0, 5)) : "") : "All day"}</span><span style="flex:1"><a ${attrs(Object.assign({}, x, { drag:false }))}><b>${esc(x.title)}</b></a>${x.sub ? ` <span class="muted">· ${esc(x.sub)}</span>` : ""}</span></div>`).join("") : `<p class="muted" style="margin:6px 0 0">Nothing on this day.</p>`}</div>`;
+    const detail = isRes ? resDetail(stays, sel) : `<div class="card list"><b style="font-size:16px">${esc(fday(sel))}</b>${day.length ? day.map(x => `<div class="it"><span class="d">${x.start ? ftime(x.start.slice(0, 5)) + (x.end ? "–" + ftime(x.end.slice(0, 5)) : "") : "All day"}</span><span style="flex:1"><a ${attrs(Object.assign({}, x, { drag:false }))}><b>${esc(x.title)}</b></a>${x.sub ? ` <span class="muted">· ${esc(x.sub)}</span>` : ""}</span>${x.join ? `<a class="btn small primary" href="${esc(x.join)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}</div>`).join("") : `<p class="muted" style="margin:6px 0 0">Nothing on this day.</p>`}</div>`;
     const main = body(key, items, canAdd, !isRes) + (isRes ? `<p class="muted" style="font-size:12px">Source: ${esc((sr && sr.data && sr.data.source) || "Track reservations")}. Guest names only; contact info stays on Home for the teams that have it.</p>` : "");
     v.innerHTML = `<div class="page cal wide">${tabs(key)}${calNav(key, isRes ? "Reservations" : isOff ? "Office" : "My calendar", addBtns)}
       ${isOff ? `<div class="cols"><div>${main}${detail}</div><div class="side">${whoPanel(ppl, mine, sel, ox, fn)}</div></div>` : main + detail}
@@ -340,22 +343,48 @@ async function evCal(v, key){
     pre = pre || {}; const kind = e ? (e.kind || "event") : (pre.kind || "event"), cal = e ? e.cal : (isOff ? "office" : "personal"), ro = e && !canEdit(e);
     const head = e ? (ro ? "Event" : "Change event") : kind === "out" ? "Mark out" : kind === "working" ? "Mark working" : cal === "office" ? "New work event" : "New personal event";
     const pick = cal === "office" && kind !== "event" && boss ? `<label class="field"><span>Who</span><select id="ev_p">${ppl.map(p => `<option value="${p.id}" ${(e ? e.person_id : myId) === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>` : "";
-    const attH = cal === "office" && kind === "event" ? `<div class="field"><span>Who's going (shows on their Personal calendar)</span><div class="attp">${ppl.map(p => `<label class="lyr"><input type="checkbox" data-att="${p.id}" ${e && (e.attendees || []).includes(p.id) ? "checked" : ""} ${ro ? "disabled" : ""}>${esc(p.name)}</label>`).join("")}</div></div>` : "";
+    const showOn = kind === "event" && boss && !ro ? `<div class="field"><span>Show on</span><div><label class="lyr"><input type="radio" name="ev_cal" value="personal" ${cal === "personal" ? "checked" : ""}>Only my calendar</label> <label class="lyr"><input type="radio" name="ev_cal" value="office" ${cal === "office" ? "checked" : ""}>Office calendar (everyone sees it)</label></div></div>` : "";
+    const st0 = e && e.start_time ? e.start_time.slice(0, 5) : pre.start || "", en0 = e && e.end_time ? e.end_time.slice(0, 5) : st0 ? endTime(st0, 60) : "";
+    const tOpts = (sel, blank) => { const l = []; for(let m = 5 * 60; m < 24 * 60; m += 15) l.push(hhmm(m)); if(sel && !l.includes(sel)) l.push(sel); l.sort();
+      return (blank ? `<option value="">${blank}</option>` : "") + l.map(t => `<option value="${t}" ${t === sel ? "selected" : ""}>${ftime(t)}</option>`).join(""); };
+    const LENS = [15, 30, 45, 60, 90, 120, 150, 180, 240, 480], lenTxt = m => m < 60 ? m + " min" : (m / 60) + (m === 60 ? " hour" : " hours");
+    const len0 = st0 && en0 ? toMin(en0) - toMin(st0) : 60;
+    const timeH = `<div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:120px"><span>Starts</span><select id="ev_s" ${ro ? "disabled" : ""}>${tOpts(st0, "All day")}</select></label>
+      <label class="field" style="flex:1;min-width:110px"><span>How long</span><select id="ev_len" ${ro || !st0 ? "disabled" : ""}>${LENS.map(m => `<option value="${m}" ${m === len0 ? "selected" : ""}>${lenTxt(m)}</option>`).join("")}<option value="" ${LENS.includes(len0) ? "" : "selected"}>Other</option></select></label>
+      <label class="field" style="flex:1;min-width:120px"><span>Ends</span><select id="ev_f" ${ro || !st0 ? "disabled" : ""}>${tOpts(en0, "—")}</select></label></div>`;
+    const lk0 = e ? links[e.id] || "" : "", virt0 = e ? !!e.virtual : false;
+    const whereH = kind === "event" ? `<div class="field"><span>Meeting type</span><div><label class="lyr"><input type="radio" name="ev_v" value="0" ${virt0 ? "" : "checked"} ${ro ? "disabled" : ""}>In person</label> <label class="lyr"><input type="radio" name="ev_v" value="1" ${virt0 ? "checked" : ""} ${ro ? "disabled" : ""}>💻 Virtual</label></div></div>
+      <div id="ev_vbox" style="display:${virt0 ? "block" : "none"}">${ro ? (lk0 ? `<a class="btn primary" href="${esc(lk0)}" target="_blank" rel="noopener noreferrer">💻 Join the meeting</a>` : "")
+        : `<label class="field"><span>Meeting link (Zoom, Google Meet, Teams…)</span><input id="ev_link" type="url" placeholder="https://zoom.us/j/…" value="${esc(lk0)}"></label>${lk0 ? `<a class="btn small" href="${esc(lk0)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}`}
+        <p class="muted" style="font-size:12px;margin:4px 0 0">The link shows to the people on the meeting, managers and admins (on an office event with nobody picked, everyone).</p></div>` : "";
+    const attH = (cal === "office" || boss) && kind === "event" ? `<div class="field" id="ev_att" style="display:${cal === "office" ? "block" : "none"}"><span>Who's going (shows on their Personal calendar)</span><div class="attp">${ppl.map(p => `<label class="lyr"><input type="checkbox" data-att="${p.id}" ${(e ? (e.attendees || []).includes(p.id) : isMe && p.id === myId) ? "checked" : ""} ${ro ? "disabled" : ""}>${esc(p.name)}</label>`).join("")}</div></div>` : "";
     $("#evcard").innerHTML = `<div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${head}</h2><button class="btn small" id="evx" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
       ${pick}<label class="field"><span>${kind === "event" ? "What" : "Note (optional, e.g. PTO, sick, on call)"}</span><input id="ev_t" value="${esc(e && !/^(out|working)$/i.test(e.title) ? e.title : "")}" ${ro ? "disabled" : ""}></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>Day</span><input type="date" id="ev_d" value="${esc(e ? e.day : pre.day || ST.sel[key])}" ${ro ? "disabled" : ""}></label><label class="field" style="flex:1"><span>Until (optional)</span><input type="date" id="ev_e" value="${esc(e && e.end_day || "")}" ${ro ? "disabled" : ""}></label></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>Starts (blank = all day)</span><input type="time" id="ev_s" value="${esc(e && e.start_time ? e.start_time.slice(0, 5) : pre.start || "")}" ${ro ? "disabled" : ""}></label><label class="field" style="flex:1"><span>Ends</span><input type="time" id="ev_f" value="${esc(e && e.end_time ? e.end_time.slice(0, 5) : pre.start ? endTime(pre.start, 60) : "")}" ${ro ? "disabled" : ""}></label></div>
-      <label class="field"><span>Where</span><input id="ev_l" value="${esc(e && e.location || "")}" ${ro ? "disabled" : ""}></label>${attH}
+      ${timeH}${showOn}${whereH}
+      <label class="field"><span>Where (optional)</span><input id="ev_l" value="${esc(e && e.location || "")}" ${ro ? "disabled" : ""}></label>${attH}
       <label class="field"><span>Notes</span><textarea id="ev_n" style="min-height:70px" placeholder="Don't type codes or passwords here." ${ro ? "disabled" : ""}>${esc(e && e.notes || "")}</textarea></label>
       ${ro ? "" : `<div style="display:flex;gap:8px"><button class="btn primary" style="flex:1" id="ev_go">Save</button>${e ? `<button class="btn" id="ev_off">Remove</button>` : ""}</div>`}<p class="muted" id="ev_m"></p>`;
     $("#evm").classList.add("on");
     $("#evx").onclick = () => $("#evm").classList.remove("on");
     if(ro) return;
+    const calNow = () => { const r = $("#evcard").querySelector("[name=ev_cal]:checked"); return r ? r.value : cal; };
+    $("#evcard").querySelectorAll("[name=ev_cal]").forEach(r => r.onchange = () => { const a = $("#ev_att"); if(a) a.style.display = calNow() === "office" ? "block" : "none"; });
+    $("#evcard").querySelectorAll("[name=ev_v]").forEach(r => r.onchange = () => { const on = r.value === "1"; $("#ev_vbox").style.display = on ? "block" : "none"; if(on && $("#ev_link")) $("#ev_link").focus(); });
+    { const S = $("#ev_s"), L = $("#ev_len"), F = $("#ev_f");
+      const setEnd = () => { if(!S.value || !L.value) return; const t = endTime(S.value, +L.value); if(![...F.options].some(o => o.value === t)) F.add(new Option(ftime(t), t)); F.value = t; };
+      S.onchange = () => { L.disabled = F.disabled = !S.value; if(S.value && !L.value) L.value = "60"; setEnd(); };
+      L.onchange = setEnd;
+      F.onchange = () => { const m = S.value && F.value ? toMin(F.value) - toMin(S.value) : 0; L.value = LENS.includes(m) ? String(m) : ""; }; }
     const go = async off => { const t = $("#ev_t").value.trim(), d = $("#ev_d").value;
       if((kind === "event" && !t) || !d) return $("#ev_m").textContent = "Add what and which day.";
-      const att = cal === "office" && kind === "event" ? [...$("#evcard").querySelectorAll("[data-att]:checked")].map(x => x.dataset.att) : null;
-      const r = await sb.rpc("cal_event_save3", { p_attendees:att, p_id:e ? e.id : null, p_cal:cal, p_kind:kind, p_person:$("#ev_p") ? $("#ev_p").value : null, p_title:t, p_day:d, p_end_day:$("#ev_e").value || null,
-        p_start:$("#ev_s").value || null, p_end:$("#ev_f").value || null, p_location:$("#ev_l").value, p_notes:$("#ev_n").value, p_off:!!off });
+      const c = calNow(), sT = $("#ev_s").value || null, fT = sT ? $("#ev_f").value || null : null;
+      if(sT && fT && fT <= sT) return $("#ev_m").textContent = "The end time has to be after the start.";
+      const vr = $("#evcard").querySelector("[name=ev_v]:checked"), virt = !!(vr && vr.value === "1"), link = $("#ev_link") ? $("#ev_link").value.trim() : "";
+      if(virt && link && !/^https:\/\/\S+$/i.test(link)) return $("#ev_m").textContent = "The meeting link has to start with https://";
+      const att = c === "office" && kind === "event" ? [...$("#evcard").querySelectorAll("[data-att]:checked")].map(x => x.dataset.att) : null;
+      const r = await sb.rpc("cal_event_save4", { p_attendees:att, p_id:e ? e.id : null, p_cal:c, p_kind:kind, p_person:$("#ev_p") ? $("#ev_p").value : null, p_title:t, p_day:d, p_end_day:$("#ev_e").value || null,
+        p_start:sT, p_end:fT, p_location:$("#ev_l").value, p_notes:$("#ev_n").value, p_off:!!off, p_virtual:virt, p_link:virt ? link : null });
       if(r.error) return $("#ev_m").textContent = "Couldn't save: " + r.error.message;
       ST.sel[key] = d; evCal(v, key); };
     $("#ev_go").onclick = () => go(false);
