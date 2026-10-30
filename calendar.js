@@ -306,7 +306,7 @@ async function evCal(v, key){
         sub:(m.people || []).map(fn).join(", "), cls:"mt", href:m.meet ? "#/" + m.meet : "#/cal_office" }));
       const timed = viewOf(key) === "day";   // week/month: schedules sit in the all-day row so the hours stay readable
       if(layerOn("sched")) ox.shifts.filter(x => x.day === s).sort((x, y) => x.start.localeCompare(y.start)).forEach(x => out.push(timed
-        ? { start:x.start, end:x.end, title:fn(x.user_id), sub:"Scheduled", cls:"sh", href:"#/cal_office" }
+        ? { start:x.start, end:x.end > x.start ? x.end : "23:59", title:fn(x.user_id), sub:"Scheduled" + (x.end > x.start ? "" : " until " + ftime(x.end) + " next day"), cls:"sh", href:"#/stf_sched" }
         : { title:fn(x.user_id) + " " + ftime(x.start) + "–" + ftime(x.end), cls:"sh", href:"#/cal_office" }));
       if(layerOn("people")) ox.off.filter(x => x.day === s).forEach(x => out.push({ title:(x.req ? "Asked off · " : "Out · ") + who(x.user_id) + (x.start ? " " + ftime(x.start) + "–" + ftime(x.end) : ""), cls:x.req ? "outp req" : "outp", href:x.req ? "#/cal_off" : "#/cal_office" }));
     }
@@ -319,7 +319,7 @@ async function evCal(v, key){
     const main = body(key, items, canAdd, !isRes) + (isRes ? `<p class="muted" style="font-size:12px">Source: ${esc((sr && sr.data && sr.data.source) || "Track reservations")}. Guest names only; contact info stays on Home for the teams that have it.</p>` : "");
     v.innerHTML = `<div class="page cal wide">${tabs(key)}${calNav(key, isRes ? "Reservations" : isOff ? "Office" : "My calendar", addBtns)}
       ${isOff ? `<div class="cols"><div>${main}${detail}</div><div class="side">${whoPanel(ppl, mine, sel, ox, fn)}</div></div>` : main + detail}
-      <p class="muted" style="font-size:12px">${isOff ? "Everyone on the hub sees the Office calendar. Mark yourself out or working; managers and admins add work events (with who's going) and can mark anyone. Schedules and time off: " + (ox.source || "Hubstaff") + (ox.at ? " (updated " + new Date(ox.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) + ")" : "") + "; only people with a Hubstaff schedule show. Meetings: Calendar ▸ Meetings times; who's in each = everyone the meeting is for." : isMe ? "Only you see your personal events. Drag your own events to move them; click an empty time to add one. Meetings come from Calendar ▸ Meetings." : ""}</p>
+      <p class="muted" style="font-size:12px">${isOff ? "Everyone on the hub sees the Office calendar. Mark yourself out or working; managers and admins add work events (with who's going) and can mark anyone. Schedules and time off: " + (ox.source || "Hubstaff") + (ox.at ? " (updated " + new Date(ox.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) + ")" : "") + "; set or changed by managers under Staffing ▸ Schedule. Meetings: Calendar ▸ Meetings times; who's in each = everyone the meeting is for." : isMe ? "Only you see your personal events. Drag your own events to move them; click an empty time to add one. Meetings come from Calendar ▸ Meetings." : ""}</p>
       <div class="modal" id="evm"><div class="card" id="evcard"></div></div></div>`;
     wireNav(v, key, draw, () => evCal(v, key));
     wireGrid(v, canAdd && !isRes ? (d, s) => form(null, { day:d, start:s, kind:isOff ? (boss ? "event" : "working") : "event" }) : null,
@@ -392,7 +392,7 @@ function whoPanel(ppl, evs, sel, ox, fn){
       <p class="muted" style="margin:4px 0 6px;font-size:13px">${inn.length} working${out.length ? ` · ${out.length} out` : ""}</p>
       ${out.length ? `<div style="font-size:13.5px;margin-bottom:4px"><b>Out:</b> ${out.map(p => esc(p.name)).join(", ")}</div>` : ""}
       ${inn.length ? `<div style="font-size:13.5px"><b>Working:</b> ${inn.map(p => esc(p.name)).join(", ")}</div>` : ""}
-      <p class="muted" style="font-size:11.5px;margin:6px 0 0">Working = Hubstaff schedule, clocked in today in Hubstaff ("On the clock"), or marked working here. Out = approved Hubstaff time off or marked out here.</p></div>
+      <p class="muted" style="font-size:11.5px;margin:6px 0 0">Working = on the schedule, clocked in today in Hubstaff ("On the clock"), or marked working here. Out = approved Hubstaff time off or marked out here.</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px;flex:1">How to reach someone</b></div>
       <input id="ppq" type="search" placeholder="Search name, title or team" style="margin:6px 0">
       ${ppl.map(person).join("")}
