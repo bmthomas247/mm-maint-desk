@@ -218,4 +218,25 @@ window.hxBanner = async function(force){
   hxDraw();
 };
 const hxBoot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(hxBoot); hxBanner(true); setInterval(() => hxBanner(false), 60e3); window.addEventListener("hashchange", () => hxBanner(false)); } }, 1000);
+
+/* ---------- Close to 40 hours (Brandon 2026-10-29: "we dont want to pay overtime and want it to be a notice in the moose hub that someone is
+   getting close to their 40 hours. the notice should go to the managers and the admin"). overtime_watch() (hub_overtime.sql) returns only
+   hourly people the viewer looks after with 32+ h this week (larger of hub clock and Hubstaff); empty for everyone else. ---------- */
+let OT = { at:0, l:null };
+function otDraw(){
+  css(); document.querySelectorAll(".otbanner").forEach(x => x.remove());
+  const l = OT.l, v = document.getElementById("view");
+  if(!l || !l.length || !v || !v.parentNode) return;
+  const top = +l[0].hours, b = document.createElement("div");
+  b.className = "hxbanner otbanner"; b.setAttribute("role", "status"); b.style.background = top >= 38 ? "#9b1c1c" : "#7a4b00";
+  b.innerHTML = `⏱ Close to 40 hours this week (no overtime): ${l.map(x => `<b>${esc(x.name.split(" ")[0])} ${hm(+x.hours)}</b>${x.open_since ? " (clocked in now)" : ""}${+x.hours >= 40 ? " ⚠ over 40" : ""}`).join(" · ")}<a href="#/staffing">Staffing →</a>`;
+  b.title = "Hours since Sunday: the larger of the hub clock and Hubstaff. Salaried people aren't counted.";
+  v.parentNode.insertBefore(b, v);
+}
+window.otBanner = async function(force){
+  if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
+  if(force || Date.now() - OT.at > 5 * 60e3){ const r = await sb.rpc("overtime_watch"); OT = { at:Date.now(), l: r.error ? null : r.data }; }
+  otDraw();
+};
+const otBoot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(otBoot); otBanner(true); setInterval(() => otBanner(false), 60e3); window.addEventListener("hashchange", () => otBanner(false)); } }, 1000);
 })();
