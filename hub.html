@@ -429,11 +429,21 @@ async function boot(){
     return noAccess(me.error ? me.error.message : ""); }
   ME = me.data; ME.canNews = !!(await sb.rpc("hub_can_post_news")).data;
   const d = await sb.rpc("hub_my_desks"); DESKS = d.data || [];
+  const ex = {}; try { ex.maint_money = !!(await sb.rpc("hub_can", { p_desk:"maint_money" })).data; } catch(e){}
+  try { const [mp, mt] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto")]); ex.perf = !!((mp.data || []).length || (mt.data || []).length); } catch(e){}
+  addDerived(DESKS, ex);
+  try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
+  PREFS.desk_order = fixOrder(PREFS.desk_order);
+  shell(); pennyMount(); route();
+}
+const fixOrder = o => (o || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:psu" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
+/* Desks made in the page from a parent desk (no DB rows). ex = { maint_money, perf } worked out for the person (View as passes another person's). */
+function addDerived(DESKS, ex){
   /* Maintenance drop-down (Brandon 2026-10-28): Workbench · Projects · Expenses & Time. Projects follows Maintenance;
      Expenses & Time follows the maint_money section (hub_can; RLS on desk_docs enforces it too). */
   const mD = DESKS.find(x => x.key === "maintenance" && x.status === "live");
   if(mD){ DESKS.push({ key:"maint_projects", label:"Maintenance · Projects", icon:mD.icon, url:"desk.html?only=projects", status:"live", sort:mD.sort + 0.1 });
-    try { if((await sb.rpc("hub_can", { p_desk:"maint_money" })).data) DESKS.push({ key:"maint_money", label:"Maintenance · Expenses & Time", icon:mD.icon, url:"desk.html?only=money", status:"live", sort:mD.sort + 0.2 }); } catch(e){}
+    if(ex.maint_money) DESKS.push({ key:"maint_money", label:"Maintenance · Expenses & Time", icon:mD.icon, url:"desk.html?only=money", status:"live", sort:mD.sort + 0.2 });
     // 2026-10-28 (Brandon): Seasonal & yearly and Recalls moved out of the Workbench into the drop-down (after Damage claims 32 / Vehicles 33)
     DESKS.push({ key:"maint_routines", label:"Maintenance · Seasonal & yearly", icon:mD.icon, url:"desk.html?only=routines", status:"live", sort:32.5 },
                { key:"maint_recalls", label:"Maintenance · Recalls", icon:mD.icon, url:"desk.html?only=recalls", status:"live", sort:33.5 });
@@ -476,10 +486,7 @@ async function boot(){
     { key:"cal_meet", label:"Calendar · Meetings", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.4 },
     { key:"cal_off", label:"Staffing · Request Time Off", icon:"clock", url:"#cal", status:"live", sort:60.5 },   // time off + PTO (2026-10-29); in the Staffing drop-down since 2026-10-29
     { key:"stf_sched", label:"Staffing · Schedule", icon:"clock", url:"#/stf_sched", status:"live", sort:60.3 });   // staffing.js; same people as Calendar
-  try { const [mp, mt] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto")]); if((mp.data || []).length || (mt.data || []).length) DESKS.push({ key:"stf_perf", label:"Staffing · My performance", icon:"clock", url:"#/stf_perf", status:"live", sort:60.7 }); } catch(e){}   // only people with scores or PTO (Brandon 2026-10-29)
-  try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
-  PREFS.desk_order = (PREFS.desk_order || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:psu" : k);   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
-  shell(); pennyMount(); route();
+  if(ex.perf) DESKS.push({ key:"stf_perf", label:"Staffing · My performance", icon:"clock", url:"#/stf_perf", status:"live", sort:60.7 });   // only people with scores or PTO (Brandon 2026-10-29)
 }
 function noAccess(err){
   app.innerHTML = `<div class="login"><div class="logo"><img src="moose-logo.png" alt=""></div><h2>No hub access yet</h2>
@@ -487,7 +494,8 @@ function noAccess(err){
     <button class="btn wide" id="out">Sign out</button><p class="muted">${esc(err)}</p></div>`;
   $("#out").onclick = async () => { await sb.auth.signOut(); loginView(); };
 }
-function shell(){
+/* The sidebar's desk list for a desk list + saved order (shell() uses the signed-in person's; View as uses another person's) */
+function sideNav(DESKS, ORD){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
   const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","pto_reports","work_check","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const CALK = ["cal_res","cal_office","cal_me","cal_meet"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
@@ -520,8 +528,7 @@ function shell(){
       const kids = DESKS.filter(y => G.kids[y.key]).sort((a, b) => a.sort - b.sort);
       return `<div class="gbox" data-g="${g}"><a class="dk par" href="#" data-g="${g}" title="${esc(G.label)}"><span class="ic">${ICON[G.icon]}</span><span class="lb">${esc(G.label)}</span><span class="chev">${ICON.chev}</span></a>
         <div class="subs">${kids.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(y.label)}"><span class="lb">${esc(G.kids[y.key])}</span>${y.status !== "live" ? soonTag : ""}</a>`).join("")}</div></div>`; }).join(""); };
-  const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
-  const ORD = PREFS.desk_order || [], okey = x => { const g = grouped(x.key); return g ? "g:" + g : x.key; };
+  const okey =x => { const g = grouped(x.key); return g ? "g:" + g : x.key; };
   const byMine = list => !ORD.length ? list : list.slice().sort((a, b) => { const ia = ORD.indexOf(okey(a)), ib = ORD.indexOf(okey(b));
       return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
   /* Sidebar (Brandon 2026-10-28): Home always on top; then "Moose Info" (Property Details, Vendors…) and the Desks, in the order each
@@ -537,6 +544,14 @@ function shell(){
   const deskBlock = live.length ? `<div class="grp">Desks</div>` + navList(byMine(live)) : "";
   const desksFirst = ORD.includes("@desks_first");
   const soonHtml = soon.length ? navList(soon, true) : "";   // a soon desk inside a live group (Damage claims) leaves this empty
+  const nav = `${homeD ? item("home", homeD.label, homeD.icon) : ""}
+        ${desksFirst ? deskBlock + (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") : (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") + deskBlock}
+        ${soonHtml ? `<div class="grp">Coming soon</div>` + soonHtml : ""}`;
+  return { nav, foot: repD ? item("reports", anD ? "Reports & Analytics" : repD.label, repD.icon || "chart") : "" };
+}
+function shell(){
+  const SN = sideNav(DESKS, PREFS.desk_order || []);
+  const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
   // 2026-10-28 (Brandon): profile, settings and sign out sit top right (were at the bottom of the sidebar)
   const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b>${meHtml}</div>
@@ -548,12 +563,10 @@ function shell(){
       <div class="rsearch"><span class="ic">${ICON.search}</span><input id="hsearch" type="search" placeholder="Search desks, properties, vendors" autocomplete="off" title="Search"></div>
       <div class="sres" id="sres"></div>
       <nav class="desks">
-        ${homeD ? item("home", homeD.label, homeD.icon) : ""}
-        ${desksFirst ? deskBlock + (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") : (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") + deskBlock}
-        ${soonHtml ? `<div class="grp">Coming soon</div>` + soonHtml : ""}
+        ${SN.nav}
       </nav>
       <div class="foot">
-        ${repD ? item("reports", anD ? "Reports & Analytics" : repD.label, repD.icon || "chart") : ""}
+        ${SN.foot}
         <a class="dk" href="#" id="fbopen"><span class="ic">${ICON.bug}</span><span class="lb">Report a Bug / Upgrade</span></a>
       </div>
     </aside>
@@ -999,12 +1012,14 @@ async function pdCard(box){
       ${pdModeBar("person")}
       <p class="muted" style="margin:4px 0 8px">Pick a person. <b>Team</b> = what their teams give them. <b>Show</b> opens a desk just for them; <b>Hide</b> takes one away just for them. Every change is logged.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="pdwho" aria-label="Person"><option value="">Choose a person…</option>${people.map(p => `<option value="${p.id}" ${p.id === who ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+        ${who ? `<button class="btn small" id="pdview">👁 See what they see</button>` : ""}
         <input id="pdnote" placeholder="Why (optional, saved with the change)" style="flex:1;min-width:180px"><span class="muted" id="pdmsg">${who ? n + " change" + (n === 1 ? "" : "s") + " from their team" : ""}</span></div>
       ${who ? `<div style="margin-top:10px">${desks.map(row).join("")}</div>
         <details class="acc2" style="margin-top:8px"><summary><b>Extra access inside desks</b><span class="muted">codes, money, contacts…</span></summary>${secs.map(row).join("")}</details>
         ${hist.length ? `<details class="acc2"><summary><b>History</b><span class="muted">${hist.length}</span></summary>${hist.map(h => `<div class="muted" style="font-size:13px;margin:3px 0">${new Date(h.set_at).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })} · ${esc(h.set_by || "?")} · ${esc(h.label || h.desk_key)} → ${{ allow:"Show", block:"Hide", team:"Team" }[h.mode]}${h.note ? " — " + esc(h.note) : ""}</div>`).join("")}</details>` : ""}` : ""}</details>`;
     pdModeWire(box);
     $("#pdwho").onchange = () => load($("#pdwho").value || null);
+    if($("#pdview")) $("#pdview").onclick = () => viewAs(who, (people.find(p => p.id === who) || {}).name || "");
     box.querySelectorAll("[data-pd]").forEach(b => b.onclick = async () => { const [k, m] = b.dataset.pd.split(":"), note = $("#pdnote").value;
       box.querySelectorAll("[data-pd]").forEach(x => x.disabled = true);
       const r = await sb.rpc("hub_person_desk_set", { p_person:who, p_desk:k, p_mode:m, p_note:note || null });
@@ -1015,6 +1030,33 @@ async function pdCard(box){
     if(id){ const [a, b] = await Promise.all([sb.rpc("hub_person_desks_get", { p_person:id }), sb.rpc("hub_person_desk_history", { p_person:id })]); rows = a.data || []; hist = b.data || []; }
     draw(); };
   PDWHO && people.some(p => p.id === PDWHO) ? load(PDWHO) : draw();
+}
+/* View as (hub_view_as.sql, Brandon 2026-10-30: "see what dave would see"): that person's sidebar + Reports list,
+   worked out AS them in the database (logged). Names only: nothing here opens a desk with their data, so the links are switched off. */
+async function viewAs(id, name){
+  document.querySelectorAll("#vam").forEach(e => e.remove());
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="vam"><div class="card" style="width:min(820px,100%);max-height:92vh;overflow:auto">
+    <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="vaback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">What ${esc(name)} sees</h2><button class="btn small" id="vax" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
+    <div id="vabody"><p class="muted">Working it out as ${esc(name)}…</p></div></div></div>`);
+  const close = () => $("#vam").remove();
+  $("#vaback").onclick = $("#vax").onclick = close;
+  $("#vam").onclick = e => { if(e.target.id === "vam") close(); };
+  const r = await sb.rpc("hub_view_as", { p_user:id });
+  if(!$("#vam")) return;
+  if(r.error || !r.data) return $("#vabody").innerHTML = `<p class="muted">Couldn't work it out: ${esc(r.error ? r.error.message : "no answer")}</p>`;
+  const j = r.data, D = (j.desks || []).slice();
+  addDerived(D, { maint_money:!!j.maint_money, perf:!!j.perf });
+  const SN = sideNav(D, fixOrder((j.prefs || {}).desk_order));
+  const rep = j.reports || [], dn = k => (D.find(x => x.key === k) || {}).label || k.replace(/_/g, " "), grp = {};
+  rep.forEach(x => (grp[dn(x.desk_key)] = grp[dn(x.desk_key)] || []).push(x));
+  const teams = ((j.me || {}).teams || []).map(t => t.replace(/_/g, " ")).join(" · ");
+  $("#vabody").innerHTML = `<p class="muted" style="margin:6px 0 10px">Teams: <b>${esc(teams || "none")}</b>. This is their sidebar and Reports list right now, worked out as them (including any Show / Hide set just for them). Desk names only: what's inside each desk follows the same access.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;align-items:start">
+      <aside class="vrail" style="background:linear-gradient(180deg,var(--forest),#2e4a0e);color:#fff;border-radius:14px;padding:10px"><nav class="desks">${SN.nav}</nav>${SN.foot ? `<div class="foot">${SN.foot}</div>` : ""}</aside>
+      <div><h3 style="margin:2px 0 6px">Reports (${rep.length})</h3>${rep.length ? Object.keys(grp).sort().map(g => `<div style="margin-bottom:8px"><b>${esc(g)}</b>${grp[g].map(x => `<div class="muted" style="font-size:13.5px;margin:2px 0 0 10px">${esc(x.label)}${x.status !== "live" ? ` <span class="pill amber">soon</span>` : ""}</div>`).join("")}</div>`).join("") : `<p class="muted">None.</p>`}</div>
+    </div>`;
+  $("#vabody").querySelectorAll(".gbox").forEach(g => g.classList.add("open"));
+  $("#vabody").querySelectorAll(".vrail a").forEach(a => { a.removeAttribute("href"); a.tabIndex = -1; a.style.cursor = "default"; a.onclick = e => e.preventDefault(); });
 }
 /* By team (hub_team_desks.sql, Brandon 2026-10-30): admins turn a desk on/off for a whole team (hub_desk_access.off, never deleted, logged).
    A person's own Show/Hide still wins over their team. */
