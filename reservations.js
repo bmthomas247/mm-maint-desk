@@ -73,18 +73,24 @@ const area = u => ((/^(?:2H-|L-)?([A-Za-z]+)/.exec(u || "") || [])[1] || "").toU
 // Keycafe = its Bookings page (keycafe.com, seen 2026-10-28). {res} is filled per stay.
 const LINKS = {
   track: "https://moosemanagement.trackhs.com/pms/reservations/view/{res}/", autohost: "https://portal.autohost.ai/reservations",
-  breezeway: "https://app.breezeway.io", brevo: "https://app.brevo.com/contact/list", safely: "https://portal.safely.com/guests",
+  breezeway: "https://app.breezeway.io", brevo: "https://app.brevo.com/contact/list", safely: "https://portal.safely.com/organizations",
   prospector: "https://fs27.formsite.com/2XpG4h/form1/index.html", keycafe: "https://www.keycafe.com/desktop#!/bookings",
-  westgate: "https://forms.office.com/Pages/ResponsePage.aspx?id=fujdTilSREuwP2RU5RjnVWGoIOdDIHhFruJUefJmkkFUMVJGMEdEUU5aSDJIM1cyMjFNSDdIRExTTi4u" };
+  westgate: "https://forms.office.com/Pages/ResponsePage.aspx?id=fujdTilSREuwP2RU5RjnVRoqMQGmOslJpfsf5h_4WBJUMVJGMEdEUU5aSDJIM1cyMjFNSDdIRExTTiQlQCN0PWcu" };
 const LINK_NAME = { track:"Track", autohost:"Autohost", breezeway:"Breezeway", brevo:"Brevo", safely:"Safely", prospector:"Prospector form", keycafe:"Keycafe", westgate:"Westgate form" };
 const STEP_LINK = {};
-[["track", "i_campaign i_agent i_ta i_rate i_fees i_card i_guar i_contract i_notesq g_dates g_type g_contact g_notes o_open o_dates o_notes o_behalf w_post w_verify w_earn a_earn g_agree g_pay g_35 g_30 c_sig c_resend oc_cl oc_post oc_prime oc_pet oc_di oc_nofee oc_doc_o oc_doc_g gp_cl gp_dw gp_not gp_pet gp_doc pt_ok pt_clean pt_fee pt_price pt_guar pt_collect pt_tag dc_set t_tag t_beyond t_di t_clean x_rent x_modify x_total x_add x_charge k_track k_refund k_zero k_pet pl_conf pl_tag wg_conf wg_tag p_split p_change p_second"],
- ["autohost", "ah_verified ah_remind ah_extra ah_card ah_review ah_link c_addr"], ["safely", "ah_safely"], ["brevo", "ah_brevo"],
+[["track", "i_campaign i_agent i_ta i_rate i_fees i_card i_guar i_contract i_notesq g_dates g_type g_contact g_notes o_open o_dates o_notes o_behalf w_post w_verify w_earn a_earn g_agree g_pay g_35 g_30 c_sig c_resend oc_cl oc_post oc_prime oc_pet oc_di oc_nofee oc_doc_o oc_doc_g gp_cl gp_dw gp_not gp_pet gp_doc pt_ok pt_clean pt_fee pt_price pt_guar pt_collect pt_tag dc_set t_tag t_beyond t_di t_clean x_rent x_modify x_total x_add x_charge k_track k_refund k_zero k_pet pl_conf pl_tag wg_conf wg_tag ah_remind dc_keycard dc_meet x_add_ok p_split p_change p_second"],
+ ["autohost", "ah_verified ah_extra ah_card ah_rev_easy ah_rev_mgr ah_link c_addr c_names_mgr"], ["safely", "ah_safely"], ["brevo", "ah_brevo"],
  ["breezeway", "bo_pre bo_notes bo_either bo_next5 bo_wg bo_wp bo_maint bo_og bg_insp k_bw x_avail"], ["prospector", "pl_form"], ["westgate", "wg_form"], ["keycafe", "dc_pv"]]
   .forEach(([k, keys]) => keys.split(" ").forEach(s => STEP_LINK[s] = k));
 const openFor = (key, s) => { const k = STEP_LINK[key]; if(!k) return "";
   return `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${esc(LINKS[k].replace("{res}", encodeURIComponent(s.res)))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${LINK_NAME[k]} ↗</a>`; };
 const WAIT = ["Guest to reply", "Owner to reply"];
+const WG_NOTE = "No cleaning by Westgate. Moose Management team to clean upon checkout. All other charges, including trash/tidy, are the guest's responsibility. Check-in is after 4 p.m. Check-out is by 10 a.m. Please approve any early check-ins or late check-outs with the Moose Management team.";
+const formText = (s, wg) => { const o = s.occ || {};
+  return [`Guest: ${s.guest || ""}`, `Unit: ${s.unit || ""}`, `Arrive: ${s.arrive}`, `Depart: ${s.depart}`, `Guests: ${o.adults || 0} adults${o.children ? ", " + o.children + " kids" : ""}`, `Reservation #${s.res}`,
+    ...(wg ? ["", "Comments: " + WG_NOTE, ...(o.pets ? ["Pet: please charge the management company, not the guest, for pet fees."] : [])] : [])].join("\n"); };
+const copyBtn = (t, s) => (t === "pl_form" || t === "wg_form") && !s.steps.find(x => x.key === t).done
+  ? `<button class="btn small" data-copyform="${t}" style="min-height:28px;padding:0 9px;font-size:12px">📋 Copy details</button>` : "";
 let B = null, loadedAt = 0;
 const money = v => v == null ? "—" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
 const day = s => s ? new Date(s + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }) : "";
@@ -108,12 +114,23 @@ async function load(force){
   if(B) B.stays.forEach(prep);
   return B;
 }
+// Safely excludes these Track types (Kim, OneNote, 2026-10-30; Janae is asking Safely for the full list)
+const SAFELY_NO = /^(owner stay|owner guest \(guest pays fees\)|3month\+ 10% commission)$/i;
+// Autohost review a front desk person may approve: only "Guest under 25" (and "Last minute reservation") at a studio-2 BR (Kim 2026-10-30)
+const UNDER25_OK = /^\s*(guest under 25|last minute reservation)\s*$/i;
 // What applies to this stay, what is done, what holds it up.
 function conds(s){
   const u = (s.unit || "").toUpperCase(), occ = s.occ || {}, cx = s.status === "Cancelled" || (s.list && s.list.stage === "cancelling");
+  const rv = !!(s.ah && s.ah.verify === "review"), rl = (s.ah && s.ah.rules) || [], ahOk = autoOk(s, "ah_verified");
+  const easy = rl.length > 0 && rl.every(r => UNDER25_OK.test(r)) && s.beds != null && s.beds <= 2;   // same rule as res_tick()
   return { pets:(occ.pets || 0) > 0, pl:u.startsWith("PL "), wg:u.startsWith("WG "), pv:u.startsWith("PV "), wp:u.startsWith("WP "),
-    thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "BHV 5604", gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
-    extend:!!(s.list && s.list.extending), cancel:cx };
+    thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "UM 3013" || u === "BHV 5604", gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
+    extend:!!(s.list && s.list.extending), cancel:cx,
+    // round 4 (Kim + Janae 2026-10-30): Safely only on insured types; door code by home; Autohost review: who may approve; reminder when half done
+    safely:s.chan !== "owner" && !SAFELY_NO.test(s.type || ""), keycard:u.startsWith("PL ") || u.startsWith("WG "), wp129:u === "WP 129",
+    codehome:!(u.startsWith("PL ") || u.startsWith("WG ") || u === "WP 129"),
+    review:rv, review_easy:rv && easy, review_hard:rv && !easy,
+    half:!cx && ahOk !== (s.agreement === "received") };
 }
 function autoOk(s, a){
   switch(a){
@@ -141,6 +158,8 @@ function autoOk(s, a){
     case "bw_pre_out": return bwHas(s, "housekeeping", /pre-?clean/i, addDay(s.arrive, -5), s.arrive) && bwClean(s);
     case "bw_owner_next_chris": return bwHas(s, "inspection", /owner next/i, addDay(s.arrive, -4), s.arrive, /chris robinson/i);
     case "bw_in_out": return bwInOut(s);
+    // White Pine 129: both inspections assigned to the home manager, Lindsay Lewis (Janae 2026-10-30)
+    case "bw_wp_lindsay": return bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive, /lindsay/i) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart, /lindsay/i);
     case "bw_og": return bwInOut(s) && bwClean(s);
     case "bw_wg": return bwHas(s, "housekeeping", /wg housekeeping/i, s.depart, s.depart);
     case "bw_no_clean": return bwKnown(s) && !(s.bw || []).some(t => t.dp === "housekeeping" && t.sd === s.depart && t.st !== "done")
@@ -171,7 +190,7 @@ const TD_RULES = {
   td_og_tag:     s => tag(s, /^owner guest$/i),
   td_door:       s => s.td.door === true,
   td_card:       s => s.td.card === true,
-  td_fees:       s => fee(s, /clean/i, false) && fee(s, /damage waiver/i) && fee(s, /admin/i),
+  td_fees:       s => fee(s, /clean/i, false) && fee(s, /damage waiver/i) && fee(s, /admin|guest services/i),   // Admin fee renamed "Guest Services Fee" (Kim 2026-10-30)
   td_gp_cl:      s => fee(s, /clean/i, false),
   td_dw:         s => fee(s, /damage waiver/i),
   td_gp_not:     s => !fee(s, OWNER_CL, true),
@@ -195,6 +214,11 @@ const TD_RULES = {
   // refunded = a credit memo (Track's Refund Transaction), or nothing was ever collected; a voided payment alone does NOT count
   td_refund:       s => s.status === "Cancelled" && !!s.td.tx && (s.td.tx.credit > 0 || (s.td.tx.pay === 0 && s.td.tx.void === 0)),
   td_ext_paid:     s => !!(s.list && s.list.extAt && s.td.tx) && doc(s, /change addendum/i, true) && (s.td.tx.payDates || []).some(d => d >= s.list.extAt.slice(0, 10)),
+  // round 4 (2026-10-30): contact needs a phone too; door code kind (never the code); signed change addendum
+  td_contact_all:  s => !!(s.td.contact && s.td.contact.address && s.td.contact.email && s.td.contact.phone),
+  td_door_keycard: s => s.td.doorKind === "keycard",
+  td_door_meet:    s => s.td.doorKind === "meet",
+  td_addendum_ok:  s => doc(s, /change addendum/i, true),
   td_extra_notes:  s => !!(s.td.notes && s.td.notes.extra && s.td.notes.extra[0] >= s.td.notes.extra[1]),
 };
 const addDay =(d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
@@ -203,7 +227,7 @@ const bwClean = s => bwHas(s, "housekeeping", /^(?!.*(assessment|spring)).*(clea
 const bwInOut = s => bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart);
 // Only trust "no clean left" when this home was in the Breezeway pull (it has a Breezeway id and the stay is in the window)
 const bwKnown = s => !!B.bwUpdated && !(B.bwMissing || []).includes(s.unit) && s.depart >= addDay(B.today, -7) && s.arrive <= addDay(B.today, 75);
-const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
+const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
 function prep(s){
   const c = conds(s), ticks = s.ticks || {};
   s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
@@ -345,6 +369,8 @@ async function card(v, res){
         ${B.money ? `<span>Rent ${money(s.rent)}</span><span>Fees ${money(s.fees)}</span><span>Taxes ${money(s.taxes)}</span><span>Total <b>${money(s.total)}</b></span>` : ""}
         <span>Paid <b>${money(s.paid)}</b></span><span>Balance <b>${money(s.balance)}</b></span>${chargeBtn(s)}</div>
       ${s.ah ? `<div class="rmoney"><span class="muted">Autohost</span><span>Status: <b>${esc(s.ah.verify || "unknown")}</b></span>${s.ah.reason ? `<span>${esc(s.ah.reason)}</span>` : ""}<span>Portal: <b>${s.ah.portal ? "done" : "not done"}</b></span></div>` : ""}
+      ${s.ah && s.ah.verify === "review" ? `<div class="rrule stop">Autohost has this guest under review${(s.ah.rules || []).length ? ": " + esc(s.ah.rules.join(", ")) : ""}. ${conds(s).review_easy ? "Under 25 at a studio–2 BR: you can approve it in Autohost if the guest gives a good reason for the stay (write it on the step)." : "A manager has to approve it (second set of eyes)."}</div>` : ""}
+      ${conds(s).half ? `<div class="rrule warn">Only ${autoOk(s, "ah_verified") ? "the ID check" : "the contract"} is in. Send “Reminder to Sign Contract or Submit ID Verification” from Track.</div>` : ""}
       ${(B.bwMissing || []).includes(s.unit) ? `<div class="rmoney"><span class="muted">Breezeway</span><span>This home has no Breezeway id in the hub's home list, so its tasks can't be checked here.</span></div>`
         : s.bw && s.bw.length ? `<div class="rmoney" style="display:block"><span class="muted">Breezeway, ${esc(day(addDay(s.arrive, -5)))} to ${esc(day(addDay(s.depart, 1)))}</span>
           ${s.bw.map(t => `<div style="display:flex;gap:8px;flex-wrap:wrap;padding:3px 0"><b style="min-width:92px">${esc(day(t.sd))}</b><span style="flex:1;min-width:140px">${esc(t.n)} <span class="muted">· ${esc(t.dp)}</span></span>
@@ -362,9 +388,10 @@ async function card(v, res){
       <div class="rchips"><span class="muted" style="align-self:center">Waiting on</span>${WAIT.map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}">${esc(w)}</button>`).join("")}</div>
       ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
       ${Object.entries(grp).map(([g, ts]) => `<div class="rgrp"><h3>${esc(g)} <span class="muted" style="font-weight:600">${ts.filter(t => !t.opt && t.done).length}/${ts.filter(t => !t.opt).length}</span></h3>
-        ${ts.map(t => `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" ${t.done ? "checked" : ""}>
-          <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`).join("")}</div>`).join("")}
+        ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
+          return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
+          <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${lock ? ` <span class="muted">— ask a manager</span>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
@@ -374,10 +401,14 @@ async function card(v, res){
   const set = async args => { const r = await sb.rpc("res_set", { p_res:s.res, ...args }); if(r.error){ msg("Couldn't save: " + r.error.message); return false; } await load(true); card(v, res); return true; };
   v.querySelectorAll("[data-step]").forEach(cb => cb.onchange = async () => {
     cb.disabled = true;
-    const r = await sb.rpc("res_tick", { p_res:s.res, p_step:cb.dataset.step, p_done:cb.checked, p_note:null });
+    let note = null;
+    if(cb.checked && cb.dataset.note){ note = prompt("Write the reason (it's saved on this check list):"); if(!note || !note.trim()){ cb.checked = false; cb.disabled = false; return; } }
+    const r = await sb.rpc("res_tick", { p_res:s.res, p_step:cb.dataset.step, p_done:cb.checked, p_note:note });
     if(r.error){ cb.checked = !cb.checked; cb.disabled = false; return msg("Couldn't save: " + r.error.message); }
     s.ticks = { ...(s.ticks || {}), [cb.dataset.step]:r.data }; prep(s); card(v, res);
   });
+  v.querySelectorAll("[data-copyform]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
+    try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
   v.querySelectorAll("[data-charge]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); charge(s, v, res); });
   $("#rx_stage").onchange = e => set({ p_stage:e.target.value });
   $("#rx_ext").onchange = e => set({ p_extending:e.target.checked });
