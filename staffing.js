@@ -222,36 +222,93 @@ window.staffingView = async function(v){
     if(!err(await sb.rpc("clock_week_ok", { p_user:b.dataset.wok, p_week:w, p_hours:+b.dataset.h, p_note:null }))) re(); });
 };
 
-/* ---------- Staffing ▸ Schedule (Brandon 2026-10-29). Who works when this week: Hubstaff work schedules (cal_office, until schedules
-   are set in the hub), time off (Hubstaff + asked in the hub) and "I'm out / I'm working" from the Office calendar. Everyone sees it,
-   same as the Office calendar. ---------- */
+/* ---------- Staffing ▸ Schedule (Brandon 2026-10-29). Who works when this week. Everyone sees it, same as the Office calendar.
+   2026-10-30 (Brandon: "we want the managers to be able to create schedules or change them"; hub_schedules.sql): shifts set in the hub
+   (sched_get: a weekly pattern from a date on + single-day changes) win over Hubstaff's work schedule for that person and day; time off
+   (Hubstaff + asked in the hub) and "I'm out / I'm working" from the Office calendar show too. Managers change the people they look after
+   (hub_sched_can = same rule as overtime plans; admins anyone): ✎ Weekly on a name, or tap a day. A shift ending at or before its start
+   ends after midnight and counts on the day it starts. ---------- */
 const t12 = t => { if(!t) return ""; const [H, M] = t.split(":").map(Number); return `${H % 12 || 12}${M ? ":" + String(M).padStart(2, "0") : ""}${H < 12 ? "a" : "p"}`; };
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const shH = x => { const m = s => { const [H, M] = s.split(":").map(Number); return H * 60 + M; }; return ((m(x.end) - m(x.start) + 1440) % 1440 || 1440) / 60; };
+const pair = (k, i, x) => `<span class="row" style="gap:4px"><input type="time" data-${k}s="${i}" value="${x ? x.start : ""}"> to <input type="time" data-${k}e="${i}" value="${x ? x.end : ""}"></span>`;
+const readPairs = (box, k, n) => { const out = []; for(let i = 0; i < n; i++){ const s = box.querySelector(`[data-${k}s="${i}"]`).value, e = box.querySelector(`[data-${k}e="${i}"]`).value;
+  if(s || e){ if(!s || !e) throw new Error("Each shift needs a start and an end time"); out.push({ i, start:s, end:e }); } } return out; };
 window.staffSched = async function(v){
   css();
   const today = dkey(Date.now()), w = SS.sched || wk(today), e = addK(w, 6);
-  v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
-  const [ox, tor, ev, pp] = await Promise.all([sb.rpc("cal_office", { p_from:w, p_to:e }), sb.rpc("timeoff_calendar", { p_from:w, p_to:e }),
+  if(!v.querySelector(".stf")) v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
+  const [ox, sgr, tor, ev, pp] = await Promise.all([sb.rpc("cal_office", { p_from:w, p_to:e }), sb.rpc("sched_get", { p_from:w, p_to:e }), sb.rpc("timeoff_calendar", { p_from:w, p_to:e }),
     sb.from("hub_cal_events").select("day,end_day,kind,person_id,start_time,end_time,off").eq("cal", "office").lte("day", e), sb.rpc("cal_people")]);
   if(current() !== "stf_sched") return;
-  const o = ox.data || { shifts:[], off:[] }, ppl = pp.data || [], cell = {};
+  const o = ox.data || { shifts:[], off:[] }, sg = sgr.data || { shifts:[], off_days:[], can:[], weeks:[], days:[] }, ppl = pp.data || [], cell = {}, hrs = {};
+  const can = new Set(sg.can || []), err = r => { if(r.error){ alert(/failed to fetch|networkerror|load failed/i.test(r.error.message) ? "No signal right now. Try again when you have service." : r.error.message.replace(/^.*?: /, "")); return true; } return false; };
   const put = (u, d, x) => { if(!u || d < w || d > e) return; ((cell[u] = cell[u] || {})[d] = cell[u][d] || []).push(x); };
-  (o.shifts || []).forEach(x => put(x.user_id, x.day, `<div>${t12(x.start)}–${t12(x.end)}</div>`));
+  const shift = (x, chg, note) => { hrs[x.user_id] = (hrs[x.user_id] || 0) + shH(x);
+    return `<div${note ? ` title="${esc(note)}"` : ""}>${t12(x.start)}–${t12(x.end)}${chg ? ` <span class="pill amber sm">changed</span>` : ""}</div>`; };
+  (sg.shifts || []).forEach(x => put(x.user_id, x.day, shift(x, x.changed, x.note)));
+  (o.shifts || []).filter(x => x.src !== "hub").forEach(x => put(x.user_id, x.day, shift(x) + `<span class="muted sm">Hubstaff</span>`));
+  (sg.off_days || []).forEach(x => put(x.user_id, x.day, `<span class="pill sm"${x.note ? ` title="${esc(x.note)}"` : ""}>Not scheduled (changed)</span>`));
   (o.off || []).forEach(x => put(x.user_id, x.day, `<span class="pill red">Off${x.start ? " " + t12(x.start) + "–" + t12(x.end) : ""}</span>`));
   ((tor && tor.data) || []).filter(r => !(r.status === "approved" && r.hs_request_id)).forEach(r => { for(let d = r.day; d <= r.end_day; d = addK(d, 1))
     put(r.user_id, d, r.status === "pending" ? `<span class="pill amber">Asked off</span>` : `<span class="pill red">Off${r.start ? " " + t12(r.start) + "–" + t12(r.end) : ""}</span>`); });
   ((ev && ev.data) || []).filter(x => !x.off && (x.kind === "out" || x.kind === "working")).forEach(x => { for(let d = x.day; d <= (x.end_day || x.day); d = addK(d, 1))
     put(x.person_id, d, x.kind === "out" ? `<span class="pill red">Out${x.start_time ? " " + t12(x.start_time) + "–" + t12(x.end_time) : ""}</span>` : `<span class="pill green">Working${x.start_time ? " " + t12(x.start_time) + "–" + t12(x.end_time) : ""}</span>`); });
-  const rows = ppl.filter(p => cell[p.id]).sort((a, b) => a.name.localeCompare(b.name)), none = ppl.filter(p => !cell[p.id]);
-  const days = [...Array(7)].map((_, i) => addK(w, i));
+  const rows = ppl.filter(p => cell[p.id] || can.has(p.id)).sort((a, b) => a.name.localeCompare(b.name)), none = ppl.filter(p => !cell[p.id] && !can.has(p.id));
+  const days = [...Array(7)].map((_, i) => addK(w, i)), anyEdit = can.size > 0, name = id => (ppl.find(p => p.id === id) || {}).name || "";
+  const hcol = id => { const h = Math.round((hrs[id] || 0) * 10) / 10; return h ? `<td class="r sm"${h > 40 ? ' style="color:var(--red,#b3261e);font-weight:700" title="Over 40 scheduled hours"' : ""}>${h} h</td>` : `<td class="r sm muted">—</td>`; };
+  const td = (p, d) => { const st = [d === today ? "background:var(--pine-soft,#eaf3da)" : "", can.has(p.id) ? "cursor:pointer" : ""].filter(Boolean).join(";");
+    return `<td class="sm"${st ? ` style="${st}"` : ""}${can.has(p.id) ? ` data-cd="${p.id}|${d}" title="Change this day"` : ""}>${((cell[p.id] || {})[d] || []).join("") || `<span class="muted">—</span>`}</td>`; };
   v.innerHTML = `<div class="page stf wide"><h2 style="margin:0 0 10px">Schedule</h2>
     <div class="card"><div class="row" style="margin:0 0 10px"><button class="btn small" data-w="-7">← Week before</button><b>Week of ${dnm(w)}</b>
       <button class="btn small" data-w="7">Next week →</button>${w !== wk(today) ? ` <button class="btn small" data-w="0">This week</button>` : ""}</div>
-    <div class="tow"><table><tr><th>Who</th>${days.map(d => `<th${d === today ? ' style="color:var(--forest,#3c5f12)"' : ""}>${dnm(d)}</th>`).join("")}</tr>
-      ${rows.map(p => `<tr><td><b>${esc(p.name)}</b></td>${days.map(d => `<td class="sm"${d === today ? ' style="background:var(--pine-soft,#eaf3da)"' : ""}>${(cell[p.id][d] || []).join("") || `<span class="muted">—</span>`}</td>`).join("")}</tr>`).join("")
-        || `<tr><td colspan="8" class="muted">Nothing scheduled this week.</td></tr>`}</table></div>
+    <div id="sedbox"></div>
+    ${anyEdit ? `<p class="muted sm" style="margin:0 0 8px">✎ Weekly sets someone's regular shifts from a date on. Tap a day to change just that day.</p>` : ""}
+    <div class="tow"><table><tr><th>Who</th>${days.map(d => `<th${d === today ? ' style="color:var(--forest,#3c5f12)"' : ""}>${dnm(d)}</th>`).join("")}<th class="r">Hours</th></tr>
+      ${rows.map(p => `<tr><td><b>${esc(p.name)}</b>${can.has(p.id) ? `<br><button class="btn small" data-wk="${p.id}">✎ Weekly</button>` : ""}</td>${days.map(d => td(p, d)).join("")}${hcol(p.id)}</tr>`).join("")
+        || `<tr><td colspan="9" class="muted">Nothing scheduled this week.</td></tr>`}</table></div>
     ${none.length ? `<p class="muted sm" style="margin:8px 0 0">No schedule this week: ${none.map(p => esc(p.name.split(" ")[0])).join(", ")}.</p>` : ""}</div>
-    <p class="muted sm">Sources: work schedules from Hubstaff${o.at ? " (updated " + esc(new Date(o.at).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) + ")" : ""}; time off from Hubstaff and the hub; Out / Working from the Office calendar. Ask for time off under Staffing ▸ Request Time Off.</p></div>`;
+    <p class="muted sm">Sources: shifts set in the hub (Staffing ▸ Schedule; the office schedule from Nov 2 is Kim's Moose_Staff_Schedule_Sept_2026 Final.xlsx); for anyone without one, their Hubstaff work schedule${o.at ? " (updated " + esc(new Date(o.at).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) + ")" : ""}. Time off from Hubstaff and the hub; Out / Working from the Office calendar. A late shift like 6p–2a ends the next morning and counts on the day it starts. Ask for time off under Staffing ▸ Request Time Off.</p></div>`;
   v.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { const n = +b.dataset.w; SS.sched = n ? addK(w, n) : null; staffSched(v); });
+  const box = v.querySelector("#sedbox"), close = () => { box.innerHTML = ""; }, re = () => staffSched(v);
+  // weekly pattern for one person from a date on
+  const weekEd = (u, from) => {
+    const pat = (sg.weeks || []).filter(x => x.user_id === u && x.starts_on <= from).sort((a, b) => a.starts_on < b.starts_on ? -1 : 1).pop()
+      || (sg.weeks || []).filter(x => x.user_id === u).sort((a, b) => a.starts_on < b.starts_on ? -1 : 1)[0];
+    const cur = pat ? pat.shifts : [], later = (sg.weeks || []).filter(x => x.user_id === u && x.starts_on > from);
+    box.innerHTML = `<div class="edbox"><b>Weekly schedule for ${esc(name(u))}</b>
+      <div class="row" style="margin:6px 0"><label>Starts <input type="date" id="sdfrom" value="${from}"></label><span class="muted sm">${pat ? `Set by ${esc(pat.by || "")} from ${dnm(pat.starts_on)}${pat.note ? " — " + esc(pat.note) : ""}` : "No hub schedule yet."}</span></div>
+      ${later.length ? `<p class="sm" style="margin:0 0 6px;color:var(--red,#b3261e)">A schedule set to start ${later.map(x => dnm(x.starts_on)).join(", ")} still takes over from then.</p>` : ""}
+      <table>${DOW.map((n, i) => { const s = cur.filter(x => x.dow === i); return `<tr><td><b>${n}</b></td><td>${pair("a", i, s[0])}</td><td>${pair("b", i, s[1])}</td></tr>`; }).join("")}</table>
+      <p class="muted sm" style="margin:4px 0">Leave a day empty for a day off. Second column = a split shift. An end time earlier than the start runs past midnight.</p>
+      <div class="row"><input id="sdnote" placeholder="Note (optional)" style="flex:1;min-width:180px"><button class="btn small primary" id="sdsave">Save weekly schedule</button>
+        ${pat && cur.length ? `<button class="btn small" id="sdstop">Stop scheduling from this date</button>` : ""}<button class="btn small" id="sdx">Cancel</button></div></div>`;
+    box.scrollIntoView({ block:"nearest" });
+    const send = async shifts => { const r = await sb.rpc("sched_week_set", { p_user:u, p_from:box.querySelector("#sdfrom").value, p_shifts:shifts, p_note:box.querySelector("#sdnote").value }); if(!err(r)) re(); };
+    box.querySelector("#sdx").onclick = close;
+    box.querySelector("#sdsave").onclick = () => { let sh; try { sh = ["a", "b"].flatMap(k => readPairs(box, k, 7).map(x => ({ dow:x.i, start:x.start, end:x.end }))); } catch(x){ return alert(x.message); } send(sh); };
+    const st = box.querySelector("#sdstop"); if(st) st.onclick = () => { if(confirm(`Stop ${name(u)}'s weekly schedule from ${box.querySelector("#sdfrom").value}? (Kept in the history.)`)) send([]); };
+  };
+  // one day for one person
+  const dayEd = (u, d) => {
+    const ch = (sg.days || []).filter(x => x.user_id === u && x.day === d).pop(), now = (sg.shifts || []).filter(x => x.user_id === u && x.day === d);
+    box.innerHTML = `<div class="edbox"><b>${esc(name(u))} · ${dnm(d)}</b>
+      ${ch && !ch.cleared ? `<p class="muted sm" style="margin:4px 0">Changed by ${esc(ch.by || "")}${ch.note ? ": " + esc(ch.note) : ""}</p>` : ""}
+      <div class="row" style="margin:6px 0">${pair("d", 0, now[0])} ${pair("d", 1, now[1])}</div>
+      <label class="sm"><input type="checkbox" id="sdoff"> Not working this day</label>
+      <div class="row" style="margin-top:6px"><input id="sdnote" placeholder="Why (optional)" style="flex:1;min-width:180px"><button class="btn small primary" id="sdsave">Save this day</button>
+        ${ch && !ch.cleared ? `<button class="btn small" id="sdback">Back to the weekly schedule</button>` : ""}<button class="btn small" id="sdx">Cancel</button></div></div>`;
+    box.scrollIntoView({ block:"nearest" });
+    const send = async (shifts, clear) => { const r = await sb.rpc("sched_day_set", { p_user:u, p_day:d, p_shifts:shifts, p_clear:clear, p_note:box.querySelector("#sdnote").value }); if(!err(r)) re(); };
+    box.querySelector("#sdx").onclick = close;
+    box.querySelector("#sdsave").onclick = () => { let sh = []; if(!box.querySelector("#sdoff").checked){ try { sh = readPairs(box, "d", 2).map(x => ({ start:x.start, end:x.end })); } catch(x){ return alert(x.message); }
+      if(!sh.length) return alert("Add a start and end time, or tick “Not working this day”."); } send(sh, false); };
+    const bk = box.querySelector("#sdback"); if(bk) bk.onclick = () => send([], true);
+  };
+  // start date: the week on screen (not before this week); a pattern that starts inside it wins, so a save can't be undone the next day
+  v.querySelectorAll("[data-wk]").forEach(b => b.onclick = ev2 => { ev2.stopPropagation(); const f = w >= wk(today) ? w : wk(today);
+    const mid = (sg.weeks || []).filter(x => x.user_id === b.dataset.wk && x.starts_on > f && x.starts_on <= e).map(x => x.starts_on).sort().pop(); weekEd(b.dataset.wk, mid || f); });
+  v.querySelectorAll("[data-cd]").forEach(c => c.onclick = () => { const [u, d] = c.dataset.cd.split("|"); dayEd(u, d); });
 };
 
 /* ---------- Staffing ▸ My performance (Brandon 2026-10-29: "show it to the employee in the hub so they can keep track of how good they have
