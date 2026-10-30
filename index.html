@@ -483,7 +483,7 @@ function noAccess(err){
 }
 function shell(){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","pto_reports","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","pto_reports","work_check","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const CALK = ["cal_res","cal_office","cal_me","cal_meet","cal_off"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
   const CMPK = ["competitor","competitor_add"];   // Brandon 2026-10-29: the Competitor Playbook drop-down sits under Moose Info too
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key) && !CALK.includes(x.key) && !CMPK.includes(x.key)),
@@ -494,7 +494,7 @@ function shell(){
   const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_recalls:"Recalls" } },
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
-                   guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", guest_reviews:"Reviews", call_review:"Call review" } },
+                   guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", guest_reviews:"Reviews", call_review:"Call review", guest_followups:"Follow-ups" } },
                    adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest", adv_realtor:"Realtor", adv_general:"General" } },   // Brandon 2026-10-28; Realtor + General 2026-10-29
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
@@ -627,6 +627,8 @@ function route(){
   if(k === "calendar" && d){ location.replace("#/cal_res"); return; }   // Calendar is a drop-down (2026-10-29)
   if(k === "reports") return hubReportsView(v);
   if(k === "good_reviews" && window.goodReviewsView){ $("#ttl").textContent = $("#utl").textContent = "Good guest reviews"; return goodReviewsView(v); }   // analytics.js, every hub user (Brandon 2026-10-29)
+  if(k === "work_check"){ if(!(ME.admin || DESKS.some(x => x.key === "work_check")) || !window.workCheck){ location.replace("#/home"); return; }   // Work check (2026-10-29)
+    $("#ttl").textContent = $("#utl").textContent = "Work check"; return workCheck(v); }
   if(k === "pto" || k === "pto_reports"){ if(!(ME.admin || DESKS.some(x => x.key === "pto_reports")) || !window.ptoReport){ location.replace("#/home"); return; }   // PTO reports (2026-10-29)
     if(k === "pto_reports"){ location.replace("#/pto"); return; } $("#ttl").textContent = $("#utl").textContent = "PTO reports"; return ptoReport(v, hashArg()); }
   if(k === "people_scores" || k === "team_ratings"){ if(!(ME.admin || DESKS.some(x => x.key === "team_ratings")) || !window.peopleScoresView){ location.replace("#/home"); return; }
@@ -646,6 +648,7 @@ function route(){
   if(d && /^meet_(or|bd|kd|beyond|mgr|fd|track|trackmk)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
   if(d && (k === "reviews" || k === "guest_reviews") && d.status === "live" && window.reviewsDesk) return reviewsDesk(v);   // analytics.js reviews report (Brandon 2026-10-29)
   if(d && k === "call_review" && d.status === "live" && window.callsView) return callsView(v);   // calls.js: Track Pulse calls + transcripts (Brandon 2026-10-29); data RLS hub_can('call_review')
+  if(d && k === "guest_followups" && d.status === "live" && window.followupsView) return followupsView(v);   // calls.js: Guest > Follow-ups (Brandon 2026-10-29); data RLS = Call review rule
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
   if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
@@ -993,7 +996,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","sync","advertising","calendar"];   // calendar: its tabs show as "Calendar" under Moose Info
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"cal" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], meet:["Meetings","people"], cal:["Calendar","calendar"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
@@ -1220,7 +1223,7 @@ async function hubReportsView(v){
   const name = k => k === "g_reviews" ? "Guest reviews" : k === "g_team" ? "Team" : k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
-  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team" };   // Guest reviews section (Brandon 2026-10-29)
+  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team", work_check:"g_team" };   // Guest reviews section (Brandon 2026-10-29)
   const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = GRP[x.key] || (sb ? sb[0] : x.desk_key); (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => (b === "analytics") - (a === "analytics") || name(a).localeCompare(name(b)));   // Analytics first
   const link = x => x.status === "live"
