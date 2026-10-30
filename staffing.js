@@ -3,7 +3,7 @@
    Loaded by hub.html; uses its sb / $ / esc / ME. Route #/staffing. Data (hub_staffing.sql): hub_clock (RLS hub_staff_sees: you,
    your manager, admins) · clock_punch(in/out + one location pin) · clock_add (missed punch: yours waits for the manager, a manager's
    counts) · clock_decide (approve / deny / set off) · hub_clock_weeks + clock_week_ok (manager signs off a Sun-Sat week) · clock_people().
-   Staffing drop-down (Brandon 2026-10-29): Clock In / Clock Out (#/staffing) · Schedule (#/stf_sched, staffSched) · Request Time Off (#/cal_off, calendar.js).
+   Staffing drop-down (Brandon 2026-10-29): Clock In / Clock Out (#/staffing) · Schedule (#/stf_sched, staffSched) · Request Time Off (#/cal_off, calendar.js) · My performance (#/stf_perf, myPerf).
    Hours: each "in" pairs with the next "out" and counts on the day of the "in" (Park City time). No pay rates here. */
 (function(){
 const TZ = "America/Denver", DAY = 864e5;
@@ -73,8 +73,10 @@ window.staffingView = async function(v){
   css();
   v.innerHTML = `<div class="page stf"><p class="muted">Loading…</p></div>`;
   const today = dkey(Date.now()), w = SS.week || wk(today);
-  const [pp, cr, wr, pl] = await Promise.all([sb.rpc("clock_people"), sb.from("hub_clock").select("*").gte("at", addK(w, -7) + "T00:00:00Z").order("at"),
-    sb.from("hub_clock_weeks").select("*").order("approved_at", { ascending:false }), places().catch(() => [])]);
+  const [pp, cr, wr, pl, hw] = await Promise.all([sb.rpc("clock_people"), sb.from("hub_clock").select("*").gte("at", addK(w, -7) + "T00:00:00Z").order("at"),
+    sb.from("hub_clock_weeks").select("*").order("approved_at", { ascending:false }), places().catch(() => []),
+    sb.from("hub_work_check").select("user_id,day,tracked_h").gte("day", w).lte("day", addK(w, 6))]);   // Hubstaff hours while both run (RLS: your team)
+  const hsH = u => ((hw && hw.data) || []).filter(x => x.user_id === u).reduce((a, x) => a + (+x.tracked_h || 0), 0), hsOn = u => ((hw && hw.data) || []).some(x => x.user_id === u);
   const ppl = pp.data || [], all = cr.data || [], weeks = wr.data || [];
   const meP = ppl.find(p => p.is_me), myId = meP && meP.user_id, meOn = !!meP, team = ppl.filter(p => !p.is_me);
   const pend = await sb.from("hub_clock").select("*").eq("status", "pending").order("at");
@@ -103,7 +105,8 @@ window.staffingView = async function(v){
       ${team.map(p => { const rows = all.filter(x => x.user_id === p.user_id), s = shifts(rows), ok = wkOk(p.user_id, w), hrs = weekHours(s, w);
         const last = rows.filter(x => x.status === "ok").slice(-1)[0], now = last && last.kind === "in" && s.open;
         const changed = ok && Math.abs(+ok.hours - hrs) > 0.01;
-        return `<details style="margin:8px 0" ${team.length === 1 ? "open" : ""}><summary><b>${esc(p.name)}</b> · ${hm(hrs)} ${now ? `<span class="pill green">clocked in since ${tm(last.at)}</span>` : ""}
+        const hh = hsOn(p.user_id) ? Math.round(hsH(p.user_id) * 100) / 100 : null, gap = hh == null ? 0 : hrs - hh;
+        return `<details style="margin:8px 0" ${team.length === 1 ? "open" : ""}><summary><b>${esc(p.name)}</b> · ${hm(hrs)}${hh != null ? ` <span class="pill ${Math.abs(gap) > 0.5 ? "amber" : ""}" title="Hours Hubstaff tracked this week, side by side until Hubstaff is cancelled">Hubstaff ${hm(hh)}${Math.abs(gap) > 0.5 ? ` · ${gap > 0 ? "+" : "−"}${hm(Math.abs(gap))} on the hub` : ""}</span>` : ""} ${now ? `<span class="pill green">clocked in since ${tm(last.at)}</span>` : ""}
           ${ok ? `<span class="pill ${changed ? "amber" : "green"}">${changed ? `approved at ${hm(+ok.hours)}, changed since` : `approved by ${esc(ok.approved_by)}`}</span>` : ""}</summary>
           ${weekTable(rows, w, pl, true)}
           <div class="row" style="margin-top:6px">${(!ok || changed) && w < wk(today) ? `<button class="btn small primary" data-wok="${p.user_id}" data-h="${hrs}">Approve ${hm(hrs)} for this week</button>` : w >= wk(today) ? `<span class="muted sm">Approve the week once it's over.</span>` : ""}</div>
@@ -161,6 +164,26 @@ window.staffSched = async function(v){
   v.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { const n = +b.dataset.w; SS.sched = n ? addK(w, n) : null; staffSched(v); });
 };
 
+/* ---------- Staffing ▸ My performance (Brandon 2026-10-29: "show it to the employee in the hub so they can keep track of how good they have
+   been doing"). my_performance() = your own Techs / Office rows of Team ratings (hub_my_performance.sql); 100 = the team's average. ---------- */
+const PM = { tech:[["tasks","Tasks worked"],["tasks_per_hr","Tasks per regular hour"],["regular_hrs","Regular hours"],["days_worked","Days worked"],["reviews_good","Praised in guest reviews"]],
+  office:[["steps","Check list steps"],["fd_resolved","Freshdesk tickets resolved"],["fd_handled","Freshdesk tickets handled"],["fd_first_hrs","First reply (median hours, lower is better)"],["reviews_good","Praised in guest reviews"]] };
+const PG = { tech:"Maintenance", office:"Office & front desk" }, PP = { "30d":"Last 30 days", "90d":"Last 90 days", "365d":"Last 12 months" };
+window.myPerf = async function(v){
+  css(); v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
+  const r = await sb.rpc("my_performance"); if(current() !== "stf_perf") return;
+  const rows = r.data || [], f = x => x == null ? "—" : (+x).toLocaleString(undefined, { maximumFractionDigits:2 });
+  const ix = i => i == null ? "" : ` <span class="pill ${i >= 115 ? "green" : i <= 85 ? "amber" : ""}" title="100 = the team's average">${i}</span>`;
+  const grps = [...new Set(rows.map(x => x.grp))];
+  v.innerHTML = `<div class="page stf wide"><h2 style="margin:0 0 6px">My performance</h2>
+    <p class="muted" style="margin:0 0 10px">How you've been doing, from the same numbers your manager sees. The small number next to a measure compares you with the team: 100 = the team's average${rows[0] ? ` · updated ${esc(dnm(rows[0].as_of))}` : ""}.</p>
+    ${grps.map(g => `<div class="card"><b style="font-size:16px">${esc(PG[g] || g)}</b><div class="tow"><table><tr><th></th>${rows.filter(x => x.grp === g).map(x => `<th class="r">${esc(PP[x.period] || x.period)}</th>`).join("")}</tr>
+      <tr><td><b>Overall</b></td>${rows.filter(x => x.grp === g).map(x => `<td class="r"><b>${x.score == null ? "—" : Math.round(x.score)}</b>${x.rank ? `<div class="muted sm">#${x.rank} of ${x.of_n}</div>` : ""}</td>`).join("")}</tr>
+      ${(PM[g] || []).map(([k, l]) => `<tr><td>${esc(l)}</td>${rows.filter(x => x.grp === g).map(x => `<td class="r">${f((x.metrics || {})[k])}${ix(((x.metrics || {}).idx || {})[k])}</td>`).join("")}</tr>`).join("")}</table></div></div>`).join("")
+      || `<div class="card"><p class="muted" style="margin:0">There aren't enough numbers for you yet. Check back after a few weeks of work.</p></div>`}
+    <p class="muted sm">Sources: Breezeway tasks, Hubstaff hours, Reservation check lists, Freshdesk tickets and guest reviews, worked out once a day by the hub.</p></div>`;
+};
+
 /* ---------- Hubstaff renewal warning (Brandon 2026-10-29: "a warning going to admin until brandon or kim confirms that we have moved out
    of hubstaff … we want to cancel before the renew on nov 11"). hubstaff_exit_status() is null for everyone but admins; the banner sits
    under the green banner on every page, like the calls / daily checks banners, until an admin taps "We're off Hubstaff". ---------- */
@@ -171,9 +194,9 @@ function hxDraw(){
   if(!j || j.done || !v || !v.parentNode) return;
   const left = j.left || [], d = j.days_left, b = document.createElement("div");
   b.className = "hxbanner"; b.setAttribute("role", "status"); b.style.background = d <= 5 ? "#9b1c1c" : "#7a4b00";
-  b.innerHTML = `⏳ Hubstaff renews ${d > 0 ? `in ${d} day${d === 1 ? "" : "s"} (Nov 11)` : d === 0 ? "TODAY (Nov 11)" : "Nov 11 — the renewal date has passed"}, ${esc(j.price)} (per Brandon). Cancel it once everyone clocks in on the hub: ${left.length} ${left.length === 1 ? "person still uses" : "people still use"} Hubstaff.
+  b.innerHTML = `⏳ Hubstaff renews ${d > 0 ? `in ${d} day${d === 1 ? "" : "s"} (Nov 11)` : d === 0 ? "TODAY (Nov 11)" : "Nov 11 — the renewal date has passed"}, ${esc(j.price)} (per Brandon). Cancel it once everyone clocks in on the hub: ${left.length ? `${left.length} Hubstaff ${left.length === 1 ? "person hasn't" : "people haven't"} clocked in on the hub in the last 3 days.` : "everyone in Hubstaff has clocked in on the hub in the last 3 days."}
     <a href="#/staffing">Staffing →</a><a href="#" data-hxdone>We're off Hubstaff ✓</a>`;
-  b.title = left.length ? "Still on Hubstaff: " + left.join(", ") : "";
+  b.title = left.length ? "Not on the hub clock yet: " + left.join(", ") : "";
   b.querySelector("[data-hxdone]").onclick = async e => { e.preventDefault();
     if(!confirm("Confirm we've moved off Hubstaff? The warning stops for you and Kim/Brandon.")) return;
     const r = await sb.rpc("hubstaff_exit_set", { p_done:true, p_note:null }); if(r.error) return alert(r.error.message); hxBanner(true); };
