@@ -33,8 +33,10 @@
     return out;
   }
   /* 2026-10-28 (Brandon): people without home entry codes (hub section home_codes) read and save the code-free copies
-     profilespub / propeditspub; the database forwards their saves into the real docs (hub_home_codes.sql). */
-  var cc = function(c){ return window.MM_CODES === false && (c === "profiles" || c === "propedits") ? c + "pub" : c; };
+     profilespub / propeditspub; the database forwards their saves into the real docs (hub_home_codes.sql).
+     2026-10-30 (hub_home_access.sql): front desk (home_entry) keeps the pub copies (door/lockout + garage); everyone else
+     (field crew) reads profilescrew / propeditscrew (Wi-Fi + garage only, read-only). */
+  var cc = function(c){ return window.MM_CODES === false && (c === "profiles" || c === "propedits") ? c + (window.MM_ENTRY ? "pub" : "crew") : c; };
   var db = {
     doc: function(path){
       var i = path.indexOf("/"), c = cc(path.slice(0, i)), id = path.slice(i + 1);
@@ -106,6 +108,7 @@
     // Moose Hub: Expenses & Time only for the maintenance manager + admins (RLS enforces it too)
     try{ window.MM_MONEY = !!(await sb.rpc("hub_can", { p_desk:"maint_money" })).data; }catch(e){ window.MM_MONEY = false; }
     try{ window.MM_CODES = !!(await sb.rpc("hub_can", { p_desk:"home_codes" })).data; }catch(e){ window.MM_CODES = false; }
+    try{ window.MM_ENTRY = window.MM_CODES || !!(await sb.rpc("hub_can", { p_desk:"home_entry" })).data; }catch(e){ window.MM_ENTRY = false; }
     var ONLY = new URLSearchParams(location.search).get("only") || "";
     if(ONLY) document.body.classList.add("only", "only-" + ONLY);
     if(ONLY) document.body.classList.add("locklook");   // Licensing, Vendors, Property Details = Moose Locks look (Brandon 2026-10-28)
