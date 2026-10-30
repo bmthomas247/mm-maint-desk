@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Meeting with Moose Management</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- meet.html (2026-10-30): the page people get when someone at Moose sends them a meeting link (meet.html?t=<token>).
+     Public: no sign-in. Data from the Edge Function `meet` (action invite): title, time, host first name, Zoom link. Booking pages land here too. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --ground:#f5f7f0; --card:#ffffff; --ink:#15201a;
+  --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --red:#b42318; --shadow:0 1px 2px rgba(20,40,20,.06),0 4px 18px rgba(20,40,20,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --moose-soft:#1e2a10; --moose-ink:#cfe79a; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{ --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --moose-soft:#1e2a10; --moose-ink:#cfe79a; }
+*{box-sizing:border-box} body{margin:0;background:var(--ground);line-height:1.5;-webkit-font-smoothing:antialiased}
+.top{background:var(--forest);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;font-weight:800}
+.top img{width:34px;height:34px;border-radius:50%;background:#fff}
+main{max-width:560px;margin:24px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+h1{font-size:24px;margin:0 0 4px;line-height:1.25} .muted{color:var(--muted)} .when{font-size:18px;font-weight:700;margin:14px 0 2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:12px;padding:12px 16px;font:inherit;font-weight:700;text-decoration:none;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--moose);border-color:var(--moose);color:#16260a;width:100%;font-size:17px;padding:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px} .row .btn{flex:1;min-width:140px;font-size:14px}
+.note{white-space:pre-wrap;background:var(--moose-soft);color:var(--moose-ink);border-radius:12px;padding:12px 14px;margin:14px 0 0}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700;background:var(--moose-soft);color:var(--moose-ink)}
+.bad{color:var(--red);font-weight:700} h2{font-size:15px;margin:18px 0 6px}
+</style>
+</head>
+<body>
+<div class="top"><img src="moose-logo.png" alt="">Moose Management</div>
+<main><div class="card" id="box"><p class="muted">Loading your meeting…</p></div>
+<p class="muted" style="font-size:13px;text-align:center;margin-top:14px">Moose Management · Park City, Utah</p></main>
+<script src="config.js"></script>
+<script>
+(async function(){
+  const C = window.MM_CONFIG, box = document.getElementById("box");
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
+  const t = (new URLSearchParams(location.search).get("t") || "").replace(/[^0-9a-f]/gi, "");
+  const call = o => fetch(C.url + "/functions/v1/meet", { method:"POST", headers:{ "content-type":"application/json", apikey:C.anonKey, authorization:"Bearer " + C.anonKey }, body:JSON.stringify(o) }).then(r => r.json()).catch(() => ({ ok:false, error:"We couldn't reach the server. Please try again." }));
+  if(!t){ box.innerHTML = `<p class="bad">This link is missing its meeting code.</p>`; return; }
+  const r = await call({ action:"invite", token:t });
+  if(!r.ok){ box.innerHTML = `<p class="bad">${esc(r.error)}</p>`; return; }
+  const m = r.meeting;
+  // Park City time (America/Denver) -> a real moment, so we can show the visitor's own time and build calendar files
+  const offsetMin = (y, mo, d, h, mi) => { const g = new Date(Date.UTC(y, mo - 1, d, h, mi));
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone:"America/Denver", hourCycle:"h23", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }).formatToParts(g).map(x => [x.type, x.value]));
+    return (Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute) - g) / 6e4; };
+  const [y, mo, d] = m.day.split("-").map(Number), [h, mi] = m.start.split(":").map(Number);
+  const start = new Date(Date.UTC(y, mo - 1, d, h, mi) - offsetMin(y, mo, d, h, mi) * 6e4), end = new Date(+start + m.minutes * 6e4);
+  const fmt = (dt, tz) => dt.toLocaleString("en-US", { timeZone:tz, weekday:"long", month:"long", day:"numeric", hour:"numeric", minute:"2-digit" });
+  const tm = (dt, tz) => dt.toLocaleTimeString("en-US", { timeZone:tz, hour:"numeric", minute:"2-digit", timeZoneName:"short" });
+  const myTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const sameTz = tm(start, myTz) === tm(start, "America/Denver");
+  const z = d => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const desc = [m.note, m.zoom_join ? "Join on Zoom: " + m.zoom_join : "", "Meeting page: " + location.href].filter(Boolean).join("\n\n");
+  const gcal = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(m.title) + "&dates=" + z(start) + "/" + z(end) + "&details=" + encodeURIComponent(desc) + (m.zoom_join ? "&location=" + encodeURIComponent(m.zoom_join) : "");
+  const ocal = "https://outlook.office.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=" + encodeURIComponent(m.title) + "&startdt=" + start.toISOString() + "&enddt=" + end.toISOString() + "&body=" + encodeURIComponent(desc) + (m.zoom_join ? "&location=" + encodeURIComponent(m.zoom_join) : "");
+  const icsEsc = s => String(s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Moose Management//Moose Hub//EN", "BEGIN:VEVENT", "UID:" + t + "@crew.moosemanagement.com", "DTSTAMP:" + z(new Date()),
+    "DTSTART:" + z(start), "DTEND:" + z(end), "SUMMARY:" + icsEsc(m.title), "DESCRIPTION:" + icsEsc(desc), m.zoom_join ? "LOCATION:" + icsEsc(m.zoom_join) : "", "END:VEVENT", "END:VCALENDAR"].filter(Boolean).join("\r\n");
+  const icsUrl = URL.createObjectURL(new Blob([ics], { type:"text/calendar" }));
+  document.title = m.title + " · Moose Management";
+  const off = m.status !== "on";
+  box.innerHTML = `${off ? `<p><span class="pill" style="background:#fde8e6;color:#b42318">Cancelled</span></p>` : ""}
+    <h1>${esc(m.title)}</h1><div class="muted">${m.guest ? "Hi " + esc(m.guest) + "! " : ""}With ${esc(m.host || "Moose Management")} from Moose Management</div>
+    <div class="when">${esc(fmt(start, "America/Denver"))}</div>
+    <div class="muted">${esc(tm(start, "America/Denver"))} – ${esc(tm(end, "America/Denver"))} (Park City time) · ${m.minutes} minutes${sameTz ? "" : `<br>Your time: ${esc(fmt(start, myTz))} (${esc(tm(start, myTz))})`}</div>
+    ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}
+    ${off ? `<p style="margin-top:16px">This meeting was cancelled. Please reach out to Moose Management if you have questions.</p>` : `
+    <div style="margin-top:18px">${m.zoom_join ? `<a class="btn primary" href="${esc(m.zoom_join)}" target="_blank" rel="noopener noreferrer">Join on Zoom</a>`
+      : `<p class="muted">The Zoom link will show here before the meeting. Keep this page or add it to your calendar.</p>`}</div>
+    <h2>Add to your calendar</h2>
+    <div class="row"><a class="btn" href="${esc(gcal)}" target="_blank" rel="noopener noreferrer">Google</a><a class="btn" href="${esc(ocal)}" target="_blank" rel="noopener noreferrer">Outlook</a>
+      <a class="btn" href="${icsUrl}" download="moose-meeting.ics">Apple / other (.ics)</a></div>`}`;
+})();
+</script>
+</body>
+</html>
