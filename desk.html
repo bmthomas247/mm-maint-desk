@@ -229,7 +229,7 @@ body.only-trash header.top{position:static}
 .tnear .chip{min-height:40px}
 /* Property Details = Moose Locks look (2026-10-29): tiles by neighborhood + home pop-up */
 .hhood{padding:16px 4px 8px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);margin-bottom:12px}
-.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+.hgrid{display:grid;grid-template-columns:1fr;gap:12px;align-items:start}
 .htile{position:relative;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 16px 14px 22px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;overflow:hidden;min-width:0}
 .htile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--accent)}
 .htile.s-open::before{background:var(--info,#2463a0)} .htile.s-owner::before{background:var(--wait,#b5770a)}
@@ -238,8 +238,8 @@ body.only-trash header.top{position:static}
 .htt{display:flex;flex-direction:column;min-width:0} .htc{font-size:21px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
 .hts{font-size:13.5px;color:var(--ink-2);margin-top:2px;overflow-wrap:anywhere}
 .htp{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto}
-.htq{display:flex;flex-direction:column;border:1px solid var(--line-2);border-radius:14px;background:var(--surface-2);cursor:text}
-.hql{padding:9px 12px;border-top:1px solid var(--line);min-width:0;overflow-wrap:anywhere} .hql:first-child{border-top:0}
+.htq{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));border:1px solid var(--line-2);border-radius:14px;background:var(--surface-2);cursor:text;overflow:hidden}
+.hql{padding:9px 12px;border-left:1px solid var(--line);margin-left:-1px;min-width:0;overflow-wrap:anywhere}
 .hql .qvh{margin-bottom:3px} .hql .qrow{margin-bottom:3px} .hql .muted{font-size:13px}
 .htmore{font-size:13px;font-weight:800;color:var(--accent-ink);align-self:flex-end}
 .hpop{position:fixed;inset:0;z-index:50;background:rgba(8,14,17,.5);overflow-y:auto;padding:24px 16px}
@@ -248,7 +248,7 @@ body.only-trash header.top{position:static}
 .hpbody{padding:12px}
 .hpbar .mx{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);width:36px;height:36px;border-radius:50%;font-size:16px;font-weight:800;cursor:pointer;flex:none}
 body.hpopen{overflow:hidden}
-@media (max-width:640px){.hpop{padding:0}.hpbox{border-radius:0;border:0;min-height:100%}.hgrid{grid-template-columns:1fr}}
+@media (max-width:640px){.hpop{padding:0}.hpbox{border-radius:0;border:0;min-height:100%}.htq{grid-template-columns:1fr}.hql{border-left:0;margin-left:0;border-top:1px solid var(--line)}.hql:first-child{border-top:0}}
 .thood{padding:10px 4px 6px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .tcard{border:1px solid var(--line);border-radius:18px;padding:16px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;margin-bottom:10px;scroll-margin:110px}
 .tcard.tdone{opacity:.65;background:var(--surface-2);box-shadow:none;padding:12px 16px;gap:4px}
