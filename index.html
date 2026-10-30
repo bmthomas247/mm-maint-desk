@@ -258,6 +258,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="banners.js"></script>
 <script src="staffing.js"></script>
 <script src="calls.js"></script>
+<script src="market_watch.js"></script>
 <script src="signals.js"></script>
 <script>
 const C = window.MM_CONFIG;
@@ -656,6 +657,7 @@ function route(){
   if(k === "meet_maint" && d && window.meetJoin) meetJoin(k);   // Monday meeting Join button in the banner (meetings.js, 2026-10-29)
   if(window.trackBanner) trackBanner();   // checks.js: Wednesdays 4-11 pm Track maintenance banner (Brandon 2026-10-29)
   if((k === "checks" || k === "daily_checks") && window.checksView) return checksView(v);   // checks.js: Reports ▸ Daily checks; RLS decides what each person sees
+  if(k === "market_watch" && window.marketWatchView) return marketWatchView(v);   // market_watch.js: Zillow / Google / ad libraries / news via SerpApi (Brandon 2026-10-30); rows gated per desk in Supabase
   if(k === "feedback") return feedbackView(v);
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "advertising" && d){ location.replace("#/adv_owners"); return; }   // Advertising became a drop-down 2026-10-28
