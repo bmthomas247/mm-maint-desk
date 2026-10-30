@@ -97,8 +97,31 @@ const formText = (s, wg) => { const o = s.occ || {};
 const FD_T = n => `https://moosemanagement.freshdesk.com/a/tickets/${n}`;
 const fdLink = (t, s) => { const f = s.td && s.td.fdc; const x = f && (t === "pl_form" || t === "pl_conf" ? f.pl : t === "wg_form" || t === "wg_pet" ? f.wg : null);
   return x ? `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${FD_T(x.t)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Freshdesk #${x.t} ↗</a>` : ""; };
-const copyBtn = (t, s) => (t === "pl_form" || t === "wg_form") && !s.steps.find(x => x.key === t).done
-  ? `<button class="btn small" data-copyform="${t}" style="min-height:28px;padding:0 9px;font-size:12px">📋 Copy details</button>` : "";
+const copyBtn = (t, s) => t === "pl_form" ? `<button class="btn small" data-uaa="1" style="min-height:28px;padding:0 9px;font-size:12px">📝 Fill the UAA form</button>`
+  : t === "wg_form" && !s.steps.find(x => x.key === t).done ? `<button class="btn small" data-copyform="${t}" style="min-height:28px;padding:0 9px;font-size:12px">📋 Copy details</button>` : "";
+// Prospector's UAA form (fs27.formsite.com/2XpG4h/form1, fields read 2026-10-30). Formsite pre-fill is off on Prospector's account,
+// so the hub lists each field in the form's order with a copy button. Agency/contact/times = Moose standard; check with Janae.
+const usDate = d => d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}/${d.slice(0, 4)}` : "";
+const uaaFields = s => [["Unit#", (s.unit || "").replace(/^(L-|2H-)?PL\s*/i, "")], ["Owner/Agent Name", "Moose Management"], ["Agency Entity", "Moose Management"],
+    ["Agent Phone/Email", "435-714-6544 / hello@moosemanagement.com"], ["Guest 1 full name", s.guest || ""], ["Guest 2 full name", "(from Autohost, if any)"], ["Guest 3 full name", "(from Autohost, if any)"],
+    ["Arrival Date", usDate(s.arrive)], ["Check-In Time", "4:00 PM"], ["Departure Date", usDate(s.depart)], ["Check-Out Time", "10:00 AM"],
+    ["Today's Date", usDate(new Date().toISOString().slice(0, 10))], ["Car Make & Model and License Plate #", ""], ["DL# & Issuing State", ""]];
+function uaaPanel(s){
+  let m = document.getElementById("ruaa"); if(m) m.remove();
+  m = document.createElement("div"); m.id = "ruaa";
+  m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:grid;place-items:center;padding:16px";
+  m.innerHTML = `<div class="card" style="max-width:560px;width:100%;max-height:90vh;overflow:auto;margin:0">
+    <div style="display:flex;align-items:center;gap:8px"><b style="flex:1">UAA form · ${esc(s.unit || "")} · ${esc(s.guest || "")}</b><button class="btn small" id="ruaa_x">✕</button></div>
+    <p class="muted" style="margin:6px 0 10px">Open the form, then copy each line in order. Check the times and contact line before sending. Extra guests who need a key card go in Guest 2 and 3.</p>
+    <a class="btn small" href="${esc(LINKS.prospector)}" target="_blank" rel="noopener" style="margin-bottom:8px">Open the UAA form ↗</a>
+    ${uaaFields(s).map(([l, v], i) => `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)">
+      <span class="muted" style="width:170px;flex:none;font-size:13px">${esc(l)}</span><b style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(v) || '<span class="muted" style="font-weight:400">—</span>'}</b>
+      ${v && !v.startsWith("(") ? `<button class="btn small" data-uv="${i}" style="min-height:28px;padding:0 9px;font-size:12px">Copy</button>` : ""}</div>`).join("")}</div>`;
+  document.body.appendChild(m);
+  const f = uaaFields(s);
+  m.onclick = e => { if(e.target === m || e.target.id === "ruaa_x") m.remove(); };
+  m.querySelectorAll("[data-uv]").forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(f[+b.dataset.uv][1]); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", f[+b.dataset.uv][1]); } });
+}
 let B = null, loadedAt = 0;
 const money = v => v == null ? "—" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
 const day = s => s ? new Date(s + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }) : "";
@@ -452,6 +475,7 @@ async function card(v, res){
     const r = await sb.rpc("res_ask", { p_res:s.res, p_step:b.dataset.ask, p_note:note });
     if(r.error){ b.disabled = false; return msg("Couldn't ask: " + r.error.message); }
     await load(true); card(v, res); });
+  v.querySelectorAll("[data-uaa]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); uaaPanel(s); });
   v.querySelectorAll("[data-copyform]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
     try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
   v.querySelectorAll("[data-charge]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); charge(s, v, res); });
