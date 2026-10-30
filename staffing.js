@@ -17,6 +17,7 @@ const SS = { week:null, places:null };
 const CSS = `.stf .big{font-size:20px;padding:14px 28px;border-radius:12px}.stf .clk{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
 .stf table{width:100%;border-collapse:collapse}.stf td,.stf th{padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);text-align:left;vertical-align:top;font-size:14px}
 .stf .r{text-align:right}.stf .sm{font-size:12px}.stf .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.stf .tow{overflow-x:auto}
+.hxbanner{color:#fff;padding:8px 18px;font-weight:600;font-size:14px;flex:none;border-top:1px solid rgba(255,255,255,.25)} .hxbanner a{color:#fff;text-decoration:underline;margin-left:10px;white-space:nowrap}
 .stf input,.stf select{font:inherit;padding:6px 8px;border:1px solid var(--line,#d1d5db);border-radius:8px}`;
 let cssOn = false;
 const css = () => { if(cssOn) return; cssOn = true; const s = document.createElement("style"); s.textContent = CSS; document.head.appendChild(s); };
@@ -159,4 +160,29 @@ window.staffSched = async function(v){
     <p class="muted sm">Sources: work schedules from Hubstaff${o.at ? " (updated " + esc(new Date(o.at).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) + ")" : ""}; time off from Hubstaff and the hub; Out / Working from the Office calendar. Ask for time off under Staffing ▸ Request Time Off.</p></div>`;
   v.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { const n = +b.dataset.w; SS.sched = n ? addK(w, n) : null; staffSched(v); });
 };
+
+/* ---------- Hubstaff renewal warning (Brandon 2026-10-29: "a warning going to admin until brandon or kim confirms that we have moved out
+   of hubstaff … we want to cancel before the renew on nov 11"). hubstaff_exit_status() is null for everyone but admins; the banner sits
+   under the green banner on every page, like the calls / daily checks banners, until an admin taps "We're off Hubstaff". ---------- */
+let HX = { at:0, j:null };
+function hxDraw(){
+  css(); document.querySelectorAll(".hxbanner").forEach(x => x.remove());
+  const j = HX.j, v = document.getElementById("view");
+  if(!j || j.done || !v || !v.parentNode) return;
+  const left = j.left || [], d = j.days_left, b = document.createElement("div");
+  b.className = "hxbanner"; b.setAttribute("role", "status"); b.style.background = d <= 5 ? "#9b1c1c" : "#7a4b00";
+  b.innerHTML = `⏳ Hubstaff renews ${d > 0 ? `in ${d} day${d === 1 ? "" : "s"} (Nov 11)` : d === 0 ? "TODAY (Nov 11)" : "Nov 11 — the renewal date has passed"}, ${esc(j.price)} (per Brandon). Cancel it once everyone clocks in on the hub: ${left.length} ${left.length === 1 ? "person still uses" : "people still use"} Hubstaff.
+    <a href="#/staffing">Staffing →</a><a href="#" data-hxdone>We're off Hubstaff ✓</a>`;
+  b.title = left.length ? "Still on Hubstaff: " + left.join(", ") : "";
+  b.querySelector("[data-hxdone]").onclick = async e => { e.preventDefault();
+    if(!confirm("Confirm we've moved off Hubstaff? The warning stops for you and Kim/Brandon.")) return;
+    const r = await sb.rpc("hubstaff_exit_set", { p_done:true, p_note:null }); if(r.error) return alert(r.error.message); hxBanner(true); };
+  v.parentNode.insertBefore(b, v);
+}
+window.hxBanner = async function(force){
+  if(typeof ME === "undefined" || !ME || !ME.admin || typeof sb === "undefined") return;
+  if(force || Date.now() - HX.at > 5 * 60e3){ const r = await sb.rpc("hubstaff_exit_status"); HX = { at:Date.now(), j: r.error ? null : r.data }; }
+  hxDraw();
+};
+const hxBoot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(hxBoot); hxBanner(true); setInterval(() => hxBanner(false), 60e3); window.addEventListener("hashchange", () => hxBanner(false)); } }, 1000);
 })();
