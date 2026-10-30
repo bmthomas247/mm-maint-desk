@@ -240,7 +240,7 @@ body.only-trash header.top{position:static}
 .htp{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto}
 .htq{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));border:1px solid var(--line-2);border-radius:14px;background:var(--surface-2);cursor:text;overflow:hidden}
 .hql{padding:6px 10px;border-left:1px solid var(--line);margin-left:-1px;min-width:0;overflow-wrap:anywhere}
-.hql .tl{font-size:13px;line-height:1.35;overflow-wrap:anywhere} .hql .tl .ql{color:var(--muted);font-size:11.5px;margin-right:4px} .hql .tl a{color:inherit}
+.hql .tl{font-size:13px;line-height:1.35;overflow-wrap:anywhere} .hql .tl .ql{display:block;color:var(--muted);font-size:11.5px;margin-top:3px} .hql .tl a{color:inherit}
 .hql .qvh .hsrc{display:inline;font-weight:500;letter-spacing:0;text-transform:none;margin:0 0 0 4px}
 .hfil{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .hfil select{width:auto;min-width:150px;max-width:230px}
 .hql .qvh{margin-bottom:3px} .hql .qrow{margin-bottom:3px} .hql .muted{font-size:13px} .hql .hsrc{font-size:11px;color:var(--muted);margin-top:4px}
@@ -408,6 +408,7 @@ tr.xtr:hover td{background:var(--surface-2)} tr.xtr.open td{background:var(--acc
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="offline.js"></script>
 <script type="text/plain" id="deskcode">
 (function(){
 "use strict";
@@ -1117,12 +1118,14 @@ function htLine(label,val,src){ return '<div class="hql"><div class="qvh">'+esc(
 /* the tile keeps only codes, log-ins and the owner: lines with a number from a note, cut short; the full notes stay in Home details */
 function codeLines(t,max){ var out=[]; String(t||"").replace(/<[^>]+>/g," ").split("\n").forEach(function(l){ l=l.replace(/\s+/g," ").trim();
     if(l && /\d{3,}|\d+#|[•]{3,}/.test(l) && out.length<max) out.push(l.length>70?l.slice(0,68)+"…":l); }); return out; }
-function tLine(l){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l); return '<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+qBold(m[2]):qBold(l))+'</div>'; }
-function tCell(label,src,lines){ lines=(lines||[]).filter(Boolean); if(!lines.length) return "";
-  return '<div class="hql"><div class="qvh">'+esc(label)+(src?'<span class="hsrc">· '+esc(src)+'</span>':'')+'</div>'+lines.map(function(l){ return typeof l==="string"?tLine(l):l.html; }).join("")+'</div>'; }
+/* Brandon 2026-10-30: each label on its own line with the value under it; Wi-Fi isn't a code, so its numbers aren't highlighted */
+function tLine(l,plain){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l), v=function(x){ return plain?esc(x):qBold(x); };
+  return '<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+v(m[2]):v(l))+'</div>'; }
+function tCell(label,src,lines,plain){ lines=(lines||[]).filter(Boolean); if(!lines.length) return "";
+  return '<div class="hql"><div class="qvh">'+esc(label)+(src?'<span class="hsrc">· '+esc(src)+'</span>':'')+'</div>'+lines.map(function(l){ return typeof l==="string"?tLine(l,plain):l.html; }).join("")+'</div>'; }
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
   var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+t.wifi_name:"",t.wifi_pass?"Password: "+t.wifi_pass:""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+pe.wifiName:"",pe.wifiPass?"Password: "+pe.wifiPass:""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
-  cells.push(tCell("Wi-Fi",q.src.wifi,wifi));
+  cells.push(tCell("Wi-Fi",q.src.wifi,wifi,true));
   cells.push(tCell("Door / gate","Track",[t.door_code?"Front door: "+t.door_code:"",t.gate_code?"Gate / building: "+t.gate_code:""]));
   cells.push(tCell("Lockout",q.src.entry,codeLines(q.entry,3)));
   cells.push(tCell("Garage",q.src.garage,t.garage_code?["Garage code: "+t.garage_code]:codeLines(q.garage,2)));
@@ -1130,9 +1133,9 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   if(t.my_code) cells.push(tCell("Your door code","Locks",["Code: "+t.my_code]));
   if(o.can && o.list.length){ var w=o.list[0];
-    cells.push(tCell("Owner",w.src==="Track"?"Track":"Hub edit",[{html:'<div class="tl"><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="ql">+'+(o.list.length-1)+'</span>':'')+'</div>'},
-      w.phone?{html:'<div class="tl"><a href="tel:'+esc(String(w.phone).replace(/[^\d+]/g,""))+'" data-stop="1">'+esc(w.phone)+'</a></div>'}:"",
-      w.email?{html:'<div class="tl"><a href="mailto:'+esc(w.email)+'" data-stop="1">'+esc(w.email)+'</a></div>'}:""])); }
+    cells.push(tCell("Owner",w.src==="Track"?"Track":"Hub edit",[{html:'<div class="tl"><span class="ql">Name</span><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
+      w.phone?{html:'<div class="tl"><span class="ql">Phone</span><a href="tel:'+esc(String(w.phone).replace(/[^\d+]/g,""))+'" data-stop="1">'+esc(w.phone)+'</a></div>'}:"",
+      w.email?{html:'<div class="tl"><span class="ql">Email</span><a href="mailto:'+esc(w.email)+'" data-stop="1">'+esc(w.email)+'</a></div>'}:""])); }
   return cells.join("")||'<div class="hql"><div class="muted">No codes on file yet.</div></div>'; }
 function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=homeQuick(c,p);
   var jobs=(D.byProp[c]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
