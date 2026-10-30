@@ -254,6 +254,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="meetings.js"></script>
 <script src="calendar.js"></script>
 <script src="checks.js"></script>
+<script src="banners.js"></script>
 <script src="staffing.js"></script>
 <script src="calls.js"></script>
 <script src="signals.js"></script>
@@ -1082,6 +1083,7 @@ function settingsView2(v){
     ${BD.mine ? bdCard() : ""}
     ${accCard()}
     ${ME.admin ? `<div id="pdesk"></div>` : ""}
+    <div id="bnrbox"></div>
     <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
     const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; draw(); };
     v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => mv(b.dataset.up, -1));
@@ -1110,7 +1112,7 @@ function settingsView2(v){
       $("#prefsave").disabled = false;
       if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
       PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks }); shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
-    pennyBriefCard($("#pbrief")); pdCard($("#pdesk"));
+    pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
   };
   draw();
 }
