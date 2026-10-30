@@ -71,6 +71,23 @@ window.marketWatchView = async function(v){
     out.push(section(`Homes for sale near ours (${sale.length})`, "Within 400 m of one of our homes: possible owner leads. New ones in the last 7 days are marked.",
       `<p><select id="mwc"><option value="">All neighborhoods</option>${comms.map(c => `<option>${esc(c)}</option>`).join("")}</select></p><div class="scroll" id="mws"></div>`, "Zillow via SerpApi"));
   }
+  // RentCast owner records around our homes (rentcast_watch.py). Prime prospect = the owner doesn't live there (second-home owner)
+  const own = K("area_owner");
+  if(own.length){
+    const prime = r => (r.data || {}).owner_occupied === false;
+    out.push(section(`Owners near our homes (${own.length})`, `Property owners within ¾ mile of our homes, from county records. <b>Prime prospects</b> don't live in the home (second-home owners). New owners bought in the last 12 months.`,
+      `<p><select id="mwo"><option value="prime">Prime prospects (${own.filter(prime).length})</option><option value="new">New owners (${own.filter(r => (r.data || {}).new_owner).length})</option><option value="all">Everyone</option></select>
+       <button class="btn small" id="mwocsv">⬇ Download CSV (for mailers)</button></p><div class="scroll" id="mwot"></div>`,
+      "RentCast property records (county records; Utah doesn't disclose sale prices)"));
+  }
+  const est = K("rent_estimate");
+  if(est.length){
+    const last = {}; est.forEach(r => { if(!last[r.home] || r.key > last[r.home].key) last[r.home] = r; });
+    out.push(section("Long-term rent estimates for our lease homes", "RentCast's estimate and range, with the rentals it compared to.",
+      `<div class="scroll"><table><tr><th>Home</th><th>Estimate</th><th>Range</th><th>Compared to</th></tr>${Object.values(last).sort((a, b) => a.home.localeCompare(b.home)).map(r => { const d = r.data || {};
+        return `<tr><td><b>${esc(r.home)}</b></td><td>${usd(d.rent)}</td><td>${usd(d.low)} – ${usd(d.high)}</td><td style="font-size:12px">${(d.comps || []).map(c => `${esc(c.address || "")} ${usd(c.rent)} · ${c.beds ?? "?"}bd${c.miles != null ? " · " + Number(c.miles).toFixed(1) + " mi" : ""}`).join("<br>")}</td></tr>`; }).join("")}</table></div>`,
+      "RentCast long-term rent estimate (AVM)"));
+  }
   const rent = K("zillow_rent");
   if(rent.length){
     const byC = {}; rent.forEach(r => { const d = r.data || {}; if(d.rent && d.beds != null) ((byC[r.community || "?"] = byC[r.community || "?"] || {})[d.beds] = (byC[r.community || "?"][d.beds] || [])).push(Number(d.rent)); });
@@ -98,5 +115,19 @@ window.marketWatchView = async function(v){
       return `<tr><td>${link(d.link, d.street || r.title)}${new Date(r.first_seen).getTime() > wk ? ` <span class="pill amber">new</span>` : ""}</td><td>${usd(d.price)}</td><td>${d.beds ?? ""}</td><td>${d.baths ?? ""}</td><td>${d.sqft ?? ""}</td>
         <td>${d.days_on_zillow ?? ""}</td><td>${esc(r.home || "")}${d.meters_to_ours != null ? ` <span class="muted">${d.meters_to_ours} m</span>` : ""}</td><td>${esc(r.community || "")}</td></tr>`; }).join("")}</table>`; };
   if($("#mws")){ draw(); $("#mwc").onchange = draw; }
+  if($("#mwot")){
+    const pick = () => { const f = $("#mwo").value; return own.filter(r => f === "all" || (f === "new" ? (r.data || {}).new_owner : (r.data || {}).owner_occupied === false))
+      .sort((a, b) => ((b.data || {}).new_owner - (a.data || {}).new_owner) || String(a.community || "").localeCompare(String(b.community || ""))); };
+    const drawO = () => { $("#mwot").innerHTML = `<table><tr><th>Property</th><th>Owner</th><th>Mailing address</th><th>Lives there</th><th>Last sale</th><th>Type</th><th>Near our</th></tr>${pick().slice(0, 600).map(r => { const d = r.data || {};
+      return `<tr><td>${esc(d.address || "")}${d.owner_occupied === false ? ` <span class="pill green">prime prospect</span>` : ""}${d.new_owner ? ` <span class="pill amber">new owner</span>` : ""}</td><td>${esc((d.owners || []).join(", "))}${d.owner_type ? ` <span class="muted">(${esc(d.owner_type)})</span>` : ""}</td>
+        <td>${esc(d.mailing || "")}</td><td>${d.owner_occupied == null ? "" : d.owner_occupied ? "yes" : "no"}</td><td>${esc(d.last_sale || "")}</td><td>${esc([d.type, d.beds != null ? d.beds + "bd" : ""].filter(Boolean).join(" · "))}</td>
+        <td>${esc(r.home || "")}${d.meters_to_ours != null ? ` <span class="muted">${d.meters_to_ours} m</span>` : ""}</td></tr>`; }).join("")}</table>`; };
+    drawO(); $("#mwo").onchange = drawO;
+    $("#mwocsv").onclick = () => { const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["property", "owners", "owner type", "mailing address", "lives there", "last sale", "new owner", "type", "beds", "baths", "sqft", "near our home", "neighborhood"]]
+        .concat(pick().map(r => { const d = r.data || {}; return [d.address, (d.owners || []).join("; "), d.owner_type, d.mailing, d.owner_occupied == null ? "" : d.owner_occupied ? "yes" : "no", d.last_sale, d.new_owner ? "yes" : "", d.type, d.beds, d.baths, d.sqft, r.home, r.community]; }));
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(x => x.map(q).join(",")).join(String.fromCharCode(10))], { type: "text/csv" }));
+      a.download = `owners-near-our-homes-${$("#mwo").value}.csv`; a.click(); };
+  }
 };
 })();
