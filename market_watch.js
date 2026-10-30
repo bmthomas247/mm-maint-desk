@@ -53,6 +53,15 @@ window.marketWatchView = async function(v){
     "Zillow via SerpApi", "alert"));
   const ranks = rows.filter(r => r.kind === "rank_maps" || r.kind === "rank_search");
   if(ranks.length) out.push(section("Where we show up on Google, vs. competitors", "Latest Sunday check. Our rows are green.", rankTables(ranks), "Google Maps + Google search (Park City location) via SerpApi"));
+  const ab = K("rank_airbnb");   // AirROI live ranking: where OUR Airbnb listings show in Airbnb's own search (2026-10-30)
+  if(ab.length){
+    const latest = {}; ab.forEach(r => { const q = (r.data || {}).query; if(q && !latest[q]) latest[q] = r; });
+    out.push(section("Where our homes show in Airbnb's own search", "Airbnb lists up to ~270 homes for a Park City search. Searches with dates only show homes open those dates, so the \"any dates\" row is the pure search position.",
+      `<div class="scroll"><table><tr><th>Search</th><th>Homes shown</th><th>Ours in it</th><th>Our best spots</th><th>Checked</th></tr>${Object.values(latest).map(r => { const d = r.data || {};
+        return `<tr><td>${esc(d.query)}</td><td>${d.shown ?? ""}</td><td><b>${(d.ours || []).length}</b> <span class="muted">of our ${d.our_listings ?? ""}</span></td>
+          <td>${(d.ours || []).slice(0, 6).map(o => "#" + o.rank + " " + esc(o.home)).join("<br>")}</td><td>${fday(r.last_seen)}</td></tr>`; }).join("")}</table></div>`,
+      "Airbnb search order via AirROI (live ranking), weekly"));
+  }
   const ads = rows.filter(r => r.kind === "ad_google" || r.kind === "ad_meta");
   if(ads.length){
     const by = {}; ads.forEach(r => { const d = r.data || {}, a = d.advertiser || d.page || "?"; (by[a] = by[a] || []).push(r); });
