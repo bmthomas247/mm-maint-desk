@@ -61,7 +61,7 @@ main.v-rater #rater{display:block}main.v-rater>*:not(#viewnav):not(#rater){displ
 .rq{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line)}
 .rchips{display:flex;gap:5px}.rchip{min-width:38px;padding:7px 0;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14px;cursor:pointer}.rchip.skip{min-width:70px;font-weight:500;font-size:12px;color:var(--ink2)}.rchip.on{background:var(--teal);border-color:var(--teal);color:var(--onteal)}
 .rduel{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}.rpick{display:grid;gap:4px;text-align:left;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);padding:10px;cursor:pointer;font:inherit}.rpick:hover{border-color:var(--teal)}.rpick b{font-size:16px}.rpick img{width:100%;height:150px;object-fit:cover;border-radius:8px}
-@media (max-width:600px){.rduel{grid-template-columns:1fr}}main.v-pulse #pulse{display:block}main.v-pulse>*:not(#viewnav):not(#pulse),main.v-hotels>*:not(#viewnav):not(#hotCard){display:none!important}#pulse h3{font-size:15px;margin:0 0 6px}#pulse table th{font-weight:600;color:var(--ink2);padding:2px 6px}#pulse table td{padding:2px 6px;border-top:1px solid var(--line)}
+@media (max-width:600px){.rduel{grid-template-columns:1fr}}main.v-pulse #pulse{display:block}main.v-pulse>*:not(#viewnav):not(#pulse),main.v-hotels>*:not(#viewnav):not(#hotFull){display:none!important}#hotFull{display:none}main.v-hotels #hotFull{display:block}body.solo #viewnav{display:none!important}body.solo #reports>h2,body.solo #reports>p,body.solo #rpBack{display:none}.hftiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:10px 0}.hftile{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card)}.hfbig{font-size:22px;font-weight:700;margin:2px 0}.hfctl label{white-space:nowrap}.hfctl input[type=date]{width:auto}.hfctl input[type=search]{width:200px;max-width:100%}#hfTbl th[data-hs]{cursor:pointer;white-space:nowrap}#hfTbl td,#hfDay td{white-space:nowrap}.hfchip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px;cursor:pointer}.hfchip input{width:auto;margin:0}.hfchip i{width:10px;height:10px;border-radius:50%;display:inline-block}#pulse h3{font-size:15px;margin:0 0 6px}#pulse table th{font-weight:600;color:var(--ink2);padding:2px 6px}#pulse table td{padding:2px 6px;border-top:1px solid var(--line)}
 .pickhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 8px}.pickedlbl{background:var(--teal);color:var(--onteal);font-weight:600;padding:4px 12px;border-radius:999px;font-size:13px}
 .homesel{position:relative}.homesel summary{cursor:pointer;list-style:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--ink2)}.homesel summary::-webkit-details-marker{display:none}
 .homeselbox{position:absolute;z-index:20;top:110%;left:0;min-width:240px;max-height:340px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.15);padding:8px}.homeselbox label{display:flex;gap:8px;align-items:center;padding:4px 6px;font-size:13px;cursor:pointer;border-radius:6px}.homeselbox label:hover{background:var(--tealbg)}.homeselbox input{width:auto!important;min-width:0;margin:0;flex:none}.homeselbox label{white-space:nowrap}.homeselbox .allrow{border-bottom:1px solid var(--line);margin-bottom:4px;padding-bottom:6px;font-weight:600}
@@ -168,7 +168,7 @@ body{padding-left:0!important}
     <button class="tab" id="landBtn" title="Compares Track's current rates and minimums with the last sheet we sent">Did it land?</button>
     <button class="tab" id="matchBtn" title="Possible same-home matches across Airbnb / VRBO for you to confirm">Review matches</button>
     <span id="weeklyMsg" class="small muted"></span></div><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">✅ Pricing check · what to bring up with Kolleen this week</h3><div id="kolOut"></div></section><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">🧮 Our price vs Beyond <span class="small muted">(shadow pricing: what our own tool would charge, never sent anywhere)</span></h3><div id="ovbOut"></div></section><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">📊 Backtest · last season vs comps <span class="small muted">(Sep 2025 – Aug 2026, how each home actually did)</span></h3><div id="btOut"></div></section><div id="landOut"></div></div>
-  <div class="card" id="viewnav" style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="tab on" data-v="desk" title="Desk: comps, rates and calendars"><span class="ic">🏠</span><span>Desk</span></button><button class="tab" data-v="pulse" title="Market pulse: searches, markets, flights, news, events"><span class="ic">📈</span><span>Market pulse</span></button><button class="tab" data-v="hotels" title="Hotel rates near our homes"><span class="ic">🏨</span><span>Hotels</span></button><button class="tab" data-v="rater" title="Score and rank our homes"><span class="ic">⭐</span><span>Home Rater</span></button><button class="tab" data-v="reports" title="Booked too low, great bookings, Airbnb rank, owner reports"><span class="ic">📋</span><span>Reports</span></button><button class="tab" data-v="findings" title="Nightly checks with Accept / Reject (PriceLabs-style findings queue)"><span class="ic">🔎</span><span>Findings</span></button><button class="tab" data-v="beyond" title="Weekly Kolleen sheet, Did it land?, matches to review"><span class="ic">🤝</span><span>Beyond Pricing</span></button><span class="small muted navnote">Market pulse = searches, stock markets, currencies, flights, news and events. Hotels = hotel rates near our homes.</span></div>
+  <div class="card" id="viewnav" style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="tab on" data-v="desk" title="Desk: comps, rates and calendars"><span class="ic">🏠</span><span>Desk</span></button><button class="tab" data-v="pulse" title="Market pulse: searches, markets, flights, news, events"><span class="ic">📈</span><span>Market pulse</span></button><button class="tab" data-v="rater" title="Score and rank our homes"><span class="ic">⭐</span><span>Home Rater</span></button><button class="tab" data-v="findings" title="Nightly checks with Accept / Reject (PriceLabs-style findings queue)"><span class="ic">🔎</span><span>Findings</span></button><button class="tab" data-v="beyond" title="Weekly Kolleen sheet, Did it land?, matches to review"><span class="ic">🤝</span><span>Beyond Pricing</span></button><span class="small muted navnote">Market pulse = searches, stock markets, currencies, flights, news and events.</span></div>
   <div class="card" id="reports"><h2 style="margin:0 0 8px">📋 Reports</h2><p class="small muted" style="margin:0 0 8px">Reports to share with owners or between ourselves. Kolleen-facing downloads carry rates only (no comp data).</p><div id="reportsBody"></div></div>
   <div class="card" id="rater"><h2 style="margin:0 0 8px">⭐ Home Rater</h2><p class="small muted" style="margin:0 0 8px">Score our homes 1–5 and pick which of two homes is nicer. Everyone's scores are combined in Rankings, next to Claude's AI score from the listing photos (ESTIMATE). The pricing engine will use these to price nicer homes higher within the same area.</p><div id="raterBody"></div></div>
   <div class="card" id="findings"><h2 style="margin:0 0 8px">🔎 Findings</h2><p class="small muted" style="margin:0 0 8px">Every night our tool checks pace, bookings and prices and lists what looks off, with the numbers and sources. Accept, Reject or Later - nothing is changed anywhere; accepted changes go on a Kolleen list.</p><div id="fdBody"></div></div>
@@ -232,6 +232,7 @@ body{padding-left:0!important}
     <div id="mkPanel" class="hidden" style="margin-top:8px"></div>
   </div>
   <details class="card" id="hotCard"><summary style="cursor:pointer"><b>🏨 Hotel rates near our homes</b> <span id="hotSum" class="small muted"></span> <span class="small" style="color:var(--teal2)">click to open</span></summary><div id="hotBody" style="margin-top:10px"></div></details>
+  <section class="card" id="hotFull"><h2 style="margin:0 0 4px">🏨 Hotels</h2><p class="small muted" style="margin:0 0 8px">Every hotel price we have pulled, for the check-in dates you pick. The Desk keeps its short hotel summary.</p><div id="hfCtl"></div><div id="hfOut"><p class="small muted">Loading…</p></div></section>
   <div class="card"><h2>Add a comp</h2>
     <p class="small muted">Paste an Airbnb, VRBO or direct-booking link. The ThinkStation reads it within about 30 minutes (manager, beds, sleeps, and the same home's other links when the page shows them). Then add it to the comps.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="newurl" type="url" placeholder="https://www.airbnb.com/rooms/..." style="flex:1;min-width:240px"><button class="tab on" id="addcomp">Add to this set</button></div>
@@ -247,7 +248,7 @@ body{padding-left:0!important}
   const key = c => "mmc:" + (c.id || (c.querySelector("h2")?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40));
   const get = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const set = (k, v) => { try { v ? localStorage.setItem(k, "1") : localStorage.removeItem(k); } catch (e) {} };
-  const NO = new Set(["reports", "weekly", "pulse", "rater"]); // 2026-10-20 (Brandon): these pages always stay open
+  const NO = new Set(["reports", "weekly", "pulse", "rater", "hotFull"]); // 2026-10-20 (Brandon): these pages always stay open
   const apply = () => document.querySelectorAll("main .card").forEach(c => { if (NO.has(c.id)) c.classList.remove("collapsed"); else if (get(key(c))) c.classList.add("collapsed"); });
   document.addEventListener("click", e => {
     const h = e.target.closest("h2"); if (!h) return;
@@ -311,7 +312,11 @@ async function boot() {
   state.sets = sets;
   loadMarket(); $("hotCard").addEventListener("toggle", renderHotels);
   document.querySelectorAll("#viewnav .tab").forEach(btn => btn.onclick = () => setView(btn.dataset.v));
-  try { const v = new URLSearchParams(location.search).get("view") || localStorage.getItem("mmView"); if (v && v !== "desk") setView(v); } catch (e) {}
+  try { const p = new URLSearchParams(location.search), sv = localStorage.getItem("mmView"), pv = p.get("view");
+    // Hotels + Reports left the top menu (Brandon 2026-10-30): Hotels = sidebar Rates ▸ Hotels; reports open from the hub's Reports & Analytics.
+    if (pv === "hotels" || pv === "reports") document.body.classList.add("solo");
+    if (pv === "reports" && p.get("rp")) { RP.open = p.get("rp"); RP.openName = rpName(RP.open); }
+    const v = pv || (sv && document.querySelector(`#viewnav .tab[data-v="${sv}"]`) ? sv : null); if (v && v !== "desk") setView(v); } catch (e) {}
   $("colleenBtn").onclick = buildColleenSheet; $("landBtn").onclick = didItLand; $("matchBtn").onclick = reviewMatches;
   const groups = [];
   for (const s of sets) { const [c, t] = split(s.name); const g = groups[groups.length - 1];
@@ -1191,8 +1196,8 @@ function setView(v) {
   if (v === "findings") loadFindings();
   if (v === "reports" && !RP.busy) renderReports();
   if (v === "beyond") { kolRender(); ovbRender(); btRender(); }
-  if (v === "hotels") { $("hotCard").open = true; renderHotels(); } else if ($("hotCard").open) renderHotels();
-  try { localStorage.setItem("mmView", v); } catch (e) {}
+  if (v === "hotels") renderHotFull(); else if ($("hotCard").open) renderHotels();
+  try { if (document.querySelector(`#viewnav .tab[data-v="${v}"]`)) localStorage.setItem("mmView", v); } catch (e) {}
   window.scrollTo(0, 0);
 }
 async function latestRun(source) {
@@ -2023,6 +2028,7 @@ const RP_IDX = [
     ["Demand", [["pulse:Google searches", "Google Search Trends"], ["pulse:Trending in Utah", "Utah Trending Searches"], ["pulse:Trending rental", "Rental + Property Management Searches"], ["pulse:Flights into SLC", "Flights into SLC"], ["pulse:Events that bring", "PredictHQ Events + Event Demand"], ["pulse:Upcoming events", "Local Events"]]],
     ["Competition", [["hotels", "Hotel Rates (Park City + Heber)"], ["pulse:Park City market", "Park City Market: ADR + Bookings (KeyData)"], ["pulse:Short-term rental market", "STR Market (PriceLabs)"], ["pulse:Property managers", "Manager Reviews"]]],
     ["Conditions", [["pulse:Drive time", "Drive Time from SLC"], ["pulse:News", "Park City News"], ["pulse:Stock markets", "Stock Markets"], ["pulse:Currencies", "Currencies"]]]]]];
+const rpName = k => { for (const [, cols] of RP_IDX) for (const [, links] of cols) for (const [kk, n] of links) if (kk === k) return n; return ""; };
 function rpIndexHtml() {
   const c = RP.cat ?? 0;
   return `<div class="rpbar">${RP_IDX.map(([t], i) => `<button class="${i === c ? "on" : ""}" data-cat="${i}">${escH(t)}</button>`).join("")}</div>
@@ -2400,7 +2406,7 @@ function wireDuels() {
 function alertMsg(m) { const el = $("rMsg"); if (el) el.innerHTML = `<span class="up">${escH(m)}</span>`; }
 function renderHotels() {
   const H = state.mk?.hotels || [], today = iso(new Date(new Date().setHours(12, 0, 0, 0)));
-  const pc = H.filter(h => h.area === "Park City"), hb = H.filter(h => h.area !== "Park City"), cap = H.map(h => h.captured_at).sort().pop();
+  const pc = H.filter(h => h.area === "Park City"), hb = H.filter(h => h.area === "Heber / Jordanelle"), cap = H.map(h => h.captured_at).sort().pop();
   $("hotSum").textContent = H.length ? `· Park City median $${Math.round(median(pc.map(h => +h.median)) || 0)}/night over ${pc.length} night${pc.length === 1 ? "" : "s"} · Heber $${Math.round(median(hb.map(h => +h.median)) || 0)}` : "· no hotel data yet";
   if (!$("hotCard").open) return;
   if (!H.length) { $("hotBody").innerHTML = `<p class="small muted">Hotel rates come in every Wednesday (hotels.py). Run run_hotels_now.bat to fill the next 90 nights now.</p>`; return; }
@@ -2448,6 +2454,145 @@ function renderHotels() {
       rows.map(r => `<tr${r.type && r.type !== "hotel" ? ' class="muted"' : ""}><td>${r.link ? `<a href="${escH(r.link)}" target="_blank" rel="noopener">${escH(r.name)}</a>` : escH(r.name)}${r.type && r.type !== "hotel" ? ` <span class="pill">${escH(r.type)}</span>` : ""}</td><td>${escH(r.area)}</td><td>${r.hotel_class ? r.hotel_class + "★" : "—"} · ${r.rating ?? "—"}${r.reviews ? ` <span class="muted small">(${r.reviews})</span>` : ""}</td><td>${fmt(r.rate_night_pre_tax)}</td><td><b>${fmt(r.rate_night)}</b></td><td>${escH(r.cheapest_source || "—")}</td></tr>`).join("") +
       `</table></div><p class="small muted">Source: <a href="${escH(rows[0]?.search_url || "https://www.google.com/travel/hotels")}" target="_blank" rel="noopener">Google Hotels search</a>, captured ${rows[0] ? new Date(rows[0].captured_at).toLocaleString() : "—"}.</p>`;
   };
+}
+// ===== Hotels page (Brandon 2026-10-30): sidebar Rates ▸ Hotels (?view=hotels). Every hotel price we have, for the check-in dates picked.
+// Source: hotel_rates (hotels.py, Google Hotels via SerpApi): one row per hotel + check-in night + pull; 2 adults, 2-night stay from that night.
+// "Latest" = the newest pull for that area + night; "earlier pull" = the pull before it for the same night.
+const HF = { from: null, to: null, areas: null, cls: 0, vr: false, q: "", sort: "med", dir: 1, rows: null, key: "", day: null };
+const HF_AREAS = ["Park City", "Heber / Jordanelle", "Westgate", "Pioche"];
+const HF_COL = { "Park City": "#0e7c66", "Heber / Jordanelle": "#c98a1b", "Westgate": "#7c5cc4", "Pioche": "#b5485d" };
+const hfCol = a => HF_COL[a] || "#5a6b7b";
+const hfDay = k => new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+const hfPct = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+const hfPre = r => r.rate_night_pre_tax != null ? +r.rate_night_pre_tax : r.rate_night != null ? +r.rate_night : null;
+const hfKey = r => r.area + "|" + (r.property_token || r.name);
+async function renderHotFull() {
+  const today = iso(new Date(new Date().setHours(12, 0, 0, 0)));
+  if (!HF.range) {
+    const [a, b] = await Promise.all([sb.from("hotel_rates").select("check_in").order("check_in").limit(1), sb.from("hotel_rates").select("check_in").order("check_in", { ascending: false }).limit(1)]);
+    HF.range = [a.data?.[0]?.check_in || today, b.data?.[0]?.check_in || today];
+  }
+  if (!HF.from) { HF.from = today; HF.to = addD(today, 89) < HF.range[1] ? addD(today, 89) : HF.range[1]; if (HF.to < HF.from) HF.to = HF.from; }
+  hfCtl();
+  const key = HF.from + "|" + HF.to;
+  if (HF.key !== key) {
+    $("hfOut").innerHTML = `<p class="small muted">Loading hotel prices…</p>`;
+    const r = await allRows(() => sb.from("hotel_rates").select("id,run_id,captured_at,area,check_in,name,property_token,type,hotel_class,rating,reviews,rate_night,rate_night_pre_tax,cheapest_source,link,search_url", { count: "exact" }).gte("check_in", HF.from).lte("check_in", HF.to).order("id"));
+    if (r.error) { $("hfOut").innerHTML = `<p class="up small">Couldn't load hotel prices: ${escH(r.error.message)}</p>`; return; }
+    HF.rows = r.data || []; HF.key = key; HF.day = null;
+  }
+  hfDraw();
+}
+function hfCtl() {
+  const C = $("hfCtl"); if (C.dataset.on) { $("hfA").value = HF.from; $("hfB").value = HF.to; return; }
+  C.dataset.on = "1";
+  const quick = [["7", "Next 7 nights"], ["30", "Next 30"], ["90", "Next 90"], ["all", "Every night we have"]];
+  C.innerHTML = `<div class="rrow hfctl"><label class="small">Check-in from <input type="date" id="hfA"></label><label class="small">to <input type="date" id="hfB"></label>
+      ${quick.map(([k, t]) => `<button class="tab" data-hq="${k}">${t}</button>`).join("")}</div>
+    <div class="rrow hfctl" id="hfAreas"></div>
+    <div class="rrow hfctl"><label class="small">Hotel class <select id="hfCls"><option value="0">Any</option><option value="3">3★ and up</option><option value="4">4★ and up</option><option value="5">5★</option></select></label>
+      <label class="small"><input type="checkbox" id="hfVr" style="width:auto"> Include vacation rentals Google mixes in</label>
+      <input type="search" id="hfQ" placeholder="Find a hotel…"></div>`;
+  $("hfA").value = HF.from; $("hfB").value = HF.to;
+  const go = () => { let a = $("hfA").value, b = $("hfB").value; if (!a || !b) return; if (b < a) [a, b] = [b, a]; if ((new Date(b) - new Date(a)) / 864e5 > 400) b = addD(a, 400); HF.from = a; HF.to = b; renderHotFull(); };
+  $("hfA").onchange = go; $("hfB").onchange = go;
+  C.querySelectorAll("[data-hq]").forEach(btn => btn.onclick = () => { const today = iso(new Date(new Date().setHours(12, 0, 0, 0)));
+    if (btn.dataset.hq === "all") { HF.from = HF.range[0]; HF.to = HF.range[1]; } else { HF.from = today; HF.to = addD(today, +btn.dataset.hq - 1); }
+    renderHotFull(); });
+  $("hfCls").onchange = e => { HF.cls = +e.target.value; hfDraw(); };
+  $("hfVr").onchange = e => { HF.vr = e.target.checked; hfDraw(); };
+  $("hfQ").oninput = e => { HF.q = e.target.value.trim(); hfDraw(); };
+}
+function hfDraw() {
+  const all = HF.rows || [];
+  const present = HF_AREAS.filter(a => all.some(r => r.area === a)).concat([...new Set(all.map(r => r.area))].filter(a => !HF_AREAS.includes(a)));
+  if (!HF.areas) HF.areas = new Set(HF_AREAS);
+  $("hfAreas").innerHTML = `<span class="small muted">Areas</span>` + (present.length ? present : HF_AREAS).map(a => `<label class="hfchip"><input type="checkbox" data-ha="${escH(a)}"${HF.areas.has(a) ? " checked" : ""}><i style="background:${hfCol(a)}"></i>${escH(a)}</label>`).join("");
+  $("hfAreas").querySelectorAll("[data-ha]").forEach(c => c.onchange = () => { c.checked ? HF.areas.add(c.dataset.ha) : HF.areas.delete(c.dataset.ha); hfDraw(); });
+  const last = {}, prev = {}, nk = r => r.area + "|" + r.check_in;
+  all.forEach(r => { const id = r.run_id || 0; if (id > (last[nk(r)] || 0)) last[nk(r)] = id; });
+  all.forEach(r => { const id = r.run_id || 0; if (id < last[nk(r)] && id > (prev[nk(r)] || 0)) prev[nk(r)] = id; });
+  const before = new Map(); all.forEach(r => { if ((r.run_id || 0) === prev[nk(r)] && hfPre(r) != null) before.set(hfKey(r) + "|" + r.check_in, { p: hfPre(r), t: r.rate_night != null ? +r.rate_night : null, at: r.captured_at }); });
+  const q = HF.q.toLowerCase();
+  const ok = r => HF.areas.has(r.area) && (HF.vr || !r.type || r.type === "hotel") && (!HF.cls || (r.hotel_class || 0) >= HF.cls) && (!q || (r.name || "").toLowerCase().includes(q));
+  const rows = all.filter(r => (r.run_id || 0) === last[nk(r)] && ok(r) && hfPre(r) != null);
+  HF.cur = rows; HF.before = before;
+  const days = []; for (let k = HF.from; k <= HF.to && days.length < 401; k = addD(k, 1)) days.push(k);
+  const areas = present.filter(a => HF.areas.has(a));
+  const night = {}; rows.forEach(r => { const a = (night[r.area] = night[r.area] || {}); (a[r.check_in] = a[r.check_in] || []).push(r); });
+  const nm = (a, k) => { const l = night[a]?.[k]; return l ? median(l.map(hfPre)) : null; };
+  const cap = rows.map(r => r.captured_at).sort(), capTxt = cap.length ? (cap[0].slice(0, 10) === cap[cap.length - 1].slice(0, 10) ? new Date(cap[0]).toLocaleDateString() : new Date(cap[0]).toLocaleDateString() + " – " + new Date(cap[cap.length - 1]).toLocaleDateString()) : "—";
+  const src = `<p class="small muted">What this shows: the lowest nightly price Google Hotels lists for each hotel (2 adults, 2-night stay starting that night) and how many hotels still show rooms. It does <b>not</b> show hotels' booked nights. "Earlier pull" = the pull before the latest one for the same night. We have hotel prices for check-ins ${hfDay(HF.range[0])} – ${hfDay(HF.range[1])}; Park City and Heber come in every Wednesday, Westgate and Pioche have fewer nights so far. Source: <a href="https://www.google.com/travel/hotels" target="_blank" rel="noopener">Google Hotels</a> via SerpApi (hotels.py), these prices captured ${capTxt}.</p>`;
+  if (!rows.length) { $("hfOut").innerHTML = `<p class="small muted">No hotel prices match these dates and filters.</p>` + src; return; }
+  // Area tiles
+  const tile = a => { const ds = days.filter(k => night[a]?.[k]);
+    if (!ds.length) return `<div class="hftile" style="border-top:3px solid ${hfCol(a)}"><b>${escH(a)}</b><div class="small muted">No prices for these dates.</div></div>`;
+    const withTax = median(ds.map(k => median(night[a][k].map(r => r.rate_night != null ? +r.rate_night : hfPre(r))))), cnt = median(ds.map(k => night[a][k].length));
+    const lo = ds.reduce((m, k) => nm(a, k) < nm(a, m) ? k : m, ds[0]), hi = ds.reduce((m, k) => nm(a, k) > nm(a, m) ? k : m, ds[0]);
+    const ch = []; ds.forEach(k => night[a][k].forEach(r => { const b = before.get(hfKey(r) + "|" + k); if (b && b.p) ch.push((hfPre(r) - b.p) / b.p * 100); }));
+    return `<div class="hftile" style="border-top:3px solid ${hfCol(a)}"><b>${escH(a)}</b><div class="hfbig">${fmt(median(ds.map(k => nm(a, k))))}<span class="small muted" style="font-weight:400"> a night before tax</span></div>
+      <div class="small">${fmt(withTax)} with tax &amp; fees · about ${Math.round(cnt)} hotel${Math.round(cnt) === 1 ? "" : "s"} with rooms a night</div>
+      <div class="small">Cheapest night <b>${hfDay(lo)}</b> ${fmt(nm(a, lo))} · priciest <b>${hfDay(hi)}</b> ${fmt(nm(a, hi))}</div>
+      <div class="small muted">${ds.length} of ${days.length} nights priced${ch.length >= 5 ? ` · vs the earlier pull: <b>${hfPct(median(ch))}</b> (${ch.length} hotel-nights)` : ""}</div></div>`; };
+  // Chart: median price a night per area
+  const N = days.length, W = 900, Ht = 250, L = 50, R = 12, T = 14, Bm = 26;
+  const vals = []; areas.forEach(a => days.forEach(k => { const v = nm(a, k); if (v != null) vals.push(v); }));
+  const ymax = Math.max(100, ...vals) * 1.1, x = i => L + (N > 1 ? i * (W - L - R) / (N - 1) : (W - L - R) / 2), y = v => T + (Ht - T - Bm) * (1 - v / ymax);
+  const path = a => { let d = "", pen = false; days.forEach((k, i) => { const v = nm(a, k); if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1); pen = true; });
+    return d ? `<path d="${d}" fill="none" stroke="${hfCol(a)}" stroke-width="2"/>` : ""; };
+  const dots = a => days.map((k, i) => { const v = nm(a, k); return v != null ? `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${N > 120 ? 1.5 : 2.5}" fill="${hfCol(a)}"/>` : ""; }).join("");
+  const grid = [0, .25, .5, .75, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${y(ymax * f)}" y2="${y(ymax * f)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(ymax * f) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">$${Math.round(ymax * f)}</text>`).join("");
+  const step = Math.max(1, Math.ceil(N / 9));
+  const ticks = days.map((k, i) => i % step === 0 ? `<text x="${x(i)}" y="${Ht - 8}" font-size="10" fill="var(--muted)" text-anchor="${i === 0 ? "start" : "middle"}">${new Date(k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : "").join("");
+  const bw = Math.max(4, (W - L - R) / Math.max(1, N));
+  const hit = days.map((k, i) => `<rect data-hk="${k}" x="${(x(i) - bw / 2).toFixed(1)}" y="${T}" width="${bw.toFixed(1)}" height="${Ht - T - Bm}" fill="${k === HF.day ? "var(--line)" : "transparent"}" opacity=".6" style="cursor:pointer"><title>${hfDay(k)}${areas.map(a => nm(a, k) != null ? ` · ${a} ${fmt(nm(a, k))} (${night[a][k].length} with rooms)` : "").join("")}${(() => { const e = typeof mkTitle === "function" ? mkTitle(k).slice(3) : ""; return e ? " · " + escH(e.slice(0, 90)) : ""; })()}</title></rect>`).join("");
+  const chart = `<div class="legend">${areas.map(a => `<span><i style="background:${hfCol(a)};height:3px"></i>${escH(a)}, median before tax</span>`).join("")}</div>
+    <svg id="hfChart" viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto">${grid}${hit}${areas.map(path).join("")}${areas.map(dots).join("")}${ticks}</svg>
+    <p class="small" style="color:var(--teal2);margin:2px 0 8px">Tap a night on the chart to see every hotel and its price that night.</p>`;
+  // One row per hotel
+  const H = new Map();
+  rows.forEach(r => { const k = hfKey(r); let h = H.get(k); if (!h) H.set(k, h = { r, p: [], t: [], src: {}, ch: [] });
+    h.p.push(hfPre(r)); if (r.rate_night != null) h.t.push(+r.rate_night); if (r.cheapest_source) h.src[r.cheapest_source] = (h.src[r.cheapest_source] || 0) + 1;
+    if ((r.reviews || 0) >= (h.r.reviews || 0)) h.r = r;
+    const b = before.get(k + "|" + r.check_in); if (b && b.p) h.ch.push((hfPre(r) - b.p) / b.p * 100); });
+  const list = [...H.values()].map(h => ({ name: h.r.name, link: h.r.link, area: h.r.area, type: h.r.type, cls: h.r.hotel_class, rating: h.r.rating != null ? +h.r.rating : null, reviews: h.r.reviews,
+    nights: h.p.length, lo: Math.min(...h.p), med: median(h.p), hi: Math.max(...h.p), tmed: h.t.length ? median(h.t) : null, ch: h.ch.length ? median(h.ch) : null,
+    src: Object.entries(h.src).sort((a, b) => b[1] - a[1])[0]?.[0] || "" }));
+  const S = HF.sort, dir = HF.dir, val = o => o[S];
+  list.sort((a, b) => { const va = val(a), vb = val(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1;
+    return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * dir; });
+  HF.list = list;
+  const th = (k, t) => `<th data-hs="${k}">${t}${S === k ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`;
+  const tbl = `<h3 class="chh" style="margin-top:14px">Every hotel, ${hfDay(HF.from)} – ${hfDay(HF.to)} <span class="small muted">(${list.length} hotel${list.length === 1 ? "" : "s"}, latest pull; tap a heading to sort)</span></h3>
+    <div class="rrow"><button class="tab" id="hfCsv1">Download this list (CSV)</button><button class="tab" id="hfCsv2">Download every hotel-night price (CSV)</button></div>
+    <div class="wrap"><table id="hfTbl"><tr>${th("name", "Hotel")}${th("area", "Area")}${th("cls", "Class")}${th("rating", "Rating")}${th("nights", "Nights with rooms")}${th("lo", "Lowest")}${th("med", "Typical")}${th("hi", "Highest")}${th("tmed", "Typical with tax")}${th("ch", "vs earlier pull")}${th("src", "Cheapest on")}</tr>` +
+    list.map(o => `<tr${o.type && o.type !== "hotel" ? ' class="muted"' : ""}><td>${o.link ? `<a href="${escH(o.link)}" target="_blank" rel="noopener">${escH(o.name)}</a>` : escH(o.name)}${o.type && o.type !== "hotel" ? ` <span class="pill">${escH(o.type)}</span>` : ""}</td><td>${escH(o.area)}</td><td>${o.cls ? o.cls + "★" : "—"}</td><td>${o.rating ?? "—"}${o.reviews ? ` <span class="muted small">(${o.reviews})</span>` : ""}</td><td>${o.nights}</td><td>${fmt(o.lo)}</td><td><b>${fmt(o.med)}</b></td><td>${fmt(o.hi)}</td><td>${fmt(o.tmed)}</td><td>${hfPct(o.ch)}</td><td>${escH(o.src || "—")}</td></tr>`).join("") +
+    `</table></div><p class="small muted">Prices are a night, before tax unless it says with tax. Typical = the middle price over the nights the hotel had rooms.</p>`;
+  $("hfOut").innerHTML = `<div class="hftiles">${areas.map(tile).join("")}</div>${chart}<div id="hfDay"></div>${tbl}${src}`;
+  $("hfChart").onclick = e => { const k = e.target.dataset?.hk; if (!k) return; HF.day = k; hfDraw(); $("hfDay").scrollIntoView({ behavior: "smooth", block: "nearest" }); };
+  $("hfTbl").querySelectorAll("th[data-hs]").forEach(t => t.onclick = () => { const k = t.dataset.hs; HF.dir = HF.sort === k ? -HF.dir : (["name", "area", "src"].includes(k) ? 1 : -1); HF.sort = k; hfDraw(); });
+  $("hfCsv1").onclick = () => hfCsv(`hotels_${HF.from}_${HF.to}.csv`, ["Hotel", "Area", "Type", "Class", "Rating", "Reviews", "Nights with rooms", "Lowest before tax", "Typical before tax", "Highest before tax", "Typical with tax", "Change vs earlier pull %", "Cheapest on", "Link"],
+    list.map(o => [o.name, o.area, o.type, o.cls, o.rating, o.reviews, o.nights, Math.round(o.lo), Math.round(o.med), Math.round(o.hi), o.tmed != null ? Math.round(o.tmed) : "", o.ch != null ? o.ch.toFixed(1) : "", o.src, o.link]));
+  $("hfCsv2").onclick = () => hfCsv(`hotel_nights_${HF.from}_${HF.to}.csv`, ["Check-in", "Area", "Hotel", "Type", "Class", "Rating", "Before tax", "With tax", "Earlier pull before tax", "Cheapest on", "Captured"],
+    rows.slice().sort((a, b) => a.check_in.localeCompare(b.check_in) || a.area.localeCompare(b.area) || hfPre(a) - hfPre(b)).map(r => { const b = before.get(hfKey(r) + "|" + r.check_in);
+      return [r.check_in, r.area, r.name, r.type, r.hotel_class, r.rating, Math.round(hfPre(r)), r.rate_night != null ? Math.round(r.rate_night) : "", b ? Math.round(b.p) : "", r.cheapest_source, r.captured_at]; }));
+  if (HF.day) hfDayBox(HF.day);
+}
+function hfDayBox(k) {
+  const list = (HF.cur || []).filter(r => r.check_in === k).sort((a, b) => hfPre(a) - hfPre(b));
+  if (!list.length) { $("hfDay").innerHTML = `<p class="small muted">No hotel prices for ${hfDay(k)} with these filters.</p>`; return; }
+  const ev = typeof mkTitle === "function" ? mkTitle(k).slice(3) : "";
+  $("hfDay").innerHTML = `<div class="hftile" style="margin:6px 0 10px"><h3 class="chh" style="margin:0 0 4px">Hotels for ${hfDay(k)} (2 nights) <a href="#" id="hfDayX" class="small" style="float:right">close ✕</a></h3>${ev ? `<p class="small muted" style="margin:0 0 6px">That night: ${escH(ev.slice(0, 160))}</p>` : ""}
+    <div class="wrap"><table><tr><th>Hotel</th><th>Area</th><th>Class / rating</th><th>Before tax</th><th>With tax &amp; fees</th><th>Earlier pull</th><th>Cheapest on</th></tr>` +
+    list.map(r => { const b = HF.before.get(hfKey(r) + "|" + k);
+      return `<tr${r.type && r.type !== "hotel" ? ' class="muted"' : ""}><td>${r.link ? `<a href="${escH(r.link)}" target="_blank" rel="noopener">${escH(r.name)}</a>` : escH(r.name)}${r.type && r.type !== "hotel" ? ` <span class="pill">${escH(r.type)}</span>` : ""}</td><td>${escH(r.area)}</td><td>${r.hotel_class ? r.hotel_class + "★" : "—"} · ${r.rating ?? "—"}${r.reviews ? ` <span class="muted small">(${r.reviews})</span>` : ""}</td><td>${fmt(hfPre(r))}</td><td><b>${fmt(r.rate_night)}</b></td><td>${b ? `${fmt(b.p)} <span class="muted small">${hfPct((hfPre(r) - b.p) / b.p * 100)}</span>` : "—"}</td><td>${escH(r.cheapest_source || "—")}</td></tr>`; }).join("") +
+    `</table></div><p class="small muted">Source: <a href="${escH(list[0].search_url || "https://www.google.com/travel/hotels")}" target="_blank" rel="noopener">Google Hotels search</a>, captured ${new Date(list[0].captured_at).toLocaleString()}.</p></div>`;
+  $("hfDayX").onclick = e => { e.preventDefault(); HF.day = null; hfDraw(); };
+}
+function hfCsv(name, head, lines) {
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + [head, ...lines].map(l => l.map(q).join(",")).join("\n")], { type: "text/csv" }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 // "What's happening these dates" (Brandon 2026-10-14): when dates are picked, explain peaks from the Local market data,
 // whatever the market toggles are set to. Sources are the same as the Local market section.
