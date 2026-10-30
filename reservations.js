@@ -85,6 +85,11 @@ const STEP_LINK = {};
 const openFor = (key, s) => { const k = STEP_LINK[key]; if(!k) return "";
   return `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${esc(LINKS[k].replace("{res}", encodeURIComponent(s.res)))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${LINK_NAME[k]} ↗</a>`; };
 const WAIT = ["Guest to reply", "Owner to reply"];
+// 🙋 Ask a manager (Brandon 2026-10-30): Slack DM to the managers on shift; their reply comes back here (res_ask_notify.py)
+const askBtn = step => `<button class="btn small" data-ask="${step}" style="min-height:28px;padding:0 9px;font-size:12px">🙋 Ask a manager</button>`;
+const askLine = a => `<div style="padding:4px 0;border-top:1px solid var(--line)">🙋 <b>${esc(a.by_name || "")}</b> asked ${esc(when(a.at))}: “${esc(a.note)}”`
+  + (a.status === "open" ? ` <span class="pill amber">${a.sent && a.sent.length ? "Waiting on " + esc(a.sent.map(x => x.name === "Kimberley" ? "Kim" : x.name).join(" + ")) : "Sending…"}</span>`
+     : ` <span class="pill ${a.status === "approved" ? "green" : "blue"}">${a.status === "approved" ? "Approved" : "Answered"} by ${esc(a.answered_by || "")}</span><div style="margin-left:22px">“${esc(a.answer || "")}”</div>`) + `</div>`;
 const WG_NOTE = "No cleaning by Westgate. Moose Management team to clean upon checkout. All other charges, including trash/tidy, are the guest's responsibility. Check-in is after 4 p.m. Check-out is by 10 a.m. Please approve any early check-ins or late check-outs with the Moose Management team.";
 const formText = (s, wg) => { const o = s.occ || {};
   return [`Guest: ${s.guest || ""}`, `Unit: ${s.unit || ""}`, `Arrive: ${s.arrive}`, `Depart: ${s.depart}`, `Guests: ${o.adults || 0} adults${o.children ? ", " + o.children + " kids" : ""}`, `Reservation #${s.res}`,
@@ -111,6 +116,9 @@ async function load(force){
   B = r.data; loadedAt = Date.now();
   if(B) B.alerts = al.data || [];   // home heads-ups (hub_penny_3.sql, Brandon 2026-10-28): warn before booking a home with a big open problem
   if(B) B.canCharge = ch.data === true;   // charge-the-balance button (hub_res_charge.sql switch + access)
+  if(B){ const ak = await sb.from("res_asks").select("id,res,step_key,note,by_name,at,status,answer,answered_by,answered_at,sent")
+      .gte("at", new Date(Date.now() - 3 * 864e5).toISOString()).order("id", { ascending:false });
+    B.asks = (ak.data || []).filter(a => !/^Test entry/.test(a.answer || "")); }
   if(B) B.stays.forEach(prep);
   return B;
 }
@@ -322,6 +330,9 @@ async function queue(v){
     <div class="rhead"><div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${RI.list}</span></div>
       <div class="grow"><h1>Moose Check lists</h1><div class="sub" id="rq_sub"></div></div>
       <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a></div>
+    ${B.canMgr && (B.asks || []).some(a => a.status === "open") ? `<div class="card" style="border-color:var(--amber)"><b>🙋 Waiting on a manager</b> <span class="muted">· reply in Slack or open the check list</span>
+      ${B.asks.filter(a => a.status === "open").map(a => { const st = B.stays.find(x => x.res === a.res) || {};
+        return `<div style="padding:5px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(a.res)}"><b>${esc(st.unit || "#" + a.res)} · ${esc(st.guest || "")}</b></a> — ${esc(a.by_name || "")}: “${esc(a.note)}” <span class="muted">${esc(when(a.at))}</span></div>`; }).join("")}</div>` : ""}
     <nav class="rtabs" id="rq_tabs"></nav>
     <div class="stats" id="rq_stats"></div>
     <div class="rkinds" id="rq_kinds"></div>
@@ -369,7 +380,8 @@ async function card(v, res){
         ${B.money ? `<span>Rent ${money(s.rent)}</span><span>Fees ${money(s.fees)}</span><span>Taxes ${money(s.taxes)}</span><span>Total <b>${money(s.total)}</b></span>` : ""}
         <span>Paid <b>${money(s.paid)}</b></span><span>Balance <b>${money(s.balance)}</b></span>${chargeBtn(s)}</div>
       ${s.ah ? `<div class="rmoney"><span class="muted">Autohost</span><span>Status: <b>${esc(s.ah.verify || "unknown")}</b></span>${s.ah.reason ? `<span>${esc(s.ah.reason)}</span>` : ""}<span>Portal: <b>${s.ah.portal ? "done" : "not done"}</b></span></div>` : ""}
-      ${s.ah && s.ah.verify === "review" ? `<div class="rrule stop">Autohost has this guest under review${(s.ah.rules || []).length ? ": " + esc(s.ah.rules.join(", ")) : ""}. ${conds(s).review_easy ? "Under 25 at a studio–2 BR: you can approve it in Autohost if the guest gives a good reason for the stay (write it on the step)." : "A manager has to approve it (second set of eyes)."}</div>` : ""}
+      ${s.ah && s.ah.verify === "review" ? `<div class="rrule stop">Autohost has this guest under review${(s.ah.rules || []).length ? ": " + esc(s.ah.rules.join(", ")) : ""}. ${conds(s).review_easy ? "Under 25 at a studio–2 BR: you can approve it in Autohost if the guest gives a good reason for the stay (write it on the step)." : "A manager has to approve it (second set of eyes)."} ${!B.canMgr && !conds(s).review_easy ? askBtn("ah_rev_mgr") : ""}</div>` : ""}
+      ${(B.asks || []).some(a => a.res === s.res) ? `<div class="rmoney" style="display:block"><span class="muted">Asked a manager</span>${B.asks.filter(a => a.res === s.res).map(askLine).join("")}</div>` : ""}
       ${conds(s).half ? `<div class="rrule warn">Only ${autoOk(s, "ah_verified") ? "the ID check" : "the contract"} is in. Send “Reminder to Sign Contract or Submit ID Verification” from Track.</div>` : ""}
       ${(B.bwMissing || []).includes(s.unit) ? `<div class="rmoney"><span class="muted">Breezeway</span><span>This home has no Breezeway id in the hub's home list, so its tasks can't be checked here.</span></div>`
         : s.bw && s.bw.length ? `<div class="rmoney" style="display:block"><span class="muted">Breezeway, ${esc(day(addDay(s.arrive, -5)))} to ${esc(day(addDay(s.depart, 1)))}</span>
@@ -390,7 +402,7 @@ async function card(v, res){
       ${Object.entries(grp).map(([g, ts]) => `<div class="rgrp"><h3>${esc(g)} <span class="muted" style="font-weight:600">${ts.filter(t => !t.opt && t.done).length}/${ts.filter(t => !t.opt).length}</span></h3>
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
-          <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${lock ? ` <span class="muted">— ask a manager</span>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
+          <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
           ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
@@ -407,6 +419,13 @@ async function card(v, res){
     if(r.error){ cb.checked = !cb.checked; cb.disabled = false; return msg("Couldn't save: " + r.error.message); }
     s.ticks = { ...(s.ticks || {}), [cb.dataset.step]:r.data }; prep(s); card(v, res);
   });
+  v.querySelectorAll("[data-ask]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
+    const note = prompt("What do you need from the manager? (sent to the managers on shift in Slack)");
+    if(!note || !note.trim()) return;
+    b.disabled = true;
+    const r = await sb.rpc("res_ask", { p_res:s.res, p_step:b.dataset.ask, p_note:note });
+    if(r.error){ b.disabled = false; return msg("Couldn't ask: " + r.error.message); }
+    await load(true); card(v, res); });
   v.querySelectorAll("[data-copyform]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
     try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
   v.querySelectorAll("[data-charge]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); charge(s, v, res); });
