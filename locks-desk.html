@@ -194,6 +194,7 @@ details.sect{margin:18px 0 6px} details.sect>summary{padding:6px 2px;border-bott
 <div id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="idle.js"></script>
 <script>
 (function(){
 "use strict";
@@ -204,6 +205,7 @@ const C = window.MM_CONFIG;
   const m = (location.hash + "&" + location.search).match(/error_description=([^&]+)/);
   if(m) window.__linkErr = decodeURIComponent(m[1].replace(/\+/g," ")); })();
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+if(window.MMIDLE) MMIDLE.watch(sb);   // 1 hour with no use -> signed out (idle.js)
 const app = document.getElementById("app");
 const S = { me:null, homes:[], props:{}, timer:null };
 // Two versions of one page: locks.html = field (phone, no code lists) · locks-desk.html = office desk (codes, stays, scorecard)
