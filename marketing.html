@@ -119,7 +119,7 @@ const LIST_TAB = n => /owner/i.test(n) ? "owners" : /realtor|agent|broker/i.test
   : /return renter|rental guest|guest of guest|cart aband|stayfi|non-booked|tns opt-in from website guest/i.test(n) ? "guest" : "general";
 const STATUS = [["idea","Ideas"],["planned","Planned"],["doing","Doing"],["done","Done"],["parked","Parked"]];
 const KINDS = { idea:"💡 Idea", campaign:"📣 Campaign", task:"✅ Task", question:"❓ Question", list:"📋 List" };
-const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], own:null, f:{ when:"30", brevo:"all", back:"all", q:"" } };
+const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], own:null, f:{ when:"30", brevo:"all", back:"all", eng:"all", q:"" } };
 
 async function load(){
   const jobs = [sb.from("mkt_ideas").select("*").eq("tab", TAB).eq("off", false).order("created_at"),
@@ -153,6 +153,7 @@ function guestRows(){
     && (S.f.when === "all" || x.send_on <= end)
     && (S.f.brevo === "all" || (S.f.brevo === "in" ? x.brevo_list : S.f.brevo === "unsub" ? x.brevo_unsub : !x.brevo_list))
     && (S.f.back === "all" || (S.f.back === "yes" ? x.came_back_booked : S.f.back === "email" ? x.email_booked : !x.came_back_booked))
+    && (S.f.eng === "all" || (S.f.eng === "clicked" ? x.email_clicks > 0 : S.f.eng === "opened" ? x.email_opens > 0 : x.email_sent > 0 && !x.email_opens))   // Brevo opens/clicks per guest (2026-10-30)
     && (!q || [x.guest, x.home, x.channel].some(v => String(v || "").toLowerCase().includes(q))));
 }
 function guestHtml(){
@@ -170,6 +171,7 @@ function guestHtml(){
     <div class="kpi"><small>Already in a Brevo batch</small><b>${inB.length.toLocaleString()}</b><small>${esc(Object.keys(sm.brevo_lists || {}).length)} "Return Renters" lists</small></div>
     <div class="kpi"><small>Unsubscribed in Brevo</small><b>${uns.length.toLocaleString()}</b><small>${inB.length ? Math.round(uns.length / inB.length * 100) + "% of those in a batch" : ""}</small></div>
     <div class="kpi"><small>Booked with us again</small><b>${back.length.toLocaleString()}</b><small>${back.filter(x => x.brevo_list).length} of them were in a Brevo batch</small></div>
+    <div class="kpi"><small>Opened our emails</small><b>${ok.filter(x => x.email_opens > 0).length}</b><small>${ok.filter(x => x.email_clicks > 0).length} clicked · of ${ok.filter(x => x.email_sent > 0).length} sent one (Brevo; opens are a floor)</small></div>
     <div class="kpi"><small>Booked after our email</small><b>${ok.filter(x => x.email_booked).length}</b><small>of ${ok.filter(x => x.emailed_id).length} guests we emailed</small></div>
   </div>
   ${(sm.by_campaign || []).length ? `<h2>Did the emails bring bookings?</h2>
@@ -184,6 +186,7 @@ function guestHtml(){
     <label>Email by <select data-f="when"><option value="30">next 30 days</option><option value="60">next 60 days</option><option value="90">next 90 days</option><option value="all">any time</option></select></label>
     <label>Brevo <select data-f="brevo"><option value="all">all</option><option value="not">not in a batch</option><option value="in">in a batch</option><option value="unsub">unsubscribed</option></select></label>
     <label>Booked again <select data-f="back"><option value="all">all</option><option value="yes">yes</option><option value="email">after our email</option><option value="no">no</option></select></label>
+    <label>Engaged <select data-f="eng"><option value="all">all</option><option value="opened">opened an email</option><option value="clicked">clicked</option><option value="none">sent, no opens</option></select></label>
     <label>Find <input data-f="q" placeholder="guest, home, channel" value="${esc(S.f.q)}"></label>
     <button class="btn small" id="csv">⬇ Download CSV</button><span class="muted">${rows.length.toLocaleString()} guests</span>
   </div>
@@ -191,7 +194,7 @@ function guestHtml(){
   <tbody>${rows.slice(0, 300).map(x => `<tr><td><b>${esc(x.guest)}</b></td><td>${esc(x.channel)}</td><td>${esc(x.home)}</td><td>${esc(fmtD(x.last_five_in))}</td>
     <td class="n">${x.five_reviews}</td><td class="n">${x.stays}</td><td class="n">${x.typical_lead} d</td><td>${esc(fmtD(x.target_stay))}</td>
     <td>${esc(fmtD(x.send_on))}${x.timing === "catch-up" ? ` <span class="pill amber">catch-up</span>` : ""}</td>
-    <td>${x.brevo_list ? `<span class="pill ${x.brevo_unsub ? "red" : "green"}" title="${esc(x.brevo_list)}">${x.brevo_unsub ? "unsubscribed" : esc(x.brevo_list.replace(/^Return Renters - 5 Star - /, ""))}</span>` : ""}</td>
+    <td>${x.brevo_list ? `<span class="pill ${x.brevo_unsub ? "red" : "green"}" title="${esc(x.brevo_list)}">${x.brevo_unsub ? "unsubscribed" : esc(x.brevo_list.replace(/^Return Renters - 5 Star - /, ""))}</span>` : ""}${x.email_sent ? `<br><small class="muted" title="Brevo, per guest${x.email_last_open ? "; last open " + esc(x.email_last_open) : ""}">opened ${x.email_opens || 0} · clicked ${x.email_clicks || 0} of ${x.email_sent}</small>` : ""}</td>
     <td>${x.came_back_booked ? `<span class="pill blue">${esc(x.came_back_home || "")} · ${esc(fmtD(x.came_back_in))}</span>` : ""}${x.email_booked ? ` <span class="pill green" title="Booked ${esc(fmtD(x.email_booked))} (${esc(x.email_booked_channel || "")}), after ${esc(x.emailed_campaign || "")}">after email</span>` : ""}</td>
     <td class="wrapc">${esc(x.review_excerpt || "")}</td></tr>`).join("") || `<tr><td colspan="12" class="empty">No guests match.</td></tr>`}</tbody></table>
   ${rows.length > 300 ? `<div class="empty">Showing the first 300. Download the CSV for all ${rows.length.toLocaleString()}.</div>` : ""}</div>
@@ -199,7 +202,7 @@ function guestHtml(){
     No emails are kept in the hub: the emails go out from Brevo.</p>`;
 }
 function csv(){
-  const cols = ["guest","channel","home","last_five_in","five_reviews","stays","typical_lead","target_stay","send_on","timing","brevo_list","brevo_unsub","came_back_booked","came_back_in","came_back_home","review_excerpt"];
+  const cols = ["guest","channel","home","last_five_in","five_reviews","stays","typical_lead","target_stay","send_on","timing","brevo_list","brevo_unsub","came_back_booked","came_back_in","came_back_home","email_sent","email_opens","email_clicks","email_last_open","review_excerpt"];
   const q = v => /[",\n]/.test(String(v ?? "")) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? "");
   const blob = new Blob([[cols.join(",")].concat(guestRows().map(r => cols.map(c => q(r[c])).join(","))).join("\n")], { type:"text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `return-renters-${today()}.csv`; a.click();
