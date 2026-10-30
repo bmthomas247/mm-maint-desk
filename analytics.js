@@ -600,7 +600,14 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
   // staff praised by name (review_kudos, found nightly by review_kudos.py; same readers as the reviews)
   let K = []; try { const k = await sb.from("review_kudos").select("*").order("submitted_at", { ascending:false }).limit(300); K = k.data || []; } catch(e){}
   const TN = Object.fromEntries(THEMES.map(t => [t[0], t[1]])), hoods = [...new Set(A.map(x => x.hood).filter(Boolean))].sort(), homes = [...new Set(A.map(x => x.code).filter(Boolean))].sort();
+  // tabs (2026-10-30): All reviews · Patterns · Improvements (#/reviews/patterns, #/reviews/improvements)
+  const TABS = { patterns:"patterns", improvements:"improve" };
+  let tab = TABS[String(pre || "").toLowerCase()] || "list"; if(tab !== "list") pre = "";
+  let only = null;   // review ids picked from an improvement ("Read the N reviews")
   v.innerHTML = `<div class="page wide">${bk}<h2>${h2}</h2>
+    <div class="anbar" id="rvtabs" style="gap:6px">${[["list", "All reviews"], ["patterns", "Patterns"], ["improve", "Improvements"]].map(([k, t]) =>
+      `<button class="btn small" data-tab="${k}">${t}</button>`).join("")}</div>
+    <div id="rvins" hidden></div><div id="rvmain">
     <p class="muted">Every guest review (Airbnb, Vrbo, our website, Google, Trustpilot) with what guests bring up, by home and neighborhood. Topics are a keyword count: a <b>complaint</b> is a sentence that reads negative ("the hot tub was cold"), a <b>mention</b> is any sentence with the topic's words. Read the reviews before acting on a count. Click a topic or a home to filter.</p>
     <div class="anbar">
       <select id="rvs"><option value="365">Last 12 months</option><option value="730">Last 2 years</option><option value="all">All (since Nov 2022)</option></select>
@@ -612,19 +619,21 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
       <select id="rvc"><option value="">All channels</option><option value="Airbnb">Airbnb</option><option value="Homeaway">Vrbo</option><option value="Website">Our website</option><option value="Google">Google</option><option value="Trustpilot">Trustpilot</option></select>
       <select id="rva"><option value="">Homes + Moose company</option><option value="home">Home reviews</option><option value="company">Moose company reviews</option><option value="neighborhood">Neighborhood Google listings</option></select>
       <input id="rvq" type="search" placeholder="Words in the review"></div>
-    <div id="rvk"></div>
+    <div id="rvonly"></div><div id="rvk"></div>
     <h3 class="anh3">Highlights</h3><div id="rvhl"></div>
     <h3 class="anh3">Topics</h3><div id="rvtt"></div>
     <h3 class="anh3">By home</h3><div id="rvht"></div>
     <h3 class="anh3">Reviews <button class="btn small" id="rvcsv" style="margin-left:8px">Download CSV</button></h3><div id="rvl"></div>
-    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py) + reviews shown only on our website (Track direct reviews, website_reviews_sync.py) + Google reviews of our 3 Google listings (google_reviews_sync.py: SerpApi daily, older ones read once from Google Maps with APPROXIMATE dates). Website and Google reviews show the review date, not a stay date. A Google review is a home review when it or our reply names the home, else a Moose company review; Trustpilot (3 reviews) read once by hand (other_reviews_load.py); homes and neighborhoods from Track (hub_homes). Vrbo shows as "Homeaway" in Track; its categories are renamed to Airbnb's. Guest names aren't stored.</p></div>`;
+    <p class="ansrc">Source: Track API /api/channel-management/channel/reviews (read daily by track_reviews_sync.py) + reviews shown only on our website (Track direct reviews, website_reviews_sync.py) + Google reviews of our 3 Google listings (google_reviews_sync.py: SerpApi daily, older ones read once from Google Maps with APPROXIMATE dates). Website and Google reviews show the review date, not a stay date. A Google review is a home review when it or our reply names the home, else a Moose company review; Trustpilot (3 reviews) read once by hand (other_reviews_load.py); homes and neighborhoods from Track (hub_homes). Vrbo shows as "Homeaway" in Track; its categories are renamed to Airbnb's. Guest names aren't stored.</p></div></div>`;
   $("#rvs").value = since; if(pre) $("#rvu").value = pre;
   const stars = s => s == null ? "" : `<span class="pill ${+s >= 5 ? "green" : +s >= 4 ? "" : +s >= 3 ? "amber" : "red"}">${(+s).toFixed(0)} ★</span>`;
   let shown = 30, cur = [];
   const draw = () => {
     const h = $("#rvh").value, u = $("#rvu").value.trim().toLowerCase(), t = $("#rvt").value, m = $("#rvm").value, rs = $("#rvr").value, ch = $("#rvc").value, ab = $("#rva").value, q = $("#rvq").value.trim().toLowerCase();
     const has = (x, k) => (m === "c" ? x.tc : x.tm).has(k);
-    const base = A.filter(x => (!h || x.hood === h) && (!u || String(x.code).toLowerCase() === u || String(x.name).toLowerCase().includes(u)) && (!ch || x.channel === ch) && (!ab || (x.about || "home") === ab)
+    $("#rvonly").innerHTML = only ? `<div class="card" style="margin:0 0 10px;padding:8px 14px">Showing the ${only.size} reviews behind an improvement or pattern. <a class="anlink" href="#" id="rvoff">Show all reviews</a></div>` : "";
+    if($("#rvoff")) $("#rvoff").onclick = e => { e.preventDefault(); only = null; shown = 30; draw(); };
+    const base = A.filter(x => (!only || only.has(+x.id)) && (!h || x.hood === h) && (!u || String(x.code).toLowerCase() === u || String(x.name).toLowerCase().includes(u)) && (!ch || x.channel === ch) && (!ab || (x.about || "home") === ab)
       && (!rs || (rs === "p" ? !!x.private : rs === "n" ? !!x.text && !x.response : x.overall != null && +x.overall <= +rs)) && (!q || [x.text, x.private].join(" ").toLowerCase().includes(q)));
     cur = base.filter(x => !t || has(x, t));
     const rated = cur.filter(x => x.overall != null), avg = rated.length ? rated.reduce((a, x) => a + +x.overall, 0) / rated.length : null;
@@ -682,7 +691,127 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
        [...r.tc].map(k => TN[k]).join("; "), r.text, r.private, r.res]));
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + rows.map(r => r.map(cell).join(",")).join("\r\n")], { type:"text/csv" }));
     a.download = `guest-reviews-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
-  draw();
+  const clear = () => { ["rvh", "rvt", "rvr", "rvc", "rva"].forEach(i => $("#" + i).value = ""); $("#rvu").value = $("#rvq").value = ""; shown = 30; };
+  const setTab = t => { tab = t; v.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("primary", b.dataset.tab === t));
+    $("#rvmain").hidden = t !== "list"; $("#rvins").hidden = t === "list";
+    if(t !== "list") insights($("#rvins"), t, ctx); };
+  const ctx = {
+    all: async () => (await load("730")) || [],
+    showIds: async ids => { if($("#rvs").value !== "730" && $("#rvs").value !== "all"){ $("#rvs").value = "730"; try { A = await load("730"); } catch(e){ return oops(e); } }
+      clear(); only = new Set(ids); setTab("list"); draw(); $("#rvonly").scrollIntoView(); },
+    showHome: code => { clear(); only = null; $("#rvu").value = code; setTab("list"); draw(); $("#rvk").scrollIntoView(); } };
+  v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+  draw(); setTab(tab);
+}
+
+/* Reviews ▸ Patterns + Improvements (Brandon 2026-10-30: "notice patterns that will help grow the business … an improvement based on reviews
+   section"). Findings: review_insights, written once a week by the Edge Function review-insights (Claude reads 2 years of reviews + jobs; every
+   finding keeps the review ids behind it, quotes checked word for word). Numbers: review_insight_runs.stats (same run) + a keyword count here.
+   Admins + managers with Reviews move improvements along (review_insight_set / _add); everyone else on the desk reads. */
+const AREA = { cleaning:"Cleaning", maintenance:"Repairs", amenities:"Amenities", setup:"Home setup", check_in:"Check-in / access", communication:"Communication",
+  listing:"Listing", value:"Price / value", location:"Location", noise:"Noise", parking:"Parking", company:"Company", marketing:"Marketing", other:"Other" };
+const ISTAT = { new:"New", planned:"Planned", doing:"Doing", done:"Done", not_doing:"Not doing" };
+const TEAMN = { admin:"Admins", front_desk:"Front desk", office_manager:"Office manager", owner_relations:"Owner relations", maint_manager:"Maintenance manager",
+  maint_crew:"Maintenance crew", hk_manager:"Housekeeping manager", licensing:"Licensing", leasing:"Leasing" };
+async function insights(el, tab, ctx){
+  el.innerHTML = `<p class="muted">Loading…</p>`;
+  const [I, RN, ED, AD] = await Promise.all([sb.from("review_insights").select("*").order("id"),
+    sb.from("review_insight_runs").select("id,ran_at,by_name,read,stats,found,new_count,error").order("id", { ascending:false }).limit(6),
+    sb.rpc("review_insight_can_edit"), sb.rpc("hub_is_admin")]);
+  if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(I.error.message)}</p></div>`; return; }
+  const L = I.data || [], runs = RN.data || [], run = runs.find(r => !r.error && r.stats && r.stats.summary) || null, edit = !!ED.data, admin = !!AD.data;
+  const pr = { high:"red", medium:"amber", low:"" };
+  const lines = s => esc(s).replace(/:\s+- /g, ":\n• ").replace(/\s+- (?=\S)/g, "\n• ").replace(/(^|\n)- /g, "$1• ");   // "- a - b" lists onto their own lines
+  const quote = q => `<div style="border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:4px 0">“${esc(q.text)}”
+      <small class="muted"> — ${q.stars != null ? (+q.stars).toFixed(0) + "★ · " : ""}${esc(q.home || "")} · ${esc(q.channel || "")} · ${esc(dt((q.stay || "") + "T12:00"))}${q.private ? ` · <span class="pill">private note</span>` : ""}</small></div>`;
+  const revIds = x => [...new Set((x.evidence || []).filter(e => e.type !== "jobs").flatMap(e => e.ids || []))];   // each evidence line is reviews or jobs (type)
+  const card = x => { const ids = revIds(x), jobs = [...new Set((x.evidence || []).filter(e => e.type === "jobs").flatMap(e => e.ids || []))];
+    return `<div class="card" style="margin:0 0 10px;padding:12px 14px" data-i="${x.id}">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${x.kind === "improve" ? `<span class="pill ${pr[x.priority]}">${esc(x.priority)}</span>` : `<span class="pill green">${x.kind === "trend" ? "trend" : "grow"}</span>`}
+      <span class="pill">${esc(AREA[x.area] || x.area)}</span>${x.kind === "improve" ? `<span class="pill">${esc(ISTAT[x.status])}</span>` : ""}${x.manual ? `<span class="pill">added by hand</span>` : ""}
+      ${(x.homes || []).slice(0, 8).map(h => `<a class="pill" href="#" data-home="${esc(h)}">${esc(h)}</a>`).join("")}${(x.homes || []).length > 8 ? `<span class="muted">+${x.homes.length - 8} homes</span>` : ""}</div>
+    <p style="margin:8px 0 4px;font-weight:700;font-size:15.5px">${esc(x.title)}</p>
+    ${x.detail ? `<p style="margin:0 0 6px;white-space:pre-line">${lines(x.detail)}</p>` : ""}
+    ${x.suggestion ? `<p style="margin:0 0 6px;white-space:pre-line"><b>What to do:</b> ${lines(x.suggestion)}</p>` : ""}
+    ${x.impact ? `<p style="margin:0 0 6px;white-space:pre-line"><b>Why it matters:</b> ${lines(x.impact)}</p>` : ""}
+    ${(x.quotes || []).map(quote).join("")}
+    ${x.after_done ? `<p style="margin:6px 0"><b>Since it was done:</b> ${esc(x.after_done)}</p>` : ""}
+    ${(x.teams || []).length ? `<p class="muted" style="margin:6px 0 0;font-size:13px">Who: ${x.teams.map(t => esc(TEAMN[t] || t)).join(", ")}</p>` : ""}
+    ${x.owner_name || x.note ? `<p class="muted" style="margin:2px 0 0;font-size:13px">${x.owner_name ? "Owner: " + esc(x.owner_name) : ""}${x.owner_name && x.note ? " · " : ""}${x.note ? "Note: " + esc(x.note) : ""}${x.status_by ? ` (${esc(x.status_by)}, ${esc(dt(x.status_at))})` : ""}</p>` : ""}
+    <p class="muted" style="margin:6px 0 0;font-size:12.5px">Evidence: ${(x.evidence || []).map(e => `${esc(e.source)} — ${esc(e.what)} (${e.count})`).join(" · ") || "—"}${jobs.length ? ` · jobs ${jobs.map(esc).join(", ")}` : ""}
+      ${ids.length ? ` <a class="anlink" href="#" data-ids="${ids.join(",")}">Read the ${ids.length} reviews →</a>` : ""}<br>Source: ${esc(x.source)} · first seen ${esc(dt(x.found_on + "T12:00"))}${x.seen_count > 1 ? `, seen ${x.seen_count} times` : ""}</p>
+    ${edit && x.kind === "improve" ? `<div class="anbar" style="margin:8px 0 0"><select data-st>${Object.entries(ISTAT).map(([k, t]) => `<option value="${k}"${k === x.status ? " selected" : ""}>${t}</option>`).join("")}</select>
+      <input data-ow placeholder="Who owns it" value="${esc(x.owner_name || "")}" style="flex:0 1 160px;min-width:120px"><input data-no placeholder="Note (what was done, when)">
+      ${(x.teams || []).length ? `<label style="font-size:13px;display:inline-flex;gap:5px;align-items:center"><input type="checkbox" data-tip style="flex:0 0 auto;width:auto;min-width:0"> Tip on the team's Home page</label>` : ""}<button class="btn small" data-save>Save</button><span class="muted" data-msg></span></div>` : ""}</div>`; };
+  const wire = () => {
+    el.querySelectorAll("[data-ids]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showIds(a.dataset.ids.split(",").map(Number)); });
+    el.querySelectorAll("[data-home]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showHome(a.dataset.home); });
+    el.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const c = b.closest("[data-i]"), m = c.querySelector("[data-msg]"); b.disabled = true; m.textContent = "Saving…";
+      const r = await sb.rpc("review_insight_set", { p_id:+c.dataset.i, p_status:c.querySelector("[data-st]").value, p_owner:c.querySelector("[data-ow]").value, p_note:c.querySelector("[data-no]").value, p_tip:!!(c.querySelector("[data-tip]") || {}).checked });
+      b.disabled = false; if(r.error){ m.textContent = r.error.message; return; } m.textContent = "Saved" + (r.data && r.data.tips ? ` · tip sent to ${r.data.tips}` : "") + ".";
+      setTimeout(() => insights(el, tab, ctx), 700); }); };
+  const runLine = `<p class="ansrc">${run ? `Last read ${esc(dt(run.ran_at))} (${esc(run.by_name || "")}): ${(run.read || {}).reviews || 0} reviews from the last 2 years, ${(run.read || {}).jobs || 0} maintenance jobs; ${run.found} findings, ${run.new_count} new. Re-read every Tuesday.` : "The first read hasn't finished yet."}
+    Findings are written by Claude (AI) from the reviews and checked by the hub: every finding needs 2+ real reviews, and quotes must match the review word for word. Read the reviews before acting.
+    ${runs[0] && runs[0].error ? ` Last try failed: ${esc(runs[0].error)}.` : ""}${admin ? ` <button class="btn small" id="riRun">Look again now</button> <span id="riMsg"></span>` : ""}</p>`;
+  const runBtn = () => { const b = el.querySelector("#riRun"); if(!b) return; b.onclick = async () => { b.disabled = true; el.querySelector("#riMsg").textContent = "Started — takes about 5 minutes. Come back and reload.";
+    const r = await sb.functions.invoke("review-insights", { body:{} }); if(r.error) el.querySelector("#riMsg").textContent = "Couldn't start: " + r.error.message; }; };
+
+  if(tab === "patterns"){
+    const G = L.filter(x => x.kind !== "improve" && !x.gone), st = (run && run.stats) || {};
+    el.innerHTML = `${run ? `<div class="card" style="margin:0 0 12px;padding:12px 14px"><h3 style="margin:0 0 6px;font-size:16px">This week's read</h3><p style="margin:0">${esc(st.summary)}</p></div>` : ""}
+      <h3 class="anh3">Patterns that can grow the business</h3>${G.length ? G.map(card).join("") : `<p class="muted">No patterns yet.</p>`}
+      <h3 class="anh3">The numbers</h3><div class="anch2"><div id="riq1"></div><div id="riq2"></div></div>
+      <div class="anch2" style="margin-top:12px"><div><h4 style="margin:0 0 6px">By channel (last 12 months)</h4><div id="rich"></div></div><div><h4 style="margin:0 0 6px">By size (last 12 months)</h4><div id="ribd"></div></div></div>
+      <h4 style="margin:14px 0 6px">By neighborhood (last 12 months, 5+ reviews)</h4><div id="rinb"></div>
+      <h3 class="anh3">Topics: rising or falling</h3><p class="muted" style="margin:0 0 6px">Complaints per 100 reviews, last 6 months vs. the 6 months before, and how often 5-star guests bring each topic up (what they love). A keyword count over the reviews loaded on this page.</p><div id="ritp"></div>
+      ${runLine}<p class="ansrc">Numbers: guest reviews in the hub (track_reviews: Track Airbnb/Vrbo, our website, Google, Trustpilot), stays in the last 2 years; reviews naming staff in a complaint left out. Charts skip quarters with fewer than 20 rated reviews.${st.public_reply_pct_12mo != null ? ` We replied to ${st.public_reply_pct_12mo}% of public reviews in the last 12 months.` : ""} Our website only shows reviews we picked, so it scores high on purpose.</p>`;
+    const Q = Object.entries(st.by_quarter || {}).filter(([k, g]) => k !== "?" && g.reviews >= 20);   // a quarter with a handful of reviews (the one just started) swings wildly
+    lineChart(el.querySelector("#riq1"), "5-star share and 3 stars or less, by quarter of stay", Q.map(q => q[0]),
+      [{ name:"5 stars", vals:Q.map(q => q[1].five_star_pct), color:C1 }, { name:"3 stars or less", vals:Q.map(q => Math.round(q[1].three_or_less / q[1].reviews * 1000) / 10), color:"var(--red,#b3261e)" }], v => Math.round(v) + "%");
+    lineChart(el.querySelector("#riq2"), "Average stars by quarter of stay", Q.map(q => q[0]), [{ name:"Average stars", vals:Q.map(q => q[1].avg), color:C3 }], v => (+v).toFixed(2));
+    const gt = (id, o, name) => table(el.querySelector(id), [{ k:"k", t:name, l:1 }, { k:"reviews", t:"Reviews" }, { k:"avg", t:"Avg stars", f:r => (+r.avg).toFixed(2) }, { k:"five_star_pct", t:"5★ share", f:r => r.five_star_pct + "%" }, { k:"three_or_less", t:"3★ or less" }],
+      Object.entries(o || {}).map(([k, g]) => ({ k, ...g })), "reviews");
+    gt("#rich", st.by_channel_12mo, "Channel"); gt("#ribd", st.by_bedrooms_12mo, "Bedrooms"); gt("#rinb", st.by_neighborhood_12mo, "Neighborhood");
+    const A = await ctx.all(), now = Date.now(), d6 = new Date(now - 182 * 864e5).toISOString().slice(0, 10), d12 = new Date(now - 365 * 864e5).toISOString().slice(0, 10);
+    const a = A.filter(x => x.check_in >= d6), b = A.filter(x => x.check_in >= d12 && x.check_in < d6), five = A.filter(x => +x.overall >= 5 && x.text);
+    const per = (S, k) => S.length ? S.filter(x => x.tc.has(k)).length / S.length * 100 : null;
+    table(el.querySelector("#ritp"), [{ k:"name", t:"Topic", l:1 }, { k:"now", t:"Last 6 mo", f:r => r.now == null ? "—" : r.now.toFixed(1) }, { k:"before", t:"6 mo before", f:r => r.before == null ? "—" : r.before.toFixed(1) },
+      { k:"chg", t:"Change", v:r => r.now == null || r.before == null ? null : r.now - r.before, f:r => r.now == null || r.before == null ? "—" : `<span class="${r.now <= r.before ? "anup" : "andn"}">${r.now > r.before ? "+" : ""}${(r.now - r.before).toFixed(1)}</span>` },
+      { k:"love", t:"In 5★ reviews", f:r => r.love == null ? "—" : r.love.toFixed(0) + "%" }],
+      THEMES.map(([k, name]) => ({ name, now:per(a, k), before:per(b, k), love:five.length ? five.filter(x => x.tm.has(k)).length / five.length * 100 : null })), "chg");
+    wire(); runBtn(); return;
+  }
+  // Improvements
+  const st0 = (() => { try { return localStorage.getItem("an_ri_st") || "open"; } catch(e){ return "open"; } })();
+  el.innerHTML = `<p class="muted" style="margin:0 0 8px">Things guests keep bringing up, with what to do about each. ${edit ? "Set who owns it and move it along; when it's marked done, the weekly read checks whether guests still mention it." : ""}</p>
+    <div class="anbar"><select id="ris"><option value="open">Open (new, planned, doing)</option>${Object.entries(ISTAT).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}<option value="">All</option></select>
+      <select id="ria"><option value="">All areas</option>${Object.entries(AREA).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
+      <select id="rit"><option value="">All teams</option>${Object.entries(TEAMN).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
+      <input id="rih" placeholder="Home (e.g. PL 805)">${edit ? `<button class="btn small" id="riAdd">+ Add an improvement</button>` : ""}</div>
+    <div id="riform"></div><div id="ril"></div>${runLine}`;
+  el.querySelector("#ris").value = st0;
+  const draw = () => { const s = el.querySelector("#ris").value, ar = el.querySelector("#ria").value, t = el.querySelector("#rit").value, h = el.querySelector("#rih").value.trim().toLowerCase();
+    try { localStorage.setItem("an_ri_st", s); } catch(e){}
+    const P = { high:0, medium:1, low:2 }, M = L.filter(x => x.kind === "improve" && (s === "" || (s === "open" ? ["new", "planned", "doing"].includes(x.status) : x.status === s))
+      && (!ar || x.area === ar) && (!t || (x.teams || []).includes(t)) && (!h || (x.homes || []).some(c => c.toLowerCase().includes(h))))
+      .sort((a, b) => a.gone - b.gone || P[a.priority] - P[b.priority] || b.last_seen.localeCompare(a.last_seen));
+    const on = M.filter(x => !x.gone || x.manual), old = M.filter(x => x.gone && !x.manual);
+    el.querySelector("#ril").innerHTML = (on.length ? on.map(card).join("") : `<p class="muted">Nothing here${s === "open" ? " — no open improvements" : ""}.</p>`)
+      + (old.length ? `<details style="margin-top:8px"><summary class="muted">${old.length} not seen in the latest read (older or fading)</summary>${old.map(card).join("")}</details>` : "");
+    wire(); };
+  ["ris", "ria", "rit"].forEach(i => el.querySelector("#" + i).onchange = draw); el.querySelector("#rih").oninput = draw;
+  if(el.querySelector("#riAdd")) el.querySelector("#riAdd").onclick = () => { const f = el.querySelector("#riform");
+    f.innerHTML = `<div class="card" style="margin:0 0 10px;padding:12px 14px"><b>Add an improvement</b>
+      <input id="rfT" placeholder="What guests keep saying (e.g. Hot tub cover broken at PL 805)" style="width:100%;margin:6px 0">
+      <textarea id="rfS" rows="2" placeholder="What to do" style="width:100%;font:inherit"></textarea>
+      <div class="anbar" style="margin:6px 0 0"><select id="rfA">${Object.entries(AREA).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
+        <select id="rfP"><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select>
+        <select id="rfTm"><option value="">Team…</option>${Object.entries(TEAMN).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
+        <input id="rfH" placeholder="Homes, comma separated"><button class="btn small" id="rfGo">Add</button><span class="muted" id="rfM"></span></div></div>`;
+    f.querySelector("#rfGo").onclick = async () => { const r = await sb.rpc("review_insight_add", { p_title:f.querySelector("#rfT").value, p_suggestion:f.querySelector("#rfS").value,
+        p_area:f.querySelector("#rfA").value, p_homes:f.querySelector("#rfH").value.split(",").map(s => s.trim()).filter(Boolean), p_teams:[f.querySelector("#rfTm").value].filter(Boolean), p_review_ids:[], p_priority:f.querySelector("#rfP").value });
+      if(r.error){ f.querySelector("#rfM").textContent = r.error.message; return; } insights(el, tab, ctx); }; };
+  draw(); runBtn();
 }
 
 const VIEWS = { comps, demand, pace, top, channels, worst, reviews };
