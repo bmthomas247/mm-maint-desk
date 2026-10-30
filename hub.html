@@ -35,6 +35,7 @@ a{color:var(--pine)}
 .field{display:block;margin:10px 0;text-align:left} .field span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:700}
 input,select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line-2);border-radius:13px;padding:10px 13px;background:var(--card);color:var(--ink)}
 textarea{min-height:120px;resize:vertical}
+input[type=checkbox],input[type=radio]{width:20px;height:20px;min-height:0;padding:0;margin:0;flex:none;accent-color:var(--moose);cursor:pointer}
 input:focus,select:focus,textarea:focus{outline:3px solid var(--moose-soft);border-color:var(--moose)}
 .muted{color:var(--muted);font-size:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
@@ -1014,9 +1015,9 @@ async function pennyBriefCard(box){
   const t12 = t => { const [h, m] = t.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} am`; };
   box.innerHTML = `<div class="card"><b style="font-size:17px">☀️ Morning briefing from Penny</b>
     <p class="muted" style="margin:4px 0 8px">A short Slack message each morning with your day: meetings, arrivals and cleans, your Breezeway tasks, your checks and Penny's tips. Only what you can already see in the hub.</p>
-    <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="pbon"${p.enabled ? " checked" : ""}> Send me the morning briefing</label>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0"><label>Time <select id="pbat">${times.map(t => `<option value="${t}"${t === p.send_at ? " selected" : ""}>${t12(t)}</option>`).join("")}</select></label>
-      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pbwk"${p.weekends ? " checked" : ""}> Weekends too</label></div>
+    <label style="display:flex;gap:10px;align-items:center;margin:10px 0;font-weight:700;cursor:pointer"><input type="checkbox" id="pbon"${p.enabled ? " checked" : ""}> Send me the morning briefing</label>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:6px 0 12px"><label style="display:flex;gap:8px;align-items:center;font-weight:700">Time <select id="pbat" style="width:auto;min-height:40px;padding:6px 10px">${times.map(t => `<option value="${t}"${t === p.send_at ? " selected" : ""}>${t12(t)}</option>`).join("")}</select></label>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer"><input type="checkbox" id="pbwk"${p.weekends ? " checked" : ""}> Weekends too</label></div>
     <div style="display:flex;gap:8px;align-items:center"><button class="btn small" id="pbsave">Save</button><span class="muted" id="pbmsg"></span></div></div>`;
   $("#pbsave").onclick = async () => { $("#pbsave").disabled = true;
     const x = await sb.rpc("penny_brief_set", { p_enabled:$("#pbon").checked, p_send_at:$("#pbat").value, p_weekends:$("#pbwk").checked });
