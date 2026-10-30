@@ -1594,24 +1594,53 @@ async function pennyAsk(q){
 }
 /* Penny's coaching tips (Brandon 2026-10-29: "she'll remind Jeff … now's the time to call that owner"). penny_tips.py finds them;
    each person reads only their own (RLS). Done / 👍 / 👎 / Hide are saved, and that's how Penny learns which tips help. */
+// Brandon 2026-10-30: tips of the same kind are bunched into ONE tip (e.g. Jeff's 5 owner-call tips = "look at rates on the Rates desk"),
+// with the homes listed inside; Done / 👍 / 👎 / Hide on a bunch marks every tip in it. The header shows Penny's face.
+const TIP_GROUP = {
+  "signal:owner_call": { t: n => `Rates: ${n} homes have lots of open nights and score low`, b: "Look at these homes on the Rates desk and decide what to do with each one: change the price, or call the owner about what guests keep saying.", link: "#/rates", go: "Open the Rates desk" },
+  "signal:rated_high_priced_low": { t: n => `Rates: ${n} homes rate high but are priced low`, b: "Look at these on the Rates desk and decide whether to raise the price.", link: "#/rates", go: "Open the Rates desk" },
+  "signal:dup_jobs": { t: n => `${n} homes have the same job open more than once`, b: "Close the extra copies so each job is open only once.", link: "#/maintenance", go: "Open the Workbench" },
+  "signal:stale_guest_job": { t: n => `${n} guest-reported jobs have been open 3+ weeks`, b: "Check on these and get them finished or updated.", link: "#/maintenance", go: "Open the Workbench" },
+  "signal:too_cold_home": { t: n => `${n} homes keep sending "too cold" alerts`, b: "Check the thermostat mode and heat source at each one.", link: "#/maintenance", go: "Open the Workbench" },
+  "signal:review_fix": { t: n => `${n} homes have repeat guest complaints to fix`, b: "Each one can become a Breezeway task.", link: "#/maintenance", go: "Open the Workbench" },
+  "signal:review_clean": { t: n => `${n} homes have repeat cleanliness complaints`, b: "Each one can become an inspection before the next arrival.", link: "#/housekeeping", go: "Open Housekeeping" },
+  "license_before_stay": { t: n => `${n} homes have a guest coming and an expired license`, b: "Renew each one, or confirm it's already renewed in the license sheet.", link: "#/licensing", go: "Open Licensing" },
+  "owner_stay_review": { t: n => `${n} owners are in town at homes with repeat complaints`, b: "A good time to ask each owner to try what guests mention.", link: "#/reviews", go: "Open Reviews" },
+  "arrival_balance": { t: n => `${n} arrivals still owe a balance`, b: "Collect before they arrive.", link: "#/reservations", go: "Open Check lists" },
+  "arrival_open_job": { t: n => `${n} arrivals have an open urgent job`, b: "Get these done before the guests arrive.", link: "#/maintenance", go: "Open the Workbench" },
+};
 async function pennyTips(box){
   if(!box) return;
-  const r = await sb.from("penny_tips").select("id, title, body, source, link, due, signal_id, action_label").eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(8);
+  const r = await sb.from("penny_tips").select("id, rule, title, body, source, link, due, signal_id, action_label").eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(60);
   const T = r.data || []; if(!T.length){ box.innerHTML = ""; return; }
-  box.innerHTML = `<div class="card"><div class="shead"><b style="font-size:17px">🦌 Penny's tips for you</b><span class="muted" style="margin-left:auto">${T.length}</span></div>
-    ${T.map(t => `<div class="fb" data-tip="${t.id}"><div class="hd"><b>${esc(t.title)}</b></div><p style="margin:4px 0">${esc(t.body)}</p>
+  const G = []; T.forEach(t => { const k = t.rule || ("tip" + t.id); let g = G.find(x => x.k === k); if(!g){ g = { k, tips:[] }; G.push(g); } g.tips.push(t); });
+  const btns = (open, ask) => `${open}<button class="btn small" data-ask="${ask}">Ask Penny about ${ask.includes(",") ? "these" : "it"}</button>
+        <button class="btn small" data-mk="done">✓ Done</button><button class="btn small" data-mk="useful" title="This tip helped">👍</button><button class="btn small" data-mk="not_useful" title="Not useful">👎</button><button class="btn small" data-mk="dismissed">Hide</button>`;
+  const one = t => `<div class="fb" data-tip="${t.id}"><div class="hd"><b>${esc(t.title)}</b></div><p style="margin:4px 0">${esc(t.body)}</p>
       <p class="muted" style="font-size:12px;margin:0 0 6px">Source: ${esc(t.source)}</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${t.signal_id && t.action_label ? `<button class="btn primary small" data-do="${t.id}">✅ ${esc(t.action_label)}</button>` : ""}${t.link ? `<a class="btn small" href="${esc(t.link)}">Open</a>` : ""}<button class="btn small" data-ask="${t.id}">Ask Penny about it</button>
-        <button class="btn small" data-mk="done">✓ Done</button><button class="btn small" data-mk="useful" title="This tip helped">👍</button><button class="btn small" data-mk="not_useful" title="Not useful">👎</button><button class="btn small" data-mk="dismissed">Hide</button></div></div>`).join("")}</div>`;
-  box.querySelectorAll("[data-mk]").forEach(b => b.onclick = async () => { const row = b.closest("[data-tip]");
-    const x = await sb.rpc("penny_tip_mark", { p_id:+row.dataset.tip, p_status:b.dataset.mk });
-    if(!x.error) row.innerHTML = `<p class="muted" style="margin:0">${{ done:"Marked done ✓", useful:"Thanks, that helps Penny learn 👍", not_useful:"Got it, Penny will learn from that 👎", dismissed:"Hidden" }[b.dataset.mk]}</p>`; });
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${btns((t.signal_id && t.action_label ? `<button class="btn primary small" data-do="${t.id}">✅ ${esc(t.action_label)}</button>` : "") + (t.link ? `<a class="btn small" href="${esc(t.link)}">Open</a>` : ""), String(t.id))}</div></div>`;
+  const bunch = g => { const d = TIP_GROUP[g.k] || { t: n => `${n} similar tips`, b: "", link: g.tips[0].link, go: "Open" }, ids = g.tips.map(t => t.id).join(",");
+    const srcs = [...new Set(g.tips.map(t => t.source).filter(Boolean))].join(" · ");
+    return `<div class="fb" data-tip="${ids}"><div class="hd"><b>${esc(d.t(g.tips.length))}</b></div>${d.b ? `<p style="margin:4px 0">${esc(d.b)}</p>` : ""}
+      <details style="margin:4px 0 6px"><summary style="cursor:pointer;font-size:13px">See the ${g.tips.length}</summary>
+        ${g.tips.map(t => `<div style="border-left:3px solid var(--line);padding:4px 0 4px 10px;margin:6px 0"><b style="font-size:13px">${esc(t.title)}</b><p style="margin:2px 0;font-size:13px">${esc(t.body)}</p>${t.signal_id && t.action_label ? `<button class="btn primary small" data-do="${t.id}">✅ ${esc(t.action_label)}</button>` : ""}</div>`).join("")}</details>
+      <p class="muted" style="font-size:12px;margin:0 0 6px">Source: ${esc(srcs)}</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${btns(d.link ? `<a class="btn primary small" href="${esc(d.link)}">${esc(d.go)}</a>` : "", ids)}</div></div>`; };
+  box.innerHTML = `<div class="card"><div class="shead"><span style="width:30px;height:30px;border-radius:50%;overflow:hidden;background:#eef5e0;flex:none;display:inline-block;margin-right:8px"><img src="penny-face.png" alt="Penny" style="width:100%;height:100%;object-fit:cover;display:block"></span><b style="font-size:17px">Penny's tips for you</b><span class="muted" style="margin-left:auto">${G.length}</span></div>
+    ${G.slice(0, 8).map(g => g.tips.length > 1 ? bunch(g) : one(g.tips[0])).join("")}</div>`;
+  box.querySelectorAll("[data-mk]").forEach(b => b.onclick = async () => { const row = b.closest("[data-tip]"); b.disabled = true;
+    const ids = row.dataset.tip.split(",").map(Number); let err = null;
+    for(const id of ids){ const x = await sb.rpc("penny_tip_mark", { p_id:id, p_status:b.dataset.mk }); if(x.error) err = x.error; }
+    if(err){ b.disabled = false; return alert("Couldn't save: " + err.message); }
+    row.innerHTML = `<p class="muted" style="margin:0">${{ done:"Marked done ✓", useful:"Thanks, that helps Penny learn 👍", not_useful:"Got it, Penny will learn from that 👎", dismissed:"Hidden" }[b.dataset.mk]}</p>`; });
   // signals.js rules (2026-10-29): "✅ Do it" approves the action; the hub does it within ~30 minutes (Breezeway task / Rates Findings)
-  box.querySelectorAll("[data-do]").forEach(b => b.onclick = async () => { const row = b.closest("[data-tip]"); b.disabled = true;
+  box.querySelectorAll("[data-do]").forEach(b => b.onclick = async () => { b.disabled = true;
     const x = await sb.rpc("signal_do", { p_tip:+b.dataset.do });
     if(x.error){ b.disabled = false; return alert("Couldn't do it: " + x.error.message); }
-    row.innerHTML = `<p class="muted" style="margin:0">On it ✓ The hub will do this within about 30 minutes.</p>`; });
-  box.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => { const t = T.find(x => x.id === +b.dataset.ask); pennyOpen(true); pennyAsk("Help me with this tip: " + t.title + ". What should I do, step by step?"); });
+    b.outerHTML = `<p class="muted" style="margin:0">On it ✓ The hub will do this within about 30 minutes.</p>`; });
+  box.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => { const ts = b.dataset.ask.split(",").map(Number).map(id => T.find(x => x.id === id)).filter(Boolean);
+    pennyOpen(true);
+    pennyAsk(ts.length > 1 ? "Help me with these tips together: " + ts.map(t => t.title).join("; ") + ". What should I look at first, and what should I decide for each?" : "Help me with this tip: " + ts[0].title + ". What should I do, step by step?"); });
 }
 /* On a stay's check list, Penny pops in with what's left to finish it (reservations.js window.resCtx(res).left). Once a day per stay. */
 function pennyNudge(){
