@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Book a time with Moose Management</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- book.html (2026-10-30): a staff member's booking link (book.html?l=<slug>). Public: guests, vendors or staff pick an open time inside
+     the window the staff member set; open times come from the Edge Function `meet` (action slots), never what they're busy with.
+     Booking -> meet.html?t=<token> (Zoom link + add to calendar). -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --ground:#f5f7f0; --card:#ffffff; --ink:#15201a;
+  --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --red:#b42318; --shadow:0 1px 2px rgba(20,40,20,.06),0 4px 18px rgba(20,40,20,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --moose-soft:#1e2a10; --moose-ink:#cfe79a; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{ --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --moose-soft:#1e2a10; --moose-ink:#cfe79a; }
+*{box-sizing:border-box} body{margin:0;background:var(--ground);line-height:1.5;-webkit-font-smoothing:antialiased}
+.top{background:var(--forest);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;font-weight:800}
+.top img{width:34px;height:34px;border-radius:50%;background:#fff}
+main{max-width:640px;margin:24px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow);margin-bottom:14px}
+h1{font-size:24px;margin:0 0 4px;line-height:1.25} h2{font-size:16px;margin:0 0 10px} .muted{color:var(--muted)}
+.days,.times{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:9px 12px;font:inherit;font-weight:700;cursor:pointer;min-width:92px}
+.chip small{display:block;font-weight:600;color:var(--muted);font-size:12px}
+.chip.on{background:var(--moose);border-color:var(--moose);color:#16260a} .chip.on small{color:#2f4710}
+label{display:block;margin:10px 0 0;font-weight:700;font-size:14px} input,textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin-top:4px}
+textarea{min-height:80px} .btn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:800;font-size:17px;background:var(--moose);color:#16260a;cursor:pointer}
+.btn:disabled{opacity:.6} .bad{color:var(--red);font-weight:700} .trap{position:absolute;left:-5000px}
+.note{white-space:pre-wrap;background:var(--moose-soft);color:var(--moose-ink);border-radius:12px;padding:12px 14px;margin:12px 0 0}
+</style>
+</head>
+<body>
+<div class="top"><img src="moose-logo.png" alt="">Moose Management</div>
+<main id="main"><div class="card"><p class="muted">Loading open times…</p></div></main>
+<script src="config.js"></script>
+<script>
+(async function(){
+  const C = window.MM_CONFIG, main = document.getElementById("main");
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
+  const slug = (new URLSearchParams(location.search).get("l") || "").replace(/[^0-9a-z]/gi, "");
+  const call = o => fetch(C.url + "/functions/v1/meet", { method:"POST", headers:{ "content-type":"application/json", apikey:C.anonKey, authorization:"Bearer " + C.anonKey }, body:JSON.stringify(o) }).then(r => r.json()).catch(() => ({ ok:false, error:"We couldn't reach the server. Please try again." }));
+  const fail = msg => main.innerHTML = `<div class="card"><p class="bad">${esc(msg)}</p></div>`;
+  if(!slug) return fail("This link is missing its booking code.");
+  const r = await call({ action:"slots", slug });
+  if(!r.ok) return fail(r.error);
+  const L = r.link, by = {};
+  L.slots.forEach(s => (by[s.day] = by[s.day] || []).push(s.start));
+  const days = Object.keys(by).sort();
+  const dlab = d => { const [y, m, dd] = d.split("-").map(Number); const dt = new Date(Date.UTC(y, m - 1, dd, 12));
+    return { a:dt.toLocaleDateString("en-US", { timeZone:"UTC", weekday:"short" }), b:dt.toLocaleDateString("en-US", { timeZone:"UTC", month:"short", day:"numeric" }) }; };
+  const ft = t => { const [h, m] = t.split(":").map(Number); return (h % 12 || 12) + ":" + String(m).padStart(2, "0") + (h < 12 ? " am" : " pm"); };
+  document.title = L.title + " · Moose Management";
+  let day = days[0], time = null;
+  const draw = () => {
+    main.innerHTML = `<div class="card"><h1>${esc(L.title)}</h1><div class="muted">With ${esc(L.host)} from Moose Management · ${L.minutes} minutes · Zoom</div>${L.note ? `<div class="note">${esc(L.note)}</div>` : ""}</div>
+      ${days.length ? `<div class="card"><h2>1. Pick a day</h2><div class="days">${days.map(d => { const x = dlab(d); return `<button class="chip ${d === day ? "on" : ""}" data-d="${d}">${x.a}<small>${x.b}</small></button>`; }).join("")}</div>
+        <h2 style="margin-top:16px">2. Pick a time <span class="muted" style="font-weight:600">(Park City time)</span></h2><div class="times">${(by[day] || []).map(t => `<button class="chip ${t === time ? "on" : ""}" data-t="${t}">${ft(t)}</button>`).join("")}</div></div>
+      <div class="card" ${time ? "" : 'style="opacity:.55"'}><h2>3. Your details</h2>
+        <label>Your name<input id="nm" autocomplete="name" maxlength="120"></label>
+        <label>Email<input id="em" type="email" autocomplete="email" maxlength="200"></label>
+        <label>Phone (optional)<input id="ph" type="tel" autocomplete="tel" maxlength="40"></label>
+        <label>Anything we should know? (optional)<textarea id="nt" maxlength="1000"></textarea></label>
+        <input class="trap" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn" id="go" ${time ? "" : "disabled"}>${time ? "Book " + esc(dlab(day).a + " " + dlab(day).b + " at " + ft(time)) : "Pick a time above"}</button><p id="msg" class="bad"></p></div>`
+      : `<div class="card"><p>There are no open times right now. Please contact Moose Management.</p></div>`}`;
+    main.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { day = b.dataset.d; time = null; draw(); });
+    main.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { const keep = ["nm", "em", "ph", "nt"].map(i => document.getElementById(i) ? document.getElementById(i).value : "");
+      time = b.dataset.t; draw(); ["nm", "em", "ph", "nt"].forEach((i, k) => document.getElementById(i).value = keep[k]); document.getElementById("nm").focus(); });
+    const go = document.getElementById("go");
+    if(go) go.onclick = async () => {
+      const v = i => document.getElementById(i).value.trim(), msg = document.getElementById("msg");
+      if(!v("nm") || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v("em"))) return msg.textContent = "Please add your name and a working email.";
+      go.disabled = true; go.textContent = "Booking…";
+      const b = await call({ action:"book", slug, day, start:time, name:v("nm"), email:v("em"), phone:v("ph"), note:v("nt"), website:v("website") });
+      if(!b.ok){ msg.textContent = b.error; go.disabled = false; go.textContent = "Try again";
+        if(/taken/.test(b.error || "")){ const s = await call({ action:"slots", slug }); if(s.ok){ L.slots = s.link.slots; Object.keys(by).forEach(k => delete by[k]); L.slots.forEach(x => (by[x.day] = by[x.day] || []).push(x.start)); time = null; } }
+        return; }
+      location.href = "meet.html?t=" + encodeURIComponent(b.token);
+    };
+  };
+  draw();
+})();
+</script>
+</body>
+</html>
