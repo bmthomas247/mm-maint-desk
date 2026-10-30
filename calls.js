@@ -17,7 +17,11 @@ const timef = s => s && s.length > 11 ? new Date(s).toLocaleTimeString(undefined
 const iso = d => d.toLocaleDateString("en-CA");
 const dirName = d => /^in/i.test(d || "") ? "Inbound" : /^out/i.test(d || "") ? "Outbound" : (d || "");
 const answered = c => /answered/i.test(c.routing_result || "");
-let S = { from: iso(new Date(Date.now() - 13 * 864e5)), to: iso(new Date()), agent: "", dir: "", result: "", queue: "", tr: "" };
+let S = { from: iso(new Date(Date.now() - 13 * 864e5)), to: iso(new Date()), agent: "", dir: "", result: "", queue: "", tr: "", party: "", q: "" };
+// who called (track_call_match.party, track_calls_match.py: Track contacts + stays + hub vendors by phone number)
+const PARTY = { guest:"Guest (has stayed or booked)", lead:"Lead (in Track, never stayed)", prospect:"Possible guest (not in Track)", owner:"Owner", vendor:"Vendor", other:"Other / unknown" };
+const digits = s => String(s || "").replace(/\D/g, "");
+const phonef = s => { const d = digits(s).slice(-10); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : (s || ""); };
 function css(){
   if(document.getElementById("callcss")) return;
   const s = document.createElement("style"); s.id = "callcss";
@@ -121,25 +125,35 @@ window.callsView = async function(v){
     $("#cub").onclick = () => uploadBox(last, () => callsView(v));
     if(/\/upload$/.test(location.hash)){ history.replaceState(null, "", "#/call_review"); uploadBox(last, () => callsView(v)); }
   }
-  let calls, trs;
+  let calls, trs, mts, nts;
   try {
-    calls = await all(() => sb.from("track_calls").select("call_id,call_at,call_day,direction,duration_s,hold_s,agents,queues,call_result,routing_result,caller_name,caller_city,caller_state")
+    calls = await all(() => sb.from("track_calls").select("call_id,call_at,call_day,direction,duration_s,hold_s,agents,queues,call_result,routing_result,caller_name,caller_city,caller_state,outside_number,first_queue")
       .gte("call_day", S.from).lte("call_day", S.to).order("call_at", { ascending:false }));
-    trs = await all(() => sb.from("track_call_transcripts").select("call_id,status,words").gte("call_id", calls.length ? Math.min(...calls.map(c => c.call_id)) : 0));
+    const lo = calls.length ? Math.min(...calls.map(c => c.call_id)) : 0;
+    trs = await all(() => sb.from("track_call_transcripts").select("call_id,status,words").gte("call_id", lo));
+    mts = await all(() => sb.from("track_call_match").select("call_id,party,contact_name,vendor_name").gte("call_id", lo));
+    nts = await all(() => sb.from("track_call_notes").select("call_id,guest_name:data->>guest_name").gte("call_id", lo));
   } catch(e){ return $("#cbody").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(e.message)}</p></div>`; }
-  const T = Object.fromEntries(trs.map(t => [t.call_id, t]));
+  const T = Object.fromEntries(trs.map(t => [t.call_id, t])), MT = Object.fromEntries(mts.map(m => [m.call_id, m])), NM = Object.fromEntries(nts.map(n => [n.call_id, n.guest_name]));
+  // the name we show: Track contact, else the hub vendor, else the name Penny heard on the call (marked "said on call")
+  const who = c => { const m = MT[c.call_id] || {}; return m.contact_name || m.vendor_name || (NM[c.call_id] ? NM[c.call_id] + " (said on call)" : c.caller_name || ""); };
   const opts = (k, split) => [...new Set(calls.flatMap(c => split ? (c[k] || "").split(",").map(x => x.trim()) : [c[k] || ""]).filter(Boolean))].sort();
   const sel = (id, label, list, val) => `<div><label>${label}</label><br><select id="${id}"><option value="">All</option>${list.map(x => `<option ${x === val ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div>`;
-  $("#cflt").innerHTML = `<div><label>From</label><br><input type="date" id="cfrom" value="${S.from}"></div><div><label>To</label><br><input type="date" id="cto" value="${S.to}"></div>
-    ${sel("cag", "Agent", opts("agents", true), S.agent)}${sel("cdir", "Direction", ["Inbound", "Outbound"], S.dir)}${sel("cres", "Result", opts("call_result"), S.result)}${sel("cq", "Queue", opts("queues", true), S.queue)}
+  $("#cflt").innerHTML = `<div><label>Caller</label><br><input type="search" id="cqq" placeholder="Name or phone" value="${esc(S.q)}" style="width:190px"></div><div><label>From</label><br><input type="date" id="cfrom" value="${S.from}"></div><div><label>To</label><br><input type="date" id="cto" value="${S.to}"></div>
+    ${sel("cag", "Agent", opts("agents", true), S.agent)}${sel("cdir", "Inbound / outbound", ["Inbound", "Outbound"], S.dir)}${sel("cq", "Call type (Pulse line)", opts("queues", true), S.queue)}
+    <div><label>Who called</label><br><select id="cpa"><option value="">All</option>${Object.entries(PARTY).map(([k, l]) => `<option value="${k}" ${S.party === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>${sel("cres", "Result", opts("call_result"), S.result)}
     <div><label>Transcript</label><br><select id="ctr"><option value="">All</option><option value="y" ${S.tr === "y" ? "selected" : ""}>Has one</option><option value="n" ${S.tr === "n" ? "selected" : ""}>None</option></select></div>`;
-  const re = () => { S = { from:$("#cfrom").value, to:$("#cto").value, agent:$("#cag").value, dir:$("#cdir").value, result:$("#cres").value, queue:$("#cq").value, tr:$("#ctr").value }; };
+  const re = () => { S = { from:$("#cfrom").value, to:$("#cto").value, agent:$("#cag").value, dir:$("#cdir").value, result:$("#cres").value, queue:$("#cq").value, tr:$("#ctr").value, party:$("#cpa").value, q:$("#cqq").value.trim() }; };
   $("#cfrom").onchange = $("#cto").onchange = () => { re(); callsView(v); };
-  ["#cag", "#cdir", "#cres", "#cq", "#ctr"].forEach(id => $(id).onchange = () => { re(); draw(); });
+  ["#cag", "#cdir", "#cres", "#cq", "#ctr", "#cpa"].forEach(id => $(id).onchange = () => { re(); draw(); });
+  let qt; $("#cqq").oninput = () => { clearTimeout(qt); qt = setTimeout(() => { re(); draw(); }, 250); };
   function draw(){
     const has = c => T[c.call_id] && T[c.call_id].status === "ok";
+    const ql = S.q.toLowerCase(), qd = digits(S.q);
+    const hit = c => !ql || who(c).toLowerCase().includes(ql) || (qd.length >= 3 && digits(c.outside_number).includes(qd)) || [c.caller_city, c.caller_state].join(" ").toLowerCase().includes(ql);
     const list = calls.filter(c => (!S.agent || (c.agents || "").split(",").map(x => x.trim()).includes(S.agent)) && (!S.dir || dirName(c.direction) === S.dir)
-      && (!S.result || c.call_result === S.result) && (!S.queue || (c.queues || "").split(",").map(x => x.trim()).includes(S.queue)) && (!S.tr || (S.tr === "y") === has(c)));
+      && (!S.result || c.call_result === S.result) && (!S.queue || (c.queues || "").split(",").map(x => x.trim()).includes(S.queue)) && (!S.tr || (S.tr === "y") === has(c))
+      && (!S.party || (MT[c.call_id] || {}).party === S.party) && hit(c));
     if(!calls.length) return $("#cbody").innerHTML = `<div class="card"><p class="muted">No calls for these dates yet.${canUp ? " Press <b>⬆ Upload calls from Track</b>." : ""}</p></div>`;
     const inb = list.filter(c => dirName(c.direction) === "Inbound"), talk = list.filter(c => c.duration_s), avg = talk.length ? Math.round(talk.reduce((a, c) => a + c.duration_s, 0) / talk.length) : null;
     const ag = {}; list.forEach(c => (c.agents || "No agent").split(",").map(x => x.trim()).forEach(a => { const o = ag[a] = ag[a] || { n:0, i:0, o:0, t:0, tr:0 };
@@ -152,9 +166,9 @@ window.callsView = async function(v){
         <div class="kpi"><span class="muted">With transcript</span><b>${list.filter(has).length}</b></div></div>
       <div class="card" style="overflow-x:auto"><b>By agent</b><table><tr><th>Agent</th><th>Calls</th><th>Inbound</th><th>Outbound</th><th>Avg talk</th><th>Transcripts</th></tr>
         ${Object.entries(ag).sort((a, b) => b[1].n - a[1].n).map(([a, o]) => `<tr><td>${esc(a)}</td><td>${o.n}</td><td>${o.i}</td><td>${o.o}</td><td>${dur(Math.round(o.t / o.n))}</td><td>${o.tr}</td></tr>`).join("")}</table></div>
-      <div class="card" style="overflow-x:auto"><b>Calls</b> <span class="muted">· click a call for its transcript</span><table><tr><th>When</th><th>Direction</th><th>Agent</th><th class="hide-s">Caller</th><th>Result</th><th class="hide-s">Queue</th><th>Talk</th><th>Transcript</th></tr>
+      <div class="card" style="overflow-x:auto"><b>Calls</b> <span class="muted">· click a call for its transcript${S.q ? ` · searching ${esc(dayf(S.from))} to ${esc(dayf(S.to))}, set From earlier to search older calls` : ""}</span><table><tr><th>When</th><th>Direction</th><th>Agent</th><th class="hide-s">Caller</th><th>Result</th><th class="hide-s">Queue</th><th>Talk</th><th>Transcript</th></tr>
         ${list.slice(0, 500).map(c => `<tr class="cl" data-id="${c.call_id}"><td style="white-space:nowrap">${esc(dayf(c.call_at || c.call_day))}<br><span class="muted">${esc(timef(c.call_at))}</span></td><td>${esc(dirName(c.direction))}</td>
-          <td>${esc(c.agents || "")}</td><td class="hide-s">${esc(c.caller_name || "")}${c.caller_city || c.caller_state ? `<br><span class="muted">${esc([c.caller_city, c.caller_state].filter(Boolean).join(", "))}</span>` : ""}</td>
+          <td>${esc(c.agents || "")}</td><td class="hide-s">${esc(who(c))}${MT[c.call_id] ? ` <span class="pill">${esc((PARTY[MT[c.call_id].party] || "").split(" (")[0])}</span>` : ""}${c.outside_number ? `<br><span class="muted">${esc(phonef(c.outside_number))}</span>` : ""}${c.caller_city || c.caller_state ? `<br><span class="muted">${esc([c.caller_city, c.caller_state].filter(Boolean).join(", "))}</span>` : ""}</td>
           <td>${esc(c.call_result || "")}${c.routing_result ? `<br><span class="muted">${esc(c.routing_result)}</span>` : ""}</td><td class="hide-s">${esc(c.queues || "")}</td><td>${dur(c.duration_s)}</td>
           <td>${has(c) ? `<span class="pill green">${T[c.call_id].words} words</span>` : T[c.call_id] ? `<span class="pill">none</span>` : `<span class="pill amber">pending</span>`}</td></tr>`).join("")}</table>
         ${list.length > 500 ? `<p class="muted">Showing the newest 500 of ${list.length}. Narrow the dates or filters to see the rest.</p>` : ""}</div>`;
