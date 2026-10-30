@@ -1061,7 +1061,7 @@ function vHomes(){
   var h='<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
       return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div>'+
     '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search home or community…" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
-    '<span class="qcount">'+list.length+' shown</span><button class="btn sm pri" data-act="newhome">+ Add property</button></div>';
+    '<span class="qcount">'+list.length+' shown</span><button class="btn sm" data-inssearch="1">🔎 Inspections</button><button class="btn sm pri" data-act="newhome">+ Add property</button></div>';
   /* Moose Office is one page, not a list: it stays open on its own tab */
   if(ht==="co") return h+'<section class="panel detail">'+homeDetail(list.length?list[0].code:"Moose company")+'</section>';
   /* Moose Locks look (Brandon 2026-10-29): one tile per home grouped by neighborhood, codes + Wi-Fi on the tile; the full home opens in a pop-up */
@@ -1133,6 +1133,7 @@ function homeDetail(code){
   h+='<div class="block"><h4>Last 3 done in Breezeway'+(bh.bwId?' <a class="golink" href="https://app.breezeway.io/property/'+esc(bh.bwId)+'" target="_blank" rel="noopener">Breezeway ↗</a>':'')+'</h4>'+(bw&&bw.length?'<div class="bwlist">'+bw.slice(0,3).map(function(b){ return '<div class="bwrow"><span>'+(b.url?'<a href="'+esc(b.url)+'" target="_blank" rel="noopener">'+esc(b.title)+'</a>':esc(b.title))+(b.by?' <span class="muted">· '+esc(b.by)+'</span>':'')+'</span><span class="when">'+esc(fmtD(b.on))+'</span></div>'; }).join("")+'</div>':
     '<div class="note">Breezeway isn\'t feeding this board yet — once it is, the last three finished tasks show here.</div>')+'</div>';
   // recent
+  h+=inspBlock(code);
   h+=npiBlock(code);
   h+='<div class="block"><h4>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">all sources, newest first</span></h4>'+
     (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
@@ -3010,6 +3011,81 @@ function guestBlock(){ var g=guestIssues(), bad=g.filter(function(x){ return !x.
 /* ================= DETAILED NEW PROPERTY INSPECTION — what we learned about each home ================= */
 function npiOf(code){ if(!D.npi){ D.npi={}; Object.keys(S.feeds).forEach(function(k){ if(/^bw-npi-\d+$/.test(k)){ var hs=S.feeds[k].homes||{}; Object.keys(hs).forEach(function(c){ D.npi[canon(c)]=hs[c]; }); } }); }
   return fromFeed(D.npi,code)||null; }
+/* Inspections (Brandon 2026-10-29: "search and add the property details inspection … an uploadable inspection"): reports uploaded per home
+   (PDF, photo, Word) in table home_inspections + private bucket home-inspections (hub_site/hub_home_inspections.sql). Everyone with Property
+   Details reads + searches; admins, managers, front desk and licensing upload. Nothing is deleted: Hide sets off. Files open by a 5-minute link. */
+var INSP_KINDS=[["new_property","New property"],["annual","Annual / yearly"],["fire","Fire / life safety"],["owner_walkthrough","Owner walk-through"],["move_in","Move-in"],["move_out","Move-out"],["other","Other"]];
+var INSP_MIME={pdf:"application/pdf",jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",webp:"image/webp",heic:"image/heic",doc:"application/msword",docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"};
+function inspKind(k){ for(var i=0;i<INSP_KINDS.length;i++) if(INSP_KINDS[i][0]===k) return INSP_KINDS[i][1]; return "Other"; }
+function inspLoad(force){ var sb=window.MM_SB; if(!sb) return Promise.resolve([]); if(D._insP && !force) return D._insP;
+  if(D._insCan==null){ D._insCan=false; sb.rpc("home_insp_can_add").then(function(r){ D._insCan=!!(r&&r.data); if(D._insCan) schedule(); }); }
+  D._insP=sb.from("home_inspections").select("id,home_code,kind,insp_date,title,note,path,file_name,mime,uploaded_name,uploaded_at,off")
+    .order("insp_date",{ascending:false,nullsFirst:false}).order("id",{ascending:false}).limit(5000)
+    .then(function(r){ D._ins=(r&&r.data)||[]; schedule(); return D._ins; });
+  return D._insP; }
+function inspFor(code,all){ inspLoad(); var c=canon(code); return (D._ins||[]).filter(function(r){ return canon(r.home_code)===c && (all||!r.off); }); }
+function inspRow(r,showHome){
+  return '<div class="ldocrow insrow" data-insrow="'+esc([r.home_code,r.title,inspKind(r.kind),r.note,r.file_name,r.uploaded_name,r.insp_date].join(" ").toLowerCase())+'"><div style="min-width:0">'+
+    (showHome?'<a href="#" data-inshome="'+esc(r.home_code)+'"><b>'+esc(r.home_code)+'</b></a> · ':'')+
+    '<a href="#" class="ldoc" data-insopen="'+esc(r.path)+'">'+(/^image\//.test(r.mime||"")?'🖼 ':'📄 ')+esc(r.title||r.file_name)+'</a>'+(r.off?' <span class="tag">hidden</span>':'')+
+    '<div class="muted" style="font-size:12.5px">'+esc(inspKind(r.kind))+(r.insp_date?' · '+esc(fmtD(r.insp_date)):'')+(r.uploaded_name?' · added by '+esc(r.uploaded_name)+' '+esc(ago(r.uploaded_at)):'')+'</div>'+
+    (r.note?'<div class="note">'+esc(r.note)+'</div>':'')+'</div>'+
+    (D._insCan?'<button class="btn sm ghost" data-insedit="'+r.id+'" style="align-self:flex-start">Edit</button>':'')+'</div>'; }
+function inspBlock(code){ var all=inspFor(code,true), L=S.ui.insHidden?all:all.filter(function(r){ return !r.off; }), hid=all.length-all.filter(function(r){ return !r.off; }).length;
+  return '<div class="block"><h4>Inspections <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">uploaded reports</span>'+
+    (D._insCan?' <button class="btn sm pri" data-insup="'+esc(code)+'" style="margin-left:6px">+ Upload inspection</button>':'')+'</h4>'+
+    (!D._ins?'<div class="note">'+(window.MM_SB?'Loading…':'Sign in to see inspections.')+'</div>':
+      (L.length>3?'<div class="qsearch" style="margin:4px 0 6px"><span class="mag">⌕</span><input type="search" data-insq="1" placeholder="Search these inspections…" autocomplete="off"></div>':'')+
+      (L.length?'<div class="inslist">'+L.map(function(r){ return inspRow(r,false); }).join("")+'</div>':'<div class="note">No inspection uploaded for this home yet.</div>')+
+      (D._insCan&&hid?'<label class="toggle" style="margin-top:6px"><input type="checkbox" data-inshid="1"'+(S.ui.insHidden?' checked':'')+'> Show '+hid+' hidden</label>':''))+'</div>'; }
+function mInspSearch(){ inspLoad().then(function(){ var L=(D._ins||[]).filter(function(r){ return !r.off; });
+  openModal("Inspections · all homes",'<div class="qsearch" style="margin-bottom:8px"><span class="mag">⌕</span><input type="search" data-insq="1" placeholder="Search home, kind, words, who added it…" autocomplete="off"></div>'+
+    '<div class="note">'+L.length+' uploaded inspection'+(L.length===1?'':'s')+'. Open a home to add one.</div>'+
+    '<div class="inslist">'+(L.map(function(r){ return inspRow(r,true); }).join("")||'<div class="note">None uploaded yet.</div>')+'</div>',null); }); }
+function mInspUp(code,id){ var r=id?(D._ins||[]).filter(function(x){ return String(x.id)===String(id); })[0]:null; if(id && !r) return;
+  var opts=INSP_KINDS.map(function(k){ return '<option value="'+k[0]+'"'+((r?r.kind:"annual")===k[0]?' selected':'')+'>'+esc(k[1])+'</option>'; }).join("");
+  var body=(r?'<div class="note">'+esc(r.home_code)+' · '+esc(r.file_name)+' (the file and the home stay as uploaded)</div>':
+      '<label class="f"><span>Home</span><select id="in_home">'+D.homes.filter(function(p){ return !HOME_HIDE[p.code]; }).map(function(p){ return '<option'+(p.code===code?' selected':'')+'>'+esc(p.code)+'</option>'; }).join("")+'</select></label>'+
+      '<label class="f"><span>File</span><input id="in_file" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx"><span class="hint">PDF, photo or Word, up to 25 MB each. Pick several and each one becomes its own entry.</span></label>')+
+    '<label class="f"><span>Kind</span><select id="in_kind">'+opts+'</select></label>'+
+    '<label class="f"><span>Inspection date</span><input id="in_date" type="date" value="'+esc(r?(r.insp_date||""):today())+'"></label>'+
+    '<label class="f"><span>Title</span><input id="in_title" maxlength="200" value="'+esc(r?r.title:"")+'"'+(r?'':' placeholder="Uses the file name if blank"')+'></label>'+
+    '<label class="f"><span>Notes</span><textarea id="in_note" rows="3" maxlength="2000" placeholder="What it found, what needs fixing…">'+esc(r?r.note:"")+'</textarea></label>'+
+    (r?'<label class="toggle"><input type="checkbox" id="in_off"'+(r.off?' checked':'')+'> Hide this inspection (it is kept, never deleted)</label>':'');
+  openModal(r?"Edit inspection":"Upload inspection",body,function(){ return r?inspSave(r):inspUpload(); },r?"Save":"Upload"); }
+function inspBusy(t){ var b=document.querySelector('#modal [data-act="msave"]'); if(b){ b.disabled=!!t; if(t) b.textContent=t; } }
+function inspUpload(){ var sb=window.MM_SB, f=$("in_file"), files=f&&f.files?[].slice.call(f.files):[], home=fv("in_home");
+  if(!sb) return toast("Sign in first"); if(!home) return toast("Pick the home"); if(!files.length) return toast("Choose a file to upload");
+  var big=files.filter(function(x){ return x.size>25*1048576; }); if(big.length) return toast(big[0].name+" is over 25 MB");
+  var kind=fv("in_kind"), date=fv("in_date")||null, title=fv("in_title"), note=fv("in_note"), ym=today().slice(0,7), ok=0, fail=[], seq=Promise.resolve();
+  inspBusy("Uploading…");
+  files.forEach(function(file){ seq=seq.then(function(){
+    var ext=((file.name.match(/\.([A-Za-z0-9]{1,5})$/)||[])[1]||"").toLowerCase(), mime=file.type||INSP_MIME[ext]||"application/octet-stream",
+        path="h/"+home.replace(/[^A-Za-z0-9-]+/g,"_")+"/"+ym+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+(ext?"."+ext:""),
+        nm=file.name.replace(/\.[^.]+$/,""), t=!title?nm:(files.length>1?title+" ("+nm+")":title);
+    return sb.storage.from("home-inspections").upload(path,file,{contentType:mime,upsert:false}).then(function(u){ if(u.error) throw u.error;
+      return sb.from("home_inspections").insert({home_code:home,kind:kind,insp_date:date,title:t.slice(0,200),note:note,path:path,file_name:file.name,mime:mime,size_bytes:file.size}); })
+      .then(function(x){ if(x&&x.error) throw x.error; ok++; })
+      .catch(function(e){ fail.push(file.name+": "+((e&&e.message)||e)); }); }); });
+  return seq.then(function(){ inspLoad(true);
+    if(!fail.length){ closeModal(); toast(ok===1?"Inspection uploaded":ok+" inspections uploaded"); }
+    else { inspBusy(""); var b=document.querySelector('#modal [data-act="msave"]'); if(b) b.textContent="Upload"; toast((ok?ok+" uploaded. ":"")+"Couldn't upload "+fail.join("; ")); } }); }
+function inspSave(r){ var sb=window.MM_SB; if(!sb) return toast("Sign in first"); inspBusy("Saving…");
+  return sb.rpc("home_insp_set",{p_id:r.id,p_kind:fv("in_kind"),p_date:fv("in_date")||null,p_title:fv("in_title"),p_note:fv("in_note"),p_off:!!($("in_off")&&$("in_off").checked)})
+    .then(function(x){ if(x&&x.error){ inspBusy(""); var b=document.querySelector('#modal [data-act="msave"]'); if(b) b.textContent="Save"; return toast("Couldn't save: "+x.error.message); }
+      closeModal(); toast("Saved"); inspLoad(true); }); }
+function openInsp(path){ var sb=window.MM_SB; if(!sb) return toast("Sign in to open inspections");
+  var w=window.open("about:blank","_blank"); sb.storage.from("home-inspections").createSignedUrl(path,300).then(function(r){
+    if(r.error||!r.data){ if(w) w.close(); return toast("Couldn't open: "+((r.error&&r.error.message)||"not found")); } if(w) w.location=r.data.signedUrl; else location.href=r.data.signedUrl; }); }
+document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-insopen],[data-insup],[data-insedit],[data-inshome],[data-inssearch]"); if(!b) return; ev.preventDefault(); var d=b.dataset;
+  if(d.insopen) return openInsp(d.insopen);
+  if(d.insup) return mInspUp(d.insup);
+  if(d.insedit) return mInspUp("",d.insedit);
+  if(d.inssearch) return mInspSearch();
+  if(d.inshome){ closeModal(); S.ui.htype=homeType(d.inshome); S.ui.home=d.inshome; return render(); } });
+document.addEventListener("input",function(ev){ var t=ev.target; if(!t.dataset || t.dataset.insq==null) return; var q=t.value.trim().toLowerCase().split(/\s+/).filter(Boolean),
+  box=t.closest(".block")||t.closest("#modal")||document; [].forEach.call(box.querySelectorAll("[data-insrow]"),function(r){ var s=r.dataset.insrow; r.style.display=q.every(function(w){ return s.indexOf(w)>-1; })?"":"none"; }); });
+document.addEventListener("change",function(ev){ if(ev.target.dataset && ev.target.dataset.inshid!=null){ S.ui.insHidden=ev.target.checked; render(); } });
 function npiBlock(code){ var n=npiOf(code); if(!n) return '<div class="block"><h4>New property inspection</h4><div class="note">No "Detailed New Property Inspection" in Breezeway for this home.</div></div>';
   var f=n.facts||{}, g={}; (n.items||[]).forEach(function(i){ (g[i.el]=g[i.el]||[]).push(i); });
   var chips=[f.hotTub!=null?(f.hotTub?'Hot tub':'No hot tub'):'',f.bbq!=null?(f.bbq?'BBQ':'No BBQ'):'',f.filter?'Filter '+f.filter:'',f.portableAC?'Portable AC':'',f.parking?f.parking+' parking':''].filter(Boolean);
