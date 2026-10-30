@@ -249,6 +249,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <div id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="offline.js"></script>
 <script src="reservations.js"></script>
 <script src="analytics.js"></script>
 <script src="meetings.js"></script>
@@ -260,7 +261,16 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="signals.js"></script>
 <script>
 const C = window.MM_CONFIG;
-const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" }, global:{ fetch:(...a) => window.MMOFF ? MMOFF.fetch(...a) : fetch(...a) } });   // offline.js: saved copy on this device (2026-10-30)
+/* weak / no signal (offline.js, Brandon 2026-10-30): these pages open from the saved copy; the rest say they need signal */
+const OFFK = ["homes", "staffing", "stf_sched", "stf_perf", "cal_off"];
+let OFFLINE = false;
+function offView(){ app.innerHTML = `<div class="login"><div class="logo"><img src="moose-logo.png" alt=""></div><h2>No signal</h2>
+    <p class="muted">The hub needs service to open, and there's no copy saved on this phone yet. Open Property Details and Staffing once with service and they'll open here next time, even with no signal.</p>
+    <button class="btn primary wide" id="offre">↻ Try again</button></div>`; $("#offre").onclick = () => location.reload(); }
+function offPage(v){ const h = OFFK.filter(k => DESKS.some(x => x.key === k && x.status === "live")).map(k => DESKS.find(x => x.key === k));
+  v.innerHTML = `<div class="page"><div class="card"><h2>No signal right now</h2><p class="muted">This page needs service. These open from the copy saved on this phone:</p>
+    <div class="row" style="flex-wrap:wrap;gap:8px">${h.map(d => `<a class="btn" href="#/${d.key}">${esc(d.label)}</a>`).join("")}<button class="btn" onclick="location.reload()">↻ Try again</button></div></div></div>`; }
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const app = $("#app");
@@ -415,15 +425,18 @@ const NEXT_OK = ["maint.html"];
 
 /* ---------- shell */
 async function boot(){
+  if(window.MMOFF) MMOFF.scope(true);   // the sign-in reads below are saved for no-signal days
   const { data:{ session } } = await sb.auth.getSession();
-  if(!session) return loginView();
-  if(!(await twoStep())) return;
-  if(TS.mc === undefined){ try{ TS.mc = !!(await sb.rpc("lock_must_change_pw")).data; }catch(e){ TS.mc = false; } }
-  if(TS.mc || TS.weak) return pwView();
+  OFFLINE = false;
+  if(!session){ if(window.MMOFF && await MMOFF.offlineReady()) OFFLINE = true; else return loginView(); }   // sign-in expired with no signal: open from the saved copy
+  if(!OFFLINE && !(await twoStep())) return;
+  if(!OFFLINE && TS.mc === undefined){ try{ TS.mc = !!(await sb.rpc("lock_must_change_pw")).data; }catch(e){ TS.mc = false; } }
+  if(!OFFLINE && (TS.mc || TS.weak)) return pwView();
   const nx = new URLSearchParams(location.search).get("next");
   if(nx && NEXT_OK.includes(nx)) return location.replace(nx);
   const me = await sb.rpc("hub_me");
   if(me.error || !me.data){   // an admin may have signed this device out (hub_admin_access.sql): its session is gone
+    if(window.MMOFF && (OFFLINE || await MMOFF.offline())) return offView();   // no signal is not a sign-out: keep the saved copy
     const r = await sb.auth.refreshSession();
     if(r.error){ await sb.auth.signOut({ scope:"local" }); return loginView("You were signed out. Sign in again."); }
     return noAccess(me.error ? me.error.message : ""); }
@@ -489,6 +502,7 @@ function addDerived(DESKS, ex){
   if(ex.perf) DESKS.push({ key:"stf_perf", label:"Staffing · My performance", icon:"clock", url:"#/stf_perf", status:"live", sort:60.7 });   // only people with scores or PTO (Brandon 2026-10-29)
 }
 function noAccess(err){
+  if(window.MMOFF) MMOFF.wipe();   // not on the hub (or locked out): nothing saved stays on this device
   app.innerHTML = `<div class="login"><div class="logo"><img src="moose-logo.png" alt=""></div><h2>No hub access yet</h2>
     <p class="muted">Your sign-in worked, but you're not on a hub team. Ask Brandon or Kim to add you.</p>
     <button class="btn wide" id="out">Sign out</button><p class="muted">${esc(err)}</p></div>`;
@@ -637,6 +651,7 @@ function route(){
   document.querySelectorAll(".gbox").forEach(g => { const on = !!g.querySelector(`.dk.sub[data-k="${hk}"]`); g.querySelector(".par").classList.toggle("on", on); g.classList.toggle("open", on); });   // opening another tab closes the other drop-downs
   const v = $("#view"), d = DESKS.find(x => x.key === k);
   $("#ttl").textContent = $("#utl").textContent = d ? d.label : (k === "feedback" ? "Bugs & Upgrades" : k === "settings" ? "My settings" : "Moose Hub");
+  if(window.MMOFF){ MMOFF.reset(); MMOFF.scope(OFFK.includes(k)); if((OFFLINE || MMOFF.isOff()) && !OFFK.includes(k)) return offPage(v); }   // offline.js (2026-10-30)
   document.querySelectorAll(".mjoin").forEach(x => x.remove());
   if(k === "meet_maint" && d && window.meetJoin) meetJoin(k);   // Monday meeting Join button in the banner (meetings.js, 2026-10-29)
   if(window.trackBanner) trackBanner();   // checks.js: Wednesdays 4-11 pm Track maintenance banner (Brandon 2026-10-29)
@@ -1915,7 +1930,7 @@ async function patrickView(v){
 }
 window.addEventListener("hashchange", route);
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
-sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { ME = null; TS.ok = false; TS.weak = false; TS.mc = undefined; loginView(); } });
+sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { if(window.MMOFF) MMOFF.wipe(); ME = null; TS.ok = false; TS.weak = false; TS.mc = undefined; loginView(); } });
 boot();
 </script>
 </body>
