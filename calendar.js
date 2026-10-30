@@ -16,7 +16,8 @@
    Only paid or unpaid time off (Brandon: no Sick in new requests). Salaried people (a Hubstaff policy named "Salaried") only get
    "Salaried time off", 80 h a year (Brandon 2026-10-29; hub_pto_salaried.sql). Hourly PTO balance = the hub's own number
    (calc_hours: tracked h x 0.77/40 since the policy started, max 52, minus PTO used; Brandon "Yes, hub calculates"), Hubstaff's alongside.
-   Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet · #/cal_off · #/pto */
+   Work check (Brandon 2026-10-29, cloud workers' screens + mouse movers, admins + managers; hub_work_check.sql): Reports ▸ Team (#/work_check).
+   Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet · #/cal_off · #/pto · #/work_check */
 (function(){
 const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
 const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"],["cal_off","Request time off"]];
@@ -521,6 +522,48 @@ window.ptoReport = async function(v, sub){
     <div class="card"><div class="tow"><table class="to"><tr><th>Who</th><th>Balances</th><th>Worked this year</th><th>Approved in the hub this year</th><th>Requests</th></tr>${ids.map(row).join("") || `<tr><td colspan="5" class="muted">Nobody on your team yet.</td></tr>`}</table></div></div>
     <div class="card"><b style="font-size:16px">Time-off requests</b>${reqs.length ? `<div class="tow"><table class="to"><tr><th>Who</th><th>When</th><th>Hours</th><th>Status</th></tr>${reqs.slice(0, 150).map(r => `<tr><td><b>${esc(who(r.user_id))}</b></td><td>${esc(whenR(r))}</td><td>${hrs(r.hours)} · ${esc(kl(r))}</td><td>${stPill(r)}${hsPill(r)}${r.decided_by && r.status !== "cancelled" ? `<div class="muted" style="font-size:12px">by ${esc(r.decided_by)}${r.response ? ": " + esc(r.response) : ""}</div>` : ""}</td></tr>`).join("")}</table></div>` : `<p class="muted" style="margin:4px 0 0">No requests made in the hub yet.</p>`}</div>
     <p class="muted" style="font-size:12px">Time off asked in Hubstaff itself (before the hub) is in Hubstaff's balance but not in this list.</p></div>`;
+};
+
+/* ---------- Reports ▸ Team ▸ Work check (hub_work_check.sql, hubstaff_workcheck.py). Brandon 2026-10-29: cloud workers' screens +
+   mouse movers; admins see everyone, managers their own team (RLS hub_team_sees). Desktop time only; nothing here is proof on its own. ---------- */
+const WCF = { mouse_only:["Mouse only", "An hour or more of mouse movement with no typing. A mouse mover looks like this, but so can reading or scrolling."],
+  same_screen:["Same screen", "Screenshots of a screen didn't change for 40+ minutes while activity was counted. A plug-in mouse mover can't change the screen."],
+  low_activity:["Low activity", "Under 15% keyboard/mouse activity across 2+ desktop hours."],
+  hubstaff_flag:["Hubstaff flag", "Hubstaff's own unusual-activity check flagged this day with medium or high confidence."] };
+window.workCheck = async function(v){
+  css();
+  const days = ST.wcDays || 14, only = ST.wcOnly !== false, from = addD(today(), -(days - 1));
+  v.innerHTML = `<div class="page cal wide"><p class="muted">Loading…</p></div>`;
+  const [ppl, rr] = await Promise.all([people(), sb.from("hub_work_check").select("*").gte("day", from).order("day", { ascending:false })]);
+  const who = id => (ppl.find(p => p.id === id) || {}).name || "Someone", all = rr.data || [];
+  const rows = all.filter(r => !only || (r.flags || []).length || (r.unusual || []).length);
+  const ids = [...new Set(all.map(r => r.user_id))].sort((x, y) => who(x).localeCompare(who(y)));
+  const sum = id => { const r = all.filter(x => x.user_id === id && +x.desktop_h > 0), h = r.reduce((a, x) => a + +x.desktop_h, 0);
+    const act = h ? Math.round(r.reduce((a, x) => a + (x.activity_pct || 0) * x.desktop_h, 0) / h) : null;
+    return `<tr><td><b>${esc(who(id))}</b></td><td>${r.length}</td><td>${hrs(Math.round(h * 10) / 10)}</td><td>${act == null ? "—" : act + "%"}</td>
+      <td>${all.filter(x => x.user_id === id && (x.flags || []).length).length || "—"}</td><td>${Math.max(0, ...all.filter(x => x.user_id === id).map(x => x.mouse_only_min || 0))} min</td><td>${Math.max(0, ...all.filter(x => x.user_id === id).map(x => x.same_screen_min || 0))} min</td></tr>`; };
+  const pill = f => `<span class="pill ${f === "hubstaff_flag" || f === "same_screen" ? "red" : "amber"}" title="${esc((WCF[f] || [])[1] || "")}">${esc((WCF[f] || [f])[0])}</span>`;
+  const row = r => `<tr><td><b>${esc(who(r.user_id))}</b><br><span class="muted">${esc(fday(r.day))}</span></td>
+    <td>${hrs(r.desktop_h)}${+r.tracked_h > +r.desktop_h + 0.1 ? `<div class="muted" style="font-size:12px">+${hrs(Math.round((r.tracked_h - r.desktop_h) * 100) / 100)} phone</div>` : ""}</td>
+    <td>${r.activity_pct == null ? "—" : r.activity_pct + "%"}<div class="muted" style="font-size:12px">keys ${r.keys_pct ?? "—"}% · mouse ${r.mouse_pct ?? "—"}%</div></td>
+    <td>${r.mouse_only_min || 0} min</td><td>${r.same_screen_min || 0} min<div class="muted" style="font-size:12px">${r.shots || 0} shots</div></td>
+    <td>${(r.flags || []).map(pill).join(" ") || `<span class="muted">—</span>`}${(r.unusual || []).map(u => `<div style="font-size:12px"><a href="${esc(u.url || "#")}" target="_blank" rel="noopener">Hubstaff: ${esc((u.type || "").replace(/_/g, " "))}</a> <span class="muted">(${esc(u.confidence || "")}, ${u.active_min} of ${u.tracked_min} min active)</span></div>`).join("")}</td>
+    <td style="white-space:nowrap"><a class="btn small" href="${esc(r.hs_url || "#")}" target="_blank" rel="noopener">Screenshots ↗</a>
+      ${r.reviewed_by ? `<div class="muted" style="font-size:12px">Looked at by ${esc(r.reviewed_by)}${r.review_note ? ": " + esc(r.review_note) : ""}</div>` : `<button class="btn small" data-rv="${r.user_id}|${r.day}">Looked at</button>`}</td></tr>`;
+  v.innerHTML = `<div class="page cal wide"><div style="padding:0 0 8px"><a href="#/reports">← All reports</a></div>
+    <div class="chead"><h2>Work check</h2>
+      <span class="vsw">${[7,14,30].map(n => `<button class="btn small${n === days ? " primary" : ""}" data-wd="${n}">${n} days</button>`).join("")}</span>
+      <label class="lyr"><input type="checkbox" id="wconly" ${only ? "checked" : ""}>Only days with a flag</label></div>
+    <p class="muted" style="margin:0 0 10px">${ME.admin ? "Everyone" : "Your team"} · computer (desktop app) time only; phone-app time has no keyboard or mouse to measure · source: Hubstaff, checked by the hub${all[0] ? " (updated " + esc(new Date(all[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) + ")" : ""}</p>
+    <div class="card"><b style="font-size:16px">By person, last ${days} days</b><div class="tow"><table class="to"><tr><th>Who</th><th>Days</th><th>Desktop hours</th><th>Activity</th><th>Flagged days</th><th>Longest mouse-only</th><th>Longest same screen</th></tr>
+      ${ids.map(sum).join("") || `<tr><td colspan="7" class="muted">Nobody on your team tracks computer time in Hubstaff.</td></tr>`}</table></div></div>
+    <div class="card"><b style="font-size:16px">${only ? "Days to look at" : "Every day"} (${rows.length})</b>${rows.length ? `<div class="tow"><table class="to"><tr><th>Who / day</th><th>Hours</th><th>Activity</th><th>Mouse only</th><th>Same screen</th><th>Flags</th><th></th></tr>${rows.map(row).join("")}</table></div>` : `<p class="muted" style="margin:4px 0 0">Nothing flagged in the last ${days} days.</p>`}</div>
+    <div class="card"><b style="font-size:16px">What the checks mean</b>${Object.values(WCF).map(([l, d]) => `<div style="font-size:13px;margin:4px 0"><b>${esc(l)}:</b> ${esc(d)}</div>`).join("")}
+      <p class="muted" style="font-size:12px;margin:6px 0 0">A flag is a reason to look at the screenshots, not proof. Screenshots stay in Hubstaff; the hub only compares them and keeps the minutes.</p></div></div>`;
+  v.querySelectorAll("[data-wd]").forEach(b => b.onclick = () => { ST.wcDays = +b.dataset.wd; workCheck(v); });
+  v.querySelector("#wconly").onchange = e => { ST.wcOnly = e.target.checked; workCheck(v); };
+  v.querySelectorAll("[data-rv]").forEach(b => b.onclick = async () => { const [u, d] = b.dataset.rv.split("|"), note = prompt("Note (optional):");
+    if(note === null) return; const r = await sb.rpc("work_check_review", { p_user:u, p_day:d, p_note:note }); if(r.error) alert(r.error.message); else workCheck(v); });
 };
 
 /* ---------- Home: your next 7 days (meetings you can open, office events, your own events) ---------- */
