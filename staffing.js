@@ -18,6 +18,7 @@ const CSS = `.stf .big{font-size:20px;padding:14px 28px;border-radius:12px}.stf 
 .stf table{width:100%;border-collapse:collapse}.stf td,.stf th{padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);text-align:left;vertical-align:top;font-size:14px}
 .stf .r{text-align:right}.stf .sm{font-size:12px}.stf .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.stf .tow{overflow-x:auto}
 .hxbanner{color:#fff;padding:8px 18px;font-weight:600;font-size:14px;flex:none;border-top:1px solid rgba(255,255,255,.25)} .hxbanner a{color:#fff;text-decoration:underline;margin-left:10px;white-space:nowrap}
+.otplan{background:#fff8e6;color:#1f2937;padding:10px 18px;border-bottom:1px solid #f0d9a6;font-size:14px;flex:none}.otplan .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.otplan input{font:inherit;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px}
 .stf input,.stf select{font:inherit;padding:6px 8px;border:1px solid var(--line,#d1d5db);border-radius:8px}`;
 let cssOn = false;
 const css = () => { if(cssOn) return; cssOn = true; const s = document.createElement("style"); s.textContent = CSS; document.head.appendChild(s); };
@@ -219,23 +220,71 @@ window.hxBanner = async function(force){
 };
 const hxBoot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(hxBoot); hxBanner(true); setInterval(() => hxBanner(false), 60e3); window.addEventListener("hashchange", () => hxBanner(false)); } }, 1000);
 
-/* ---------- Close to 40 hours (Brandon 2026-10-29: "we dont want to pay overtime and want it to be a notice in the moose hub that someone is
-   getting close to their 40 hours. the notice should go to the managers and the admin"). overtime_watch() (hub_overtime.sql) returns only
-   hourly people the viewer looks after with 32+ h this week (larger of hub clock and Hubstaff); empty for everyone else. ---------- */
-let OT = { at:0, l:null };
+/* ---------- Close to 40 hours (Brandon 2026-10-29: "we dont want to pay overtime … the notice should go to the managers and the admin";
+   2026-10-30: "people can see their own hours when they get to 38 - we will want to notify a manager if they havent already scheduled them
+   to clock out soon or approve overtime. no one should be going into overtime without approval"). hub_overtime.sql + hub_overtime_2.sql:
+   overtime_watch() = people you look after with 32+ h (never yourself) + their plan + needs ('plan' at 38 h with no plan, 'over' at 40+ h
+   without an OK) · overtime_mine() = your own row from 38 h · overtime_plan() (clock out by a time / OK overtime up to N h / cancel) ·
+   overtime_ask(). The hub warns; it never blocks the clock (unapproved hours still have to be paid). ---------- */
+let OT = { at:0, l:null, me:null };
+const fn = n => esc(String(n || "").split(" ")[0]);
+const at40 = x => x.open_since && +x.hours < 40 ? new Date(Date.now() + (40 - +x.hours) * 36e5) : null;   // when they reach 40 h if they stay in
+const planTxt = x => x.plan_kind === "approved" ? `overtime OK'd up to ${+x.plan_up_to} h (${fn(x.plan_by)})`
+  : x.plan_kind === "clock_out" ? `clock out by ${tm(x.plan_out_at)}${dkey(x.plan_out_at) !== dkey(Date.now()) ? " " + dnm(dkey(x.plan_out_at)) : ""} (${fn(x.plan_by)})` : "";
+const localIn = d => { const p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+function otPlanBox(x, b){
+  document.querySelectorAll(".otplan").forEach(e => e.remove());
+  const t = at40(x) || (() => { const d = new Date(); d.setHours(17, 0, 0, 0); return d < new Date() ? new Date(Date.now() + 36e5) : d; })();
+  const f = document.createElement("div"); f.className = "otplan";
+  f.innerHTML = `<b>${esc(x.name)}</b> · ${hm(+x.hours)} this week${x.asked_at ? ` · asked for overtime${x.asked_note ? `: “${esc(x.asked_note)}”` : ""}` : ""}
+    <div class="row" style="margin-top:8px"><label><input type="radio" name="otk" value="clock_out" checked> Clock out by</label> <input type="datetime-local" data-t value="${localIn(t)}">
+      ${at40(x) ? `<span class="sm">(reaches 40 h at ${tm(at40(x))})</span>` : ""}</div>
+    <div class="row" style="margin-top:6px"><label><input type="radio" name="otk" value="approved"> Approve overtime up to</label> <input type="number" data-u min="40.5" max="60" step="0.5" value="${Math.max(41, Math.ceil(+x.hours) + 2)}" style="width:80px"> h this week</div>
+    ${x.plan_kind ? `<div class="row" style="margin-top:6px"><label><input type="radio" name="otk" value="cancel"> Remove the plan (${planTxt(x)})</label></div>` : ""}
+    <div class="row" style="margin-top:6px"><input data-n placeholder="Note (optional)" style="flex:1;min-width:160px"><button class="btn small primary" data-s>Save</button><button class="btn small" data-c>Close</button></div>`;
+  f.querySelector("[data-c]").onclick = () => f.remove();
+  f.querySelector("[data-s]").onclick = async () => {
+    const k = f.querySelector("[name=otk]:checked").value, tv = f.querySelector("[data-t]").value;
+    const r = await sb.rpc("overtime_plan", { p_user:x.user_id, p_kind:k, p_out_at: k === "clock_out" && tv ? new Date(tv).toISOString() : null,
+      p_up_to: k === "approved" ? +f.querySelector("[data-u]").value : null, p_note: f.querySelector("[data-n]").value || null });
+    if(r.error) return alert(r.error.message); f.remove(); otBanner(true); };
+  b.after(f);
+}
 function otDraw(){
-  css(); document.querySelectorAll(".otbanner").forEach(x => x.remove());
-  const l = OT.l, v = document.getElementById("view");
-  if(!l || !l.length || !v || !v.parentNode) return;
-  const top = +l[0].hours, b = document.createElement("div");
-  b.className = "hxbanner otbanner"; b.setAttribute("role", "status"); b.style.background = top >= 38 ? "#9b1c1c" : "#7a4b00";
-  b.innerHTML = `⏱ Close to 40 hours this week (no overtime): ${l.map(x => `<b>${esc(x.name.split(" ")[0])} ${hm(+x.hours)}</b>${x.open_since ? " (clocked in now)" : ""}${+x.hours >= 40 ? " ⚠ over 40" : ""}`).join(" · ")}<a href="#/staffing">Staffing →</a>`;
-  b.title = "Hours since Sunday: the larger of the hub clock and Hubstaff. Salaried people aren't counted.";
+  css(); document.querySelectorAll(".otbanner,.otplan").forEach(x => x.remove());
+  const v = document.getElementById("view"); if(!v || !v.parentNode) return;
+  const m = OT.me && OT.me[0];
+  if(m){   // your own hours, from 38 h
+    const b = document.createElement("div"), t = at40(m);
+    b.className = "hxbanner otbanner"; b.setAttribute("role", "status");
+    b.style.background = m.needs === "over" ? "#9b1c1c" : m.needs ? "#7a4b00" : "#1f5f3f";
+    b.innerHTML = `⏱ You're at <b>${hm(+m.hours)}</b> this week. ${m.plan_kind ? `Your manager's plan: ${planTxt(m)}.`
+      : m.needs === "over" ? "You're over 40 hours without overtime approval: please clock out, or ask your manager now."
+      : `To stay under 40, ${t ? `clock out by <b>${tm(t)}</b>` : "keep the rest of the week under " + hm(Math.max(0, 40 - +m.hours))}, or ask your manager to OK overtime.`}
+      ${m.asked_at ? `<span style="margin-left:8px">· Asked for overtime ${tm(m.asked_at)}, waiting for your manager.</span>` : m.plan_kind !== "approved" ? `<a href="#" data-ask>Ask for overtime</a>` : ""}<a href="#/staffing">Staffing →</a>`;
+    b.title = "Hours since Sunday: the larger of the hub clock and Hubstaff.";
+    const a = b.querySelector("[data-ask]"); if(a) a.onclick = async e => { e.preventDefault();
+      const n = prompt("Why do you need overtime this week? (your manager sees this)"); if(n === null) return;
+      const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert(r.error.message); otBanner(true); };
+    v.parentNode.insertBefore(b, v);
+  }
+  const l = OT.l; if(!l || !l.length) return;
+  const need = l.filter(x => x.needs), b = document.createElement("div");
+  b.className = "hxbanner otbanner"; b.setAttribute("role", "status");
+  b.style.background = need.some(x => x.needs === "over") ? "#9b1c1c" : need.length || +l[0].hours >= 38 ? "#9b1c1c" : "#7a4b00";
+  b.innerHTML = `⏱ Close to 40 hours this week (no overtime without approval): ${l.map(x => `<b>${fn(x.name)} ${hm(+x.hours)}</b>${x.open_since ? " (clocked in now)" : ""}${
+      x.needs === "over" ? " ⚠ over 40, not approved" : x.needs === "plan" ? " · needs a plan" : x.plan_kind ? " · " + planTxt(x) : ""}${x.asked_at ? " · asked for overtime" : ""}${
+      x.needs || x.asked_at || +x.hours >= 36 ? ` <a href="#" data-ot="${x.user_id}" style="margin-left:4px">${x.plan_kind ? "Change" : "Plan / approve"}</a>` : ""}`).join(" · ")}<a href="#/staffing">Staffing →</a>`;
+  b.title = "Hours since Sunday: the larger of the hub clock and Hubstaff. From 38 h each person needs a clock-out time or an overtime OK. Salaried people aren't counted.";
+  b.querySelectorAll("[data-ot]").forEach(a => a.onclick = e => { e.preventDefault(); otPlanBox(l.find(x => x.user_id === a.dataset.ot), b); });
   v.parentNode.insertBefore(b, v);
 }
 window.otBanner = async function(force){
   if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
-  if(force || Date.now() - OT.at > 5 * 60e3){ const r = await sb.rpc("overtime_watch"); OT = { at:Date.now(), l: r.error ? null : r.data }; }
+  if(document.querySelector(".otplan") && !force) return;   // don't redraw under an open plan box
+  if(force || Date.now() - OT.at > 5 * 60e3){
+    const [r, s] = await Promise.all([sb.rpc("overtime_watch"), sb.rpc("overtime_mine")]);
+    OT = { at:Date.now(), l: r.error ? null : r.data, me: s.error ? null : s.data }; }
   otDraw();
 };
 const otBoot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(otBoot); otBanner(true); setInterval(() => otBanner(false), 60e3); window.addEventListener("hashchange", () => otBanner(false)); } }, 1000);
