@@ -171,16 +171,26 @@ const PM = { tech:[["tasks","Tasks worked"],["tasks_per_hr","Tasks per regular h
 const PG = { tech:"Maintenance", office:"Office & front desk" }, PP = { "30d":"Last 30 days", "90d":"Last 90 days", "365d":"Last 12 months" };
 window.myPerf = async function(v){
   css(); v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
-  const r = await sb.rpc("my_performance"); if(current() !== "stf_perf") return;
+  const [r, pt] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto")]); if(current() !== "stf_perf") return;
+  // PTO you're earning (Brandon 2026-10-29: "show how much PTO they are aquiring"); my_pto() = your own row (hub_my_pto.sql)
+  const pto = (pt && pt.data) || [], hh = x => x == null ? "—" : (Math.round(+x * 10) / 10).toLocaleString() + " h";
+  const ptoCard = pto.map(b => { const c = b.config || {}, have = b.calc_hours != null ? b.calc_hours : b.hours;
+    if(b.salaried) return `<div class="card"><b style="font-size:16px">Salaried time off</b><div style="font-size:22px;margin:6px 0"><b>${hh(have)}</b> left</div>
+      <p class="muted sm" style="margin:0">Salaried staff get ${esc(c.hours_per_year || 80)} hours a year${b.used_ytd != null ? ` · used this year: ${hh(b.used_ytd)}` : ""}.</p></div>`;
+    const wk = b.worked_ytd && b.calc_from ? (+b.worked_ytd) / Math.max(1, (Date.now() - Date.parse(new Date().getFullYear() + "-01-01")) / (7 * DAY)) : null;
+    return `<div class="card"><b style="font-size:16px">Paid time off you're earning</b><div style="font-size:22px;margin:6px 0"><b>${hh(have)}</b> available</div>
+      <p style="margin:0 0 4px">You earn <b>${esc(c.hours_per)} h</b> of paid time off for every <b>${esc(c.hours_worked)} h</b> you work, up to <b>${esc(c.maximum_to_accrue)} h</b> saved up.${have != null && c.maximum_to_accrue && +have >= +c.maximum_to_accrue ? ` <span class="pill amber">You're at the most you can save. Use some so you keep earning.</span>` : ""}</p>
+      ${wk ? `<p class="muted sm" style="margin:0">At your pace this year (about ${hh(wk)} worked a week) that's about ${hh(wk * c.hours_per / c.hours_worked)} of PTO a week.</p>` : ""}
+      <p class="muted sm" style="margin:4px 0 0">Ask for it under Staffing ▸ Request Time Off. Source: hours you tracked × the PTO policy, worked out by the hub${b.as_of ? ` (updated ${esc(dnm(dkey(b.as_of)))})` : ""}.</p></div>`; }).join("");
   const rows = r.data || [], f = x => x == null ? "—" : (+x).toLocaleString(undefined, { maximumFractionDigits:2 });
   const ix = i => i == null ? "" : ` <span class="pill ${i >= 115 ? "green" : i <= 85 ? "amber" : ""}" title="100 = the team's average">${i}</span>`;
   const grps = [...new Set(rows.map(x => x.grp))];
   v.innerHTML = `<div class="page stf wide"><h2 style="margin:0 0 6px">My performance</h2>
     <p class="muted" style="margin:0 0 10px">How you've been doing, from the same numbers your manager sees. The small number next to a measure compares you with the team: 100 = the team's average${rows[0] ? ` · updated ${esc(dnm(rows[0].as_of))}` : ""}.</p>
-    ${grps.map(g => `<div class="card"><b style="font-size:16px">${esc(PG[g] || g)}</b><div class="tow"><table><tr><th></th>${rows.filter(x => x.grp === g).map(x => `<th class="r">${esc(PP[x.period] || x.period)}</th>`).join("")}</tr>
+    ${ptoCard}${grps.map(g => `<div class="card"><b style="font-size:16px">${esc(PG[g] || g)}</b><div class="tow"><table><tr><th></th>${rows.filter(x => x.grp === g).map(x => `<th class="r">${esc(PP[x.period] || x.period)}</th>`).join("")}</tr>
       <tr><td><b>Overall</b></td>${rows.filter(x => x.grp === g).map(x => `<td class="r"><b>${x.score == null ? "—" : Math.round(x.score)}</b>${x.rank ? `<div class="muted sm">#${x.rank} of ${x.of_n}</div>` : ""}</td>`).join("")}</tr>
       ${(PM[g] || []).map(([k, l]) => `<tr><td>${esc(l)}</td>${rows.filter(x => x.grp === g).map(x => `<td class="r">${f((x.metrics || {})[k])}${ix(((x.metrics || {}).idx || {})[k])}</td>`).join("")}</tr>`).join("")}</table></div></div>`).join("")
-      || `<div class="card"><p class="muted" style="margin:0">There aren't enough numbers for you yet. Check back after a few weeks of work.</p></div>`}
+      || (pto.length ? "" : `<div class="card"><p class="muted" style="margin:0">There aren't enough numbers for you yet. Check back after a few weeks of work.</p></div>`)}
     <p class="muted sm">Sources: Breezeway tasks, Hubstaff hours, Reservation check lists, Freshdesk tickets and guest reviews, worked out once a day by the hub.</p></div>`;
 };
 
