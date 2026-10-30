@@ -240,7 +240,7 @@ body.only-trash header.top{position:static}
 .htp{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto}
 .htq{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));border:1px solid var(--line-2);border-radius:14px;background:var(--surface-2);cursor:text;overflow:hidden}
 .hql{padding:9px 12px;border-left:1px solid var(--line);margin-left:-1px;min-width:0;overflow-wrap:anywhere}
-.hql .qvh{margin-bottom:3px} .hql .qrow{margin-bottom:3px} .hql .muted{font-size:13px}
+.hql .qvh{margin-bottom:3px} .hql .qrow{margin-bottom:3px} .hql .muted{font-size:13px} .hql .hsrc{font-size:11px;color:var(--muted);margin-top:4px}
 .htmore{font-size:13px;font-weight:800;color:var(--accent-ink);align-self:flex-end}
 .hpop{position:fixed;inset:0;z-index:50;background:rgba(8,14,17,.5);overflow-y:auto;padding:24px 16px}
 .hpbox{max-width:1000px;margin:0 auto;background:var(--ground);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
@@ -1072,19 +1072,36 @@ function vHomes(){
     '<div class="hpbody"><section class="panel detail">'+homeDetail(u.home)+'</section></div></div></div>';
   return h;
 }
-/* the codes + Wi-Fi people look up most — same sources as the Quick view (hub edit first, else the Asana note); codes only for home_codes people */
-function homeQuick(code,p){ var pe=pedit(code), a=function(rx){ var n=infoNote(p,rx); return n?n.text:""; };
-  var r={wifi:pe.wifiName||pe.wifiPass?(pe.wifiName?"Network: "+pe.wifiName:"")+(pe.wifiPass?(pe.wifiName?"\n":"")+"Password: "+pe.wifiPass:""):a(/^(wifi|wi-fi|stay[- ]?fi)/i), keybox:homeInfo(code).keybox||""};
-  if(window.MM_CODES!==false){ r.entry=pe.lockoutCode||a(/^lockout info/i); r.garage=pe.garageCode||a(/^parking\/? ?garage info$|^parking$/i); }
+/* the codes + Wi-Fi people look up most (Brandon 2026-10-30: "make sure all our info is the most up to date, so pull from track and asana").
+   Track first (home_quick(): Track unit fields + security codes, hub_home_access.sql), then the hub edit, then the Asana note.
+   Levels: everyone with Homes = Wi-Fi, garage, key box location, their own Locks code; front desk (MM_ENTRY) + full = door/lockout,
+   key box + gate codes, the guest's door code; owner closet etc. only full (MM_CODES). The database hands each level only its part. */
+function hqOf(code){ var sb=window.MM_SB; if(!sb) return null;
+  if(!D._hq){ if(!D._hqAsk){ D._hqAsk=1; sb.rpc("home_quick").then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ m[x.home]=x; }); D._hq=m; schedule(); }); } return null; }
+  return D._hq[code]||null; }
+/* no homes are on Stay-Fi any more (Brandon 2026-10-30): drop those Asana lines and labels left with nothing after them */
+function noStayfi(t){ return String(t||"").split("\n").filter(function(l){ return !/stay[- ]?fi/i.test(l) && !/^\s*[^:]{1,30}:\s*$/.test(l); }).join("\n").trim(); }
+function canEntry(){ return window.MM_CODES!==false || !!window.MM_ENTRY; }
+function homeQuick(code,p){ var pe=pedit(code), t=hqOf(code)||{}, a=function(rx){ var n=infoNote(p,rx); return n?n.text:""; };
+  var r={src:{}}, pick=function(k,list){ for(var i=0;i<list.length;i++){ if(list[i][1]){ r[k]=list[i][1]; r.src[k]=list[i][0]; return; } } r[k]=""; };
+  var wl=function(n,pw,x){ return [n?"Network: "+n:"",pw?"Password: "+pw:"",x||""].filter(Boolean).join("\n"); };
+  pick("wifi",[["Track",t.wifi_name||t.wifi_pass?wl(t.wifi_name,t.wifi_pass,t.wifi_note):""],["Hub edit",pe.wifiName||pe.wifiPass?wl(pe.wifiName,pe.wifiPass):""],["Asana",noStayfi(a(/^(wifi|wi-fi|stay[- ]?fi)/i))]]);
+  pick("garage",[["Track",t.garage_code?["Garage code: "+t.garage_code,t.garage_note||""].filter(Boolean).join("\n"):(t.garage_note||"")],["Hub edit",pe.garageCode],["Asana",a(/^parking\/? ?garage info$|^parking$/i)]]);
+  var loc=homeInfo(code); r.keybox=[t.keybox_code?"Key box code: "+t.keybox_code:"",loc.keybox||""].filter(Boolean).join("\n"); r.src.keybox=t.keybox_code?"Track":(loc.src&&loc.src.keybox)||"";
+  if(canEntry()){ pick("entry",[["Hub edit",pe.lockoutCode],["Asana",a(/^lockout info/i)]]);
+    if(t.gate_code){ r.entry=(r.entry?r.entry+"\n":"")+"Gate / building: "+t.gate_code; r.src.entry=r.src.entry?r.src.entry+" + Track":"Track"; }
+    if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); r.guest="Guest door code: "+t.guest_code+"\n"+(inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)+" – "+fmtD(t.guest_out)); r.src.guest="Locks"; } }
+  if(t.my_code){ r.mine="Your code: "+t.my_code+(t.my_code_label?"\n"+t.my_code_label:""); r.src.mine="Locks"; }
   return r; }
-function htLine(label,val){ return '<div class="hql"><div class="qvh">'+esc(label)+'</div>'+(val?qShort(val).html:'<div class="muted">Not recorded</div>')+'</div>'; }
+function htLine(label,val,src){ return '<div class="hql"><div class="qvh">'+esc(label)+'</div>'+(val?qShort(val).html+(src?'<div class="hsrc">From '+esc(src)+'</div>':''):'<div class="muted">Not recorded</div>')+'</div>'; }
 function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=homeQuick(c,p);
   var jobs=(D.byProp[c]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
   var rc=(p.appliances||[]).some(function(a){ return a.recalls&&a.recalls.length; });
   var st=occ?"owner":jobs.length?"open":"ok", sub=(p.track&&p.track.name)||p.community||"";
   return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'</div>'+
     '<div class="htp">'+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'</div></div>'+
-    '<div class="htq">'+htLine("Wi-Fi",q.wifi)+(window.MM_CODES!==false?htLine("Door / lockout",q.entry)+htLine("Garage / parking",q.garage):'')+(q.keybox?htLine("Key box",q.keybox):'')+'</div>'+
+    '<div class="htq">'+htLine("Wi-Fi",q.wifi,q.src.wifi)+(canEntry()?htLine("Door / lockout",q.entry,q.src.entry):'')+htLine("Garage / parking",q.garage,q.src.garage)+(q.keybox?htLine("Key box",q.keybox,q.src.keybox):'')+
+      (q.guest?htLine("Guest",q.guest,q.src.guest):'')+(q.mine?htLine("Your door code",q.mine,q.src.mine):'')+'</div>'+
     '<div class="htmore">Home details →</div></div>'; }
 /* Heads-up (Brandon 2026-10-28): big open/recent problems + active projects at this home, from hub_home_alerts (hub_penny_3.sql).
    Same list Penny and the reservation check list use. Loaded once, then the page redraws. */
@@ -1388,21 +1405,23 @@ function qCard(title,val,src,cls,cat){ if(!val) return '<div class="qv '+(cls||"
 function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(code);
   var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
-  var wifi=pe.wifiName||pe.wifiPass?{v:(pe.wifiName?"Network: "+pe.wifiName:"")+(pe.wifiPass?(pe.wifiName?"\n":"")+"Password: "+pe.wifiPass:""),s:"Edited in the hub"}:asana(/^(wifi|wi-fi|stay[- ]?fi)/i);
-  var entry=pick(pe.lockoutCode,/^lockout info/i), garage=pick(pe.garageCode,/^parking\/? ?garage info$|^parking$/i), closet=pick(pe.ownerCloset,/^owner closet info$/i);
+  var q=homeQuick(code,p), qs=function(k,rx){ var s0=q.src[k]; return {v:q[k],s:s0==="Asana"?asana(rx).s:s0==="Hub edit"?"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):""):s0?"From "+esc(s0):""}; };
+  var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=qs("garage",/^parking\/? ?garage info$|^parking$/i), closet=pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
-    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(window.MM_CODES===false?'':qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
-    qCard("Key box",hi.keybox,hi.src&&hi.src.keybox?"From "+hi.src.keybox:"","")+'</div>'+
+    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(canEntry()?qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout"):'')+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
+    (window.MM_CODES===false?'':qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
+    qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+(q.mine?qCard("Your door code",q.mine,"From Locks",""):'')+'</div>'+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
 function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
   openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div>'+
-    (window.MM_CODES===false?'':area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Leave blank to show the Asana note")+area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note"))+
+    (canEntry()?area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Track's garage code shows first; this is used when Track has none"):'')+(window.MM_CODES===false?'':area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note"))+
     (o.can?'<div class="lbl" style="margin-top:10px">Owner contact <span class="muted">(blank = use Track)</span></div><div class="fields">'+fld("o_name","Owner name",oc.name||"")+fld("o_phone","Phone",oc.phone||"","tel")+fld("o_email","Email",oc.email||"","email")+'</div>'+area("o_notes","Owner notes",oc.notes||"","e.g. prefers text, second contact"):''),
   function(){ var k=sid(code);
     var qp={wifiName:fv("q_wn"),wifiPass:fv("q_wp"),qBy:S.me};
-    if(window.MM_CODES!==false){ qp.lockoutCode=fv("q_lo"); qp.garageCode=fv("q_gc"); qp.ownerCloset=fv("q_oc"); }
+    if(canEntry()){ qp.lockoutCode=fv("q_lo"); qp.garageCode=fv("q_gc"); }
+    if(window.MM_CODES!==false) qp.ownerCloset=fv("q_oc");
     var a=put("propedits",k,qp,S.propedits[k]);
     var b=o.can?put("ownercontacts",k,{code:code,name:fv("o_name"),phone:fv("o_phone"),email:fv("o_email"),notes:fv("o_notes")},(S.ownercontacts||{})[k]):Promise.resolve();
     return Promise.all([a,b]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
@@ -2418,7 +2437,7 @@ function timesheetPanel(m){
 /* ================= TRASH — only homes with a stay or finished work this week ================= */
 /* Trash page (Brandon 2026-10-28): its own hub item, field crew included; out of the Workbench's Today list.
    Field view like the Locks field site: one card per home, big "✓ Out" / "N/A → next", the garage code on the card
-   (home_codes people only — everyone else gets the code-free profiles, so nothing shows). Per-home ticks live in rlog
+   (every level sees garage codes since 2026-10-30: Track first, then the hub edit, then Asana). Per-home ticks live in rlog
    as <route>__<trash day>__<home> with a "home" field; the route ticks itself done when every home is done. */
 /* Mobile first like the Locks field app (Brandon 2026-10-28): one phone-width column on every screen, today's route open and the
    other days folded, a sticky route bar with progress, "📍 I'm at the home" to jump to the closest home, compact done cards. */
@@ -2492,10 +2511,9 @@ document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-t
     trashPlaces().then(function(){ S.ui.trashAt={rid:rid,lat:pos.coords.latitude,lng:pos.coords.longitude,acc:Math.round(pos.coords.accuracy||0)}; render();
       var c=document.querySelector('[data-trid="'+CSS.escape(rid)+'"][data-tjump]'); if(c) trashJump(rid,c.dataset.tjump); }); },
     function(err){ S.ui.trashAt={rid:rid,err:err.message||"blocked"}; render(); }, {enableHighAccuracy:true,timeout:15000,maximumAge:30000}); });
-/* garage / parking code — same source as Property Details' quick view: the hub edit first, else the Asana "Parking/Garage Info" note */
-function trashGarage(c){ if(window.MM_CODES===false) return "";
-  var pr=trashProf(c), pe=pedit((pr||{}).code||c), v=pe.garageCode||"", src=v?"Edited in the hub":"";
-  if(!v && pr){ var nt=infoNote(pr,/^parking\/? ?garage info$|^parking$/i); if(nt){ v=nt.text; src="From Asana"; } }
+/* garage / parking code — same source as Property Details' tiles: Track first, then the hub edit, then the Asana note (all levels see it) */
+function trashGarage(c){
+  var pr=trashProf(c), q=homeQuick((pr||{}).code||c,pr||{}), v=q.garage, src=q.src.garage==="Hub edit"?"Edited in the hub":q.src.garage?"From "+q.src.garage:"";
   if(!v) return '<div class="tgar none">No garage code saved · <a href="./#/homes/'+encodeURIComponent((pr||{}).code||c)+'" target="_top">Add it in Property Details →</a></div>';
   return '<div class="tgar"><div class="qvh">Garage / parking</div>'+qShort(v).html+'<div class="hint">'+src+'</div></div>'; }
 function trashProf(c){ var bare=c.replace(/^(L-|2H-)/,""), hit=null;
