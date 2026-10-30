@@ -97,6 +97,10 @@ const formText = (s, wg) => { const o = s.occ || {};
 const FD_T = n => `https://moosemanagement.freshdesk.com/a/tickets/${n}`;
 const fdLink = (t, s) => { const f = s.td && s.td.fdc; const x = f && (t === "pl_form" || t === "pl_conf" ? f.pl : t === "wg_form" || t === "wg_pet" ? f.wg : null);
   return x ? `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${FD_T(x.t)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Freshdesk #${x.t} ↗</a>` : ""; };
+const ABB_RES = s => s.td && s.td.alt && /^HM/i.test(s.td.alt) ? `https://www.airbnb.com/hosting/reservations/details/${encodeURIComponent(s.td.alt)}` : "";
+const abbLink = (t, s) => (t === "i_reviews" || t === "i_msgs") && ABB_RES(s)
+  ? `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${ABB_RES(s)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${t === "i_reviews" ? "Guest on Airbnb" : "Airbnb messages"} ↗</a>` : "";
+const msgOwed = s => !!(s.td && s.td.msgs && s.td.msgs.lastIn && !(s.td.msgs.lastOut && s.td.msgs.lastOut > s.td.msgs.lastIn));
 const copyBtn = (t, s) => t === "pl_form" ? `<button class="btn small" data-uaa="1" style="min-height:28px;padding:0 9px;font-size:12px">📝 Fill the UAA form</button>`
   : t === "wg_form" && !s.steps.find(x => x.key === t).done ? `<button class="btn small" data-copyform="${t}" style="min-height:28px;padding:0 9px;font-size:12px">📋 Copy details</button>` : "";
 // Prospector's UAA form (fs27.formsite.com/2XpG4h/form1, fields read 2026-10-30). Formsite pre-fill is off on Prospector's account,
@@ -201,7 +205,7 @@ function autoOk(s, a){
     case "bw_owner_next_chris": return bwHas(s, "inspection", /owner next/i, addDay(s.arrive, -4), s.arrive, /chris robinson/i);
     case "bw_in_out": return bwInOut(s);
     // White Pine 129: both inspections assigned to the home manager, Lindsay Lewis (Janae 2026-10-30)
-    case "bw_wp_lindsay": return bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive, /lindsay/i) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart, /lindsay/i);
+    case "bw_wp_lindsay": return bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive, /linds(i|ay)/i) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart, /linds(i|ay)/i);   // Breezeway spells it "Lindsi Lewis"
     case "bw_og": return bwInOut(s) && bwClean(s);
     case "bw_wg": return bwHas(s, "housekeeping", /wg housekeeping/i, s.depart, s.depart);
     case "bw_no_clean": return bwKnown(s) && !(s.bw || []).some(t => t.dp === "housekeeping" && t.sd === s.depart && t.st !== "done")
@@ -262,6 +266,8 @@ const TD_RULES = {
   td_door_meet:    s => s.td.doorKind === "meet",
   td_addendum_ok:  s => doc(s, /change addendum/i, true),
   // Freshdesk (fd_confirm.py): Prospector's "Unit Access Authorization Form Result" reply; Westgate's form receipt (+ pet line)
+  // Track folio events (comm.guest-message): nothing from the guest, or our reply came after their last message
+  td_msgs_ok:      s => !!(s.td.msgs && (!s.td.msgs.lastIn || (s.td.msgs.lastOut && s.td.msgs.lastOut > s.td.msgs.lastIn))),
   td_pl_conf:      s => !!(s.td.fdc && s.td.fdc.pl),
   td_pl_noted:     s => !!(s.td.fdc && s.td.fdc.pl && s.td.notes && s.td.notes.ticket),
   td_wg_sent:      s => !!(s.td.fdc && s.td.fdc.wg),
@@ -274,7 +280,7 @@ const bwClean = s => bwHas(s, "housekeeping", /^(?!.*(assessment|spring)).*(clea
 const bwInOut = s => bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart);
 // Only trust "no clean left" when this home was in the Breezeway pull (it has a Breezeway id and the stay is in the window)
 const bwKnown = s => !!B.bwUpdated && !(B.bwMissing || []).includes(s.unit) && s.depart >= addDay(B.today, -7) && s.arrive <= addDay(B.today, 75);
-const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", td_pl_conf:"Freshdesk", td_pl_noted:"Freshdesk", td_wg_sent:"Freshdesk", td_wg_pet:"Freshdesk", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
+const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", td_msgs_ok:"Track messages", td_pl_conf:"Freshdesk", td_pl_noted:"Freshdesk", td_wg_sent:"Freshdesk", td_wg_pet:"Freshdesk", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
 function prep(s){
   const c = conds(s), ticks = s.ticks || {};
   s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
@@ -336,7 +342,7 @@ async function queue(v){
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))} · #${esc(s.res)}</span></div>
       <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^Owner Guest\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
-        <span class="pill plain grey">${s.got} of ${s.need} steps</span>${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill amber">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
+        <span class="pill plain grey">${s.got} of ${s.need} steps</span>${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill amber">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
       <div class="progress"><i style="width:${pct}%"></i></div></a>`; };
   const draw = () => {
     const dk = s => String(s[F.by] || "").slice(0, 10);
@@ -429,6 +435,8 @@ async function card(v, res){
         ${B.money ? `<span>Rent ${money(s.rent)}</span><span>Fees ${money(s.fees)}</span><span>Taxes ${money(s.taxes)}</span><span>Total <b>${money(s.total)}</b></span>` : ""}
         <span>Paid <b>${money(s.paid)}</b></span><span>Balance <b>${money(s.balance)}</b></span>${chargeBtn(s)}</div>
       ${s.ah ? `<div class="rmoney"><span class="muted">Autohost</span><span>Status: <b>${esc(s.ah.verify || "unknown")}</b></span>${s.ah.reason ? `<span>${esc(s.ah.reason)}</span>` : ""}<span>Portal: <b>${s.ah.portal ? "done" : "not done"}</b></span></div>` : ""}
+      ${s.td && s.td.msgs && (s.td.msgs.in || s.td.msgs.out) ? `<div class="rmoney"><span class="muted">Guest messages (Track)</span><span>${s.td.msgs.in} from the guest · ${s.td.msgs.out} from us</span>
+        ${msgOwed(s) ? `<span class="pill amber">Reply owed since ${esc(when(s.td.msgs.lastIn))}</span>` : `<span class="pill green">Answered</span>`}</div>` : ""}
       ${s.ah && s.ah.verify === "review" ? `<div class="rrule stop">Autohost has this guest under review${(s.ah.rules || []).length ? ": " + esc(s.ah.rules.join(", ")) : ""}. ${conds(s).review_easy ? "Under 25 at a studio–2 BR: you can approve it in Autohost if the guest gives a good reason for the stay (write it on the step)." : "A manager has to approve it (second set of eyes)."} ${!B.canMgr && !conds(s).review_easy ? askBtn("ah_rev_mgr") : ""}</div>` : ""}
       ${(B.asks || []).some(a => a.res === s.res) ? `<div class="rmoney" style="display:block"><span class="muted">Asked a manager</span>${B.asks.filter(a => a.res === s.res).map(askLine).join("")}</div>` : ""}
       ${conds(s).half ? `<div class="rrule warn">Only ${autoOk(s, "ah_verified") ? "the ID check" : "the contract"} is in. Send “Reminder to Sign Contract or Submit ID Verification” from Track.</div>` : ""}
@@ -452,7 +460,7 @@ async function card(v, res){
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
           <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
