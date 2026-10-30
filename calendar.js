@@ -180,7 +180,7 @@ function lay(list){   // overlapping timed blocks side by side, like Outlook
     let c = cols.findIndex(e => e <= x.s); if(c < 0){ c = cols.length; cols.push(0); } cols[c] = x.e; x.c = c; grp.push(x); end = Math.max(end, x.e); });
   fin(); return list;
 }
-const attrs = x => (x.href ? `href="${esc(x.href)}"` : `href="#"`) + (x.ev ? ` data-ev="${x.ev}"` : "") + (x.drag ? " data-drag" : "");
+const attrs = x => (x.href ? `href="${esc(x.href)}"` : `href="#"`) + (x.ev ? ` data-ev="${x.ev}"` : "") + (x.mt ? ` data-mt="${x.mt}"` : "") + (x.drag ? " data-drag" : "");
 const chip = x => `<a class="ev ${x.cls || ""}" ${attrs(x)} title="${esc(x.title + (x.start ? " · " + ftime(x.start.slice(0, 5)) : ""))}">${x.start ? esc(ftime(x.start.slice(0, 5))) + " " : ""}${esc(x.title)}</a>`;
 function timeGrid(key, items, canAdd, hours){
   const days = gridDays(key), n = days.length, t = today(), sel = ST.sel[key], H = (WE - WS) * HPX, nw = new Date(), nowM = nw.getHours() * 60 + nw.getMinutes();
@@ -278,8 +278,10 @@ async function evCal(v, key){
   v.innerHTML = `<div class="page cal wide">${tabs(key)}<p class="muted">Loading…</p></div>`;
   const [a, b] = curRange(key);
   const wantStays = isRes || (isMe && layerOn("checkins"));
-  const [evs, ms, ppl, sr, orr, tor] = await Promise.all([isRes ? [] : events(a, b), isMe && layerOn("meet") ? meetings() : [], isRes ? [] : people(),
-    wantStays ? sb.rpc("cal_stays", { p_from:a, p_to:b }) : null, isOff ? sb.rpc("cal_office", { p_from:a, p_to:b }) : null, isOff ? sb.rpc("timeoff_calendar", { p_from:a, p_to:b }) : null]);
+  const [evs, ms, ppl, sr, orr, tor, hm] = await Promise.all([isRes ? [] : events(a, b), isMe && layerOn("meet") ? meetings() : [], isRes ? [] : people(),
+    wantStays ? sb.rpc("cal_stays", { p_from:a, p_to:b }) : null, isOff ? sb.rpc("cal_office", { p_from:a, p_to:b }) : null, isOff ? sb.rpc("timeoff_calendar", { p_from:a, p_to:b }) : null,
+    isMe ? sb.rpc("meet_mine", { p_from:a, p_to:b }) : null]);
+  const hubMeets = ((hm && hm.data) || []).filter(m => m.status === "on");   // meetings made with Schedule a meeting / booked on a booking link
   if(current() !== key) return;
   const stays = (sr && sr.data && sr.data.stays) || [], who = id => (ppl.find(p => p.id === id) || {}).name || "Someone";
   const fn = id => who(id).split(" ")[0], ox = (orr && orr.data) || { meetings:[], shifts:[], off:[] };
@@ -300,6 +302,8 @@ async function evCal(v, key){
     const out = [];
     if(isRes || (isMe && layerOn("checkins"))){ stays.filter(x => x.in === s).forEach(x => out.push({ title:(x.owner ? "OWNER " : "") + "CHECK-IN " + x.unit + (x.guest ? " · " + x.guest : ""), cls:"ar", href:"#/cal_res" }));
       if(isRes) stays.filter(x => x.out === s).forEach(x => out.push({ title:"CHECK-OUT " + x.unit, cls:"dp", href:"#/cal_res" })); }
+    if(isMe) hubMeets.filter(m => m.day === s).forEach(m => out.push({ start:m.start, end:endTime(m.start, m.minutes), title:"📹 " + m.title,
+      sub:[m.guest_name ? "booked by " + m.guest_name : "", m.host_id !== myId ? "host " + (m.host || "").split(" ")[0] : ""].filter(Boolean).join(" · "), cls:"mt", mt:m.id, join:m.zoom_join }));
     if(isMe){ mt.filter(x => x.day === s).forEach(x => out.push({ start:x.start, end:x.start && x.minutes ? endTime(x.start, x.minutes) : null, title:NAMES[x.meet] + " meeting", cls:"mt", href:"#/" + x.meet }));
       const att = e => (e.attendees || []).includes(myId);   // office events you're going to show with your own events
       if(layerOn("personal")) mine.concat(evs.filter(e => e.cal === "office" && att(e))).filter(e => evOn(e, s)).forEach(e => out.push(e.cal === "office" ? Object.assign(evItem(e), { cls:"of", drag:false }) : evItem(e)));
@@ -317,7 +321,7 @@ async function evCal(v, key){
     return out; };
   const draw = () => {
     const sel = ST.sel[key], day = items(sel).sort((x, y) => (x.start || "").localeCompare(y.start || ""));
-    const addBtns = isMe ? `<button class="btn small primary" data-add="event">+ Event</button>`
+    const addBtns = isMe ? `<button class="btn small primary" data-add="event">+ Event</button><button class="btn small" data-sched>📅 Schedule a meeting</button><button class="btn small" data-blinks>🔗 Booking links</button>`
       : isOff ? (boss ? `<button class="btn small primary" data-add="event">+ Work event</button>` : "") + `<a class="btn small" href="#/cal_off" data-askoff>🌴 Ask for time off</a><button class="btn small" data-add="out">I'm out</button><button class="btn small" data-add="working">I'm working</button>` : "";
     const detail = isRes ? resDetail(stays, sel) : `<div class="card list"><b style="font-size:16px">${esc(fday(sel))}</b>${day.length ? day.map(x => `<div class="it"><span class="d">${x.start ? ftime(x.start.slice(0, 5)) + (x.end ? "–" + ftime(x.end.slice(0, 5)) : "") : "All day"}</span><span style="flex:1"><a ${attrs(Object.assign({}, x, { drag:false }))}><b>${esc(x.title)}</b></a>${x.sub ? ` <span class="muted">· ${esc(x.sub)}</span>` : ""}</span>${x.join ? `<a class="btn small primary" href="${esc(x.join)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}</div>`).join("") : `<p class="muted" style="margin:6px 0 0">Nothing on this day.</p>`}</div>`;
     const main = body(key, items, canAdd, !isRes) + (isRes ? `<p class="muted" style="font-size:12px">Source: ${esc((sr && sr.data && sr.data.source) || "Track reservations")}. Guest names only; contact info stays on Home for the teams that have it.</p>` : "");
@@ -334,10 +338,98 @@ async function evCal(v, key){
         if(!r.error){ ST.sel[key] = to.day; evCal(v, key); } },
       id => { const e = evs.find(x => x.id === id); if(e) form(e); });
     v.querySelectorAll("[data-add]").forEach(bt => bt.onclick = () => form(null, { kind:bt.dataset.add }));
+    v.querySelectorAll("[data-sched]").forEach(bt => bt.onclick = () => schedForm());
+    if(ST.justMade){ const m = hubMeets.find(y => y.id === ST.justMade); ST.justMade = null; if(m) meetBox(m, true); }
+    v.querySelectorAll("[data-blinks]").forEach(bt => bt.onclick = () => linksBox());
+    v.querySelectorAll("[data-mt]").forEach(el => el.onclick = x => { x.preventDefault(); x.stopPropagation(); const m = hubMeets.find(y => y.id === +el.dataset.mt); if(m) meetBox(m); });
     v.querySelectorAll("[data-askoff]").forEach(bt => bt.onclick = () => { ST.askOff = true; });
     v.querySelectorAll(".pp [data-mailto]").forEach(x => x.onclick = e => e.stopPropagation());
     const q = v.querySelector("#ppq"); if(q) q.oninput = () => v.querySelectorAll(".pp[data-n]").forEach(p => p.style.display = p.dataset.n.includes(q.value.trim().toLowerCase()) ? "" : "none");
   };
+  // ---- Schedule a meeting / booking links (hub_meet_book.sql + Edge Function `meet`; public pages meet.html + book.html) ----
+  const pageUrl = (f, q) => new URL(f + "?" + q, location.href).href;
+  const copy = async (txt, btn) => { try { await navigator.clipboard.writeText(txt); if(btn){ const o = btn.textContent; btn.textContent = "Copied ✓"; setTimeout(() => btn.textContent = o, 1500); } }
+    catch(_){ prompt("Copy this link:", txt); } };
+  const fnCall = async o => { const ss = (await sb.auth.getSession()).data.session;
+    const r = await fetch(MM_CONFIG.url + "/functions/v1/meet", { method:"POST", headers:{ "content-type":"application/json", apikey:MM_CONFIG.anonKey, authorization:"Bearer " + (ss ? ss.access_token : MM_CONFIG.anonKey) }, body:JSON.stringify(o) });
+    return r.json().catch(() => ({ ok:false, error:"No answer from the server." })); };
+  const modal = html => { $("#evcard").innerHTML = `<div class="evhd" style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${html.h}</h2><button class="btn small" id="evx" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>${html.b}`;
+    $("#evm").classList.add("on"); $("#evcard").scrollTop = 0; $("#evx").onclick = () => $("#evm").classList.remove("on");
+    $("#evm").onclick = x => { if(x.target === $("#evm")) $("#evm").classList.remove("on"); }; };
+  const topts = (sel, blank) => { const l = []; for(let m = 5 * 60; m < 24 * 60; m += 15) l.push(hhmm(m)); return (blank ? `<option value="">${blank}</option>` : "") + l.map(t => `<option value="${t}" ${t === sel ? "selected" : ""}>${ftime(t)}</option>`).join(""); };
+  const lenOpts = (sel, list) => list.map(m => `<option value="${m}" ${m === sel ? "selected" : ""}>${m < 60 ? m + " min" : (m / 60) + (m === 60 ? " hour" : " hours")}</option>`).join("");
+  const staffPick = (sel, id) => `<div class="field"><span>Also invite from Moose (optional; shows on their calendar)</span><div class="attp" id="${id}">${ppl.filter(p => p.id !== myId).map(p => `<label class="lyr"><input type="checkbox" data-st="${p.id}" ${(sel || []).includes(p.id) ? "checked" : ""}>${esc(p.name)}</label>`).join("")}</div></div>`;
+  const picked = id => [...$("#" + id).querySelectorAll("[data-st]:checked")].map(x => x.dataset.st);
+  const zoomTxt = m => m.zoom_status === "made" ? `<a class="btn small primary" href="${esc(m.zoom_join)}" target="_blank" rel="noopener noreferrer">💻 Join on Zoom</a>`
+    : `<span class="pill amber">Zoom link ${m.zoom_status === "failed" ? "not made" : "coming"}</span> <span class="muted" style="font-size:12.5px">${esc(m.zoom_error || "")}</span> <button class="btn small" id="mz">Try again</button>`;
+  function schedForm(){
+    modal({ h:"Schedule a meeting", b:`<p class="muted" style="margin:4px 0 0">The hub makes the Zoom meeting and a link you can send to guests, vendors or anyone at Moose. It goes on your calendar.</p>
+      <label class="field"><span>What</span><input id="sm_t" maxlength="120" placeholder="e.g. Owner walk-through call"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Day</span><input type="date" id="sm_d" value="${esc(ST.sel[key] >= today() ? ST.sel[key] : today())}"></label>
+        <label class="field" style="flex:1;min-width:120px"><span>Starts</span><select id="sm_s">${topts("10:00")}</select></label>
+        <label class="field" style="flex:1;min-width:110px"><span>How long</span><select id="sm_l">${lenOpts(30, [15, 30, 45, 60, 90, 120, 180])}</select></label></div>
+      <label class="field"><span>Note for the people you send it to (optional)</span><textarea id="sm_n" maxlength="1000" style="min-height:60px" placeholder="Agenda, what to bring… Don't type codes or passwords."></textarea></label>
+      ${staffPick([], "sm_st")}
+      <div class="evft"><button class="btn primary" style="width:100%" id="sm_go">Make the meeting</button><p class="muted" id="sm_m" style="margin:6px 0 0"></p></div>` });
+    $("#sm_go").onclick = async () => { const t = $("#sm_t").value.trim(); if(!t) return $("#sm_m").textContent = "Add what the meeting is.";
+      $("#sm_go").disabled = true; $("#sm_m").textContent = "Making the meeting and the Zoom link…";
+      const r = await fnCall({ action:"create", title:t, day:$("#sm_d").value, start:$("#sm_s").value, minutes:+$("#sm_l").value, note:$("#sm_n").value, staff:picked("sm_st") });
+      if(!r.ok){ $("#sm_go").disabled = false; return $("#sm_m").textContent = "Couldn't make it: " + r.error; }
+      const dy = $("#sm_d").value || today(); ST.sel[key] = dy; ST.justMade = r.id; evCal(v, key); };   // the redrawn calendar opens it (ST.justMade)
+  }
+  function meetBox(m, fresh){
+    const url = pageUrl("meet.html", "t=" + m.token), canCx = m.mine || ME.admin;
+    modal({ h:esc(m.title), b:`${fresh ? `<p class="pill green" style="display:inline-block">Made ✓ Send the link below</p>` : ""}
+      <p style="margin:6px 0"><b>${esc(fday(m.day))}</b> · ${esc(ftime(m.start))}–${esc(ftime(endTime(m.start, m.minutes)))} · ${m.minutes} min<br><span class="muted">Host: ${esc(m.host || "")}${m.booking ? " · booked on “" + esc(m.booking) + "”" : ""}</span></p>
+      <div class="field"><span>Link to send (meeting page with the Zoom button and Add to calendar)</span><div style="display:flex;gap:6px"><input readonly value="${esc(url)}" style="flex:1"><button class="btn small primary" id="mc">Copy</button></div></div>
+      <div style="margin:8px 0">${zoomTxt(m)}</div>
+      ${m.guest_name ? `<div class="card" style="padding:10px 12px;margin:8px 0"><b>Booked by ${esc(m.guest_name)}</b><br>${m.guest_email ? `<a href="mailto:${esc(m.guest_email)}">${esc(m.guest_email)}</a>` : ""}${m.guest_phone ? " · " + esc(m.guest_phone) : ""}${m.guest_note ? `<div class="muted" style="white-space:pre-wrap;margin-top:4px">${esc(m.guest_note)}</div>` : ""}</div>` : ""}
+      ${m.note ? `<p class="muted" style="white-space:pre-wrap">${esc(m.note)}</p>` : ""}
+      ${(m.staff || []).length ? `<p class="muted">Also from Moose: ${esc(m.staff.map(id => (ppl.find(p => p.id === id) || {}).name || "").filter(Boolean).join(", "))}</p>` : ""}
+      <div class="evft" style="display:flex;gap:8px"><a class="btn" style="flex:1" href="${esc(url)}" target="_blank" rel="noopener">Open the page</a>${canCx ? `<button class="btn" id="mx">Cancel meeting</button>` : ""}</div>
+      <p class="muted" id="mm" style="margin:0 0 10px"></p>` });
+    $("#mc").onclick = () => copy(url, $("#mc"));
+    if($("#mz")) $("#mz").onclick = async () => { $("#mz").disabled = true; const r = await fnCall({ action:"zoom", id:m.id }); if(!r.ok) $("#mm").textContent = r.error;
+      const l = await sb.rpc("meet_mine", { p_from:m.day, p_to:m.day }); const n = ((l && l.data) || []).find(x => x.id === m.id); if(n) meetBox(n); };
+    if($("#mx")) $("#mx").onclick = async () => { const why = prompt("Cancel this meeting? The link will say it's cancelled. Add a note (optional):", ""); if(why === null) return;
+      const r = await sb.rpc("meet_cancel", { p_id:m.id, p_note:why }); if(r.error) return $("#mm").textContent = "Couldn't cancel: " + r.error.message;
+      $("#evm").classList.remove("on"); evCal(v, key); };
+  }
+  async function linksBox(){
+    const r = await sb.rpc("book_links_mine"); const L = (r && r.data) || [];
+    modal({ h:"Booking links", b:`<p class="muted" style="margin:4px 0 8px">Send a booking link and people pick an open time inside the days and hours you set. Times you're busy on the hub calendar (events, meetings, time off) never show. Each booking gets its own Zoom link and lands on your calendar.</p>
+      <button class="btn primary" id="bl_new" style="width:100%">+ New booking link</button>
+      ${L.length ? L.map(b => `<div class="card" style="padding:10px 12px;margin:8px 0;${b.off ? "opacity:.6" : ""}"><b>${esc(b.title)}</b>${b.off ? ` <span class="pill">Off</span>` : ""}${ME.admin && b.owner_id !== myId ? ` <span class="muted">· ${esc(b.owner)}</span>` : ""}
+        <div class="muted" style="font-size:13px">${b.minutes} min · ${esc(fday(b.from_day))} – ${esc(fday(b.to_day))} · ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].filter((_, i) => b.dows.includes(i)).join(", ")} ${esc(ftime(b.day_start.slice(0, 5)))}–${esc(ftime(b.day_end.slice(0, 5)))} · ${b.booked} booked</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn small primary" data-bc="${esc(b.slug)}">Copy link</button><a class="btn small" href="${esc(pageUrl("book.html", "l=" + b.slug))}" target="_blank" rel="noopener">Open</a><button class="btn small" data-be="${b.id}">Change</button></div></div>`).join("")
+        : `<p class="muted">No booking links yet.</p>`}<div class="evft"></div>` });
+    $("#bl_new").onclick = () => linkForm(null);
+    $("#evcard").querySelectorAll("[data-bc]").forEach(x => x.onclick = () => copy(pageUrl("book.html", "l=" + x.dataset.bc), x));
+    $("#evcard").querySelectorAll("[data-be]").forEach(x => x.onclick = () => linkForm(L.find(b => b.id === +x.dataset.be)));
+  }
+  function linkForm(b){
+    const t0 = today(), dows = b ? b.dows : [1, 2, 3, 4, 5];
+    modal({ h:b ? "Change booking link" : "New booking link", b:`
+      <label class="field"><span>What people book</span><input id="bl_t" maxlength="120" value="${esc(b ? b.title : "")}" placeholder="e.g. Owner intro call, Vendor walk-through"></label>
+      <label class="field"><span>Meeting length</span><select id="bl_l">${lenOpts(b ? b.minutes : 30, [15, 20, 30, 45, 60, 90, 120])}</select></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>First day they can book</span><input type="date" id="bl_f" value="${esc(b ? b.from_day : t0)}"></label>
+        <label class="field" style="flex:1;min-width:140px"><span>Last day</span><input type="date" id="bl_e" value="${esc(b ? b.to_day : addD(t0, 14))}"></label></div>
+      <div class="field"><span>Days of the week</span><div>${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d, i) => `<label class="lyr"><input type="checkbox" data-dw="${i}" ${dows.includes(i) ? "checked" : ""}>${d}</label>`).join(" ")}</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:120px"><span>From</span><select id="bl_s">${topts(b ? b.day_start.slice(0, 5) : "09:00")}</select></label>
+        <label class="field" style="flex:1;min-width:120px"><span>Until</span><select id="bl_u">${topts(b ? b.day_end.slice(0, 5) : "17:00")}</select></label></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Break between meetings</span><select id="bl_g">${[0, 5, 10, 15, 30].map(m => `<option value="${m}" ${(b ? b.gap_min : 0) === m ? "selected" : ""}>${m ? m + " min" : "None"}</option>`).join("")}</select></label>
+        <label class="field" style="flex:1;min-width:140px"><span>Book at least</span><select id="bl_n">${[[0, "Any time"], [1, "1 hour ahead"], [2, "2 hours ahead"], [4, "4 hours ahead"], [12, "12 hours ahead"], [24, "1 day ahead"], [48, "2 days ahead"]].map(([h, l]) => `<option value="${h}" ${(b ? b.notice_h : 4) === h ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
+      <label class="field"><span>Note on the booking page (optional)</span><textarea id="bl_x" maxlength="1000" style="min-height:60px">${esc(b && b.note || "")}</textarea></label>
+      ${staffPick(b ? b.staff : [], "bl_st")}
+      ${b ? `<label class="lyr"><input type="checkbox" id="bl_off" ${b.off ? "checked" : ""}>Turn this link off (people can't book)</label>` : ""}
+      <div class="evft"><button class="btn primary" style="width:100%" id="bl_go">${b ? "Save" : "Make the link"}</button><p class="muted" id="bl_m" style="margin:6px 0 0"></p></div>` });
+    $("#bl_go").onclick = async () => {
+      const r = await sb.rpc("book_link_save", { p_id:b ? b.id : null, p_title:$("#bl_t").value, p_minutes:+$("#bl_l").value, p_from:$("#bl_f").value || null, p_to:$("#bl_e").value || null,
+        p_dows:[...$("#evcard").querySelectorAll("[data-dw]:checked")].map(x => +x.dataset.dw), p_start:$("#bl_s").value, p_end:$("#bl_u").value, p_gap:+$("#bl_g").value,
+        p_notice:+$("#bl_n").value, p_note:$("#bl_x").value, p_staff:picked("bl_st"), p_off:$("#bl_off") ? $("#bl_off").checked : false });
+      if(r.error) return $("#bl_m").textContent = "Couldn't save: " + r.error.message;
+      linksBox(); };
+  }
   const save = (e, over) => sb.rpc("cal_event_save2", Object.assign({ p_id:e.id, p_cal:e.cal, p_kind:e.kind || "event", p_person:e.person_id, p_title:e.title, p_day:e.day, p_end_day:e.end_day,
     p_start:e.start_time ? e.start_time.slice(0, 5) : null, p_end:e.end_time ? e.end_time.slice(0, 5) : null, p_location:e.location || "", p_notes:e.notes || "", p_off:false }, over)).then(r => { if(r.error) alert("Couldn't move it: " + r.error.message); return r; });
   const form = (e, pre) => {
