@@ -250,6 +250,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="offline.js"></script>
+<script src="idle.js"></script>
 <script src="reservations.js"></script>
 <script src="analytics.js"></script>
 <script src="meetings.js"></script>
@@ -1961,7 +1962,8 @@ async function patrickView(v){
 }
 window.addEventListener("hashchange", route);
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
-sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { if(window.MMOFF) MMOFF.wipe(); ME = null; TS.ok = false; TS.weak = false; TS.mc = undefined; loginView(); } });
+sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { if(window.MMOFF) MMOFF.wipe(); ME = null; TS.ok = false; TS.weak = false; TS.mc = undefined; loginView(window.MMIDLE ? MMIDLE.reason() : ""); } });
+if(window.MMIDLE) MMIDLE.watch(sb);   // signed out after 1 hour with no use (idle.js)
 boot();
 </script>
 </body>
