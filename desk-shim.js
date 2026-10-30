@@ -9,6 +9,7 @@
   var sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" },
     global:{ fetch:function(a, b){ return MMO ? MMO.fetch(a, b) : fetch(a, b); } } });
   window.MM_SB = sb;
+  if(window.MMIDLE) window.MMIDLE.watch(sb);   // 1 hour with no use -> signed out (idle.js; only when opened on its own)
   if(OFFH) MMO.scope(true);
   sb.auth.onAuthStateChange(function(ev){ if(ev === "SIGNED_OUT" && MMO) MMO.wipe(); });
   var T = "desk_docs";
