@@ -20,7 +20,7 @@
    Routes: #/cal_res · #/cal_office · #/cal_me · #/cal_meet · #/cal_off · #/pto · #/work_check */
 (function(){
 const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
-const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"],["cal_off","Request time off"]];
+const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"]];   // Request time off moved to Staffing (Brandon 2026-10-29)
 const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["month","Month"],["wm","Week + Month"]];
 const LAYERS = { cal_me:[["meet","Meetings"],["personal","My events"],["office","Office"],["checkins","Check-ins"]], cal_office:[["events","Work events"],["meet","Meetings"],["sched","Schedules"],["people","Who's in / out"]] };
 const LAYER_ON = { meet:true, personal:true, office:true, checkins:false, events:true, people:true, sched:true };
@@ -420,7 +420,7 @@ function ptoBy(b, pol, by){
   return { h:Math.min(cap, balOf(b) + add), perWk, capped:balOf(b) + add > cap, cap };
 }
 async function timeOff(v){
-  v.innerHTML = `<div class="page cal">${tabs("cal_off")}<p class="muted">Loading…</p></div>`;
+  v.innerHTML = `<div class="page cal"><p class="muted">Loading…</p></div>`;
   const [ppl, br, pr, rr, ar] = await Promise.all([people(), sb.from("hub_pto_balances").select("*"), sb.from("hub_pto_policies").select("*"),
     sb.from("hub_timeoff_requests").select("*").order("day", { ascending:false }).limit(300), sb.from("hub_timeoff_approvers").select("*").eq("off", false)]);
   if(current() !== "cal_off") return;
@@ -447,7 +447,7 @@ async function timeOff(v){
   const myOrder = myB.slice().sort((x, y) => (pol(x.policy_id).kind === "pto" ? 0 : 1) - (pol(y.policy_id).kind === "pto" ? 0 : 1));
   const teamRow = id => teamB.filter(b => b.user_id === id).sort((x, y) => (pol(y.policy_id).paid ? 1 : 0) - (pol(x.policy_id).paid ? 1 : 0)).map((b, i) =>
     `<tr><td>${i ? "" : `<b>${esc(who(id))}</b>`}</td><td>${esc(pol(b.policy_id).name || "")}</td><td>${hrs(b.hours)}${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}</td><td>${pol(b.policy_id).policy_type === "hours_worked" ? hrs(b.worked_ytd) : ""}</td><td>${b.earned_ytd != null ? hrs(b.earned_ytd) : ""}</td><td>${hrs(b.used_ytd)}</td></tr>`).join("");
-  v.innerHTML = `<div class="page cal">${tabs("cal_off")}
+  v.innerHTML = `<div class="page cal">
     <div class="chead"><h2>Request time off</h2><button class="btn primary" id="askoff">🌴 Ask for time off</button></div>
     ${approver && wait.length ? `<div class="card" style="border-left:4px solid var(--amber,#8a5a00)"><b style="font-size:16px">Waiting for you (${wait.length})</b>${table(wait, "wait")}</div>` : ""}
     <div class="card"><b style="font-size:16px">Your balances</b>
