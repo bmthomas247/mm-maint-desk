@@ -46,7 +46,7 @@ const CSS = `
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px} .rgrid>.card{margin:0}
 .rhome{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px!important} .rhome:hover{border-color:var(--forest-2)}
 .rhome::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--line-2)} .rhome.ok::before{background:var(--moose)} .rhome.bad::before{background:var(--red)} .rhome.todo::before{background:var(--amber)}
-.rhome .rtop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start} .rhome .rtop>.pill{flex:none} .rhome .rcode{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.rhome .rtop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start} .rhome .rtop>.pill{flex:none} .rhome .rcode{font-size:20px;font-weight:800;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rhome .rsub{font-size:13.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rhome .rdates{font-size:13.5px;margin-top:6px}
 .rhome .rmeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} .rhome .rmeta .pill{font-size:11.5px;padding:2px 8px}
 .rhome .progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px} .rhome .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--moose),var(--moose-2));border-radius:99px}
@@ -247,8 +247,8 @@ async function queue(v){
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
   const tile = s => { const why = [...s.waiting, ...s.blockers], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
     return `<a class="card rhome ${stripe(s)}" href="#/reservations/${encodeURIComponent(s.res)}">
-      <div class="rtop"><div style="min-width:0"><div class="rcode">${esc(s.unit || "#" + s.res)}</div>
-        <div class="rsub">${esc(s.guest || "")}${s.guest ? " · " : ""}${esc(s.type || CH[s.chan] || "")}</div></div>
+      <div class="rtop"><div style="min-width:0"><div class="rcode">${esc(s.guest || "#" + s.res)}</div>
+        <div class="rsub"><b>${esc(s.unit || "")}</b>${HOODS[s.area] ? " · " + esc(HOODS[s.area]) : ""} · ${esc(s.type || CH[s.chan] || "")}</div></div>
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))} · #${esc(s.res)}</span></div>
       <div class="rmeta">${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
