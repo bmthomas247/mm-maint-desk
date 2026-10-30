@@ -398,12 +398,18 @@ async function evCal(v, key){
   async function linksBox(){
     const r = await sb.rpc("book_links_mine"); const L = (r && r.data) || [];
     modal({ h:"Booking links", b:`<p class="muted" style="margin:4px 0 8px">Send a booking link and people pick an open time inside the days and hours you set. Times you're busy on the hub calendar (events, meetings, time off) never show. Each booking gets its own Zoom link and lands on your calendar.</p>
+      ${ME.admin ? `<div class="card" style="padding:8px 12px;margin:0 0 8px" id="zst"><span class="muted">Checking Zoom…</span></div>` : ""}
       <button class="btn primary" id="bl_new" style="width:100%">+ New booking link</button>
       ${L.length ? L.map(b => `<div class="card" style="padding:10px 12px;margin:8px 0;${b.off ? "opacity:.6" : ""}"><b>${esc(b.title)}</b>${b.off ? ` <span class="pill">Off</span>` : ""}${ME.admin && b.owner_id !== myId ? ` <span class="muted">· ${esc(b.owner)}</span>` : ""}
         <div class="muted" style="font-size:13px">${b.minutes} min · ${esc(fday(b.from_day))} – ${esc(fday(b.to_day))} · ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].filter((_, i) => b.dows.includes(i)).join(", ")} ${esc(ftime(b.day_start.slice(0, 5)))}–${esc(ftime(b.day_end.slice(0, 5)))} · ${b.booked} booked</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn small primary" data-bc="${esc(b.slug)}">Copy link</button><a class="btn small" href="${esc(pageUrl("book.html", "l=" + b.slug))}" target="_blank" rel="noopener">Open</a><button class="btn small" data-be="${b.id}">Change</button></div></div>`).join("")
         : `<p class="muted">No booking links yet.</p>`}<div class="evft"></div>` });
     $("#bl_new").onclick = () => linkForm(null);
+    if(ME.admin) fnCall({ action:"check" }).then(z => { const el = $("#zst"); if(!el) return;   // admins: is Zoom connected? (never shows the keys)
+      el.innerHTML = !z.ok ? `<span class="muted">Couldn't check Zoom: ${esc(z.error || "")}</span>`
+        : !z.connected ? `<b>Zoom isn't connected yet.</b> <span class="muted">Meetings save now and get their Zoom link once it is${z.waiting ? " (" + z.waiting + " waiting)" : ""}.</span>`
+        : z.sign_in !== "ok" ? `<b>Zoom sign-in failed:</b> <span class="muted">${esc(z.sign_in)}</span>`
+        : `<b>Zoom connected ✓</b> <span class="muted">${z.host_ok ? "Host account OK" : "Host account problem: " + esc(z.host_error || "")}${z.waiting ? " · " + z.waiting + " meetings still waiting for a link" : ""}</span>`; });
     $("#evcard").querySelectorAll("[data-bc]").forEach(x => x.onclick = () => copy(pageUrl("book.html", "l=" + x.dataset.bc), x));
     $("#evcard").querySelectorAll("[data-be]").forEach(x => x.onclick = () => linkForm(L.find(b => b.id === +x.dataset.be)));
   }
