@@ -55,6 +55,38 @@ function shifts(rows){
   if(cur){ if(Date.now() - Date.parse(cur.at) < 20 * 36e5) out.open = cur; else out.odd.push(cur); }
   return out;
 }
+/* ---------- schedule check (Brandon 2026-10-30: "flag clock-ins that don't match the schedule"). Only person-days the hub schedule covers
+   (sched_get.cov); 15 minutes either way counts as on time. Worked out here from punches this viewer may already see; nothing is saved. ---------- */
+const GRACE = 15 * 6e4, t12 = t => { if(!t) return ""; const [H, M] = t.split(":").map(Number); return `${H % 12 || 12}${M ? ":" + String(M).padStart(2, "0") : ""}${H < 12 ? "a" : "p"}`; };
+const tzOff = x => { const p = {}; new Intl.DateTimeFormat("en-US", { timeZone:TZ, hourCycle:"h23", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })
+  .formatToParts(new Date(x)).forEach(q => p[q.type] = +q.value); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - x; };
+const pcAt = (k, t) => { const [y, mo, da] = k.split("-").map(Number), [H, M] = t.split(":").map(Number), g = Date.UTC(y, mo - 1, da, H, M); return g - tzOff(g - tzOff(g)); };   // Park City wall time → ms
+const mins = ms => { const m = Math.round(ms / 6e4); return m < 60 ? m + " min" : hm(m / 60); };
+// → [{ k:day, kind, txt }]; kinds: noin_now (shift going, not in), noin, early, late, still (in past the end), outlate, outearly, unsched
+function schedCheck(u, rows, sg, from, to){
+  const cov = new Set(sg.cov || []), s = shifts(rows), out = [], now = Date.now(), used = new Set(), pairs = [];
+  Object.values(s.days).forEach(l => l.forEach(x => pairs.push({ a:Date.parse(x.a.at), b:Date.parse(x.b.at) })));
+  if(s.open) pairs.push({ a:Date.parse(s.open.at), b:null });
+  const add = (k, kind, txt) => out.push({ k, kind, txt });
+  for(let k = from; k <= to; k = addK(k, 1)){
+    if(!cov.has(u + "|" + k)) continue;
+    for(const x of (sg.shifts || []).filter(x => x.user_id === u && x.day === k)){
+      const S = pcAt(k, x.start), E = pcAt(x.end > x.start ? k : addK(k, 1), x.end), sch = `${t12(x.start)}–${t12(x.end)}`;
+      const m = pairs.filter(p => !used.has(p) && p.a >= S - 3 * 36e5 && p.a < E);
+      m.forEach(p => used.add(p));
+      if(!m.length){ if(now > S + GRACE) add(k, now < E ? "noin_now" : "noin", now < E ? `not clocked in yet (scheduled ${sch})` : `no clock-in for the ${sch} shift`); continue; }
+      const a = Math.min(...m.map(p => p.a)), open = m.some(p => p.b == null), b = open ? null : Math.max(...m.map(p => p.b));
+      if(a < S - GRACE) add(k, "early", `in ${mins(S - a)} early (${tm(a)}, scheduled ${t12(x.start)})`);
+      if(a > S + GRACE) add(k, "late", `in ${mins(a - S)} late (${tm(a)}, scheduled ${t12(x.start)})`);
+      if(open){ if(now > E + GRACE) add(k, "still", `still clocked in ${mins(now - E)} after the shift ended (${t12(x.end)})`); }
+      else if(b > E + GRACE) add(k, "outlate", `out ${mins(b - E)} late (${tm(b)}, scheduled ${t12(x.end)})`);
+      else if(b < E - GRACE && now > E) add(k, "outearly", `out ${mins(E - b)} early (${tm(b)}, scheduled ${t12(x.end)})`);
+    }
+  }
+  pairs.filter(p => !used.has(p)).forEach(p => { const k = dkey(p.a); if(k >= from && k <= to && cov.has(u + "|" + k)) add(k, "unsched", `clocked in ${tm(p.a)}, not on the schedule that day`); });
+  return out;
+}
+const schedTxt = (sg, u, k) => (sg.shifts || []).filter(x => x.user_id === u && x.day === k).map(x => `${t12(x.start)}–${t12(x.end)}`).join(", ");
 const weekHours = (s, w) => { let h = 0; for(let i = 0; i < 7; i++) (s.days[addK(w, i)] || []).forEach(x => h += x.h); return Math.round(h * 100) / 100; };
 
 // a punch time + ✎ (Brandon 2026-10-30: "anyone should be able to edit their own hours and managers can edit anyones but they have to
@@ -87,7 +119,7 @@ function donut(parts, sz){
 }
 
 // who's clocked in right now (Brandon 2026-10-30: "we want managers to see whos clocked in everytime they click into staffing")
-function nowCard(ppl, rows, pl){
+function nowCard(ppl, rows, pl, sg){
   const today = dkey(Date.now()), inn = [], done = [], none = [];
   for(const p of ppl){ const mine = rows.filter(x => x.user_id === p.user_id), s = shifts(mine), dh = (s.days[today] || []).reduce((a, x) => a + x.h, 0);
     if(s.open) inn.push({ p, at:s.open, h:(Date.now() - Date.parse(s.open.at)) / 36e5, dh });
@@ -104,20 +136,33 @@ function nowCard(ppl, rows, pl){
         ${inn.length ? `<ul>${inn.map(x => `<li><span class="sw" style="background:${C[0]}"></span><b>${esc(x.p.name)}</b> since ${tm(x.at.at)}${dkey(x.at.at) !== today ? " " + dnm(dkey(x.at.at)) : ""} · ${hm(x.h)} ${where(x.at, pl)}</li>`).join("")}</ul>` : `<p class="muted" style="margin:0">Nobody is clocked in right now.</p>`}
         ${done.length ? `<ul style="margin-top:6px">${done.map(x => `<li><span class="sw" style="background:${C[1]}"></span>${esc(x.p.name)} · out ${x.at ? tm(x.at.at) : ""} · ${hm(x.dh)} today</li>`).join("")}</ul>` : ""}
         ${none.length ? `<details style="margin-top:6px"><summary class="muted sm">Not in today (${none.length})</summary><p class="sm muted" style="margin:4px 0 0">${none.map(p => esc(p.name)).join(" · ")}</p></details>` : ""}
+        ${schedNow(ppl, rows, sg)}
       </div></div></div>`;
 }
+// today against the schedule: should be in but isn't · in with nothing scheduled · still in after the shift ended
+function schedNow(ppl, rows, sg){
+  if(!sg || !(sg.cov || []).length) return "";
+  const today = dkey(Date.now()), yest = addK(today, -1), l = [];
+  for(const p of ppl) schedCheck(p.user_id, rows.filter(x => x.user_id === p.user_id), sg, yest, today)
+    .filter(x => x.kind === "still" || (x.k === today && (x.kind === "noin_now" || x.kind === "unsched"))).forEach(x => l.push(`<li>⚠ <b>${esc(p.name)}</b>: ${esc(x.txt)}</li>`));
+  return l.length ? `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#fff8e6;color:#1f2937"><b class="sm">Against today's schedule</b><ul>${l.join("")}</ul></div>`
+    : `<p class="sm muted" style="margin:6px 0 0">✓ Nobody is off today's schedule right now.</p>`;
+}
 
-function weekTable(rows, w, pl, boss){
-  const s = shifts(rows), today = dkey(Date.now());
+// sc (when the person has a hub schedule that week) = { u, sg, fl:[schedCheck rows] } → a Scheduled column + flags under each day
+function weekTable(rows, w, pl, boss, sc){
+  const s = shifts(rows), today = dkey(Date.now()), cols = sc ? 4 : 3;
+  const sch = k => sc ? `<td class="sm">${esc(schedTxt(sc.sg, sc.u, k)) || `<span class="muted">${(sc.sg.cov || []).includes(sc.u + "|" + k) ? "off" : "—"}</span>`}</td>` : "";
+  const fl = k => sc ? sc.fl.filter(x => x.k === k).map(x => `<div class="sm" style="color:#b45309">⚠ ${esc(x.txt)}</div>`).join("") : "";
   let h = "";
   for(let i = 0; i < 7; i++){ const k = addK(w, i), l = s.days[k] || [], t = l.reduce((a, x) => a + x.h, 0);
     const open = s.open && dkey(s.open.at) === k;
-    if(!l.length && !open && k !== today) { h += `<tr><td>${dnm(k)}</td><td class="muted">—</td><td></td></tr>`; continue; }
-    h += `<tr><td>${dnm(k)}</td><td>${l.map(x => `${pt(x.a)} – ${pt(x.b)} <span class="muted sm">(${hm(x.h)})</span> ${where(x.a, pl)}${boss ? offBtn(x.a) + offBtn(x.b) : ""}`).join("<br>")}
-      ${open ? `${l.length ? "<br>" : ""}${pt(s.open)} – <b>still clocked in</b> ${where(s.open, pl)}${boss ? offBtn(s.open) : ""}` : ""}${!l.length && !open ? `<span class="muted">—</span>` : ""}</td><td class="r">${t ? hm(t) : ""}</td></tr>`; }
+    if(!l.length && !open && k !== today && !fl(k)) { h += `<tr><td>${dnm(k)}</td>${sch(k)}<td class="muted">—</td><td></td></tr>`; continue; }
+    h += `<tr><td>${dnm(k)}</td>${sch(k)}<td>${l.map(x => `${pt(x.a)} – ${pt(x.b)} <span class="muted sm">(${hm(x.h)})</span> ${where(x.a, pl)}${boss ? offBtn(x.a) + offBtn(x.b) : ""}`).join("<br>")}
+      ${open ? `${l.length ? "<br>" : ""}${pt(s.open)} – <b>still clocked in</b> ${where(s.open, pl)}${boss ? offBtn(s.open) : ""}` : ""}${!l.length && !open ? `<span class="muted">—</span>` : ""}${fl(k)}</td><td class="r">${t ? hm(t) : ""}</td></tr>`; }
   const odd = s.odd.filter(p => wk(dkey(p.at)) === w);
-  return `<div class="tow"><table><tr><th>Day</th><th>In – out</th><th class="r">Hours</th></tr>${h}
-    <tr><td colspan="2"><b>Week</b></td><td class="r"><b>${hm(weekHours(s, w))}</b></td></tr></table></div>
+  return `<div class="tow"><table><tr><th>Day</th>${sc ? "<th>Scheduled</th>" : ""}<th>In – out</th><th class="r">Hours</th></tr>${h}
+    <tr><td colspan="${cols - 1}"><b>Week</b></td><td class="r"><b>${hm(weekHours(s, w))}</b></td></tr></table></div>
     ${odd.length ? `<p class="sm" style="color:#b45309;margin:6px 0 0">⚠ ${odd.map(p => `${dnm(dkey(p.at))} ${tm(p.at)}: clocked ${p.kind} with no matching clock-${p.kind === "in" ? "out" : "in"}${boss ? offBtn(p) : ""}`).join(" · ")}. ${boss ? "Add the missing punch or set this one off." : "Use “Forgot to clock in or out?” below."}</p>` : ""}`;
 }
 // admins (Brandon 2026-10-30: "kim should be able to trump anyones approval or denial"): punches that don't count, with "Count it"
@@ -138,8 +183,11 @@ window.staffingView = async function(v){
   const [pp, cr, wr, pl, hw] = await Promise.all([sb.rpc("clock_people"), sb.from("hub_clock").select("*").gte("at", addK(w, -7) + "T00:00:00Z").order("at"),
     sb.from("hub_clock_weeks").select("*").order("approved_at", { ascending:false }), places().catch(() => []),
     sb.from("hub_work_check").select("user_id,day,tracked_h").gte("day", w).lte("day", addK(w, 6))]);   // Hubstaff hours while both run (RLS: your team)
-  const nr = await sb.from("hub_clock").select("*").eq("status", "ok").gte("at", new Date(Date.now() - 30 * 36e5).toISOString()).order("at");   // right now, whatever week is shown
-  const nowRows = nr.data || [], curW = w === wk(today);
+  const [nr, sgr] = await Promise.all([sb.from("hub_clock").select("*").eq("status", "ok").gte("at", new Date(Date.now() - 30 * 36e5).toISOString()).order("at"),   // right now, whatever week is shown
+    sb.rpc("sched_get", { p_from:w < addK(today, -1) ? w : addK(today, -1), p_to:addK(w, 6) > today ? addK(w, 6) : today })]);
+  const nowRows = nr.data || [], curW = w === wk(today), sg = (sgr && sgr.data) || { shifts:[], cov:[] };
+  const scOf = u => { const fl = schedCheck(u, (cr.data || []).filter(x => x.user_id === u), sg, w, addK(w, 6));
+    return (sg.cov || []).some(c => c.startsWith(u + "|") && c.slice(-10) >= w && c.slice(-10) <= addK(w, 6)) ? { u, sg, fl } : null; };
   if(!OT.at) await otBanner(true).catch(() => {});
   const hsH = u => ((hw && hw.data) || []).filter(x => x.user_id === u).reduce((a, x) => a + (+x.tracked_h || 0), 0), hsOn = u => ((hw && hw.data) || []).some(x => x.user_id === u);
   const ppl = pp.data || [], all = cr.data || [], weeks = wr.data || [];
@@ -149,7 +197,7 @@ window.staffingView = async function(v){
   const wkOk = (u, wk_) => weeks.find(x => x.user_id === u && x.week === wk_);
   const nav = `<div class="row" style="margin:0 0 10px"><button class="btn small" data-w="-7">← Week before</button><b>Week of ${dnm(w)}</b>
     ${w < wk(today) ? `<button class="btn small" data-w="7">Next week →</button> <button class="btn small" data-w="0">This week</button>` : ""}</div>`;
-  let h = `<div class="page stf wide"><h2 style="margin:0 0 10px">Staffing</h2>${team.length ? nowCard(ppl, nowRows, pl) : ""}`;   // managers: who's in, first thing
+  let h = `<div class="page stf wide"><h2 style="margin:0 0 10px">Staffing</h2>${team.length ? nowCard(ppl, nowRows, pl, sg) : ""}`;   // managers: who's in, first thing
   if(meOn){
     const mine = all.filter(p => p.user_id === myId), s = shifts(mine), last = mine.filter(p => p.status === "ok").slice(-1)[0];
     const isIn = last && last.kind === "in";
@@ -160,7 +208,7 @@ window.staffingView = async function(v){
         <div class="muted sm">This week: ${hm(myH)}${myH > 40 ? " · over 40" : myH >= 36 ? " · close to 40" : ""}</div></div></div>
       <button class="btn primary big" id="punch" data-k="${isIn ? "out" : "in"}">${isIn ? "Clock out" : "Clock in"}</button></div>
       <p class="muted sm" style="margin:-4px 0 10px">Your phone's location is saved once when you clock in or out (only you, your manager and Brandon/Kim see it). Not during the day.</p>
-      <div class="card">${nav}${weekTable(mine, w, pl, false)}${ok ? `<p class="sm" style="margin:6px 0 0">✅ Approved by ${esc(ok.approved_by)} (${hm(+ok.hours)})</p>` : ""}</div>
+      <div class="card">${nav}${weekTable(mine, w, pl, false, scOf(myId))}${ok ? `<p class="sm" style="margin:6px 0 0">✅ Approved by ${esc(ok.approved_by)} (${hm(+ok.hours)})</p>` : ""}</div>
       ${pendAll.filter(p => p.user_id === myId).length ? `<div class="card"><b>Waiting for your manager</b><table>${pendAll.filter(p => p.user_id === myId).map(p => pendRow(p, null, false)).join("")}</table></div>` : ""}
       ${addForm(myId, false)}`;
   }
@@ -175,16 +223,16 @@ window.staffingView = async function(v){
         const last = rows.filter(x => x.status === "ok").slice(-1)[0], now = last && last.kind === "in" && s.open;
         const changed = ok && Math.abs(+ok.hours - hrs) > 0.01;
         const hh = hsOn(p.user_id) ? Math.round(hsH(p.user_id) * 100) / 100 : null, gap = hh == null ? 0 : hrs - hh;
-        const ot = (OT.l || []).find(x => x.user_id === p.user_id);
-        return `<details data-du="${p.user_id}" style="margin:8px 0" ${team.length === 1 || SS.open.has(p.user_id) ? "open" : ""}><summary><b>${esc(p.name)}</b> · ${hm(hrs)}${hh != null ? ` <span class="pill ${Math.abs(gap) > 0.5 ? "amber" : ""}" title="Hours Hubstaff tracked this week, side by side until Hubstaff is cancelled">Hubstaff ${hm(hh)}${Math.abs(gap) > 0.5 ? ` · ${gap > 0 ? "+" : "−"}${hm(Math.abs(gap))} on the hub` : ""}</span>` : ""} ${now ? `<span class="pill green">clocked in since ${tm(last.at)}</span>` : ""}
+        const ot = (OT.l || []).find(x => x.user_id === p.user_id), sc = scOf(p.user_id), nf = sc ? sc.fl.length : 0;
+        return `<details data-du="${p.user_id}" style="margin:8px 0" ${team.length === 1 || SS.open.has(p.user_id) ? "open" : ""}><summary><b>${esc(p.name)}</b> · ${hm(hrs)}${hh != null ? ` <span class="pill ${Math.abs(gap) > 0.5 ? "amber" : ""}" title="Hours Hubstaff tracked this week, side by side until Hubstaff is cancelled">Hubstaff ${hm(hh)}${Math.abs(gap) > 0.5 ? ` · ${gap > 0 ? "+" : "−"}${hm(Math.abs(gap))} on the hub` : ""}</span>` : ""} ${now ? `<span class="pill green">clocked in since ${tm(last.at)}</span>` : ""}${nf ? ` <span class="pill amber" title="Clock-ins that don't match the schedule this week">⚠ ${nf} off schedule</span>` : ""}
           ${ok ? `<span class="pill ${changed ? "amber" : "green"}">${changed ? `approved at ${hm(+ok.hours)}, changed since` : `approved by ${esc(ok.approved_by)}`}</span>` : ""}</summary>
-          ${weekTable(rows, w, pl, true)}${ME.admin ? notCounted(rows, w) : ""}
+          ${weekTable(rows, w, pl, true, sc)}${ME.admin ? notCounted(rows, w) : ""}
           ${curW ? `<div class="row" style="margin-top:6px"><span class="sm">${ot && ot.plan_kind ? "Overtime plan: " + planTxt(ot) : "No overtime plan this week."}${ot && ot.asked_at ? " · asked for overtime" + (ot.asked_note ? `: “${esc(ot.asked_note)}”` : "") : ""}</span>
             <button class="btn small" data-otp="${p.user_id}" data-h="${Math.round(tH(p) * 100) / 100}">${ot && ot.plan_kind ? "Change overtime plan" : "Approve overtime / set clock-out"}</button></div>` : ""}
           <div class="row" style="margin-top:6px">${(!ok || changed) && w < wk(today) ? `<button class="btn small primary" data-wok="${p.user_id}" data-h="${hrs}">Approve ${hm(hrs)} for this week</button>` : w >= wk(today) ? `<span class="muted sm">Approve the week once it's over.</span>` : ""}</div>
           ${addForm(p.user_id, true)}</details>`; }).join("")}</div>`;
   } else if(!meOn) h += `<div class="card"><p class="muted" style="margin:0">Nobody on your team clocks in on the hub yet. People move here from Hubstaff one at a time.</p></div>`;
-  h += `<p class="muted sm">Hours count from each clock-in to the next clock-out, on the day of the clock-in (Park City time). Source: the hub time clock.</p></div>`;
+  h += `<p class="muted sm">Hours count from each clock-in to the next clock-out, on the day of the clock-in (Park City time). Source: the hub time clock. Scheduled times come from Staffing ▸ Schedule; clocking in or out within 15 minutes of the schedule counts as on time.</p></div>`;
   v.innerHTML = h;
   const re = () => staffingView(v), err = r => { if(r.error){ alert(/failed to fetch|networkerror|load failed/i.test(r.error.message) ? "No signal right now. Try again when you have service (a missed clock-in can be added later)." : r.error.message.replace(/^.*?: /, "")); return true; } return false; };
   v.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { const n = +b.dataset.w; SS.week = n ? addK(w, n) : null; re(); });
@@ -228,7 +276,6 @@ window.staffingView = async function(v){
    (Hubstaff + asked in the hub) and "I'm out / I'm working" from the Office calendar show too. Managers change the people they look after
    (hub_sched_can = same rule as overtime plans; admins anyone): ✎ Weekly on a name, or tap a day. A shift ending at or before its start
    ends after midnight and counts on the day it starts. ---------- */
-const t12 = t => { if(!t) return ""; const [H, M] = t.split(":").map(Number); return `${H % 12 || 12}${M ? ":" + String(M).padStart(2, "0") : ""}${H < 12 ? "a" : "p"}`; };
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const shH = x => { const m = s => { const [H, M] = s.split(":").map(Number); return H * 60 + M; }; return ((m(x.end) - m(x.start) + 1440) % 1440 || 1440) / 60; };
 const pair = (k, i, x) => `<span class="row" style="gap:4px"><input type="time" data-${k}s="${i}" value="${x ? x.start : ""}"> to <input type="time" data-${k}e="${i}" value="${x ? x.end : ""}"></span>`;
@@ -256,6 +303,7 @@ window.staffSched = async function(v){
     put(x.person_id, d, x.kind === "out" ? `<span class="pill red">Out${x.start_time ? " " + t12(x.start_time) + "–" + t12(x.end_time) : ""}</span>` : `<span class="pill green">Working${x.start_time ? " " + t12(x.start_time) + "–" + t12(x.end_time) : ""}</span>`); });
   const rows = ppl.filter(p => cell[p.id] || can.has(p.id)).sort((a, b) => a.name.localeCompare(b.name)), none = ppl.filter(p => !cell[p.id] && !can.has(p.id));
   const days = [...Array(7)].map((_, i) => addK(w, i)), anyEdit = can.size > 0, name = id => (ppl.find(p => p.id === id) || {}).name || "";
+  const over = rows.filter(p => (hrs[p.id] || 0) > 40);
   const hcol = id => { const h = Math.round((hrs[id] || 0) * 10) / 10; return h ? `<td class="r sm"${h > 40 ? ' style="color:var(--red,#b3261e);font-weight:700" title="Over 40 scheduled hours"' : ""}>${h} h</td>` : `<td class="r sm muted">—</td>`; };
   const td = (p, d) => { const st = [d === today ? "background:var(--pine-soft,#eaf3da)" : "", can.has(p.id) ? "cursor:pointer" : ""].filter(Boolean).join(";");
     return `<td class="sm"${st ? ` style="${st}"` : ""}${can.has(p.id) ? ` data-cd="${p.id}|${d}" title="Change this day"` : ""}>${((cell[p.id] || {})[d] || []).join("") || `<span class="muted">—</span>`}</td>`; };
@@ -263,6 +311,7 @@ window.staffSched = async function(v){
     <div class="card"><div class="row" style="margin:0 0 10px"><button class="btn small" data-w="-7">← Week before</button><b>Week of ${dnm(w)}</b>
       <button class="btn small" data-w="7">Next week →</button>${w !== wk(today) ? ` <button class="btn small" data-w="0">This week</button>` : ""}</div>
     <div id="sedbox"></div>
+    ${over.length ? `<p class="sm" style="margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#fde8e8;color:#7f1d1d">⚠ Scheduled over 40 hours this week (Sun–Sat): ${over.map(p => `<b>${esc(p.name)}</b> ${Math.round(hrs[p.id] * 10) / 10} h`).join(" · ")}. Over 40 is overtime and needs an OK first${anyEdit ? " (Staffing ▸ Clock In / Clock Out ▸ Approve overtime, or change the schedule)" : ""}.</p>` : ""}
     ${anyEdit ? `<p class="muted sm" style="margin:0 0 8px">✎ Weekly sets someone's regular shifts from a date on. Tap a day to change just that day.</p>` : ""}
     <div class="tow"><table><tr><th>Who</th>${days.map(d => `<th${d === today ? ' style="color:var(--forest,#3c5f12)"' : ""}>${dnm(d)}</th>`).join("")}<th class="r">Hours</th></tr>
       ${rows.map(p => `<tr><td><b>${esc(p.name)}</b>${can.has(p.id) ? `<br><button class="btn small" data-wk="${p.id}">✎ Weekly</button>` : ""}</td>${days.map(d => td(p, d)).join("")}${hcol(p.id)}</tr>`).join("")
@@ -286,7 +335,10 @@ window.staffSched = async function(v){
     box.scrollIntoView({ block:"nearest" });
     const send = async shifts => { const r = await sb.rpc("sched_week_set", { p_user:u, p_from:box.querySelector("#sdfrom").value, p_shifts:shifts, p_note:box.querySelector("#sdnote").value }); if(!err(r)) re(); };
     box.querySelector("#sdx").onclick = close;
-    box.querySelector("#sdsave").onclick = () => { let sh; try { sh = ["a", "b"].flatMap(k => readPairs(box, k, 7).map(x => ({ dow:x.i, start:x.start, end:x.end }))); } catch(x){ return alert(x.message); } send(sh); };
+    box.querySelector("#sdsave").onclick = () => { let sh; try { sh = ["a", "b"].flatMap(k => readPairs(box, k, 7).map(x => ({ dow:x.i, start:x.start, end:x.end }))); } catch(x){ return alert(x.message); }
+      const tot = Math.round(sh.reduce((a, x) => a + shH(x), 0) * 10) / 10;   // Brandon 2026-10-30: warn when someone is scheduled over 40 hours
+      if(tot > 40 && !confirm(`This schedules ${name(u)} for ${tot} hours a week. Over 40 is overtime, which needs an OK first. Save anyway?`)) return;
+      send(sh); };
     const st = box.querySelector("#sdstop"); if(st) st.onclick = () => { if(confirm(`Stop ${name(u)}'s weekly schedule from ${box.querySelector("#sdfrom").value}? (Kept in the history.)`)) send([]); };
   };
   // one day for one person
@@ -302,7 +354,10 @@ window.staffSched = async function(v){
     const send = async (shifts, clear) => { const r = await sb.rpc("sched_day_set", { p_user:u, p_day:d, p_shifts:shifts, p_clear:clear, p_note:box.querySelector("#sdnote").value }); if(!err(r)) re(); };
     box.querySelector("#sdx").onclick = close;
     box.querySelector("#sdsave").onclick = () => { let sh = []; if(!box.querySelector("#sdoff").checked){ try { sh = readPairs(box, "d", 2).map(x => ({ start:x.start, end:x.end })); } catch(x){ return alert(x.message); }
-      if(!sh.length) return alert("Add a start and end time, or tick “Not working this day”."); } send(sh, false); };
+      if(!sh.length) return alert("Add a start and end time, or tick “Not working this day”."); }
+      const tot = Math.round(((hrs[u] || 0) - now.reduce((a, x) => a + shH(x), 0) + sh.reduce((a, x) => a + shH(x), 0)) * 10) / 10;
+      if(tot > 40 && !confirm(`With this change ${name(u)} is scheduled for ${tot} hours this week (Sun–Sat). Over 40 is overtime, which needs an OK first. Save anyway?`)) return;
+      send(sh, false); };
     const bk = box.querySelector("#sdback"); if(bk) bk.onclick = () => send([], true);
   };
   // start date: the week on screen (not before this week); a pattern that starts inside it wins, so a save can't be undone the next day
