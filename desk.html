@@ -1074,8 +1074,11 @@ function vHomes(){
 }
 /* the codes + Wi-Fi people look up most (Brandon 2026-10-30: "make sure all our info is the most up to date, so pull from track and asana").
    Track first (home_quick(): Track unit fields + security codes, hub_home_access.sql), then the hub edit, then the Asana note.
-   Levels: everyone with Homes = Wi-Fi, garage, key box location, their own Locks code; front desk (MM_ENTRY) + full = door/lockout,
-   key box + gate codes, the guest's door code; owner closet etc. only full (MM_CODES). The database hands each level only its part. */
+   Levels (2026-10-30, Brandon: field crew "see key box codes, gate codes and door codes but not owner lockout. they can click to view it"):
+   everyone with Homes = Wi-Fi, garage, key box, gate, front door, the guest's door code, their own Locks code and the lockout note with
+   owner + master lines masked (crew: "View owner lockout" = home_owner_reveal(), which pings Chris + the admins); front desk (MM_ENTRY) +
+   full = the owner lines + Track's owner garage code; owner closet etc. only full (MM_CODES). The database hands each level only its part.
+   "track is always going to have the most up to date": Track's code shows first. */
 function hqOf(code){ var sb=window.MM_SB; if(!sb) return null;
   if(!D._hq){ if(!D._hqAsk){ D._hqAsk=1; sb.rpc("home_quick").then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ m[x.home]=x; }); D._hq=m; schedule(); }); } return null; }
   return D._hq[code]||null; }
@@ -1088,9 +1091,12 @@ function homeQuick(code,p){ var pe=pedit(code), t=hqOf(code)||{}, a=function(rx)
   pick("wifi",[["Track",t.wifi_name||t.wifi_pass?wl(t.wifi_name,t.wifi_pass,t.wifi_note):""],["Hub edit",pe.wifiName||pe.wifiPass?wl(pe.wifiName,pe.wifiPass):""],["Asana",noStayfi(a(/^(wifi|wi-fi|stay[- ]?fi)/i))]]);
   pick("garage",[["Track",t.garage_code?["Garage code: "+t.garage_code,t.garage_note||""].filter(Boolean).join("\n"):(t.garage_note||"")],["Hub edit",pe.garageCode],["Asana",a(/^parking\/? ?garage info$|^parking$/i)]]);
   var loc=homeInfo(code); r.keybox=[t.keybox_code?"Key box code: "+t.keybox_code:"",loc.keybox||""].filter(Boolean).join("\n"); r.src.keybox=t.keybox_code?"Track":(loc.src&&loc.src.keybox)||"";
-  if(canEntry()){ pick("entry",[["Hub edit",pe.lockoutCode],["Asana",a(/^lockout info/i)]]);
-    if(t.gate_code){ r.entry=(r.entry?r.entry+"\n":"")+"Gate / building: "+t.gate_code; r.src.entry=r.src.entry?r.src.entry+" + Track":"Track"; }
-    if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); r.guest="Guest door code: "+t.guest_code+"\n"+(inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)+" – "+fmtD(t.guest_out)); r.src.guest="Locks"; } }
+  r.door=[t.door_code?"Front door: "+t.door_code:"",t.gate_code?"Gate / building: "+t.gate_code:""].filter(Boolean).join("\n"); r.src.door=r.door?"Track":"";
+  pick("entry",[["Hub edit",pe.lockoutCode],["Asana",a(/^lockout info/i)]]);
+  if(t.owner_garage_code){ r.entry=(r.entry?r.entry+"\n":"")+"Owner garage: "+t.owner_garage_code; r.src.entry=r.src.entry?r.src.entry+" + Track":"Track"; }
+  r.ownerView=!!t.owner_hidden;
+  if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); r.guest="Guest door code: "+t.guest_code+"\n"+(inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)+" – "+fmtD(t.guest_out)); r.src.guest="Locks"; }
+  r.closet=t.owner_closet_code?"Owner closet: "+t.owner_closet_code:""; r.src.closet=r.closet?"Track":"";
   if(t.my_code){ r.mine="Your code: "+t.my_code+(t.my_code_label?"\n"+t.my_code_label:""); r.src.mine="Locks"; }
   return r; }
 function htLine(label,val,src){ return '<div class="hql"><div class="qvh">'+esc(label)+'</div>'+(val?qShort(val).html+(src?'<div class="hsrc">From '+esc(src)+'</div>':''):'<div class="muted">Not recorded</div>')+'</div>'; }
@@ -1100,7 +1106,7 @@ function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=h
   var st=occ?"owner":jobs.length?"open":"ok", sub=(p.track&&p.track.name)||p.community||"";
   return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'</div>'+
     '<div class="htp">'+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'</div></div>'+
-    '<div class="htq">'+htLine("Wi-Fi",q.wifi,q.src.wifi)+(canEntry()?htLine("Door / lockout",q.entry,q.src.entry):'')+htLine("Garage / parking",q.garage,q.src.garage)+(q.keybox?htLine("Key box",q.keybox,q.src.keybox):'')+
+    '<div class="htq">'+htLine("Wi-Fi",q.wifi,q.src.wifi)+(q.door?htLine("Door / gate",q.door,q.src.door):'')+htLine("Lockout info",q.entry,q.src.entry)+htLine("Garage / parking",q.garage,q.src.garage)+(q.keybox?htLine("Key box",q.keybox,q.src.keybox):'')+
       (q.guest?htLine("Guest",q.guest,q.src.guest):'')+(q.mine?htLine("Your door code",q.mine,q.src.mine):'')+'</div>'+
     '<div class="htmore">Home details →</div></div>'; }
 /* Heads-up (Brandon 2026-10-28): big open/recent problems + active projects at this home, from hub_home_alerts (hub_penny_3.sql).
@@ -1406,14 +1412,25 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
   var q=homeQuick(code,p), qs=function(k,rx){ var s0=q.src[k]; return {v:q[k],s:s0==="Asana"?asana(rx).s:s0==="Hub edit"?"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):""):s0?"From "+esc(s0):""}; };
-  var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=qs("garage",/^parking\/? ?garage info$|^parking$/i), closet=pick(pe.ownerCloset,/^owner closet info$/i);
+  var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=qs("garage",/^parking\/? ?garage info$|^parking$/i), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
-    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(canEntry()?qCard("Entry / owner lockout codes",entry.v,entry.s,"codes","lockout"):'')+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
+    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
+    qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout is hidden. Tap View to open it.":""),entry.s+ownerViewHtml(code,q),"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
     (window.MM_CODES===false?'':qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
     qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+(q.mine?qCard("Your door code",q.mine,"From Locks",""):'')+'</div>'+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
+/* field crew: owner lockout lines are masked; "View" opens them and the database pings Chris + the admins (home_owner_reveal) */
+function ownerViewHtml(code,q){ if(!q.ownerView) return ""; var v=(D._ov||{})[code];
+  if(!v) return '<div style="margin-top:6px"><button class="btn sm" data-act="ownerview" data-code="'+esc(code)+'">👁 View owner lockout</button>'+
+    '<div class="hint">Opening it sends Chris and the admins a message.</div></div>';
+  if(v.err) return '<div class="hint" style="color:var(--bad,#b42318)">'+esc(v.err)+'</div>';
+  var L=(v.lines||[]).concat(v.owner_garage?["Owner garage: "+v.owner_garage]:[]);
+  return '<div class="qvt" style="margin-top:6px"><b>Owner lockout</b><br>'+(L.length?L.map(esc).join("<br>"):'<span class="muted">Nothing on file.</span>')+'</div>'+
+    '<div class="hint">Opened '+esc(new Date(v.at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}))+(v.pinged?' · Chris and the admins were told':'')+'</div>'; }
+function ownerView(code){ var sb=window.MM_SB; if(!sb) return; D._ov=D._ov||{};
+  sb.rpc("home_owner_reveal",{p_home:code}).then(function(r){ D._ov[code]=r.error?{err:"Couldn't open it. Try again."}:Object.assign({at:Date.now()},r.data||{}); render(); }); }
 function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
   openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div>'+
     (canEntry()?area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Track's garage code shows first; this is used when Track has none"):'')+(window.MM_CODES===false?'':area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note"))+
@@ -3938,6 +3955,7 @@ document.addEventListener("click",function(ev){
     case "newhome": return mNewHome();
     case "hclose": S.ui.home=""; return render();
     case "editquick": return mQuick(d.code);
+    case "ownerview": return ownerView(d.code);
     case "savehoa": var hc=d.code, hk=sid(hc); return put("propedits",hk,{hoaName:fv("hoa_name"),hoaMgmt:fv("hoa_mgmt"),hoaContact:fv("hoa_contact"),hoaPhone:fv("hoa_phone"),hoaEmail:fv("hoa_email"),hoaPortal:fv("hoa_portal"),hoaRules:fv("hoa_rules")},S.propedits[hk]).then(function(){ toast("HOA saved"); });
     case "newexp": return mExpense();
     case "newtime": return mTime();
