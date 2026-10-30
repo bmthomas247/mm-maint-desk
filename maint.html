@@ -120,11 +120,13 @@ textarea{min-height:96px;resize:vertical}
 <div id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="idle.js"></script>
 <script>
 (function(){
 "use strict";
 const C = window.MM_CONFIG;
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+if(window.MMIDLE) MMIDLE.watch(sb);   // 1 hour with no use -> signed out (idle.js)
 const app = document.getElementById("app");
 const S = { user:null, me:null, people:[], props:[], propById:{}, filters:JSON.parse(localStorageGet("mm_f")||"{}") };
 const STATUSES = [["new","New"],["assigned","Assigned"],["in_progress","In progress"],["waiting_parts","Waiting on parts"],["done","Done"],["cancelled","Cancelled"]];
