@@ -25,7 +25,33 @@ const CSS = `
 .rq3 .when{font-size:13.5px} .rq3 .when>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .rq3 .when .k{display:inline-block;min-width:52px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
 .rq3 .st{align-items:flex-end} .rq3 .why{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end} .rq3 .why .pill{font-size:11px;padding:2px 7px}
 @media(min-width:1000px){ .rpage{max-width:1180px!important} }
-@media(max-width:640px){ .rq3{grid-template-columns:minmax(0,1fr) minmax(0,44%)} .rq3 .when{grid-column:1 / -1;grid-row:2} .rrow{flex-wrap:wrap;gap:4px 10px} .rrow .g{order:3;flex-basis:100%;white-space:normal} .rrow .d{flex:1} .rrow .rbar{display:none} }`;
+@media(max-width:640px){ .rq3{grid-template-columns:minmax(0,1fr) minmax(0,44%)} .rq3 .when{grid-column:1 / -1;grid-row:2} .rrow{flex-wrap:wrap;gap:4px 10px} .rrow .g{order:3;flex-basis:100%;white-space:normal} .rrow .d{flex:1} .rrow .rbar{display:none} }
+/* queue in the Locks office look (Brandon 2026-10-30) */
+.rlk{max-width:min(1800px,calc(100vw - 48px))!important}
+.rhead{display:flex;align-items:center;gap:12px;color:#fff;background:linear-gradient(135deg,var(--forest),var(--forest-2));border-radius:var(--radius);padding:12px 16px;margin-bottom:12px}
+.rhead .logo{position:relative;width:46px;height:46px;flex:none} .rhead .logo img{width:46px;height:46px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 2px 8px rgba(0,0,0,.25);display:block}
+.rhead .lk{position:absolute;right:-4px;bottom:-4px;width:20px;height:20px;border-radius:50%;background:var(--moose);display:grid;place-items:center;box-shadow:0 0 0 2px var(--forest)} .rhead .lk svg{width:11px;height:11px;color:#16220a}
+.rhead h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-.01em;line-height:1.15;color:#fff} .rhead .sub{font-size:13px;opacity:.8;font-weight:600} .rhead .grow{flex:1;min-width:0}
+.rhead .deskbtn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;text-decoration:none;font-weight:800;font-size:14px;white-space:nowrap} .rhead .deskbtn svg{width:18px;height:18px}
+.rtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.rtabs button{display:inline-flex;align-items:center;gap:8px;padding:9px 14px 9px 10px;font:inherit;font-size:14px;font-weight:800;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);cursor:pointer}
+.rtabs button svg{width:22px;height:22px} .rtabs button.on{background:var(--forest-2);color:#fff;border-color:var(--forest-2)}
+.rtabs .badge{background:var(--line);color:var(--ink-2);border-radius:999px;font-size:11.5px;padding:1px 7px} .rtabs .on .badge{background:rgba(255,255,255,.22);color:#fff}
+.rlk .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.rlk .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow)}
+.rlk .stat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1} .rlk .stat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px} .rlk .stat.warn .n{color:var(--red)}
+.rlk .syncbar{display:flex;align-items:center;gap:12px} .rlk .syncbar .ic{width:40px;height:40px;border-radius:12px;background:var(--moose-soft);color:var(--forest-2);display:grid;place-items:center;flex:none} .rlk .syncbar .ic svg{width:20px;height:20px}
+.rfg{display:grid;grid-template-columns:2fr repeat(6,minmax(0,1fr));gap:10px;align-items:end} .rfg .field{display:block;margin:0} .rfg .field>span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:700} .rfg input,.rfg select{width:100%;min-width:0;max-width:100%;box-sizing:border-box} .rfg .field{min-width:0}
+.rgh{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;letter-spacing:.04em;color:var(--muted);margin:16px 2px 8px;cursor:pointer;user-select:none}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px} .rgrid>.card{margin:0}
+.rhome{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px!important} .rhome:hover{border-color:var(--forest-2)}
+.rhome::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--line-2)} .rhome.ok::before{background:var(--moose)} .rhome.bad::before{background:var(--red)} .rhome.todo::before{background:var(--amber)}
+.rhome .rtop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start} .rhome .rtop>.pill{flex:none} .rhome .rcode{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.rhome .rsub{font-size:13.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rhome .rdates{font-size:13.5px;margin-top:6px}
+.rhome .rmeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} .rhome .rmeta .pill{font-size:11.5px;padding:2px 8px}
+.rhome .progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px} .rhome .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--moose),var(--moose-2));border-radius:99px}
+@media(max-width:1100px){ .rfg{grid-template-columns:repeat(3,minmax(0,1fr))} .rfg .field:first-child{grid-column:1 / -1} }
+@media(max-width:640px){ .rlk{max-width:none!important} .rlk .stats{grid-template-columns:repeat(2,1fr)} .rfg{grid-template-columns:1fr 1fr} .rgrid{grid-template-columns:1fr} .rhead .deskbtn span{display:none} .rtabs button{padding:7px 10px 7px 8px;font-size:13px} }`;
 const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / BDC / Hopper", oguest:"Owner guest", owner:"Owner stay" };
 const STAGE = { in_progress:"In progress", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
 // Neighborhoods: unit code prefix -> name (maintenance_desk/units.json "communities", from Track units)
@@ -193,13 +219,41 @@ function css(){ if(!document.getElementById("rescss")){ const st = document.crea
 const fresh = () => `<p class="muted" style="margin:4px 0 10px">Source: Track reservations, updated ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost, updated ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway, updated ${esc(when(B.bwUpdated))}` : ""}</p>`;
 
 /* ---------- queue */
-const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"arrive", from:"", to:"" };
+const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"arrive", from:"", to:"", group:"date" };
+const RSHUT = new Set();   // folded groups on the queue
+// icons (same stroke style as the Locks office tabs)
+const RSV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2"/><circle cx="5" cy="19" r="1"/>'),
+  checkout:RSV('<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M9 16l-4-4 4-4M5 12h11"/>'),
+  owner_done:RSV('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
+  cancelling:RSV('<circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/>'),
+  closed:RSV('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/>'),
+  list:RSV('<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>'),
+  held:RSV('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'),
+  sync:RSV('<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>') };
 // Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
 const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Booking date" };
 async function queue(v){
-  v.innerHTML = `<div class="page rpage"><h2>Check lists</h2><p class="muted">Loading…</p></div>`;
+  v.innerHTML = `<div class="page rpage rlk"><p class="muted">Loading…</p></div>`;
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load the check lists: ${esc(e.message)}</p></div></div>`; return; }
   if(!B){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
+  const today = B.today, in7 = new Date(new Date(today + "T12:00").getTime() + 7 * 864e5).toISOString().slice(0, 10);
+  const stateCls = s => s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "grey" : s.state === "Cancelling" ? "red" : "amber";
+  const stripe = s => ({ green:"ok", red:"bad", amber:"todo", grey:"" })[stateCls(s)];
+  // groups (like the Locks office neighborhoods): day of the sort date (month for the past lists) or neighborhood
+  const gKey = s => { if(F.group === "hood") return s.area || "~"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" ? d : d.slice(0, 7); };
+  const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k;
+    if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
+    return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
+  const tile = s => { const why = [...s.waiting, ...s.blockers], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
+    return `<a class="card rhome ${stripe(s)}" href="#/reservations/${encodeURIComponent(s.res)}">
+      <div class="rtop"><div style="min-width:0"><div class="rcode">${esc(s.unit || "#" + s.res)}</div>
+        <div class="rsub">${esc(s.guest || "")}${s.guest ? " · " : ""}${esc(s.type || CH[s.chan] || "")}</div></div>
+        <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
+      <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))} · #${esc(s.res)}</span></div>
+      <div class="rmeta">${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
+        <span class="pill plain grey">${s.got} of ${s.need} steps</span>${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill amber">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
+      <div class="progress"><i style="width:${pct}%"></i></div></a>`; };
   const draw = () => {
     const dk = s => String(s[F.by] || "").slice(0, 10);
     const base = B.stays.filter(s => (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
@@ -209,39 +263,50 @@ async function queue(v){
     const rows = inStage.filter(s => !F.held || s.blockers.includes(F.held) || s.waiting.includes(F.held));
     const cnt = k => base.filter(s => s.stage === k).length;
     const held = {}; inStage.forEach(s => [...s.blockers, ...s.waiting].forEach(b => held[b] = (held[b] || 0) + 1));
-    $("#rqbody").innerHTML = `
-      <div class="rchips">${Object.entries(STAGE).map(([k, l]) => `<button class="rchip ${F.stage === k ? "on" : ""}" data-stage="${k}">${l}<span class="n">${cnt(k)}</span></button>`).join("")}</div>
-      ${Object.keys(held).length ? `<div class="rchips"><span class="muted" style="align-self:center">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}<span class="n">${n}</span></button>`).join("")}</div>` : ""}
-      <div class="card" style="padding:6px 12px">${rows.length ? rows.map(s => { const why = [...s.waiting, ...s.blockers];
-        return `<a class="rrow rq3" href="#/reservations/${encodeURIComponent(s.res)}">
-        <span class="who"><b>${esc(s.guest || "#" + s.res)}</b>${s.vip ? ` <span class="pill blue">VIP</span>` : ""}${s.dnr ? ` <span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? ` <span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
-          <span class="sub">${esc(s.unit || "")}${HOODS[s.area] ? ` · ${esc(HOODS[s.area])}` : ""}</span><span class="sub">${esc(s.type || CH[s.chan])}</span></span>
-        <span class="when"><span><span class="k">Booked</span> ${esc(dayY(s.bookedAt))}</span><span><span class="k">Stay</span> <b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> <span class="muted"> · ${esc(s.nights)} nights</span></span></span>
-        <span class="st"><span style="display:flex;gap:8px;align-items:center;justify-content:flex-end"><span class="pill ${s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "" : s.state === "Cancelling" ? "red" : "amber"}">${esc(s.state)}</span>
-          <span class="rbar" title="${s.got} of ${s.need} steps"><i style="width:${s.need ? Math.round(100 * s.got / s.need) : 0}%"></i></span></span>
-          ${why.length && s.state !== "Complete" ? `<span class="why">${why.slice(0, 4).map(b => `<span class="pill amber">${esc(b)}</span>`).join("")}${why.length > 4 ? `<span class="muted">+${why.length - 4}</span>` : ""}</span>` : ""}</span></a>`; }).join("")
-        : `<p class="muted">Nothing here${F.q || F.chan || F.held ? " with these filters" : ""}.</p>`}</div>`;
-    $("#rqbody").querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; draw(); });
-    $("#rqbody").querySelectorAll("[data-held]").forEach(b => b.onclick = () => { F.held = F.held === b.dataset.held ? "" : b.dataset.held; draw(); });
+    const ip = base.filter(s => s.stage === "in_progress"), soon = ip.filter(s => s.arrive >= today && s.arrive <= in7);
+    $("#rq_sub").textContent = `${ip.length} in progress · ${ip.filter(s => s.blockers.length || s.waiting.length).length} held up`;
+    $("#rq_tabs").innerHTML = Object.entries(STAGE).map(([k, l]) => `<button class="${F.stage === k ? "on" : ""}" data-stage="${k}">${RI[k]}<span>${l}</span><span class="badge">${cnt(k)}</span></button>`).join("");
+    $("#rq_stats").innerHTML = [[ip.length, "In progress"], [soon.length, "Arriving next 7 days"],
+      [soon.filter(s => s.got < s.need).length, "Arriving in 7 days, steps left", true],
+      [ip.filter(s => s.blockers.length || s.waiting.length).length, "Held up", true]]
+      .map(([n, l, w]) => `<div class="stat ${w && n ? "warn" : ""}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+    $("#rq_held").innerHTML = Object.keys(held).length ? `<span class="muted" style="align-self:center;font-weight:700;font-size:13px">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}<span class="n">${n}</span></button>`).join("")}` : "";
+    const groups = []; rows.forEach(s => { const k = gKey(s), g = groups.find(x => x.k === k); g ? g.s.push(s) : groups.push({ k, s:[s] }); });
+    if(F.group === "hood") groups.sort((a, b) => gName(a.k).localeCompare(gName(b.k)));
+    $("#rqbody").innerHTML = rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
+      return `<div class="rgh" data-g="${esc(g.k)}"><span>${esc(gName(g.k).toUpperCase())} · ${g.s.length} ${g.s.length === 1 ? "STAY" : "STAYS"}</span><span>${shut ? "▾" : "▴"}</span></div>
+      ${shut ? "" : `<div class="rgrid">${g.s.map(tile).join("")}</div>`}`; }).join("")
+      : `<div class="card"><p class="muted" style="margin:0">Nothing here${F.q || F.chan || F.held || F.area ? " with these filters" : ""}.</p></div>`;
+    v.querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; draw(); });
+    v.querySelectorAll("[data-held]").forEach(b => b.onclick = () => { F.held = F.held === b.dataset.held ? "" : b.dataset.held; draw(); });
+    v.querySelectorAll("[data-g]").forEach(h => h.onclick = () => { const k = F.stage + "|" + F.group + "|" + h.dataset.g; RSHUT.has(k) ? RSHUT.delete(k) : RSHUT.add(k); draw(); });
   };
-  v.innerHTML = `<div class="page rpage"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0;flex:1">Check lists</h2>
-      <a class="btn small" href="#/reservations/held">Held up report</a></div>${fresh()}
-    <div class="rqbar"><input id="rq_q" placeholder="Search guest, home or res #" value="${esc(F.q)}">
-      <select id="rq_c"><option value="">All types</option>${Object.entries(CH).map(([k, l]) => `<option value="${k}" ${F.chan === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-      <select id="rq_a"><option value="">All neighborhoods</option>${[...new Set(B.stays.map(s => s.area).filter(Boolean))].map(a => [a, HOODS[a] || a]).sort((x, y) => x[1].localeCompare(y[1]))
-        .map(([a, n]) => `<option value="${a}" ${F.area === a ? "selected" : ""}>${esc(n)}${n !== a ? " (" + a + ")" : ""}</option>`).join("")}</select></div>
-    <div class="rqbar"><label class="muted" style="display:flex;gap:6px;align-items:center">Sort by <select id="rq_by" style="width:auto">${Object.entries(BY).map(([k, l]) => `<option value="${k}" ${F.by === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <label class="muted" style="display:flex;gap:6px;align-items:center">from <input type="date" id="rq_from" value="${esc(F.from)}" style="width:auto"></label>
-      <label class="muted" style="display:flex;gap:6px;align-items:center">to <input type="date" id="rq_to" value="${esc(F.to)}" style="width:auto"></label>
-      ${F.from || F.to ? `<button class="btn small" id="rq_clr">Clear dates</button>` : ""}</div>
+  const sel = (id, opts, cur) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${esc(k)}" ${cur === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  v.innerHTML = `<div class="page rpage rlk">
+    <div class="rhead"><div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${RI.list}</span></div>
+      <div class="grow"><h1>Moose Check lists</h1><div class="sub" id="rq_sub"></div></div>
+      <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a></div>
+    <nav class="rtabs" id="rq_tabs"></nav>
+    <div class="stats" id="rq_stats"></div>
+    <div class="card syncbar"><span class="ic">${RI.sync}</span><div style="flex:1;min-width:0"><b>Data sync</b>
+      <div class="muted" style="font-size:13px">Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""} · steps tick themselves as these update</div></div></div>
+    <div class="card"><div class="rfg">
+      <label class="field"><span>Find</span><input id="rq_q" placeholder="Guest, home or res #" value="${esc(F.q)}"></label>
+      <label class="field"><span>Type</span>${sel("rq_c", [["", "All types"], ...Object.entries(CH)], F.chan)}</label>
+      <label class="field"><span>Neighborhood</span>${sel("rq_a", [["", "All neighborhoods"], ...[...new Set(B.stays.map(s => s.area).filter(Boolean))].map(a => [a, HOODS[a] ? HOODS[a] + " (" + a + ")" : a]).sort((x, y) => x[1].localeCompare(y[1]))], F.area)}</label>
+      <label class="field"><span>Sort by</span>${sel("rq_by", Object.entries(BY), F.by)}</label>
+      <label class="field"><span>Group by</span>${sel("rq_g", [["date", "Date"], ["hood", "Neighborhood"]], F.group)}</label>
+      <label class="field"><span>From</span><input type="date" id="rq_from" value="${esc(F.from)}"></label>
+      <label class="field"><span>To</span><input type="date" id="rq_to" value="${esc(F.to)}"></label></div>
+      <div class="rchips" id="rq_held" style="margin:8px 0 0"></div></div>
     <div id="rqbody"></div></div>`;
   $("#rq_q").oninput = e => { F.q = e.target.value; draw(); };
   $("#rq_c").onchange = e => { F.chan = e.target.value; draw(); };
   $("#rq_a").onchange = e => { F.area = e.target.value; draw(); };
   $("#rq_by").onchange = e => { F.by = e.target.value; draw(); };
-  $("#rq_from").onchange = e => { F.from = e.target.value; queue(v); };
-  $("#rq_to").onchange = e => { F.to = e.target.value; queue(v); };
-  if($("#rq_clr")) $("#rq_clr").onclick = () => { F.from = F.to = ""; queue(v); };
+  $("#rq_g").onchange = e => { F.group = e.target.value; draw(); };
+  $("#rq_from").onchange = e => { F.from = e.target.value; draw(); };
+  $("#rq_to").onchange = e => { F.to = e.target.value; draw(); };
   draw();
 }
 
