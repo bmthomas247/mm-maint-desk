@@ -253,6 +253,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="meetings.js"></script>
 <script src="calendar.js"></script>
 <script src="checks.js"></script>
+<script src="staffing.js"></script>
 <script src="calls.js"></script>
 <script src="signals.js"></script>
 <script>
@@ -267,6 +268,7 @@ const ICON = {
   key: I('<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M16 7l3 3M14 9l2 2"/>'),
   wrench: I('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>'),
   calendar: I('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>'),
+  clock: I('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   chart: I('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
   home: I('<path d="m3 11 9-7 9 7"/><path d="M5 10v10h14V10"/>'),
   badge: I('<circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-3 5 3-1.5-7"/>'),
@@ -643,6 +645,7 @@ function route(){
   if(k === "penny") return pennyView(v);
   if(k === "patrick" || k === "patrick_log" || k === "patrick_fix") return patrickView(v);   // Reports > Ask Patrick (no sidebar entry, Brandon 2026-10-28)
   if(k === "messages") return messagesView(v);
+  if(d && k === "staffing" && window.staffingView) return staffingView(v);   // staffing.js: Staffing Desk, hub time clock (Brandon 2026-10-29); data RLS hub_staff_sees
   if(d && k === "res_report") return resReportView(v);
   if(d && /^cal_(res|office|me|meet|off)$/.test(k) && window.calView) return calView(v, k);   // calendar.js (2026-10-29)
   if(d && /^meet_(or|bd|kd|beyond|mgr|fd|track|trackmk)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
@@ -943,7 +946,7 @@ function bdSelects(id, cur){ cur = cur || {};
   return `<select id="${id}_m" aria-label="Month"><option value="">Month</option>${MONTHS.map((m, i) => `<option value="${i + 1}" ${cur.month === i + 1 ? "selected" : ""}>${m}</option>`).join("")}</select>
     <select id="${id}_d" aria-label="Day"><option value="">Day</option>${[...Array(31)].map((_, i) => `<option ${cur.day === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select>`; }
 function alertMsg(t){ const m = $("#bdmsg"); if(m) m.textContent = t; }
-let BD = { mine:null, people:[] }, ACC = [];
+let BD = { mine:null, people:[] }, ACC = [], PDWHO = null;
 /* Sign-in control (hub admins only, hub_admin_access.sql): sign a person out of every device, or lock them out */
 function accCard(){
   if(!ME.admin || !ACC.length) return "";
@@ -970,6 +973,38 @@ function accAsk(act, x, done){
     const r = act === "out" ? await sb.rpc("hub_admin_sign_out", { p_person:x.id }) : await sb.rpc("hub_admin_lock", { p_person:x.id, p_lock:act === "lock" });
     if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + r.error.message; }
     close(); done(act === "unlock" ? x.name + " can sign in again." : x.name + " was signed out of " + r.data + " device" + (r.data === 1 ? "" : "s") + "."); };
+}
+/* Who sees which desk (hub admins only, hub_person_desks.sql). Brandon 2026-10-29: Kim can open a desk for one person, or hide one,
+   on top of what their teams give. Show / Hide / Team (= back to their teams). The database (hub_can) enforces it. */
+async function pdCard(box){
+  if(!box || !ME.admin) return;
+  const people = ACC.filter(x => x.active && !x.admin);
+  if(!people.length) return box.innerHTML = "";
+  let who = null, rows = [], hist = [];   // PDWHO keeps the picked person when My settings redraws
+  const sees = r => r.mode === "allow" || (r.mode === "team" && r.by_team);
+  const row = r => `<div class="ord" style="flex-wrap:wrap"><b style="flex:1;min-width:180px">${esc(r.label)}${r.status === "soon" ? ` <span class="muted" style="font-weight:600">(coming soon)</span>` : ""}
+      <div class="muted" style="font-weight:600;font-size:13px">${sees(r) ? "✓ Sees it" : "Doesn't see it"} · ${r.by_team ? "their team has it" : "not from their team"}${r.mode !== "team" ? ` · set by ${esc(r.set_by || "?")} ${new Date(r.set_at).toLocaleDateString([], { month:"short", day:"numeric" })}${r.note ? " — " + esc(r.note) : ""}` : ""}</div></b>
+    <span class="seg">${[["team","Team"],["allow","Show"],["block","Hide"]].map(([m, l]) => `<button class="btn small ${r.mode === m ? "on" : ""}" data-pd="${esc(r.key)}:${m}">${l}</button>`).join("")}</span></div>`;
+  const draw = () => {
+    const desks = rows.filter(r => r.status !== "section"), secs = rows.filter(r => r.status === "section"), n = rows.filter(r => r.mode !== "team").length;
+    box.innerHTML = `<details class="card acc" id="pdcard" open><summary><b style="font-size:17px">👥 Who sees which desk</b><span class="muted">Brandon & Kim</span></summary>
+      <p class="muted" style="margin:4px 0 8px">Pick a person. <b>Team</b> = what their teams give them. <b>Show</b> opens a desk just for them; <b>Hide</b> takes one away just for them. Every change is logged.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="pdwho" aria-label="Person"><option value="">Choose a person…</option>${people.map(p => `<option value="${p.id}" ${p.id === who ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+        <input id="pdnote" placeholder="Why (optional, saved with the change)" style="flex:1;min-width:180px"><span class="muted" id="pdmsg">${who ? n + " change" + (n === 1 ? "" : "s") + " from their team" : ""}</span></div>
+      ${who ? `<div style="margin-top:10px">${desks.map(row).join("")}</div>
+        <details class="acc2" style="margin-top:8px"><summary><b>Extra access inside desks</b><span class="muted">codes, money, contacts…</span></summary>${secs.map(row).join("")}</details>
+        ${hist.length ? `<details class="acc2"><summary><b>History</b><span class="muted">${hist.length}</span></summary>${hist.map(h => `<div class="muted" style="font-size:13px;margin:3px 0">${new Date(h.set_at).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })} · ${esc(h.set_by || "?")} · ${esc(h.label || h.desk_key)} → ${{ allow:"Show", block:"Hide", team:"Team" }[h.mode]}${h.note ? " — " + esc(h.note) : ""}</div>`).join("")}</details>` : ""}` : ""}</details>`;
+    $("#pdwho").onchange = () => load($("#pdwho").value || null);
+    box.querySelectorAll("[data-pd]").forEach(b => b.onclick = async () => { const [k, m] = b.dataset.pd.split(":"), note = $("#pdnote").value;
+      box.querySelectorAll("[data-pd]").forEach(x => x.disabled = true);
+      const r = await sb.rpc("hub_person_desk_set", { p_person:who, p_desk:k, p_mode:m, p_note:note || null });
+      if(r.error){ box.querySelectorAll("[data-pd]").forEach(x => x.disabled = false); return $("#pdmsg").textContent = "Didn't save: " + r.error.message; }
+      await load(who); $("#pdmsg").textContent = "Saved. It takes effect the next time " + (people.find(p => p.id === who) || {}).name + " opens or reloads the hub."; });
+  };
+  const load = async id => { who = PDWHO = id; rows = []; hist = [];
+    if(id){ const [a, b] = await Promise.all([sb.rpc("hub_person_desks_get", { p_person:id }), sb.rpc("hub_person_desk_history", { p_person:id })]); rows = a.data || []; hist = b.data || []; }
+    draw(); };
+  PDWHO && people.some(p => p.id === PDWHO) ? load(PDWHO) : draw();
 }
 /* My settings: Penny's morning briefing (penny_brief_set, hub_penny_brief.sql). Brandon 2026-10-29: on for everyone at 7:30 am weekdays, anyone can turn it off. */
 async function pennyBriefCard(box){
@@ -1042,6 +1077,7 @@ function settingsView2(v){
       <p class="muted" style="font-size:12px;margin:6px 0 0">Every fact and stat shows where it came from.</p></div>
     ${BD.mine ? bdCard() : ""}
     ${accCard()}
+    ${ME.admin ? `<div id="pdesk"></div>` : ""}
     <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
     const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; draw(); };
     v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => mv(b.dataset.up, -1));
@@ -1070,7 +1106,7 @@ function settingsView2(v){
       $("#prefsave").disabled = false;
       if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
       PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks }); shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
-    pennyBriefCard($("#pbrief"));
+    pennyBriefCard($("#pbrief")); pdCard($("#pdesk"));
   };
   draw();
 }
