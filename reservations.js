@@ -263,7 +263,7 @@ async function queue(v){
     const rows = inStage.filter(s => !F.held || s.blockers.includes(F.held) || s.waiting.includes(F.held));
     const cnt = k => base.filter(s => s.stage === k).length;
     const held = {}; inStage.forEach(s => [...s.blockers, ...s.waiting].forEach(b => held[b] = (held[b] || 0) + 1));
-    const ip = base.filter(s => s.stage === "in_progress"), soon = ip.filter(s => s.arrive >= today && s.arrive <= in7);
+    const ip = base.filter(s => s.stage === "in_progress"), soon = base.filter(s => s.status !== "Cancelled" && s.stage !== "closed" && s.arrive >= today && s.arrive <= in7);   // any stage: Asana moves stays to Checkout once booking steps are done
     $("#rq_sub").textContent = `${ip.length} in progress · ${ip.filter(s => s.blockers.length || s.waiting.length).length} held up`;
     $("#rq_tabs").innerHTML = Object.entries(STAGE).map(([k, l]) => `<button class="${F.stage === k ? "on" : ""}" data-stage="${k}">${RI[k]}<span>${l}</span><span class="badge">${cnt(k)}</span></button>`).join("");
     $("#rq_stats").innerHTML = [[ip.length, "In progress"], [soon.length, "Arriving next 7 days"],
