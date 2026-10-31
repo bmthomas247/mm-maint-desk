@@ -217,6 +217,7 @@ details.acc[open]>summary{margin-bottom:6px}
 .pmsg.me{justify-content:flex-end;color:var(--ink)} .pmsg.me .bub{background:var(--moose-soft);color:var(--ink);border-color:transparent;border-radius:14px 4px 14px 14px} /* the banner's .me{color:#fff} was turning your own messages white */
 .pmsg .fbk{display:flex;gap:4px;margin-top:4px} .pmsg .fbk button{border:1px solid var(--line);background:var(--card);border-radius:8px;cursor:pointer;font-size:13px;padding:2px 7px}
 .pmsg .fbk button.on{background:var(--moose-soft);border-color:var(--moose)}
+.pmsg .pchoices{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px} .pmsg .pchoices button{border:1px solid var(--line-2);background:var(--card);color:inherit;border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer} .pmsg .pchoices button:hover{border-color:var(--moose,#2f5d3a)}
 .pmsg .plinks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px} .pmsg .plinks a{text-decoration:none}
 .pmsg .pask{margin-top:6px} .pmsg .pask textarea{width:100%;min-height:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
 #pennyForm{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--card)}
@@ -1598,7 +1599,7 @@ async function pennyAsk(q){
         while((i = buf.indexOf("\n")) >= 0){ const line = buf.slice(0, i); buf = buf.slice(i + 1); if(!line) continue; let o; try { o = JSON.parse(line); } catch(e){ continue; }
           if(o.t === "status") setWait(o.s);
           else if(o.t === "reset") live = "";
-          else if(o.t === "text"){ live += o.d; setWait(live); }
+          else if(o.t === "text"){ live += o.d; setWait(live.replace(/\n?\s*\**NEXT:[\s\S]*$/i, "")); }
           else if(o.t === "done") d = o; } }
       if(!d) d = { error:"Penny's answer got cut off — please ask again." };
     } else { got = true; d = await resp.json().catch(() => ({ error:"Penny couldn't answer right now." })); }
@@ -1607,6 +1608,10 @@ async function pennyAsk(q){
   wait.remove();
   const a = d.ok ? d.answer : (d.error || "Penny couldn't answer right now.");
   const el = pennySay("assistant", a, d.id, d.links);
+  /* 2026-10-30 (Brandon: "shrink Penny's responses but give people more selection choices"): her follow-ups as tap-to-ask buttons */
+  if(d.ok && (d.choices || []).length){ const ch = document.createElement("div"); ch.className = "pchoices";
+    d.choices.forEach(t => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = () => { ch.remove(); pennyAsk(t); }; ch.appendChild(b); });
+    el.querySelector(".bub").after(ch); $("#pennyLog").scrollTop = 1e9; }
   if(d.ok && (d.actions || []).length){ const box = document.createElement("div"); box.className = "pacts";
     d.actions.forEach(x => { const row = document.createElement("div"); row.className = "pa"; row.innerHTML = `<b>${esc(x.label)}</b>`;
       const go = document.createElement("button"); go.className = "btn primary small"; go.textContent = { job:"✅ Create this job", tick:"✅ Tick it", fd_note:"✅ Add to the ticket", slack_post:"✅ Send it", track_update:"✅ Update Track", hub_update:"✅ Make this change" }[x.kind] || "✅ Do it";
