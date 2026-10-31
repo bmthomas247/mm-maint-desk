@@ -5,9 +5,10 @@
    Google Flights; no limit per person since 2026-10-30 (Brandon), a repeat within 6 hours comes from the cache; nothing saved with the
    person's name). City search = airports.json (OurAirports, public domain; large + medium airports with scheduled service) + PLACES
    below (popular places whose airport has another town's name, and cities with several airports). PTO = my_pto() (your own row only).
+   2026-10-31 (Brandon): "Compare with Provo" (on by default) runs every search from both airports at once and shows them side by side.
    The hub never books or pays: every result links to Google Flights. */
 (function(){
-const PF = { tab:"find", busy:"", from:{ label:"Salt Lake City (SLC)", codes:["SLC"] }, to:null, ex:null, rt:null, picked:null, f:{ mo:"0", du:"2", ad:"1", ch:"0", in:"popular" }, air:null, pto:undefined };
+const PF = { tab:"find", busy:"", from:{ label:"Salt Lake City (SLC)", codes:["SLC"] }, to:null, s:[], rterr:"", view:[], f:{ mo:"0", du:"2", ad:"1", ch:"0", in:"popular", cmp:true }, air:null, pto:undefined };
 // IATA codes; groups = every main airport of that place (explore uses the first one)
 const PLACES = [["Hawaii (all islands)", "HNL,OGG,KOA,LIH", "Oahu Maui Kauai Big Island Kona"], ["Maui", "OGG", "Kahului Hawaii"], ["Kauai", "LIH", "Lihue Hawaii"],
   ["Big Island (Kona)", "KOA", "Hawaii Kailua"], ["Oahu (Honolulu)", "HNL", "Hawaii Waikiki"], ["New York City (all airports)", "JFK,LGA,EWR", "NYC Manhattan Newark"],
@@ -46,6 +47,12 @@ const CSS = `.prk .hd{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-star
 .prk .lv.low{background:#e3f4e6;color:#1f6b33}.prk .lv.typical{background:var(--line-2,#eef0ea);color:var(--ink)}.prk .lv.high{background:#fde5e3;color:#a1261b}
 @media (prefers-color-scheme: dark){.prk .lv.low{background:#1f3a26;color:#9fe0ad}.prk .lv.high{background:#45201c;color:#f5aaa2}}
 .prk .best{border:2px solid var(--forest-2,#2f5d3a);border-radius:14px;padding:12px 14px;margin-top:14px}
+.prk .cmp2{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}.prk .cmp2 .best{margin-top:0}
+.prk .from{font-weight:800;font-size:15px;margin:0 0 6px;color:var(--forest-2,#2f5d3a)}.prk .cmpl{margin:14px 0 10px;font-size:15px}
+.prk .cmpc{margin-top:6px;font-size:14px;color:var(--ink)!important}
+.prk .cr{border-top:1px solid var(--line,#e5e7eb);padding:6px 0 2px;margin-top:4px}.prk .cr .pr{font-size:20px}.prk .cr.win .pr{color:#1f6b33}
+@media (prefers-color-scheme: dark){.prk .cr.win .pr{color:#9fe0ad}}
+@media (max-width:900px){.prk .cmp2{grid-template-columns:1fr}}
 @media (max-width:640px){.prk .grid{grid-template-columns:1fr 1fr}.prk .dst .ph{height:72px}.prk .cities{grid-template-columns:1fr}.prk .pto{max-width:none;width:100%}}`;
 let cssOn = false;
 const css = () => { if(cssOn) return; cssOn = true; const s = document.createElement("style"); s.textContent = CSS; document.head.appendChild(s); };
@@ -96,7 +103,7 @@ function wireCity(v, id, key){
   let list = [], at = 0;
   const show = () => { box.hidden = !list.length; box.innerHTML = list.map((o, i) => `<div data-i="${i}" class="${i === at ? "on" : ""}"><b>${esc(o.label)}</b><span class="muted sm">${esc(o.sub)}</span></div>`).join(""); };
   const pick = o => { const was = PF[key] && PF[key].label; PF[key] = o ? { label:o.label, codes:o.codes } : null; inp.value = o ? o.label : ""; list = []; show();
-    if(key === "to" && was !== (o && o.label)){ PF.ex = null; PF.picked = null; draw(v); } };
+    if(was !== (o && o.label)){ clear(); draw(v); } };   // new From/To: old results (and the Compare label) no longer fit
   inp.oninput = async () => { await airports(); list = suggest(inp.value); at = 0; show(); };
   inp.onfocus = () => { if(!PF.air) airports(); inp.select(); };
   inp.onkeydown = e => { if(box.hidden) return;
@@ -106,7 +113,7 @@ function wireCity(v, id, key){
   box.onmousedown = e => { const d = e.target.closest("[data-i]"); if(d){ e.preventDefault(); pick(list[+d.dataset.i]); } };
   inp.onblur = () => setTimeout(() => { if(!inp.isConnected) return;
     if(list.length && inp.value.trim() && (!PF[key] || PF[key].label !== inp.value)) pick(list[0]);
-    else if(!inp.value.trim() && key === "to"){ if(PF.to){ PF.to = null; PF.ex = null; PF.picked = null; draw(v); } }
+    else if(!inp.value.trim() && key === "to"){ if(PF.to){ PF.to = null; clear(); draw(v); } }
     else if(PF[key]) inp.value = PF[key].label;
     list = []; show(); }, 150);
 }
@@ -148,44 +155,89 @@ const foot = x => `<p class="muted sm" style="margin:10px 0 0">Source: Google Fl
 const err = e => `<p style="margin-top:12px;color:#b42318;font-weight:600">${esc(e)}</p>`;
 const people = () => (+PF.f.ad || 1) + (+PF.f.ch || 0);
 
-function routeHtml(x){
+/* ---------- SLC vs Provo (Brandon 2026-10-31: "can we compare provo side by side with slc") ----------
+   PF.s = one slot per "flying from" airport: [{o, ex, picked, rt, out, ret}]. With Compare on there are two slots (your From + Provo,
+   or + Salt Lake City when From is Provo) and every search runs for both at the same time. */
+const SLC = { label:"Salt Lake City (SLC)", codes:["SLC"] }, PVU = { label:"Provo (PVU)", codes:["PVU"] };
+const oname = o => o.label.replace(/ \(.*\)$/, "");
+const other = () => PF.from && PF.from.codes.join() === "PVU" ? SLC : PVU;
+const origins = () => { const a = PF.from && PF.from.codes.length ? PF.from : SLC; return PF.f.cmp && a.codes.join() !== other().codes.join() ? [a, other()] : [a]; };
+const cmpOn = () => PF.s.length === 2;
+const rtPrice = x => x && x.result ? (x.result.lowest ?? (x.result.flights[0] || {}).price ?? null) : null;
+function cmpLine(pa, pb, a, b, note){
+  if(pa == null || pb == null) return pa == null && pb == null ? "" : `<p class="cmpl">${esc(oname(pa == null ? b : a))} has flights; ${esc(oname(pa == null ? a : b))} doesn't for this search.</p>`;
+  const d = Math.round(Math.abs(pa - pb));
+  return `<p class="cmpl">${d < 1 ? "Same price from both airports." : `✈️ <b>${esc(oname(pa < pb ? a : b))} is ${money(d)} cheaper</b> (${money(Math.min(pa, pb))} vs ${money(Math.max(pa, pb))}).`}${note ? ` <span class="muted sm">${note}</span>` : ""}</p>`;
+}
+
+function routeHtml(x, out, ret, compact){
   if(!x) return ""; if(x.error) return err(x.error);
-  const r = x.result, LV = { low:"Low price", typical:"Typical price", high:"High price" };
-  return `<div class="row" style="justify-content:space-between;margin-top:12px"><div><span class="muted sm">Cheapest flight for ${esc(dshort(PF.f.out))}${PF.f.ret ? " – " + esc(dshort(PF.f.ret)) : " (one way)"}</span>
-      <div style="font-size:28px;font-weight:800">${money(r.lowest ?? (r.flights[0] || {}).price)}</div></div>
+  const r = x.result, LV = { low:"Low price", typical:"Typical price", high:"High price" }, fl = compact ? r.flights.slice(0, 5) : r.flights;
+  return `<div class="row" style="justify-content:space-between;margin-top:12px"><div><span class="muted sm">Cheapest flight for ${esc(dshort(out))}${ret ? " – " + esc(dshort(ret)) : " (one way)"}</span>
+      <div style="font-size:28px;font-weight:800">${money(rtPrice(x))}</div></div>
       ${r.level ? `<span class="lv ${esc(r.level)}">${esc(LV[r.level] || r.level)}${r.level === "low" ? " ✓" : r.level === "high" ? " ↑" : ""}</span>` : ""}</div>
-    ${meter(r)}${history(r.history)}
-    <p class="muted sm" style="margin:8px 0 0">${people() > 1 ? "Prices are the total for all travelers" : "Price for one traveler"}, ${PF.f.ret ? "round trip" : "one way"}, economy, before bag fees.</p>
-  ${r.flights.length ? `<div class="tow"><table style="margin-top:10px"><tr><th>Price</th><th>Airline</th><th>Leaves</th><th>Arrives</th><th>Stops</th><th>Time</th></tr>
-    ${r.flights.map(f => `<tr><td><b>${money(f.price)}</b>${f.best ? ` <span class="pill">Best</span>` : ""}</td><td>${esc(f.airlines.join(", "))}</td>
+    ${meter(r)}${compact ? "" : history(r.history)}
+    <p class="muted sm" style="margin:8px 0 0">${people() > 1 ? "Prices are the total for all travelers" : "Price for one traveler"}, ${ret ? "round trip" : "one way"}, economy, before bag fees.</p>
+  ${fl.length ? `<div class="tow"><table style="margin-top:10px"><tr><th>Price</th><th>Airline</th><th>Leaves</th><th>Arrives</th><th>Stops</th><th>Time</th></tr>
+    ${fl.map(f => `<tr><td><b>${money(f.price)}</b>${f.best ? ` <span class="pill">Best</span>` : ""}</td><td>${esc(f.airlines.join(", "))}</td>
       <td>${ttime(f.depart)} <span class="muted sm">${esc(f.from || "")}</span></td><td>${ttime(f.arrive)} <span class="muted sm">${esc(f.to || "")}</span></td>
       <td>${stopTx(f.stops)}${f.via.length ? ` <span class="muted sm">via ${esc(f.via.join(", "))}</span>` : ""}</td><td>${hrs(f.minutes)}</td></tr>`).join("")}</table></div>`
-    : `<p class="muted">No flights found for those dates.</p>`}
+    : `<p class="muted">No flights found for those dates.</p>`}${compact && r.flights.length > 5 ? `<p class="muted sm">+ ${r.flights.length - 5} more on Google Flights</p>` : ""}
   <p style="margin:10px 0 0"><a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">See it and book on Google Flights ↗</a></p>${foot(x)}`;
 }
 
+// one place: cheapest dates from this airport + the flights for them
+function cityCard(s, two){
+  const head = two ? `<div class="from">From ${esc(s.o.label)}</div>` : "";
+  if(!s.ex) return "";
+  if(s.ex.error) return `<div class="best">${head}${err(s.ex.error)}</div>`;
+  const d = s.picked; if(!d) return `<div class="best">${head}<p class="muted">Google didn't find a trip from ${esc(oname(s.o))} for that time.</p></div>`;
+  return `<div class="best">${head}<div class="row" style="justify-content:space-between"><div><span class="muted sm">Cheapest dates to ${esc(PF.to ? PF.to.label : d.name)}</span>
+      <div style="font-size:20px;font-weight:800">${esc(dshort(d.start))}${d.end ? " – " + esc(dshort(d.end)) : ""}</div>
+      <span class="muted sm">${esc([d.airline, stopTx(d.stops), hrs(d.minutes)].filter(Boolean).join(" · "))}</span></div>
+      <div style="font-size:28px;font-weight:800">${money(d.price)}</div></div>
+    ${PF.busy === "rt" && !s.rt ? `<p class="muted">Getting the flights for those dates…</p>` : routeHtml(s.rt, s.out, s.ret, two)}</div>`;
+}
+
 function findOut(){
-  const x = PF.ex; if(!x) return ""; if(x.error) return err(x.error);
-  const all = x.result.destinations || [];
-  if(PF.picked){   // one place: its cheapest dates + the flights for them
-    const d = PF.picked;
-    return `<div class="best"><div class="row" style="justify-content:space-between"><div><span class="muted sm">Cheapest dates to ${esc(PF.to ? PF.to.label : d.name)}</span>
-        <div style="font-size:20px;font-weight:800">${esc(dshort(d.start))}${d.end ? " – " + esc(dshort(d.end)) : ""}</div>
-        <span class="muted sm">${esc([d.airline, stopTx(d.stops), hrs(d.minutes)].filter(Boolean).join(" · "))}</span></div>
-        <div style="font-size:28px;font-weight:800">${money(d.price)}</div></div>
-      ${PF.busy === "rt" ? `<p class="muted">Getting the flights for those dates…</p>` : routeHtml(PF.rt)}
-      <p class="sm" style="margin:10px 0 0"><a href="#" id="otherdates">Want other dates? Pick them yourself →</a></p></div>`;
+  const s0 = PF.s[0]; if(!s0 || !s0.ex) return "";
+  const two = cmpOn();
+  if(PF.to){
+    const pr = s => rtPrice(s.rt) ?? (s.picked ? s.picked.price : null);
+    return `${two && PF.busy !== "rt" ? cmpLine(pr(PF.s[0]), pr(PF.s[1]), PF.s[0].o, PF.s[1].o, "Each airport shows its own cheapest dates, so the dates can differ.") : ""}
+      <div class="${two ? "cmp2" : ""}">${PF.s.map(s => cityCard(s, two)).join("")}</div>
+      <p class="sm" style="margin:10px 0 0"><a href="#" id="otherdates">${two ? "Want the same dates from both? Pick them yourself →" : "Want other dates? Pick them yourself →"}</a></p>`;
   }
-  const scope = PF.f.sc || "all";
-  const list = all.filter(d => scope === "all" || (scope === "us" ? d.country === "United States" : d.country !== "United States"));
-  return `<div class="row" style="margin-top:14px;justify-content:space-between"><b>${list.length} places${all.length !== list.length ? ` of ${all.length}` : ""}, cheapest first</b>
+  if(s0.ex.error && (!two || (PF.s[1].ex && PF.s[1].ex.error))) return err(s0.ex.error);
+  // Anywhere: one list of places; with Compare on, each place shows both airports' price
+  const map = new Map();
+  PF.s.forEach((s, si) => ((s.ex && s.ex.result && s.ex.result.destinations) || []).forEach(d => {
+    const k = (d.name || d.airport || "").toLowerCase(); const m = map.get(k) || { name:d.name, country:d.country, thumb:d.thumb, airport:d.airport, by:[] };
+    if(!m.thumb) m.thumb = d.thumb; if(!m.by[si] || d.price < m.by[si].price) m.by[si] = d; map.set(k, m); }));
+  const scope = PF.f.sc || "all", low = m => Math.min(...m.by.filter(Boolean).map(d => d.price));
+  const all = [...map.values()].sort((a, b) => low(a) - low(b));
+  const list = PF.view = all.filter(d => scope === "all" || (scope === "us" ? d.country === "United States" : d.country !== "United States"));
+  const wins = [0, 0]; if(two) list.forEach(m => { if(m.by[0] && m.by[1]) wins[m.by[0].price <= m.by[1].price ? 0 : 1]++; else wins[m.by[0] ? 0 : 1]++; });
+  const line = (m, si) => { const d = m.by[si], o = PF.s[si].o; if(!d) return two ? `<div class="cr"><b>${esc(oname(o))}</b> <span class="muted sm">no trip found</span></div>` : "";
+    const win = two && m.by[0] && m.by[1] && d.price < m.by[1 - si].price;
+    return `<div class="cr ${win ? "win" : ""}">${two ? `<b>${esc(oname(o))}</b> ` : ""}<span class="pr">${money(d.price)}</span>${two && d.airport ? ` <span class="muted sm">to ${esc(d.airport)}</span>` : ""}${win ? ` <span class="pill green">${money(m.by[1 - si].price - d.price)} less</span>` : ""}
+      <div class="sm">${d.start ? `${dshort(d.start)}${d.end ? " – " + dshort(d.end) : ""}` : ""}</div><div class="muted sm">${esc([d.airline, stopTx(d.stops), hrs(d.minutes)].filter(Boolean).join(" · "))}</div>
+      <div class="row" style="padding-top:4px">${d.airport && d.start ? `<button class="btn small" data-ck="${list.indexOf(m)}:${si}">See flights</button>` : ""}${d.link ? `<a class="sm" href="${esc(d.link)}" target="_blank" rel="noopener">Google ↗</a>` : ""}</div></div>`; };
+  const fx = PF.s.map(s => s.ex).find(x => x && x.at) || s0.ex;
+  return `${two ? `<p class="cmpl">Cheaper from <b>${esc(oname(PF.s[0].o))}</b> for ${wins[0]} places, from <b>${esc(oname(PF.s[1].o))}</b> for ${wins[1]}.</p>` : ""}
+    <div class="row" style="margin-top:14px;justify-content:space-between"><b>${list.length} places${all.length !== list.length ? ` of ${all.length}` : ""}, cheapest first</b>
     <label class="row sm">Show <select id="exsc"><option value="all">Everywhere</option><option value="us" ${scope === "us" ? "selected" : ""}>In the U.S.</option><option value="abroad" ${scope === "abroad" ? "selected" : ""}>Outside the U.S.</option></select></label></div>
-  ${list.length ? `<div class="grid">${list.map(d => `<div class="dst"><div class="ph" style="${d.thumb ? `background-image:url('${esc(d.thumb)}')` : ""}"></div><div class="bd">
-      <b>${esc(d.name)}</b><span class="muted sm">${esc(d.country || "")}${d.airport ? " · " + esc(d.airport) : ""}</span>
-      <span class="pr">${money(d.price)}</span><span class="sm">${d.start ? `${dshort(d.start)}${d.end ? " – " + dshort(d.end) : ""}` : ""}</span>
-      <span class="muted sm">${esc([d.airline, stopTx(d.stops), hrs(d.minutes)].filter(Boolean).join(" · "))}</span>
-      <div class="row" style="margin-top:auto;padding-top:6px">${d.airport && d.start ? `<button class="btn small" data-ck="${all.indexOf(d)}">See flights</button>` : ""}${d.link ? `<a class="sm" href="${esc(d.link)}" target="_blank" rel="noopener">Google ↗</a>` : ""}</div></div></div>`).join("")}</div>`
-    : `<p class="muted">Nothing found. Try another month, a longer trip, or no price limit.</p>`}${foot(x)}`;
+  ${list.length ? `<div class="grid">${list.map(m => `<div class="dst"><div class="ph" style="${m.thumb ? `background-image:url('${esc(m.thumb)}')` : ""}"></div><div class="bd">
+      <b>${esc(m.name)}</b><span class="muted sm">${esc(m.country || "")}${m.airport ? " · " + esc(m.airport) : ""}</span>
+      ${PF.s.map((s, si) => line(m, si)).join("")}</div></div>`).join("")}</div>`
+    : `<p class="muted">Nothing found. Try another month, a longer trip, or no price limit.</p>`}${fx && fx.at ? foot(fx) : ""}`;
+}
+
+function datesOut(){
+  const s0 = PF.s[0]; if(!s0 || PF.busy === "rt" || !s0.rt) return "";
+  if(!cmpOn()) return routeHtml(s0.rt, s0.out, s0.ret);
+  const [a, b] = PF.s;
+  return `${cmpLine(rtPrice(a.rt), rtPrice(b.rt), a.o, b.o, "")}<div class="cmp2">${PF.s.map(s => `<div class="best"><div class="from">From ${esc(s.o.label)}</div>${routeHtml(s.rt, s.out, s.ret, true)}</div>`).join("")}</div>`;
 }
 
 /* ---------- page ---------- */
@@ -194,10 +246,11 @@ function travelers(){
   return `<label>Adults<select id="fad">${[1,2,3,4,5,6].map(n => `<option ${n === +f.ad ? "selected" : ""}>${n}</option>`).join("")}</select></label>
   <label>Kids<select id="fch">${[0,1,2,3,4,5,6].map(n => `<option ${n === +f.ch ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
 }
+const cmpChip = () => `<label class="chk cmpc"><input type="checkbox" id="fcmp" ${PF.f.cmp ? "checked" : ""}> ↔ Compare with ${esc(oname(other()))} side by side</label>`;
 const popOn = p => p === null ? !PF.to : !!PF.to && (typeof p === "number" ? PF.to.label === PLACES[p][0] : PF.to.codes.join() === p);
 function findForm(){
   const f = PF.f, anyw = !PF.to;
-  return `<div class="cities"><div><div class="lbl">Flying from</div>${cityBox("cfrom", "from", "City or airport")}</div>
+  return `<div class="cities"><div><div class="lbl">Flying from</div>${cityBox("cfrom", "from", "City or airport")}${cmpChip()}</div>
       <div><div class="lbl">Where to?</div>${cityBox("cto", "to", "Anywhere, or type a city")}</div></div>
     <div class="chips">${POP.map(([l, p]) => `<button class="chip ${popOn(p) ? "on" : ""}" data-pop="${esc(l)}">${esc(l)}</button>`).join("")}</div>
     <div class="lbl">When</div><div class="chips">${[["0", "Any time"], ...MONTHS()].map(([k, l]) => `<button class="chip ${f.mo === k ? "on" : ""}" data-mo="${k}">${esc(l)}</button>`).join("")}</div>
@@ -212,17 +265,18 @@ function findForm(){
 function datesForm(){
   const f = PF.f, t = new Date().toLocaleDateString("en-CA");
   return `<p class="muted" style="margin:0 0 6px">Already know your dates? See every flight and whether the price is low, typical or high.</p>
-    <div class="cities"><div><div class="lbl">Flying from</div>${cityBox("dfrom", "from", "City or airport")}</div>
+    <div class="cities"><div><div class="lbl">Flying from</div>${cityBox("dfrom", "from", "City or airport")}${cmpChip()}</div>
       <div><div class="lbl">Flying to</div>${cityBox("dto", "to", "Type a city")}</div></div>
     <div class="frm" style="margin-top:12px"><label>Leave<input id="fout" type="date" min="${t}" value="${esc(f.out || "")}"></label>
       <label>Come back (empty = one way)<input id="fret" type="date" min="${t}" value="${esc(f.ret || "")}"></label>${travelers()}
       <label class="chk"><input type="checkbox" id="fns" ${f.ns ? "checked" : ""}> Nonstop only</label></div>
     <button class="btn primary go" id="dgo" ${PF.busy ? "disabled" : ""}>${PF.busy === "rt" ? "Searching…" : "Check prices"}</button>
-    ${PF.busy === "rt" ? "" : routeHtml(PF.rt)}`;
+    ${PF.rterr ? err(PF.rterr) : datesOut()}`;
 }
 function keep(v){ const g = id => v.querySelector("#" + id);
   [["fad", "ad"], ["fch", "ch"], ["fin", "in"], ["fmp", "mp"], ["fout", "out"], ["fret", "ret"]].forEach(([id, k]) => { if(g(id)) PF.f[k] = g(id).value; });
-  if(g("fns")) PF.f.ns = g("fns").checked; if(g("more")) PF.f.more = g("more").open; }
+  if(g("fns")) PF.f.ns = g("fns").checked; if(g("fcmp")) PF.f.cmp = g("fcmp").checked; if(g("more")) PF.f.more = g("more").open; }
+const clear = () => { PF.s = []; PF.rterr = ""; };
 
 function draw(v){
   if(current() !== "stf_perks") return;
@@ -233,39 +287,44 @@ function draw(v){
       <p class="muted sm" style="margin:14px 0 0">Your searches aren't saved with your name. The hub doesn't book or pay for flights; you book your own trip.${PF.airSrc ? ` City list: ${esc(PF.airSrc)}.` : ""}</p></div></div>`;
   ["cfrom", "dfrom"].forEach(id => wireCity(v, id, "from")); ["cto", "dto"].forEach(id => wireCity(v, id, "to"));
   const on = (sel, fn) => v.querySelectorAll(sel).forEach(b => b.onclick = e => { e.preventDefault(); keep(v); fn(b); draw(v); });
-  on("[data-tab]", b => { PF.tab = b.dataset.tab; });
+  on("[data-tab]", b => { PF.tab = b.dataset.tab; clear(); });
   on("[data-mo]", b => { PF.f.mo = b.dataset.mo; });
   on("[data-du]", b => { PF.f.du = b.dataset.du; });
   on("[data-pop]", b => { const p = POP.find(x => x[0] === b.dataset.pop)[1];
-    PF.to = p === null ? null : typeof p === "number" ? (o => ({ label:o.label, codes:o.codes }))(placeOpt(PLACES[p])) : { label:`${b.dataset.pop} (${p})`, codes:[p] }; PF.ex = null; PF.picked = null; });
+    PF.to = p === null ? null : typeof p === "number" ? (o => ({ label:o.label, codes:o.codes }))(placeOpt(PLACES[p])) : { label:`${b.dataset.pop} (${p})`, codes:[p] }; clear(); });
+  const cb = v.querySelector("#fcmp"); if(cb) cb.onchange = () => { keep(v); clear(); draw(v); };
   const sc = v.querySelector("#exsc"); if(sc) sc.onchange = () => { keep(v); PF.f.sc = sc.value; draw(v); };
-  on("[data-ck]", b => { const d = PF.ex.result.destinations[+b.dataset.ck];
-    PF.to = { label:`${d.name} (${d.airport})`, codes:[d.airport] }; PF.f.out = d.start; PF.f.ret = d.end || ""; PF.tab = "dates"; PF.rt = null; setTimeout(() => runRoute(v), 0); });
-  const od = v.querySelector("#otherdates"); if(od) od.onclick = e => { e.preventDefault(); keep(v); PF.tab = "dates"; draw(v); };
+  on("[data-ck]", b => { const [i, si] = b.dataset.ck.split(":").map(Number), m = PF.view[i], d = m.by[si];
+    PF.to = { label:`${m.name} (${d.airport})`, codes:[d.airport] }; PF.f.out = d.start; PF.f.ret = d.end || ""; PF.tab = "dates"; clear(); setTimeout(() => runRoute(v), 0); });
+  const od = v.querySelector("#otherdates"); if(od) od.onclick = e => { e.preventDefault(); keep(v);
+    const s = PF.s.find(s => s.picked); if(s){ PF.f.out = s.picked.start; PF.f.ret = s.picked.end || ""; } PF.tab = "dates"; clear(); draw(v); };
   const fg = v.querySelector("#fgo"); if(fg) fg.onclick = () => { keep(v); runFind(v); };
   const dg = v.querySelector("#dgo"); if(dg) dg.onclick = () => { keep(v); runRoute(v); };
 }
-const fromCodes = () => (PF.from && PF.from.codes.length ? PF.from.codes : ["SLC"]).slice(0, 6).join(",");
+const bad = e => ({ ok:false, error:String((e && e.message) || e) });
+const routeCall = (o, out, ret) => { const f = PF.f; return call({ action:"route", from:o.codes.slice(0, 6).join(","), to:PF.to.codes.slice(0, 6).join(","), out, ret, adults:f.ad, children:f.ch, stops:f.ns ? 1 : 0 })
+  .catch(bad).then(j => j.ok ? j : { error:j.error || "Something went wrong. Try again." }); };
 async function runFind(v){
-  PF.busy = "ex"; PF.ex = null; PF.picked = null; PF.rt = null; draw(v);
-  const f = PF.f, j = await call({ action:"explore", from:fromCodes(), to:PF.to ? PF.to.codes[0] : "", month:f.mo, duration:f.du, interest:PF.to ? "popular" : f.in,
-    max_price:f.mp, adults:f.ad, children:f.ch, stops:f.ns ? 1 : 0 }).catch(e => ({ ok:false, error:String(e.message || e) }));
-  PF.busy = ""; PF.ex = j.ok ? j : { error:j.error || "Something went wrong. Try again." };
-  if(j.ok && PF.to){
-    const d = (j.result.destinations || []).filter(d => d.start)[0];
-    if(!d){ PF.ex = { error:`Google didn't find a trip to ${PF.to.label} for that time. Try "Any time", a longer trip, or "I know my dates".` }; draw(v); return; }
-    PF.picked = d; PF.f.out = d.start; PF.f.ret = d.end || "";
-    await runRoute(v, true); return;
+  const f = PF.f; PF.busy = "ex"; PF.s = origins().map(o => ({ o })); PF.rterr = ""; draw(v);
+  const res = await Promise.all(PF.s.map(s => call({ action:"explore", from:s.o.codes.slice(0, 6).join(","), to:PF.to ? PF.to.codes[0] : "", month:f.mo, duration:f.du,
+    interest:PF.to ? "popular" : f.in, max_price:f.mp, adults:f.ad, children:f.ch, stops:f.ns ? 1 : 0 }).catch(bad)));
+  res.forEach((j, i) => { PF.s[i].ex = j.ok ? j : { error:j.error || "Something went wrong. Try again." }; });
+  if(PF.to){
+    PF.s.forEach(s => { const d = s.ex.result ? (s.ex.result.destinations || []).filter(d => d.start)[0] : null;
+      s.picked = d || null; if(d){ s.out = d.start; s.ret = d.end || ""; } });
+    if(!PF.s.some(s => s.picked) && !PF.s.some(s => s.ex.error)) PF.s[0].ex = { error:`Google didn't find a trip to ${PF.to.label} for that time. Try "Any time", a longer trip, or "I know my dates".` };
+    PF.busy = "rt"; draw(v);
+    await Promise.all(PF.s.map(async s => { if(s.picked){ s.rt = await routeCall(s.o, s.out, s.ret); draw(v); } }));
   }
-  draw(v);
+  PF.busy = ""; draw(v);
 }
-async function runRoute(v, quiet){
-  if(!PF.to){ PF.rt = { error:"Type the city you're flying to." }; draw(v); return; }
-  if(!PF.f.out){ PF.rt = { error:"Pick the day you leave." }; draw(v); return; }
-  PF.busy = "rt"; PF.rt = null; draw(v);
-  const f = PF.f, j = await call({ action:"route", from:fromCodes(), to:PF.to.codes.slice(0, 6).join(","), out:f.out, ret:f.ret, adults:f.ad, children:f.ch, stops:f.ns ? 1 : 0 })
-    .catch(e => ({ ok:false, error:String(e.message || e) }));
-  PF.busy = ""; PF.rt = j.ok ? j : { error:j.error || "Something went wrong. Try again." }; draw(v);
+async function runRoute(v){
+  PF.rterr = "";
+  if(!PF.to){ PF.rterr = "Type the city you're flying to."; draw(v); return; }
+  if(!PF.f.out){ PF.rterr = "Pick the day you leave."; draw(v); return; }
+  const f = PF.f; PF.busy = "rt"; PF.s = origins().map(o => ({ o, out:f.out, ret:f.ret })); draw(v);
+  await Promise.all(PF.s.map(async s => { s.rt = await routeCall(s.o, s.out, s.ret); }));
+  PF.busy = ""; draw(v);
 }
 
 window.perksView = async function(v){
