@@ -371,7 +371,9 @@ async function mkLink(){
   $("#serr").textContent = "";
   if(SH.aud === "realtor" && !n){ $("#serr").textContent = "Type the realtor's name, so their clients' leads come back tagged to them."; return; }
   let w;
-  try { w = await worker("/hub/share", { inputs:i, audience:SH.aud, ref:SH.aud === "realtor" ? n : me.first, to_name:n || null }); }
+  // Only the home's selections go to the Worker (who it's for stays in est_shares). No team member's name in a public link;
+  // a realtor's name goes in as ref so the public page credits their clients (estimator project 2026-10-30).
+  try { w = await worker("/hub/share", { inputs:i, audience:SH.aud, ...(SH.aud === "realtor" ? { ref:n } : {}) }); }
   catch(err){ $("#serr").textContent = err.message === "not_built" || err instanceof TypeError ? "Sending isn't switched on yet: the estimator project is adding pre-filled links to the Worker." : errText(err); return; }
   SH.link = w;
   const h = i.addr || i.home_code, f = n ? n.split(/\s+/)[0] : "there", D = DRAFT[SH.aud];
