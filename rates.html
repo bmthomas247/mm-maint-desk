@@ -182,6 +182,14 @@ table{font-size:14px}th{color:var(--muted);font-weight:700}tr.click:hover td,.tb
 .county{border-radius:14px;box-shadow:var(--shadow)}
 .pill{border-radius:999px;font-weight:800}
 .flag{border-radius:14px}
+.fdcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--line-2,#cfd8cb);border-radius:16px;padding:12px 14px;margin:10px 0;box-shadow:var(--shadow)}
+.fdcard.sev1{border-left-color:var(--red)}.fdcard.sev2{border-left-color:var(--amber)}.fdcard.sev3{border-left-color:var(--moose,#88B535)}
+.fdcard>div{margin:2px 0}.fdhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:15px}.fdchg{background:var(--ground);border-radius:10px;padding:5px 9px;display:inline-block}
+.fdacts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px!important}.fdacts .tab,.fdask .tab{font-size:13px;min-height:32px;padding:5px 11px}
+.fdask{border:1px dashed var(--line-2,#cfd8cb);border-radius:12px;padding:10px;margin-top:8px;display:grid;gap:6px}.fdask select,.fdask input{max-width:420px}
+.fdstat{border-radius:10px;padding:6px 10px;margin-top:6px!important;font-size:13px;background:var(--ground)}.fdstat.accept{background:var(--greenbg)}.fdstat.reject{background:var(--ground)}.fdstat.later{background:var(--amberbg)}
+.fdbulk{background:var(--ground);border-radius:12px;padding:6px 10px}
+.fdacts .tab.fdgo{border-color:var(--moose,#88B535);background:var(--moose-soft,#eef5e0);font-weight:800}.fdacts .tab.on{background:var(--forest-2);color:#fff}
 /* stat tiles, like the Locks office */
 .rstats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
 .rstat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow);color:inherit;text-decoration:none;display:block}
@@ -361,7 +369,7 @@ async function boot() {
     // Hotels + Reports left the top menu (Brandon 2026-10-30): Hotels = sidebar Rates ▸ Hotels; reports open from the hub's Reports & Analytics.
     if (pv === "hotels" || pv === "reports" || pv === "rater" || pv === "pulse") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
     if (pv === "reports" && p.get("rp")) { RP.open = p.get("rp"); RP.openName = rpName(RP.open); }
-    const v = pv || (sv && document.querySelector(`#viewnav .tab[data-v="${sv}"]`) ? sv : null); if (v && v !== "desk") setView(v); } catch (e) {}
+    const hv = location.hash.slice(1), v = pv || (["findings", "beyond"].includes(hv) ? hv : null) || (sv && document.querySelector(`#viewnav .tab[data-v="${sv}"]`) ? sv : null); if (v && v !== "desk") setView(v); } catch (e) {}
   $("colleenBtn").onclick = buildColleenSheet; $("landBtn").onclick = didItLand; $("matchBtn").onclick = reviewMatches;
   const groups = [];
   for (const s of sets) { const [c, t] = split(s.name); const g = groups[groups.length - 1];
@@ -408,7 +416,7 @@ const nbOf = name => NB.find(([re]) => re.test(name));
 const countyOf = (name, set) => (set && set.county) || (nbOf(name) || [])[1] || "Other";
 const codeOf = name => (nbOf(name) || [])[2] || "";
 // Full house code (Brandon 2026-10-21): "406" -> "PL 406" so a home is never just a number. Labels that already start with a word stay as they are.
-const houseName = (label, setName) => { const n = String(label || "").replace(/\s*\(.*?\)\s*$/, "").trim(), c = codeOf(setName || ""); return c && /^\d/.test(n) ? `${c} ${n}` : n; };
+const houseName = (label, setName) => { const n = String(label || "").replace(/\s*\(.*?\)\s*$/, "").trim(), c = codeOf(setName || ""); return c && /^(\d|[A-Z]\d)/.test(n) ? `${c} ${n}` : n; };
 function filterSets() {
   const q = $("setq").value.trim().toLowerCase(); let n = 0;
   $("tabs").querySelectorAll("details.county").forEach(d => {
@@ -2791,18 +2799,21 @@ async function loadFindings(force) {
     allRows(() => sb.from("findings_decisions").select("id,finding_id,decision,note,created_at,created_by,sent_to_kolleen,findings(kind,comp_id,set_id,date_from,date_to)", { count: "exact" }).gte("created_at", since).order("created_at"))]);
   FD.busy = false;
   if (f.error) { $("fdBody").innerHTML = `<p class="up small">Couldn't load findings: ${escH(f.error.message)}. (The v11 SQL may not have run yet.)</p>`; return; }
-  FD.rows = f.data || []; FD.dec = d.data || []; renderFindings();
+  FD.rows = f.data || []; FD.dec = d.data || [];
+  const [fu, pp] = await Promise.all([sb.rpc("finding_followups"), FD.people ? { data: FD.people } : sb.rpc("finding_people")]);
+  FD.fu = fu.data || []; FD.people = pp.data || []; renderFindings();
 }
 function fdDecision(f) {
   const own = FD.dec.filter(x => x.finding_id === f.id).pop();
   if (own) return { ...own, carried: false };
   const k = fdKey(f), cut = Date.now() - 7 * 864e5; let best = null;
   for (const x of FD.dec) { if (!x.findings || fdKey(x.findings) !== k) continue; if (!FD_DATED.includes(f.kind) && new Date(x.created_at) < cut) continue; best = x; }
-  return best && best.decision !== "later" ? { ...best, carried: true } : null;
+  return best && (best.decision !== "later" || /^(⏰|🙋)|\(asked /.test(best.note || "")) ? { ...best, carried: true } : null;
 }
 function renderFindings() {
   const el = $("fdBody"), all = (FD.rows || []).map(f => ({ ...f, d: fdDecision(f) }));
-  const isOpen = x => !x.d || x.d.decision === "later";
+  const snoozed = x => x.d?.decision === "later" && /^⏰/.test(x.d.note || "") && Date.now() - new Date(x.d.created_at) < 7 * 864e5;
+  const isOpen = x => (!x.d || x.d.decision === "later") && !snoozed(x);
   const list = all.filter(x => (FD.kind === "*" || x.kind === FD.kind) && (FD.show === "all" || (FD.show === "open" ? isOpen(x) : x.d?.decision === FD.show)));
   const kinds = [...new Set(all.map(x => x.kind))], acc = all.filter(x => x.d?.decision === "accept" && x.change && !x.d.sent_to_kolleen);
   const cnt = k => all.filter(x => x.kind === k && isOpen(x)).length;
@@ -2813,23 +2824,88 @@ function renderFindings() {
     <button class="tab" id="fdRe">Refresh</button><button class="tab on" id="fdKol"${acc.length ? "" : " disabled"} title="Excel for Kolleen: home, dates, current, new - no comp data. Also saved for Did it land?">Kolleen list (${acc.length} accepted)</button>
     <span id="fdMsg" class="small muted">${all.length ? `Run ${escH(all[0].run_date)} · ${all.length} findings` : "No findings yet - findings.py runs nightly after the shadow prices."}</span></div>
     ${fdScore()}
-    ${list.length ? `<div class="wrap"><table><tr><th>Finding</th><th>Dates</th><th>Suggested change</th><th style="min-width:210px">Decision</th></tr>${list.slice(0, 300).map(x => `<tr data-fid="${x.id}">
-      <td><b>${escH(x.title)}</b><div class="small">${escH(x.evidence || "")}</div><div class="small" style="color:var(--teal2)">→ ${escH(x.suggestion || "")}</div><div class="small muted">Sources: ${escH(x.sources || "")}</div></td>
-      <td class="small">${escH(dates(x))}</td><td class="small">${chg(x.change)}</td>
-      <td>${x.d && x.d.decision !== "later" ? `<span class="${x.d.decision === "accept" ? "down" : "muted"}"><b>${x.d.decision === "accept" ? "Accepted" : "Rejected"}</b></span><div class="small muted">${escH(x.d.created_by || "")} · ${new Date(x.d.created_at).toLocaleDateString()}${x.d.carried ? " (earlier finding)" : ""}${x.d.sent_to_kolleen ? " · on Kolleen list" : ""}${x.d.note ? "<br>" + escH(x.d.note) : ""}</div>` :
-        `<select class="fdWhy" style="margin-bottom:4px;width:100%"><option value="">Why? (pick after the button)</option>${[...new Set(Object.values(FD_WHY).flat())].map(w => `<option>${w}</option>`).join("")}</select><input class="fdNote" placeholder="note (optional)" maxlength="300" style="margin-bottom:4px"><div class="rrow" style="margin:0"><button class="tab on" data-fd="accept">Accept</button><button class="tab" data-fd="reject">Reject</button><button class="tab" data-fd="later">Later</button></div>${x.d?.decision === "later" ? `<div class="small muted">Snoozed by ${escH(x.d.created_by || "")}</div>` : ""}`}</td></tr>`).join("")}</table></div>${list.length > 300 ? `<p class="small muted">Showing the first 300 of ${list.length}.</p>` : ""}` : `<p class="small muted">Nothing here.</p>`}
-    <p class="small muted">Findings are checks our tool runs every night (comps' booking pace from KeyData, our Track bookings, Beyond's calendar, our shadow prices). Nothing changes anywhere until you Accept, and even then it only goes on the Kolleen list. A Reject hides the same finding for 7 days (dated ones for good). Every number is an ESTIMATE.</p>`;
+    ${FD.kind !== "*" && FD.show === "open" && list.length > 1 ? `<div class="rrow fdbulk"><span class="small muted">All ${list.length} shown:</span>${list.some(x => x.change) ? `<button class="tab" data-bulk="kol">📋 Add the ${list.filter(x => x.change).length} with a change to the Kolleen list</button>` : ""}<button class="tab" data-bulk="snooze">⏰ Snooze all a week</button></div>` : ""}
+    ${list.length ? list.slice(0, 300).map(fdCard).join("") + (list.length > 300 ? `<p class="small muted">Showing the first 300 of ${list.length}.</p>` : "") : `<p class="small muted">Nothing here.</p>`}
+    <p class="small muted">Findings are checks our tool runs every night (comps' booking pace from KeyData, our Track bookings, Beyond's calendar, our shadow prices). Nothing changes in Track or Beyond from here: a change you pick goes on the Kolleen list, "Ask someone" puts a tip on that person's Home page, and a meeting button adds it to that meeting's task list. "Leave as is" hides the same finding for 7 days (dated ones for good); "Snooze" hides it for a week. Every number is an ESTIMATE.</p>`;
   $("fdKind").onchange = e => { FD.kind = e.target.value; renderFindings(); };
   $("fdShow").onchange = e => { FD.show = e.target.value; renderFindings(); };
   $("fdRe").onclick = () => loadFindings(true);
   $("fdKol").onclick = () => fdKolleen(acc);
-  el.querySelectorAll("[data-fd]").forEach(b => b.onclick = async () => {
-    const tr = b.closest("tr"), id = +tr.dataset.fid, why = tr.querySelector(".fdWhy")?.value || "", n0 = tr.querySelector(".fdNote")?.value.trim() || "";
-    if (b.dataset.fd !== "accept" && !why) { $("fdMsg").innerHTML = `<span class="up">Pick a reason first (it helps the tool learn).</span>`; return; }
-    const note = [why, n0].filter(Boolean).join(" - ") || null;
-    b.disabled = true; const { data, error } = await sb.from("findings_decisions").insert({ finding_id: id, decision: b.dataset.fd, note }).select("id,finding_id,decision,note,created_at,created_by,sent_to_kolleen");
-    if (error) { $("fdMsg").innerHTML = `<span class="up">Couldn't save: ${escH(error.message)}</span>`; b.disabled = false; return; }
-    const f = FD.rows.find(r => r.id === id); FD.dec.push({ ...data[0], findings: { kind: f.kind, comp_id: f.comp_id, set_id: f.set_id, date_from: f.date_from, date_to: f.date_to } }); renderFindings(); });
+  fdWire(el);
+}
+// ===== "What would we do?" (Brandon 2026-10-30: handle the findings in the hub). Each button = a decision (accept = Kolleen list when the
+// finding has a change; later = waiting on someone / snoozed; reject = leave as is) + an optional follow-up: ask a person (tip on their Home
+// page) or a meeting's task list. Saved by finding_act() (hub_findings_act.sql). [label, decision, {chg: needs a change, to: ask someone
+// (default first name), meet: meeting key, why: needs a reason}]
+const FD_ACT = {
+  not_booking: [["📉 Lower to our tool's price", "accept", { chg: 1 }], ["🔍 Check the listing (photos, min stay, reviews)", "later", { to: "" }], ["📞 Ask the owner", "later", { to: "Jeff" }]],
+  stuck_at_min: [["📉 Lower the minimum price", "accept", { chg: 1 }], ["📞 Ask the owner to lower their minimum", "later", { to: "Jeff" }]],
+  owner_min_block: [["📉 Lower the minimum price", "accept", { chg: 1 }], ["📞 Ask the owner to lower their minimum", "later", { to: "Jeff" }]],
+  min_stay: [["📅 Change the minimum stay", "accept", { chg: 1 }]],
+  fast_filling: [["📈 Raise the price", "accept", { chg: 1 }]], fast_booking: [["📈 Raise the price", "accept", { chg: 1 }]],
+  rated_high_priced_low: [["📈 Raise the price", "accept", { chg: 1 }]],
+  booked_low: [["🔍 Look at how it was booked", "later", { to: "" }]],
+  total_price: [["🧾 Check the fees in Track", "later", { to: "" }]], channel_fee: [["🧾 Check the fees in Track", "later", { to: "" }]],
+  event_gone: [["🗓️ Take off the event price", "accept", { chg: 1 }]],
+  segment_pace: [["💬 Talk about it at the managers meeting", "later", { meet: "meet_mgr" }]] };
+const FD_COMMON = [["🙋 Ask someone", "later", { to: "" }], ["🤝 Bring to the Beyond call", "later", { meet: "meet_beyond" }], ["⏰ Snooze a week", "later", {}], ["✋ Leave as is", "reject", { why: 1 }]];
+const fdActs = x => [...(FD_ACT[x.kind] || []).filter(a => !a[2].chg || x.change), ...FD_COMMON];
+function fdCard(x) {
+  const chg = c => !c ? "" : c.kind === "min" ? `min stay ${c.cur} → <b>${c.new}</b> nights` : `${c.kind === "min_price" ? "Beyond minimum " : ""}${fmt(c.cur)} → <b>${fmt(c.new)}</b>${c.pct != null ? ` (${c.pct > 0 ? "+" : ""}${c.pct}%)` : ""}${c.note ? ` <span class="muted">${escH(c.note)}</span>` : ""}`;
+  const dates = x.date_from ? (x.date_from === x.date_to ? x.date_from : `${x.date_from} → ${x.date_to}`) : "";
+  const fu = (FD.fu || []).filter(f => f.finding_id === x.id || (x.d && x.d.finding_id === f.finding_id));
+  const d = x.d, done = d && d.decision !== "later";
+  const status = d ? `<div class="fdstat ${d.decision}"><b>${d.decision === "accept" ? "✓ Doing it" : d.decision === "reject" ? "Left as is" : "Waiting"}</b> · ${escH(d.note || "")} <span class="muted">· ${escH(d.created_by || "")}, ${new Date(d.created_at).toLocaleDateString()}${d.carried ? " (earlier copy of this finding)" : ""}${d.sent_to_kolleen ? " · sent to Kolleen" : d.decision === "accept" && x.change ? " · on the Kolleen list" : ""}</span>
+      ${fu.map(f => `<div class="small">🙋 Asked ${escH(f.who)}: <b>${f.status === "done" || f.status === "useful" ? "done ✓" : f.status === "dismissed" || f.status === "not_useful" ? "they hid it" : "not done yet"}</b>${f.status_at && f.status !== "new" ? ` <span class="muted">${new Date(f.status_at).toLocaleDateString()}</span>` : ""}</div>`).join("")}</div>` : "";
+  return `<div class="fdcard sev${x.severity || 2}" data-fid="${x.id}">
+    <div class="fdhead"><b>${escH(x.title)}</b>${dates ? `<span class="pill">${escH(dates)}</span>` : ""}</div>
+    <div class="small">${escH(x.evidence || "")}</div>
+    <div class="small" style="color:var(--teal2)">→ ${escH(x.suggestion || "")}</div>
+    ${x.change ? `<div class="fdchg small">Suggested change: ${chg(x.change)}</div>` : ""}
+    <div class="small muted">Sources: ${escH(x.sources || "")}</div>
+    ${status}
+    ${done ? `<div class="rrow" style="margin:6px 0 0"><button class="tab" data-again="1">Decide again</button></div>` : ""}
+    <div class="fdacts"${done ? ' style="display:none"' : ""}><span class="small muted">What would we do?</span>${fdActs(x).map(([l], i) => `<button class="tab${i < fdActs(x).length - FD_COMMON.length ? " fdgo" : ""}" data-act="${i}">${escH(l)}</button>`).join("")}</div>
+    <div class="fdpanel"></div></div>`;
+}
+function fdWire(el) {
+  el.querySelectorAll("[data-again]").forEach(b => b.onclick = () => { const c = b.closest(".fdcard"); c.querySelector(".fdacts").style.display = ""; b.parentElement.remove(); });
+  el.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
+    const card = b.closest(".fdcard"), id = +card.dataset.fid, x = FD.rows.find(r => r.id === id), [label, dec, o] = fdActs(x)[+b.dataset.act];
+    card.querySelectorAll("[data-act]").forEach(y => y.classList.toggle("on", y === b));
+    const def = o.to ? (FD.people || []).find(p => p.name.split(" ")[0].toLowerCase() === o.to.toLowerCase()) : null;
+    const P = card.querySelector(".fdpanel");
+    P.innerHTML = `<div class="fdask"><b>${escH(label)}</b>${dec === "accept" ? ` <span class="small muted">goes on the Kolleen list</span>` : ""}
+      ${o.to !== undefined ? `<label class="small">Who? <select class="fdTo"><option value="">Pick someone</option>${(FD.people || []).map(p => `<option value="${p.id}"${def && def.id === p.id ? " selected" : ""}>${escH(p.name)}</option>`).join("")}</select></label>` : ""}
+      ${o.meet ? `<span class="small muted">Adds it to the ${o.meet === "meet_mgr" ? "Managers" : "Beyond Pricing"} meeting's task list.</span>` : ""}
+      ${o.why ? `<div class="chips small">${FD_WHY.reject.map(w => `<button class="tab fdw" data-w="${escH(w)}">${escH(w)}</button>`).join("")}</div>` : ""}
+      <input class="fdNote" placeholder="${o.to !== undefined ? "What should they do? (optional)" : "Note (optional)"}" maxlength="300">
+      <div class="rrow" style="margin:6px 0 0"><button class="tab on fdSave">Save</button><button class="tab fdCancel">Cancel</button><span class="small fdMsg"></span></div></div>`;
+    let why = "";
+    P.querySelectorAll(".fdw").forEach(w => w.onclick = () => { why = w.dataset.w; P.querySelectorAll(".fdw").forEach(y => y.classList.toggle("on", y === w)); });
+    P.querySelector(".fdCancel").onclick = () => { P.innerHTML = ""; card.querySelectorAll("[data-act]").forEach(y => y.classList.remove("on")); };
+    P.querySelector(".fdSave").onclick = async e => {
+      const to = P.querySelector(".fdTo")?.value || null, n0 = P.querySelector(".fdNote").value.trim(), msg = P.querySelector(".fdMsg");
+      if (o.to !== undefined && !to) { msg.innerHTML = `<span class="up">Pick who to ask.</span>`; return; }
+      if (o.why && !why) { msg.innerHTML = `<span class="up">Pick a reason (it helps the tool learn).</span>`; return; }
+      e.target.disabled = true; msg.textContent = "Saving…";
+      const note = [why, n0].filter(Boolean).join(" - ") || null;
+      const r = await sb.rpc("finding_act", { p_finding: id, p_decision: dec, p_action: label, p_note: note, p_to: to, p_meet: o.meet || null });
+      if (r.error) { msg.innerHTML = `<span class="up">Couldn't save: ${escH(r.error.message)}</span>`; e.target.disabled = false; return; }
+      const who = to ? (FD.people || []).find(p => p.id === to)?.name : null;
+      FD.dec.push({ id: r.data.decision, finding_id: id, decision: dec, note: label + (note ? " - " + note : "") + (who ? ` (asked ${who})` : ""), created_at: new Date().toISOString(), created_by: state.email, sent_to_kolleen: false,
+        findings: { kind: x.kind, comp_id: x.comp_id, set_id: x.set_id, date_from: x.date_from, date_to: x.date_to } });
+      if (who) (FD.fu ||= []).push({ finding_id: id, who, status: "new", asked_at: new Date().toISOString() });
+      renderFindings(); };
+  });
+  el.querySelectorAll("[data-bulk]").forEach(b => b.onclick = async () => {
+    const all = (FD.rows || []).map(f => ({ ...f, d: fdDecision(f) })).filter(x => (FD.kind === "*" || x.kind === FD.kind) && (!x.d || x.d.decision === "later"));
+    const kol = b.dataset.bulk === "kol", ids = (kol ? all.filter(x => x.change) : all).map(x => x.id);
+    if (!ids.length || !confirm(kol ? `Add all ${ids.length} suggested changes to the Kolleen list?` : `Snooze all ${ids.length} for a week?`)) return;
+    b.disabled = true;
+    const r = await sb.rpc("finding_act_many", { p_ids: ids, p_decision: kol ? "accept" : "later", p_action: kol ? "📋 Add to the Kolleen list" : "⏰ Snooze a week" });
+    if (r.error) { $("fdMsg").innerHTML = `<span class="up">Couldn't save: ${escH(r.error.message)}</span>`; b.disabled = false; return; }
+    loadFindings(true); });
 }
 function fdScore() {
   const s = FD.sc || []; if (!s.length) return `<p class="small muted">Scorecard: starts once our tool has priced nights that have now passed (needs a few weeks of shadow prices).</p>`;
