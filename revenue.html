@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Revenue Estimator</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Revenue Estimator, owner relations version (hub key 'revenue'; hub_revenue_desk.sql; plan REVENUE_ESTIMATOR_HUB_PLAN.md).
+     The numbers come ONLY from the estimator's Cloudflare Worker (/hub/estimate), never computed here: the math is the estimator project's.
+     "What our own data says" = est_hub_context() (Track via est_owner_index, Key Data comps) shown next to the model, never blended.
+     No contact fields for the team member. Access is enforced in Supabase (hub_can('revenue')) and by the Worker (est_hub_ok()). -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e; --pine:#4f7a18;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --radius:16px; --tap:44px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:17px;margin:24px 0 8px;font-weight:800}
+h3{font-size:15px;margin:0 0 6px;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn:disabled{opacity:.5;cursor:default}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.chip{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:5px 12px;border-radius:999px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
+.chip.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;min-width:0}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:820px){ .grid2{grid-template-columns:1fr} }
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.form label{font-size:12.5px;font-weight:800;color:var(--ink-2);display:flex;flex-direction:column;gap:3px;min-width:0}
+.form input,.form select,.find input,dialog input,dialog textarea{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 8px;background:var(--card);color:var(--ink);min-height:36px;width:100%}
+.src{font-size:11px;font-weight:700;color:var(--muted)} .src.t{color:var(--forest-2)}
+.checks{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px}
+.checks label{font-size:13px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+input[type=checkbox]{width:auto;min-height:0}
+.find{position:relative} .find .list{position:absolute;z-index:5;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);max-height:300px;overflow:auto}
+.find .list button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--ink);font:inherit;font-size:13.5px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
+.find .list button:hover,.find .list button:focus{background:var(--moose-soft)}
+.tiers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:560px){ .tiers{grid-template-columns:1fr} }
+.tier{border:1px solid var(--line);border-radius:12px;padding:12px}
+.tier.mid{border-color:var(--forest-2);background:var(--moose-soft)}
+.tier b{display:block;font-size:22px;font-weight:800;letter-spacing:-.01em}
+.tier small{color:var(--muted);font-size:12.5px;font-weight:700}
+.bars{display:flex;align-items:flex-end;gap:4px;height:120px;margin-top:10px}
+.bars div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.bars i{display:block;width:100%;background:var(--moose);border-radius:4px 4px 0 0}
+.bars span{font-size:10.5px;color:var(--muted);font-weight:700}
+.why{list-style:none;margin:0;padding:0}
+.why li{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.why li:last-child{border-bottom:0}
+.eff{font-weight:800;text-align:right;font-size:14px} .eff.up{color:var(--forest-2)} .eff.dn{color:var(--red)}
+.why .s{font-size:12px;color:var(--muted)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+td.n,th.n{text-align:right}
+tr:last-child td{border-bottom:0}
+.empty{padding:18px;color:var(--muted);font-size:14px}
+.note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
+.note.amber{background:var(--amber-soft)}
+.stat{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.stat:last-child{border-bottom:0} .stat b{font-weight:800}
+dialog{border:1px solid var(--line);border-radius:16px;padding:20px;max-width:520px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog textarea{min-height:90px}
+.err{color:var(--red);font-size:13px;min-height:1em}
+.url{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;overflow-wrap:anywhere;background:var(--ground);border-radius:8px;padding:8px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtD = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const usd = n => n == null || isNaN(n) ? "—" : "$" + Math.round(n).toLocaleString();
+const pct = n => n == null || isNaN(n) ? "—" : Math.round(n * 100) + "%";
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+const median = a => { a = a.filter(x => x != null && !isNaN(x)).sort((x, y) => x - y); if(!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+
+const WORKER = "https://moose-estimator-api.moosemanagement.workers.dev";   // the estimator project's Worker (Part A: /hub/estimate, /hub/share)
+const GAP = 0.15;           // the estimator's own rule: model vs. real data more than ~15% apart = log as calibration, never average
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// Amenities the engine knows (math doc §3.5). Keys are the hub's names; the Worker maps them to its own state.
+const AMEN = [["ski_in_out","Ski-in/out"],["pool_private","Private pool"],["golf","Golf"],["lakefront","Lakefront"],["bbq","BBQ"],["fireplace","Fireplace"],
+  ["fire_pit","Fire pit"],["ev","EV charger"],["pet","Pet friendly"],["game_room","Game room"],["luxe_bath","Luxe bath"],["kitchen","Chef's kitchen"],
+  ["gym","Gym"],["laundry","Laundry"],["workspace","Workspace"],["garage","Garage"]];
+const blank = () => ({ addr:"", lat:null, lng:null, home_code:null, track_id:null, community:null, beds:3, baths:2, half_baths:0, sleeps:null, sqft:null,
+  home_type:"condo", finish:"standard", home_value:null, remodel_year:null, hot_tub:"none", amenities:{ laundry:true },
+  min_stay:3, owner_nights:0, owner_window:"even", price_floor:null, snow:0 });
+const S = { tab:"est", homes:[], me:null, inp:blank(), src:{}, res:null, resErr:"", ctx:null, busy:false, find:"", lists:{} };
+
+/* ---------- picking a home ---------- */
+function setHome(h){
+  const i = blank(), src = {};
+  Object.assign(i, { addr:[h.address, h.city].filter(Boolean).join(", "), home_code:h.code, track_id:h.track_id, community:h.community });
+  src.addr = "Track";
+  if(h.beds != null){ i.beds = h.beds; src.beds = "Track"; }
+  if(h.baths != null){ i.baths = Math.floor(h.baths); i.half_baths = h.baths % 1 ? 1 : 0; src.baths = "Track"; }
+  if(h.lat != null){ i.lat = h.lat; i.lng = h.lng; src.addr = "Track (map point: Locks desk)"; }
+  i.home_type = /hous|home$|chalet|cabin/i.test(h.name || "") ? "house" : /town/i.test(h.name || "") ? "townhome" : "condo";
+  src.home_type = "guessed from the Track name — check it";
+  S.inp = i; S.src = src; S.res = null; S.resErr = ""; S.find = h.code;
+  render(); loadContext();
+}
+function readForm(){
+  const i = S.inp, f = $("#f"); if(!f) return;
+  for(const el of $$("[data-k]", f)){
+    const k = el.dataset.k, v = el.type === "checkbox" ? el.checked : el.value;
+    if(el.dataset.am){ i.amenities[k] = v; continue; }
+    const num = el.type === "number" || el.dataset.num;
+    const nv = num ? (v === "" ? null : +v) : v;
+    if(i[k] !== nv && S.src[k] && el.type !== "checkbox") S.src[k] = "changed by you";
+    i[k] = nv;
+  }
+}
+
+/* ---------- numbers: the Worker only ---------- */
+async function token(){ const { data:{ session } } = await sb.auth.getSession(); return session && session.access_token; }
+async function worker(path, body){
+  if(window.MM_EST_STUB) return window.MM_EST_STUB(path, body);          // stub test only
+  const r = await fetch(WORKER + path, { method:"POST", headers:{ "Content-Type":"application/json", "Authorization":"Bearer " + await token() }, body:JSON.stringify(body) });
+  if(r.status === 404 || r.status === 403) throw new Error("not_built");   // 403 {"error":"origin"} = the Worker doesn't allow the hub yet (checked 2026-10-30)
+  if(r.status === 401) throw new Error("The estimator didn't accept your hub sign-in. Sign out and back in, then try again.");
+  if(!r.ok) throw new Error("The estimator answered " + r.status + ". Try again in a minute.");
+  return r.json();
+}
+async function run(){
+  readForm();
+  if(!S.inp.addr && S.inp.lat == null){ S.resErr = "Pick one of our homes or type an address first."; render(); return; }
+  S.busy = true; S.resErr = ""; render();
+  try { S.res = await worker("/hub/estimate", { inputs:S.inp }); }
+  catch(e){ S.res = null; S.resErr = e.message === "not_built" || e instanceof TypeError
+      ? "The team version of the estimator isn't switched on yet. The estimator project is adding it to the Worker (Part A of the plan). Our own data below still works."
+      : errText(e); }
+  S.busy = false; render();
+}
+async function loadContext(){
+  const i = S.inp;
+  const r = await sb.rpc("est_hub_context", { p_code:i.home_code, p_community:i.home_code ? null : i.community, p_beds:i.beds });
+  S.ctx = r.error ? { error:errText(r.error) } : r.data; render();
+}
+
+/* ---------- "what our own data says" ---------- */
+function ourData(){
+  const c = S.ctx; if(!c) return `<p class="muted">Pick one of our homes (or type a community) to see our own numbers.</p>`;
+  if(c.error) return `<p class="err">${esc(c.error)}</p>`;
+  const out = [], exp = S.res && S.res.tiers && S.res.tiers.expected && S.res.tiers.expected.gross, checks = [];
+  const yr = (o, lbl) => o ? `<div class="stat"><span>${esc(lbl)}${o.months < 12 ? ` <span class="pill amber">${o.months} months only</span>` : ""}</span>
+      <b>${usd(o.gross)} · ${o.nights ? usd(o.gross / o.nights) + " ADR · " + pct(o.nights / 365) + " booked" : "no nights"}</b></div>` : "";
+  if(c.home && (c.home.t12 || c.home.ly)){
+    out.push(`<h3>This home in Track</h3>${yr(c.home.t12, "Last 12 months (" + (c.home.t12_label || "") + ")")}${yr(c.home.ly, "Year before (" + (c.home.ly_label || "") + ")")}
+      <p class="src">Source: Track gross rent and nights, from the estimator's owner index (${esc(c.home.program || "")}; updated ${fmtDT(c.home.index_updated)}).</p>`);
+    if(exp && c.home.t12 && c.home.t12.months >= 12) checks.push(["this home's last 12 months in Track", c.home.t12.gross]);
+  }
+  const full = (c.moose || []).filter(m => m.months >= 12), same = full.filter(m => m.same_community);
+  const use = same.length >= 2 ? same : full;
+  if((c.moose || []).length){
+    const g = median(use.map(m => m.gross)), n = median(use.map(m => m.nights));
+    out.push(`<h3 style="margin-top:14px">Moose homes like it (${c.beds} bed, ${esc(same.length >= 2 ? c.community : c.neighborhood || c.community)})</h3>
+      ${use.length ? `<div class="stat"><span>Middle of ${use.length} full-year home${use.length === 1 ? "" : "s"}</span><b>${usd(g)} · ${n ? usd(g / n) + " ADR · " + pct(n / 365) + " booked" : ""}</b></div>` : `<p class="muted">None with a full year in Track yet.</p>`}
+      <details><summary class="muted" style="cursor:pointer">See each home</summary><div class="box" style="margin-top:6px"><table><thead><tr><th>Home</th><th class="n">Gross</th><th class="n">Nights</th><th class="n">Months</th></tr></thead><tbody>
+      ${c.moose.map(m => `<tr><td>${esc(m.code)}${m.same_community ? "" : ` <span class="muted">${esc(m.community)}</span>`}</td><td class="n">${usd(m.gross)}</td><td class="n">${m.nights ?? ""}</td><td class="n">${m.months ?? ""}</td></tr>`).join("")}
+      </tbody></table></div></details>
+      <p class="src">Source: Track, last 12 months per home (estimator owner index), short-term homes only. Homes with under 12 months are listed but not in the middle number.</p>`);
+    if(exp && use.length) checks.push(["the middle Moose home like it", g]);
+  }
+  const kd = c.kd || [];
+  if(kd.length){
+    const rows = ["Ours", "Primary", "Secondary"].map(t => { const a = kd.filter(k => k.tier === t && k.months >= 10); if(!a.length) return "";
+      if(t === "Primary" && exp) checks.push(["the middle Key Data comp", median(a.map(k => k.rev))]);
+      return `<tr><td>${t === "Ours" ? "Our listings" : t + " comps"}</td><td class="n">${a.length}</td><td class="n">${usd(median(a.map(k => k.rev)))}</td><td class="n">${usd(median(a.map(k => k.adr)))}</td><td class="n">${pct(median(a.map(k => k.occ)))}</td></tr>`; }).join("");
+    out.push(`<h3 style="margin-top:14px">Key Data comps</h3>${rows ? `<div class="box"><table><thead><tr><th></th><th class="n">Homes</th><th class="n">Middle revenue</th><th class="n">ADR</th><th class="n">Occupancy</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="muted">No comp with 10+ months of data.</p>`}
+      <p class="src">Source: Key Data monthly listing numbers ${fmtD(c.kd_from)} – ${fmtD(c.kd_to)}, comp sets ${esc((c.kd_sets || []).join(", "))} (Rates desk). Key Data revenue is Airbnb rent, not the same as Track gross.</p>`);
+  }
+  if(!out.length) return `<p class="muted">We don't have Track or Key Data numbers for a ${esc(c.beds)}-bed home in ${esc(c.community || "this area")} yet.</p>`;
+  const gaps = checks.filter(([, v]) => v && Math.abs(exp - v) / v > GAP);
+  const flag = gaps.length ? `<div class="note amber"><b>The model and our data are more than ${GAP * 100}% apart.</b> ${gaps.map(([w, v]) => `Expected ${usd(exp)} is ${exp > v ? "above" : "below"} ${esc(w)} (${usd(v)}, ${Math.round((exp - v) / v * 100)}%).`).join(" ")}
+      Don't average them. If you think the model is off for this home, log it so the estimator team can look. <button class="btn" data-act="calib" style="margin-left:6px">Log it for calibration</button></div>`
+    : exp && checks.length ? `<div class="note">The model's Expected (${usd(exp)}) is within ${GAP * 100}% of our own data.</div>` : "";
+  return flag + out.join("");
+}
+
+/* ---------- views ---------- */
+function field(k, label, html){ const s = S.src[k]; return `<label>${esc(label)}${html}${s ? `<span class="src${s === "Track" || /^Track/.test(s) ? " t" : ""}">${esc(s)}</span>` : ""}</label>`; }
+const num = (k, label, step = 1) => field(k, label, `<input type="number" step="${step}" data-k="${k}" value="${S.inp[k] ?? ""}">`);
+const sel = (k, label, opts) => field(k, label, `<select data-k="${k}">${opts.map(([v, t]) => `<option value="${v}"${String(S.inp[k]) === String(v) ? " selected" : ""}>${t}</option>`).join("")}</select>`);
+
+function estView(){
+  const i = S.inp, r = S.res, t = r && r.tiers;
+  const list = S.find && !i.home_code ? S.homes.filter(h => (h.code + " " + h.name + " " + (h.address || "") + " " + (h.community || "")).toLowerCase().includes(S.find.toLowerCase())).slice(0, 12) : [];
+  return `
+  <div class="card">
+    <h3>1. The home</h3>
+    <div class="find"><input id="find" placeholder="Our home (code, name, community) or any address" value="${esc(S.find)}" autocomplete="off">
+      ${list.length ? `<div class="list">${list.map(h => `<button data-home="${esc(h.code)}"><b>${esc(h.code)}</b> · ${esc(h.community || "")} · ${h.beds ?? "?"} bd <span class="muted">${esc(h.address || "")}</span></button>`).join("")}</div>` : ""}</div>
+    ${i.home_code ? `<p class="muted" style="margin:6px 0 0">Our home <b>${esc(i.home_code)}</b>${i.community ? " in " + esc(i.community) : ""}. <button class="btn" data-act="clear" style="min-height:28px">Start over</button></p>`
+      : S.find ? `<p class="muted" style="margin:6px 0 0">Not one of ours? The estimator looks the address up itself. <button class="btn" data-act="useaddr" style="min-height:28px">Use "${esc(S.find)}" as the address</button></p>` : ""}
+    <form id="f" onsubmit="return false" style="margin-top:12px">
+      <div class="form">
+        ${num("beds", "Bedrooms")}${num("baths", "Full baths")}${num("half_baths", "Half baths")}${num("sleeps", "Sleeps")}${num("sqft", "Sq ft")}
+        ${sel("home_type", "Home type", [["house","House"],["townhome","Townhome"],["condo","Condo"]])}
+        ${sel("finish", "Finish", [["dated","Dated"],["standard","Standard"],["upscale","Upscale"],["luxury","Luxury"]])}
+        ${num("home_value", "Home value ($)", 1000)}${num("remodel_year", "Last remodel (year)")}
+        ${sel("hot_tub", "Hot tub", [["none","None"],["private","Private"],["shared","Shared"]])}
+      </div>
+      <div class="checks">${AMEN.map(([k, t]) => `<label><input type="checkbox" data-am="1" data-k="${k}"${i.amenities[k] ? " checked" : ""}>${t}</label>`).join("")}</div>
+      <h3 style="margin-top:14px">Owner choices</h3>
+      <div class="form">
+        ${sel("min_stay", "Minimum stay", [3,5,7,10,15,30].map(n => [n, n + " nights"]))}
+        ${num("owner_nights", "Owner nights a year")}
+        ${sel("owner_window", "Owner uses it", [["even","Spread out"],["peak","In ski season"],["summer","In summer"],["off","Off-season"]])}
+        ${num("price_floor", "Lowest nightly price ($)")}
+        ${sel("snow", "Snow year", [[-1,"Dry"],[-0.5,"Below average"],[0,"Average"],[0.5,"Good"],[1,"Epic"]])}
+      </div>
+    </form>
+    <p class="muted" style="margin:10px 0 0">Nothing is saved about you. Only the home details go to the estimator.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn primary" data-act="run"${S.busy ? " disabled" : ""}>${S.busy ? "Working it out…" : "Get the estimate"}</button>
+      <button class="btn" data-act="send">Send the public estimator…</button>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <h3>2. The estimate</h3>
+      ${S.resErr ? `<div class="note amber">${esc(S.resErr)}</div>` : ""}
+      ${t ? `<div class="tiers">${[["conservative","Conservative"],["expected","Expected"],["peak","Peak"]].map(([k, lbl]) => { const x = t[k] || {};
+          return `<div class="tier${k === "expected" ? " mid" : ""}"><small>${lbl}</small><b>${usd(x.gross)}</b><small>${usd(x.adr)} ADR · ${pct(x.occ)} booked · ${x.nights ?? "—"} nights</small></div>`; }).join("")}</div>
+        <p class="src" style="margin-top:6px">Gross rent before fees. An estimate, not a promise. Engine ${esc(r.version || "")}${r.complex && r.complex.name ? " · complex " + esc(r.complex.name) : ""}.</p>
+        ${monthBars(r.months)}` : !S.resErr ? `<p class="muted">Fill in the home and tap <b>Get the estimate</b>.</p>` : ""}
+    </div>
+    <div class="card">
+      <h3>3. What our own data says</h3>
+      ${ourData()}
+    </div>
+  </div>
+
+  ${r && (r.explain || []).length ? `<div class="card" style="margin-top:14px">
+    <h3>Why these numbers</h3>
+    <p class="muted" style="margin:0 0 6px">Every factor the estimator used, biggest effect first, with where it comes from.</p>
+    <ul class="why">${[...r.explain].sort((a, b) => Math.abs(b.effect_pct || 0) - Math.abs(a.effect_pct || 0)).map(x => {
+      const e = x.effect_pct; return `<li><span class="eff ${e > 0 ? "up" : e < 0 ? "dn" : ""}">${e == null ? "" : (e > 0 ? "+" : "") + Math.round(e) + "%"}</span>
+        <div><b>${esc(x.label)}</b>${x.value != null ? ` <span class="pill">${esc(x.value)}</span>` : ""}<div>${esc(x.why || "")}</div><div class="s">Source: ${esc(x.source || "model default")}</div></div></li>`; }).join("")}</ul>
+  </div>` : ""}`;
+}
+function monthBars(m){
+  if(!m || m.length !== 12) return "";
+  const max = Math.max(...m.map(x => x.gross || 0)) || 1;
+  return `<div class="bars" aria-label="Expected gross by month">${m.map((x, k) => `<div title="${MONTHS[k]}: ${usd(x.gross)} · ${usd(x.adr)} ADR · ${pct(x.occ)}"><i style="height:${Math.max(2, (x.gross || 0) / max * 100)}%"></i><span>${MONTHS[k][0]}</span></div>`).join("")}</div>
+    <p class="src">Expected, month by month (hover for numbers).</p>`;
+}
+
+/* ---------- lists (the est_ tables the Worker already writes; RLS decides who reads) ---------- */
+const LISTS = {
+  sent:{ t:"est_shares", sel:"id,how,url,home_code,addr,to_name,to_email,email_status,email_error,sent_name,created_at", order:"created_at", empty:"Nothing sent yet.",
+    head:["Sent","By","Home","To","How"], row:x => [fmtDT(x.created_at), esc(x.sent_name), esc(x.home_code || x.addr || ""), esc([x.to_name, x.to_email].filter(Boolean).join(" · ")),
+      x.how === "link" ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">Link</a>` : `Email <span class="pill ${x.email_status === "sent" ? "green" : x.email_status === "failed" ? "red" : "amber"}">${esc(x.email_status === "waiting" ? "waiting to send" : x.email_status)}</span>`] },
+  leads:{ t:"est_leads", sel:"id,ts,kind,name,email,phone,addr,gross_expected,channel,status,owner_flag", order:"ts", empty:"No leads yet.",
+    head:["When","Who","Home","Expected","From","Status"], row:x => [fmtDT(x.ts), esc(x.name) + `<div class="muted">${esc([x.email, x.phone].filter(Boolean).join(" · "))}</div>`, esc(x.addr),
+      usd(x.gross_expected), esc(x.channel || "") + (x.owner_flag ? ` <span class="pill blue">current owner</span>` : ""), esc(x.status || "new")] },
+  alerts:{ t:"est_v_open_alerts", sel:"id,ts,level,strong,addr,shown_expected,status,notes", order:"ts", empty:"No open owner alerts.",
+    head:["When","Address","Shown","Level","Status"], row:x => [fmtDT(x.ts), esc(x.addr), usd(x.shown_expected), esc(x.level) + (x.strong ? ` <span class="pill red">strong match</span>` : ""), esc(x.status || "")] },
+  feedback:{ t:"est_feedback", sel:"id,ts,verdict,direction,addr,gross_expected,their_number,gap_pct,note", order:"ts", empty:"No feedback yet.",
+    head:["When","Verdict","Address","Ours","Theirs","Note"], row:x => [fmtDT(x.ts), esc(x.verdict) + (x.direction ? " (" + esc(x.direction) + ")" : ""), esc(x.addr), usd(x.gross_expected), usd(x.their_number), esc(x.note || "")] },
+};
+async function loadList(k){
+  const L = LISTS[k], r = await sb.from(L.t).select(L.sel).order(L.order, { ascending:false }).limit(200);
+  S.lists[k] = r.error ? { error:errText(r.error) } : r.data; render();
+}
+function listView(k){
+  const L = LISTS[k], d = S.lists[k];
+  if(!d) return `<p class="muted">Loading…</p>`;
+  if(d.error) return `<p class="err">${esc(d.error)}</p>`;
+  if(!d.length) return `<div class="box"><p class="empty">${L.empty}</p></div>`;
+  return `<div class="box"><table><thead><tr>${L.head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${d.map(x => `<tr>${L.row(x).map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function render(){
+  const tabs = [["est","Estimate"],["sent","Sent"],["leads","Leads"],["alerts","Owner alerts"],["feedback","Feedback"]];
+  const fo = document.activeElement && document.activeElement.id === "find";
+  $("#app").innerHTML = `<h1>Revenue Estimator</h1>
+    <p class="muted" style="margin:0">Team version: the same numbers as the public estimator, with the reasons behind them and our own data next to them.</p>
+    <div class="tabs">${tabs.map(([k, t]) => `<button class="chip${S.tab === k ? " on" : ""}" data-tab="${k}">${t}</button>`).join("")}</div>
+    ${S.tab === "est" ? estView() : listView(S.tab)}`;
+  if(fo){ const f = $("#find"); f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+}
+
+/* ---------- send the public estimator ---------- */
+function sendDlg(){
+  readForm();
+  const i = S.inp, d = $("#dlg");
+  d.innerHTML = `<h3>Send the public estimator</h3>
+    <p class="muted">They get the public page with ${i.home_code || i.addr ? "<b>" + esc(i.home_code || i.addr) + "</b> and these details" : "these details"} already filled in. They see the public numbers and give their own contact info only if they want the PDF.</p>
+    <label>Their name (optional)<input id="sn"></label>
+    <label>Their email (only to email it)<input id="se" type="email"></label>
+    <label>Note for the email (optional)<textarea id="sx"></textarea></label>
+    <div id="sout"></div><p class="err" id="serr"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="link">Copy a link</button><button class="btn" data-act="mail">Email it</button><button class="btn" data-act="close">Close</button></div>`;
+  d.showModal();
+}
+async function share(how){
+  const i = S.inp, n = $("#sn").value.trim(), e = $("#se").value.trim(), x = $("#sx").value.trim();
+  $("#serr").textContent = "";
+  if(how === "email" && !e){ $("#serr").textContent = "Type their email to email it."; return; }
+  let w;
+  try { w = await worker("/hub/share", { inputs:i, to_name:n || null, to_email:how === "email" ? e : null, note:x || null }); }
+  catch(err){ $("#serr").textContent = err.message === "not_built" || err instanceof TypeError ? "Sending isn't switched on yet: the estimator project is adding pre-filled links to the Worker." : errText(err); return; }
+  const r = await sb.rpc("est_share_save", { p_how:how, p_url:w.url, p_token:w.token, p_state:i, p_home:i.home_code, p_addr:i.addr || null,
+    p_to_name:n || null, p_to_email:how === "email" ? e : null, p_note:x || null });
+  if(r.error){ $("#serr").textContent = errText(r.error); return; }
+  if(how === "link"){ try { await navigator.clipboard.writeText(w.url); } catch {}
+    $("#sout").innerHTML = `<p class="muted">Copied. Paste it into your email or text:</p><div class="url">${esc(w.url)}</div>`; }
+  else $("#sout").innerHTML = `<div class="note">Saved. The email goes out from hello@moosemanagement.com once Brandon OKs the email text; until then it waits under <b>Sent</b>.</div>`;
+  S.lists.sent = null;
+}
+async function calibDlg(){
+  const d = $("#dlg"), i = S.inp, exp = S.res && S.res.tiers && S.res.tiers.expected && S.res.tiers.expected.gross;
+  d.innerHTML = `<h3>Log for calibration</h3><p class="muted">Goes to the estimator team's calibration list. It doesn't change any number.</p>
+    <label>What looks off?<textarea id="cc">Model Expected ${usd(exp)} for ${esc(i.home_code || i.addr)} vs. our own data.</textarea></label>
+    <label>Evidence<textarea id="ce">${esc($$(".note.amber")[0] ? $$(".note.amber")[0].innerText.split("Don't average")[0].trim() : "")}</textarea></label>
+    <p class="err" id="cerr"></p><div style="display:flex;gap:8px"><button class="btn primary" data-act="calibsave">Log it</button><button class="btn" data-act="close">Close</button></div>`;
+  d.showModal();
+}
+async function calibSave(){
+  const { data:{ user } } = await sb.auth.getUser(), i = S.inp;
+  const r = await sb.from("est_calibration_ledger").insert({ entry_date:new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" }), who:S.me && S.me.name,
+    claim:$("#cc").value.trim(), property:i.home_code || i.addr, evidence:$("#ce").value.trim(), evidence_rank:1, created_by:user.id });
+  if(r.error){ $("#cerr").textContent = errText(r.error); return; }
+  $("#dlg").close();
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.tab){ S.tab = b.dataset.tab; if(S.tab !== "est" && !S.lists[S.tab]) loadList(S.tab); render(); return; }
+  if(b.dataset.home){ const h = S.homes.find(x => x.code === b.dataset.home); if(h) setHome(h); return; }
+  const a = b.dataset.act;
+  if(a === "run") run();
+  else if(a === "clear"){ S.inp = blank(); S.src = {}; S.res = null; S.ctx = null; S.resErr = ""; S.find = ""; render(); }
+  else if(a === "useaddr"){ readForm(); S.inp.addr = S.find; S.src.addr = "typed"; render(); }
+  else if(a === "send") sendDlg();
+  else if(a === "link") share("link");
+  else if(a === "mail") share("email");
+  else if(a === "calib") calibDlg();
+  else if(a === "calibsave") calibSave();
+  else if(a === "close") $("#dlg").close();
+});
+document.addEventListener("input", e => {
+  if(e.target.id === "find"){ readForm(); S.find = e.target.value; if(S.inp.home_code){ const keep = S.find; S.inp = blank(); S.src = {}; S.ctx = null; S.res = null; S.find = keep; } render(); }
+});
+document.addEventListener("change", e => {
+  if(e.target.closest("#f")){ const k = e.target.dataset.k; readForm(); if(k === "beds" && (S.inp.home_code || S.inp.community)) loadContext(); }
+});
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("est_hub_ok");
+  if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Revenue Estimator</h1><p class="muted">Nothing to show.</p>`; return; }
+  const [h, me] = await Promise.all([sb.rpc("est_hub_homes"), sb.rpc("hub_me")]);
+  S.homes = h.data || []; S.me = me.data || null;
+  render();
+})();
+window.__est = { S, render, setHome, median };   // for the stub test
+</script>
+</body>
+</html>
