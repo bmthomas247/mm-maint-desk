@@ -1583,9 +1583,28 @@ async function pennyAsk(q){
   const ue = pennySay("user", q); if(img) ue.querySelector(".bub").insertAdjacentHTML("afterbegin", `<img class="pphoto" alt="Your photo" src="data:image/jpeg;base64,${img.data}">`);
   const wait = pennySay("assistant", "Penny is thinking"); { const wb = wait.querySelector(".bub"); wb.classList.add("wait"); wb.insertAdjacentHTML("beforeend", "<i></i><i></i><i></i>"); }
   const where = (typeof whereAmI === "function" ? whereAmI().label : "") || location.hash;
-  const r = await sb.functions.invoke("penny", { body:{ question:q, page:where, ctx:pennyCtx(), history:PENNY.hist, image:img || undefined } });
+  const body = { question:q, page:where, ctx:pennyCtx(), history:PENNY.hist, image:img || undefined };
+  /* 2026-10-30 (Brandon: "speed up penny"): Penny streams what she's doing ("Searching hub knowledge…", "Looking up PL 406…") and her words;
+     if the stream can't start, the old one-shot call runs. A stream that breaks partway is NOT re-asked (it would log and bill twice). */
+  const wb = wait.querySelector(".bub"), setWait = t => { const n = wb.firstChild; if(n && n.nodeType === 3) n.nodeValue = t; };
+  let d = null, got = false;
+  try {
+    const ses = (await sb.auth.getSession()).data.session;
+    const resp = await fetch(MM_CONFIG.url + "/functions/v1/penny", { method:"POST", headers:{ "content-type":"application/json", apikey:MM_CONFIG.anonKey, authorization:"Bearer " + (ses ? ses.access_token : MM_CONFIG.anonKey) }, body:JSON.stringify(Object.assign({ stream:true }, body)) });
+    if(/ndjson/.test(resp.headers.get("content-type") || "") && resp.body){
+      const rd = resp.body.getReader(), dec = new TextDecoder(); let buf = "", live = "";
+      for(;;){ const x = await rd.read(); if(x.done) break; got = true; buf += dec.decode(x.value, { stream:true }); let i;
+        while((i = buf.indexOf("\n")) >= 0){ const line = buf.slice(0, i); buf = buf.slice(i + 1); if(!line) continue; let o; try { o = JSON.parse(line); } catch(e){ continue; }
+          if(o.t === "status") setWait(o.s);
+          else if(o.t === "reset") live = "";
+          else if(o.t === "text"){ live += o.d; setWait(live); }
+          else if(o.t === "done") d = o; } }
+      if(!d) d = { error:"Penny's answer got cut off — please ask again." };
+    } else { got = true; d = await resp.json().catch(() => ({ error:"Penny couldn't answer right now." })); }
+  } catch(e){ if(got) d = { error:"Penny's answer got cut off — please ask again." }; }
+  if(!d){ const r = await sb.functions.invoke("penny", { body }); d = r.data || { error:r.error && r.error.message }; }
   wait.remove();
-  const d = r.data || {}; const a = d.ok ? d.answer : (d.error || (r.error && r.error.message) || "Penny couldn't answer right now.");
+  const a = d.ok ? d.answer : (d.error || "Penny couldn't answer right now.");
   const el = pennySay("assistant", a, d.id, d.links);
   if(d.ok && (d.actions || []).length){ const box = document.createElement("div"); box.className = "pacts";
     d.actions.forEach(x => { const row = document.createElement("div"); row.className = "pa"; row.innerHTML = `<b>${esc(x.label)}</b>`;
