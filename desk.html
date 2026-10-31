@@ -903,6 +903,8 @@ function jobDetail(j){
       resourcesFor(trs).map(function(r){ return '<a class="golink" href="'+esc(/^https?:/.test(r.urls[0]||"")?r.urls[0]:"https://"+(r.urls[0]||""))+'" target="_blank" rel="noopener">'+esc(r.name)+' ↗</a>'; }).join("")+
       trs.map(function(tn){ return '<button class="btn sm ghost" data-vtradego="'+esc(tn)+'">All '+esc(tn)+' →</button>'; }).join("")+'</div></div>'; }
   if(j.detail) h+='<div class="block"><h4>What it says in '+esc(SRCNAME[j.src]||j.src)+'</h4><div class="prose">'+esc(j.detail)+'</div></div>';
+  var bwc=(j.bwComments&&j.bwComments.length)?j.bwComments:((j.bw&&j.bw.t&&j.bw.t.bwComments)||[]);   /* Hub 2026-10-30: Breezeway comments (masked, newest 10; Breezeway gives no author; times without a zone are UTC like its task times) */
+  if(bwc.length) h+='<div class="block"><h4>Comments in Breezeway ('+bwc.length+')</h4>'+bwc.slice().reverse().map(function(c){ return '<div class="logrow"><div class="logmeta">'+esc(c.at?new Date(String(c.at).replace(" ","T")+(/[zZ]|[+-]\d\d:?\d\d$/.test(c.at)?"":"Z")).toLocaleString([], {month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"}):"")+' · <span class="muted">Breezeway comment</span></div><div class="logtxt">'+linkify(c.text||"")+'</div></div>'; }).join("")+'</div>';
   h+=mergedBlock(j)+relatedBlock(j);
   var links=[], seenL={}; if(j.srcUrl){ links.push(['Open in '+(SRCNAME[j.src]||j.src),j.srcUrl]); seenL[j.srcUrl]=1; }
   [j].concat(j.merged||[]).forEach(function(m){ if(m!==j && m.srcUrl && !seenL[m.srcUrl]){ seenL[m.srcUrl]=1; links.push([(SRCNAME[m.src]||m.src)+' (combined)',m.srcUrl]); }
