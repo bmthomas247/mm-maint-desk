@@ -84,7 +84,8 @@ tr:last-child td{border-bottom:0}
 dialog{border:1px solid var(--line);border-radius:16px;padding:20px;max-width:520px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
 dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
-dialog textarea{min-height:90px}
+dialog textarea{min-height:90px} dialog input,dialog textarea{font-weight:500;margin-top:4px}
+dialog{max-height:calc(100vh - 32px);overflow:auto}
 .err{color:var(--red);font-size:13px;min-height:1em}
 .url{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;overflow-wrap:anywhere;background:var(--ground);border-radius:8px;padding:8px}
 </style>
@@ -282,8 +283,9 @@ function monthBars(m){
 
 /* ---------- lists (the est_ tables the Worker already writes; RLS decides who reads) ---------- */
 const LISTS = {
-  sent:{ t:"est_shares", sel:"id,how,url,home_code,addr,to_name,to_email,email_status,email_error,sent_name,created_at", order:"created_at", empty:"Nothing sent yet.",
-    head:["Sent","By","Home","To","How"], row:x => [fmtDT(x.created_at), esc(x.sent_name), esc(x.home_code || x.addr || ""), esc([x.to_name, x.to_email].filter(Boolean).join(" · ")),
+  sent:{ t:"est_shares", sel:"id,how,url,home_code,addr,to_name,to_email,email_status,email_error,sent_name,created_at,audience,fd_ticket", order:"created_at", empty:"Nothing sent yet.",
+    head:["Sent","By","Home","To","How"], row:x => [fmtDT(x.created_at), esc(x.sent_name), esc(x.home_code || x.addr || ""),
+      esc([x.to_name, x.to_email].filter(Boolean).join(" · ")) + ` <span class="pill${x.audience === "realtor" ? " blue" : ""}">${x.audience === "realtor" ? "Realtor" : "Owner"}</span>` + (x.email_error ? `<div class="err">${esc(x.email_error)}</div>` : ""),
       x.how === "link" ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">Link</a>` : `Email <span class="pill ${x.email_status === "sent" ? "green" : x.email_status === "failed" ? "red" : "amber"}">${esc(x.email_status === "waiting" ? "waiting to send" : x.email_status)}</span>`] },
   leads:{ t:"est_leads", sel:"id,ts,kind,name,email,phone,addr,gross_expected,channel,status,owner_flag", order:"ts", empty:"No leads yet.",
     head:["When","Who","Home","Expected","From","Status"], row:x => [fmtDT(x.ts), esc(x.name) + `<div class="muted">${esc([x.email, x.phone].filter(Boolean).join(" · "))}</div>`, esc(x.addr),
@@ -316,32 +318,94 @@ function render(){
 }
 
 /* ---------- send the public estimator ---------- */
+const PHONE = "(435) 214-1797";   // the number the public estimator page uses (Worker proposal.js PHONE)
+// Email drafts OK'd by Brandon 2026-10-30 (owner + realtor). They fill in and can be edited before sending.
+const DRAFT = {
+  owner:{ subject:h => `Your rental income estimate for ${h || "your home"}`,
+    body:(f, me, h, url) => `Hi ${f},
+
+${me.first} from Moose Management here. Here's a link to our Revenue Estimator with your home already filled in:
+
+${url}
+
+It shows a Conservative, Expected and Peak year for nightly rentals. These are gross rent before fees, and an estimate, not a guarantee. You can change any detail, like bedrooms, hot tub, minimum stay or how much you'd like to use the home yourself, and the numbers update right away.
+
+If you'd like to talk it through or get a full proposal, just reply to this email or call us at ${PHONE}.
+
+${me.full}
+Moose Management · Park City
+vacationrentalsparkcity.com` },
+  realtor:{ subject:h => `Rental income estimate for ${h || "your listing"}, for you and your client`,
+    body:(f, me, h, url) => `Hi ${f},
+
+${me.first} from Moose Management here. Here's our Revenue Estimator with ${h || "the home"} already filled in:
+
+${url}
+
+It shows a Conservative, Expected and Peak year for nightly rentals: gross rent before fees, an estimate, not a guarantee. Your buyer or seller can change any detail, like bedrooms, hot tub, minimum stay or owner use, and see the numbers update.
+
+You're welcome to send this link to your clients, or use it for other listings by typing in a different address.
+
+If a client wants a full rental proposal for a home, or you'd like to talk through a property, reply here or call us at ${PHONE}.
+
+${me.full}
+Moose Management · Park City
+vacationrentalsparkcity.com` } };
+const SH = { aud:"owner", link:null };
 function sendDlg(){
-  readForm();
+  readForm(); SH.link = null;
   const i = S.inp, d = $("#dlg");
   d.innerHTML = `<h3>Send the public estimator</h3>
-    <p class="muted">They get the public page with ${i.home_code || i.addr ? "<b>" + esc(i.home_code || i.addr) + "</b> and these details" : "these details"} already filled in. They see the public numbers and give their own contact info only if they want the PDF.</p>
-    <label>Their name (optional)<input id="sn"></label>
-    <label>Their email (only to email it)<input id="se" type="email"></label>
-    <label>Note for the email (optional)<textarea id="sx"></textarea></label>
-    <div id="sout"></div><p class="err" id="serr"></p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="link">Copy a link</button><button class="btn" data-act="mail">Email it</button><button class="btn" data-act="close">Close</button></div>`;
+    <p class="muted">They get the public page with ${i.home_code || i.addr ? "<b>" + esc(i.addr || i.home_code) + "</b> and these details" : "these details"} already filled in. They see the public numbers and give their own contact info only if they want the PDF.</p>
+    <div class="tabs" style="margin:6px 0">${[["owner","Owner"],["realtor","Realtor"]].map(([k, t]) => `<button class="chip${SH.aud === k ? " on" : ""}" data-aud="${k}">${t}</button>`).join("")}</div>
+    <label>Their name<input id="sn" placeholder="${SH.aud === "realtor" ? "Realtor's name (their clients' leads are tagged to them)" : "Optional"}"></label>
+    <label>Their email (to email it)<input id="se" type="email"></label>
+    <div id="sout"><button class="btn primary" data-act="mklink">Make the link + email</button></div>
+    <p class="err" id="serr"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-act="close">Close</button></div>`;
   d.showModal();
 }
-async function share(how){
-  const i = S.inp, n = $("#sn").value.trim(), e = $("#se").value.trim(), x = $("#sx").value.trim();
+function meNames(){ const full = (S.me && S.me.name) || ""; return { full, first:full.split(/\s+/)[0] || "" }; }
+async function mkLink(){
+  const i = S.inp, n = $("#sn").value.trim(), me = meNames();
   $("#serr").textContent = "";
-  if(how === "email" && !e){ $("#serr").textContent = "Type their email to email it."; return; }
+  if(SH.aud === "realtor" && !n){ $("#serr").textContent = "Type the realtor's name, so their clients' leads come back tagged to them."; return; }
   let w;
-  try { w = await worker("/hub/share", { inputs:i, to_name:n || null, to_email:how === "email" ? e : null, note:x || null }); }
+  try { w = await worker("/hub/share", { inputs:i, audience:SH.aud, ref:SH.aud === "realtor" ? n : me.first, to_name:n || null }); }
   catch(err){ $("#serr").textContent = err.message === "not_built" || err instanceof TypeError ? "Sending isn't switched on yet: the estimator project is adding pre-filled links to the Worker." : errText(err); return; }
+  SH.link = w;
+  const h = i.addr || i.home_code, f = n ? n.split(/\s+/)[0] : "there", D = DRAFT[SH.aud];
+  $("#sout").innerHTML = `<div class="url">${esc(w.url)}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><button class="btn" data-act="link">Copy the link</button></div>
+    <label>Subject<input id="ssub" value="${esc(D.subject(h))}"></label>
+    <label>Message (change anything; keep the link)<textarea id="sbody" style="min-height:260px">${esc(D.body(f, me, h, w.url))}</textarea></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="mail">Send from hello@moosemanagement.com</button><button class="btn" data-act="copymail">Copy the email to send it myself</button></div>
+    <p class="muted" style="margin:6px 0 0">Sent from hello@ through Freshdesk. If they reply, it lands in Freshdesk${me.first ? " assigned to " + esc(me.first) : ""}.</p>`;
+}
+async function save(how){
+  const i = S.inp, w = SH.link, n = $("#sn").value.trim(), e = $("#se").value.trim();
   const r = await sb.rpc("est_share_save", { p_how:how, p_url:w.url, p_token:w.token, p_state:i, p_home:i.home_code, p_addr:i.addr || null,
-    p_to_name:n || null, p_to_email:how === "email" ? e : null, p_note:x || null });
-  if(r.error){ $("#serr").textContent = errText(r.error); return; }
-  if(how === "link"){ try { await navigator.clipboard.writeText(w.url); } catch {}
-    $("#sout").innerHTML = `<p class="muted">Copied. Paste it into your email or text:</p><div class="url">${esc(w.url)}</div>`; }
-  else $("#sout").innerHTML = `<div class="note">Saved. The email goes out from hello@moosemanagement.com once Brandon OKs the email text; until then it waits under <b>Sent</b>.</div>`;
+    p_to_name:n || null, p_to_email:how === "email" ? e : null, p_audience:SH.aud,
+    p_subject:how === "email" ? $("#ssub").value.trim() : null, p_body:how === "email" ? $("#sbody").value : null });
   S.lists.sent = null;
+  if(r.error){ $("#serr").textContent = errText(r.error); return null; }
+  return r.data;
+}
+async function share(how){
+  if(!SH.link) return;
+  $("#serr").textContent = "";
+  if(how === "link"){ if(await save("link") == null) return; try { await navigator.clipboard.writeText(SH.link.url); } catch {}
+    $("#serr").innerHTML = `<span style="color:var(--forest-2)">Link copied.</span>`; return; }
+  if(how === "copy"){ if(await save("link") == null) return; try { await navigator.clipboard.writeText("Subject: " + $("#ssub").value + "\n\n" + $("#sbody").value); } catch {}
+    $("#serr").innerHTML = `<span style="color:var(--forest-2)">Email copied. Paste it into your own email.</span>`; return; }
+  if(!$("#se").value.trim()){ $("#serr").textContent = "Type their email to send it."; return; }
+  const b = $("[data-act=mail]"); b.disabled = true; b.textContent = "Sending…";
+  const id = await save("email"); if(id == null){ b.disabled = false; b.textContent = "Send from hello@moosemanagement.com"; return; }
+  const r = window.MM_EST_STUB ? { data:{ ok:true, ticket:1 } } : await sb.functions.invoke("est-share-send", { body:{ id } });
+  const ok = r.data && r.data.ok;
+  b.textContent = ok ? "Sent ✓" : "Send from hello@moosemanagement.com"; b.disabled = !!ok;
+  if(!ok) $("#serr").textContent = "Not sent: " + ((r.data && r.data.error) || errText(r.error)) + " It's saved under Sent as failed.";
+  else $("#serr").innerHTML = `<span style="color:var(--forest-2)">Sent from hello@ (Freshdesk #${esc(r.data.ticket)}).</span>`;
 }
 async function calibDlg(){
   const d = $("#dlg"), i = S.inp, exp = S.res && S.res.tiers && S.res.tiers.expected && S.res.tiers.expected.gross;
@@ -368,7 +432,10 @@ document.addEventListener("click", e => {
   else if(a === "clear"){ S.inp = blank(); S.src = {}; S.res = null; S.ctx = null; S.resErr = ""; S.find = ""; render(); }
   else if(a === "useaddr"){ readForm(); S.inp.addr = S.find; S.src.addr = "typed"; render(); }
   else if(a === "send") sendDlg();
+  else if(b.dataset.aud){ SH.aud = b.dataset.aud; sendDlg(); }
+  else if(a === "mklink") mkLink();
   else if(a === "link") share("link");
+  else if(a === "copymail") share("copy");
   else if(a === "mail") share("email");
   else if(a === "calib") calibDlg();
   else if(a === "calibsave") calibSave();
