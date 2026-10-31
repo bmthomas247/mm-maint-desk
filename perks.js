@@ -270,6 +270,7 @@ async function runRoute(v, quiet){
 
 window.perksView = async function(v){
   css(); draw(v); airports();
-  if(PF.pto === undefined){ const r = await sb.rpc("my_pto").catch(() => null); PF.pto = (r && r.data) || []; draw(v); }
+  if(PF.pto === undefined){ let r = null; try { r = await sb.rpc("my_pto"); } catch(e){}   // supabase-js builders have no .catch()
+    PF.pto = (r && r.data) || []; draw(v); }
 };
 })();
