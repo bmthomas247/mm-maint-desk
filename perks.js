@@ -1,7 +1,7 @@
 /* perks.js — Staffing ▸ Perks (Brandon 2026-10-30: "lets have a staffing: Perks, but only if we can build some type of cheap flight
    planner with our serpapi"). Route #/stf_perks, made in hub.html after hub_my_desks; follows the Staffing desk (hub_can('staffing')).
    Loaded by hub.html; uses its sb / esc / current / MM_CONFIG. Data: Edge Function perks-flights (SerpApi Google Travel Explore +
-   Google Flights; 15 new searches a person a day, a repeat within 6 hours is free; nothing saved with the person's name — hub_perks.sql).
+   Google Flights; no limit per person since 2026-10-30 (Brandon), a repeat within 6 hours comes from the cache; nothing saved with the person's name — hub_perks.sql).
    The hub never books or pays: every result links to Google Flights. */
 (function(){
 const PF = { tab:"explore", ex:null, rt:null, lim:null, busy:false, f:{} };
@@ -137,11 +137,10 @@ const foot = x => `<p class="muted sm" style="margin:10px 0 0">Source: Google Fl
 
 function draw(v){
   if(current() !== "stf_perks") return;
-  const L = PF.lim;
   v.innerHTML = `<div class="page prk wide"><h2 style="margin:0 0 4px">Perks</h2>
     <p class="muted" style="margin:0 0 12px">Extras for the Moose team.</p>
     <div class="card"><div class="row" style="justify-content:space-between"><b style="font-size:17px">✈️ Cheap flights</b>
-      ${L ? `<span class="muted sm">${L.left} of ${L.per_day} searches left today</span>` : ""}</div>
+      </div>
       <div class="tabs" style="margin-top:10px"><button data-tab="explore" class="${PF.tab === "explore" ? "on" : ""}">Where can I go cheap?</button><button data-tab="route" class="${PF.tab === "route" ? "on" : ""}">Check one trip</button></div>
       ${PF.tab === "explore" ? exploreForm() + exploreOut() : routeForm() + routeOut()}
       <p class="muted sm" style="margin:12px 0 0">Your searches aren't saved with your name. The hub doesn't book or pay for flights; you book your own trip.</p></div></div>`;
@@ -161,6 +160,5 @@ const IDS = ["exfr", "exmo", "exdu", "exin", "exmp", "exad", "exch", "exns", "ex
 
 window.perksView = async function(v){
   css(); draw(v);
-  if(!PF.lim){ const j = await call({ action:"limits" }).catch(() => null); if(j && j.ok) draw(v); }
 };
 })();
