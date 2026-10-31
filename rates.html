@@ -190,6 +190,13 @@ table{font-size:14px}th{color:var(--muted);font-weight:700}tr.click:hover td,.tb
 .fdstat{border-radius:10px;padding:6px 10px;margin-top:6px!important;font-size:13px;background:var(--ground)}.fdstat.accept{background:var(--greenbg)}.fdstat.reject{background:var(--ground)}.fdstat.later{background:var(--amberbg)}
 .fdbulk{background:var(--ground);border-radius:12px;padding:6px 10px}
 .fdacts .tab.fdgo{border-color:var(--moose,#88B535);background:var(--moose-soft,#eef5e0);font-weight:800}.fdacts .tab.on{background:var(--forest-2);color:#fff}
+.pk{position:relative;max-width:620px;margin:4px 0 8px}.pk input{width:100%;font-size:16px;padding:12px 52px 12px 14px;border-radius:14px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
+.pkbtn{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:20px;padding:6px 12px;cursor:pointer;color:var(--ink);min-width:44px;min-height:44px}
+.pklist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;max-height:380px;overflow:auto;background:var(--card);border:2px solid var(--moose,#88B535);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.pkrow{display:flex;flex-direction:column;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:15px}.pkrow:last-child{border-bottom:0}.pkrow span{font-size:12.5px;color:var(--muted)}
+.pkrow.hi,.pkrow:hover{background:var(--pine-soft,#eaf3da)}.pkrow.cur b::after{content:" · showing now";font-weight:600;color:var(--muted);font-size:12px}
+.pkgh{position:sticky;top:0;background:var(--ground);padding:6px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--line)}
+.pkrecent{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 6px}.pkrecent .tab{font-size:13px;min-height:32px;padding:5px 11px}
 /* stat tiles, like the Locks office */
 .rstats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
 .rstat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow);color:inherit;text-decoration:none;display:block}
@@ -223,7 +230,7 @@ body.inhub>header{display:none!important}
   <div class="card" id="rater"><h2 style="margin:0 0 8px">⭐ Home Rater</h2><p class="small muted" style="margin:0 0 8px">Score our homes 1–5 and pick which of two homes is nicer. Everyone's scores are combined in Rankings, next to Claude's AI score from the listing photos (ESTIMATE). The pricing engine will use these to price nicer homes higher within the same area.</p><div id="raterBody"></div></div>
   <div class="card" id="findings"><h2 style="margin:0 0 8px">🔎 Findings</h2><p class="small muted" style="margin:0 0 8px">Every night our tool checks pace, bookings and prices and lists what looks off, with the numbers and sources. Accept, Reject or Later - nothing is changed anywhere; accepted changes go on a Kolleen list.</p><div id="fdBody"></div></div>
   <div class="card" id="pulse"><h2 style="margin:0 0 8px">📈 Market pulse</h2><div id="pulseBody"></div></div>
-  <div class="setnav"><div class="pickhead"><h2 style="margin:0">1 · Pick a neighborhood or home</h2><span id="pickedLbl" class="pickedlbl hidden"></span><details id="homeSel" class="homesel hidden"><summary id="homeSelSum"></summary><div id="homeSelBox" class="homeselbox"></div></details></div><div class="setfind"><input id="setq" type="search" placeholder="Search neighborhood, unit or code (BHV, BHL 1403, 625-A4…)" autocomplete="off"><span id="setqn" class="small muted"></span></div><div id="tabs"></div></div>
+  <div class="setnav"><div class="pickhead"><h2 style="margin:0">1 · Pick a neighborhood or home</h2><span id="pickedLbl" class="pickedlbl hidden"></span><details id="homeSel" class="homesel hidden"><summary id="homeSelSum"></summary><div id="homeSelBox" class="homeselbox"></div></details></div><div class="pk"><input id="pkq" type="search" placeholder="Type a neighborhood, home or code (BHV, BHL 1403, EH A102…)" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="pklist"><button class="pkbtn" id="pkall" type="button" title="Show every neighborhood" aria-label="Show every neighborhood">▾</button><div class="pklist" id="pklist" role="listbox" hidden></div></div><div class="pkrecent" id="pkrecent"></div><div id="tabs" hidden></div></div>
   <div class="card" id="search">
     <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h2 style="margin:0">2 · Pick dates</h2><span id="rangeLbl" class="small muted"></span><span class="sp"></span><span class="small muted">Under each day:</span><button class="tab" id="calAdr" title="Average nightly rate of the comps open that day, before cleaning and tax">Daily rate (ADR)</button><button class="tab" id="calAllin" title="Average all-in price per night (cleaning, fees and tax spread over the stay)">All-in</button> <button class="tab" id="todayBtn">Today</button> <button class="tab" id="clearRange">Clear dates</button></div>
     <p class="small muted" id="calHelp">Pick check-in, then check-out. The number under each day is the average all-in rate per night across all our comps that are priced for that night (Airbnb incl. estimated tax, and Direct). Red = 60%+ of comps already blocked. Hover a day for the count.</p>
@@ -374,24 +381,49 @@ async function boot() {
   const groups = [];
   for (const s of sets) { const [c, t] = split(s.name); const g = groups[groups.length - 1];
     if (g && g.c === c) g.items.push([s, t]); else groups.push({ c, items: [[s, t]] }); }
-  // Accordion by county, with search by neighborhood, our unit or our short code (Brandon 2026-10-14).
+  // Neighborhood or home picker (Brandon 2026-10-30, was a county accordion): one search box with a drop-down like the Locks office.
+  // Type a neighborhood, home or code; ▾ lists every neighborhood by county; arrows + Enter work; recent picks sit under it.
+  // Picking a home opens its neighborhood showing only that home (the "Our homes" picker can add the rest back).
   for (const g of groups) { g.county = countyOf(g.c, g.items[0][0]); g.code = codeOf(g.c); }
-  const counties = [...new Set(groups.map(g => g.county))].sort((a, b) => (COUNTY_ORDER.indexOf(a) + 99 * (COUNTY_ORDER.indexOf(a) < 0)) - (COUNTY_ORDER.indexOf(b) + 99 * (COUNTY_ORDER.indexOf(b) < 0)));
-  // One county open at a time: opening one closes the others (Brandon 2026-10-20). Last one opened is remembered.
-  let openOne = null; try { openOne = localStorage.getItem("mmCounty"); } catch (e) {}
-  const row = g => `<div class="tgrp" data-key="${String((g.c + " " + g.code + " " + g.items.map(([s]) => s.name).join(" ")).toLowerCase().replace(/"/g, ""))}"><span class="tgname">${g.c}${g.code ? `<span class="tgcode">${g.code}</span>` : ""}</span>${g.items.map(([s, t]) =>
-    `<button class="tab" data-id="${s.id}" title="${s.name}">${(t || s.name).replace(/^Studio\s*[–-]\s*/i, "Studio ")}</button>`).join("")}</div>`;
-  $("tabs").innerHTML = counties.map(c => `<details class="county" data-c="${c}"${openOne === c ? " open" : ""}><summary>${c}<span class="small muted">${groups.filter(g => g.county === c).length} neighborhoods</span></summary><div class="tabs">${groups.filter(g => g.county === c).map(row).join("")}</div></details>`).join("");
-  $("tabs").onclick = e => e.target.dataset.id && load(e.target.dataset.id);
-  $("tabs").querySelectorAll("details.county").forEach(d => d.addEventListener("toggle", () => { if ($("setq").value) return; if (d.open) $("tabs").querySelectorAll("details.county[open]").forEach(o => { if (o !== d) o.open = false; }); else if ($("tabs").querySelector("details.county[open]")) return; try { localStorage.setItem("mmCounty", d.open ? d.dataset.c : ""); } catch (e) {} }));
-  // our unit labels per set, so "1403" or "BHL 1403" finds the right set
-  sb.from("comps").select("set_id,label").eq("tier", "Ours").eq("active", true).then(({ data }) => {
-    const bySet = {}; for (const r of data || []) (bySet[r.set_id] = bySet[r.set_id] || []).push(r.label.replace(/\s*\(.*?\)\s*$/, ""));
-    $("tabs").querySelectorAll(".tgrp").forEach(el => { const ids = [...el.querySelectorAll("[data-id]")].map(b => b.dataset.id);
-      el.dataset.key += " " + ids.flatMap(i => bySet[i] || []).join(" ").toLowerCase(); });
-    if ($("setq").value) filterSets();
-  });
-  $("setq").oninput = filterSets;
+  const cOrd = c => COUNTY_ORDER.indexOf(c) < 0 ? 99 : COUNTY_ORDER.indexOf(c);
+  const PK = { opts: [], list: [], hi: 0 };
+  PK.opts = groups.flatMap(g => g.items.map(([s]) => ({ kind: "set", set: s.id, title: s.name, sub: g.county + (g.code ? " · " + g.code : ""), county: g.county,
+    key: (s.name + " " + g.code + " " + g.county).toLowerCase() }))).sort((a, b) => cOrd(a.county) - cOrd(b.county));
+  sb.from("comps").select("id,set_id,label").eq("tier", "Ours").eq("active", true).then(({ data }) => {
+    for (const r of data || []) { const s = sets.find(x => x.id === r.set_id); if (!s) continue; const nm = houseName(r.label || r.id, s.name);
+      PK.opts.push({ kind: "home", id: r.id, set: r.set_id, title: nm, sub: s.name, county: countyOf(s.name, s), key: (nm + " " + (r.label || "") + " " + s.name + " " + codeOf(s.name)).toLowerCase() }); }
+    if (!$("pklist").hidden) pkList(); });
+  const recent = () => { try { return JSON.parse(localStorage.getItem("mmRecent") || "[]"); } catch (e) { return []; } };
+  const pkRecent = () => { const R = recent().filter(o => sets.some(s => s.id === o.set));
+    $("pkrecent").innerHTML = R.length ? `<span class="small muted">Recent</span>` + R.map((o, i) => `<button class="tab" data-rc="${i}">${o.kind === "home" ? "🏠 " : ""}${escH(o.title)}</button>`).join("") : "";
+    $("pkrecent").querySelectorAll("[data-rc]").forEach(b => b.onclick = () => pkPick(R[+b.dataset.rc])); };
+  const pkClose = () => { $("pklist").hidden = true; $("pkq").setAttribute("aria-expanded", "false"); };
+  const pkPick = async o => { if (!o) return; pkClose(); $("pkq").value = ""; $("pkq").blur();
+    try { localStorage.setItem("mmRecent", JSON.stringify([{ kind: o.kind, id: o.id, set: o.set, title: o.title }, ...recent().filter(x => !(x.kind === o.kind && (x.id || x.set) === (o.id || o.set)))].slice(0, 6))); } catch (e) {}
+    pkRecent();
+    await load(o.set);
+    if (o.kind === "home" && state._all?.comps.some(c => c.id === o.id)) { state.homeSel = new Set([o.id]); applyHomeSel(); renderHomeSel(); render(); } };
+  const pkList = all => {
+    const q = $("pkq").value.trim().toLowerCase(), ws = q.split(/\s+/).filter(Boolean);
+    let L = PK.opts.filter(o => (q ? ws.every(w => o.key.includes(w)) : o.kind === "set"));
+    if (q) L.sort((a, b) => { const sa = a.title.toLowerCase().startsWith(q) ? 0 : 1, sb2 = b.title.toLowerCase().startsWith(q) ? 0 : 1; return sa - sb2 || (a.kind === b.kind ? 0 : a.kind === "set" ? -1 : 1); });
+    PK.list = L.slice(0, q ? 60 : 200); PK.hi = Math.min(PK.hi, Math.max(0, PK.list.length - 1));
+    let lastC = null;
+    $("pklist").innerHTML = PK.list.length ? PK.list.map((o, i) => (!q && o.county !== lastC ? `<div class="pkgh">${escH(lastC = o.county)}</div>` : "") +
+      `<div class="pkrow${i === PK.hi ? " hi" : ""}${o.set === state.set?.id && o.kind === "set" ? " cur" : ""}" role="option" data-i="${i}"><b>${o.kind === "home" ? "🏠 " : ""}${escH(o.title)}</b><span>${o.kind === "home" ? "Our home · " : ""}${escH(o.sub)}</span></div>`).join("")
+      : `<div class="pkrow"><span>Nothing matches "${escH(q)}"</span></div>`;
+    $("pklist").hidden = false; $("pkq").setAttribute("aria-expanded", "true");
+    $("pklist").querySelector(".pkrow.hi")?.scrollIntoView({ block: "nearest" }); };
+  $("pkq").oninput = () => { PK.hi = 0; pkList(); };
+  $("pkq").onfocus = () => pkList();
+  $("pkall").onclick = () => { if (!$("pklist").hidden) return pkClose(); $("pkq").value = ""; PK.hi = 0; pkList(); $("pkq").focus(); };
+  $("pkq").onkeydown = e => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if ($("pklist").hidden) return pkList(); PK.hi = (PK.hi + (e.key === "ArrowDown" ? 1 : -1) + PK.list.length) % Math.max(1, PK.list.length); pkList(); }
+    else if (e.key === "Enter") { e.preventDefault(); pkPick(PK.list[PK.hi]); }
+    else if (e.key === "Escape") pkClose(); };
+  $("pklist").onmousedown = e => { const r = e.target.closest("[data-i]"); if (r) { e.preventDefault(); pkPick(PK.list[+r.dataset.i]); } };
+  document.addEventListener("mousedown", e => { if (!e.target.closest(".pk")) pkClose(); });
+  pkRecent();
   let last = null; try { last = localStorage.getItem("mmSet"); } catch (e) {}
   load(sets.some(s => s.id === last) ? last : sets[0].id);
 }
