@@ -35,6 +35,7 @@ h2{font-size:17px;margin:26px 0 8px;font-weight:800}
 .btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;
   font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.small{min-height:30px;font-size:12.5px;padding:0 9px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
 .pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
 .pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
@@ -100,6 +101,7 @@ dialog.big[open]{display:flex}
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
 <dialog id="big" class="big"></dialog>
+<dialog id="osd" class="big"></dialog>
 <input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
@@ -275,13 +277,16 @@ function statsHtml(){
   <p class="src">Emails sent to ${esc(TABS[TAB])} lists in Brevo. ▲▼ compare with the 90 days before. Apple Mail privacy makes opens look higher than they are; clicks are the surer sign.</p>`;
 }
 
-/* ---------- Owners tab: list check (mkt_owner_check.py), owners in town (feeds/owner-stays), owners coming and going (Property Set Up) ---------- */
+/* ---------- Owners tab: list check (mkt_owner_check.py), owners in town (feeds/owner-stays), owner stay emails, owners coming and going (Property Set Up) ---------- */
 async function loadOwners(){
-  const [chk, stays, psu] = await Promise.all([
+  const [chk, stays, psu, os_, tev] = await Promise.all([
     sb.from("mkt_owner_check").select("ran_at,summary").order("ran_at", { ascending:false }).limit(1),
     sb.from("desk_docs").select("data").eq("collection", "feeds").eq("id", "owner-stays").maybeSingle(),
-    sb.from("pd_docs").select("id,code:data->>code,kind:data->>kind").eq("collection", "jobs")]);
-  S.own = { chk:(chk.data || [])[0] || null, stays:stays.error ? null : (stays.data && stays.data.data) || null, psu:psu.error ? null : psu.data || [] };
+    sb.from("pd_docs").select("id,code:data->>code,kind:data->>kind").eq("collection", "jobs"),
+    sb.from("mkt_owner_emails").select("*").eq("off", false).gte("stay_out", new Date(Date.now() - 10 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" })).order("stay_in"),
+    sb.from("mkt_town_events").select("*").eq("off", false).order("starts")]);
+  S.own = { chk:(chk.data || [])[0] || null, stays:stays.error ? null : (stays.data && stays.data.data) || null, psu:psu.error ? null : psu.data || [],
+    os:os_.error ? null : os_.data || [], ev:tev.error ? [] : tev.data || [] };
 }
 function ownersHtml(){
   const O = S.own || {}, c = O.chk && O.chk.summary, out = [];
@@ -305,6 +310,7 @@ function ownersHtml(){
         <td>${x.in < t ? `<span class="pill">here now</span>` : `<span class="pill green">arrives ${esc(fmtD(x.in).replace(/, \d{4}$/, ""))}</span>`}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="muted">No owner stays in the next 30 days.</p>`}
     <p class="src">Source: Track owner stays (feeds/owner-stays). A good time for a hello, a welcome gift or a quick walk-through.</p>`); }
+  out.push(osHtml());
   if(O.psu && O.psu.length){ const K = { str:"New homes being set up", h2:"New 2nd-home owners", off:"Leaving us", sale:"Home sales" };
     const by = {}; O.psu.forEach(j => (by[j.kind] = by[j.kind] || []).push(j));
     out.push(`<h2>Owners coming and going</h2><div class="kpis">${Object.keys(K).filter(k => by[k]).map(k => `<div class="kpi"><small>${K[k]}</small><b>${by[k].length}</b>
@@ -312,6 +318,166 @@ function ownersHtml(){
     <p class="src">Source: Property Set Up jobs. Ideas: a welcome email for new owners; move owners who leave to the Previous Owners list in Brevo.</p>`); }
   return out.join("");
 }
+
+/* ---------- Owners tab: owner stay emails (Brandon 2026-10-31; mkt_owner_emails ← mkt_owner_stays.py daily, hub_owner_stay_emails.sql).
+   One "during" + one "after" email per Track owner stay in the next 30 days. The wording is made here from the ticked items (OS_TEXT);
+   staff edit, save and tap Send → Edge Function owner-stay-send (Freshdesk outbound from hello@). Owner emails never reach this page. ---------- */
+const OS_TEXT_OK = false;   // false until Brandon OKs the wording below: Send stays off, drafts can still be reviewed and saved
+const OS = { row:null, items:null, edited:false, me:"", subject:"", body:"" };
+const osDay = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
+const osShort = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
+const osRange = r => { const a = osShort(r.stay_in), b = osShort(r.stay_out); return a.slice(0, 3) === b.slice(0, 3) ? `${a}–${b.slice(4)}` : `${a} – ${b}`; };
+const osEvLine = e => `• ${e.title}${e.venue && !e.title.toLowerCase().includes(e.venue.split(",")[0].toLowerCase()) ? ` at ${e.venue.split(",")[0]}` : ""}, ${osDay(e.day)}${e.end && e.end !== e.day ? ` to ${osDay(e.end)}` : ""}`
+  + `${e.time ? `, ${e.time}` : ""}${e.price ? ` (${e.price})` : ""}${e.url && !/google\.com\/search/.test(e.url) ? `\n  ${e.url}` : ""}`;
+// The wording Brandon OKs (2026-10-31: waiting). Facts come only from the ticked items, each with its source on the page.
+const OS_TEXT = {
+  during(r, it, me){
+    const t = osRange(r), here = r.stay_in <= today(), ev = it.events.filter(e => e.on), td = it.todo.filter(x => x.on);
+    return { subject:`What's happening in Park City during your stay (${t})`,
+      body:[`Hi ${r.greet_name || "there"},`,
+        here ? `We see you're at your home through ${osShort(r.stay_out)}. Welcome back!` : `We see you'll be at your home ${t}. We're looking forward to having you back!`,
+        ...(ev.length ? [`Here's what's happening around town while you're here:`, ev.map(osEvLine).join("\n")] : []),
+        ...(td.length ? [`While you're there, a few things that would help us take great care of your home:`, td.map(x => "• " + x.text).join("\n")] : []),
+        `Need anything during your stay, a walk-through, or something looked at? Just reply to this email or call us at 435-714-6544.`,
+        `Enjoy your stay!\n${me || "The Moose Management team"}\nMoose Management`].join("\n\n") }; },
+  after(r, it, me){
+    const td = it.todo.filter(x => x.on);
+    return { subject:`Thanks for staying at your home. Anything you need?`,
+      body:[`Hi ${r.greet_name || "there"},`,
+        `Thanks for spending time at your home ${osRange(r)}. We hope it was a great stay!`,
+        `Did anything come up while you were there that you'd like us to take care of? Something that needs fixing, supplies running low, or a change you'd like before your next visit: just reply to this email and we'll get on it.`,
+        ...(td.length ? [`We'd also love your take on:`, td.map(x => "• " + x.text.replace(/^(.*?)\. \d+ guest reviews.*$/, "$1")).join("\n")] : []),
+        `Thanks again,\n${me || "The Moose Management team"}\nMoose Management\n435-714-6544`].join("\n\n") }; }
+};
+// same text -> HTML rules as functions/owner-stay-send (paragraphs, "• " lines as a list, links)
+const osLink = s => esc(s).replace(/https:\/\/[^\s<)]+/g, u => `<a href="${u}">${u.length > 60 ? "more info" : u}</a>`);
+const osHtmlMail = t => t.trim().split(/\n{2,}/).map(p => /^\s*[•\-]\s/.test(p)
+  ? "<ul>" + p.split(/\n(?=\s*[•\-]\s)/).map(l => "<li>" + osLink(l.replace(/^\s*[•\-]\s/, "")).replace(/\n\s*/g, "<br>") + "</li>").join("") + "</ul>"
+  : "<p>" + p.split("\n").map(osLink).join("<br>") + "</p>").join("");
+
+function osItems(r){   // the row's items + any town event added since the last daily run that falls in the stay
+  const it = JSON.parse(JSON.stringify(r.items || {})); it.events = it.events || []; it.todo = it.todo || [];
+  if(r.kind === "during"){ const lo = r.stay_in > today() ? r.stay_in : today(), have = new Set(it.events.map(e => e.id));
+    (S.own.ev || []).forEach(e => { const id = "te" + e.id; if(have.has(id) || e.starts > r.stay_out || (e.ends || e.starts) < lo) return;
+      it.events.push({ id, title:e.title, venue:e.venue || "", day:e.starts, end:e.ends, time:e.time_text || "", price:e.price_text || "", url:e.url || "", source:e.source, on:false, fresh:true }); });
+    it.events.sort((a, b) => a.day.localeCompare(b.day)); }
+  return it;
+}
+const OSST = { draft:["", "Draft"], sending:["blue", "Sending…"], sent:["green", "Sent"], failed:["red", "Not sent"], skipped:["", "Skipped"] };
+function osHtml(){
+  if(!S.own || !S.own.os) return "";
+  const rows = S.own.os, t = today(), by = {};
+  rows.forEach(r => { const k = r.home + "|" + r.stay_in; by[k] = by[k] || { home:r.home, r }; by[k][r.kind] = r; });
+  const stays = Object.values(by).sort((a, b) => a.r.stay_in.localeCompare(b.r.stay_in));
+  const cell = (r, kind) => { if(!r) return `<span class="muted">—</span>`; const [tone, lab] = OSST[r.status] || ["", r.status];
+    const wait = kind === "after" && r.status === "draft" && r.stay_out > t;
+    return `<span class="pill ${tone}">${lab}</span>${r.status === "draft" && !r.auto ? ` <span class="pill blue">edited</span>` : ""}${wait ? ` <span class="muted">from ${esc(osShort(r.stay_out))}</span>` : ""}
+      <button class="btn small" data-os="${r.id}">${["draft", "failed"].includes(r.status) ? "✏️ Open" : "👁 See"}</button>`; };
+  const ev = (S.own.ev || []).filter(e => (e.ends || e.starts) >= t);
+  return `<h2>Owner stay emails</h2><p class="muted">For owners staying in their home in the next 30 days: what's on in town during their dates and a short "while you're here" list, then an "anything you need?" email after they leave. Nothing goes out until someone taps Send.</p>
+  ${OS_TEXT_OK ? "" : `<div class="note">The email wording is waiting for Brandon's OK, so Send is off for now. You can open, edit and save drafts.</div>`}
+  ${stays.length ? `<div class="box"><table><thead><tr><th>Home</th><th>Owner</th><th>Stay</th><th>During the stay</th><th>After the stay</th></tr></thead><tbody>
+    ${stays.map(s => `<tr><td><b>${esc(s.home)}</b></td><td>${esc(s.r.greet_name || "")}<div class="muted">${esc(s.r.owner_label || "no Track owner")}</div></td>
+      <td>${esc(osRange(s.r))}${s.r.stay_in <= t ? ` <span class="pill">here now</span>` : ""}</td><td>${cell(s.during, "during")}</td><td>${cell(s.after, "after")}</td></tr>`).join("")}</tbody></table></div>`
+    : `<p class="muted">No owner stays in the next 30 days.</p>`}
+  <p class="src">Source: Track owner stays (feeds/owner-stays, type "Owner Stay"; owner-guest stays left out) and Track owners (feeds/owners, matched by Track owner id), rebuilt daily by mkt_owner_stays.py${rows.length ? `, last ${esc(fmtDT(rows.reduce((m, r) => r.built_at > m ? r.built_at : m, "")))}` : ""}. Sent from hello@ through Freshdesk; a reply comes back as a Freshdesk ticket.</p>
+  <h2 style="font-size:15px">Town events for these emails</h2>
+  <div class="bar"><button class="btn" data-osadd="1">+ Add an event</button><span class="muted">From a newsletter, a website or a flyer. Always say where it came from.</span></div>
+  <details><summary class="muted" style="cursor:pointer">${ev.length} added by hand (Google local events, Ticketmaster and Penny's town calendar are added automatically)</summary>
+  ${ev.length ? `<div class="box"><table><thead><tr><th>When</th><th>Event</th><th>Source</th><th></th></tr></thead><tbody>${ev.map(e => `<tr><td>${esc(osDay(e.starts))}${e.ends && e.ends !== e.starts ? ` – ${esc(osDay(e.ends))}` : ""}</td>
+    <td><b>${esc(e.title)}</b><div class="muted">${esc([e.venue, e.time_text, e.price_text].filter(Boolean).join(" · "))}</div></td>
+    <td class="wrapc">${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.source)}</a>` : esc(e.source)}<div class="muted">added by ${esc(e.added_name || "?")}</div></td>
+    <td><button class="btn small" data-evoff="${e.id}" title="Hide this event">Hide</button></td></tr>`).join("")}</tbody></table></div>` : ""}</details>`;
+}
+async function osOpen(id){
+  const r = S.own.os.find(x => x.id == id); if(!r) return;
+  OS.row = r; OS.items = osItems(r); OS.edited = !r.auto && !!r.body;
+  if(!OS.me){ try { const m = await sb.rpc("hub_me"); OS.me = ((m.data && m.data.name) || "").split(" ")[0]; } catch(e){} }
+  OS.subject = r.subject || ""; OS.body = r.body || "";
+  if(!OS.edited){ const c = OS_TEXT[r.kind](r, OS.items, OS.me); OS.subject = c.subject; OS.body = c.body; }
+  osDraw(); const d = $("#osd"); if(!d.open) d.showModal();
+}
+function osDraw(){
+  const r = OS.row, it = OS.items, ro = !["draft", "failed"].includes(r.status), early = r.kind === "after" && r.stay_out > today();
+  const item = (x, g) => `<label style="display:flex;gap:8px;align-items:flex-start;font-weight:600;margin:6px 0"><input type="checkbox" data-osi="${g}:${esc(x.id)}" ${x.on ? "checked" : ""} ${ro ? "disabled" : ""} style="width:auto;margin-top:4px">
+    <span>${g === "events" ? esc(osEvLine(x).replace(/^• /, "").replace(/\n[\s\S]*$/, "")) : esc(x.text)}${x.staff ? ` <span class="pill amber">staff pick</span>` : ""}${x.fresh ? ` <span class="pill blue">new</span>` : ""}
+    <span class="src" style="display:block;margin:2px 0 0">${x.url && /^https:/.test(x.url) ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.source)}</a>` : esc(x.source)}</span>
+    ${x.detail ? `<span class="src" style="display:block;margin:2px 0 0">For you, not in the email: ${esc(x.detail)}</span>` : ""}</span></label>`;
+  $("#osd").innerHTML = `<div class="dhead"><h3>${r.kind === "after" ? "After the stay" : "During the stay"} · ${esc(r.home)} · ${esc(r.greet_name || "")} (${esc(osRange(r))})</h3>
+    <span class="status" id="osst">${r.status === "sent" ? `Sent by ${esc(r.sent_name || "")} ${esc(fmtDT(r.sent_at))}${r.fd_ticket ? ` · Freshdesk #${esc(r.fd_ticket)}` : ""}` : r.status === "failed" ? `<span class="err">${esc(r.error || "Not sent")}</span>` : r.edited_name ? `Saved by ${esc(r.edited_name)} ${esc(fmtDT(r.edited_at))}` : ""}</span>
+    ${ro ? "" : `<button class="btn" data-ossave="1">💾 Save</button><button class="btn primary" data-ossend="1" ${!OS_TEXT_OK || early ? "disabled" : ""} title="${!OS_TEXT_OK ? "Waiting for Brandon to OK the wording" : early ? "Can go out on or after " + osShort(r.stay_out) : "Send from hello@moosemanagement.com"}">✉️ Send from hello@</button>
+      <button class="btn" data-osskip="1">Skip</button>`}${r.status === "skipped" ? `<button class="btn" data-osback="1">Bring back</button>` : ""}<button class="btn" data-osclose="1">Close</button></div>
+  <div class="des"><div class="ed">
+    ${r.res_id ? `<p class="src">Track res #${esc(r.res_id)} · ${esc(r.stay_label || "")}${r.owner_label ? ` · Track owner: ${esc(r.owner_label)}` : ""}</p>` : ""}
+    ${r.kind === "during" ? `<h3 style="font-size:14px;margin:8px 0 2px">What's on during their dates</h3>${it.events.length ? it.events.map(x => item(x, "events")).join("") : `<p class="muted">No events we know of on these dates. Add one under Town events.</p>`}` : ""}
+    <h3 style="font-size:14px;margin:12px 0 2px">${r.kind === "during" ? "While you're here" : "Ask about"}</h3>${it.todo.length ? it.todo.map(x => item(x, "todo")).join("") : `<p class="muted">Nothing from the hub for this home.</p>`}
+    ${ro ? "" : `<p class="muted" id="osmode" style="margin-top:12px">${OS.edited ? `You changed the words. <button class="btn small" data-osre="1">↻ Rewrite from ticked items</button>` : "Ticking items rewrites the message."}</p>`}
+    <label>Subject<input id="ossub" value="${esc(OS.subject)}" ${ro ? "readonly" : ""}></label>
+    <label>Message<textarea id="osbody" style="min-height:280px" ${ro ? "readonly" : ""}>${esc(OS.body)}</textarea></label>
+    ${r.note ? `<p class="muted">Note: ${esc(r.note)}</p>` : ""}
+  </div><div id="ospv" style="display:flex;min-height:0;min-width:0"></div></div>`;
+  osPreview();
+}
+function osPreview(){ const box = $("#ospv"); if(box) box.innerHTML = frame(`<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#222;max-width:600px;margin:16px auto;padding:0 16px">
+  <p style="color:#888;font-size:13px">Subject: ${esc(OS.subject)}<br>From: Moose Management &lt;hello@moosemanagement.com&gt;</p>${osHtmlMail(OS.body)}</div>`, false); }
+function osRecompose(){ const c = OS_TEXT[OS.row.kind](OS.row, OS.items, OS.me); OS.subject = c.subject; OS.body = c.body; OS.edited = false; osDraw(); }
+async function osSave(){
+  const r = OS.row, items = JSON.parse(JSON.stringify(OS.items)); [...items.events, ...items.todo].forEach(x => delete x.fresh);
+  const q = await sb.rpc("mkt_owner_email_save", { p_id:r.id, p_subject:OS.subject, p_body:OS.body, p_items:items });
+  if(q.error){ $("#osst").innerHTML = `<span class="err">${esc(q.error.message)}</span>`; return false; }
+  Object.assign(r, { subject:OS.subject, body:OS.body, items, auto:false, edited_name:"you", edited_at:new Date().toISOString() });
+  $("#osst").textContent = "Saved"; return true;
+}
+async function osSend(){
+  const r = OS.row;
+  if(!confirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
+  if(!(await osSave())) return;
+  $("#osst").textContent = "Sending…";
+  const { data, error } = await sb.functions.invoke("owner-stay-send", { body:{ id:r.id } });
+  if(error || !data || !data.ok){ let m = (data && data.error) || (error && error.message) || "Not sent";
+    try { const j = error && error.context && await error.context.json(); if(j && j.error) m = j.error; } catch(e){}
+    await loadOwners(); OS.row = S.own.os.find(x => x.id == r.id) || r; osDraw(); render(); $("#osst").innerHTML = `<span class="err">${esc(m)}</span>`; return; }
+  await loadOwners(); OS.row = S.own.os.find(x => x.id == r.id) || r; osDraw(); render();
+}
+function osEventDialog(){
+  const d = $("#dlg");
+  d.innerHTML = `<form method="dialog" id="osef"><h3 style="margin:0 0 4px">Add a town event</h3><p class="muted" style="margin:0">It shows in the owner emails for stays on those dates.</p>
+    <label>What<input name="title" required maxlength="200" placeholder="Dalla Terra Wine Dinner at Tupelo"></label>
+    <label>Where<input name="venue" placeholder="Tupelo, 1500 Kearns Blvd"></label>
+    <div style="display:flex;gap:8px"><label style="flex:1">Date<input name="starts" type="date" required></label><label style="flex:1">Last day (if more than one)<input name="ends" type="date"></label></div>
+    <div style="display:flex;gap:8px"><label style="flex:1">Time<input name="time" placeholder="6:30 PM"></label><label style="flex:1">Price<input name="price" placeholder="$95 per person"></label></div>
+    <label>Link (https://)<input name="url" type="url" pattern="https://.*"></label>
+    <label>Where did this come from?<input name="source" required placeholder="Park City Area Restaurant Association newsletter, Oct 30"></label>
+    <p class="err" id="ose"></p><div class="bar"><button class="btn primary" value="ok">Add</button><button class="btn" value="cancel" formnovalidate>Cancel</button></div></form>`;
+  d.showModal();
+  $("#osef").addEventListener("submit", async ev => { if(ev.submitter && ev.submitter.value === "cancel") return; ev.preventDefault(); const f = new FormData(ev.target);
+    const q = await sb.rpc("mkt_event_add", { p_title:f.get("title"), p_starts:f.get("starts"), p_ends:f.get("ends") || null, p_venue:f.get("venue"), p_time:f.get("time"),
+      p_price:f.get("price"), p_url:f.get("url"), p_source:f.get("source"), p_notes:null });
+    if(q.error){ $("#ose").textContent = q.error.message; return; }
+    d.close(); await loadOwners(); render(); });
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-os],[data-osadd],[data-evoff],[data-ossave],[data-ossend],[data-osskip],[data-osback],[data-osclose],[data-osre]"); if(!b) return;
+  if(b.dataset.os) return osOpen(b.dataset.os);
+  if(b.dataset.osadd) return osEventDialog();
+  if(b.dataset.evoff){ if(!confirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
+  if(b.dataset.osclose) return $("#osd").close();
+  if(b.dataset.osre) return osRecompose();
+  if(b.dataset.ossave) return osSave();
+  if(b.dataset.ossend) return osSend();
+  if(b.dataset.osskip || b.dataset.osback){ const skip = !!b.dataset.osskip, note = skip ? prompt("Why skip this one? (optional)") : "";
+    if(skip && note === null) return;
+    const q = await sb.rpc("mkt_owner_email_skip", { p_id:OS.row.id, p_skip:skip, p_note:note || "" });
+    if(q.error){ $("#osst").innerHTML = `<span class="err">${esc(q.error.message)}</span>`; return; }
+    await loadOwners(); OS.row = S.own.os.find(x => x.id == OS.row.id) || OS.row; osDraw(); render(); }
+});
+document.addEventListener("change", e => { const k = e.target.dataset && e.target.dataset.osi; if(!k) return;
+  const i = k.indexOf(":"), x = OS.items[k.slice(0, i)].find(y => String(y.id) === k.slice(i + 1)); if(x) x.on = e.target.checked;
+  if(!OS.edited) osRecompose(); });
+document.addEventListener("input", e => { if(e.target.id !== "ossub" && e.target.id !== "osbody") return;
+  OS.subject = $("#ossub").value; OS.body = $("#osbody").value;
+  if(!OS.edited){ OS.edited = true; const m = $("#osmode"); if(m) m.innerHTML = `You changed the words. <button class="btn small" data-osre="1">↻ Rewrite from ticked items</button>`; }
+  osPreview(); });
 
 /* ---------- Brevo email campaigns (mkt_campaigns, read by mkt_brevo_sync.py) + hub drafts (mkt_drafts) ---------- */
 // a campaign sent to more than one kind of list (e.g. Moose Magazine: guests + owners + everyone) files under General only
