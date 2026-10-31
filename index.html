@@ -528,7 +528,7 @@ function sideNav(DESKS, ORD){
                    adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest", adv_realtor:"Realtor", adv_general:"General" } },   // Brandon 2026-10-28; Realtor + General 2026-10-29
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
-                   rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
+                   rates:{ label:"Rates", icon:"chart", kids:{ rates:"Rates", rates_hotels:"Hotels", rates_report:"Report folio", revenue:"Revenue Estimator", rates_home_rater:"Home Rater" } },   // Revenue Estimator under Rates: Brandon 2026-10-28
                    competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } },
                    psu:{ label:"Property Set Up", icon:"home", kids:{ property_setup:"Launch Pad", psu_desc:"AI Description Tool", psu_photos:"Photo Compressor", psu_qr:"QR Code Generator" } },   // Brandon 2026-10-29   // Brandon 2026-10-28
                    cal:{ label:"Calendar", icon:"calendar", kids:{ cal_res:"Reservations", cal_office:"Office", cal_me:"Personal", cal_meet:"Meetings" } },
@@ -1136,7 +1136,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","sync","advertising","calendar"];   // calendar: its tabs show as "Calendar" under Moose Info
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], meet:["Meetings","people"], cal:["Calendar","calendar"], stf:["Staffing","clock"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
@@ -1310,6 +1310,7 @@ async function homeView(v){
     <div id="bdays"></div>
     <div id="chk"></div>
     <div id="ptips"></div>
+    <div id="hq"></div>
     <div class="card daily" id="daily"></div>
     <div class="card" id="ment"><b style="font-size:17px">🔔 Your Slack mentions</b><p class="muted">Loading…</p></div>
     ${DESKS.some(x => x.key === "cal_me") ? `<div class="card" id="mywk"><b style="font-size:17px">🗓️ Your week</b><p class="muted">Loading…</p></div>` : ""}
@@ -1324,7 +1325,7 @@ async function homeView(v){
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
   if(window.calHomeCard && $("#mywk")) calHomeCard($("#mywk"));   // calendar.js (2026-10-29)
-  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello(); pennyTips($("#ptips"));
+  loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello(); pennyTips($("#ptips")); homeQuick($("#hq"));
   if(window.checksHome) checksHome($("#chk"));   // checks.js: my checks + issues warning (Brandon 2026-10-29)
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
@@ -1631,6 +1632,42 @@ const TIP_GROUP = {
   "arrival_balance": { t: n => `${n} arrivals still owe a balance`, b: "Collect before they arrive.", link: "#/reservations", go: "Open Check lists" },
   "arrival_open_job": { t: n => `${n} arrivals have an open urgent job`, b: "Get these done before the guests arrive.", link: "#/maintenance", go: "Open the Workbench" },
 };
+/* Home page quick question (Brandon 2026-10-30): one "which home would you rather stay in?" + 3 reasons -> home_duels, the same
+   matchups the Home Rater + nightly Home Rater score use (hub_home_rater_live.sql: home_quick_q / home_quick_answer). Home Rater people only. */
+async function homeQuick(el){
+  if(!el || !DESKS.some(x => x.key === "rates_home_rater" || x.key === "rates")) return;
+  const today = new Date().toDateString(); let skip = ""; try { skip = localStorage.getItem("mm_hq_skip") || ""; } catch(e){}
+  if(skip === today) return;
+  const r = await sb.rpc("home_quick_q"), q = r.data;
+  if(r.error || !q || !q.homes || q.homes.length < 2){ el.innerHTML = ""; return; }
+  const [a, b] = q.homes; let pick = null, busy = false, n = 0;
+  const tile = (h, i) => `<button class="hqh" data-i="${i}" style="all:unset;box-sizing:border-box;cursor:pointer;display:block;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)">
+      ${h.photo ? `<img src="${esc(h.photo)}" alt="${esc(h.name)} listing photo" loading="lazy" style="width:100%;height:130px;object-fit:cover;display:block;background:var(--line)">` : `<div style="height:130px;display:flex;align-items:center;justify-content:center;background:var(--ground);font-size:34px">🏠</div>`}
+      <div style="padding:8px 10px"><b style="display:block">${esc(h.name)}</b><span class="muted" style="font-size:13px">${esc(h.hood || "")}${h.bedrooms ? " · " + h.bedrooms + " BR" : ""}${h.sleeps ? " · sleeps " + h.sleeps : ""}</span></div></button>`;
+  const WHY = [["Location", "📍 Location"], ["Inside the home", "🏠 Inside the home"], ["Amenities", "♨️ Amenities"]];
+  const draw = () => {
+    el.innerHTML = `<div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">⭐ Quick question</b>
+        <span class="muted" style="font-size:13px">Helps the Home Rater learn which homes guests love</span><a href="#" id="hqno" class="muted" style="margin-left:auto;font-size:13px">Not today</a></div>
+      <p style="margin:8px 0">${esc(q.question)}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${tile(a, 0)}${tile(b, 1)}</div>
+      <div id="hqwhy" style="display:${pick == null ? "none" : "block"};margin-top:10px"><p style="margin:0 0 6px"><b>Why ${pick == null ? "" : esc(q.homes[pick].name)}?</b> <span class="muted" style="font-size:13px">Tap one</span></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${WHY.map(([k, t]) => `<button class="btn" data-w="${esc(k)}">${t}</button>`).join("")}<a href="#" id="hqskip" class="muted" style="align-self:center;font-size:13px">Skip why</a></div></div>
+      <p class="muted" id="hqmsg" style="font-size:13px;margin:8px 0 0"></p></div>`;
+    el.querySelectorAll(".hqh").forEach(t => { const on = pick === +t.dataset.i; t.style.borderColor = on ? "var(--moose)" : "var(--line)"; t.style.boxShadow = on ? "0 0 0 2px var(--moose)" : "";
+      t.onclick = () => { pick = +t.dataset.i; draw(); }; });
+    $("#hqno").onclick = e => { e.preventDefault(); try { localStorage.setItem("mm_hq_skip", today); } catch(x){} el.innerHTML = ""; };
+    el.querySelectorAll("[data-w]").forEach(w => w.onclick = () => save(w.dataset.w));
+    if($("#hqskip")) $("#hqskip").onclick = e => { e.preventDefault(); save(null); };
+  };
+  const save = async why => { if(busy || pick == null) return; busy = true; $("#hqmsg").textContent = "Saving…";
+    const s = await sb.rpc("home_quick_answer", { p_a:a.id, p_b:b.id, p_winner:pick === 0 ? 1 : 0, p_why:why });
+    busy = false; if(s.error){ $("#hqmsg").textContent = s.error.message; return; }
+    n++;
+    el.innerHTML = `<div class="card"><b style="font-size:17px">⭐ Thanks!</b><p style="margin:6px 0">Saved to the Home Rater: <b>${esc(q.homes[pick].name)}</b>${why ? " for its " + esc(why.toLowerCase()) : ""}.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="hqmore">Another one</button>${DESKS.some(x => x.key === "rates_home_rater") ? `<a href="#/rates_home_rater">Open the Home Rater →</a>` : ""}</div></div>`;
+    $("#hqmore").onclick = () => homeQuick(el); };
+  draw();
+}
 async function pennyTips(box){
   if(!box) return;
   const r = await sb.from("penny_tips").select("id, rule, title, body, source, link, due, signal_id, action_label").eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(60);
