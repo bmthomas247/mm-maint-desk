@@ -1628,6 +1628,7 @@ async function pennyAsk(q){
 // Brandon 2026-10-30: tips of the same kind are bunched into ONE tip (e.g. Jeff's 5 owner-call tips = "look at rates on the Rates desk"),
 // with the homes listed inside; Done / 👍 / 👎 / Hide on a bunch marks every tip in it. The header shows Penny's face.
 const TIP_GROUP = {
+  "finding_followup": { t: n => `${n} pricing follow-ups people asked you about`, b: "Each one says who asked and what to do. Mark it Done when it's handled so they see it on The Lift.", link: null, go: "" },   // The Lift ▸ Findings "Ask someone" (2026-10-30)
   "signal:owner_call": { t: n => `Rates: ${n} homes have lots of open nights and score low`, b: "Look at these homes on the Rates desk and decide what to do with each one: change the price, or call the owner about what guests keep saying.", link: "#/rates", go: "Open the Rates desk" },
   "signal:rated_high_priced_low": { t: n => `Rates: ${n} homes rate high but are priced low`, b: "Look at these on the Rates desk and decide whether to raise the price.", link: "#/rates", go: "Open the Rates desk" },
   "signal:dup_jobs": { t: n => `${n} homes have the same job open more than once`, b: "Close the extra copies so each job is open only once.", link: "#/maintenance", go: "Open the Workbench" },
