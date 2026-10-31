@@ -340,6 +340,7 @@ table.t .mono{font-size:12px}
 .scrim.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);width:100%;max-width:560px;padding:20px;display:flex;flex-direction:column;gap:12px}
 .modal h3{font-size:16px}
+.modal.wide{max-width:860px}
 .modact{display:flex;gap:8px;justify-content:flex-end}
 .toast{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(90px);background:var(--ink);color:var(--ground);padding:9px 16px;border-radius:8px;font-size:13px;z-index:80;transition:transform .22s;box-shadow:var(--shadow);font-weight:500;max-width:calc(100vw - 32px)}
 .toast.show{transform:translateX(-50%) translateY(0)}
@@ -986,12 +987,13 @@ function routineRow(r){
   var lg=rlogFor(r), done=lg&&!lg.undone, ld=lastDone(r);
   return '<div class="rout'+(done?' doneit':'')+'"><input type="checkbox" class="cb" data-rtick="'+esc(r.id)+'"'+(done?' checked':'')+' aria-label="Done this period">'+
     '<span class="rt">'+esc(r.title)+(r.draft?' <span class="badge draft">Draft</span>':'')+'</span>'+
-    '<span class="rm"><span>'+esc(r.cadence)+'</span>'+(r.when?'<span>· '+esc(r.when)+'</span>':'')+(r.who?'<span>· '+esc(r.who)+'</span>':'')+
+    '<span class="rm"><span>'+esc(r.cadence)+'</span>'+(r.when?'<span>· '+esc(r.when)+'</span>':'')+(r.who?'<span>· '+esc(r.who)+'</span>':'')+(routineVendor(r)?'<span>· vendor '+esc(routineVendor(r).name||"")+'</span>':'')+
     (r.props&&r.props.length?'<span>· '+r.props.length+' homes</span>':'')+
     (done?'<span>· done by '+esc(nameFor(lg.by))+'</span>':(ld?'<span>· last '+esc(ago(ymd(ld.at)))+' by '+esc(nameFor(ld.by))+'</span>':''))+'</span>'+
     (isTrash(r)?trashBlock(r):'')+(r.detail?'<span class="rd">'+esc(r.detail)+'</span>':'')+
     '<span class="rbtns">'+(r.draft?'<button class="btn sm" data-rconfirm="'+esc(r.id)+'">Confirm</button>':'')+
     (r.cadence==="monthly"||r.cadence==="seasonal"?routineBwBtn(r):'')+
+    (r.cadence==="seasonal"&&vemMode()?'<button class="btn sm ghost" data-rvem="'+esc(r.id)+'">✉ Vendor email</button>':'')+
     '<button class="btn sm ghost" data-redit="'+esc(r.id)+'">Edit</button>'+(r.url?'<a class="golink" href="'+esc(r.url)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'</span></div>';
 }
 function routineBwBtn(r){ var k=sid("r_"+r.id+"_"+period(r)), q=S.bwq[k], ps=planState(r);
@@ -1005,7 +1007,7 @@ function routineBwBtn(r){ var k=sid("r_"+r.id+"_"+period(r)), q=S.bwq[k], ps=pla
 function vRoutines(){
   var rs=routines(), cols=[["seasonal","Seasonal & yearly","once a year"]];
   var h='<div class="sechead"><h2>Seasonal & yearly</h2><p>Heat tape, irrigation, spring and fall services — the once-a-year work. Plan each one by community so it spreads over the month. '+
-    'Trash is on its own Trash page and other weekly routines show on Today; filters, BBQ cleans and other repeat care are on Home care.</p><button class="btn pri" data-act="newroutine">+ Routine</button></div><div class="rcols" style="grid-template-columns:minmax(0,1fr)">';
+    'Trash is on its own Trash page and other weekly routines show on Today; filters, BBQ cleans and other repeat care are on Home care.</p><button class="btn pri" data-act="newroutine">+ Routine</button>'+(vemMode()?' <button class="btn" data-rvem="">✉ Vendor email</button>':'')+'</div><div class="rcols" style="grid-template-columns:minmax(0,1fr)">';
   cols.forEach(function(c){ var list=rs.filter(function(r){ return r.cadence===c[0]; }).map(function(r){ r._next=nextWhen(r.when); return r; })
       .sort(function(a,b){ return (a._next||"9999").localeCompare(b._next||"9999"); });
     var left=list.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
@@ -1021,6 +1023,96 @@ function vRoutines(){
     h+='</section>'; });
   return h+'</div>';
 }
+
+/* ===== Vendor on a routine + vendor schedule email (2026-10-31, Brandon's notes "Seasonal and yearly - assigning a vendor too" +
+   "Vendor scheduling emails with door codes and access dates"; like Freshdesk #103721). hub_site/hub_vendor_email.sql:
+   vendor_email_homes() gives address + Track codes + the vendor's Locks code + stays; vendor_email_log() keeps a MASKED copy;
+   vendor-email-send sends from hello@ (switch hub_flags vendor_email_send). Maintenance manager + admins only (hub_can('vendor_email')). */
+function vemMode(){ if(D._vem!==undefined) return D._vem; D._vem=null; var sb=window.MM_SB; if(!sb) return null;
+  sb.rpc("vendor_email_send_mode").then(function(r){ D._vem=(r&&r.data)||null; if(D._vem) schedule(); }); return null; }
+function routineVendor(r){ if(!r.vendorId && !r.vendorName) return null;
+  return D.vendors.filter(function(v){ return v.id===r.vendorId; })[0] || D.vendors.filter(function(v){ return v.name===r.vendorName; })[0] || {name:r.vendorName}; }
+function vendorEmailOf(v){ var m=String((v&&(v.contact||""))+" "+((v&&v.edit&&v.edit.how)||"")+" "+((v&&v.notes)||"")).match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/); return m?m[0]:""; }
+function vendorOptions(cur){ return '<option value="">— none —</option>'+D.vendors.slice().sort(function(a,b){ return a.name.localeCompare(b.name); })
+  .map(function(v){ return '<option value="'+esc(v.id)+'"'+(v.id===cur?' selected':'')+'>'+esc(v.name)+(vTrades(v)[0]?' · '+esc(vTrades(v)[0]):'')+'</option>'; }).join(""); }
+var VEM={};
+function vemKey(s){ return String(s||"").toLowerCase().replace(/\(.*?\)/g,"").replace(/[^a-z0-9 ]/g," ").split(/\s+/).filter(function(w){ return w.length>3 && !/^(services?|company|companies|solutions|repair|cleaning|heating|plumbing)$/.test(w); }); }
+function vemLockMatch(name,list){ var k=vemKey(name); return (list||[]).filter(function(c){ var ck=vemKey((c.company||"")+" "+(c.person||"")); return k.some(function(w){ return ck.indexOf(w)>-1; }); })[0]; }
+function mVendorEmail(rid){ var sb=window.MM_SB; if(!sb) return toast("Sign in first"); var r=rid?Object.assign({id:rid},S.recurring[rid]):{};
+  var v=routineVendor(r)||{}, homes=rid?routineHomes(r):[], t=today();
+  VEM={rid:rid||"", title:r.title||"", vendor:v, homes:homes, data:null, locks:null};
+  openModal("Vendor schedule email",'<div class="fields">'+
+    '<label class="f"><span>Vendor</span><select id="ve_v">'+vendorOptions(v.id)+'</select></label>'+
+    '<label class="f"><span>Vendor\'s own door code (Locks)</span><select id="ve_lock"><option value="">Loading…</option></select></label>'+
+    fld("ve_to","Send to (email)",vendorEmailOf(v),"email",'placeholder="name@vendor.com"')+fld("ve_cc","Cc (optional)","","text",'placeholder="another@vendor.com"')+
+    fld("ve_from","Open dates from",t,"date")+fld("ve_until","Open dates until",addDays(t,45),"date")+
+    area("ve_homes","Homes (one per line or comma)",homes.join(", "))+'</div>'+
+    '<div class="note">Codes come from Track (garage, door, key box, gate) and the vendor\'s own Locks code when they have one. Open dates skip guest, owner and lease stays; a check-out day counts as open (after 10 AM). Check everything before you send.</div>'+
+    '<div><button class="btn pri" data-vem="build">Build the email</button></div><div id="ve_out"></div><div id="ve_hist"></div>',null,null,'');
+  $("modal").classList.add("wide");
+  sb.rpc("vendor_code_list").then(function(x){ VEM.locks=(x&&x.data)||[]; var m=vemLockMatch(v.name||"",VEM.locks), s=$("ve_lock"); if(!s) return;
+    s.innerHTML='<option value="">— none (use each home\'s codes) —</option>'+VEM.locks.map(function(c){ return '<option value="'+c.id+'"'+(m&&m.id===c.id?' selected':'')+'>'+esc(c.company||c.person||c.label||"Vendor")+(c.role?' · '+esc(c.role):'')+(c.all_homes?' · all homes':' · '+c.homes+' homes')+'</option>'; }).join(""); });
+  vemHist(); }
+function vemHist(){ var sb=window.MM_SB; if(!sb||!VEM.rid) return; sb.rpc("vendor_email_recent",{p_routine_id:VEM.rid}).then(function(x){ var l=(x&&x.data)||[], el=$("ve_hist"); if(!el||!l.length) return;
+  el.innerHTML='<div class="lbl" style="margin:6px 0 4px">Sent or copied for this routine</div>'+l.map(function(e){ return '<div class="note" style="padding:2px 0">'+esc(fmtD(e.created_at))+' · '+esc(e.made_name||"")+' · '+
+    (e.how==="copy"?'copied':e.status==="sent"?'sent from hello@'+(e.fd_ticket?' (Freshdesk #'+e.fd_ticket+')':''):e.status==="failed"?'<b style="color:var(--stop)">failed</b>':e.status)+' · '+esc(e.to_email||e.vendor_name||"")+' · '+(e.homes||[]).length+' homes</div>'; }).join(""); }); }
+var MONL=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function lastOfMonth(d){ var x=new Date(Date.parse(d.slice(0,7)+"-01T12:00:00")); x.setMonth(x.getMonth()+1); x.setDate(0); return x.toISOString().slice(0,10); }
+function vemRange(a,b){ var A=fmtD(a), B=fmtD(b);
+  if(b===lastOfMonth(b)){ if(a.slice(8)==="01" && a.slice(0,7)===b.slice(0,7)) return "all "+MONL[+b.slice(5,7)-1]; if(a.slice(0,7)!==b.slice(0,7)) return A+" - all "+MONL[+b.slice(5,7)-1]; }
+  return a===b?A:A+" - "+B; }
+/* open days in [from,to]: a stay blocks arrival day .. the night before check-out */
+function vemOpen(stays,from,to){ var busy={}; (stays||[]).forEach(function(s){ for(var d=String(s["in"]).slice(0,10); d<String(s.out).slice(0,10); d=addDays(d,1)) busy[d]=1; });
+  var out=[], a=null, p=null; for(var d=from; d<=to; d=addDays(d,1)){ if(!busy[d]){ if(!a) a=d; p=d; } else if(a){ out.push([a,p]); a=null; } } if(a) out.push([a,p]);
+  return out; }
+function vemBuild(){ var sb=window.MM_SB, hs=fv("ve_homes").split(/[,\n]+/).map(function(x){ return canon(x.trim()); }).filter(Boolean), from=fv("ve_from"), to=fv("ve_until"), lock=fv("ve_lock");
+  if(!hs.length) return toast("Add at least one home"); if(!from||!to||to<from) return toast("Pick the open-dates range");
+  var vid=fv("ve_v"); VEM.vendor=D.vendors.filter(function(v){ return v.id===vid; })[0]||{}; $("ve_out").innerHTML='<div class="note">Looking up the homes…</div>';
+  sb.rpc("vendor_email_homes",{p_homes:hs,p_lock_id:lock?+lock:null,p_from:from,p_to:to}).then(function(x){
+    if(x.error){ $("ve_out").innerHTML='<div class="note" style="color:var(--stop)">'+esc(x.error.message)+'</div>'; return; }
+    var d=x.data; VEM.data=d; VEM.homes=hs; VEM.from=from; VEM.to=to; VEM.lock=lock?+lock:null;
+    var byCode={}; d.homes.forEach(function(h){ byCode[h.code]=h; });
+    var all=d.homes.length && d.homes.every(function(h){ return h.vendor_code; }) ? d.homes[0].vendor_code : null;
+    var lines=[], warn=[];
+    hs.forEach(function(c){ var h=byCode[c]; if(!h){ warn.push(c+": not one of our homes in Track"); return; }
+      var addr=[h.address,h.city,("UT "+(h.postal||"")).trim()].filter(Boolean).join(", "), L=["**"+h.code+"** - Address: "+(addr||"(no address in Track)")];
+      if(h.gate) L.push("Gate code: "+h.gate); if(h.garage) L.push("Garage code: "+h.garage);
+      if(h.vendor_code && !all) L.push("Door code (yours): "+h.vendor_code); else if(h.door && !all) L.push("Door code: "+h.door);
+      if(h.keybox) L.push("Key box: "+h.keybox);
+      if(!h.garage && !h.door && !h.keybox && !h.vendor_code && !all){ L.push("Access: call us before you go"); warn.push(h.code+": no code in Track — add one or call them"); }
+      var lease=(h.stays||[]).some(function(s){ return s.lease; });
+      if(lease){ L.push("Availability: tenant lives here - please call us to set a time"); }
+      else { var o=vemOpen(h.stays,from,to); L.push("Availability: "+(o.length?o.map(function(r){ return vemRange(r[0],r[1]); }).join(", "):"booked the whole time - please call us")); if(!o.length) warn.push(h.code+": booked the whole time"); }
+      lines.push(L.join("\n")); });
+    (d.missing||[]).forEach(function(c){ if(warn.join().indexOf(c)<0) warn.push(c+": not found"); });
+    var vname=(VEM.vendor.name||"").replace(/\s*\(.*?\)\s*/g," ").trim(), first=vname?"Hi "+vname+" team,":"Hi,";
+    var what=VEM.title||"this service";
+    var body=first+"\n\nHere are the homes for "+what+". Please reply with the date you're scheduled at each home.\n\n"+
+      (all?"**Door code for all homes: "+all+"**\n\n":"")+lines.join("\n\n")+
+      "\n\nPlease let us know if you have any questions.\n\nThank you,\n"+(nameFor(S.me)||"")+"\nMoose Management Vacation Rentals\nOffice: 435-714-6544 · hello@moosemanagement.com";
+    var subj=what+" - homes, access + open dates"+(vname?" ("+vname+")":"");
+    var canSend=D._vem==="send";
+    $("ve_out").innerHTML=(warn.length?'<div class="note" style="color:var(--wait)">'+warn.map(esc).join("<br>")+'</div>':'')+
+      '<div class="note">'+esc(d.source||"")+'</div>'+
+      '<label class="f"><span>Subject</span><input id="ve_subj" value="'+esc(subj)+'"></label>'+
+      '<label class="f"><span>Message (edit anything; **bold** shows as bold in the email)</span><textarea id="ve_body" style="min-height:320px;font-family:inherit">'+esc(body)+'</textarea></label>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-vem="copy">Copy the email</button>'+
+      (canSend?'<button class="btn pri" data-vem="send">Send from hello@</button>':'<span class="note">Sending from hello@ isn\'t switched on yet — copy it into Freshdesk for now.</span>')+'</div>';
+  }); }
+function vemArgs(){ return {to:fv("ve_to"), cc:fv("ve_cc"), subject:fv("ve_subj"), body:$("ve_body").value, homes:VEM.homes, from:VEM.from, to_date:VEM.to,
+  routine_id:VEM.rid||null, routine_title:VEM.title||null, vendor_name:VEM.vendor.name||null, vendor_id:VEM.vendor.id||null, lock_id:VEM.lock}; }
+function vemCopy(){ var sb=window.MM_SB, a=vemArgs(), txt="Subject: "+a.subject+"\n\n"+a.body.replace(/\*\*/g,"");
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(function(){ toast("Copied — paste it into Freshdesk"); },function(){ toast("Couldn't copy — select the text and copy it"); });
+  sb.rpc("vendor_email_log",{p_how:"copy",p_to:a.to||null,p_to_name:null,p_cc:a.cc||null,p_subject:a.subject,p_body:a.body,p_homes:a.homes,p_from:a.from,p_to_date:a.to_date,
+    p_routine_id:a.routine_id,p_routine_title:a.routine_title,p_vendor_name:a.vendor_name,p_vendor_id:a.vendor_id,p_lock_id:a.lock_id}).then(function(){ vemHist(); }); }
+function vemSend(){ var sb=window.MM_SB, a=vemArgs(); if(!a.to) return toast("Put the vendor's email in Send to");
+  if(!confirm("Send this to "+a.to+" from hello@moosemanagement.com?")) return;
+  var b=document.querySelector('[data-vem="send"]'); if(b){ b.disabled=true; b.textContent="Sending…"; }
+  sb.functions.invoke("vendor-email-send",{body:a}).then(function(x){ var r=x.data||{};
+    if(x.error||!r.ok){ var m=r.error||(x.error&&x.error.message)||"error"; if(x.error&&x.error.context&&x.error.context.json) x.error.context.json().then(function(j){ toast("Not sent: "+(j.error||m)); },function(){ toast("Not sent: "+m); }); else toast("Not sent: "+m); if(b){ b.disabled=false; b.textContent="Send from hello@"; } vemHist(); return; }
+    toast("Sent"+(r.ticket?" — Freshdesk #"+r.ticket:"")); if(b) b.textContent="Sent ✓"; vemHist(); }); }
+document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-vem],[data-rvem]"); if(!b) return; ev.preventDefault(); var d=b.dataset;
+  if(d.rvem!=null) return mVendorEmail(d.rvem); if(d.vem==="build") return vemBuild(); if(d.vem==="copy") return vemCopy(); if(d.vem==="send") return vemSend(); });
 
 /* ================= HOMES ================= */
 var HTYPES=[["str","Short-term rentals"],["lease","Lease"],["2h","Second homes"],["co","Moose Office"]];
@@ -3691,7 +3783,7 @@ function overnightPanel(){ var f=S.feeds["bw-overnight"]; if(!f||!(f.tasks||[]).
 var MOD=null;
 function openModal(title,body,onSave,saveLabel,extra){
   /* every pop-up gets a Back button and an X at the top (Brandon 2026-10-28); Esc also closes; clicking outside closes view-only pop-ups */
-  MOD=onSave; $("modal").innerHTML='<div class="mhead"><button class="btn sm mback" data-act="mclose">← Back</button><h3>'+esc(title)+'</h3><button class="mx" data-act="mclose" aria-label="Close" title="Close">✕</button></div>'+body+unitList()+'<div class="modact">'+(extra||'')+'<button class="btn" data-act="mclose">Cancel</button>'+
+  MOD=onSave; $("modal").classList.remove("wide"); $("modal").innerHTML='<div class="mhead"><button class="btn sm mback" data-act="mclose">← Back</button><h3>'+esc(title)+'</h3><button class="mx" data-act="mclose" aria-label="Close" title="Close">✕</button></div>'+body+unitList()+'<div class="modact">'+(extra||'')+'<button class="btn" data-act="mclose">Cancel</button>'+
     (onSave?'<button class="btn pri" data-act="msave">'+esc(saveLabel||"Save")+'</button>':'')+'</div>';
   $("scrim").classList.add("open"); $("scrim").dataset.view=onSave?"":"1"; var f=$("modal").querySelector("input,select,textarea"); if(f) f.focus(); }
 document.addEventListener("click",function(ev){ var sc=$("scrim"); if(sc && ev.target===sc && sc.dataset.view==="1") closeModal(); });
@@ -3741,12 +3833,14 @@ function mTime(id,pre){ var e=id?S.time[id]:(pre||{});
 function mRoutine(id){ var r=id?S.recurring[id]:{cadence:"weekly"};
   openModal(id?"Edit routine":"New routine",'<div class="fields">'+fld("m_title","Routine",r.title||"")+sel("m_cad","How often",[["daily","Daily"],["weekly","Weekly"],["monthly","Monthly"],["seasonal","Seasonal / yearly"]],r.cadence)+
     fld("m_when","When",r.when||"","text",'placeholder="e.g. Tuesday, 1st week, Early Nov"')+'<label class="f"><span>Who</span><select id="m_who">'+whoOptions(r.who||"","—")+'</select></label>'+
+    '<label class="f"><span>Vendor</span><select id="m_vendor">'+vendorOptions((routineVendor(r)||{}).id||"")+'</select></label>'+
     fld("m_cph","Cost per home $ (for projections)",r.costPerHome||"","number",'min="0" step="1"')+
     area("m_detail","Details",r.detail)+area("m_props","Homes (one per line or comma)",(r.props||[]).join(", "))+'</div>'+
     '<div class="note">Weekly: put a weekday in "When" and it shows on Today only that day. Seasonal: put month names (e.g. "Oct–Nov").</div>',
   function(){ var t=fv("m_title"); if(!t){ toast("Name the routine"); return; } var k=id||uid("r-");
     var props=fv("m_props").split(/[,\n]+/).map(function(s){return s.trim();}).filter(Boolean);
-    return put("recurring",k,{title:t,cadence:fv("m_cad"),when:fv("m_when"),who:fv("m_who"),detail:fv("m_detail"),props:props,costPerHome:+fv("m_cph")||0,draft:false,active:true},id?S.recurring[id]:null)
+    var vd=D.vendors.filter(function(v){ return v.id===fv("m_vendor"); })[0];
+    return put("recurring",k,{title:t,cadence:fv("m_cad"),when:fv("m_when"),who:fv("m_who"),vendorId:vd?vd.id:"",vendorName:vd?vd.name:"",detail:fv("m_detail"),props:props,costPerHome:+fv("m_cph")||0,draft:false,active:true},id?S.recurring[id]:null)
       .then(function(){ toast("Routine saved"); closeModal(); }); },"Save",
   id?'<button class="btn warn" data-act="mrouteoff" data-id="'+esc(id)+'" style="margin-right:auto">Turn off</button>':''); }
 
