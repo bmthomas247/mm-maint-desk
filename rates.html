@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rates · Moose Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -151,6 +151,45 @@ body{padding-left:0!important}
 #viewnav .tab.on{background:var(--teal2)!important;color:#fff!important;border-color:var(--teal2)!important;font-weight:600}
 @media (max-width:600px){#viewnav{flex-wrap:nowrap!important;overflow-x:auto!important;padding:8px 10px!important}#viewnav .tab{padding:7px 11px 7px 8px!important;font-size:13px!important}}
 </style>
+<style id="locksLook">
+/* ===== Locks office look (Brandon 2026-10-30): same palette, font, header, pill tabs, cards and stat tiles as locks-desk.html ===== */
+:root{--moose:#88B535;--moose-2:#A6CE39;--moose-ink:#2f4710;--moose-soft:#eef5e0;--forest:#3c5f12;--forest-2:#5b8a1e;--pine:#4f7a18;--pine-soft:#eaf3da;
+  --ground:#f5f7f0;--line-2:#cfd8cb;--shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06);
+  --bg:var(--ground);--card:#fff;--ink:#15201a;--ink2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--teal:#88B535;--teal2:#4f7a18;--tealbg:#eaf3da;--onteal:#16220a;
+  --red:#c8382b;--redbg:#fbe7e4;--amber:#b5770a;--amberbg:#fbf0d9}
+@media (prefers-color-scheme:dark){:root{--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;
+  --pine-soft:#173026;--moose-soft:#1e2a10;--moose-ink:#cfe79a;--tealbg:#173026;--teal2:#b5da72;--redbg:#3a1714;--amberbg:#33270c;--shadow:0 1px 2px rgba(0,0,0,.3)}}
+body{background:var(--ground);font-family:"Manrope",Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased}
+header{background:linear-gradient(135deg,var(--forest),var(--forest-2));border-bottom:0;box-shadow:0 2px 12px rgba(10,30,20,.18);padding:14px 16px 16px}
+header h1{font-size:19px;font-weight:800;letter-spacing:-.01em}header h1 span{color:var(--moose-2)}
+header img{border-radius:50%!important;width:46px;height:46px!important;object-fit:contain;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 2px 8px rgba(0,0,0,.25)}
+main{max-width:min(1800px,calc(100vw - 48px))}
+.card{border-radius:18px;box-shadow:var(--shadow);border-color:var(--line)}
+.card h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+h3,.chh{font-weight:800}
+b,strong{font-weight:800}
+.tab{border-color:var(--line-2);color:var(--ink);font-weight:700;border-radius:11px;min-height:36px;padding:7px 13px}
+.tab.on{background:var(--forest-2);border-color:var(--forest-2);color:#fff;font-weight:800}
+#viewnav{position:sticky;top:0;z-index:5;background:var(--ground)!important;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;box-shadow:none!important;
+  margin:-16px -16px 14px!important;padding:12px 16px!important;gap:6px!important}
+#viewnav .tab{display:inline-flex;align-items:center;gap:8px;padding:9px 16px 9px 12px;font-size:14px;font-weight:800;border-radius:14px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);color:var(--muted)}
+#viewnav .tab.on{background:var(--forest-2);border-color:var(--forest-2);color:#fff}
+#viewnav .navnote{display:none}
+.kpi,.hftile{border-radius:16px;background:var(--card);box-shadow:var(--shadow)}.kpi b{color:var(--ink);font-size:26px;font-weight:800;letter-spacing:-.02em}
+input,select,textarea{border-radius:13px;border-color:var(--line-2)}
+input:focus,select:focus,textarea:focus{outline:3px solid var(--moose-soft);border-color:var(--moose)}
+table{font-size:14px}th{color:var(--muted);font-weight:700}tr.click:hover td,.tbl tr:hover td{background:var(--ground)}
+.county{border-radius:14px;box-shadow:var(--shadow)}
+.pill{border-radius:999px;font-weight:800}
+.flag{border-radius:14px}
+/* stat tiles, like the Locks office */
+.rstats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.rstat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow);color:inherit;text-decoration:none;display:block}
+.rstat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1}.rstat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px}
+.rstat.warn .n{color:var(--red)}a.rstat:hover{border-color:var(--moose)}
+main.v-pulse>#rstats,main.v-hotels>#rstats,main.v-rater>#rstats,main.v-reports>#rstats,main.v-beyond>#rstats,main.v-findings>#rstats{display:none!important}
+@media (max-width:700px){.rstats{grid-template-columns:repeat(2,1fr)}main{max-width:none}#viewnav{margin:-16px -16px 12px!important}}
+</style>
 </head>
 <body>
 <header><img src="https://www.vacationrentalsparkcity.com/wp-content/uploads/2024/07/Vacation-Rentals-Park-City-Moose-management-logo-.png" alt="" style="height:34px;background:#fff;border-radius:6px;padding:2px 4px"><h1>Moose Management <span>Rates Desk</span></h1><div class="sp"></div><span id="runinfo" class="small" style="opacity:.8"></span><button id="out" class="tab hidden">Sign out</button></header>
@@ -168,7 +207,8 @@ body{padding-left:0!important}
     <button class="tab" id="landBtn" title="Compares Track's current rates and minimums with the last sheet we sent">Did it land?</button>
     <button class="tab" id="matchBtn" title="Possible same-home matches across Airbnb / VRBO for you to confirm">Review matches</button>
     <span id="weeklyMsg" class="small muted"></span></div><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">✅ Pricing check · what to bring up with Kolleen this week</h3><div id="kolOut"></div></section><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">🧮 Our price vs Beyond <span class="small muted">(shadow pricing: what our own tool would charge, never sent anywhere)</span></h3><div id="ovbOut"></div></section><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">📊 Backtest · last season vs comps <span class="small muted">(Sep 2025 – Aug 2026, how each home actually did)</span></h3><div id="btOut"></div></section><div id="landOut"></div></div>
-  <div class="card" id="viewnav" style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="tab on" data-v="desk" title="Desk: comps, rates and calendars"><span class="ic">🏠</span><span>Desk</span></button><button class="tab" data-v="pulse" title="Market pulse: searches, markets, flights, news, events"><span class="ic">📈</span><span>Market pulse</span></button><button class="tab" data-v="rater" title="Score and rank our homes"><span class="ic">⭐</span><span>Home Rater</span></button><button class="tab" data-v="findings" title="Nightly checks with Accept / Reject (PriceLabs-style findings queue)"><span class="ic">🔎</span><span>Findings</span></button><button class="tab" data-v="beyond" title="Weekly Kolleen sheet, Did it land?, matches to review"><span class="ic">🤝</span><span>Beyond Pricing</span></button><span class="small muted navnote">Market pulse = searches, stock markets, currencies, flights, news and events.</span></div>
+  <div class="card" id="viewnav" style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="tab on" data-v="desk" title="Desk: comps, rates and calendars"><span class="ic">🏠</span><span>Desk</span></button><button class="tab" data-v="pulse" title="Market pulse: searches, markets, flights, news, events"><span class="ic">📈</span><span>Market pulse</span></button><button class="tab" data-v="findings" title="Nightly checks with Accept / Reject (PriceLabs-style findings queue)"><span class="ic">🔎</span><span>Findings</span></button><button class="tab" data-v="beyond" title="Weekly Kolleen sheet, Did it land?, matches to review"><span class="ic">🤝</span><span>Beyond Pricing</span></button><span class="small muted navnote">Market pulse = searches, stock markets, currencies, flights, news and events.</span></div>
+  <div class="rstats" id="rstats"></div>
   <div class="card" id="reports"><h2 style="margin:0 0 8px">📋 Reports</h2><p class="small muted" style="margin:0 0 8px">Reports to share with owners or between ourselves. Kolleen-facing downloads carry rates only (no comp data).</p><div id="reportsBody"></div></div>
   <div class="card" id="rater"><h2 style="margin:0 0 8px">⭐ Home Rater</h2><p class="small muted" style="margin:0 0 8px">Score our homes 1–5 and pick which of two homes is nicer. Everyone's scores are combined in Rankings, next to Claude's AI score from the listing photos (ESTIMATE). The pricing engine will use these to price nicer homes higher within the same area.</p><div id="raterBody"></div></div>
   <div class="card" id="findings"><h2 style="margin:0 0 8px">🔎 Findings</h2><p class="small muted" style="margin:0 0 8px">Every night our tool checks pace, bookings and prices and lists what looks off, with the numbers and sources. Accept, Reject or Later - nothing is changed anywhere; accepted changes go on a Kolleen list.</p><div id="fdBody"></div></div>
@@ -301,6 +341,8 @@ async function boot() {
   const [{ data: sets, error }, { data: runs }] = await Promise.all([
     sb.from("rate_sets").select("*").eq("active", true).order("name"),
     sb.from("runs").select("*").order("started_at", { ascending: false }).limit(1)]);
+  if ((error || !sets?.length) && new URLSearchParams(location.search).get("view") === "rater") {
+    document.body.classList.add("solo"); state.sets = []; state.raterOnly = true; setView("rater"); return; }
   if (error || !sets?.length) { $("flags").innerHTML = `<p>This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
   const r = runs?.[0];
   if (r) $("runinfo").textContent = `Last pull ${new Date(r.started_at).toLocaleString()} · ${r.mode} · ${r.status} · ${r.rows_written} rows`;
@@ -310,11 +352,12 @@ async function boot() {
   const cx = n => split(n)[0].replace(/^the\s+/i, "").toLowerCase();
   sets.sort((a, b) => cx(a.name).localeCompare(cx(b.name)) || (([x1, y1], [x2, y2]) => x1 - x2 || y1 - y2)(typeKey(split(a.name)[1]), typeKey(split(b.name)[1])));
   state.sets = sets;
+  rStats(r);
   loadMarket(); $("hotCard").addEventListener("toggle", renderHotels);
   document.querySelectorAll("#viewnav .tab").forEach(btn => btn.onclick = () => setView(btn.dataset.v));
   try { const p = new URLSearchParams(location.search), sv = localStorage.getItem("mmView"), pv = p.get("view");
     // Hotels + Reports left the top menu (Brandon 2026-10-30): Hotels = sidebar Rates ▸ Hotels; reports open from the hub's Reports & Analytics.
-    if (pv === "hotels" || pv === "reports") document.body.classList.add("solo");
+    if (pv === "hotels" || pv === "reports" || pv === "rater") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
     if (pv === "reports" && p.get("rp")) { RP.open = p.get("rp"); RP.openName = rpName(RP.open); }
     const v = pv || (sv && document.querySelector(`#viewnav .tab[data-v="${sv}"]`) ? sv : null); if (v && v !== "desk") setView(v); } catch (e) {}
   $("colleenBtn").onclick = buildColleenSheet; $("landBtn").onclick = didItLand; $("matchBtn").onclick = reviewMatches;
@@ -376,6 +419,19 @@ function filterSets() {
 
 // Supabase sends at most 1,000 rows per request: fetch every page (in parallel after the first) so nothing past
 // the first ~1,000 stays gets cut off (fixed 2026-10-13: charts were stopping around Nov 9).
+// Desk stat tiles (Locks office look, 2026-10-30): sets, our homes, last nightly pull, findings waiting. Counts only.
+async function rStats(run) {
+  const el = $("rstats"); if (!el) return;
+  const tile = (n, l, warn, v) => `<${v ? `a href="#" data-sv="${v}"` : "div"} class="rstat${warn ? " warn" : ""}"><div class="n">${n}</div><div class="l">${l}</div></${v ? "a" : "div"}>`;
+  const ok = run && /ok|done|success|complete/i.test(run.status || ""), when = run ? new Date(run.started_at) : null;
+  const pull = when ? when.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) : "—";
+  const draw = (homes, finds) => { el.innerHTML = tile(state.sets.length, "Neighborhood sets") + tile(homes ?? "…", "Our homes priced") +
+      tile(pull, run ? `Last nightly pull · ${escH(run.status || "")}` : "Last nightly pull", run && !ok) + tile(finds ?? "…", "Findings to decide", finds > 0, "findings");
+    el.querySelectorAll("[data-sv]").forEach(a => a.onclick = e => { e.preventDefault(); setView(a.dataset.sv); }); };
+  draw();
+  const [h, f] = await Promise.all([sb.rpc("home_rater_homes"), sb.from("findings_latest").select("id", { count: "exact", head: true }).is("decision", null)]);
+  draw(h.error ? "—" : (h.data || []).length, f.error ? "—" : f.count ?? "—");
+}
 async function allRows(q, size = 1000) {
   const first = await q().range(0, size - 1);
   if (first.error || !first.count || first.count <= size) return first;
@@ -2173,7 +2229,7 @@ async function loadRater(force) {
   if (RT.homes && !force) return renderRater();
   $("raterBody").innerHTML = `<p class="small muted">Loading homes…</p>`;
   const [c, ai, rt, du] = await Promise.all([
-    allRows(() => sb.from("comps").select("id,set_id,label,bedrooms,sleeps", { count: "exact" }).eq("tier", "Ours").eq("active", true).order("id")),
+    sb.rpc("home_rater_homes"),
     allRows(() => sb.from("home_ai").select("*", { count: "exact" }).order("comp_id")),
     allRows(() => sb.from("home_ratings").select("*", { count: "exact" }).order("id")),
     allRows(() => sb.from("home_duels").select("*", { count: "exact" }).order("id"))]);
@@ -2181,7 +2237,7 @@ async function loadRater(force) {
   RT.hduels = hd.data || []; RT.poll = ps.data?.[0] || null;
   const ra = await allRows(() => sb.from("rater_answers").select("qkey,subject,answer,score,season", { count: "exact" }).order("id")); RT.answers = ra.data || [];
   const setName = id => state.sets.find(s => s.id === id)?.name || id;
-  RT.homes = (c.data || []).map(h => ({ ...h, name: houseName(h.label || h.id, setName(h.set_id)), set: setName(h.set_id) })).sort((a, b) => a.set.localeCompare(b.set) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  RT.homes = (c.data || []).map(h => ({ ...h, name: houseName(h.label || h.id, h.set_name || setName(h.set_id)), set: h.set_name || setName(h.set_id) })).sort((a, b) => a.set.localeCompare(b.set) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   RT.ai = Object.fromEntries((ai.data || []).map(a => [a.comp_id, a])); RT.ratings = rt.data || []; RT.duels = du.data || [];
   RT.err = c.error?.message || ai.error?.message || rt.error?.message || du.error?.message;
   if (!RT.hood) RT.hood = "*"; // 2026-10-20 (Brandon): rank homes more than neighborhoods -> default = all homes, least-scored first
@@ -2345,7 +2401,7 @@ function rankHtml() {
   return seasonSel + `<p class="small"><b>Every home ranked against every other home, across all neighborhoods.</b> "In its neighborhood" = where it sits among our homes in the same neighborhood (the better ones should price higher).</p><p class="small muted">Score = staff overall when 2+ people scored the home; with 1 person it's half staff, half AI; with none it's the AI score (ESTIMATE). Head-to-head starts at 1500. Click a column to sort.</p>
     <div class="wrap"><table><tr><th>#</th><th>Home</th><th>In its neighborhood</th>${th("blend", "Score")}${th("staff", "Staff overall")}${th("ai", "AI overall")}${th("ins", "Staff inside")}${th("aiIns", "AI inside")}${th("guest", "Guest ★")}${th("elo", "Head-to-head")}</tr>
     ${rows.map((r, i) => `<tr><td class="small muted">${i + 1}</td><td>${escH(r.h.name)}<div class="small muted">${escH(r.h.set)}</div></td><td class="small">${r.setN > 1 ? `#${r.setPos} of ${r.setN}` : '<span class="muted">only one</span>'}</td><td><b>${f(r.blend)}</b></td><td>${f(r.staff)}${r.n ? ` <span class="small muted">(${r.n})</span>` : ""}</td><td>${f(r.ai)}</td><td>${f(r.ins)}</td><td>${f(r.aiIns)}</td><td>${r.guest ? r.guest.toFixed(2) + ` <span class="small muted">(${r.rev})</span>` : "—"}</td><td>${r.elo == null ? "—" : Math.round(r.elo) + ` <span class="small muted">(${r.games})</span>`}</td></tr>`).join("")}</table></div>
-    ${hoodTbl}${pollSel}<p class="small muted">Sources: staff scores and matchups saved on the Desk, plus Slack home poll votes; AI score from each home's Airbnb listing photos and amenities (captured 2026-10-20); guest rating from the Airbnb listing.</p>`;
+    ${hoodTbl}${state.raterOnly ? "" : pollSel}<p class="small muted">Sources: staff scores and matchups saved on the Desk, plus Slack home poll votes; AI score from each home's Airbnb listing photos and amenities (captured 2026-10-20); guest rating from the Airbnb listing.</p>`;
 }
 async function saveDuel(a, b, w, why) { const season = RT.season === "any" ? null : RT.season;
   const { error } = await sb.from("home_duels").insert({ a: a.id, b: b.id, winner: w, why_tags: why?.tags?.length ? why.tags : null, why: why?.text || null, season, question: "stay" }); if (!error) RT.duels.push({ a: a.id, b: b.id, winner: w, season }); return error; }
