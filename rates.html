@@ -188,10 +188,12 @@ table{font-size:14px}th{color:var(--muted);font-weight:700}tr.click:hover td,.tb
 .rstat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1}.rstat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px}
 .rstat.warn .n{color:var(--red)}a.rstat:hover{border-color:var(--moose)}
 main.v-pulse>#rstats,main.v-hotels>#rstats,main.v-rater>#rstats,main.v-reports>#rstats,main.v-beyond>#rstats,main.v-findings>#rstats{display:none!important}
+body.inhub>header{display:none!important}
 @media (max-width:700px){.rstats{grid-template-columns:repeat(2,1fr)}main{max-width:none}#viewnav{margin:-16px -16px 12px!important}}
 </style>
 </head>
 <body>
+<script>if (window.top !== window) document.body.classList.add("inhub");   // inside the hub: its green banner is the only header (Brandon 2026-10-30)</script>
 <header><img src="https://www.vacationrentalsparkcity.com/wp-content/uploads/2024/07/Vacation-Rentals-Park-City-Moose-management-logo-.png" alt="" style="height:34px;background:#fff;border-radius:6px;padding:2px 4px"><h1>Moose Management <span>Rates Desk</span></h1><div class="sp"></div><span id="runinfo" class="small" style="opacity:.8"></span><button id="out" class="tab hidden">Sign out</button></header>
 
 <div id="login" class="card hidden">
@@ -629,7 +631,7 @@ function renderDaily(ch) {
   if (!pts.some(p => p.ours != null || p.med != null || p.hot != null)) {
     el.innerHTML = `<p class="muted small" style="padding:18px 0">${ch === "VRBO" ? "VRBO prices aren't pulled automatically yet (VRBO hides prices from automated browsers)." : "No priced nights yet for this channel."}</p>`; return;
   }
-  const W = 1000, H = 270, L = 52, R = 12, T = 32, B = 34;
+  const lanes = mkLanes(pts), W = 1000, H = 270 + lanes * 11, L = 70, R = 12, T = 14 + lanes * 11, B = 34;   // marker lanes above the chart (2026-10-30)
   // Axis fix (Brandon 2026-10-20): one bad comp price ($30K+) stretched the axis into ~70 stacked labels.
   // Scale to the 98th percentile of values (outliers are drawn at the top edge) and keep about 5 gridlines.
   const vals = pts.flatMap(p => [p.ours, p.med, p.p75, p.hot]).filter(v => v != null).sort((a, b) => a - b);
@@ -641,15 +643,17 @@ function renderDaily(ch) {
   let g = "";
   for (let v = 0; v <= top; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">$${v.toLocaleString()}</text>`;
   pts.forEach((p, i) => {
-    if (p.d.getDate() === 1 || i === 0 || (N <= 31 && N > 1)) g += `<text x="${x(i)}" y="${H - 12}" font-size="11" fill="var(--muted)" text-anchor="${i === 0 ? "start" : "middle"}">${p.d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>`;
-    if (p.d.getDay() === 5 || p.d.getDay() === 6) g += `<rect x="${x(i) - 2}" y="${T}" width="${(W - L - R) / M}" height="${H - T - B}" fill="var(--tealbg)" opacity=".45"/>`;
+    // date labels: the 1st of each month (or every few nights on short ranges); the first night only when no label is close (no overlap, 2026-10-30)
+    const ev = N <= 31 ? Math.max(1, Math.ceil(N / 10)) : 0, nextLab = pts.findIndex((q, j) => j > 0 && (ev ? j % ev === 0 : q.d.getDate() === 1));
+    if (ev ? i % ev === 0 : (p.d.getDate() === 1 || (i === 0 && (nextLab < 0 || x(nextLab) - x(0) > 48)))) g += `<text x="${x(i)}" y="${H - 12}" font-size="11" fill="var(--muted)" text-anchor="${i === 0 ? "start" : "middle"}">${p.d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>`;
+    if (p.d.getDay() === 5 || p.d.getDay() === 6) g += `<rect x="${x(i) - 2}" y="${T}" width="${(W - L - R) / M}" height="${H - T - B}" fill="var(--tealbg)" opacity=".3"/>`;
   });
   const bandPts = pts.map((p, i) => p.p25 != null ? { i, ...p } : null).filter(Boolean);
   const band = bandPts.length > 1 ? `<path d="M${bandPts.map(p => x(p.i) + "," + y(p.p75)).join("L")}L${bandPts.slice().reverse().map(p => x(p.i) + "," + y(p.p25)).join("L")}Z" fill="var(--line)" opacity=".9"/>` : "";
   const op = pts.map((q, i) => q.ours != null ? [x(i), y(q.ours)] : null).filter(Boolean);
-  const area = op.length > 1 ? `<path d="M${op[0][0]},${y(0)}L${op.map(p => p.join(",")).join("L")}L${op[op.length - 1][0]},${y(0)}Z" fill="var(--teal)" opacity=".16"/>` : "";
+  const area = op.length > 1 ? `<path d="M${op[0][0]},${y(0)}L${op.map(p => p.join(",")).join("L")}L${op[op.length - 1][0]},${y(0)}Z" fill="var(--teal)" opacity=".08"/>` : "";
   const dots = pts.map((p, i) => (p.ours != null ? `<circle cx="${x(i)}" cy="${y(p.ours)}" r="2.6" fill="var(--teal)"/>` : "") + (p.med != null ? `<circle cx="${x(i)}" cy="${y(p.med)}" r="2" fill="var(--ink)"/>` : "")).join("");
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ch} all-in price per night, ours vs comps">${g}${mkTicks(pts, x, T)}${band}${area}
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ch} all-in price per night, ours vs comps">${g}${mkTicks(pts, x, T, L, W - R, (W - L - R) / M)}${band}${area}
     <path d="${line("p75")}" fill="none" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="3 3" stroke-linejoin="round"/>
     <path d="${line("p25")}" fill="none" stroke="#3b82c4" stroke-width="1.4" stroke-dasharray="3 3" stroke-linejoin="round"/>
     <path d="${line("med")}" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-dasharray="6 4" stroke-linejoin="round"/>
@@ -2938,13 +2942,20 @@ function mkTip(k) { const o = mkFor(k), t = [];
   o.ev.slice(0, 3).forEach(e => t.push(`<span class="mkev">⚑</span> ${escH(e.title.slice(0, 48))}`)); if (o.ev.length > 3) t.push(`<span class="muted">+${o.ev.length - 3} more events</span>`);
   return t.length ? "<br>" + t.join("<br>") : ""; }
 // Ticks along the top of a price chart.
-function mkTicks(pts, x, T) {
+// Market markers in labeled lanes above a chart (2026-10-30, was stars/triangles/dots crowding the top): one row each for
+// holidays, events, our notes and snow; a night with something gets a small block (blocks on nights in a row join into a bar).
+const MK_LANES = [["hol", "Holidays", "var(--red)"], ["ev", "Events", "var(--amber)"], ["notes", "Our notes", "#7c5cc4"], ["snow", "Snow", "#3b82c4"]];
+const mkHas = (o, k) => k === "snow" ? !!(o.snow && o.snow.in >= 0.5) : o[k].length > 0;
+function mkLanes(pts) { const o = pts.map(p => mkFor(p.k)); return MK_LANES.filter(([k]) => o.some(x => mkHas(x, k))).length; }
+function mkTicks(pts, x, T, L, xr, step) {
+  const o = pts.map(p => mkFor(p.k)), used = MK_LANES.filter(([k]) => o.some(v => mkHas(v, k))), w = Math.max(2, step || 4);
   let s = "";
-  pts.forEach((p, i) => { const o = mkFor(p.k);
-    if (o.hol.length) s += `<text x="${x(i)}" y="${T - 28}" text-anchor="middle" font-size="9" fill="var(--red)">★<title>${escH(o.hol.join(" · "))}</title></text>`;
-    if (o.ev.length) s += `<path d="M${x(i) - 4},${T - 15}L${x(i) + 4},${T - 15}L${x(i)},${T - 8}Z" fill="var(--amber)"><title>${escH(mkTitle(p.k).slice(3))}</title></path>`;
-    if (o.notes.length) s += `<rect x="${x(i) - 3.5}" y="${T - 26}" width="7" height="7" rx="1.5" fill="#7c5cc4"><title>${escH(o.notes.map(e => e.title).join(" · "))}</title></rect>`;
-    if (o.snow && o.snow.in >= 0.5) s += `<circle cx="${x(i)}" cy="${T - 4}" r="${Math.min(2 + o.snow.in * 0.7, 7)}" fill="#3b82c4" opacity=".85"><title>${o.snow.in}" snow forecast (${escH(o.snow.loc)}, NWS)</title></circle>`;
+  used.forEach(([k, name, col], li) => { const yy = T - 8 - (used.length - li) * 11 + 2;
+    s += `<text x="${(L || 52) - 8}" y="${yy + 6}" text-anchor="end" font-size="9.5" fill="var(--muted)">${name}</text>`;
+    pts.forEach((p, i) => { const v = o[i]; if (!mkHas(v, k)) return;
+      const t = k === "hol" ? v.hol.join(" · ") : k === "ev" ? mkTitle(p.k).slice(3) : k === "notes" ? v.notes.map(e => e.title).join(" · ") : `${v.snow.in}" snow forecast (${v.snow.loc}, NWS)`;
+      const op = k === "snow" ? Math.min(1, 0.35 + v.snow.in / 8) : 0.85;
+      s += `<rect x="${(x(i) - w / 2).toFixed(1)}" y="${yy}" width="${(w + 1).toFixed(1)}" height="7" rx="1" fill="${col}" opacity="${op.toFixed(2)}"><title>${p.d ? p.d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + ": " : ""}${escH(t)}</title></rect>`; });
   });
   return s;
 }
