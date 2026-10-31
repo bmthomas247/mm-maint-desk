@@ -259,6 +259,7 @@ details.acc[open]>summary{margin-bottom:6px}
 <script src="checks.js"></script>
 <script src="banners.js"></script>
 <script src="staffing.js"></script>
+<script src="perks.js"></script>
 <script src="calls.js"></script>
 <script src="market_watch.js"></script>
 <script src="signals.js"></script>
@@ -502,6 +503,7 @@ function addDerived(DESKS, ex){
     { key:"cal_meet", label:"Calendar · Meetings", icon:"calendar", url:"#cal", status:"live", sort:cD.sort + 0.4 },
     { key:"cal_off", label:"Staffing · Request Time Off", icon:"clock", url:"#cal", status:"live", sort:60.5 },   // time off + PTO (2026-10-29); in the Staffing drop-down since 2026-10-29
     { key:"stf_sched", label:"Staffing · Schedule", icon:"clock", url:"#/stf_sched", status:"live", sort:60.3 });   // staffing.js; same people as Calendar
+  if(DESKS.some(x => x.key === "staffing" && x.status === "live")) DESKS.push({ key:"stf_perks", label:"Staffing · Perks", icon:"clock", url:"#/stf_perks", status:"live", sort:60.9 });   // perks.js: cheap-flight finder, same people as Staffing (Brandon 2026-10-30)
   if(ex.perf) DESKS.push({ key:"stf_perf", label:"Staffing · My performance", icon:"clock", url:"#/stf_perf", status:"live", sort:60.7 });   // only people with scores or PTO (Brandon 2026-10-29)
 }
 function noAccess(err){
@@ -533,7 +535,7 @@ function sideNav(DESKS, ORD){
                    competitor:{ label:"Competitor Playbook", icon:"target", kids:{ competitor:"Cards", competitor_add:"Add intel" } },
                    psu:{ label:"Property Set Up", icon:"home", kids:{ property_setup:"Launch Pad", psu_desc:"AI Description Tool", psu_photos:"Photo Compressor", psu_qr:"QR Code Generator" } },   // Brandon 2026-10-29   // Brandon 2026-10-28
                    cal:{ label:"Calendar", icon:"calendar", kids:{ cal_res:"Reservations", cal_office:"Office", cal_me:"Personal", cal_meet:"Meetings" } },
-                   stf:{ label:"Staffing", icon:"clock", kids:{ staffing:"Clock In / Clock Out", stf_sched:"Schedule", cal_off:"Request Time Off", stf_perf:"My performance" } } };   // Brandon 2026-10-29: Staffing drop-down   // Brandon 2026-10-29: the Meetings drop-down moved into Calendar ▸ Meetings (tiles)
+                   stf:{ label:"Staffing", icon:"clock", kids:{ staffing:"Clock In / Clock Out", stf_sched:"Schedule", cal_off:"Request Time Off", stf_perf:"My performance", stf_perks:"Perks" } } };   // Brandon 2026-10-29: Staffing drop-down   // Brandon 2026-10-29: the Meetings drop-down moved into Calendar ▸ Meetings (tiles)
   // Damage claims + Vehicles sit under Maintenance (still "soon", Brandon 2026-10-28) only for people who also have Maintenance; others keep them on their own
   if(DESKS.some(x => x.key === "maintenance")) Object.assign(GROUPS.maint.kids, { damage_claims:"Damage claims", vehicles:"Vehicles", trash:"Trash" });   // crew without Maintenance see Trash on its own
   const grouped = k => Object.keys(GROUPS).find(g => GROUPS[g].kids[k]);
@@ -683,6 +685,7 @@ function route(){
   if(k === "patrick" || k === "patrick_log" || k === "patrick_fix") return patrickView(v);   // Reports > Ask Patrick (no sidebar entry, Brandon 2026-10-28)
   if(k === "messages") return messagesView(v);
   if(d && k === "stf_sched" && window.staffSched) return staffSched(v);
+  if(d && k === "stf_perks" && window.perksView) return perksView(v);   // perks.js (2026-10-30); searches gated by hub_can('staffing') in perks-flights
   if(d && k === "stf_perf" && window.myPerf) return myPerf(v);   // staffing.js: your own Team ratings rows   // staffing.js: Staffing ▸ Schedule
   if(d && k === "staffing" && window.staffingView) return staffingView(v);   // staffing.js: Staffing Desk, hub time clock (Brandon 2026-10-29); data RLS hub_staff_sees
   if(d && k === "res_report") return resReportView(v);
@@ -1137,7 +1140,7 @@ async function settingsView(v){
 }
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","team_ratings","sync","advertising","calendar"];   // calendar: its tabs show as "Calendar" under Moose Info
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], meet:["Meetings","people"], cal:["Calendar","calendar"], stf:["Staffing","clock"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
