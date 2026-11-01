@@ -463,7 +463,8 @@ function otDraw(){
   const v = document.getElementById("view"); if(!v || !v.parentNode) return;
   const m = OT.me && OT.me[0];
   const meSig = m && [m.week, m.needs || "", m.plan_kind || "", m.plan_up_to || "", m.plan_out_at || "", m.asked_at || ""].join("|");
-  if(m && !bxHidden("ot_me", meSig)){   // your own hours, from 38 h
+  const okd = x => x && x.plan_kind === "approved" && !x.needs;   // Brandon 2026-11-01: approved overtime = no banner
+  if(m && !okd(m) && !bxHidden("ot_me", meSig)){   // your own hours, from 38 h
     const b = document.createElement("div"), t = at40(m);
     b.className = "hxbanner otbanner"; b.setAttribute("role", "status");
     b.style.background = m.needs === "over" ? "#9b1c1c" : m.needs ? "#7a4b00" : "#1f5f3f";
@@ -477,7 +478,7 @@ function otDraw(){
       const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert(r.error.message); otBanner(true); };
     bxAdd(b, "ot_me", meSig); v.parentNode.insertBefore(b, v);
   }
-  const l = OT.l; if(!l || !l.length) return;
+  const l = (OT.l || []).filter(x => !okd(x)); if(!l.length) return;
   const sig = l.map(x => [x.user_id, x.week, x.needs || "", x.plan_kind || "", x.asked_at || "", +x.hours >= 38 ? 38 : +x.hours >= 36 ? 36 : 32].join(",")).join("|");
   if(bxHidden("ot", sig)) return;
   const need = l.filter(x => x.needs), b = document.createElement("div");
