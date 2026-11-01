@@ -121,7 +121,7 @@ const LIST_TAB = n => /owner/i.test(n) ? "owners" : /realtor|agent|broker/i.test
   : /return renter|rental guest|guest of guest|cart aband|stayfi|non-booked|tns opt-in from website guest/i.test(n) ? "guest" : "general";
 const STATUS = [["idea","Ideas"],["planned","Planned"],["doing","Doing"],["done","Done"],["parked","Parked"]];
 const KINDS = { idea:"💡 Idea", campaign:"📣 Campaign", task:"✅ Task", question:"❓ Question", list:"📋 List" };
-const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], own:null, f:{ when:"30", brevo:"all", back:"all", eng:"all", q:"" } };
+const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], own:null, places:[], f:{ when:"30", brevo:"all", back:"all", eng:"all", q:"" } };
 
 async function load(){
   const jobs = [sb.from("mkt_ideas").select("*").eq("tab", TAB).eq("off", false).order("created_at"),
@@ -133,7 +133,9 @@ async function load(){
       if(r.error) return r; all = all.concat(r.data || []); if((r.data || []).length < 1000) break; }
     return { data:all.sort((a, b) => String(a.send_on).localeCompare(String(b.send_on))) }; })());
   if(TAB === "owners") jobs.push(Promise.resolve(null), loadOwners());
-  const [i, r, cp, dr, rr] = await Promise.all(jobs);
+  if(TAB === "general") jobs.push(Promise.resolve(null), loadPlaces());
+  const [i, r, cp, dr, rr, pl] = await Promise.all(jobs);
+  if(TAB === "general") S.places = pl.data;
   if(i.error) throw i.error;
   S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
   S.camps = (cp.data || []).filter(c => !c.gone); S.drafts = dr.data || [];
@@ -143,6 +145,7 @@ function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`, statsHtml()];
   if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(top, campsHtml(), "<h2>Guests</h2>" + list); }   // campaigns above the long guest list
   else if(TAB === "owners") h.push(ownersHtml(), campsHtml());
+  else if(TAB === "general") h.push(placesHtml(), campsHtml());
   else h.push(campsHtml());
   h.push(listsHtml(), boardHtml());
   $("#app").innerHTML = h.join("");
@@ -494,6 +497,76 @@ document.addEventListener("input", e => { if(e.target.id !== "ossub" && e.target
   OS.subject = $("#ossub").value; OS.body = $("#osbody").value;
   if(!OS.edited){ OS.edited = true; const m = $("#osmode"); if(m) m.innerHTML = `You changed the words. <button class="btn small" data-osre="1">↻ Rewrite from ticked items</button>`; }
   osPreview(); });
+
+/* ---------- General: where we advertise the business (mkt_places, hub_marketing_places.sql; Brandon 2026-11-01) ---------- */
+const PKINDS = { chamber:"🏛 Chamber", directory:"📒 Directory", reviews:"⭐ Reviews", membership:"🎟 Membership", media:"📰 Media / ads", social:"💬 Social", other:"📌 Other" };
+async function loadPlaces(){
+  const r = await sb.from("mkt_places").select("*").order("sort", { nullsFirst:false }).order("name");
+  return { data:r.error ? [] : r.data || [] };
+}
+function placesHtml(){
+  const on = S.places.filter(p => !p.off), off = S.places.filter(p => p.off), t = today();
+  const soon = p => p.renews_on && p.renews_on >= t && p.renews_on <= new Date(Date.now() + 45 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+  const a = (u, l, cls) => u ? `<a class="btn small ${cls || ""}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "";
+  const card = p => `<div class="kpi plc" ${p.off ? 'style="opacity:.6"' : ""}>
+      <div class="bar" style="justify-content:space-between;margin:0"><span class="pill">${PKINDS[p.kind] || p.kind}</span><button class="btn small" data-place="${p.id}">✎ Edit</button></div>
+      <b style="font-size:16px">${esc(p.name)}</b>
+      ${p.renews || p.renews_on ? `<small>${soon(p) ? '<span class="pill amber">Renews soon</span> ' : ""}${p.renews_on ? "Renews " + esc(fmtD(p.renews_on)) + (p.renews ? " · " : "") : ""}${esc(p.renews || "")}</small>` : ""}
+      ${p.note ? `<small>${esc(p.note)}</small>` : ""}
+      <div class="bar" style="margin:6px 0 0;gap:6px">${a(p.edit_url, "Edit / sign in", "primary")}${a(p.our_url, "Our page")}
+        ${(p.links || []).map(l => a(l.url, esc(l.label))).join("")}
+        ${!p.edit_url ? `<button class="btn small" data-place="${p.id}">+ Add the sign-in page</button>` : ""}</div>
+      ${p.login_where ? `<small>🔑 Sign-in: ${esc(p.login_where)}</small>` : ""}
+      <small class="src">Source: ${esc(p.source)}${p.checked_on ? ` · checked ${esc(fmtD(p.checked_on))}` : ""}${p.updated_name ? ` · last change ${esc(p.updated_name)}` : ""}</small></div>`;
+  return `<h2>Where we advertise the business</h2>
+  <div class="bar"><button class="btn primary" data-newplace="1">+ Add a place</button>
+    <span class="muted">Chambers, directories, review sites and ads for Moose Management itself (not single homes). "Edit / sign in" opens their site in a new tab.</span></div>
+  <div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))">${on.map(card).join("") || '<p class="muted">Nothing added yet.</p>'}</div>
+  ${off.length ? `<details><summary class="muted">Hidden places · ${off.length}</summary><div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))">${off.map(card).join("")}</div></details>` : ""}
+  <p class="src">Sign-in names and passwords are never kept in the hub; "Sign-in" only says who has it. Nothing here is ever deleted: hide a place you stop using.</p>`;
+}
+function placeDialog(x){
+  const d = $("#dlg"), p = x || { kind:"directory", links:[] };
+  const links = (p.links || []).map(l => `${l.label} | ${l.url}`).join("\n");
+  d.innerHTML = `<form method="dialog" id="f"><h3 style="margin:0 0 6px">${x ? "Edit " + esc(p.name) : "Add a place we advertise"}</h3>
+    <label>Name <input name="name" maxlength="120" required value="${esc(p.name || "")}"></label>
+    <label>Kind <select name="kind">${Object.entries(PKINDS).map(([k, l]) => `<option value="${k}" ${p.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label>Sign-in / edit page (https://…) <input name="edit_url" type="url" value="${esc(p.edit_url || "")}" placeholder="where we log in to change our listing"></label>
+    <label>Our page there (https://…) <input name="our_url" type="url" value="${esc(p.our_url || "")}" placeholder="what the public sees"></label>
+    <label>More links, one per line: Label | https://… <textarea name="links" rows="3">${esc(links)}</textarea></label>
+    <label>Who has the sign-in <input name="login_where" maxlength="300" value="${esc(p.login_where || "")}" placeholder="e.g. Brandon · in the password manager (never the password)"></label>
+    <label>Renewal <input name="renews" maxlength="200" value="${esc(p.renews || "")}" placeholder="e.g. yearly in June, $… "></label>
+    <label>Renewal date <input name="renews_on" type="date" value="${esc(p.renews_on || "")}"></label>
+    <label>Notes <textarea name="note" maxlength="2000">${esc(p.note || "")}</textarea></label>
+    <label>Source (where this came from) <input name="source" maxlength="500" required value="${esc(p.source || "")}" placeholder="e.g. renewal email to hello@, Jun 2026"></label>
+    <label>Last checked <input name="checked_on" type="date" value="${esc(p.checked_on || today())}"></label>
+    ${x ? `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="off" ${p.off ? "checked" : ""} style="width:auto"> Hide (we stopped using it)</label>` : ""}
+    <p class="err" id="err"></p>
+    <div class="bar" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="save" value="save">Save</button></div>
+    ${x ? `<p class="src">Added by ${esc(x.created_name || "?")} ${esc(fmtDT(x.created_at))}${x.updated_name ? ` · last change ${esc(x.updated_name)} ${esc(fmtDT(x.updated_at))}` : ""}</p>` : ""}</form>`;
+  d.showModal();
+  $("#save", d).onclick = async e => {
+    e.preventDefault(); const f = new FormData($("#f", d)), g = k => (f.get(k) || "").toString().trim(), err = m => { $("#err", d).textContent = m; };
+    const row = { name:g("name"), kind:g("kind"), edit_url:g("edit_url") || null, our_url:g("our_url") || null, login_where:g("login_where") || null,
+      renews:g("renews") || null, renews_on:g("renews_on") || null, note:g("note") || null, source:g("source"), checked_on:g("checked_on") || null };
+    if(x) row.off = f.get("off") === "on";
+    if(!row.name) return err("Give it a name.");
+    if(!row.source) return err("Say where this came from (every fact needs a source).");
+    if([row.edit_url, row.our_url].some(u => u && !/^https:\/\//.test(u))) return err("Links need to start with https://");
+    if(/(pass(word|wd)?|pw|pin)\s*[:=]/i.test((row.login_where || "") + " " + (row.note || ""))) return err("Don't put passwords here — just say who has the sign-in.");
+    const bad = [], lk = g("links").split("\n").map(s => s.trim()).filter(Boolean).map(s => { const m = s.match(/^(.{1,60}?)\s*\|\s*(https:\/\/\S+)$/); if(!m) bad.push(s); return m && { label:m[1].trim(), url:m[2] }; });
+    if(bad.length) return err(`Use "Label | https://…" for: ${bad[0]}`);
+    row.links = lk;
+    const r = x ? await sb.from("mkt_places").update(row).eq("id", x.id) : await sb.from("mkt_places").insert(row);
+    if(r.error) return err("Couldn't save: " + r.error.message);
+    d.close(); await refresh();
+  };
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-place],[data-newplace]"); if(!b) return;
+  if(b.dataset.newplace) return placeDialog(null);
+  const p = S.places.find(x => x.id == b.dataset.place); if(p) placeDialog(p);
+});
 
 /* ---------- Brevo email campaigns (mkt_campaigns, read by mkt_brevo_sync.py) + hub drafts (mkt_drafts) ---------- */
 // a campaign sent to more than one kind of list (e.g. Moose Magazine: guests + owners + everyone) files under General only
