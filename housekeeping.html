@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Housekeeping</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Housekeeping desk board (hub key 'housekeeping'; hub_housekeeping_desk.sql). Reads hk_board(): every clean + inspection from
+     bw_tasks (the one Breezeway pull; Breezeway's webhook brings changes within about a minute) with the Track stays at those homes.
+     Access is enforced in Supabase: hk_board() = hub_can('housekeeping') and (desk live or admin); changes to Breezeway = hk_can_act()
+     (section hk_act + hub_flags.hk_bw_write). This page only shows what the database already allows. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:16px;margin:0;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:38px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.sm{min-height:32px;padding:0 9px;font-size:12.5px} .btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.clean{background:var(--moose-soft);color:var(--moose-ink)} .pill.dirty{background:var(--amber-soft);color:var(--amber)} .pill.in_use{background:var(--blue-soft);color:var(--blue)}
+.pill.needs_repair,.pill.low{background:var(--red-soft);color:var(--red)} .pill.in_storage{background:var(--violet-soft);color:var(--violet)}
+.tabs{display:flex;gap:6px;margin:14px 0 4px;flex-wrap:wrap}
+.tab{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:7px 16px;border-radius:999px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;min-height:40px}
+.tab.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+.head{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tile b{display:block;font-size:22px;font-weight:800;line-height:1.2} .tile span{font-size:12.5px;color:var(--muted);font-weight:700}
+.tile.on{outline:2px solid var(--forest-2)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}
+.bar input,.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 9px;background:var(--card);color:var(--ink);min-height:38px}
+.bar input[type=search]{flex:1;min-width:170px}
+.bar label{font-size:13px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+.grp>header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.grp>header .muted{margin-left:auto}
+.row{display:grid;grid-template-columns:minmax(0,1.6fr) auto minmax(0,1fr) auto;gap:6px 14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .nm{font-weight:800;overflow-wrap:anywhere} .row .nt{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.qty{display:inline-flex;align-items:center;gap:4px} .qty b{min-width:44px;text-align:center;font-size:16px}
+.qty .btn{width:34px;padding:0;justify-content:center;font-size:18px}
+.loc{font-size:13.5px;overflow-wrap:anywhere} .loc small{display:block;color:var(--muted);font-size:11.5px}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.acts select{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line-2);border-radius:10px;padding:4px 6px;background:var(--card);color:var(--ink);min-height:32px}
+.empty{padding:22px;color:var(--muted);font-size:14px;text-align:center}
+.start{background:var(--card);border:1px dashed var(--line-2);border-radius:var(--radius);padding:18px}
+.start .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:480px;width:calc(100% - 24px);background:var(--card);color:var(--ink);max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog form,dialog .dbody{padding:18px 20px;overflow:auto;max-height:calc(100vh - 100px)}
+dialog h3{margin:0 0 6px;font-size:18px}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog input,dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog textarea{min-height:70px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.dfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line);background:var(--card);position:sticky;bottom:0}
+.err{color:var(--red);font-size:13px;min-height:1em}
+.hist{font-size:13.5px} .hist li{margin:6px 0} .hist small{color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.card>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line)}
+.card>header h2{font-size:17px}
+.card>header .right{margin-left:auto}
+.task{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.task:last-child{border-bottom:0}
+.task .nm{font-weight:800;overflow-wrap:anywhere} .task .sub{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.task .who{font-size:13.5px;overflow-wrap:anywhere}
+.pill.done{background:var(--moose-soft);color:var(--moose-ink)} .pill.prog{background:var(--blue-soft);color:var(--blue)}
+.pill.todo{background:var(--line);color:var(--ink-2)} .pill.late{background:var(--red-soft);color:var(--red)}
+.pill.in{background:var(--amber-soft);color:var(--amber)} .pill.out{background:var(--violet-soft);color:var(--violet)}
+.pill.turn{background:var(--red-soft);color:var(--red)} .pill.own{background:var(--blue-soft);color:var(--blue)}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.qlog{grid-column:1/-1;font-size:12.5px;color:var(--muted)} .qlog .failed{color:var(--red)}
+.day{font-size:13px;font-weight:800;color:var(--ink-2);margin:18px 0 8px;text-transform:uppercase;letter-spacing:.04em}
+.fresh{font-size:12.5px;color:var(--muted)}
+.chk{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px}
+.chk label{display:flex;gap:8px;align-items:center;margin:0;font-weight:700} .chk input{width:auto;margin:0}
+input.tab{font-weight:700}
+@media (max-width:700px){
+  .task{grid-template-columns:minmax(0,1fr)} .task .acts{justify-content:flex-start}
+  .two{grid-template-columns:1fr}
+}
+body.inhub .wrap{padding-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+if(window.top !== window) document.body.classList.add("inhub");
+
+/* Park City dates = the board's days */
+const pcDay = (d = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone:"America/Denver", year:"numeric", month:"2-digit", day:"2-digit" }).format(d);
+const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const dayName = iso => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday:"long", month:"short", day:"numeric", timeZone:"UTC" });
+/* Breezeway times come without a zone and are UTC (same as the desk's comment times, checked 2026-10-30) */
+const bwTime = s => { if(!s) return ""; const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + "Z"); return isNaN(d) ? "" :
+  d.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit", timeZone:"America/Denver" }); };
+const hm = m => { m = +m || 0; return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
+const KIND = { close:"Mark done", reopen:"Reopen", comment:"Comment", reschedule:"Move", assign:"Assign", priority:"Priority" };
+
+const S = { range:"today", day:pcDay(), depts:{ housekeeping:true, inspection:false }, view:"home", q:"", show:"", B:null, busy:false };
+
+function span(){
+  const t = pcDay();
+  if(S.range === "yesterday") return [addDays(t, -1), addDays(t, -1)];
+  if(S.range === "tomorrow") return [addDays(t, 1), addDays(t, 1)];
+  if(S.range === "week") return [t, addDays(t, 6)];
+  if(S.range === "pick") return [S.day, S.day];
+  return [t, t];
+}
+async function load(quiet){
+  if(S.busy) return; S.busy = true;
+  const [a, b] = span(), depts = Object.keys(S.depts).filter(k => S.depts[k]);
+  let r;
+  try { r = await sb.rpc("hk_board", { p_from:a, p_to:b, p_depts:depts.length ? depts : ["housekeeping"] }); }
+  catch(e){ r = { error:e }; }
+  S.busy = false;
+  if(r.error){ if(!quiet) $("#app").innerHTML = `<h1>Housekeeping</h1><p class="err">${esc(errText(r.error))}</p>`; return; }
+  S.B = r.data; render();
+}
+
+function state(t){
+  if(t.stage === "finished" || ["finished","closed","approved"].includes(t.code)) return ["done", "Done"];
+  if(t.stage === "paused") return ["prog", "Paused"];
+  if(t.started || t.stage === "in_progress") return ["prog", "In progress"];
+  return ["todo", t.code === "drafted" ? "Draft" : "Not started"];
+}
+function stayFlags(home, day){
+  const st = ((S.B && S.B.stays) || []).filter(s => s.home === home);
+  const out = st.filter(s => s.depart === day), inn = st.filter(s => s.arrive === day);
+  return { out, inn, now: st.filter(s => s.arrive < day && s.depart > day), turn: !!(out.length && inn.length) };
+}
+const match = t => !S.q || [t.home, t.name, (t.who || []).join(" ")].join(" ").toLowerCase().includes(S.q.toLowerCase());
+function counts(tasks){
+  const n = { all:tasks.length, done:0, prog:0, todo:0, turn:0, risk:0 };
+  tasks.forEach(t => n[state(t)[0]]++);
+  new Set(tasks.map(t => t.home + "|" + t.date)).forEach(k => {
+    const [h, d] = k.split("|"), f = stayFlags(h, d);
+    if(f.turn) n.turn++;
+    if(f.inn.length && tasks.some(t => t.home === h && t.date === d && state(t)[0] !== "done")) n.risk++;
+  });
+  return n;
+}
+const pass = t => !S.show || (S.show === "turn" ? stayFlags(t.home, t.date).turn :
+  S.show === "risk" ? (stayFlags(t.home, t.date).inn.length > 0 && state(t)[0] !== "done") : state(t)[0] === S.show);
+
+function render(){
+  const B = S.B, [a, b] = span();
+  const all = (B.tasks || []).filter(match), tasks = all.filter(pass), n = counts(all);
+  const days = [...new Set(tasks.map(t => t.date))].sort();
+  const T = [["", "Tasks", n.all], ["todo", "Not started", n.todo], ["prog", "In progress", n.prog], ["done", "Done", n.done],
+             ["risk", "Homes with a guest arriving, not done", n.risk], ["turn", "Same-day turns", n.turn]];
+  const ago = B.pulled ? Math.max(0, Math.round((Date.now() - new Date(B.pulled)) / 60000)) : null;
+  $("#app").innerHTML = `
+    <div class="head"><div><h1>Housekeeping</h1>
+      <p class="muted" style="margin:0">Every clean${S.depts.inspection ? " and inspection" : ""} in Breezeway, with the stays at each home. Changes made in Breezeway show here within about a minute.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="fresh">${ago == null ? "" : "Last Breezeway change saved " + (ago < 1 ? "just now" : ago < 120 ? ago + " min ago" : Math.round(ago / 60) + " h ago")}</span>
+      <button class="btn sm" id="rf">↻ Refresh</button></div></div>
+    <div class="tabs">${[["yesterday","Yesterday"],["today","Today"],["tomorrow","Tomorrow"],["week","Next 7 days"]].map(([k, l]) =>
+      `<button class="tab${S.range === k ? " on" : ""}" data-r="${k}">${l}</button>`).join("")}
+      <input type="date" id="pick" class="tab${S.range === "pick" ? " on" : ""}" value="${S.range === "pick" ? S.day : ""}" aria-label="Pick a day"></div>
+    <div class="tiles">${T.map(([k, l, v]) => `<button class="tile${S.show === k ? " on" : ""}" data-show="${k}"><b>${v}</b><span>${l}</span></button>`).join("")}</div>
+    <div class="bar"><input type="search" id="q" placeholder="Search home, task or person…" value="${esc(S.q)}" aria-label="Search">
+      <label><input type="checkbox" id="dhk"${S.depts.housekeeping ? " checked" : ""}> Cleans</label>
+      <label><input type="checkbox" id="din"${S.depts.inspection ? " checked" : ""}> Inspections</label>
+      <select id="view" aria-label="Group by"><option value="home"${S.view === "home" ? " selected" : ""}>By home</option><option value="who"${S.view === "who" ? " selected" : ""}>By person</option></select></div>
+    ${days.length ? days.map(d => dayBlock(d, tasks.filter(t => t.date === d))).join("") :
+      `<div class="card"><div class="empty">Nothing ${S.show || S.q ? "matches" : "scheduled"} for ${a === b ? dayName(a) : dayName(a) + " – " + dayName(b)}.</div></div>`}`;
+}
+function dayBlock(d, ts){
+  const head = `<div class="day">${esc(dayName(d))} · ${ts.length} task${ts.length === 1 ? "" : "s"}</div>`;
+  if(S.view === "who"){
+    const g = {}, NB = "Nobody assigned";
+    ts.forEach(t => (t.who && t.who.length ? t.who : [NB]).forEach(p => (g[p] = g[p] || []).push(t)));
+    return head + Object.keys(g).sort((x, y) => x === NB ? -1 : y === NB ? 1 : x.localeCompare(y)).map(p => `
+      <section class="card"><header><h2>${esc(p)}</h2><span class="right muted">${g[p].length} task${g[p].length === 1 ? "" : "s"} · ${g[p].filter(t => state(t)[0] === "done").length} done</span></header>
+      ${g[p].map(t => taskRow(t, true)).join("")}</section>`).join("");
+  }
+  const g = {}; ts.forEach(t => (g[t.home || "No home"] = g[t.home || "No home"] || []).push(t));
+  const rank = h => { const f = stayFlags(h, d); return f.turn ? 0 : f.inn.length ? 1 : 2; };
+  return head + Object.keys(g).sort((x, y) => rank(x) - rank(y) || x.localeCompare(y)).map(h => homeCard(h, d, g[h])).join("");
+}
+function stayPill(s, kind){
+  const who = s.owner ? (s.guest ? "Owner stay: " + s.guest : "Owner stay") : (s.guest || "Guest");
+  return `<span class="pill ${kind}">${kind === "in" ? "In" : "Out"}: ${esc(who)}${s.vip ? " · VIP" : ""}${kind === "in" && s.nights ? " · " + esc(s.nights) + " nights" : ""}</span>`;
+}
+function homeCard(h, d, ts){
+  const f = stayFlags(h, d), done = ts.filter(t => state(t)[0] === "done").length;
+  return `<section class="card"><header><h2>${esc(h)}</h2>
+    ${f.turn ? `<span class="pill turn">Same-day turn</span>` : ""}${f.out.map(s => stayPill(s, "out")).join("")}${f.inn.map(s => stayPill(s, "in")).join("")}
+    ${f.now.length ? `<span class="pill own">Guests staying</span>` : ""}
+    <span class="right muted">${done} of ${ts.length} done</span></header>${ts.map(t => taskRow(t, false)).join("")}</section>`;
+}
+function taskRow(t, showHome){
+  const [k, l] = state(t), late = k !== "done" && t.date < pcDay();
+  const times = [t.time ? "Scheduled " + esc(String(t.time).slice(0, 5)) : "", t.started ? "Started " + bwTime(t.started) : "",
+                 t.finished ? "Finished " + bwTime(t.finished) : "", t.minutes ? hm(t.minutes) : ""].filter(Boolean).join(" · ");
+  const acts = (S.B.actions || []).filter(x => x.task === t.id).slice(0, 3), can = S.B.canAct;
+  const pr = String(t.priority || "").toLowerCase();
+  return `<div class="task" data-id="${t.id}">
+    <div><div class="nm">${showHome ? esc(t.home) + " · " : ""}${esc(t.name)} <span class="pill ${late ? "late" : k}">${late ? "Overdue · " : ""}${l}</span>
+      ${pr && !["normal", "low", "watch"].includes(pr) ? `<span class="pill late">${esc(t.priority)}</span>` : ""}</div>
+      <div class="sub">${times || (t.dept === "inspection" ? "Inspection" : "Clean")}${t.comments ? " · 💬 " + t.comments + " comment" + (t.comments === 1 ? "" : "s") : ""}</div></div>
+    <div class="who">${t.who && t.who.length ? esc(t.who.join(", ")) : `<span class="muted">Nobody assigned</span>`}</div>
+    <div class="acts"><a class="btn sm" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Breezeway ↗</a>
+      ${can ? (k === "done" ? `<button class="btn sm" data-a="reopen">Reopen</button>` : `<button class="btn sm primary" data-a="close">✓ Done</button>`) +
+        `<button class="btn sm" data-a="assign">Assign</button><button class="btn sm" data-a="reschedule">Move</button><button class="btn sm" data-a="comment">Comment</button>` : ""}</div>
+    ${acts.length ? `<div class="qlog">${acts.map(x => `<span class="${x.status === "failed" ? "failed" : ""}">${esc(KIND[x.kind] || x.kind)} by ${esc(x.by || "?")}: ${
+      x.status === "waiting" || x.status === "sending" ? "sending to Breezeway…" : x.status === "done" ? "done in Breezeway" : "didn't go through — " + esc(x.result || "")}</span>`).join(" · ")}</div>` : ""}
+  </div>`;
+}
+
+/* ---- changes to Breezeway: only drawn when hk_board says canAct; hk_action_add checks again ---- */
+function act(id, kind){
+  const t = (S.B.tasks || []).find(x => x.id === id); if(!t) return;
+  let body = "";
+  if(kind === "close") body = `<p>Mark this task done in Breezeway? The checklist answers and photos stay as the cleaner left them.</p>`;
+  if(kind === "reopen") body = `<p>Reopen this task in Breezeway? It goes back to in progress.</p>`;
+  if(kind === "comment") body = `<label>Comment<textarea id="f-text" maxlength="1000"></textarea></label><p class="muted">Shows on the task in Breezeway with your name. Door codes are hidden automatically.</p>`;
+  if(kind === "reschedule") body = `<div class="two"><label>Date<input type="date" id="f-date" value="${esc(t.date)}"></label><label>Time (optional)<input type="time" id="f-time" value="${esc(String(t.time || "").slice(0, 5))}"></label></div>`;
+  if(kind === "assign") body = `<p class="muted">Tick everyone who should be on it.</p><div class="chk">${(S.B.people || []).map(p =>
+      `<label><input type="checkbox" value="${p.id}"${(t.who || []).includes(p.name) ? " checked" : ""}> ${esc(p.name)}</label>`).join("") || `<span class="muted">No Breezeway people loaded yet.</span>`}</div>`;
+  const d = $("#dlg");
+  d.innerHTML = `<div class="dbody"><h3>${esc(KIND[kind])}</h3><p class="muted" style="margin:0">${esc(t.home)} · ${esc(t.name)}</p>${body}<p class="err" id="aerr"></p></div>
+    <div class="dfoot"><button class="btn" id="acancel">Cancel</button><button class="btn primary" id="ago">${kind === "close" ? "✓ Mark done" : "Send to Breezeway"}</button></div>`;
+  d.showModal();
+  $("#acancel").onclick = () => d.close();
+  $("#ago").onclick = async () => {
+    let data = {};
+    if(kind === "comment") data = { text:$("#f-text").value };
+    if(kind === "reschedule") data = { date:$("#f-date").value, time:$("#f-time").value };
+    if(kind === "assign") data = { people:$$(".chk input:checked", d).map(x => x.value) };
+    $("#ago").disabled = true;
+    const r = await sb.rpc("hk_action_add", { p_task:id, p_kind:kind, p_data:data });
+    if(r.error){ $("#aerr").textContent = errText(r.error); $("#ago").disabled = false; return; }
+    d.close(); load(true);
+  };
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button"); if(!t) return;
+  if(t.id === "rf"){ load(); return; }
+  if(t.dataset.r){ S.range = t.dataset.r; S.show = ""; load(); return; }
+  if(t.hasAttribute("data-show")){ S.show = S.show === t.dataset.show ? "" : t.dataset.show; render(); return; }
+  if(t.dataset.a){ act(+t.closest(".task").dataset.id, t.dataset.a); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if(t.id === "pick" && t.value){ S.range = "pick"; S.day = t.value; S.show = ""; load(); }
+  if(t.id === "dhk"){ S.depts.housekeeping = t.checked; load(); }
+  if(t.id === "din"){ S.depts.inspection = t.checked; load(); }
+  if(t.id === "view"){ S.view = t.value; render(); }
+});
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; const p = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(p, p); } });
+setInterval(() => { if(S.B && !document.hidden && !$("#dlg").open && (document.activeElement || {}).id !== "q") load(true); }, 60000);
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hk_ok");
+  if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Housekeeping</h1><p class="muted">Coming soon.</p>`; return; }
+  load();
+})();
+window.__hk = { S, render, state, stayFlags, span, counts };   // for the stub test
+</script>
+</body>
+</html>
