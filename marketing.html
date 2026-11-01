@@ -516,14 +516,14 @@ function placesHtml(){
       <div class="bar" style="margin:6px 0 0;gap:6px">${a(p.edit_url, "Edit / sign in", "primary")}${a(p.our_url, "Our page")}
         ${(p.links || []).map(l => a(l.url, esc(l.label))).join("")}
         ${!p.edit_url ? `<button class="btn small" data-place="${p.id}">+ Add the sign-in page</button>` : ""}</div>
-      ${p.login_where ? `<small>🔑 Sign-in: ${esc(p.login_where)}</small>` : ""}
+      ${p.login_where ? `<small>🔑 Sign-in: ${esc(p.login_where)}${/last ?pass/i.test(p.login_where) ? ` · <a href="https://lastpass.com/vault/" target="_blank" rel="noopener noreferrer">Open LastPass ↗</a>` : ""}</small>` : ""}
       <small class="src">Source: ${esc(p.source)}${p.checked_on ? ` · checked ${esc(fmtD(p.checked_on))}` : ""}${p.updated_name ? ` · last change ${esc(p.updated_name)}` : ""}</small></div>`;
   return `<h2>Where we advertise the business</h2>
   <div class="bar"><button class="btn primary" data-newplace="1">+ Add a place</button>
     <span class="muted">Chambers, directories, review sites and ads for Moose Management itself (not single homes). "Edit / sign in" opens their site in a new tab.</span></div>
   <div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))">${on.map(card).join("") || '<p class="muted">Nothing added yet.</p>'}</div>
   ${off.length ? `<details><summary class="muted">Hidden places · ${off.length}</summary><div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))">${off.map(card).join("")}</div></details>` : ""}
-  <p class="src">Sign-in names and passwords are never kept in the hub; "Sign-in" only says who has it. Nothing here is ever deleted: hide a place you stop using.</p>`;
+  <p class="src">Passwords live in LastPass (<a href="https://lastpass.com/vault/" target="_blank" rel="noopener noreferrer">open LastPass ↗</a>), never in the hub; "Sign-in" only says where it's saved or who has it. Nothing here is ever deleted: hide a place you stop using.</p>`;
 }
 function placeDialog(x){
   const d = $("#dlg"), p = x || { kind:"directory", links:[] };
@@ -534,7 +534,7 @@ function placeDialog(x){
     <label>Sign-in / edit page (https://…) <input name="edit_url" type="url" value="${esc(p.edit_url || "")}" placeholder="where we log in to change our listing"></label>
     <label>Our page there (https://…) <input name="our_url" type="url" value="${esc(p.our_url || "")}" placeholder="what the public sees"></label>
     <label>More links, one per line: Label | https://… <textarea name="links" rows="3">${esc(links)}</textarea></label>
-    <label>Who has the sign-in <input name="login_where" maxlength="300" value="${esc(p.login_where || "")}" placeholder="e.g. Brandon · in the password manager (never the password)"></label>
+    <label>Who has the sign-in <input name="login_where" maxlength="300" value="${esc(p.login_where || "")}" placeholder="e.g. In LastPass · Brandon (never the password itself)"></label>
     <label>Renewal <input name="renews" maxlength="200" value="${esc(p.renews || "")}" placeholder="e.g. yearly in June, $… "></label>
     <label>Renewal date <input name="renews_on" type="date" value="${esc(p.renews_on || "")}"></label>
     <label>Notes <textarea name="note" maxlength="2000">${esc(p.note || "")}</textarea></label>
