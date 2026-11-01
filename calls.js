@@ -5,10 +5,10 @@
    - callsView(v): #/call_review — upload button + steps (call_can_upload), numbers, by agent, call list, transcript pop-up.
    - callsBanner: admins + office managers get a banner on every hub page until yesterday's calls are uploaded and complete
      (calls_upload_due(): an upload made today that covers yesterday, with no Pulse call ids missing). Others never see it.
-   - ownerCallsView(v): #/owner_calls — Owners ▸ Calls (2026-11-01): calls with owners / possible owners (track_calls.owner_kind,
+   - ownerCallsView(v): #/owner_calls — Owners ▸ Communication (2026-11-01): calls with owners / possible owners (track_calls.owner_kind,
      hub_owner_calls.sql) with Penny's notes + reach-out marks. For people who can open it, those calls leave Call review + Follow-ups.
    Who sees which calls is decided by RLS: admins + office managers all, owner relations owner calls, everyone else their own;
-   owner calls also for everyone with the Owner calls desk (owner relations + the 4 manager teams). */
+   owner calls also for everyone with the Owner communication desk (owner relations + the 4 manager teams). */
 (function(){
 const TRACK = "https://moosemanagement.trackhs.com";
 const NEED = ["Call Id", "Created Date", "Created Time", "Direction", "Duration", "Agents", "Call Result", "Routing Result"];   // same list as calls_upload()
@@ -24,7 +24,7 @@ let S = { from: iso(new Date(Date.now() - 13 * 864e5)), to: iso(new Date()), age
 // who called (track_call_match.party, track_calls_match.py: Track contacts + stays + hub vendors by phone number)
 const PARTY = { guest:"Guest (has stayed or booked)", lead:"Lead (in Track, never stayed)", prospect:"Possible guest (not in Track)", owner:"Owner", vendor:"Vendor", other:"Other / unknown" };
 const digits = s => String(s || "").replace(/\D/g, "");
-const ownDesk = () => typeof DESKS !== "undefined" && DESKS.some(d => d.key === "owner_calls" && d.status === "live");   // owner calls live on Owners ▸ Calls for these people
+const ownDesk = () => typeof DESKS !== "undefined" && DESKS.some(d => d.key === "owner_calls" && d.status === "live");   // owner calls live on Owners ▸ Communication for these people
 const phonef = s => { const d = digits(s).slice(-10); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : (s || ""); };
 function css(){
   if(document.getElementById("callcss")) return;
@@ -139,7 +139,7 @@ window.callsView = async function(v){
     nts = await all(() => sb.from("track_call_notes").select("call_id,guest_name:data->>guest_name").gte("call_id", lo));
   } catch(e){ return $("#cbody").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(e.message)}</p></div>`; }
   if(ownDesk()){ const moved = calls.filter(c => c.owner_kind).length; calls = calls.filter(c => !c.owner_kind);
-    if(moved) $("#culast").insertAdjacentHTML("beforeend", ` <a href="#/owner_calls">${moved} owner call${moved === 1 ? "" : "s"} for these dates are in Owners ▸ Calls →</a>`); }
+    if(moved) $("#culast").insertAdjacentHTML("beforeend", ` <a href="#/owner_calls">${moved} owner call${moved === 1 ? "" : "s"} for these dates are in Owners ▸ Communication →</a>`); }
   const T = Object.fromEntries(trs.map(t => [t.call_id, t])), MT = Object.fromEntries(mts.map(m => [m.call_id, m])), NM = Object.fromEntries(nts.map(n => [n.call_id, n.guest_name]));
   // the name we show: Track contact, else the hub vendor, else the name Penny heard on the call (marked "said on call")
   const who = c => { const m = MT[c.call_id] || {}; return m.contact_name || m.vendor_name || (NM[c.call_id] ? NM[c.call_id] + " (said on call)" : c.caller_name || ""); };
@@ -202,7 +202,7 @@ window.followupsView = async function(v){
     match = await all(() => sb.from("track_call_match").select("call_id,party,contact_id,stays_before,last_stay,reservation_id,res_arrive,res_depart,res_unit,booked_after,booked_after_on").gte("call_id", calls.length ? calls[calls.length - 1].call_id : 0));
     fus = await all(() => sb.from("track_call_followups").select("call_id,status,note,by_name,at").order("at", { ascending:false }));
   } catch(e){ return $("#fbody").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(e.message)}</p></div>`; }
-  if(ownDesk()) calls = calls.filter(c => !c.owner_kind);   // they're on Owners ▸ Calls
+  if(ownDesk()) calls = calls.filter(c => !c.owner_kind);   // they're on Owners ▸ Communication
   const C = Object.fromEntries(calls.map(c => [c.call_id, c])), MT = Object.fromEntries(match.map(m => [m.call_id, m])), FU = {};
   fus.forEach(f => { if(!FU[f.call_id]) FU[f.call_id] = f; });
   const isOpen = n => !FU[n.call_id] || FU[n.call_id].status === "open";
@@ -267,13 +267,13 @@ window.followupsView = async function(v){
     followupsView(v); });
   $("#fbody").querySelectorAll("[data-call]").forEach(b => b.onclick = () => { const id = +b.dataset.call; showCall({ ...C[id], call_id:id }, { status:"ok" }); });
 };
-// ---------- Owners ▸ Calls (Brandon 2026-11-01): "owner communication comes into there ... so the owner relations team can monitor the
+// ---------- Owners ▸ Communication (Brandon 2026-11-01): "owner communication comes into there ... so the owner relations team can monitor the
 // transcripts or listen to the call to determine if they need to reach out or not". Calls with track_calls.owner_kind (hub_owner_calls.sql).
 // Homes = owner_call_homes() (the call's number vs the Track owners list, home codes only). Marks go in track_call_followups (followup_set).
 let O = { tab:"reach", from: iso(new Date(Date.now() - 59 * 864e5)), to: iso(new Date()), q:"", agent:"" };
 window.ownerCallsView = async function(v){
-  css(); $("#ttl").textContent = $("#utl").textContent = "Owner calls";
-  v.innerHTML = `<div class="page wide calls"><h2 style="margin:0 0 4px">Owner calls</h2>
+  css(); $("#ttl").textContent = $("#utl").textContent = "Owner communication";
+  v.innerHTML = `<div class="page wide calls"><h2 style="margin:0 0 4px">Owner communication</h2>
     <p class="muted">Phone calls with our owners and with people asking about management, from Track Pulse. Penny reads each transcript (machine-made, so double-check names and numbers) and suggests a next step. Homes are matched by phone number to the Track owners list. Source: Pulse Recent Calls export + Track API (transcripts).</p>
     <div class="flt" id="oflt"></div><div class="bdsel" id="otabs" style="margin:4px 0 10px"></div><div id="obody"><p class="muted">Loading…</p></div></div>`;
   let calls, trs, mts, nts, fus; const hm = {};
