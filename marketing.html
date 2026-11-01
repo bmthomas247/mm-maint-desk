@@ -329,10 +329,12 @@ const osShort = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { mon
 const osRange = r => { const a = osShort(r.stay_in), b = osShort(r.stay_out); return a.slice(0, 3) === b.slice(0, 3) ? `${a}–${b.slice(4)}` : `${a} – ${b}`; };
 const osEvLine = e => `• ${e.title}${e.venue && !e.title.toLowerCase().includes(e.venue.split(",")[0].toLowerCase()) ? ` at ${e.venue.split(",")[0]}` : ""}, ${osDay(e.day)}${e.end && e.end !== e.day ? ` to ${osDay(e.end)}` : ""}`
   + `${e.time ? `, ${e.time}` : ""}${e.price ? ` (${e.price})` : ""}${e.url && !/google\.com\/search/.test(e.url) ? `\n  ${e.url}` : ""}`;
+// ticked items, ⭐ pushed ones first (Brandon 2026-11-01: "push certain items or not include events")
+const osOn = l => l.filter(x => x.on).sort((a, b) => (b.top ? 1 : 0) - (a.top ? 1 : 0));
 // The wording Brandon OKs (2026-10-31: waiting). Facts come only from the ticked items, each with its source on the page.
 const OS_TEXT = {
   during(r, it, me){
-    const t = osRange(r), here = r.stay_in <= today(), ev = it.events.filter(e => e.on), td = it.todo.filter(x => x.on);
+    const t = osRange(r), here = r.stay_in <= today(), ev = osOn(it.events), td = osOn(it.todo);
     return { subject:`What's happening in Park City during your stay (${t})`,
       body:[`Hi ${r.greet_name || "there"},`,
         here ? `We see you're at your home through ${osShort(r.stay_out)}. Welcome back!` : `We see you'll be at your home ${t}. We're looking forward to having you back!`,
@@ -341,7 +343,7 @@ const OS_TEXT = {
         `Need anything during your stay, a walk-through, or something looked at? Just reply to this email or call us at 435-714-6544.`,
         `Enjoy your stay!\n${me || "The Moose Management team"}\nMoose Management`].join("\n\n") }; },
   after(r, it, me){
-    const td = it.todo.filter(x => x.on);
+    const td = osOn(it.todo);
     return { subject:`Thanks for staying at your home. Anything you need?`,
       body:[`Hi ${r.greet_name || "there"},`,
         `Thanks for spending time at your home ${osRange(r)}. We hope it was a great stay!`,
@@ -370,11 +372,12 @@ function osHtml(){
   rows.forEach(r => { const k = r.home + "|" + r.stay_in; by[k] = by[k] || { home:r.home, r }; by[k][r.kind] = r; });
   const stays = Object.values(by).sort((a, b) => a.r.stay_in.localeCompare(b.r.stay_in));
   const cell = (r, kind) => { if(!r) return `<span class="muted">—</span>`; const [tone, lab] = OSST[r.status] || ["", r.status];
-    const wait = kind === "after" && r.status === "draft" && r.stay_out > t;
+    const wait = kind === "after" && r.status === "draft" && r.stay_out > t, it = osItems(r), ne = it.events.filter(x => x.on).length, nt = it.todo.filter(x => x.on).length;
     return `<span class="pill ${tone}">${lab}</span>${r.status === "draft" && !r.auto ? ` <span class="pill blue">edited</span>` : ""}${wait ? ` <span class="muted">from ${esc(osShort(r.stay_out))}</span>` : ""}
-      <button class="btn small" data-os="${r.id}">${["draft", "failed"].includes(r.status) ? "✏️ Open" : "👁 See"}</button>`; };
+      <button class="btn small" data-os="${r.id}">${["draft", "failed"].includes(r.status) ? "✏️ Pick & send" : "👁 See"}</button>
+      <div class="muted" style="font-size:12px">${kind === "during" ? `${ne ? `${ne} of ${it.events.length} events` : "no events"} · ` : ""}${nt} to-do${nt === 1 ? "" : "s"} in it</div>`; };
   const ev = (S.own.ev || []).filter(e => (e.ends || e.starts) >= t);
-  return `<h2>Owner stay emails</h2><p class="muted">For owners staying in their home in the next 30 days: what's on in town during their dates and a short "while you're here" list, then an "anything you need?" email after they leave. Nothing goes out until someone taps Send.</p>
+  return `<h2>Owner stay emails</h2><p class="muted">For owners staying in their home in the next 30 days: what's on in town during their dates and a short "while you're here" list, then an "anything you need?" email after they leave. Open one to pick what goes in it for that owner: tick or untick each event and to-do, ⭐ push an item to the top, leave out all events, or add your own line. Nothing goes out until someone taps Send.</p>
   ${OS_TEXT_OK ? "" : `<div class="note">The email wording is waiting for Brandon's OK, so Send is off for now. You can open, edit and save drafts.</div>`}
   ${stays.length ? `<div class="box"><table><thead><tr><th>Home</th><th>Owner</th><th>Stay</th><th>During the stay</th><th>After the stay</th></tr></thead><tbody>
     ${stays.map(s => `<tr><td><b>${esc(s.home)}</b></td><td>${esc(s.r.greet_name || "")}<div class="muted">${esc(s.r.owner_label || "no Track owner")}</div></td>
@@ -399,18 +402,22 @@ async function osOpen(id){
 }
 function osDraw(){
   const r = OS.row, it = OS.items, ro = !["draft", "failed"].includes(r.status), early = r.kind === "after" && r.stay_out > today();
-  const item = (x, g) => `<label style="display:flex;gap:8px;align-items:flex-start;font-weight:600;margin:6px 0"><input type="checkbox" data-osi="${g}:${esc(x.id)}" ${x.on ? "checked" : ""} ${ro ? "disabled" : ""} style="width:auto;margin-top:4px">
-    <span>${g === "events" ? esc(osEvLine(x).replace(/^• /, "").replace(/\n[\s\S]*$/, "")) : esc(x.text)}${x.staff ? ` <span class="pill amber">staff pick</span>` : ""}${x.fresh ? ` <span class="pill blue">new</span>` : ""}
+  const item = (x, g) => `<div style="display:flex;gap:6px;align-items:flex-start"><label style="flex:1;display:flex;gap:8px;align-items:flex-start;font-weight:600;margin:6px 0"><input type="checkbox" data-osi="${g}:${esc(x.id)}" ${x.on ? "checked" : ""} ${ro ? "disabled" : ""} style="width:auto;margin-top:4px">
+    <span>${g === "events" ? esc(osEvLine(x).replace(/^• /, "").replace(/\n[\s\S]*$/, "")) : esc(x.text)}${x.top ? ` <span class="pill green">⭐ pushed to the top</span>` : ""}${x.staff ? ` <span class="pill amber">staff pick</span>` : ""}${x.fresh ? ` <span class="pill blue">new</span>` : ""}${x.mine ? ` <span class="pill blue">your line</span>` : ""}
     <span class="src" style="display:block;margin:2px 0 0">${x.url && /^https:/.test(x.url) ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.source)}</a>` : esc(x.source)}</span>
-    ${x.detail ? `<span class="src" style="display:block;margin:2px 0 0">For you, not in the email: ${esc(x.detail)}</span>` : ""}</span></label>`;
+    ${x.detail ? `<span class="src" style="display:block;margin:2px 0 0">For you, not in the email: ${esc(x.detail)}</span>` : ""}</span></label>
+    ${ro ? "" : `<button class="btn small" data-ostop="${g}:${esc(x.id)}" title="${x.top ? "Stop pushing this one" : "Push to the top of its list (and tick it)"}" style="margin-top:4px">${x.top ? "★" : "☆"}</button>`}</div>`;
+  const all = g => ro || !it[g].length ? "" : ` <button class="btn small" data-osall="${g}:1">All in</button> <button class="btn small" data-osall="${g}:0">${g === "events" ? "No events" : "None"}</button>`;
+  const mine = () => ro ? "" : `<div class="bar" style="margin:6px 0"><input id="osmine" maxlength="300" placeholder="Add your own line, e.g. Your new hot tub cover is in. Let us know what you think!" style="flex:1"><button class="btn small" data-osmine="1">+ Add</button></div>`;
   $("#osd").innerHTML = `<div class="dhead"><h3>${r.kind === "after" ? "After the stay" : "During the stay"} · ${esc(r.home)} · ${esc(r.greet_name || "")} (${esc(osRange(r))})</h3>
     <span class="status" id="osst">${r.status === "sent" ? `Sent by ${esc(r.sent_name || "")} ${esc(fmtDT(r.sent_at))}${r.fd_ticket ? ` · Freshdesk #${esc(r.fd_ticket)}` : ""}` : r.status === "failed" ? `<span class="err">${esc(r.error || "Not sent")}</span>` : r.edited_name ? `Saved by ${esc(r.edited_name)} ${esc(fmtDT(r.edited_at))}` : ""}</span>
     ${ro ? "" : `<button class="btn" data-ossave="1">💾 Save</button><button class="btn primary" data-ossend="1" ${!OS_TEXT_OK || early ? "disabled" : ""} title="${!OS_TEXT_OK ? "Waiting for Brandon to OK the wording" : early ? "Can go out on or after " + osShort(r.stay_out) : "Send from hello@moosemanagement.com"}">✉️ Send from hello@</button>
       <button class="btn" data-osskip="1">Skip</button>`}${r.status === "skipped" ? `<button class="btn" data-osback="1">Bring back</button>` : ""}<button class="btn" data-osclose="1">Close</button></div>
   <div class="des"><div class="ed">
     ${r.res_id ? `<p class="src">Track res #${esc(r.res_id)} · ${esc(r.stay_label || "")}${r.owner_label ? ` · Track owner: ${esc(r.owner_label)}` : ""}</p>` : ""}
-    ${r.kind === "during" ? `<h3 style="font-size:14px;margin:8px 0 2px">What's on during their dates</h3>${it.events.length ? it.events.map(x => item(x, "events")).join("") : `<p class="muted">No events we know of on these dates. Add one under Town events.</p>`}` : ""}
-    <h3 style="font-size:14px;margin:12px 0 2px">${r.kind === "during" ? "While you're here" : "Ask about"}</h3>${it.todo.length ? it.todo.map(x => item(x, "todo")).join("") : `<p class="muted">Nothing from the hub for this home.</p>`}
+    ${r.kind === "during" ? `<h3 style="font-size:14px;margin:8px 0 2px">What's on during their dates${all("events")}</h3>${it.events.length ? it.events.map(x => item(x, "events")).join("") : `<p class="muted">No events we know of on these dates.</p>`}
+      ${ro ? "" : `<button class="btn small" data-osadd="1">+ Add an event (with where it came from)</button>`}` : ""}
+    <h3 style="font-size:14px;margin:12px 0 2px">${r.kind === "during" ? "While you're here" : "Ask about"}${all("todo")}</h3>${it.todo.length ? it.todo.map(x => item(x, "todo")).join("") : `<p class="muted">Nothing from the hub for this home.</p>`}${mine()}
     ${ro ? "" : `<p class="muted" id="osmode" style="margin-top:12px">${OS.edited ? `You changed the words. <button class="btn small" data-osre="1">↻ Rewrite from ticked items</button>` : "Ticking items rewrites the message."}</p>`}
     <label>Subject<input id="ossub" value="${esc(OS.subject)}" ${ro ? "readonly" : ""}></label>
     <label>Message<textarea id="osbody" style="min-height:280px" ${ro ? "readonly" : ""}>${esc(OS.body)}</textarea></label>
@@ -454,11 +461,20 @@ function osEventDialog(){
     const q = await sb.rpc("mkt_event_add", { p_title:f.get("title"), p_starts:f.get("starts"), p_ends:f.get("ends") || null, p_venue:f.get("venue"), p_time:f.get("time"),
       p_price:f.get("price"), p_url:f.get("url"), p_source:f.get("source"), p_notes:null });
     if(q.error){ $("#ose").textContent = q.error.message; return; }
-    d.close(); await loadOwners(); render(); });
+    d.close(); await loadOwners(); render();
+    if($("#osd").open && OS.row){ const have = new Set(OS.items.events.map(x => x.id));   // offer it in the email that's open
+      osItems(OS.row).events.filter(x => !have.has(x.id)).forEach(x => OS.items.events.push(x));
+      OS.items.events.sort((a, b) => a.day.localeCompare(b.day)); osDraw(); } });
 }
 document.addEventListener("click", async e => {
-  const b = e.target.closest("[data-os],[data-osadd],[data-evoff],[data-ossave],[data-ossend],[data-osskip],[data-osback],[data-osclose],[data-osre]"); if(!b) return;
+  const b = e.target.closest("[data-os],[data-osadd],[data-evoff],[data-ossave],[data-ossend],[data-osskip],[data-osback],[data-osclose],[data-osre],[data-ostop],[data-osall],[data-osmine]"); if(!b) return;
   if(b.dataset.os) return osOpen(b.dataset.os);
+  if(b.dataset.ostop || b.dataset.osall || b.dataset.osmine){   // pick what goes in: push, all in / none, your own line
+    if(b.dataset.ostop){ const k = b.dataset.ostop, i = k.indexOf(":"), x = OS.items[k.slice(0, i)].find(y => String(y.id) === k.slice(i + 1)); if(x){ x.top = !x.top; if(x.top) x.on = true; } }
+    if(b.dataset.osall){ const [g, v] = b.dataset.osall.split(":"); OS.items[g].forEach(x => x.on = v === "1"); }
+    if(b.dataset.osmine){ const t = ($("#osmine").value || "").trim(); if(!t) return $("#osmine").focus();
+      OS.items.todo.push({ id:"my" + Date.now(), text:t, source:`Added by ${OS.me || "you"}, ${osShort(today())}`, on:true, mine:true }); }
+    return OS.edited ? osDraw() : osRecompose(); }
   if(b.dataset.osadd) return osEventDialog();
   if(b.dataset.evoff){ if(!confirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
   if(b.dataset.osclose) return $("#osd").close();
