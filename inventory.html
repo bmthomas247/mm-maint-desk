@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Inventory</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Inventory (hub key 'inventory'; hub_inventory.sql). Maintenance ▸ Inventory opens ?area=maintenance, Housekeeping ▸ Inventory
+     ?area=housekeeping. Access is enforced in Supabase (hub_can('inventory') = admins, maint_manager, hk_manager, Janae) - this page
+     only shows what RLS already allows. Nothing is deleted: Remove sets off = true; every change is in hub_inventory_log. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:16px;margin:0;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:38px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.sm{min-height:32px;padding:0 9px;font-size:12.5px} .btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.clean{background:var(--moose-soft);color:var(--moose-ink)} .pill.dirty{background:var(--amber-soft);color:var(--amber)} .pill.in_use{background:var(--blue-soft);color:var(--blue)}
+.pill.needs_repair,.pill.low{background:var(--red-soft);color:var(--red)} .pill.in_storage{background:var(--violet-soft);color:var(--violet)}
+.tabs{display:flex;gap:6px;margin:14px 0 4px;flex-wrap:wrap}
+.tab{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:7px 16px;border-radius:999px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;min-height:40px}
+.tab.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+.head{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tile b{display:block;font-size:22px;font-weight:800;line-height:1.2} .tile span{font-size:12.5px;color:var(--muted);font-weight:700}
+.tile.on{outline:2px solid var(--forest-2)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}
+.bar input,.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 9px;background:var(--card);color:var(--ink);min-height:38px}
+.bar input[type=search]{flex:1;min-width:170px}
+.bar label{font-size:13px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+.grp>header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.grp>header .muted{margin-left:auto}
+.row{display:grid;grid-template-columns:minmax(0,1.6fr) auto minmax(0,1fr) auto;gap:6px 14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .nm{font-weight:800;overflow-wrap:anywhere} .row .nt{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.qty{display:inline-flex;align-items:center;gap:4px} .qty b{min-width:44px;text-align:center;font-size:16px}
+.qty .btn{width:34px;padding:0;justify-content:center;font-size:18px}
+.loc{font-size:13.5px;overflow-wrap:anywhere} .loc small{display:block;color:var(--muted);font-size:11.5px}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.acts select{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line-2);border-radius:10px;padding:4px 6px;background:var(--card);color:var(--ink);min-height:32px}
+.empty{padding:22px;color:var(--muted);font-size:14px;text-align:center}
+.start{background:var(--card);border:1px dashed var(--line-2);border-radius:var(--radius);padding:18px}
+.start .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:480px;width:calc(100% - 24px);background:var(--card);color:var(--ink);max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog form,dialog .dbody{padding:18px 20px;overflow:auto;max-height:calc(100vh - 100px)}
+dialog h3{margin:0 0 6px;font-size:18px}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog input,dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog textarea{min-height:70px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.dfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line);background:var(--card);position:sticky;bottom:0}
+.err{color:var(--red);font-size:13px;min-height:1em}
+.hist{font-size:13.5px} .hist li{margin:6px 0} .hist small{color:var(--muted)}
+@media (max-width:700px){
+  .row{grid-template-columns:minmax(0,1fr) auto}
+  .row .loc{grid-column:1} .row .acts{grid-column:1 / -1;justify-content:flex-start}
+  .two{grid-template-columns:1fr}
+}
+body.inhub .wrap{padding-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<datalist id="dl-cat"></datalist><datalist id="dl-name"></datalist><datalist id="dl-loc"></datalist><datalist id="dl-unit"></datalist>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const num = n => { n = +n || 0; return Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits:2 }); };
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+if(window.top !== window) document.body.classList.add("inhub");
+
+/* What Brandon listed (2026-11-01). Anything else can be typed in. */
+const AREAS = {
+  maintenance:{ label:"Maintenance", cats:["Portable AC","Portable heater","Mini fridge","Microwave","Toaster"],
+    names:{}, units:["each"], hint:"Things we bring to a rental when it's needed. Track where each one is and whether it's clean, dirty or in use." },
+  housekeeping:{ label:"Housekeeping", cats:["Linens","Soaps"],
+    names:{ Linens:["King sheet set","Queen sheet set","Twin sheet set","Pillowcase","Bath towel","Hand towel","Washcloth","Bath mat"],
+            Soaps:["Shampoo","Conditioner","Bar soap"] },
+    units:["each","set","bottle","case","box","gallon"], hint:"Linens and guest soaps. Add a count and a \"low at\" number so it shows when we're running low." }
+};
+const STATUS = [["clean","Clean"],["dirty","Dirty"],["in_use","In use"],["in_storage","In storage"],["needs_repair","Needs repair"]];
+const SL = Object.fromEntries(STATUS);
+const S = { area: new URLSearchParams(location.search).get("area") === "housekeeping" ? "housekeeping" : "maintenance",
+  rows: [], homes: [], q: "", cat: "", status: "", loc: "", show: "", removed: false };
+
+const isLow = r => r.low_at != null && +r.qty <= +r.low_at;
+const live = () => S.rows.filter(r => r.area === S.area && !r.off);
+
+async function load(){
+  const r = await sb.from("hub_inventory").select("*").order("category").order("name").limit(5000);
+  if(r.error){ $("#app").innerHTML = `<h1>Inventory</h1><p class="err">${esc(errText(r.error))}</p>`; return; }
+  S.rows = r.data || [];
+  render();
+}
+
+function lists(){
+  const A = AREAS[S.area], mine = S.rows.filter(r => r.area === S.area);
+  const uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y));
+  $("#dl-cat").innerHTML = uniq(A.cats.concat(mine.map(r => r.category))).map(v => `<option value="${esc(v)}">`).join("");
+  $("#dl-unit").innerHTML = uniq(A.units.concat(mine.map(r => r.unit))).map(v => `<option value="${esc(v)}">`).join("");
+  $("#dl-loc").innerHTML = uniq(["Office"].concat(S.rows.map(r => r.location), S.homes)).map(v => `<option value="${esc(v)}">`).join("");
+}
+function nameList(cat){
+  const A = AREAS[S.area];
+  const v = [...new Set((A.names[cat] || []).concat(S.rows.filter(r => r.area === S.area && r.category === cat).map(r => r.name)))];
+  $("#dl-name").innerHTML = v.map(x => `<option value="${esc(x)}">`).join("");
+}
+
+function render(){
+  const A = AREAS[S.area], all = live(), any = S.rows.some(r => r.area === S.area);   // any = removed ones too, so they can be brought back
+  lists();
+  const sumQ = f => all.filter(f).reduce((t, r) => t + (+r.qty || 0), 0);
+  const tiles = [["", "Items", sumQ(() => true)]].concat(
+    S.area === "maintenance"
+      ? [["in_use", "In use", sumQ(r => r.status === "in_use")], ["clean", "Clean", sumQ(r => r.status === "clean")],
+         ["dirty", "Dirty", sumQ(r => r.status === "dirty")], ["needs_repair", "Needs repair", sumQ(r => r.status === "needs_repair")]]
+      : [["low", "Running low", all.filter(isLow).length], ["clean", "Clean", sumQ(r => r.status === "clean")], ["dirty", "Dirty", sumQ(r => r.status === "dirty")]]);
+  const q = S.q.trim().toLowerCase();
+  const show = (S.removed ? S.rows.filter(r => r.area === S.area && r.off) : all).filter(r =>
+    (!S.cat || r.category === S.cat) && (!S.status || r.status === S.status) && (!S.loc || (r.location || "") === S.loc) &&
+    (S.show !== "low" || isLow(r)) && (S.show === "" || S.show === "low" || r.status === S.show) &&
+    (!q || [r.name, r.category, r.location, r.note, r.unit].join(" ").toLowerCase().includes(q)));
+  const cats = [...new Set(all.map(r => r.category))].sort(), locs = [...new Set(all.map(r => r.location).filter(Boolean))].sort();
+  const groups = {}; show.forEach(r => (groups[r.category] = groups[r.category] || []).push(r));
+  const start = !all.length && !S.removed ? `<div class="start"><h2>Nothing here yet — start the list</h2>
+      <p class="muted" style="margin:4px 0 0">${esc(A.hint)}</p>
+      <div class="chips">${A.cats.map(c => `<button class="btn" data-add="${esc(c)}">+ ${esc(c)}</button>`).join("")}<button class="btn" data-add="">+ Something else</button></div></div>` : "";
+  $("#app").innerHTML = `
+    <div class="head"><div><h1>Inventory</h1><p class="muted" style="margin:0">${esc(A.hint)} <span class="pill in_storage">Early version — add what we have; more is coming</span></p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="csv">⬇ CSV</button><button class="btn primary" data-add="">+ Add item</button></div></div>
+    <div class="tabs">${Object.keys(AREAS).map(k => `<button class="tab${k === S.area ? " on" : ""}" data-area="${k}">${esc(AREAS[k].label)}</button>`).join("")}</div>
+    <div class="tiles">${tiles.map(([k, l, n]) => `<button class="tile${S.show === k ? " on" : ""}" data-show="${k}"><b>${num(n)}</b><span>${esc(l)}</span></button>`).join("")}</div>
+    ${start}
+    ${any ? `<div class="bar">
+      <input type="search" id="q" placeholder="Search name, place, note…" value="${esc(S.q)}" aria-label="Search">
+      <select id="fcat" aria-label="Kind"><option value="">Every kind</option>${cats.map(c => `<option${c === S.cat ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
+      <select id="fst" aria-label="Status"><option value="">Any status</option>${STATUS.map(([k, l]) => `<option value="${k}"${k === S.status ? " selected" : ""}>${l}</option>`).join("")}</select>
+      <select id="floc" aria-label="Where"><option value="">Anywhere</option>${locs.map(c => `<option${c === S.loc ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
+      <label><input type="checkbox" id="frem"${S.removed ? " checked" : ""}> Removed items</label></div>` : ""}
+    ${Object.keys(groups).sort().map(c => grp(c, groups[c])).join("") || (all.length || S.removed ? `<div class="grp"><div class="empty">${S.removed ? "No removed items." : "Nothing matches."}</div></div>` : "")}`;
+}
+function grp(cat, rows){
+  const tot = rows.reduce((t, r) => t + (+r.qty || 0), 0);
+  return `<section class="grp"><header><h2>${esc(cat)}</h2><span class="muted">${num(tot)} total</span>
+      ${S.removed ? "" : `<button class="btn sm" data-add="${esc(cat)}">+ Add</button>`}</header>${rows.map(row).join("")}</section>`;
+}
+function row(r){
+  const st = r.status ? `<span class="pill ${r.status}">${esc(SL[r.status])}</span>` : "";
+  const low = isLow(r) ? ` <span class="pill low">Low (at ${num(r.low_at)})</span>` : "";
+  return `<div class="row" data-id="${r.id}">
+    <div><div class="nm">${esc(r.name)} ${st}${low}</div>${r.note ? `<div class="nt">${esc(r.note)}</div>` : ""}</div>
+    <div class="qty">${S.removed ? `<b>${num(r.qty)}</b>` : `<button class="btn" data-q="-1" aria-label="One less">−</button><b>${num(r.qty)}</b><button class="btn" data-q="1" aria-label="One more">+</button>`}
+      <span class="muted">${esc(r.unit || "")}</span></div>
+    <div class="loc">${r.location ? esc(r.location) : `<span class="muted">Where? Not set</span>`}<small>Changed ${esc(fmtDT(r.updated_at))}${r.updated_name ? " by " + esc(r.updated_name) : ""}</small></div>
+    <div class="acts">${S.removed ? `<button class="btn sm" data-back>↩ Bring back</button>` :
+      `<select data-st aria-label="Status"><option value="">Status…</option>${STATUS.map(([k, l]) => `<option value="${k}"${k === r.status ? " selected" : ""}>${l}</option>`).join("")}</select>
+       <button class="btn sm" data-edit>Edit</button>`}<button class="btn sm ghost" data-hist>History</button></div></div>`;
+}
+
+async function save(id, patch){
+  const r = id ? await sb.from("hub_inventory").update(patch).eq("id", id).select().single()
+               : await sb.from("hub_inventory").insert(patch).select().single();
+  if(r.error) throw r.error;
+  const i = S.rows.findIndex(x => x.id === r.data.id);
+  if(i >= 0) S.rows[i] = r.data; else S.rows.push(r.data);
+  return r.data;
+}
+async function quick(id, patch){
+  try { await save(id, patch); render(); } catch(e){ alert("Couldn't save: " + errText(e)); load(); }
+}
+
+function form(r, cat){
+  r = r || { area:S.area, category:cat || "", name:"", qty:1, unit:S.area === "maintenance" ? "each" : "", status:"", location:"", low_at:null, note:"" };
+  const d = $("#dlg");
+  d.innerHTML = `<form method="dialog" id="f">
+    <h3>${r.id ? "Edit item" : "Add to " + esc(AREAS[S.area].label) + " inventory"}</h3>
+    <label>Kind<input name="category" list="dl-cat" required maxlength="60" value="${esc(r.category)}" placeholder="${S.area === "maintenance" ? "e.g. Portable AC" : "e.g. Linens"}"></label>
+    <label>Item<input name="name" list="dl-name" required maxlength="120" value="${esc(r.name)}" placeholder="${S.area === "maintenance" ? "e.g. LG 8,000 BTU #1" : "e.g. Queen sheet set"}"></label>
+    <div class="two"><label>How many<input name="qty" type="number" min="0" step="any" inputmode="decimal" required value="${esc(r.qty)}"></label>
+      <label>Counted in<input name="unit" list="dl-unit" maxlength="30" value="${esc(r.unit || "")}" placeholder="each, set, bottle…"></label></div>
+    <div class="two"><label>Status<select name="status"><option value="">—</option>${STATUS.map(([k, l]) => `<option value="${k}"${k === r.status ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label>Where is it<input name="location" list="dl-loc" maxlength="120" value="${esc(r.location || "")}" placeholder="Office, storage, or home code"></label></div>
+    <label>Flag as low at (optional)<input name="low_at" type="number" min="0" step="any" inputmode="decimal" value="${r.low_at == null ? "" : esc(r.low_at)}" placeholder="e.g. 10"></label>
+    <label>Note<textarea name="note" maxlength="1000" placeholder="Model, size, anything to know">${esc(r.note || "")}</textarea></label>
+    <p class="err" id="ferr"></p></form>
+    <div class="dfoot">${r.id ? `<button class="btn ghost" id="frm" type="button" style="margin-right:auto;color:var(--red)">Remove</button>` : ""}
+      <button class="btn" id="fx" type="button">Cancel</button><button class="btn primary" id="fok" type="button">${r.id ? "Save" : "Add"}</button></div>`;
+  nameList(r.category);
+  d.showModal();
+  const f = $("#f");
+  f.category.addEventListener("input", () => nameList(f.category.value.trim()));
+  $("#fx").onclick = () => d.close();
+  $("#fok").onclick = async () => {
+    if(!f.reportValidity()) return;
+    const p = { area:r.area, category:f.category.value.trim(), name:f.name.value.trim(), qty:+f.qty.value, unit:f.unit.value.trim() || null,
+      status:f.status.value || null, location:f.location.value.trim() || null, low_at:f.low_at.value === "" ? null : +f.low_at.value, note:f.note.value.trim() || null };
+    $("#fok").disabled = true;
+    try { await save(r.id, p); d.close(); if(S.cat && S.cat !== p.category) S.cat = ""; render(); }
+    catch(e){ $("#ferr").textContent = "Couldn't save: " + errText(e); $("#fok").disabled = false; }
+  };
+  if(r.id) $("#frm").onclick = async () => {
+    if(!confirm(`Remove "${r.name}" from the list? It's kept in history and can be brought back from "Removed items".`)) return;
+    try { await save(r.id, { off:true }); d.close(); render(); } catch(e){ $("#ferr").textContent = "Couldn't remove: " + errText(e); }
+  };
+}
+
+const FL = { category:"Kind", name:"Item", qty:"How many", unit:"Counted in", status:"Status", location:"Where", low_at:"Low at", note:"Note", off:"Removed" };
+const fv = (k, v) => v == null || v === "" ? "—" : k === "status" ? (SL[v] || v) : k === "off" ? (v ? "yes" : "no") : String(v);
+async function showHistory(id){
+  const it = S.rows.find(x => x.id === id), d = $("#dlg");
+  d.innerHTML = `<div class="dbody"><h3>History · ${esc(it ? it.name : "")}</h3><p class="muted">Loading…</p></div><div class="dfoot"><button class="btn" id="hx">Close</button></div>`;
+  d.showModal(); $("#hx").onclick = () => d.close();
+  const r = await sb.from("hub_inventory_log").select("op,old_row,new_row,by_name,at").eq("item_id", id).order("at", { ascending:false }).limit(200);
+  const li = (r.data || []).map(x => {
+    if(x.op === "insert") return `<li><b>Added</b> — ${esc(fv("qty", x.new_row.qty))} ${esc(x.new_row.unit || "")}${x.new_row.status ? ", " + esc(SL[x.new_row.status]) : ""}${x.new_row.location ? ", " + esc(x.new_row.location) : ""}<br><small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`;
+    const ch = Object.keys(FL).filter(k => JSON.stringify(x.old_row[k]) !== JSON.stringify(x.new_row[k]))
+      .map(k => `${esc(FL[k])}: ${esc(fv(k, x.old_row[k]))} → <b>${esc(fv(k, x.new_row[k]))}</b>`);
+    return ch.length ? `<li>${ch.join("<br>")}<br><small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>` : "";
+  }).join("");
+  $(".dbody", d).innerHTML = `<h3>History · ${esc(it ? it.name : "")}</h3>` + (r.error ? `<p class="err">${esc(errText(r.error))}</p>` : `<ul class="hist">${li || "<li class='muted'>No changes yet.</li>"}</ul>`);
+}
+
+function csv(){
+  const rows = live(), cols = ["category","name","qty","unit","status","location","low_at","note","updated_at","updated_name"];
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const txt = [cols.join(",")].concat(rows.map(r => cols.map(c => q(c === "status" ? SL[r.status] || "" : r[c])).join(","))).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type:"text/csv" }));
+  a.download = `inventory-${S.area}-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button,[data-area]"); if(!t) return;
+  const rw = t.closest(".row"), id = rw ? +rw.dataset.id : null, it = id ? S.rows.find(x => x.id === id) : null;
+  if(t.dataset.area){ S.area = t.dataset.area; S.cat = S.status = S.loc = S.show = ""; S.removed = false;
+    try { history.replaceState(null, "", "?area=" + S.area); } catch(_){} render(); return; }
+  if(t.dataset.show != null){ S.show = S.show === t.dataset.show ? "" : t.dataset.show; S.removed = false; render(); return; }
+  if(t.dataset.add != null){ form(null, t.dataset.add); return; }
+  if(t.id === "csv"){ csv(); return; }
+  if(t.dataset.q && it){ const n = Math.max(0, (+it.qty || 0) + (+t.dataset.q)); if(n !== +it.qty) quick(id, { qty:n }); return; }
+  if(t.hasAttribute("data-edit") && it){ form(it); return; }
+  if(t.hasAttribute("data-hist") && id){ showHistory(id); return; }
+  if(t.hasAttribute("data-back") && it){ quick(id, { off:false }); return; }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if(t.hasAttribute("data-st")){ const id = +t.closest(".row").dataset.id; if(t.value) quick(id, { status:t.value }); return; }
+  if(t.id === "fcat"){ S.cat = t.value; render(); } if(t.id === "fst"){ S.status = t.value; render(); }
+  if(t.id === "floc"){ S.loc = t.value; render(); } if(t.id === "frem"){ S.removed = t.checked; S.show = ""; render(); }
+});
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; const p = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(p, p); } });
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"inventory" });
+  if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Inventory</h1><p class="muted">Coming soon.</p>`; return; }
+  try { const h = await sb.from("hub_homes").select("code,active").eq("active", true).limit(2000); S.homes = (h.data || []).map(x => x.code).filter(Boolean); } catch(_){}
+  load();
+})();
+window.__inv = { S, render, isLow };   // for the stub test
+</script>
+</body>
+</html>
