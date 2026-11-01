@@ -106,7 +106,7 @@ function inventory(){
     tbl(["Person", "Desk", "Rule"], I.overrides.map(o => `<tr><td>${esc(o.person)}</td><td>${esc(o.desk)}</td><td>${esc(o.mode)}</td></tr>`)));
   h += card("Edge Functions (Supabase)", "Small programs inside Supabase. JWT on = only works for a signed-in person. Code in hub_site/functions/.",
     tbl(["Function", "JWT", "Version", "Updated"], (P.functions || []).map(f => `<tr><td><code>${esc(f.name)}</code></td><td>${f.jwt ? "on" : "off"}</td><td>${esc(String(f.version ?? ""))}</td><td>${esc(f.updated || "")}</td></tr>`)));
-  h += card("Where the keys live (names only)", "The values are never shown here. Passwords for people are in LastPass; these are the keys programs use. Only Brandon (or Kim) pastes a key.",
+  h += card("Where the keys live (names only)", "The values are never shown here. Passwords and these API keys are saved in LastPass; this is the working copy the programs read on the office computer. Only Brandon (or Kim) pastes a key.",
     tbl(["File on the office computer", "For", "Key names"], (P.keys || []).map(k => `<tr><td><code>${esc(k.file)}</code></td><td>${esc(k.what)}</td><td class="names">${k.names ? esc(k.names.join(", ")) : `<span class="bad">file not found</span>`}</td></tr>`))
     + `<p style="margin:10px 0 4px"><b>Supabase secrets</b> <span class="muted" style="font-size:12.5px">(Supabase ▸ Edge Functions ▸ Secrets)</span></p><div class="names">${esc((P.secrets || []).join(", ")) || "–"}</div>`);
   return h;
