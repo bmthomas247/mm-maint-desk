@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <!-- Inventory (hub key 'inventory'; hub_inventory.sql). Maintenance ▸ Inventory opens ?area=maintenance, Housekeeping ▸ Inventory
-     ?area=housekeeping. Access is enforced in Supabase (hub_can('inventory') = admins, maint_manager, hk_manager, Janae) - this page
+     ?area=housekeeping. Access is enforced in Supabase (see = hub_can('inventory') = all 4 manager teams; change = hub_can('inventory_edit') = admins, maint_manager, hk_manager, Janae) - this page
      only shows what RLS already allows. Nothing is deleted: Remove sets off = true; every change is in hub_inventory_log. -->
 <style>
 :root{
@@ -83,6 +83,9 @@ dialog textarea{min-height:70px;resize:vertical}
   .two{grid-template-columns:1fr}
 }
 body.inhub .wrap{padding-top:10px}
+/* view-only managers (hub_inventory_2.sql: can see, inventory_edit can change) */
+body.ro [data-add],body.ro .qty .btn,body.ro [data-st],body.ro [data-edit],body.ro [data-back],body.ro .start .chips,body.ro .rw{display:none!important}
+body:not(.ro) .ro-only{display:none}
 </style>
 </head>
 <body>
@@ -155,7 +158,7 @@ function render(){
     (!q || [r.name, r.category, r.location, r.note, r.unit].join(" ").toLowerCase().includes(q)));
   const cats = [...new Set(all.map(r => r.category))].sort(), locs = [...new Set(all.map(r => r.location).filter(Boolean))].sort();
   const groups = {}; show.forEach(r => (groups[r.category] = groups[r.category] || []).push(r));
-  const start = !all.length && !S.removed ? `<div class="start"><h2>Nothing here yet — start the list</h2>
+  const start = !all.length && !S.removed ? `<div class="start"><h2><span class="rw">Nothing here yet — start the list</span><span class="ro-only">Nothing here yet</span></h2>
       <p class="muted" style="margin:4px 0 0">${esc(A.hint)}</p>
       <div class="chips">${A.cats.map(c => `<button class="btn" data-add="${esc(c)}">+ ${esc(c)}</button>`).join("")}<button class="btn" data-add="">+ Something else</button></div></div>` : "";
   $("#app").innerHTML = `
@@ -287,6 +290,8 @@ document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.targe
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("hub_can", { p_desk:"inventory" });
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Inventory</h1><p class="muted">Coming soon.</p>`; return; }
+  const ed = await sb.rpc("hub_can", { p_desk:"inventory_edit" });   // all managers see; Chris, Cheree, Janae + admins change (RLS enforces it too)
+  document.body.classList.toggle("ro", ed.error || ed.data !== true);
   try { const h = await sb.from("hub_homes").select("code,active").eq("active", true).limit(2000); S.homes = (h.data || []).map(x => x.code).filter(Boolean); } catch(_){}
   load();
 })();
