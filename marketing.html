@@ -510,20 +510,20 @@ function placesHtml(){
   const a = (u, l, cls) => u ? `<a class="btn small ${cls || ""}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "";
   const card = p => `<div class="kpi plc" ${p.off ? 'style="opacity:.6"' : ""}>
       <div class="bar" style="justify-content:space-between;margin:0"><span class="pill">${PKINDS[p.kind] || p.kind}</span><button class="btn small" data-place="${p.id}">✎ Edit</button></div>
-      <b style="font-size:16px">${esc(p.name)}</b>
+      <b style="font-size:16px">${p.edit_url ? `<a href="${esc(p.edit_url)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${esc(p.name)} ↗</a>` : esc(p.name)}</b>
       ${p.renews || p.renews_on ? `<small>${soon(p) ? '<span class="pill amber">Renews soon</span> ' : ""}${p.renews_on ? "Renews " + esc(fmtD(p.renews_on)) + (p.renews ? " · " : "") : ""}${esc(p.renews || "")}</small>` : ""}
       ${p.note ? `<small>${esc(p.note)}</small>` : ""}
-      <div class="bar" style="margin:6px 0 0;gap:6px">${a(p.edit_url, "Edit / sign in", "primary")}${a(p.our_url, "Our page")}
+      <div class="bar" style="margin:6px 0 0;gap:6px">${a(p.edit_url, "Sign in & edit", "primary")}${a(p.our_url, "Our page")}
         ${(p.links || []).map(l => a(l.url, esc(l.label))).join("")}
         ${!p.edit_url ? `<button class="btn small" data-place="${p.id}">+ Add the sign-in page</button>` : ""}</div>
-      ${p.login_where ? `<small>🔑 Sign-in: ${esc(p.login_where)}${/last ?pass/i.test(p.login_where) ? ` · <a href="https://lastpass.com/vault/" target="_blank" rel="noopener noreferrer">Open LastPass ↗</a>` : ""}</small>` : ""}
+      ${p.login_where ? `<small>🔑 Sign-in: ${esc(p.login_where)}</small>` : ""}
       <small class="src">Source: ${esc(p.source)}${p.checked_on ? ` · checked ${esc(fmtD(p.checked_on))}` : ""}${p.updated_name ? ` · last change ${esc(p.updated_name)}` : ""}</small></div>`;
   return `<h2>Where we advertise the business</h2>
   <div class="bar"><button class="btn primary" data-newplace="1">+ Add a place</button>
-    <span class="muted">Chambers, directories, review sites and ads for Moose Management itself (not single homes). "Edit / sign in" opens their site in a new tab.</span></div>
+    <span class="muted">Chambers, directories, review sites and ads for Moose Management itself (not single homes). "Sign in & edit" goes straight to their sign-in page (LastPass fills it in).</span></div>
   <div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))">${on.map(card).join("") || '<p class="muted">Nothing added yet.</p>'}</div>
   ${off.length ? `<details><summary class="muted">Hidden places · ${off.length}</summary><div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))">${off.map(card).join("")}</div></details>` : ""}
-  <p class="src">Passwords live in LastPass (<a href="https://lastpass.com/vault/" target="_blank" rel="noopener noreferrer">open LastPass ↗</a>), never in the hub; "Sign-in" only says where it's saved or who has it. Nothing here is ever deleted: hide a place you stop using.</p>`;
+  <p class="src">"Sign in & edit" opens their sign-in page and LastPass fills it in. Passwords stay in LastPass, never in the hub. Nothing here is ever deleted: hide a place you stop using.</p>`;
 }
 function placeDialog(x){
   const d = $("#dlg"), p = x || { kind:"directory", links:[] };
