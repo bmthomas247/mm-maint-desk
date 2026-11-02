@@ -5,7 +5,7 @@
 <title>Photo Compressor</title>
 <link rel="icon" href="moose-logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-<!-- Property Set Up ▸ Photo Compressor (hub key psu_photos; follows property_setup's access). Brandon 2026-10-29.
+<!-- Property Set Up ▸ Photo Compressor (hub key psu_photos; Tools; open to everyone on the hub since 2026-11-02). Brandon 2026-10-29.
      Everything happens in this browser: photos are never uploaded anywhere. Default 1920 px on the long side = the size of the
      Estabrook "COMPRESSED" sets we upload to Track ("MM - Property Set Up" playbook, PL 406 photos 2026-10-22/27). -->
 <style>
@@ -44,7 +44,7 @@ const S = { items:[], edge:1920, q:0.82, prefix:"" };
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/psu_photos" target="_top">Go to the Moose Hub →</a></p>`; return; }
-  if(!(await sb.rpc("hub_can", { p_desk:"property_setup" })).data){ $("#app").innerHTML = `<h1>No access</h1><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
+  if(!(await sb.rpc("hub_can", { p_desk:"home" })).data){   // everyone on the hub (Brandon 2026-11-02); was property_setup $("#app").innerHTML = `<h1>No access</h1><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
   $("#app").innerHTML = `<h1>Photo Compressor</h1>
     <p class="muted small">Shrinks listing photos for Track and the OTAs. It all happens in your browser — nothing is uploaded. 1920 px matches the Estabrook compressed sets we use.</p>
     <div class="card row">
