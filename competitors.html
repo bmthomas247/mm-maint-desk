@@ -55,6 +55,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--moose-soft);bord
 header.mast{background:linear-gradient(160deg,#2e4a0e,var(--forest) 60%,var(--forest-2));color:#fff;padding:22px 0 18px;border-bottom:4px solid var(--gold)}
 header.mast h1{font-size:26px;line-height:1.15;margin:0 0 6px;font-weight:800;letter-spacing:-.02em}
 header.mast p{margin:0;max-width:68ch;opacity:.93;font-size:15px}
+.btn.addintel{background:var(--gold);border-color:var(--gold);color:#1d2a0a;font-weight:800;margin-top:14px}   /* Brandon 2026-11-02: Add competitor intel as a button in the playbook */
 .metabar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;font-size:12.5px}
 .metabar span{background:rgba(255,255,255,.13);padding:4px 11px;border-radius:999px}
 .metabar .conf{border:1px solid rgba(224,178,95,.7);background:rgba(224,178,95,.2)}
@@ -298,6 +299,7 @@ async function playbookView(jump){
     <h1>Competitor Intel Playbook</h1>
     <p>Who we're up against in the Park City STR management market: what they charge, how they pitch, where they're weak, and how we win the conversation.</p>
     <div class="metabar">${meta.map((m, i) => `<span class="${i === 0 ? "conf" : ""}">${esc(m)}</span>`).join("")}</div>
+    <a class="btn addintel" href="#/add">+ Add competitor intel</a>
     ${S.me.edit ? `<p style="margin-top:12px"><button class="btn small" data-edit-content="masthead">Edit this line</button></p>` : ""}
   </div></header>
   <div class="controls"><div class="wrap">
