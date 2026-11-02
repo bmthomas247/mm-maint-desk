@@ -58,7 +58,7 @@ td.n,th.n{text-align:right}
 tr:last-child td{border-bottom:0}
 .empty{padding:18px;color:var(--muted);font-size:14px}
 .note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
-dialog{border:1px solid var(--line);border-radius:16px;padding:20px;max-width:420px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog{border:1px solid var(--line);border-radius:16px;padding:20px;max-width:420px;width:calc(100% - 32px);max-height:calc(100vh - 32px);overflow:auto;background:var(--card);color:var(--ink)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
 dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
 dialog input{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
@@ -155,12 +155,16 @@ function computeVisits(){
 /* ---------- data ---------- */
 async function load(){
   const from = new Date(Date.now() - (S.days + 1) * 86400000).toISOString();
-  const [v, p, o, t] = await Promise.all([
+  const [v, p, o, t, sv, sf, mp] = await Promise.all([
     sb.from("bouncie_vehicles").select("*").order("nickname"),
     sb.from("vehicle_places").select("*").eq("off", false),
     sb.from("vehicle_oil").select("*").order("entered_at", { ascending: false }),
-    sb.from("bouncie_trips").select("*").gte("started_at", from).order("started_at", { ascending: false }).limit(2000)]);
-  const bad = [v, p, o, t].find(x => x.error); if(bad) throw bad.error;
+    sb.from("bouncie_trips").select("*").gte("started_at", from).order("started_at", { ascending: false }).limit(2000),
+    sb.from("vehicle_service").select("*").eq("off", false).order("done_on", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).limit(2000),
+    sb.from("vehicle_service_files").select("id,service_id,path,file_name,mime,uploaded_name,uploaded_at").eq("off", false).limit(5000),
+    sb.from("vehicle_maint_plan").select("*").eq("off", false).order("sort")]);
+  const bad = [v, p, o, t, sv, sf, mp].find(x => x.error); if(bad) throw bad.error;
+  S.service = sv.data; S.files = sf.data; S.plan = mp.data;
   S.vehicles = v.data; S.places = p.data; S.trips = t.data; S.oil = {};
   for(const r of o.data) if(!S.oil[r.imei]) S.oil[r.imei] = r;   // newest per vehicle
   S.points = [];
@@ -176,7 +180,7 @@ async function load(){
 function oilBlock(v){
   const o = S.oil[v.imei];
   if(!o) return `<dt>Oil change</dt><dd><button class="btn" data-oil="${esc(v.imei)}">+ Add last oil change</button></dd>`;
-  const since = v.odometer == null ? null : v.odometer - o.odometer, cls = since == null ? "" : since >= OIL_EVERY ? "red" : since >= OIL_WARN ? "amber" : "";
+  const since = !(v.odometer > 0) ? null : v.odometer - o.odometer, cls = since == null ? "" : since >= OIL_EVERY ? "red" : since >= OIL_WARN ? "amber" : "";
   const pct = since == null ? 0 : Math.max(0, Math.min(100, since / OIL_EVERY * 100));
   const word = since == null ? "waiting for the odometer" : since >= OIL_EVERY ? `<span class="pill red">Due now</span> ${mi(since)} mi since the last change`
     : since >= OIL_WARN ? `<span class="pill amber">Plan it</span> ${mi(since)} mi since · due in ${mi(OIL_EVERY - since)} mi` : `${mi(since)} mi since · due in ${mi(OIL_EVERY - since)} mi`;
@@ -204,10 +208,12 @@ function render(){
     return `<div class="card"><h3>${esc(vname(v))}</h3>
       <div>${v.is_running ? `<span class="pill green">Driving${v.speed ? " · " + Math.round(v.speed) + " mph" : ""}</span>` : `<span class="pill">Parked</span>`}
         ${v.mil_on ? `<span class="pill red">Check engine</span>` : ""}${v.battery && !/normal/i.test(v.battery) ? `<span class="pill amber">Battery: ${esc(v.battery)}</span>` : ""}</div>
-      <dl class="kv"><dt>Odometer</dt><dd>${v.odometer == null ? "" : mi(v.odometer) + " mi"}</dd>
+      <dl class="kv"><dt>Odometer</dt><dd>${v.odometer > 0 ? mi(v.odometer) + " mi" : `<span class="muted">waiting for the tracker</span>`}</dd>
         <dt>Last seen</dt><dd>${fmtDT(v.last_seen)}${v.last_address ? "<br><span class='muted'>" + esc(v.last_address) + "</span>" : ""}</dd>
         <dt>Car wash</dt><dd>${wash ? fmtDT(wash.a) + " · " + dur((wash.b - wash.a) / 1000) : `<span class="muted">none in the last ${S.days} days</span>`}</dd>
-        ${oilBlock(v)}</dl></div>`;
+        ${oilBlock(v)}</dl>${maintBlock(v)}
+      <div class="bar" style="margin:10px 0 0"><button class="btn" data-hist="${esc(v.imei)}">📋 Service history (${S.service.filter(s => s.imei === v.imei).length})</button>
+        <button class="btn" data-svc="${esc(v.imei)}">+ Add service / invoice</button></div></div>`;
   }).join("") + `</div>`;
 
   // time at places
@@ -219,7 +225,7 @@ function render(){
   h += `<h2>Time at places · last ${S.days} days</h2><div class="box">` + (rows.length ? `<table><thead><tr><th>Vehicle</th><th>Place</th><th class="n">Visits</th><th class="n">Total time</th><th class="n">Avg visit</th><th>Last visit</th></tr></thead><tbody>` +
     rows.map(r => `<tr><td>${esc(vname(r.v))}</td><td>${esc(r.p.name)}</td><td class="n">${r.n}</td><td class="n">${dur(r.total)}</td><td class="n">${dur(r.total / r.n)}</td>
       <td>${fmtDT(r.last)}${r.open ? ` <span class="pill blue">there now</span>` : ""}</td></tr>`).join("") + `</tbody></table>`
-    : `<div class="empty">No time at ${S.places.map(p => esc(p.name)).join(", ")} in the last ${S.days} days.</div>`) + `</div>
+    : `<div class="empty">No visits in the last ${S.days} days.</div>`) + `</div>
     <p class="muted">A visit = parked inside the place's circle between two trips, or moving slower than 10 mph inside it for a minute or more (car wash tunnel).
     The office circle also covers the Lodges at Bear Hollow homes in the same building.</p>`;
 
@@ -264,14 +270,152 @@ function oilDialog(imei){
   };
 }
 
+/* ---------- maker's recommended maintenance (vehicle_maint_plan, sourced owner's manuals) + service history (Brandon 2026-11-02) ---------- */
+const KINDS = [["oil_change","Oil change"],["service","Scheduled service"],["tires","Tires"],["brakes","Brakes"],["battery","Battery"],["repair","Repair"],
+  ["recall","Recall"],["inspection","Inspection"],["registration","Registration"],["insurance","Insurance"],["other","Other"]];
+const KIND = Object.fromEntries(KINDS);
+const norm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function planFor(v){
+  const rows = S.plan.filter(p => norm(p.make) === norm(v.make) && norm(p.model) === norm(v.model) && (!v.year || (v.year >= p.year_from && v.year <= p.year_to)));
+  const by = {};   // one line per item: the severe-use schedule when the maker has one (Park City = cold, mountains, dust, short trips)
+  for(const p of rows) if(!by[p.item] || (p.severe && !by[p.item].severe)) by[p.item] = p;
+  return Object.values(by).sort((a, b) => a.sort - b.sort);
+}
+function lastDone(imei, item){
+  return S.service.filter(s => s.imei === imei && (s.items || []).includes(item)).sort((a, b) =>
+    (b.odometer ?? -1) - (a.odometer ?? -1) || String(b.done_on || "").localeCompare(String(a.done_on || "")))[0];
+}
+function dueOf(v, p){
+  const last = lastDone(v.imei, p.item), odo = v.odometer > 0 ? +v.odometer : null;
+  let left = null, days = null;
+  if(p.every_miles && last && last.odometer != null && odo != null) left = (+last.odometer + p.every_miles) - odo;
+  if(p.every_months && last && last.done_on){ const d = new Date(last.done_on + "T12:00:00"); d.setMonth(d.getMonth() + p.every_months); days = Math.round((d - Date.now()) / 86400000); }
+  const st = !last ? "none" : (left != null && left <= 0) || (days != null && days <= 0) ? "due" : (left != null && left <= 1000) || (days != null && days <= 30) ? "soon" : "ok";
+  return { last, left, days, st };
+}
+function dueText(p, d){
+  const every = [p.every_miles ? mi(p.every_miles) + " mi" : "", p.every_months ? p.every_months + " months" : ""].filter(Boolean).join(" or ");
+  const when = d.st === "none" ? "no record yet" : [d.left != null ? (d.left <= 0 ? mi(-d.left) + " mi overdue" : "in " + mi(d.left) + " mi") : "",
+    d.days != null ? (d.days <= 0 ? -d.days + " days overdue" : "by " + fmtD(new Date(Date.now() + d.days * 86400000))) : ""].filter(Boolean).join(" · ");
+  const pill = d.st === "due" ? `<span class="pill red">Due</span> ` : d.st === "soon" ? `<span class="pill amber">Soon</span> ` : d.st === "none" ? `<span class="pill">No record</span> ` : `<span class="pill green">OK</span> `;
+  return { every, when, pill };
+}
+function maintBlock(v){
+  const plan = planFor(v);
+  if(!plan.length) return `<p class="muted" style="margin:10px 0 0">Maker's maintenance schedule: not loaded yet for this vehicle.</p>`;
+  const rank = { due: 0, soon: 1, none: 2, ok: 3 };
+  const list = plan.map(p => ({ p, d: dueOf(v, p) })).sort((a, b) => rank[a.d.st] - rank[b.d.st] || a.p.sort - b.p.sort);
+  const top = list.filter(x => x.d.st === "due" || x.d.st === "soon").slice(0, 4), none = list.filter(x => x.d.st === "none").length;
+  return `<div style="margin-top:10px"><b style="font-size:13.5px">Maker's recommended maintenance</b>
+    ${top.map(x => { const t = dueText(x.p, x.d); return `<div style="font-size:13px;margin-top:3px">${t.pill}${esc(x.p.label)} <span class="muted">· ${esc(t.when)}</span></div>`; }).join("")}
+    ${!top.length && none < list.length ? `<div style="font-size:13px;margin-top:3px"><span class="pill green">OK</span> nothing due soon</div>` : ""}
+    ${none ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${none} item${none === 1 ? "" : "s"} with no service record yet</div>` : ""}
+    <button class="btn" data-plan="${esc(v.imei)}" style="margin-top:6px">See the full schedule (${plan.length})</button></div>`;
+}
+function planDialog(imei){
+  const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg"), plan = planFor(v);
+  const srcs = [...new Set(plan.map(p => p.source))];
+  d.style.maxWidth = "760px";
+  d.innerHTML = `<h3 style="margin:0 0 4px">Maker's maintenance · ${esc(vname(v))}</h3>
+    <p class="muted" style="margin:0 0 8px">Odometer now: ${v.odometer > 0 ? mi(v.odometer) + " mi" : "not known yet"}. "Last done" comes from this vehicle's service history (tick the items on each record).
+    ${plan.some(p => p.severe) ? "Where the maker has a severe-use schedule (cold, mountains, dust, short trips, towing), that one is shown." : ""}</p>
+    <div class="box"><table><thead><tr><th></th><th>Item</th><th>Every</th><th>Last done</th><th>Next</th></tr></thead><tbody>${plan.map(p => { const dd = dueOf(v, p), t = dueText(p, dd);
+      return `<tr><td>${t.pill}</td><td style="white-space:normal">${esc(p.label)}${p.severe ? ` <span class="pill">severe use</span>` : ""}${p.note ? `<br><span class="muted">${esc(p.note)}</span>` : ""}</td><td>${esc(t.every)}</td>
+        <td>${dd.last ? (dd.last.odometer != null ? mi(dd.last.odometer) + " mi" : "") + (dd.last.done_on ? " · " + fmtD(dd.last.done_on) : "") : `<span class="muted">none</span>`}</td><td>${esc(t.when)}</td></tr>`; }).join("")}</tbody></table></div>
+    <p class="muted">Source: ${srcs.map(s => /^https?:/.test(s) ? `<a href="${esc(s.split(" ")[0])}" target="_blank" rel="noopener">${esc(s)}</a>` : esc(s)).join("<br>")}</p>
+    <div class="bar"><button class="btn" id="pc">Close</button></div>`;
+  if(!d.open) d.showModal(); $("#pc", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
+}
+function histDialog(imei){
+  const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg"), rows = S.service.filter(s => s.imei === imei);
+  const lab = Object.fromEntries(planFor(v).map(p => [p.item, p.label]));
+  d.style.maxWidth = "820px";
+  d.innerHTML = `<h3 style="margin:0 0 8px">Service history · ${esc(vname(v))}</h3>
+    ${rows.length ? `<div class="box"><table><thead><tr><th>Date</th><th>What</th><th class="n">Odometer</th><th>Shop</th><th class="n">Cost</th><th>Invoice / files</th><th></th></tr></thead><tbody>` +
+      rows.map(s => { const fs = S.files.filter(f => f.service_id === s.id);
+        return `<tr><td>${s.done_on ? fmtD(s.done_on) : ""}</td><td style="white-space:normal;min-width:180px"><b>${esc(KIND[s.kind] || s.kind)}</b>${(s.items || []).length ? `<br><span class="muted">${s.items.map(i => esc(lab[i] || i)).join(", ")}</span>` : ""}${s.note ? `<br>${esc(s.note)}` : ""}
+          <br><span class="muted">by ${esc((s.entered_name || "").split(" ")[0])}</span></td>
+          <td class="n">${s.odometer == null ? "" : mi(s.odometer)}</td><td>${esc(s.vendor)}</td><td class="n">${s.cost == null ? "" : "$" + (+s.cost).toFixed(2)}</td>
+          <td style="white-space:normal">${s.invoice_no ? "#" + esc(s.invoice_no) + "<br>" : ""}${fs.map(f => `<a href="#" data-file="${f.id}">📎 ${esc(f.file_name || "file")}</a>`).join("<br>")}</td>
+          <td><button class="btn" data-hide="${s.id}" title="Hide this record (kept in the history log)">Hide</button></td></tr>`; }).join("") + `</tbody></table></div>`
+      : `<p class="muted">No records yet. Add services, repairs, invoices, registration and insurance papers with "+ Add service / invoice".</p>`}
+    <div class="bar"><button class="btn primary" data-svc="${esc(imei)}">+ Add service / invoice</button><button class="btn" id="hc">Close</button></div>`;
+  if(!d.open) d.showModal(); $("#hc", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
+}
+async function openFile(id){
+  const f = S.files.find(x => x.id === +id); if(!f) return;
+  const w = window.open("", "_blank");
+  const r = await sb.storage.from("vehicle-docs").createSignedUrl(f.path, 300);
+  if(r.error){ if(w) w.close(); alert("Couldn't open the file: " + errText(r.error)); return; }
+  if(w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl;
+}
+async function hideSvc(id){
+  const s = S.service.find(x => x.id === id); if(!s) return;
+  if(!confirm("Hide this record? It stays in the history log and an admin can bring it back.")) return;
+  const r = await sb.rpc("vehicle_service_set", { p_id: id, p_kind: null, p_items: null, p_done: s.done_on, p_odometer: s.odometer, p_vendor: null,
+    p_cost: s.cost, p_invoice: null, p_note: null, p_off: true });
+  if(r.error){ alert(errText(r.error)); return; }
+  await load(); render(); histDialog(s.imei);
+}
+function svcDialog(imei){
+  const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg"), plan = planFor(v);
+  d.style.maxWidth = "560px";
+  d.innerHTML = `<h3 style="margin:0 0 4px">Add service / invoice · ${esc(vname(v))}</h3>
+    <p class="muted" style="margin:0">Odometer now: ${v.odometer > 0 ? mi(v.odometer) + " mi" : "not known yet"}. Invoices and photos stay private to the Vehicles desk.</p>
+    <label>What was it<select id="sk" style="display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)">${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">
+      <label>Date<input id="sd" type="date" value="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}"></label>
+      <label>Odometer<input id="so" type="number" inputmode="numeric" min="0" step="1" value="${v.odometer > 0 ? Math.round(v.odometer) : ""}"></label>
+      <label>Shop / dealer<input id="sv" maxlength="120" placeholder="e.g. the dealer"></label>
+      <label>Cost ($)<input id="sc" type="number" inputmode="decimal" min="0" step="0.01"></label>
+      <label>Invoice #<input id="si" maxlength="60"></label>
+    </div>
+    ${plan.length ? `<div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:10px 0 4px">Items done (from the maker's schedule)</div><div id="sitems" style="columns:2;font-size:13.5px">${plan.map(p =>
+      `<div><input type="checkbox" value="${esc(p.item)}" id="it_${esc(p.item)}" style="width:auto;display:inline;margin:0 6px 0 0;padding:0"><label for="it_${esc(p.item)}" style="display:inline;margin:0;font-weight:600">${esc(p.label)}</label></div>`).join("")}</div>` : ""}
+    <label>Note<input id="sn" maxlength="600" placeholder="What was done, parts, warranty…"></label>
+    <label>Invoice / photos (PDF, picture, Word; up to 25 MB each)<input id="sf" type="file" multiple accept="application/pdf,image/*,.doc,.docx"></label>
+    <div class="err" id="se"></div>
+    <div class="bar"><button class="btn primary" id="ss">Save</button><button class="btn" id="sx">Cancel</button></div>`;
+  if(!d.open) d.showModal();
+  $("#sk", d).onchange = () => { const c = $("#it_oil", d); if(c && $("#sk", d).value === "oil_change") c.checked = true; };
+  $("#sx", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
+  $("#ss", d).onclick = async () => {
+    const odo = $("#so", d).value === "" ? null : Number($("#so", d).value), cost = $("#sc", d).value === "" ? null : Number($("#sc", d).value);
+    const items = $$("#sitems input:checked", d).map(c => c.value), files = [...($("#sf", d).files || [])];
+    if(odo != null && !(odo >= 0)){ $("#se", d).textContent = "The odometer doesn't look right."; return; }
+    if(files.some(f => f.size > 25 * 1024 * 1024)){ $("#se", d).textContent = "A file is over 25 MB."; return; }
+    $("#ss", d).disabled = true; $("#se", d).textContent = "Saving…";
+    const r = await sb.from("vehicle_service").insert({ imei, kind: $("#sk", d).value, items, done_on: $("#sd", d).value || null, odometer: odo,
+      vendor: $("#sv", d).value.trim(), cost, invoice_no: $("#si", d).value.trim(), note: $("#sn", d).value.trim() }).select("id").single();
+    if(r.error){ $("#se", d).textContent = errText(r.error); $("#ss", d).disabled = false; return; }
+    let bad = 0;
+    for(const f of files){
+      const ext = (f.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";
+      const path = `v/${imei}/${new Date().toISOString().slice(0, 7)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const up = await sb.storage.from("vehicle-docs").upload(path, f, { contentType: f.type || undefined, upsert: false });
+      if(up.error){ bad++; continue; }
+      const fr = await sb.from("vehicle_service_files").insert({ service_id: r.data.id, path, file_name: f.name.slice(0, 200), mime: f.type || "", size_bytes: f.size });
+      if(fr.error) bad++;
+    }
+    await load(); render(); histDialog(imei);
+    if(bad) alert(bad + " file(s) didn't upload. The record is saved; add the file again with a new record.");
+  };
+}
+
 async function refresh(){
   try { await load(); render(); }
   catch(e){ $("#app").innerHTML = `<h1>Vehicles</h1><div class="note">Couldn't load: ${esc(errText(e))}</div>`; }
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-days],[data-oil]"); if(!b) return;
+  const b = e.target.closest("[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan]"); if(!b) return;
+  if(b.dataset.file) e.preventDefault();
   if(b.dataset.days){ S.days = +b.dataset.days; refresh(); }
-  else oilDialog(b.dataset.oil);
+  else if(b.dataset.oil) oilDialog(b.dataset.oil);
+  else if(b.dataset.hist) histDialog(b.dataset.hist);
+  else if(b.dataset.svc) svcDialog(b.dataset.svc);
+  else if(b.dataset.file) openFile(b.dataset.file);
+  else if(b.dataset.hide) hideSvc(+b.dataset.hide);
+  else if(b.dataset.plan) planDialog(b.dataset.plan);
 });
 document.addEventListener("change", e => {
   if(e.target.id === "veh"){ S.veh = e.target.value; render(); }
