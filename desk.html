@@ -1137,11 +1137,14 @@ function npiAppl(code){ var n=npiOf(code); if(!n||!n.items) return []; var by={}
     if(/^(TV|Sound bar|BBQ)$/.test(t) && !b.photos.length) return null;
     var r=rd[b.key]||{}; if(r.conf==="wrong-photo"&&!r.model) r={conf:"wrong-photo",note:r.note}; return {key:b.key,type:t,yearHow:r.yearHow||"",lnote:r.note||"",brand:r.brand||(t==="Furnace"&&b.notes[0]&&b.notes[0].length<30?b.notes[0]:""),model:r.model||"",serial:r.serial||"",mfg:r.mfg||"",conf:r.conf||"",
       location:t==="Water Softener"?(b.notes[0]||""):"",notes:b.notes.join(" · "),photos:b.photos,url:b.url,src:"inspection",read:!!r.at}; }).filter(Boolean); }
+/* Hub 2026-11-02: recall matches from feeds/recalls (recalls_check.py, CPSC) by home + appliance key - covers Asana, desk-added and inspection appliances */
+function recallMap(){ var f=S.feeds.recalls||{}; if(f.__m) return f.__m; var m={}; (f.hits||[]).forEach(function(h){ if(h&&h.recalls&&h.recalls.length) m[h.prop+"|"+h.key]=h.recalls; });
+  try{ Object.defineProperty(f,"__m",{value:m,enumerable:false}); }catch(e){} return m; }
 function homeAppl(code,p){ p=p||D.homes.filter(function(h){ return h.code===code; })[0]||{appliances:[]}; var pe=pedit(code), base=(p.appliances||[]).concat(pe.extraAppl||[]);
   var have={}; base.forEach(function(a){ if(!a.model && !a.brand) return; var t=a.type; have[t]=(have[t]||0)+1; if(t==="Washer/Dryer"){ have.Washer=1; have.Dryer=1; } if(/range|oven|stove/i.test(t)) have["Range/Oven"]=1; });
   var np=npiAppl(code).filter(function(a){ return !have[a.type] && !(pe.hideAppl||{})[a.key]; }), npT={}; np.forEach(function(a){ if(a.model||a.brand) npT[a.type]=1; if(a.type==="Washer/Dryer"&&a.model){ npT.Washer=1; npT.Dryer=1; } });
   /* an Asana row with no brand/model gives way to an inspection row that has one */
-  return base.filter(function(a){ return a.model||a.brand||!npT[a.type]; }).concat(np); }
+  var R=recallMap(); return base.filter(function(a){ return a.model||a.brand||!npT[a.type]; }).concat(np).map(function(a){ var r=R[code+"|"+a.key]; return r&&!(a.recalls&&a.recalls.length)?Object.assign({},a,{recalls:r}):a; }); }
 function applianceView(code,a){
   var pe=(pedit(code).appl||{})[a.key]||{}; var x=Object.assign({},a,pe);
   x.year=+pe.year||yearOf(x.mfg)||null;
@@ -1234,7 +1237,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   return cells.join("")||'<div class="hql"><div class="muted">No codes on file yet.</div></div>'; }
 function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=homeQuick(c,p);
   var jobs=(D.byProp[c]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
-  var rc=(p.appliances||[]).some(function(a){ return a.recalls&&a.recalls.length; });
+  var rc=homeAppl(p.code,p).some(function(a){ return a.recalls&&a.recalls.length; });
   var st=occ?"owner":jobs.length?"open":"ok", sub=(p.track&&p.track.name)||p.community||"";
   return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'</div>'+
     '<div class="htp">'+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'<span class="htmore">Home details →</span></div></div>'+
@@ -1954,7 +1957,7 @@ function vMoney(){
 }
 
 /* ================= RECALLS ================= */
-function recallHits(){ var out=[]; D.homes.forEach(function(p){ p.appliances.forEach(function(a){ var pe=((pedit(p.code).appl||{})[a.key])||{};
+function recallHits(){ var out=[]; D.homes.forEach(function(p){ homeAppl(p.code,p).forEach(function(a){ var pe=((pedit(p.code).appl||{})[a.key])||{};
   if(a.recalls&&a.recalls.length&&!pe.recallCleared) out.push({p:p,a:a,pe:pe}); }); }); return out; }
 function vRecalls(){
   var hits=recallHits(), f=S.feeds.recalls||{}, unk=0, chk=0;
