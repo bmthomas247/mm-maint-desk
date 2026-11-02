@@ -31,34 +31,65 @@ function draw(){
     CB.a = CB.a.filter(x => x.id !== id); draw(); await sb.rpc("hub_banner_dismiss", { p_id:id }); });
   drawGw();
 }
-/* Brivo gateway alerts (hub_gateway_alerts.sql, Brandon 2026-11-02): maintenance manager + admins only (the database decides; others get
-   an empty list). Brivo never says when a gateway comes back, so Chris decides: schedule a reset (the hub makes the Breezeway task
-   within a minute) or mark it back online. */
-let GW = [];
+/* Brivo gateway alerts (hub_gateway_alerts.sql + _2, Brandon 2026-11-02): maintenance manager + admins only (the database decides; for anyone
+   else gateway_alerts_mine() is null, so no banner and the page sends them Home). Brivo never says when a gateway comes back, so Chris
+   decides. The banner is ONE line; "Open alerts" goes to #/gateways, where each alert is scheduled (the hub makes the Breezeway
+   Restart Gateway task within a minute, brivo_tasks.py --queue) or marked back online. */
+let GW = null;
+const GWOPEN = g => ["open", "queued", "failed"].includes(g.status);
 const day = d => new Date(d + "T12:00").toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" });
 const tmr = () => { const d = new Date(Date.now() + 864e5); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const ago = d => { const h = Math.round((Date.now() - new Date(d)) / 36e5); return h < 1 ? "just now" : h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`; };
 function drawGw(){
   document.querySelectorAll(".gwbanner").forEach(x => x.remove());
-  const v = document.getElementById("view"); if(!v || !v.parentNode || !GW.length) return;
+  const open = (GW || []).filter(g => g.status === "open" || g.status === "failed");
+  const v = document.getElementById("view"); if(!v || !v.parentNode || !open.length || location.hash.startsWith("#/gateways")) return;
   const b = document.createElement("div"); b.className = "cbanner gwbanner"; b.style.background = "#7a4b00"; b.setAttribute("role", "status");
-  b.innerHTML = `<span>📡</span><span class="bm"><b>Brivo gateway alerts</b> — Brivo doesn't tell us when a gateway comes back, so check the Brivo app.${GW.map(g => {
-    const since = `alert ${when(g.alert_at)}`;
-    const act = g.status === "queued" ? `reset asked for ${day(g.due)} — making the Breezeway task…`
-      : g.status === "scheduled" ? `reset scheduled ${day(g.due)}${g.bw_url ? ` · <a href="${e(g.bw_url)}" target="_blank" rel="noopener">Open task</a>` : ""}`
-      : `${g.status === "failed" ? `couldn't schedule (${e(g.note || "")}) · ` : ""}<input type="date" data-gwd="${g.id}" value="${tmr()}" style="font:inherit;font-size:13px;padding:1px 4px;border-radius:6px;border:0">
-         <button data-gws="${g.id}">Schedule a reset</button> <button data-gwc="${g.id}">It's back online</button>`;
-    return `<br>• <b>${e(g.home)}</b> (${since}): ${act}`; }).join("")}</span>`;
+  const first = open[open.length - 1];
+  b.innerHTML = `<span>📡</span><span class="bm">${open.length === 1 ? `Brivo gateway offline at <b>${e(first.home)}</b> (alert ${ago(first.alert_at)})`
+    : `<b>${open.length} Brivo gateway alerts</b>: ${open.slice(0, 3).map(g => e(g.home)).join(", ")}${open.length > 3 ? "…" : ""}`}</span><a href="#/gateways">Open alerts →</a>`;
   v.parentNode.insertBefore(b, v);
-  const go = async (id, act, due) => { const r = await sb.rpc("gateway_alert_act", { p_id:id, p_act:act, p_due:due || null });
-    if(r.error) alert(r.error.message.replace(/^.*?: /, "")); await loadGw(); drawGw(); };
-  b.querySelectorAll("[data-gws]").forEach(x => x.onclick = () => { const d = b.querySelector(`[data-gwd="${x.dataset.gws}"]`); go(+x.dataset.gws, "schedule", d && d.value); });
-  b.querySelectorAll("[data-gwc]").forEach(x => x.onclick = () => go(+x.dataset.gwc, "clear"));
 }
-async function loadGw(){ try { const r = await sb.rpc("gateway_alerts_mine"); if(!r.error) GW = r.data || []; } catch(_){ } }
+window.gatewayView = async function(v){
+  await loadGw();
+  if(GW === null){ location.replace("#/home"); return; }
+  const open = GW.filter(GWOPEN), done = GW.filter(g => !GWOPEN(g));
+  const card = g => {
+    const st = g.status === "queued" ? `<span class="pill">Making the Breezeway task for ${day(g.due)}…</span>`
+      : g.status === "scheduled" ? `<span class="pill">Reset scheduled ${day(g.due)}</span>${g.bw_url ? ` <a href="${e(g.bw_url)}" target="_blank" rel="noopener">Open in Breezeway ↗</a>` : ""}`
+      : g.status === "cleared" ? `<span class="pill">Back online</span>` : "";
+    const fd = g.fd_ticket > 0 ? ` · <a href="https://moosemanagement.freshdesk.com/a/tickets/${g.fd_ticket}" target="_blank" rel="noopener">Brivo email ↗</a>` : "";
+    const act = (g.status === "open" || g.status === "failed") ? `<div class="gwact">${g.status === "failed" ? `<div style="color:#9b1c1c;margin-bottom:6px">Couldn't schedule: ${e(g.note || "")}</div>` : ""}
+        <label>Reset on <input type="date" data-gwd="${g.id}" value="${tmr()}"></label>
+        <button class="btn primary" data-gws="${g.id}">Schedule reset in Breezeway</button> <button class="btn" data-gwc="${g.id}">It's back online</button>
+        <input type="checkbox" data-gwk="${g.id}" title="Pick for scheduling all at once"></div>` : "";
+    const who = g.asked_name && !GWOPEN(g) ? ` · ${e(g.asked_name)}` : g.status === "queued" && g.asked_name ? ` · asked by ${e(g.asked_name)}` : "";
+    return `<div class="card gwcard"><div><b style="font-size:17px">${e(g.home)}</b> · alert ${when(g.alert_at)} (${ago(g.alert_at)})${fd}${who}</div>
+      ${g.title ? `<div class="muted" style="font-size:13px;margin-top:2px">${e(g.title)}</div>` : ""}${st ? `<div style="margin-top:6px">${st}</div>` : ""}${act}</div>`;
+  };
+  const many = open.filter(g => g.status === "open" || g.status === "failed").length > 1;
+  v.innerHTML = `<style>.gwcard{margin-bottom:10px} .gwact{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px} .gwact input[type=date]{margin-left:6px}
+      .gwcard .pill{display:inline-block;background:#f3ead7;color:#5a3a00;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700}</style>
+    <div class="card"><h2 style="margin:0 0 4px">📡 Brivo gateway alerts</h2>
+      <div class="muted">Brivo emails when a gateway goes offline but never when it comes back, and they often come back by themselves within 48 hours.
+      Check the Brivo app, then either schedule a reset (the hub makes the "Restart Gateway" task for Chris in Breezeway within a minute) or mark it back online.</div>
+      ${many ? `<div class="gwact"><label>Reset the ticked ones on <input type="date" id="gwalld" value="${tmr()}"></label><button class="btn" id="gwall">Schedule ticked</button></div>` : ""}</div>
+    ${open.length ? open.map(card).join("") : `<div class="card">No gateway alerts right now.</div>`}
+    ${done.length ? `<h3 style="margin:18px 0 8px">Last 14 days</h3>${done.map(card).join("")}` : ""}`;
+  if(!many) v.querySelectorAll("[data-gwk]").forEach(x => x.remove());
+  const go = async (id, act, due) => { const r = await sb.rpc("gateway_alert_act", { p_id:id, p_act:act, p_due:due || null }); if(r.error) alert(r.error.message.replace(/^.*?: /, "")); };
+  v.querySelectorAll("[data-gws]").forEach(x => x.onclick = async () => { const d = v.querySelector(`[data-gwd="${x.dataset.gws}"]`); x.disabled = true; await go(+x.dataset.gws, "schedule", d && d.value); gatewayView(v); });
+  v.querySelectorAll("[data-gwc]").forEach(x => x.onclick = async () => { x.disabled = true; await go(+x.dataset.gwc, "clear"); gatewayView(v); });
+  const all = v.querySelector("#gwall");
+  if(all) all.onclick = async () => { const ids = [...v.querySelectorAll("[data-gwk]:checked")].map(x => +x.dataset.gwk); if(!ids.length) return alert("Tick the homes to schedule first.");
+    all.disabled = true; for(const id of ids) await go(id, "schedule", v.querySelector("#gwalld").value); gatewayView(v); };
+  clearTimeout(window._gwT); if(open.some(g => g.status === "queued")) window._gwT = setTimeout(() => { if(location.hash.startsWith("#/gateways")) gatewayView(v); }, 20e3);
+  drawGw();
+};
+async function loadGw(){ try { const r = await sb.rpc("gateway_alerts_mine"); if(!r.error) GW = r.data; } catch(_){ } }
 window.customBanners = async function(force){
   if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
   if(force || Date.now() - CB.at > 5 * 60e3){ const r = await sb.rpc("hub_banners_mine"); CB = { at:Date.now(), a: r.error ? CB.a : (r.data || []) }; await loadGw(); }
-  else if(GW.some(g => g.status === "queued")) await loadGw();      // waiting on the task: check every minute
   draw();
 };
 const boot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(boot); customBanners(true);
