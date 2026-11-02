@@ -85,7 +85,7 @@ const errText = e => ((e && (e.message || e.error_description)) || String(e)).re
 const OIL_EVERY = 5000, OIL_WARN = 4000;          // Brandon 2026-10-29: change every 5,000 miles, plan it at 4,000
 const S = { days: 7, limit: 75, veh: "", vehicles: [], places: [], oil: {}, trips: [], visits: [] };
 
-function vname(v){ return v.nickname || [v.year, v.make, v.model].filter(Boolean).join(" ") || ("Tracker " + String(v.imei).slice(-4)); }
+function vname(v){ return [v.year, v.make, v.model].filter(Boolean).join(" ") || v.nickname || ("Tracker " + String(v.imei).slice(-4)); }   // Brandon 2026-11-02: year, make, model on every card
 
 /* ---------- distance + Bouncie polyline (precision 5; falls back to 6 if the points land off the map) ---------- */
 function meters(a, b, c, d){ const R = 6371000, r = Math.PI / 180, x = (c - a) * r, y = (d - b) * r;
