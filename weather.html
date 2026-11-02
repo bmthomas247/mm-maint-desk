@@ -63,6 +63,7 @@ details summary{cursor:pointer;font-weight:800}
 .err{color:var(--red);font-size:13px}
 .empty{padding:18px;color:var(--muted);text-align:center}
 @media (max-width:640px){ .hr b{min-width:0;flex-basis:100%} }
+body.embed{background:transparent} body.embed .wrap{max-width:none;padding:0 0 6px}
 </style>
 </head>
 <body>
@@ -85,6 +86,15 @@ const base = h => String(h || "").replace(/^(2H-|L-)/i, "").toUpperCase();
 if(window.top !== window) document.body.classList.add("inhub");
 const P = new URLSearchParams(location.search);
 const S = { tab:P.get("tab") || "plan", list:"ac", plan:null, ppl:[], stays:[], open:{} };
+/* Brandon 2026-11-02: "the weather plan can be built into the seasonal and yearly tab, they need to work together and be one tab".
+   desk.html?only=routines shows this page as ?embed=1 above its routines; we tell it our height, and its routine cards call __wx.jump(rule). */
+const EMB = P.get("embed") === "1"; if(EMB) document.body.classList.add("embed");
+const tell = m => { if(EMB && window.parent !== window) try { window.parent.postMessage(Object.assign({ wx:1 }, m), location.origin); } catch(_){} };
+const postH = () => tell({ h:document.documentElement.scrollHeight, none:!S.plan });
+if(EMB && window.ResizeObserver) new ResizeObserver(postH).observe(document.body);
+function jump(key){ const r = S.plan && S.plan.rules.find(x => x.key === key); if(!r) return;
+  S.tab = "plan"; S.open[key] = true; render(); const c = document.querySelector(`[data-rule="${key}"]`);
+  if(c){ c.style.outline = "2px solid var(--forest-2)"; setTimeout(() => c.style.outline = "", 2500); EMB ? tell({ y:c.getBoundingClientRect().top + window.scrollY }) : c.scrollIntoView({ behavior:"smooth" }); } }
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const LISTS = { ac:"Portable AC", heat_tape:"Heat tape", salt:"Salt + shovel", winter:"Winter inspection" };
 const STATES = { ac:[["installed","Units in"],["stored","Stored"],["keep","Keep installed all year"],["none","No AC"]], other:[["yes","Yes"],["no","No"]] };
@@ -96,7 +106,7 @@ const PL = { high_f:"High (°F)", low_f:"Low (°F)", snow_in:'Snow (inches)', da
 function plain(r){ const p = r.params;
   return { any_high_ge:`When a high reaches ${p.high_f}°F in the next ${p.days} days`, all_high_lt:`After ${md(p.from)}, once every high in the next ${p.days} days stays under ${p.high_f}°F`,
     any_low_le_or_snow:`When a low reaches ${p.low_f}°F or ${p.snow_in}" of snow is forecast in the next ${p.days} days`, all_low_gt_no_snow:`After ${md(p.from)}, once every low in the next ${p.days} days stays above ${p.low_f}°F with no snow`,
-    any_snow:`Before the first snow (${p.snow_in}"+) in the next ${p.days} days`, season_then_snow:`A fall job from ${md(p.from)}, so Chris has time to get into every home; it warns when snow (${p.snow_in}"+) shows up in the next ${p.days} days`, heat_check:`${p.after_days}+ days after heat tape goes ON, once ${p.snow_in}"+ of snow has fallen` }[p.test] || ""; }
+    any_snow:`Before the first snow (${p.snow_in}"+) in the next ${p.days} days`, season_then_snow:`A fall job from ${md(p.from)}, so Chris has time to get into every home; it warns when snow (${p.snow_in}"+) shows up in the next ${p.days} days`, heat_check:`${+p.after_days ? p.after_days + "+ days after heat tape goes ON and once " : "Once "}${p.snow_in}"+ of snow has fallen since it went ON, the trash route checks the snow is melting along the heat tape line` }[p.test] || ""; }
 const md = s => { if(!s) return ""; const [m, d] = s.split("-").map(Number); return MON[m - 1] + " " + d; };
 const months = m => !m || m.length === 12 ? "all year" : m.map(x => MON[x - 1]).join(", ");
 
@@ -124,9 +134,9 @@ function forecast(){
 }
 
 const ST = { no_guest:["No guest arriving in the hot days", ""], todo:["To schedule", "warn"], sched:["Scheduled", "sched"], open:["Open in Breezeway", "sched"], done:["Done this season", "go"], not_on:["Heat tape wasn't turned on", ""],
-  due:["Check on the trash route", "warn"], wait_days:["Waiting a week", "wait"], wait_snow:["Waiting for snow", "wait"], checked:["Checked", "go"] };
+  due:["Check on the trash route", "warn"], wait_days:["Waiting a few days", "wait"], wait_snow:["Waiting for 4\"+ of snow", "wait"], checked:["Checked", "go"] };
 function homeRow(r, h){
-  const s = ST[h.status] || [h.status, ""], last = h.last, sc = h.sched;
+  const s = h.status === "todo" && !r.hit ? ["Not done yet", ""] : ST[h.status] || [h.status, ""], last = h.last, sc = h.sched;
   const info = [h.state && r.list === "ac" ? stName("ac", h.state) : "", h.guest ? `guest arrives ${day(h.guest)}` : "", last ? `${last.finished ? "done" : "open"} ${day(last.date)} <a href="https://app.breezeway.io/task/${last.id}" target="_blank" rel="noopener">Breezeway ↗</a>` : "",
     sc ? `${sc.status === "failed" ? `<span class="err">couldn't make the task: ${esc(sc.note || "")}</span>` : sc.status === "skipped" ? esc(sc.note || "") : `${day(sc.due)}${sc.person ? " · " + esc(sc.person) : ""}${sc.status === "queued" ? " · making the Breezeway task…" : ""}`}` : "",
     h.confirmed === false ? `<span class="muted">suggested list</span>` : ""].filter(Boolean).join(" · ");
@@ -142,11 +152,11 @@ function ruleCard(r){
   const tag = r.off ? `<span class="pill">Turned off</span>` : !r.in_season ? `<span class="pill">Not this time of year (${months(r.months)})</span>`
     : r.warn ? `<span class="pill bad">Snow coming</span>` : r.params.test === "season_then_snow" ? `<span class="pill go">Fall job</span>`
     : r.hit ? `<span class="pill go">Weather says now</span>` : `<span class="pill wait">Waiting on the weather</span>`;
-  const show = S.open[r.key] != null ? S.open[r.key] : r.hit;
+  const show = S.open[r.key] != null ? S.open[r.key] : r.hit && !EMB;   // inside Seasonal & yearly every card starts folded
   return `<div class="card" data-rule="${r.key}"><div class="top"><h2>${esc(r.label)}</h2>${tag}${r.hit && todo.length ? `<span class="pill warn">${todo.length} to schedule</span>` : ""}
       <span class="muted" style="margin-left:auto">${r.template_id ? `Breezeway template “${esc(r.task_name)}” (#${r.template_id})` : "Trash route check"}</span></div>
     <div class="why${r.hit ? " go" : ""}"><b>${esc(plain(r))}.</b> ${r.in_season ? esc(r.reason) : ""}</div>
-    ${lst.unconfirmed ? `<div class="muted">⚠️ ${lst.unconfirmed} of these homes are on the SUGGESTED list Chris hasn't confirmed yet (<a href="?tab=lists&list=${r.list}">Home lists</a>).</div>` : ""}
+    ${lst.unconfirmed ? `<div class="muted">⚠️ ${lst.unconfirmed} of these homes are on the SUGGESTED list Chris hasn't confirmed yet (<a href="?tab=lists&list=${r.list}${EMB ? "&embed=1" : ""}">Home lists</a>).</div>` : ""}
     <details${show ? " open" : ""} data-det="${r.key}"><summary>${r.homes.length} home${r.homes.length === 1 ? "" : "s"} · ${Object.entries(r.homes.reduce((a, h) => (a[h.status] = (a[h.status] || 0) + 1, a), {})).map(([k, n]) => `${n} ${(ST[k] || [k])[0].toLowerCase()}`).join(" · ") || "none"}</summary>
       ${r.hit && todo.length ? `<div class="bar"><b>Who does them:</b> ${pick("all|" + r.key)}${todo.length > 1 ? ` · <b>All ticked:</b> each on its first empty day from <input type="date" data-bfrom="${r.key}" value="${iso(new Date(Date.now() + 864e5))}">
         <button class="btn primary sm" data-bulk="${r.key}">Schedule ticked</button><span class="muted">Untick any you don't want.</span>` : ""}
@@ -216,13 +226,14 @@ function render(){
   const P = S.plan, app = $("#app");
   if(!P){ app.innerHTML = `<p class="empty">This page isn't available.</p>`; return; }
   const go = P.rules.filter(r => r.hit && r.key !== "heat_check").reduce((n, r) => n + r.homes.filter(h => h.status === "todo").length, 0);
+  if(!P){ app.innerHTML = ""; tell({ none:true }); return; }
   app.innerHTML = `<div class="top" style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><h1>🌦 Weather plan</h1>
       <span class="muted">${go} home job${go === 1 ? "" : "s"} the weather says to schedule · ${P.blockers.length} outdoor job${P.blockers.length === 1 ? "" : "s"} on a bad day</span></div>
     ${forecast()}
     <div class="tabs">${[["plan", "Plan"], ["lists", "Home lists"], ["settings", "Rules & numbers"]].map(([k, n]) => `<button class="tab${S.tab === k ? " on" : ""}" data-tab="${k}">${n}</button>`).join("")}</div>
     <div id="pane">${S.tab === "lists" ? lists() : S.tab === "settings" ? settings() : plan()}</div>
     <p class="muted">Nothing here schedules itself. When you schedule, the hub makes the Breezeway task with its template and normal priority within a minute, for the person you picked.</p>`;
-  wire(app);
+  wire(app); postH();
 }
 
 const rpc = async (fn, args, btn) => { if(btn) btn.disabled = true; const r = await sb.rpc(fn, args);
@@ -274,10 +285,10 @@ function poll(){ clearTimeout(pollT); const q = S.plan && S.plan.rules.some(r =>
     const { data:{ session } } = await sb.auth.getSession();
     if(!session){ $("#app").innerHTML = `<p class="empty">Please sign in to the Moose Hub first.</p>`; return; }
     if(P.get("list") && LISTS[P.get("list")]) S.list = P.get("list");
-    await load(); render(); poll();
+    await load(); render(); poll(); tell({ ready:true });
   } catch(e){ $("#app").innerHTML = `<p class="empty">Couldn't load: ${esc(errText(e))}</p>`; }
 })();
-window.__wx = { S, render };   // for the stub test
+window.__wx = { S, render, jump };   // desk.html Seasonal & yearly + the stub test
 </script>
 </body>
 </html>
