@@ -899,6 +899,7 @@ function route(){
   if(d && (k === "reviews" || k === "guest_reviews") && d.status === "live" && window.reviewsDesk) return reviewsDesk(v);   // analytics.js reviews report (Brandon 2026-10-29)
   if(d && k === "call_review" && d.status === "live" && window.callsView) return callsView(v);   // calls.js: Track Pulse calls + transcripts (Brandon 2026-10-29); data RLS hub_can('call_review')
   if(d && k === "guest_followups" && d.status === "live" && window.followupsView) return followupsView(v);
+  if(d && k === "guest_desk" && d.status === "live" && window.guestCallsView) return guestCallsView(v);   // calls.js: Guest > Communication (Brandon 2026-11-02); data RLS hub_guest_calls.sql
   if(d && k === "owner_calls" && d.status === "live" && window.ownerCallsView) return ownerCallsView(v);   // calls.js: Owners > Calls (Brandon 2026-11-01); data RLS hub_owner_calls.sql   // calls.js: Guest > Follow-ups (Brandon 2026-10-29); data RLS = Call review rule
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
