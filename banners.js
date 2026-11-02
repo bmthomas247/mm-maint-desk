@@ -57,7 +57,7 @@ function drawGw(){
     wx.checks && `${wx.checks} heat tape check${wx.checks === 1 ? "" : "s"}`].filter(Boolean);
   const onlyWx = !gw && !d && !gj && !sn;   // Weather plan (hub_weather_plan.sql, 2026-11-02): its own page
   const b = document.createElement("div"); b.className = "cbanner gwbanner"; b.style.background = "#7a4b00"; b.setAttribute("role", "status");
-  b.innerHTML = `<span>🔧</span><span class="bm"><b>Maintenance alerts</b>: ${parts.join(" · ")}</span>${onlyWx ? "" : `<a href="#/maint_alerts">Open →</a>`}${wx.ready || wx.blockers || wx.checks ? `<a href="#/maint_weather">Weather plan →</a>` : ""}<button data-mahide title="Hide until something new comes in">✕</button>`;
+  b.innerHTML = `<span>🔧</span><span class="bm"><b>Maintenance alerts</b>: ${parts.join(" · ")}</span>${onlyWx ? "" : `<a href="#/maint_alerts">Open →</a>`}${wx.ready || wx.blockers || wx.checks ? `<a href="#/maint_routines">Weather plan →</a>` : ""}<button data-mahide title="Hide until something new comes in">✕</button>`;
   v.parentNode.insertBefore(b, v);
   b.querySelector("[data-mahide]").onclick = () => { try { localStorage.setItem("mm_ma_hide", sig); } catch(_){} b.remove(); };
 }
