@@ -377,7 +377,7 @@ function loginView(msg){
     <p class="muted">Then set your password under 👤 My account.</p><p id="msg" class="muted">${esc(msg||"")}</p></div>`;
   $("#go").onclick = async () => {
     const { error } = await sb.auth.signInWithPassword({ email:fixEm(), password:$("#pw").value });
-    if(error) $("#msg").textContent = "Wrong email or password."; else route();
+    if(error) $("#msg").textContent = "Wrong email or password."; else { S.lastPw = $("#pw").value; route(); }   // memory only: needed if they must pick a new password now
   };
   const fixEm = () => { let e = $("#em").value.trim().toLowerCase().replace(/\s+/g,"");
     e = e.replace(/@m[o0]+s[e]?m[a-z]*ment\.c[o0]m?$/, "@moosemanagement.com").replace(/@moosemanagement\.co$/, "@moosemanagement.com");
@@ -1636,10 +1636,10 @@ async function accountView(){
       let ok = false; try{ const tok = (await sb.auth.getSession()).data.session.access_token, pl = JSON.parse(atob(tok.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
         ok = (pl.amr||[]).some(m => ["otp","magiclink","recovery"].includes(m.method) && Date.now()/1000 - m.timestamp < 900); }catch(e){}
       if(!ok) return $("#npmsg").textContent = "Type your current password. Forgot it? Sign out and use \"Email me a link\", then come back here within 15 minutes."; }
-    let { error } = await sb.auth.updateUser({ password: a });
+    let { error } = await sb.auth.updateUser(old ? { password: a, current_password: old } : { password: a });   // Supabase checks the current password too (2026-11-02)
     if(error && (error.code === "reauthentication_needed" || /reauthenticat/i.test(error.message))){   // signed in 24h+ ago: Supabase emails a 6-digit code first
       await sb.auth.reauthenticate(); const n = (prompt("For safety we just emailed you a 6-digit code. Type it here:") || "").replace(/\D/g,"");
-      if(n) ({ error } = await sb.auth.updateUser({ password: a, nonce: n })); }
+      if(n) ({ error } = await sb.auth.updateUser(old ? { password: a, nonce: n, current_password: old } : { password: a, nonce: n })); }
     $("#npmsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Use the new password next time you sign in.";
     if(!error){ $("#np1").value = $("#np2").value = ""; } };
   $("#signout").onclick = async () => { await sb.auth.signOut(); S.me = null; S.aal2 = false; S.mustChange = undefined; location.hash = "#/"; route(); };
@@ -1901,7 +1901,8 @@ function mustChangeView(){
     if(a !== b2) return $("#mcmsg").textContent = "The two don't match.";
     if(/^moose-/i.test(a)) return $("#mcmsg").textContent = "Pick something different from the temporary one.";
     $("#mcmsg").textContent = "Saving…";
-    const { error } = await sb.auth.updateUser({ password:a });
+    const { error } = await sb.auth.updateUser(S.lastPw ? { password:a, current_password:S.lastPw } : { password:a });
+    if(error && /current password/i.test(error.message)) return $("#mcmsg").textContent = "For safety, sign out, sign in again with the temporary password, then pick your own right away.";
     if(error) return $("#mcmsg").textContent = "Couldn't save (" + error.message + ").";
     try{ await rpc("lock_pw_changed"); }catch(e){}
     S.mustChange = false; toast("Password saved"); route(); };
@@ -1990,7 +1991,7 @@ async function route(){
   if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!S.dirty && !document.querySelector("input:focus,details[open]:not(.guide):not(.sect)")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
 }
 window.addEventListener("hashchange", route);
-sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
+sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_OUT") S.lastPw = null; if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
 route();
 })();
 
