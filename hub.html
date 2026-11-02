@@ -186,6 +186,8 @@ details.acc[open]>summary{margin-bottom:6px}
 .how .key{flex:0 0 auto;min-width:44px;text-align:center;padding:6px 8px;border-radius:10px;background:var(--card);border:2px solid var(--line);font-weight:900;font-size:16px}
 .pwr{list-style:none;margin:2px 0 8px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;text-align:left;font-size:13.5px;color:var(--muted);font-weight:700}
 .pwr li.ok{color:var(--forest-2)}
+.pwshow{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600;margin:4px 0;cursor:pointer;text-align:left}.pwshow input{width:auto;margin:0}
+.apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:8px}.apps div{border:1px solid var(--line);border-radius:12px;padding:10px 12px}.apps a{font-weight:700;margin-right:10px}
 .seg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px} .seg button{flex:1;min-width:110px}
 .seg button.on{background:var(--moose-soft);border-color:var(--moose);color:var(--moose-ink)}
 .fb{border-top:1px solid var(--line);padding:12px 0}.fb:first-child{border-top:0}
@@ -275,6 +277,7 @@ body.pennyonly #pennyBox .ph{cursor:default}
 <script src="config_guide.js"></script>
 <script>
 const C = window.MM_CONFIG;
+try{ if(/type=(magiclink|recovery|signup|invite)/.test(location.hash)) sessionStorage.setItem("mm_pw_offer", "1"); }catch(e){}   // signed in from an emailed link -> offer "Set a password?" (2026-11-02)
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" }, global:{ fetch:(...a) => window.MMOFF ? MMOFF.fetch(...a) : fetch(...a) } });   // offline.js: saved copy on this device (2026-10-30)
 /* weak / no signal (offline.js, Brandon 2026-10-30): these pages open from the saved copy; the rest say they need signal */
 const OFFK = ["homes", "staffing", "stf_sched", "stf_perf", "cal_off"];
@@ -332,6 +335,7 @@ function loginView(msg){
     e = e.replace(/@m[o0]+s[e]?m[a-z]*ment\.c[o0]m?$/, "@moosemanagement.com"); $("#em").value = e; return e; };
   $("#go").onclick = async () => { const { data, error } = await sb.auth.signInWithPassword({ email:fixEm(), password:$("#pw").value });
     if(error) return $("#msg").textContent = "Wrong email or password.";
+    LASTPW = $("#pw").value;   // memory only: Supabase asks for it if they must pick a new password now
     if(data && data.weakPassword) TS.weak = true;   // older password that doesn't meet today's rules -> must pick a new one
     boot(); };
   $("#pw").addEventListener("keydown", e => { if(e.key === "Enter") $("#go").click(); });
@@ -341,13 +345,17 @@ function loginView(msg){
     if(!error){ $("#codebox").style.display = "block"; $("#otp").focus(); }
     $("#msg").textContent = !error ? "Code sent to " + email + "." : "Couldn't send the code (" + error.message + ")."; };
   $("#otpgo").onclick = async () => { const { error } = await sb.auth.verifyOtp({ email:$("#em").value.trim().toLowerCase(), token:$("#otp").value.replace(/\D/g,""), type:"email" });
-    if(error) $("#msg").textContent = "That code didn't work - send a new one."; else boot(); };
+    if(error) $("#msg").textContent = "That code didn't work - send a new one."; else { try{ sessionStorage.setItem("mm_pw_offer", "1"); }catch(e){} boot(); } };
 }
 
 /* ---------- 2-step sign-in (authenticator app), same as Moose Locks. hub_two_step.sql decides when it's required:
    anyone who set up the app always types a code; with the switch on "all", everyone without it sets it up first.
    The code is asked once per device - the session stays at 2-step until they sign out. */
+const AUTH_APPS = [["Google Authenticator", "https://apps.apple.com/us/app/google-authenticator/id388497605", "https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2"],
+  ["Microsoft Authenticator", "https://apps.apple.com/us/app/microsoft-authenticator/id983156458", "https://play.google.com/store/apps/details?id=com.azure.authenticator"]];   // official store pages, checked 2026-11-02
+const appLinks = n => { const a = AUTH_APPS.find(x => x[0] === n); return `<b>${n}</b> (<a href="${a[1]}" target="_blank" rel="noopener">iPhone</a> · <a href="${a[2]}" target="_blank" rel="noopener">Android</a>)`; };
 const TS = { ok:false, weak:false, mc:undefined, busy:false };
+let LASTPW = null;   // the password typed at sign-in on this page, never saved anywhere (2026-11-02)
 const PW_SYM = /[!@#$%^&*()_+\-=\[\]{};'\\:"|<>?,./`~]/;
 const qrSrc = q => { const i = q.indexOf(","); return q.startsWith("data:") && i > 0 && !/;base64,/.test(q.slice(0, i+1)) ? "data:image/svg+xml;charset=utf-8," + encodeURIComponent(q.slice(i+1)) : q; };
 const codeIn = `<input id="tsc" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" style="font-size:24px;letter-spacing:6px;text-align:center">`;
@@ -392,7 +400,7 @@ async function tsSetupView(){
     const { data, error } = await sb.auth.mfa.enroll({ factorType:"totp", friendlyName:"Moose Hub " + new Date().toISOString().slice(0,16).replace("T"," ") + " " + Math.random().toString(36).slice(2,6) });
     if(error) throw error;
     $("#tsbox").innerHTML = `<ol class="how">
-        <li><span class="key">1</span><span>Install <b>Google Authenticator</b> or <b>Microsoft Authenticator</b> from the App Store / Google Play.</span></li>
+        <li><span class="key">1</span><span>Install ${appLinks("Google Authenticator")} or ${appLinks("Microsoft Authenticator")}.</span></li>
         <li><span class="key">2</span><span>In the app tap <b>+</b> → <b>Scan a QR code</b> and scan this:</span></li></ol>
       <img src="${qrSrc(data.totp.qr_code)}" alt="QR code" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:12px;margin:6px auto;display:block">
       <details style="margin:6px 0"><summary class="muted">Can't scan? Type this key instead</summary><code style="word-break:break-all">${esc(data.totp.secret)}</code></details>
@@ -422,17 +430,107 @@ function pwView(){
     if(pwMissing(a).some(([ok]) => !ok)) return $("#pwmsg").textContent = "Needs every item on the list.";
     if(a !== b) return $("#pwmsg").textContent = "The two don't match.";
     $("#pwmsg").textContent = "Saving…"; $("#pwgo").disabled = true;
-    const { error } = await sb.auth.updateUser(n ? { password:a, nonce:n } : { password:a });
+    const att = n ? { password:a, nonce:n } : { password:a };
+    if(LASTPW && !(await codeSession())) att.current_password = LASTPW;
+    const { error } = await sb.auth.updateUser(att);
     $("#pwgo").disabled = false;
     if(error){
       if(error.code === "reauthentication_needed" || /reauthenticat/i.test(error.message)){
         await sb.auth.reauthenticate(); $("#nonce").style.display = "block"; $("#pwn").focus();
         return $("#pwmsg").textContent = "For safety we emailed you a 6-digit code. Type it above, then Save again."; }
       if(error.code === "same_password") return $("#pwmsg").textContent = "Pick something different from your old password.";
+      if(/current password/i.test(error.message)) return $("#pwmsg").textContent = "For safety, tap Back, sign in again, then pick your new password right away.";
       if(/pwned|leak|breach/i.test(error.message)) return $("#pwmsg").textContent = "That password has shown up in a data leak online - pick a different one.";
       return $("#pwmsg").textContent = "Couldn't save (" + error.message + ")."; }
     try{ await sb.rpc("lock_pw_changed"); }catch(e){}
     TS.weak = false; TS.mc = false; boot(); };
+}
+/* set or change your own password (My settings) and right after an emailed code/link sign-in (Brandon 2026-11-02).
+   Brandon: only with your current password OR a code from your email. Supabase enforces it too (require_current_password):
+   a session started by an emailed code/link counts as proven; otherwise updateUser needs current_password. The "email me a code"
+   route signs in a separate short-lived copy with the code and changes the password there. Supabase refuses leaked passwords. */
+async function codeSession(){ try{ const t = (await sb.auth.getSession()).data.session.access_token, pl = JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
+  return (pl.amr || []).some(m => ["otp","magiclink","recovery"].includes(m.method)); }catch(e){ return false; } }
+function pwFields(p, proof){
+  return (proof ? `<div id="${p}pf"><label class="field"><span>Your current password</span><input type="password" id="${p}o" autocomplete="current-password"></label>
+      <p class="muted" style="margin:-4px 0 10px;font-size:13px">Forgot it? <a href="#" id="${p}fg">Email me a code instead</a></p></div>
+    <div id="${p}ec" style="display:none"><button class="btn small" id="${p}send">Email me a code</button>
+      <label class="field" style="margin-top:8px"><span>Code from the email</span><input id="${p}k" inputmode="numeric" maxlength="8" autocomplete="one-time-code" style="font-size:22px;letter-spacing:6px;text-align:center"></label>
+      <div id="${p}ta" style="display:none"><label class="field"><span>6-digit code from your authenticator app</span><input id="${p}t" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="font-size:22px;letter-spacing:6px;text-align:center"></label></div>
+      <p class="muted" style="margin:-4px 0 10px;font-size:13px"><a href="#" id="${p}bk">Use my current password instead</a></p></div>` : "")
+  + `<label class="field"><span>New password</span><input type="password" id="${p}1" autocomplete="new-password"></label>
+    <ul class="pwr" id="${p}r"></ul>
+    <label class="field"><span>Type it again</span><input type="password" id="${p}2" autocomplete="new-password"></label>
+    <label class="pwshow"><input type="checkbox" id="${p}s"> Show what I typed</label>
+    <div id="${p}n" style="display:none"><label class="field"><span>Code we just emailed you</span><input id="${p}c" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="font-size:22px;letter-spacing:6px;text-align:center"></label></div>
+    <button class="btn primary wide" id="${p}go">Save my password</button><p id="${p}m" class="muted"></p>`; }
+function pwWire(p, done, proof){
+  const el = k => $("#" + p + k), msg = t => el("m").textContent = t;
+  let mode = proof ? "pw" : "none", cc = null, em = null;
+  const show = () => el("r").innerHTML = pwMissing(el("1").value).map(([ok, t]) => `<li class="${ok ? "ok" : ""}">${ok ? "✓" : "○"} ${t}</li>`).join("");
+  el("1").oninput = show; show();
+  el("s").onchange = e => { el("1").type = el("2").type = e.target.checked ? "text" : "password"; };
+  if(proof){
+    el("fg").onclick = e => { e.preventDefault(); mode = "code"; el("pf").style.display = "none"; el("ec").style.display = "block"; msg(""); };
+    el("bk").onclick = e => { e.preventDefault(); mode = "pw"; el("ec").style.display = "none"; el("pf").style.display = "block"; msg(""); };
+    el("send").onclick = async () => { try{ em = (await sb.auth.getSession()).data.session.user.email; }catch(e){}
+      if(!em) return msg("Sign in again first.");
+      cc = cc || supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:"mm-pwcode" } });
+      msg("Sending…"); const { error } = await cc.auth.signInWithOtp({ email:em, options:{ shouldCreateUser:false } });
+      msg(error ? "Couldn't send the code (" + error.message + ")." : "Code sent to " + em + "."); if(!error) el("k").focus(); };
+  }
+  el("go").onclick = async () => { const a = el("1").value, b = el("2").value, n = el("c").value.replace(/\D/g,"");
+    if(mode === "pw" && !el("o").value) return msg("Type your current password, or email yourself a code.");
+    if(mode === "code" && (!cc || !el("k").value.replace(/\D/g,""))) return msg("Tap Email me a code, then type the code.");
+    if(pwMissing(a).some(([ok]) => !ok)) return msg("Needs every item on the list.");
+    if(a !== b) return msg("The two don't match.");
+    msg("Saving…"); el("go").disabled = true;
+    let error;
+    if(mode === "code"){
+      let { data:cs } = await cc.auth.getSession();
+      if(!cs.session){ const v = await cc.auth.verifyOtp({ email:em, token:el("k").value.replace(/\D/g,""), type:"email" });
+        if(v.error){ el("go").disabled = false; return msg("That code didn't work - send a new one."); } }
+      ({ error } = await cc.auth.updateUser({ password:a }));
+      if(error && /aal2|AAL/i.test(error.message)){   // 2-step is on: Supabase wants the authenticator code too
+        const t = el("t").value.replace(/\D/g,"");
+        if(!t){ el("ta").style.display = "block"; el("t").focus(); el("go").disabled = false; return msg("Type the 6-digit code from your authenticator app, then Save again."); }
+        const f = ((await cc.auth.mfa.listFactors()).data || {}).totp || [], fac = f.find(x => x.status === "verified");
+        const v2 = fac ? await cc.auth.mfa.challengeAndVerify({ factorId:fac.id, code:t }) : { error:{ message:"no app set up" } };
+        if(v2.error){ el("go").disabled = false; return msg("That app code didn't work - type the newest one."); }
+        ({ error } = await cc.auth.updateUser({ password:a })); }
+      if(!error) try{ await cc.auth.signOut({ scope:"local" }); }catch(e){}
+    } else {
+      const att = n ? { password:a, nonce:n } : { password:a };
+      if(mode === "pw") att.current_password = el("o").value;
+      ({ error } = await sb.auth.updateUser(att)); }
+    el("go").disabled = false;
+    if(error){
+      if(error.code === "reauthentication_needed" || /reauthenticat/i.test(error.message)){
+        await sb.auth.reauthenticate(); el("n").style.display = "block"; el("c").focus();
+        return msg("For safety we emailed you a 6-digit code. Type it above, then Save again."); }
+      if(/current password/i.test(error.message)) return msg(mode === "pw" ? "That isn't your current password. Forgot it? Email yourself a code." : "Type your current password, or email yourself a code.");
+      if(error.code === "same_password") return msg("That's already your password - pick something different.");
+      if(/pwned|leak|breach/i.test(error.message)) return msg("That password has shown up in a data leak online - pick a different one.");
+      return msg("Couldn't save (" + error.message + ")."); }
+    try{ await sb.rpc("lock_pw_changed"); }catch(e){}
+    TS.weak = false; TS.mc = false; done(); };
+}
+const pwOfferDue = () => { try{ const f = sessionStorage.getItem("mm_pw_offer"); sessionStorage.removeItem("mm_pw_offer"); return !!f; }catch(e){ return false; } };
+function pwOfferView(){
+  tsShell("Set a password?", `<p class="muted">You signed in with an emailed code. Pick a password now and next time you can sign in with your email and password. It works for the Hub and Moose Locks.</p>${pwFields("po", false)}`, false);
+  $("#tsback").textContent = "Skip for now"; $("#tsback").onclick = () => boot();
+  pwWire("po", boot, false); $("#po1").focus();
+}
+async function myPwBox(){
+  const proof = !(await codeSession());   // signed in with an emailed code = already proven
+  document.querySelectorAll("#mypwm").forEach(e => e.remove());
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="mypwm"><div class="card" style="max-width:440px;max-height:92vh;overflow:auto">
+    <div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">🔑 Set my password</h2><button class="btn small" id="mypwx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
+    <p class="muted">${proof ? "First prove it's you: type your current password, or get a code by email." : "You signed in with an emailed code, so you can pick a new password now."} It works for the Hub and Moose Locks.</p>${pwFields("mp", proof)}</div></div>`);
+  const close = () => $("#mypwm").remove();
+  $("#mypwx").onclick = close;
+  pwWire("mp", () => { close(); const m = $("#prefmsg"); if(m) m.textContent = "Password saved."; }, proof);
+  $(proof ? "#mpo" : "#mp1").focus();
 }
 /* old Maintenance site sends people here to finish 2-step, then gets them back */
 const NEXT_OK = ["maint.html"];
@@ -446,6 +544,7 @@ async function boot(){
   if(!OFFLINE && !(await twoStep())) return;
   if(!OFFLINE && TS.mc === undefined){ try{ TS.mc = !!(await sb.rpc("lock_must_change_pw")).data; }catch(e){ TS.mc = false; } }
   if(!OFFLINE && (TS.mc || TS.weak)) return pwView();
+  if(!OFFLINE && pwOfferDue()) return pwOfferView();
   const nx = new URLSearchParams(location.search).get("next");
   if(nx && NEXT_OK.includes(nx)) return location.replace(nx);
   const me = await sb.rpc("hub_me");
@@ -1010,17 +1109,47 @@ function bdSelects(id, cur){ cur = cur || {};
   return `<select id="${id}_m" aria-label="Month"><option value="">Month</option>${MONTHS.map((m, i) => `<option value="${i + 1}" ${cur.month === i + 1 ? "selected" : ""}>${m}</option>`).join("")}</select>
     <select id="${id}_d" aria-label="Day"><option value="">Day</option>${[...Array(31)].map((_, i) => `<option ${cur.day === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select>`; }
 function alertMsg(t){ const m = $("#bdmsg"); if(m) m.textContent = t; }
-let BD = { mine:null, people:[] }, ACC = [], PDWHO = null, PDMODE = "person", PDTEAM = null;
+let BD = { mine:null, people:[] }, ACC = [], PWP = [], PDWHO = null, PDMODE = "person", PDTEAM = null;
 /* Sign-in control (hub admins only, hub_admin_access.sql): sign a person out of every device, or lock them out */
 function accCard(){
   if(!ME.admin || !ACC.length) return "";
   const ago = t => t ? new Date(t).toLocaleDateString([], { month:"short", day:"numeric" }) : "never";
   return `<details class="card acc" id="acccard"><summary><b style="font-size:17px">🔐 Sign-in control</b><span class="muted">${ACC.filter(x => !x.active).length} locked out</span></summary>
-    <p class="muted" style="margin:4px 0 8px">Sign someone out of every phone and computer, or lock them out until you let them back in. Every change is logged.</p>
+    <p class="muted" style="margin:4px 0 8px">Set someone's password, sign them out of every phone and computer, or lock them out until you let them back in. Every change is logged.</p>
     ${ACC.map(x => `<div class="ord"><b>${esc(x.name)}${x.active ? "" : ` <span class="pill red">Locked out</span>`}
-        <div class="muted" style="font-weight:600;font-size:13px">2-step ${x.two_step ? "✓" : "not yet"} · signed in on ${x.devices} device${x.devices === 1 ? "" : "s"} · last sign-in ${ago(x.last_sign_in)}${x.last_action ? ` · ${{ sign_out:"signed out", lock:"locked", unlock:"let back in" }[x.last_action]} ${ago(x.last_action_at)}` : ""}</div></b>
-      ${x.active ? `<button class="btn small" data-acc="out:${x.id}" ${x.devices ? "" : "disabled"}>Sign out everywhere</button>${x.admin ? "" : `<button class="btn small" data-acc="lock:${x.id}" style="color:var(--red)">Lock out</button>`}`
+        <div class="muted" style="font-weight:600;font-size:13px">2-step ${x.two_step ? "✓" : "not yet"} · signed in on ${x.devices} device${x.devices === 1 ? "" : "s"} · last sign-in ${ago(x.last_sign_in)}${x.last_action ? ` · ${{ sign_out:"signed out", lock:"locked", unlock:"let back in", set_password:"password set" }[x.last_action]} ${ago(x.last_action_at)}` : ""}</div></b>
+      ${x.active ? `<button class="btn small" data-acc="pw:${x.id}">Set password</button><button class="btn small" data-acc="out:${x.id}" ${x.devices ? "" : "disabled"}>Sign out everywhere</button>${x.admin ? "" : `<button class="btn small" data-acc="lock:${x.id}" style="color:var(--red)">Lock out</button>`}`
         : `<button class="btn small" data-acc="unlock:${x.id}">Let back in</button>`}</div>`).join("")}</details>`;
+}
+/* Set someone's password (hub_admin_set_password.sql; Brandon 2026-11-02): admins anyone, managers their own staff (hub_pw_can).
+   Saving signs them out of every phone and computer. The password is saved only in their sign-in, never logged. */
+function accPw(x, done){
+  document.querySelectorAll("#accm").forEach(e => e.remove());
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="accm"><div class="card" style="max-width:460px;max-height:92vh;overflow:auto">
+    <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="accback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Set ${esc(x.name)}'s password</h2><button class="btn small" id="accx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
+    <p class="muted">Type a password for them, or make one. Give it to them in person or by phone, never in Slack or email. Saving signs them out of every phone and computer right away.</p>
+    <label class="field"><span>New password</span><input type="text" id="ap1" autocomplete="off" spellcheck="false"></label>
+    <ul class="pwr" id="apr"></ul>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button class="btn small" id="apmake">Make one for me</button><button class="btn small" id="apcopy">Copy</button></div>
+    <label class="pwshow"><input type="checkbox" id="apmc" checked> They pick their own password at their next sign-in</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" id="accgo">Set password</button><button class="btn" id="accno">Cancel</button></div>
+    <p class="muted" id="accmsg"></p></div></div>`);
+  const close = () => $("#accm").remove();
+  $("#accback").onclick = $("#accx").onclick = $("#accno").onclick = close;
+  const show = () => $("#apr").innerHTML = pwMissing($("#ap1").value).map(([ok, t]) => `<li class="${ok ? "ok" : ""}">${ok ? "✓" : "○"} ${t}</li>`).join("");
+  $("#ap1").oninput = show; show(); $("#ap1").focus();
+  $("#apmake").onclick = () => { const U = "ABCDEFGHJKMNPQRSTUVWXYZ", L = "abcdefghjkmnpqrstuvwxyz", D = "23456789", Y = "!#?@$%";
+    const r = n => crypto.getRandomValues(new Uint32Array(1))[0] % n, pick = t => t[r(t.length)];
+    const c = [pick(U), pick(L), pick(D), pick(Y)]; while(c.length < 14) c.push(pick(U + L + D + Y));
+    for(let i = c.length - 1; i > 0; i--){ const j = r(i + 1); [c[i], c[j]] = [c[j], c[i]]; }
+    $("#ap1").value = c.join(""); show(); };
+  $("#apcopy").onclick = async () => { try{ await navigator.clipboard.writeText($("#ap1").value); $("#accmsg").textContent = "Copied."; }catch(e){ $("#ap1").select(); } };
+  $("#accgo").onclick = async () => { const pw = $("#ap1").value, mc = $("#apmc").checked;
+    if(pwMissing(pw).some(([ok]) => !ok)) return $("#accmsg").textContent = "Needs every item on the list.";
+    $("#accgo").disabled = true; $("#accmsg").textContent = "Saving…";
+    const r = await sb.rpc("hub_set_password", { p_person:x.id, p_password:pw, p_must_change:mc });
+    if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + r.error.message; }
+    close(); done(x.name + "'s password is set and they're signed out" + (r.data ? " of " + r.data + " device" + (r.data === 1 ? "" : "s") : "") + "." + (mc ? " They'll pick their own at their next sign-in." : "")); };
 }
 function accAsk(act, x, done){
   const T = { out:["Sign " + x.name + " out everywhere?", "Every phone and computer they're signed in on stops working right away. They can sign straight back in.", "Sign out everywhere"],
@@ -1155,9 +1284,9 @@ async function pennyBriefCard(box){
     $("#pbmsg").textContent = x.error ? "Couldn't save: " + x.error.message : (x.data.enabled ? `Saved. Next one at ${t12(x.data.send_at)}${x.data.weekends ? "" : " on a weekday"}.` : "Saved. You won't get the briefing."); };
 }
 async function settingsView(v){
-  const [a, b, c] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] }),
-    ME.admin ? sb.rpc("hub_admin_people") : Promise.resolve({ data:[] })]);
-  BD = { mine:(a.data || []).find(x => x.me) || null, people:b.data || [] }; ACC = c.data || [];
+  const [a, b, c, d] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] }),
+    ME.admin ? sb.rpc("hub_admin_people") : Promise.resolve({ data:[] }), ME.admin ? Promise.resolve({ data:[] }) : sb.rpc("hub_pw_people")]);
+  BD = { mine:(a.data || []).find(x => x.me) || null, people:b.data || [] }; ACC = c.data || []; PWP = (d && d.data) || [];
   settingsView2(v);
 }
 /* My settings: every card is an accordion and only one is open at a time (Brandon 2026-11-02). Plain cards (title <b> first) are
@@ -1216,6 +1345,13 @@ function settingsView2(v){
     <div class="card"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
+    <div class="card"><b style="font-size:17px">🔑 My password</b><p class="muted" style="margin:4px 0 8px">Set or change the password you sign in with (Hub and Moose Locks). You'll need your current password or a code from your email.</p><button class="btn small" id="mypw">Set a new password</button></div>
+    <div class="card"><b style="font-size:17px">📱 2-step sign-in app</b><p class="muted" style="margin:4px 0 0">Signing in asks for a 6-digit code from a free authenticator app on your phone. Get one here:</p>
+      <div class="apps">${AUTH_APPS.map(([n, i, g]) => `<div><b>${n}</b><br><a href="${i}" target="_blank" rel="noopener">iPhone</a><a href="${g}" target="_blank" rel="noopener">Android</a></div>`).join("")}</div>
+      <p class="muted" style="margin:8px 0 0;font-size:13px">New phone? Ask Brandon or Kim to reset your 2-step, then scan the new code when you sign in.</p></div>
+    ${PWP.length ? `<details class="card acc" id="pwpcard"><summary><b style="font-size:17px">🔑 Team passwords</b><span class="muted">${PWP.length} people</span></summary>
+      <p class="muted" style="margin:4px 0 8px">Set a password for someone on your team. Saving signs them out of every phone and computer. Every change is logged.</p>
+      ${PWP.map(x => `<div class="ord"><b style="flex:1">${esc(x.name)}<div class="muted" style="font-weight:600;font-size:13px">${esc(x.teams || "")}</div></b><button class="btn small" data-pwp="${x.id}">Set password</button></div>`).join("")}</details>` : ""}
     ${BD.mine ? "" : bdCard()}
     <div id="pbrief"></div>
     <details class="card acc" id="ordcard"${ORDO.card ? " open" : ""}><summary><b style="font-size:17px">☰ Arrange my sidebar</b><span class="muted">${desksFirst ? "Desks first" : "Moose Info first"}${ORD.length ? " · your order" : ""}</span></summary><p class="muted" style="margin:4px 0 8px">Home always stays on top. Pick what comes next, then put things in the order you like.</p>
@@ -1254,7 +1390,7 @@ function settingsView2(v){
       const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
       b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
     v.querySelectorAll("[data-acc]").forEach(b => b.onclick = () => { const [act, id] = b.dataset.acc.split(":"), x = ACC.find(p => p.id === id);
-      accAsk(act, x, async msg => { ACC = (await sb.rpc("hub_admin_people")).data || []; draw(); const c = $("#acccard"); if(c){ SETOPEN = (c.querySelector("summary b") || {}).textContent; c.open = true; } $("#prefmsg").textContent = msg; }); });
+      (act === "pw" ? accPw : (p, f) => accAsk(act, p, f))(x, async msg => { ACC = (await sb.rpc("hub_admin_people")).data || []; draw(); const c = $("#acccard"); if(c){ SETOPEN = (c.querySelector("summary b") || {}).textContent; c.open = true; } $("#prefmsg").textContent = msg; }); });
     $("#ordreset").onclick = () => { ilist = std(ilist); dlist = std(dlist); desksFirst = false; draw(); };
     $("#intown").onchange = () => { const own = $("#intown").value.split(",").map(x => x.trim().replace(/\s+/g, " ").slice(0, 40)).filter(x => x.length > 1);
       ints = ints.filter(x => INTERESTS.some(([k]) => k === x)).concat([...new Set(own.map(x => x.toLowerCase()))]).slice(0, 20); };
@@ -1264,6 +1400,8 @@ function settingsView2(v){
       $("#prefsave").disabled = false;
       if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
       PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks }); shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
+    $("#mypw").onclick = myPwBox;
+    v.querySelectorAll("[data-pwp]").forEach(b => b.onclick = () => accPw(PWP.find(p => p.id === b.dataset.pwp), msg => { $("#prefmsg").textContent = msg; }));
     pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
     setOneOpen(v);
   };
@@ -2160,7 +2298,7 @@ async function patrickView(v){
 }
 window.addEventListener("hashchange", route);
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ const m = document.querySelector(".modal.on"); if(m) m.classList.remove("on"); } });
-sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { if(window.MMOFF) MMOFF.wipe(); ME = null; TS.ok = false; TS.weak = false; TS.mc = undefined; loginView(window.MMIDLE ? MMIDLE.reason() : ""); } });
+sb.auth.onAuthStateChange(ev => { if(ev === "SIGNED_OUT") { if(window.MMOFF) MMOFF.wipe(); LASTPW = null; ME = null; TS.ok = false; TS.weak = false; TS.mc = undefined; loginView(window.MMIDLE ? MMIDLE.reason() : ""); } });
 if(window.MMIDLE) MMIDLE.watch(sb);   // signed out after 1 hour with no use (idle.js)
 boot();
 </script>
