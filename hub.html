@@ -619,9 +619,15 @@ function addDerived(DESKS, ex){
   // Property Set Up drop-down (Brandon 2026-10-29): Launch Pad (the board) · AI Description Tool · Photo Compressor · QR Code Generator.
   // The three tools follow property_setup's access (each page checks hub_can('property_setup'); psu-describe too) and are live now; the board waits for cut-over.
   const psD = DESKS.find(x => x.key === "property_setup");
-  if(psD) DESKS.push({ key:"psu_desc", label:"Property Set Up · AI Description Tool", icon:psD.icon, url:"psu_desc.html", status:"live", sort:psD.sort + 0.1 },
-    { key:"psu_photos", label:"Property Set Up · Photo Compressor", icon:psD.icon, url:"psu_photos.html", status:"live", sort:psD.sort + 0.2 },
-    { key:"psu_qr", label:"Property Set Up · QR Code Generator", icon:psD.icon, url:"psu_qr.html", status:"live", sort:psD.sort + 0.3 });
+  // 2026-11-02 (Brandon): the three tools moved from Owners into the Tools drop-down (GROUPS.tools); access unchanged (property_setup)
+  if(psD) DESKS.push({ key:"psu_desc", label:"Tools · AI Description Tool", icon:"grid", url:"psu_desc.html", status:"live", sort:70.1 },
+    { key:"psu_photos", label:"Tools · Photo Compressor", icon:"grid", url:"psu_photos.html", status:"live", sort:70.2 },
+    { key:"psu_qr", label:"Tools · QR Code Generator", icon:"grid", url:"psu_qr.html", status:"live", sort:70.3 });
+  // Tools also has a copy of Rates ▸ Revenue Estimator (same desk, access + status) and a Report folio for anything (hub_tools_desk.sql;
+  // follows res_report = every team; reports land in the managers' folio review list)
+  const rvE = DESKS.find(x => x.key === "revenue");
+  if(rvE) DESKS.push({ key:"tools_revenue", label:"Tools · Revenue Estimator", icon:"grid", url:rvE.url, status:rvE.status, sort:70.4 });
+  if(DESKS.some(x => x.key === "res_report" && x.status === "live")) DESKS.push({ key:"tools_report", label:"Tools · Report folio", icon:"grid", url:"#tools_report", status:"live", sort:70.5 });
   // Licensing drop-down (Brandon 2026-10-28): Licenses · Fire suppression · Leases. Both follow licensing's access (lic_fire / lic_lease RLS: hub_can('licensing'))
   const lD = DESKS.find(x => x.key === "licensing" && x.status === "live");
   if(lD) DESKS.push({ key:"lic_fire", label:"Licensing · Fire suppression", icon:lD.icon, url:"desk.html?only=firesys", status:"live", sort:lD.sort + 0.1 },
@@ -663,7 +669,8 @@ function sideNav(DESKS, ORD){
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly", hk_inv:"Inventory", hk_improve:"Improvements" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
                    guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", guest_reviews:"Reviews", call_review:"Call review", guest_followups:"Follow-ups" } },
-                   own:{ label:"Owners", icon:"key", kids:{ owner_calls:"Communication", property_setup:"Property Set Up", psu_desc:"AI Description Tool", psu_photos:"Photo Compressor", psu_qr:"QR Code Generator", competitor:"Competitor Playbook", competitor_add:"Add competitor intel" } },   // Competitor Playbook + Property Set Up: Brandon 2026-11-02   // Brandon 2026-11-01: owner communication for owner relations + managers
+                   own:{ label:"Owners", icon:"key", kids:{ owner_calls:"Communication", property_setup:"Property Set Up", competitor:"Competitor Playbook", competitor_add:"Add competitor intel" } },
+                   tools:{ label:"Tools", icon:"grid", kids:{ psu_desc:"AI Description Tool", psu_photos:"Photo Compressor", psu_qr:"QR Code Generator", tools_revenue:"Revenue Estimator", tools_report:"Report folio" } },   // Brandon 2026-11-02   // Competitor Playbook + Property Set Up: Brandon 2026-11-02   // Brandon 2026-11-01: owner communication for owner relations + managers
                    adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest", adv_realtor:"Realtor", adv_general:"General" } },   // Brandon 2026-10-28; Realtor + General 2026-10-29
                    locks:{ label:"Locks", icon:"lock", kids:{ locks_office:"Office", locks_field:"Field" } },
                    res:{ label:"Reservations", icon:"calendar", kids:{ reservations:"Check lists", reviews:"Reviews", res_report:"Report folio" } },
@@ -725,6 +732,9 @@ async function bellLoad(force){
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
   if(ans.length) it.push({ ic:"📬", t:`An admin answered ${ans.length === 1 ? "your question" : ans.length + " of your questions"}`, s:"Open Penny to read it", penny:true });
+  // Folio reports waiting (2026-11-02): only reviewers read other people's rows (RLS), so this is 0 for everyone else
+  if(DESKS.some(x => x.key === "res_report" || x.key === "tools_report")){ const fr = await q(sb.from("res_folio_reports").select("id", { count:"exact", head:true }).eq("status", "new").neq("reporter_name", ME.name || ""));
+    if(fr.count) it.push({ ic:"🚩", t:`${fr.count} new folio report${fr.count === 1 ? "" : "s"}`, s:"Someone flagged a folio for a manager", href:"#/res_report" }); }
   BELL.items = it;
   document.querySelectorAll(".mbell").forEach(b => { b.classList.toggle("has", it.length > 0); b.querySelector(".bdot").textContent = it.length > 9 ? "9+" : it.length;
     b.title = it.length ? `Notifications (${it.length})` : "Notifications"; });
@@ -894,6 +904,7 @@ function route(){
   if(d && k === "stf_perf" && window.myPerf) return myPerf(v);   // staffing.js: your own Team ratings rows   // staffing.js: Staffing ▸ Schedule
   if(d && k === "staffing" && window.staffingView) return staffingView(v);   // staffing.js: Staffing Desk, hub time clock (Brandon 2026-10-29); data RLS hub_staff_sees
   if(d && k === "res_report") return resReportView(v);
+  if(d && k === "tools_report") return resReportView(v, "tools");   // Tools ▸ Report folio (2026-11-02): same list, any topic
   if(d && /^cal_(res|office|me|meet|off)$/.test(k) && window.calView) return calView(v, k);   // calendar.js (2026-10-29)
   if(d && /^meet_(or|bd|kd|beyond|mgr|fd|track|trackmk)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
   if(d && (k === "reviews" || k === "guest_reviews") && d.status === "live" && window.reviewsDesk) return reviewsDesk(v);   // analytics.js reviews report (Brandon 2026-10-29)
@@ -1400,8 +1411,8 @@ function setOneOpen(v){
 let SETOBS = null;
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","team_ratings","sync","advertising","calendar","config"];   // calendar: its tabs show as "Calendar" under Moose Info
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", maint_inv:"maint", maint_improve:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", hk_inv:"hk", hk_improve:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", owner_calls:"own", competitor:"own", competitor_add:"own", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"own", psu_desc:"own", psu_photos:"own", psu_qr:"own", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
-    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], own:["Owners","key"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], meet:["Meetings","people"], cal:["Calendar","calendar"], stf:["Staffing","clock"] };
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", maint_inv:"maint", maint_improve:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", hk_inv:"hk", hk_improve:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", owner_calls:"own", competitor:"own", competitor_add:"own", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"own", psu_desc:"tools", psu_photos:"tools", psu_qr:"tools", tools_revenue:"tools", tools_report:"tools", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
+    GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], own:["Owners","key"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], tools:["Tools","grid"], meet:["Meetings","people"], cal:["Calendar","calendar"], stf:["Staffing","clock"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
@@ -1525,22 +1536,24 @@ async function loadRateFlag(){
 /* Reservations ▸ Report folio (2026-10-28): guest / stay issues by Track folio. "Rate looks wrong" goes to the Rates list instead. */
 const RES_KINDS = [["bad_guest","Bad guest (do not rent again)"],["damage","Damage"],["complaint","Guest complaint"],["noise_party","Noise / party"],["extra_guests_pets","Extra guests or pets"],
   ["payment","Payment problem"],["cleaning","Cleaning issue"],["maintenance","Maintenance issue"],["other","Other"],["rate_off","Rate looks wrong (goes to Rates)"]];
+const TOOL_KINDS = [["guest","Guest / stay"],["owner","Owner"],["maintenance","Maintenance"],["housekeeping","Housekeeping"],["cleaning","Cleaning"],["damage","Damage"],
+  ["billing","Billing / payment"],["home_info","Home info is wrong"],["bad_guest","Bad guest (do not rent again)"],["other","Something else"],["rate_off","Rate looks wrong (goes to Rates)"]];
 const RES_ST = { new:["New","red"], seen:["Seen","blue"], doing:["Working on it","amber"], done:["Done","green"], no_action:["No action",""] };
-async function resReportView(v){
-  const rev = !!(await sb.rpc("hub_can", { p_desk:"res_report_review" })).data;
-  v.innerHTML = `<div class="page"><h2>Report folio</h2><p class="muted">Tell us about a guest or stay problem. Use the Track folio number; add the home if you know it.</p>
+async function resReportView(v, mode){
+  const rev = !!(await sb.rpc("hub_can", { p_desk:"res_report_review" })).data, tools = mode === "tools", KINDS = tools ? TOOL_KINDS : RES_KINDS;
+  v.innerHTML = `<div class="page"><h2>Report folio</h2><p class="muted">${tools ? "Flag a Track folio for any reason so a manager takes note. Add the home if you know it." : "Tell us about a guest or stay problem. Use the Track folio number; add the home if you know it."}</p>
     <div class="card"><label class="field"><span>Track folio number</span><input id="rr_f" inputmode="numeric" placeholder="Example: 320102"></label>
     <label class="field"><span>Home (optional)</span><input id="rr_u" placeholder="Example: PL 612"></label>
-    <label class="field"><span>What happened?</span><select id="rr_k">${RES_KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+    <label class="field"><span>${tools ? "What's it about?" : "What happened?"}</span><select id="rr_k">${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
     <label class="field"><span>Details</span><textarea id="rr_n" style="min-height:80px" placeholder="What happened, when, and anything we should do next time"></textarea></label>
     <button class="btn primary" id="rr_s">Send</button> <span class="muted" id="rr_m"></span></div>
     <div class="card" id="rr_list"><p class="muted">Loading…</p></div></div>`;
   const list = async () => {
     const r = await sb.from("res_folio_reports").select("*").order("id", { ascending:false }).limit(200); const rows = r.data || [];
-    const lab = Object.fromEntries(RES_KINDS);
+    const lab = Object.assign(Object.fromEntries(TOOL_KINDS), Object.fromEntries(RES_KINDS), { other:"Other" });
     $("#rr_list").innerHTML = `<b style="font-size:17px">${rev ? "Folio reports" : "Your reports"}</b> <span class="muted">${rows.length}${rev ? " · " + rows.filter(x => x.status === "new").length + " new" : ""}</span>` +
       (rows.length ? rows.map(x => `<div class="fb"><div class="hd" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${x.folio ? "#" + esc(x.folio) : ""}${x.unit ? " · " + esc(x.unit) : ""}</b>
-        <span class="pill">${esc(lab[x.kind] || x.kind)}</span><span class="pill ${RES_ST[x.status][1]}">${RES_ST[x.status][0]}</span>${x.from_form === "rates" ? `<span class="pill">from Rates form</span>` : ""}
+        <span class="pill">${esc(lab[x.kind] || x.kind)}</span><span class="pill ${RES_ST[x.status][1]}">${RES_ST[x.status][0]}</span>${x.from_form === "rates" ? `<span class="pill">from Rates form</span>` : x.from_form === "tools" ? `<span class="pill">from Tools</span>` : ""}
         <span class="muted" style="margin-left:auto">${rev ? esc(x.reporter_name || "") + " · " : ""}${new Date(x.created_at).toLocaleString()}</span></div>
         <p style="white-space:pre-wrap;margin:6px 0">${esc(x.note)}</p>${x.handle_note || x.handled_by ? `<p class="muted" style="margin:0">${esc(x.handled_by || "")}${x.handle_note ? ": " + esc(x.handle_note) : ""}</p>` : ""}
         ${rev ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center"><input data-rn="${x.id}" placeholder="Note (optional)" style="flex:1;min-width:160px;min-height:0;padding:6px 8px">${Object.entries(RES_ST).filter(([k]) => k !== x.status).map(([k, [l]]) => `<button class="btn small" data-rs="${x.id}" data-st="${k}">${l}</button>`).join("")}</div>` : ""}</div>`).join("")
@@ -1551,7 +1564,7 @@ async function resReportView(v){
   $("#rr_s").onclick = async () => { const f = $("#rr_f").value.trim(), u = $("#rr_u").value.trim();
     if(!f && !u) return $("#rr_m").textContent = "Enter the folio number (or the home).";
     $("#rr_s").disabled = true; $("#rr_m").textContent = "Sending…";
-    const r = await sb.rpc("res_report_folio", { p_folio:f, p_unit:u, p_kind:$("#rr_k").value, p_note:$("#rr_n").value }); $("#rr_s").disabled = false;
+    const kd = $("#rr_k").value, r = await sb.rpc(tools ? "tools_report_folio" : "res_report_folio", { p_folio:f, p_unit:u, p_kind:tools && kd === "guest" ? "complaint" : kd, p_note:$("#rr_n").value }); $("#rr_s").disabled = false;
     if(r.error){ $("#rr_m").textContent = "Couldn't send: " + r.error.message; return; }
     $("#rr_f").value = $("#rr_u").value = $("#rr_n").value = "";
     $("#rr_m").textContent = r.data && r.data.list === "rates" ? "Sent ✓ That's a rate question, so it went to the Rates folio list." : "Sent ✓ Thanks — a manager will look at it.";
