@@ -1160,6 +1160,29 @@ async function settingsView(v){
   BD = { mine:(a.data || []).find(x => x.me) || null, people:b.data || [] }; ACC = c.data || [];
   settingsView2(v);
 }
+/* My settings: every card is an accordion and only one is open at a time (Brandon 2026-11-02). Plain cards (title <b> first) are
+   folded into <details>; cards drawn later (Penny briefing, Who sees which desk, Banners) are caught by a watcher. SETOPEN = the open one. */
+let SETOPEN = null;
+function setOneOpen(v){
+  const key = d => (d.querySelector(":scope>summary b") || {}).textContent || "";
+  const fix = () => {
+    const page = v.querySelector(".setpage"); if(!page) return SETOBS && (SETOBS.disconnect(), SETOBS = null);
+    page.querySelectorAll(":scope>.card, :scope>div>.card").forEach(c => {
+      if(c.dataset.one) return; c.dataset.one = 1;
+      let d = c;
+      if(c.tagName !== "DETAILS"){ const t = c.firstElementChild; if(!t || t.tagName !== "B") return;
+        d = document.createElement("details"); d.className = c.className + " acc"; if(c.id) d.id = c.id; d.setAttribute("style", c.getAttribute("style") || "");
+        const sm = document.createElement("summary"); sm.appendChild(t); d.appendChild(sm); while(c.firstChild) d.appendChild(c.firstChild);
+        d.dataset.one = 1; c.replaceWith(d); }
+      d.open = !!SETOPEN && key(d) === SETOPEN;
+      d.addEventListener("toggle", () => { const k = key(d);
+        if(d.open){ SETOPEN = k; page.querySelectorAll("details[data-one]").forEach(o => { if(o !== d && o.open) o.open = false; }); }
+        else if(SETOPEN === k) SETOPEN = null; });
+    });
+  };
+  fix(); if(SETOBS) SETOBS.disconnect(); SETOBS = new MutationObserver(fix); SETOBS.observe(v, { childList:true, subtree:true });
+}
+let SETOBS = null;
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","team_ratings","sync","advertising","calendar","config"];   // calendar: its tabs show as "Calendar" under Moose Info
   const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", maint_inv:"maint", housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", hk_inv:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", guest_reviews:"guest", call_review:"guest", guest_followups:"guest", owner_calls:"own", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"res", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"psu", psu_desc:"psu", psu_photos:"psu", psu_qr:"psu", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
@@ -1189,7 +1212,7 @@ function settingsView2(v){
   const bdCard = () => BD.mine ? `<details class="card acc"><summary><b style="font-size:17px">🎂 My birthday</b><span class="muted">${MONTHS[BD.mine.month - 1]} ${BD.mine.day}</span></summary>${bdBody()}</details>`
     : `<div class="card"><b style="font-size:17px">🎂 My birthday</b>${bdBody()}</div>`;
   const draw = () => {
-    v.innerHTML = `<div class="page"><h2>My settings</h2><p class="muted">Only you see these. They follow you to any computer or phone you sign in on.</p>
+    v.innerHTML = `<div class="page setpage"><h2>My settings</h2><p class="muted">Only you see these. They follow you to any computer or phone you sign in on.</p>
     <div class="card"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
@@ -1231,7 +1254,7 @@ function settingsView2(v){
       const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
       b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
     v.querySelectorAll("[data-acc]").forEach(b => b.onclick = () => { const [act, id] = b.dataset.acc.split(":"), x = ACC.find(p => p.id === id);
-      accAsk(act, x, async msg => { ACC = (await sb.rpc("hub_admin_people")).data || []; draw(); const c = $("#acccard"); if(c) c.open = true; $("#prefmsg").textContent = msg; }); });
+      accAsk(act, x, async msg => { ACC = (await sb.rpc("hub_admin_people")).data || []; draw(); const c = $("#acccard"); if(c){ SETOPEN = (c.querySelector("summary b") || {}).textContent; c.open = true; } $("#prefmsg").textContent = msg; }); });
     $("#ordreset").onclick = () => { ilist = std(ilist); dlist = std(dlist); desksFirst = false; draw(); };
     $("#intown").onchange = () => { const own = $("#intown").value.split(",").map(x => x.trim().replace(/\s+/g, " ").slice(0, 40)).filter(x => x.length > 1);
       ints = ints.filter(x => INTERESTS.some(([k]) => k === x)).concat([...new Set(own.map(x => x.toLowerCase()))]).slice(0, 20); };
@@ -1242,6 +1265,7 @@ function settingsView2(v){
       if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
       PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks }); shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
     pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
+    setOneOpen(v);
   };
   draw();
 }
