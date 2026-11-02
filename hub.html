@@ -1179,6 +1179,7 @@ function settingsView2(v){
   const ordRows = (l, tag) => l.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
         <button class="btn small" data-up="${tag}:${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${tag}:${i}" ${i < l.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("");
   let ints = (PREFS.interests || []).slice(), ks = (PREFS.kinds || []).slice();
+  const ORDO = { card:false, i:true, d:true };   // Arrange my sidebar = accordion (Brandon 2026-11-02): card closed at first, Moose Info + Desks fold inside
   const L = k => items.find(x => x.k === k);
   const bdBody = () => `<p class="muted" style="margin:4px 0 8px">Month and day only — so the team can celebrate you.</p>
       <div class="bdsel">${bdSelects("bd", BD.mine)}<button class="btn small" id="bdsave">Save birthday</button><span class="muted" id="bdmsg"></span></div>
@@ -1194,11 +1195,11 @@ function settingsView2(v){
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
     ${BD.mine ? "" : bdCard()}
     <div id="pbrief"></div>
-    <div class="card"><b style="font-size:17px">☰ Arrange my sidebar</b><p class="muted" style="margin:4px 0 8px">Home always stays on top. Pick what comes next, then put things in the order you like.</p>
+    <details class="card acc" id="ordcard"${ORDO.card ? " open" : ""}><summary><b style="font-size:17px">☰ Arrange my sidebar</b><span class="muted">${desksFirst ? "Desks first" : "Moose Info first"}${ORD.length ? " · your order" : ""}</span></summary><p class="muted" style="margin:4px 0 8px">Home always stays on top. Pick what comes next, then put things in the order you like.</p>
       <div class="seg" id="ordfirst" style="margin:0 0 10px"><span class="muted" style="align-self:center;margin-right:6px">Show first:</span><button class="btn small ${desksFirst ? "" : "on"}" data-first="info">Moose Info</button><button class="btn small ${desksFirst ? "on" : ""}" data-first="desks">Desks</button></div>
-      ${ilist.length ? `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><b>Moose Info</b><button class="btn small" data-az="i" style="margin-left:auto">A–Z</button></div><div>${ordRows(ilist, "i")}</div>` : ""}
-      ${dlist.length ? `<div style="display:flex;align-items:center;gap:8px;margin-top:12px"><b>Desks</b><button class="btn small" data-az="d" style="margin-left:auto">A–Z</button></div><div>${ordRows(dlist, "d")}</div>` : ""}
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn small" id="ordreset">Back to the standard order</button></div></div>
+      ${ilist.length ? `<details class="acc2" data-ordo="i"${ORDO.i ? " open" : ""}><summary><b>Moose Info</b><span class="muted">${ilist.length}</span></summary><div style="display:flex;margin:6px 0"><button class="btn small" data-az="i" style="margin-left:auto">A–Z</button></div><div>${ordRows(ilist, "i")}</div></details>` : ""}
+      ${dlist.length ? `<details class="acc2" data-ordo="d"${ORDO.d ? " open" : ""}><summary><b>Desks</b><span class="muted">${dlist.length}</span></summary><div style="display:flex;margin:6px 0"><button class="btn small" data-az="d" style="margin-left:auto">A–Z</button></div><div>${ordRows(dlist, "d")}</div></details>` : ""}
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn small" id="ordreset">Back to the standard order</button></div></details>
     <div class="card"><b style="font-size:17px">☀️ My morning pick</b><p class="muted" style="margin:4px 0 4px">What you care about — your quote, joke, fact or stat of the day comes from these. Pick none to get everything.</p>
       <div class="ints">${INTERESTS.map(([k, l]) => `<label class="${ints.includes(k) ? "on" : ""}"><input type="checkbox" data-int="${k}" ${ints.includes(k) ? "checked" : ""}>${esc(l)}</label>`).join("")}</div>
       <label class="field" style="margin-top:10px"><span>Your own interests <span class="muted">(type anything, separated by commas)</span></span>
@@ -1211,6 +1212,8 @@ function settingsView2(v){
     ${ME.admin ? `<div id="pdesk"></div>` : ""}
     <div id="bnrbox"></div>
     <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
+    $("#ordcard").ontoggle = () => { ORDO.card = $("#ordcard").open; };
+    v.querySelectorAll("[data-ordo]").forEach(x => x.ontoggle = () => { ORDO[x.dataset.ordo] = x.open; });
     const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; draw(); };
     v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => mv(b.dataset.up, -1));
     v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => mv(b.dataset.dn, 1));
