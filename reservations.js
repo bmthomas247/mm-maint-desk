@@ -60,7 +60,8 @@ const CSS = `
 @media(max-width:1100px){ .rfg{grid-template-columns:repeat(3,minmax(0,1fr))} .rfg .field:first-child{grid-column:1 / -1} }
 @media(max-width:640px){ .rlk{max-width:none!important} .rlk .stats{grid-template-columns:repeat(2,1fr)} .rfg{grid-template-columns:1fr 1fr} .rgrid{grid-template-columns:1fr} .rhead .deskbtn span{display:none} .rtabs button{padding:7px 10px 7px 8px;font-size:13px} }`;
 const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / BDC / Hopper", oguest:"Owner guest", owner:"Owner stay" };
-const STAGE = { in_progress:"In progress", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
+// waiting_pay is never saved: a Checkout stay with a balance still due shows there (Kim 2026-11-02, see prep)
+const STAGE = { in_progress:"In progress", waiting_pay:"Waiting on payment", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
 // Neighborhoods: unit code prefix -> name (maintenance_desk/units.json "communities", from Track units)
 const HOODS = {"BHL":"Bear Hollow Lodges","BHR":"Bear Hollow Ridge","BHV":"Bear Hollow Village","BRR":"Black Rock Ridge","BSR":"Blackstone Residences","CH":"Carriage House",
   "CR":"Coyote Ridge","CV":"Crestview","DR":"Discovery Ridge","DS":"Deer Springs","EH":"Edelweiss Haus","FB":"Fox Bay","FP":"Foxpoint","HS":"Hailstone Heights",
@@ -148,7 +149,13 @@ async function load(force){
   if(B) B.canCharge = ch.data === true;   // charge-the-balance button (hub_res_charge.sql switch + access)
   if(B){ const ak = await sb.from("res_asks").select("id,res,step_key,note,by_name,at,status,answer,answered_by,answered_at,sent")
       .gte("at", new Date(Date.now() - 3 * 864e5).toISOString()).order("id", { ascending:false });
-    B.asks = (ak.data || []).filter(a => !/^Test entry/.test(a.answer || "")); }
+    B.asks = (ak.data || []).filter(a => !/^Test entry/.test(a.answer || ""));
+    // declined payments from the daily check (daily_checks.py failed_payments: Track payment plans that failed in the last 7 days)
+    B.failed = {};
+    try { const fp = await sb.from("hub_check_runs").select("day,items").eq("check_key", "failed_payments").order("id", { ascending:false }).limit(1);
+      const run = (fp.data || [])[0];
+      if(run && run.day >= addDay(B.today, -2)) (Array.isArray(run.items) ? run.items : []).forEach(i => { if(i && i.res) B.failed[String(i.res)] = i; });
+    } catch(e){} }
   if(B) B.stays.forEach(prep);
   return B;
 }
@@ -295,6 +302,13 @@ function prep(s){
   s.blockers = [...new Set(req.filter(t => !t.done && t.blocker).map(t => t.blocker))];
   const today = B.today;
   s.stage = (s.list && s.list.stage) || (s.status === "Cancelled" ? "cancelling" : s.depart < today ? (s.chan === "owner" ? "owner_done" : "checkout") : "in_progress");
+  // Kim 2026-11-02: Checkout only once nothing is owed, so a payment can't be missed. Still owed before check-out = Waiting on payment
+  // (Track takes the later payments from the card); declined payment or no card for it = back to In progress.
+  s.stageSet = s.stage; s.payWhy = "";
+  const owed = (s.balance || 0) > 0.005 && s.status !== "Cancelled" && s.depart >= today, fp = owed && B.failed && B.failed[String(s.res)];
+  if(fp){ s.blockers.push("Payment declined"); s.payWhy = fp.what || "Track declined a payment in the last few days."; }
+  else if(owed && s.td && s.td.card === false && s.stage === "checkout"){ s.blockers.push("No card on file for the next payment"); s.payWhy = "No card on file in Track for the payments still due."; }
+  if(s.stage === "checkout" && owed) s.stage = s.payWhy ? "in_progress" : "waiting_pay";
   s.waiting = (s.list && s.list.waiting) || [];
   s.state = s.stage === "closed" ? "Complete" : s.status === "Cancelled" && s.stage !== "closed" ? "Cancelling" : s.got === 0 ? "Not started"
     : s.got >= s.need ? (s.depart < today ? "Ready to close" : "Paperwork done") : s.waiting.length ? "Waiting" : "In progress";
@@ -311,6 +325,7 @@ const kindOf = s => s.chan === "abnb" ? "airbnb" : s.chan === "owner" ? "owner" 
 // icons (same stroke style as the Locks office tabs)
 const RSV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2"/><circle cx="5" cy="19" r="1"/>'),
+  waiting_pay:RSV('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>'),
   checkout:RSV('<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M9 16l-4-4 4-4M5 12h11"/>'),
   owner_done:RSV('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
   cancelling:RSV('<circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/>'),
@@ -321,7 +336,7 @@ const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1
 // Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
 const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Booking date" };
 // "Held up by" groups (Brandon 2026-10-30): pick the group, then filter down to one of its members
-const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management" };
+const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management", "Payment declined":"Payment", "No card on file for the next payment":"Payment" };
 const heldKey = b => HELD_GROUP[b] || b;
 const heldHas = (s, k) => [...s.blockers, ...s.waiting].some(b => b === k || heldKey(b) === k);
 async function queue(v){
@@ -331,7 +346,7 @@ async function queue(v){
   const today = B.today, in7 = new Date(new Date(today + "T12:00").getTime() + 7 * 864e5).toISOString().slice(0, 10);
   const stateCls = s => s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "grey" : s.state === "Cancelling" ? "red" : "amber";
   // groups (like the Locks office neighborhoods): day of the sort date (month for the past lists) or neighborhood
-  const gKey = s => { if(F.group === "hood") return s.area || "~"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" ? d : d.slice(0, 7); };
+  const gKey = s => { if(F.group === "hood") return s.area || "~"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" ? d : d.slice(0, 7); };
   const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k;
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
@@ -453,7 +468,9 @@ async function card(v, res){
     <div class="card">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="flex:1">${s.got} of ${s.need} steps done</b>
         <label class="muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rx_ext" style="width:20px;height:20px;min-height:0" ${s.list && s.list.extending ? "checked" : ""}> Extending</label>
-        <select id="rx_stage" style="width:auto">${Object.entries(STAGE).map(([k, l]) => `<option value="${k}" ${s.stage === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay").map(([k, l]) => `<option value="${k}" ${s.stageSet === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      ${s.stage === "waiting_pay" ? `<div class="rrule info">Waiting on payment: ${money(s.balance)} is still due. Track takes the next payments from the card on file, so nothing to do unless one fails. It moves to Checkout by itself once the balance is $0.</div>`
+        : s.payWhy ? `<div class="rrule stop">${s.stageSet === "checkout" ? "Back in progress: " : ""}${esc(s.payWhy)} ${money(s.balance)} still due. ${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : "Ask the guest to add a card in the guest portal, or pay the balance."}</div>` : ""}
       <div class="rchips"><span class="muted" style="align-self:center">Waiting on</span>${WAIT.map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}">${esc(w)}</button>`).join("")}</div>
       ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
       ${Object.entries(grp).map(([g, ts]) => `<div class="rgrp"><h3>${esc(g)} <span class="muted" style="font-weight:600">${ts.filter(t => !t.opt && t.done).length}/${ts.filter(t => !t.opt).length}</span></h3>
