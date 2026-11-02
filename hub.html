@@ -740,17 +740,30 @@ function bellDraw(){
 }
 function bellSetup(){
   if(!$("#bellpop")){ const p = document.createElement("div"); p.className = "bellpop"; p.id = "bellpop"; document.body.appendChild(p);
-    document.addEventListener("click", e => { if(!p.contains(e.target) && !e.target.closest(".mbell")) p.classList.remove("on"); });
-    document.addEventListener("keydown", e => { if(e.key === "Escape") p.classList.remove("on"); });
+    const q = document.createElement("div"); q.className = "bellpop"; q.id = "boardpop"; document.body.appendChild(q);
+    document.addEventListener("click", e => { if(!p.contains(e.target) && !e.target.closest(".mbell")) p.classList.remove("on");
+      if(!q.contains(e.target) && !e.target.closest(".mboard")) q.classList.remove("on"); });
+    document.addEventListener("keydown", e => { if(e.key === "Escape"){ p.classList.remove("on"); q.classList.remove("on"); } });
     window.addEventListener("hashchange", () => bellLoad());
     setInterval(() => bellLoad(true), 5 * 60000); }
-  document.querySelectorAll(".mbell").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#bellpop");
+  const place = (b, p) => { const r = b.getBoundingClientRect(); p.style.top = (r.bottom + 8) + "px"; const pw = Math.min(360, window.innerWidth - 24); p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px"; };
+  document.querySelectorAll(".mbell").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#bellpop"); $("#boardpop").classList.remove("on");
     if(p.classList.contains("on")) return p.classList.remove("on");
-    const r = b.getBoundingClientRect(); p.style.top = (r.bottom + 8) + "px"; const pw = Math.min(360, window.innerWidth - 24); p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px";
-    bellDraw(); p.classList.add("on"); bellLoad(true); });
+    place(b, p); bellDraw(); p.classList.add("on"); bellLoad(true); });
+  document.querySelectorAll(".mboard").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const q = $("#boardpop"); $("#bellpop").classList.remove("on");
+    if(q.classList.contains("on")) return q.classList.remove("on");
+    place(b, q); boardDraw(); q.classList.add("on"); });
   BELL.at = 0; bellLoad(true);
 }
-/* 💬 Message board: button now, board built later (Brandon 2026-11-02) */
+/* 💬 Message board: the button opens a preview of the newest messages first (Brandon 2026-11-02); the board itself is built later.
+   boardPreview() returns the newest posts [{who, text, at}] once the board exists. */
+function boardPreview(){ return []; }
+function boardDraw(){
+  const q = $("#boardpop"), m = boardPreview();
+  q.innerHTML = `<h4>Message board</h4>` + (m.length ? m.slice(0, 5).map(x => `<a class="bn" href="#/board"><span class="bi">💬</span><span><b>${esc(x.who)}</b><small>${esc(x.text)}</small></span></a>`).join("")
+    : `<div class="bnone">No messages yet. The message board is coming soon.</div>`) + `<a class="bn" href="#/board" style="justify-content:center;font-weight:700">Open the message board →</a>`;
+  q.querySelectorAll("a").forEach(a => a.onclick = () => q.classList.remove("on"));
+}
 function boardView(v){
   $("#ttl").textContent = $("#utl").textContent = "Message board";
   v.innerHTML = `<div class="page"><div class="card" style="text-align:center;padding:28px 18px"><div style="font-size:40px">💬</div><h2 style="margin:6px 0">Message board</h2><p class="muted">Coming soon: a place to post and talk with the whole Moose team.</p><a class="btn" href="#/home">← Home</a></div></div>`;
