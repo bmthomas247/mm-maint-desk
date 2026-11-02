@@ -5,7 +5,7 @@
 <title>QR Code Generator</title>
 <link rel="icon" href="moose-logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-<!-- Property Set Up ▸ QR Code Generator (hub key psu_qr; follows property_setup's access). Brandon 2026-10-29.
+<!-- Property Set Up ▸ QR Code Generator (hub key psu_qr; Tools; open to everyone on the hub since 2026-11-02). Brandon 2026-10-29.
      Made in this browser (qrcode-generator), nothing is sent anywhere. Typical use: the guest book frame in each home (Touch Stay link). -->
 <style>
 :root{--forest:#3c5f12;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;--red:#c8382b;--radius:16px;
@@ -42,7 +42,7 @@ const S = { text:"", cap:"Scan for your Guest Book", sub:"", px:1024, ec:"M", qr
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/psu_qr" target="_top">Go to the Moose Hub →</a></p>`; return; }
-  if(!(await sb.rpc("hub_can", { p_desk:"property_setup" })).data){ $("#app").innerHTML = `<h1>No access</h1><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
+  if(!(await sb.rpc("hub_can", { p_desk:"home" })).data){   // everyone on the hub (Brandon 2026-11-02); was property_setup $("#app").innerHTML = `<h1>No access</h1><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p>`; return; }
   $("#app").innerHTML = `<h1>QR Code Generator</h1>
     <p class="muted small">Paste a link (a home's Touch Stay guest book, a listing, a form) and get a QR code to download or print. Made in your browser; nothing is sent anywhere. Don't put door codes or Wi-Fi passwords in a QR code that sits in a home.</p>
     <div class="cols"><div class="card">
