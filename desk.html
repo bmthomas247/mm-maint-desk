@@ -1232,7 +1232,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   if(t.my_code) cells.push(tCell("Your door code","Locks",["Code: "+t.my_code]));
   if(o.can && o.list.length){ var w=o.list[0];
-    cells.push(tCell("Owner",w.src==="Track"?"Track":"Hub edit",[{html:'<div class="tl"><span class="ql">Name</span><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
+    cells.push(tCell("Owner",w.src==="Track"?"Track":"Hub edit",[{html:'<div class="tl"><span class="ql">Name</span><b>'+esc(w.name||"")+'</b>'+(w.plan?' <span class="muted">'+esc(w.plan)+'</span>':'')+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
       w.phone?{html:'<div class="tl"><span class="ql">Phone</span><a href="tel:'+esc(String(w.phone).replace(/[^\d+]/g,""))+'" data-stop="1">'+esc(w.phone)+'</a></div>'}:"",
       w.email?{html:'<div class="tl"><span class="ql">Email</span><a href="mailto:'+esc(w.email)+'" data-stop="1">'+esc(w.email)+'</a></div>'}:""])); }
   return cells.join("")||'<div class="hql"><div class="muted">No codes on file yet.</div></div>'; }
@@ -1521,8 +1521,14 @@ function mCoVehicle(id){ var pe=coEdits(), ed=pe.co_vehicles||{}, v=id?(coVehicl
 /* ===== Hub 2026-10-28 (Brandon): Property Details quick view, HOA (Pyper), owner contact, add a property ===== */
 function infoNote(p,rx){ var hit=(p.info||[]).filter(function(i){ return i.notes && rx.test(i.cat||""); }).sort(function(a,b){ return (a.archived?1:0)-(b.archived?1:0); })[0];
   return hit?{text:hit.notes.replace(/^\[codes\]\s*/,"").trim(),url:hit.url||""}:null; }
+/* Track owner names are "BHL 1206 | Mason (Prime)": the home code is only for sorting in Track and the brackets hold the program
+   (Brandon 2026-11-02), so show "Mason" with the program as a small tag */
+function ownerName(raw){ var n=String(raw||"").trim(), plan="";
+  if(n.indexOf("|")>-1) n=n.slice(n.indexOf("|")+1).trim();
+  var m=n.match(/^(.*?)\s*\(((?:prime|lease|complete|fp)[^)]*)\)\s*$/i); if(m&&m[1]){ n=m[1]; plan=m[2]; }
+  return {name:n||String(raw||""), plan:plan}; }
 function ownerOf(code){ var oc=(S.ownercontacts||{})[sid(code)]||{}, f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFeed(f,code)||[]):[];
-  var list=tr.map(function(o){ return {name:o.name,phone:o.phone,email:o.email,src:"Track"}; });
+  var list=tr.map(function(o){ var n=ownerName(o.name); return {name:n.name,plan:n.plan,phone:o.phone,email:o.email,src:"Track"}; });
   if(oc.name||oc.phone||oc.email) list=[{name:oc.name||((list[0]||{}).name)||"",phone:oc.phone||((list[0]||{}).phone)||"",email:oc.email||((list[0]||{}).email)||"",src:"Edited in the hub"+(oc.by?" by "+nameFor(oc.by):""),notes:oc.notes||""}].concat(list.slice(1));
   return {can:!!f||Object.keys(S.ownercontacts||{}).length>0, list:list}; }
 /* Quick view text, easy to scan (Brandon 2026-10-28): "Label: value" lines show the label small and the answer bold; codes/numbers get a highlight. */
@@ -1549,7 +1555,7 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var q=homeQuick(code,p), qs=function(k,rx){ var s0=q.src[k]; return {v:q[k],s:s0==="Asana"?asana(rx).s:s0==="Hub edit"?"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):""):s0?"From "+esc(s0):""}; };
   var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=qs("garage",/^parking\/? ?garage info$|^parking$/i), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
-    (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
+    (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?' <span class="muted">'+esc(x.plan)+'</span>':'')+(x.phone?'<br><a href="tel:'+esc(String(x.phone).replace(/[^\d+]/g,""))+'">'+esc(x.phone)+'</a>':'')+(x.email?'<br><a href="mailto:'+esc(x.email)+'">'+esc(x.email)+'</a>':'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
   return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
     qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),entry.s+ownerViewHtml(code,q),"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
