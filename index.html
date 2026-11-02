@@ -80,7 +80,7 @@ a.mlink{display:flex;align-items:center;gap:9px;min-width:0;color:inherit;text-d
 a.mlink:hover .nm{text-decoration:underline}
 a.mgear{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:9px;color:inherit;background:var(--ground);border:1px solid var(--line)} a.mgear:hover,a.mgear.on{background:var(--moose-soft);border-color:var(--moose)} a.mgear svg{width:17px;height:17px}
 /* bell + message board, top right (Brandon 2026-11-02) */
-.mbell{position:relative;padding:0;cursor:pointer} .topbar .me button.mbell{width:32px;height:32px;min-height:0;padding:0}
+.mbell{position:relative;padding:0;cursor:pointer} .me button.mbell{padding:0;min-height:0;width:32px;height:32px} .mbell svg{width:17px;height:17px;display:block} .topbar .me button.mbell{width:32px;height:32px;min-height:0;padding:0}
 .mbell .bdot{position:absolute;top:-5px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#d64545;color:#fff;font-size:10.5px;font-weight:800;line-height:17px;text-align:center;border:2px solid var(--forest);display:none}
 .mbell.has .bdot{display:block}
 .bellpop{position:fixed;z-index:45;width:min(360px,calc(100vw - 24px));max-height:min(70vh,520px);overflow:auto;background:var(--card,#fff);color:var(--ink,#16220a);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(10,30,20,.25);padding:8px;display:none}
