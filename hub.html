@@ -79,6 +79,18 @@ aside.rail{overflow-y:auto;overscroll-behavior:contain}
 a.mlink{display:flex;align-items:center;gap:9px;min-width:0;color:inherit;text-decoration:none;border-radius:10px}
 a.mlink:hover .nm{text-decoration:underline}
 a.mgear{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:9px;color:inherit;background:var(--ground);border:1px solid var(--line)} a.mgear:hover,a.mgear.on{background:var(--moose-soft);border-color:var(--moose)} a.mgear svg{width:17px;height:17px}
+/* bell + message board, top right (Brandon 2026-11-02) */
+.mbell{position:relative;padding:0;cursor:pointer} .topbar .me button.mbell{width:32px;height:32px;min-height:0;padding:0}
+.mbell .bdot{position:absolute;top:-5px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#d64545;color:#fff;font-size:10.5px;font-weight:800;line-height:17px;text-align:center;border:2px solid var(--forest);display:none}
+.mbell.has .bdot{display:block}
+.bellpop{position:fixed;z-index:45;width:min(360px,calc(100vw - 24px));max-height:min(70vh,520px);overflow:auto;background:var(--card,#fff);color:var(--ink,#16220a);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(10,30,20,.25);padding:8px;display:none}
+.bellpop.on{display:block}
+.bellpop h4{margin:4px 8px 6px;font-size:15px}
+.bellpop a.bn{display:flex;gap:10px;align-items:flex-start;padding:9px 8px;border-radius:10px;color:inherit;text-decoration:none}
+.bellpop a.bn:hover{background:var(--moose-soft)}
+.bellpop a.bn .bi{font-size:18px;line-height:1.2;flex:none}
+.bellpop a.bn small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.bellpop .bnone{padding:10px 8px;color:var(--muted)}
 .av img,.avbig img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .avbig{width:88px;height:88px;border-radius:50%;background:var(--moose);color:#16220a;display:grid;place-items:center;font-weight:800;font-size:28px;flex:none;overflow:hidden}
 .ment{display:block;padding:9px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit} .ment:last-child{border-bottom:0}
@@ -315,6 +327,8 @@ const ICON = {
   search: I('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>'),
   chev: I('<path d="m9 6 6 6-6 6"/>'),
   menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+  bell: I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
+  chat: I('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
   gear: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
   grid: I('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>')
 };
@@ -690,11 +704,62 @@ function sideNav(DESKS, ORD){
   return { nav, foot: (repD ? item("reports", anD ? "Reports & Analytics" : repD.label, repD.icon || "chart") : "")
     + (DESKS.some(x => x.key === "config") ? item("config", "Configuration", "gear") : "") };   // admins only (desk config has no teams; Brandon 2026-11-01)
 }
+/* 🔔 Notifications (Brandon 2026-11-02: "let people see their notifications quickly"). Only things this person already gets,
+   read with their own sign-in (RLS decides): Penny's tips, their checks today, time-off requests waiting for their OK, and answers
+   from an admin to "Ask an admin". Nothing new is stored; an item goes away when it's done where it lives. */
+let BELL = { items:[], at:0 };
+async function bellLoad(force){
+  if(!ME || (!force && Date.now() - BELL.at < 60000)) return; BELL.at = Date.now();
+  const has = k => DESKS.some(x => x.key === k), today = new Date().toLocaleDateString("en-CA"), it = [];
+  const q = (p) => Promise.resolve(p).then(r => r, () => ({}));
+  const [tips, chk, off, ppl, fb] = await Promise.all([
+    q(sb.from("penny_tips").select("id, title, rule", { count:"exact" }).eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(3)),
+    q(sb.rpc("hub_checks_mine")),
+    has("cal_off") ? q(sb.from("hub_timeoff_requests").select("user_id").eq("status", "pending")) : {},
+    has("cal_off") ? q(sb.rpc("cal_people")) : {},
+    q(sb.rpc("hub_feedback_board"))]);
+  if(tips.count) it.push({ ic:"💡", t:`Penny has ${tips.count} tip${tips.count === 1 ? "" : "s"} for you`, s:(tips.data || []).map(x => x.title).slice(0, 2).join(" · "), href:"#/home" });
+  const open = (chk.data || []).filter(c => !c.run || !["ok","done"].includes(c.run.status));
+  if(open.length) it.push({ ic:"☑️", t:`${open.length} check${open.length === 1 ? "" : "s"} to do${open.some(c => c.overdue) ? " (overdue)" : " today"}`, s:open.map(c => c.title).slice(0, 2).join(" · "), href:"#/home" });
+  const myId = ((ppl.data || []).find(p => p.name === ME.name) || {}).id, nWait = (off.data || []).filter(r => r.user_id !== myId).length;
+  if(nWait) it.push({ ic:"🌴", t:`${nWait} time-off request${nWait === 1 ? "" : "s"} waiting for you`, s:"Approve or say no", href:"#/cal_off" });
+  let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
+  const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
+  if(ans.length) it.push({ ic:"📬", t:`An admin answered ${ans.length === 1 ? "your question" : ans.length + " of your questions"}`, s:"Open Penny to read it", penny:true });
+  BELL.items = it;
+  document.querySelectorAll(".mbell").forEach(b => { b.classList.toggle("has", it.length > 0); b.querySelector(".bdot").textContent = it.length > 9 ? "9+" : it.length;
+    b.title = it.length ? `Notifications (${it.length})` : "Notifications"; });
+  if($("#bellpop") && $("#bellpop").classList.contains("on")) bellDraw();
+}
+function bellDraw(){
+  const p = $("#bellpop");
+  p.innerHTML = `<h4>Notifications</h4>` + (BELL.items.length ? BELL.items.map((x, i) => `<a class="bn" href="${x.href || "#"}" data-bn="${i}"><span class="bi">${x.ic}</span><span><b>${esc(x.t)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ""}</span></a>`).join("")
+    : `<div class="bnone">You're all caught up. 🎉</div>`);
+  p.querySelectorAll("[data-bn]").forEach(a => a.onclick = e => { const x = BELL.items[+a.dataset.bn]; p.classList.remove("on");
+    if(x.penny){ e.preventDefault(); pennyOpen(true); if($("#pennyLog").children.length) pennyAnswers(); setTimeout(() => bellLoad(true), 1500); } });
+}
+function bellSetup(){
+  if(!$("#bellpop")){ const p = document.createElement("div"); p.className = "bellpop"; p.id = "bellpop"; document.body.appendChild(p);
+    document.addEventListener("click", e => { if(!p.contains(e.target) && !e.target.closest(".mbell")) p.classList.remove("on"); });
+    document.addEventListener("keydown", e => { if(e.key === "Escape") p.classList.remove("on"); });
+    window.addEventListener("hashchange", () => bellLoad());
+    setInterval(() => bellLoad(true), 5 * 60000); }
+  document.querySelectorAll(".mbell").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#bellpop");
+    if(p.classList.contains("on")) return p.classList.remove("on");
+    const r = b.getBoundingClientRect(); p.style.top = (r.bottom + 8) + "px"; const pw = Math.min(360, window.innerWidth - 24); p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px";
+    bellDraw(); p.classList.add("on"); bellLoad(true); });
+  BELL.at = 0; bellLoad(true);
+}
+/* 💬 Message board: button now, board built later (Brandon 2026-11-02) */
+function boardView(v){
+  $("#ttl").textContent = $("#utl").textContent = "Message board";
+  v.innerHTML = `<div class="page"><div class="card" style="text-align:center;padding:28px 18px"><div style="font-size:40px">💬</div><h2 style="margin:6px 0">Message board</h2><p class="muted">Coming soon: a place to post and talk with the whole Moose team.</p><a class="btn" href="#/home">← Home</a></div></div>`;
+}
 function shell(){
   const SN = sideNav(DESKS, PREFS.desk_order || []);
   const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
   // 2026-10-28 (Brandon): profile, settings and sign out sit top right (were at the bottom of the sidebar)
-  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
+  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button class="mgear mbell" title="Notifications" aria-label="Notifications">${ICON.bell}<span class="bdot"></span></button><a class="mgear mboard" href="#/board" title="Message board" aria-label="Message board">${ICON.chat}</a><a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b>${meHtml}</div>
   <div class="scrim" id="scrim"></div>
   <div class="shell">
@@ -722,6 +787,7 @@ function shell(){
     <div style="display:flex;gap:8px"><button class="btn" id="fbcancel">Cancel</button><button class="btn primary" style="flex:1" id="fbsend">Send</button></div>
     <p class="muted" id="fbmsg"></p></div></div>`;
   document.querySelectorAll(".uout").forEach(b => b.onclick = async () => { await sb.auth.signOut(); location.hash = ""; loginView(); });
+  bellSetup();
   $("#menu").onclick = () => document.body.classList.toggle("open");
   try { if(localStorage.getItem("hub_mini") === "1") document.body.classList.add("mini"); } catch(e){}
   $("#rtoggle").onclick = () => { if(window.innerWidth <= 820) return document.body.classList.remove("open");
@@ -806,6 +872,7 @@ function route(){
   if(k === "an" && window.anView){ $("#ttl").textContent = "Reports & Analytics"; return anView(v); }   // analytics.js (2026-10-28); data gated by hub_can('analytics')
   if(k === "sync"){ const a = hashArg(); return a === "recent" || a === "errors" ? syncReport(v, a) : syncView(v, a); }
   if(k === "home") return homeView(v);
+  if(k === "board") return boardView(v);
   if(k === "settings") return settingsView(v);
   if(k === "penny") return pennyView(v);
   if(k === "patrick" || k === "patrick_log" || k === "patrick_fix") return patrickView(v);   // Reports > Ask Patrick (no sidebar entry, Brandon 2026-10-28)
