@@ -23,7 +23,7 @@ const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet
 const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"]];   // Request time off moved to Staffing (Brandon 2026-10-29)
 const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["month","Month"],["wm","Week + Month"]];
 const LAYERS = { cal_me:[["meet","Meetings"],["personal","My events"],["office","Office"],["checkins","Check-ins"]], cal_office:[["events","Work events"],["meet","Meetings"],["sched","Schedules"],["people","Who's in / out"]] };
-const LAYER_ON = { meet:true, personal:true, office:true, checkins:false, events:true, people:true, sched:true };
+const LAYER_ON = { meet:true, personal:true, office:false, checkins:false, events:true, people:true, sched:true };
 const MGR = ["owner_relations","maint_manager","office_manager","hk_manager"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const WS = 6, WE = 22, HPX = 44;   // hourly grid 6 am – 10 pm, 44px per hour
