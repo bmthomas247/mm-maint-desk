@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Weather plan</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Maintenance ▸ Weather plan (hub_weather_plan.sql, weather_save.py, maint_alerts_sync.py; Brandon 2026-11-02).
+     Open-Meteo's 16-day Park City forecast decides WHEN each seasonal job makes sense (AC in / check / out, heat tape ON / OFF + drive-by,
+     salt + shovel, winter inspection) and which scheduled outdoor jobs land on a bad day. Nothing schedules itself: a person picks the
+     day and who does it, and the hub makes the Breezeway task (template, normal priority) within a minute. Access is enforced in
+     Supabase (wx_plan() is null for anyone without the maint_weather desk). Nothing is deleted. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:16px 16px 40px} body.inhub .wrap{padding-top:10px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800} h2{font-size:17px;margin:0;font-weight:800} h3{font-size:15px;margin:18px 0 8px;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:38px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.primary{background:var(--forest);border-color:var(--forest);color:#fff} .btn.sm{min-height:30px;padding:0 9px;font-size:12.5px} .btn:disabled{opacity:.5;cursor:default}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.go{background:var(--moose-soft);color:var(--moose-ink)} .pill.wait{background:var(--blue-soft);color:var(--blue)} .pill.bad{background:var(--red-soft);color:var(--red)}
+.pill.warn{background:var(--amber-soft);color:var(--amber)} .pill.sched{background:var(--violet-soft);color:var(--violet)}
+.tabs{display:flex;gap:6px;margin:14px 0 10px;flex-wrap:wrap}
+.tab{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:7px 16px;border-radius:999px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;min-height:40px}
+.tab.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+.fc{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(64px,1fr);gap:6px;overflow-x:auto;padding:4px 2px 8px;margin:10px 0}
+.fd{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 6px 8px;text-align:center;font-size:12px;min-width:64px}
+.fd b{display:block;font-size:12.5px} .fd .hi{font-size:16px;font-weight:800} .fd .lo{color:var(--blue);font-weight:800}
+.fd.past{opacity:.55} .fd.today{outline:2px solid var(--forest-2)} .fd .sn{color:var(--violet);font-weight:800} .fd .ic{font-size:18px;line-height:1.2}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;padding:14px 16px}
+.card .top{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap}
+.why{background:var(--blue-soft);border-radius:10px;padding:8px 12px;font-size:13.5px;margin:8px 0}
+.why.go{background:var(--moose-soft)}
+.hl{border-top:1px solid var(--line);margin-top:10px}
+.hr{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+.hr:last-child{border-bottom:0} .hr b{min-width:96px} .hr .rt{margin-left:auto;display:inline-flex;gap:6px;align-items:center}
+.hr select,.hr input,.bar select,.bar input{font:inherit;font-size:13.5px;border:1px solid var(--line-2);border-radius:9px;padding:4px 8px;background:var(--card);color:var(--ink);min-height:32px}
+.chips{display:inline-flex;gap:4px;flex-wrap:wrap}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 4px;padding:10px 12px;background:var(--ground);border-radius:12px}
+.set{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 14px;margin-top:8px}
+.set label{font-size:12.5px;font-weight:800;color:var(--ink-2)} .set input{display:block;width:100%;font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:9px;padding:5px 8px;background:var(--card);color:var(--ink)}
+.months{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px} .months label{font-size:12.5px;font-weight:700;border:1px solid var(--line-2);border-radius:999px;padding:2px 9px;cursor:pointer}
+details summary{cursor:pointer;font-weight:800}
+.err{color:var(--red);font-size:13px}
+.empty{padding:18px;color:var(--muted);text-align:center}
+@media (max-width:640px){ .hr b{min-width:0;flex-basis:100%} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const pad = n => String(n).padStart(2, "0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dd = d => new Date(String(d).slice(0, 10) + "T12:00");
+const day = d => d ? dd(d).toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }) : "";
+const when = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+const base = h => String(h || "").replace(/^(2H-|L-)/i, "").toUpperCase();
+if(window.top !== window) document.body.classList.add("inhub");
+const P = new URLSearchParams(location.search);
+const S = { tab:P.get("tab") || "plan", list:"ac", plan:null, ppl:[], stays:[], open:{} };
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const LISTS = { ac:"Portable AC", heat_tape:"Heat tape", salt:"Salt + shovel", winter:"Winter inspection" };
+const STATES = { ac:[["installed","Units in"],["stored","Stored"],["keep","Keep installed all year"],["none","No AC"]], other:[["yes","Yes"],["no","No"]] };
+const stName = (k, s) => ((k === "ac" ? STATES.ac : STATES.other).find(x => x[0] === s) || [s, s])[1];
+const ICON = w => /thunder/i.test(w) ? "⛈" : /snow/i.test(w) ? "🌨" : /rain|shower|drizzle/i.test(w) ? "🌧" : /fog/i.test(w) ? "🌫" : /clear/i.test(w) ? "☀️" : /partly/i.test(w) ? "⛅" : "☁️";
+const PL = { high_f:"High (°F)", low_f:"Low (°F)", snow_in:'Snow (inches)', days:"Days of forecast to look at", recent_days:"Skip a home checked in the last (days)",
+  after_days:"Days after heat tape ON", precip_in:'Rain/snow that day (inches)', high_below_f:"Not when the high is under (°F)", low_below_f:"Not when the low is under (°F)",
+  gust_mph:"Not with gusts of (mph)", days_after:"Days after to watch for freezing", from:"Not before (MM-DD)", since:"Season starts (MM-DD)", next_day:"Also no rain the next day" };
+function plain(r){ const p = r.params;
+  return { any_high_ge:`When a high reaches ${p.high_f}°F in the next ${p.days} days`, all_high_lt:`After ${md(p.from)}, once every high in the next ${p.days} days stays under ${p.high_f}°F`,
+    any_low_le_or_snow:`When a low reaches ${p.low_f}°F or ${p.snow_in}" of snow is forecast in the next ${p.days} days`, all_low_gt_no_snow:`After ${md(p.from)}, once every low in the next ${p.days} days stays above ${p.low_f}°F with no snow`,
+    any_snow:`Before the first snow (${p.snow_in}"+) in the next ${p.days} days`, season_then_snow:`A fall job from ${md(p.from)}, so Chris has time to get into every home; it warns when snow (${p.snow_in}"+) shows up in the next ${p.days} days`, heat_check:`${p.after_days}+ days after heat tape goes ON, once ${p.snow_in}"+ of snow has fallen` }[p.test] || ""; }
+const md = s => { if(!s) return ""; const [m, d] = s.split("-").map(Number); return MON[m - 1] + " " + d; };
+const months = m => !m || m.length === 12 ? "all year" : m.map(x => MON[x - 1]).join(", ");
+
+function free(home, n = 4, from){ const out = [], t0 = from ? dd(from) : new Date(Date.now() + 864e5);
+  for(let i = 0; i <= 45 && out.length < n; i++){ const d = iso(new Date(t0.getTime() + i * 864e5));
+    if(!S.stays.some(x => base(x.unit) === base(home) && x.in <= d && d < x.out)) out.push(d); } return out; }
+const pick = id => `<select data-pp="${id}" title="Assign to">${S.ppl.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("") || `<option value="">Chris Robinson</option>`}</select>`;
+const chips = (home, id) => free(home).map(d => `<button type="button" class="btn sm" data-chip="${id}" data-day="${d}">${day(d)}</button>`).join("");
+
+async function load(){
+  const [r, pp, st] = await Promise.all([sb.rpc("wx_plan"), sb.rpc("maint_people"),
+    sb.rpc("cal_stays", { p_from:iso(new Date()), p_to:iso(new Date(Date.now() + 60 * 864e5)) })]);
+  if(r.error) throw r.error;
+  S.plan = r.data; S.ppl = pp.data || []; S.stays = (st.data && st.data.stays) || [];
+}
+
+function forecast(){
+  const P = S.plan, f = P.forecast.filter(x => x.day >= iso(new Date(Date.now() - 3 * 864e5)));
+  return `<div class="fc">${f.map(x => `<div class="fd${x.day < P.today ? " past" : ""}${x.day === P.today ? " today" : ""}" title="${esc(x.weather)}${x.prob != null ? ", " + x.prob + "% chance of rain/snow" : ""}">
+      <b>${x.day === P.today ? "Today" : dd(x.day).toLocaleDateString("en-US", { weekday:"short" })}</b><span class="muted" style="font-size:11px">${dd(x.day).toLocaleDateString("en-US", { month:"numeric", day:"numeric" })}</span>
+      <div class="ic">${ICON(x.weather)}</div><div class="hi">${x.high}°</div><div class="lo">${x.low}°</div>
+      ${+x.snow > 0 ? `<div class="sn">${(+x.snow).toFixed(1)}" snow</div>` : +x.precip > 0 ? `<div style="color:var(--blue)">${(+x.precip).toFixed(2)}"</div>` : ""}
+      ${x.gust >= 25 ? `<div class="muted" style="font-size:11px">gusts ${x.gust}</div>` : ""}</div>`).join("")}</div>
+    <div class="muted">Forecast: ${esc(P.source)} · saved ${when(P.fetched_at)} · faded days already happened.</div>`;
+}
+
+const ST = { no_guest:["No guest arriving in the hot days", ""], todo:["To schedule", "warn"], sched:["Scheduled", "sched"], open:["Open in Breezeway", "sched"], done:["Done this season", "go"], not_on:["Heat tape wasn't turned on", ""],
+  due:["Check on the trash route", "warn"], wait_days:["Waiting a week", "wait"], wait_snow:["Waiting for snow", "wait"], checked:["Checked", "go"] };
+function homeRow(r, h){
+  const s = ST[h.status] || [h.status, ""], last = h.last, sc = h.sched;
+  const info = [h.state && r.list === "ac" ? stName("ac", h.state) : "", h.guest ? `guest arrives ${day(h.guest)}` : "", last ? `${last.finished ? "done" : "open"} ${day(last.date)} <a href="https://app.breezeway.io/task/${last.id}" target="_blank" rel="noopener">Breezeway ↗</a>` : "",
+    sc ? `${sc.status === "failed" ? `<span class="err">couldn't make the task: ${esc(sc.note || "")}</span>` : sc.status === "skipped" ? esc(sc.note || "") : `${day(sc.due)}${sc.person ? " · " + esc(sc.person) : ""}${sc.status === "queued" ? " · making the Breezeway task…" : ""}`}` : "",
+    h.confirmed === false ? `<span class="muted">suggested list</span>` : ""].filter(Boolean).join(" · ");
+  const can = r.hit && (h.status === "todo" || (sc && sc.status === "failed" && h.status !== "done" && h.status !== "open"));
+  return `<div class="hr" data-home="${esc(h.home)}"><b>${can ? `<input type="checkbox" data-tick="${r.key}" value="${esc(h.home)}" checked> ` : ""}${esc(h.home)}</b><span class="pill ${s[1]}">${s[0]}</span>
+    <span class="muted">${info}</span>
+    ${can ? `<span class="rt"><input type="date" data-due="${r.key}|${esc(h.home)}" value="${h.suggest || free(h.home, 1)[0] || ""}" title="${h.suggest ? "The day before the guest arrives" : "First day nobody is staying there"}">
+      <button class="btn sm primary" data-one="${r.key}|${esc(h.home)}">Schedule</button></span>` : ""}</div>`;
+}
+
+function ruleCard(r){
+  const todo = r.homes.filter(h => h.status === "todo"), lst = S.plan.lists[r.list] || {};
+  const tag = r.off ? `<span class="pill">Turned off</span>` : !r.in_season ? `<span class="pill">Not this time of year (${months(r.months)})</span>`
+    : r.warn ? `<span class="pill bad">Snow coming</span>` : r.params.test === "season_then_snow" ? `<span class="pill go">Fall job</span>`
+    : r.hit ? `<span class="pill go">Weather says now</span>` : `<span class="pill wait">Waiting on the weather</span>`;
+  const show = S.open[r.key] != null ? S.open[r.key] : r.hit;
+  return `<div class="card" data-rule="${r.key}"><div class="top"><h2>${esc(r.label)}</h2>${tag}${r.hit && todo.length ? `<span class="pill warn">${todo.length} to schedule</span>` : ""}
+      <span class="muted" style="margin-left:auto">${r.template_id ? `Breezeway template “${esc(r.task_name)}” (#${r.template_id})` : "Trash route check"}</span></div>
+    <div class="why${r.hit ? " go" : ""}"><b>${esc(plain(r))}.</b> ${r.in_season ? esc(r.reason) : ""}</div>
+    ${lst.unconfirmed ? `<div class="muted">⚠️ ${lst.unconfirmed} of these homes are on the SUGGESTED list Chris hasn't confirmed yet (<a href="?tab=lists&list=${r.list}">Home lists</a>).</div>` : ""}
+    <details${show ? " open" : ""} data-det="${r.key}"><summary>${r.homes.length} home${r.homes.length === 1 ? "" : "s"} · ${Object.entries(r.homes.reduce((a, h) => (a[h.status] = (a[h.status] || 0) + 1, a), {})).map(([k, n]) => `${n} ${(ST[k] || [k])[0].toLowerCase()}`).join(" · ") || "none"}</summary>
+      ${r.hit && todo.length ? `<div class="bar"><b>Who does them:</b> ${pick("all|" + r.key)}${todo.length > 1 ? ` · <b>All ticked:</b> each on its first empty day from <input type="date" data-bfrom="${r.key}" value="${iso(new Date(Date.now() + 864e5))}">
+        <button class="btn primary sm" data-bulk="${r.key}">Schedule ticked</button><span class="muted">Untick any you don't want.</span>` : ""}
+        <span class="muted" style="flex-basis:100%">${r.params.before_arrival_days ? "Each home's date is the day before its guest arrives." : "Each home's date starts on its first empty day (no guest or owner stay)."}</span></div>` : ""}
+      <div class="hl">${r.key === "heat_check" ? checkRows(r) : r.homes.map(h => homeRow(r, h)).join("") || `<div class="empty">No homes on this list yet.</div>`}</div></details>
+    <div class="muted" style="margin-top:6px">${esc(r.why)}</div></div>`;
+}
+
+function checkRows(r){
+  if(!r.homes.length) return `<div class="empty">No heat tape has gone ON this winter yet.</div>`;
+  return r.homes.map(h => { const s = ST[h.status] || [h.status, ""], c = h.check;
+    return `<div class="hr"><b>${esc(h.home)}</b><span class="pill ${c && !c.ok ? "bad" : s[1]}">${c ? (c.ok ? "Melting ✓" : "Not melting") : s[0]}</span>
+      <span class="muted">ON ${day(h.on.finished_at || h.on.date)} · ${(+h.snow_since).toFixed(1)}" snow since${c ? ` · ${esc(c.by || "")} ${when(c.at)}${c.note ? ": “" + esc(c.note) + "”" : ""}` : ""}</span>
+      ${h.status === "due" ? `<button class="btn sm" data-ck="${esc(h.home)}" data-ok="1">Yes, melting</button><button class="btn sm" data-ck="${esc(h.home)}" data-ok="0">No</button>` : ""}
+      ${c && !c.ok ? `<button class="btn sm primary" data-again="${esc(h.home)}">Schedule Turn ON Heat Tape again</button>` : ""}</div>`; }).join("");
+}
+
+function blockers(){
+  const b = S.plan.blockers;
+  if(!b.length) return `<div class="card"><h2>Outdoor jobs on a bad-weather day</h2><div class="empty">None in the next 16 days. ${S.plan.dont.filter(x => !x.off).map(x => esc(x.label)).join(" · ")} are watched.</div></div>`;
+  return `<div class="card"><h2>Outdoor jobs on a bad-weather day (${b.length})</h2><div class="muted">These jobs are scheduled on a day the forecast says is wrong for them. Move them to a better day, or leave them.</div>
+    <div class="hl">${b.map(x => { const id = x.src + "|" + x.ref, ok = (x.ok_days || []).filter(d => !S.stays.some(s => base(s.unit) === base(x.home) && s.in <= d && d < s.out)).slice(0, 4);
+      return `<div class="hr"><b>${esc(x.home || "")}</b><span class="pill bad">${esc(x.label)}</span><span>${esc(x.name)} · <b style="min-width:0">${day(x.due)}</b></span>
+        <span class="muted">${esc(x.why)}${x.bw_task_id ? ` · <a href="https://app.breezeway.io/task/${x.bw_task_id}" target="_blank" rel="noopener">Breezeway ↗</a>` : ""}</span>
+        ${x.moved ? `<span class="pill sched">Moved to ${day(x.moved.due)} by ${esc(x.moved.by || "")}</span>` : `<span style="flex-basis:100%"></span>
+        <span class="muted">Better days (empty home):</span><span class="chips">${ok.map(d => `<button type="button" class="btn sm" data-chip="${id}" data-day="${d}">${day(d)}</button>`).join("") || "none in the forecast"}</span>
+        <input type="date" data-due="${id}" value="${ok[0] || ""}"><button class="btn sm primary" data-move="${id}" data-rule="${x.rule}">Move it</button>`}</div>`; }).join("")}</div></div>`;
+}
+
+function plan(){
+  const R = S.plan.rules, go = R.filter(r => r.hit), wait = R.filter(r => !r.hit && r.in_season && !r.off), out = R.filter(r => !r.in_season || r.off);
+  return `${blockers()}<h3>The weather says now (${go.length})</h3>${go.map(ruleCard).join("") || `<div class="card empty">Nothing right now.</div>`}
+    <h3>Waiting on the weather (${wait.length})</h3>${wait.map(ruleCard).join("") || `<div class="card empty">Nothing waiting.</div>`}
+    <details><summary>Not this time of year (${out.length})</summary><div style="margin-top:10px">${out.map(ruleCard).join("")}</div></details>`;
+}
+
+function lists(){
+  const k = S.list, L = S.plan.lists[k] || { homes:[] }, ed = S.plan.can_edit, have = new Set(L.homes.map(h => h.home));
+  const opts = (k === "ac" ? STATES.ac : STATES.other);
+  return `<div class="tabs">${Object.entries(LISTS).map(([x, n]) => `<button class="tab${x === k ? " on" : ""}" data-list="${x}">${n} (${(S.plan.lists[x] || {}).n || 0})</button>`).join("")}</div>
+    <div class="card"><div class="top"><h2>${LISTS[k]}</h2>${L.unconfirmed ? `<span class="pill warn">${L.unconfirmed} suggested, not confirmed</span>` : `<span class="pill go">Confirmed</span>`}
+      ${ed && L.unconfirmed ? `<button class="btn sm primary" data-confirm="${k}" style="margin-left:auto">The list is right: confirm all ${L.unconfirmed}</button>` : ""}</div>
+    <div class="muted" style="margin:6px 0">${k === "ac" ? "Which homes have portable AC units, and whether they're in the windows now or stored. The AC rules use this." : `Which homes get ${LISTS[k].toLowerCase()}.`}
+      ${ed ? "Change one and it's saved at once (every change is logged)." : "Chris or an admin keeps this list."}</div>
+    <div class="hl">${L.homes.map(h => `<div class="hr"><b>${esc(h.home)}</b>
+      ${ed ? `<select data-hs="${esc(h.home)}">${opts.map(([v, n]) => `<option value="${v}"${v === h.state ? " selected" : ""}>${n}</option>`).join("")}</select>` : `<span class="pill">${esc(stName(k, h.state))}</span>`}
+      <span class="muted">${h.by ? `set by ${esc(h.by)} ${when(h.at)}` : `suggested from: ${esc(h.from || "")}`}${h.note ? " · " + esc(h.note) : ""}</span></div>`).join("") || `<div class="empty">No homes yet.</div>`}</div>
+    ${ed ? `<div class="bar">Add a home: <select id="addh"><option value="">Pick…</option>${S.plan.all_homes.filter(c => !have.has(c)).map(c => `<option>${esc(c)}</option>`).join("")}</select>
+      <select id="adds">${opts.map(([v, n]) => `<option value="${v}">${n}</option>`).join("")}</select><button class="btn sm primary" id="addb">Add</button></div>` : ""}</div>`;
+}
+
+function settings(){
+  const ed = S.plan.can_edit, all = S.plan.rules.concat(S.plan.dont.map(d => Object.assign({ kind:"dont" }, d)));
+  return `<div class="card muted">${ed ? "Change a number and press Save. Every change is logged with who and why. The phrase lists for outdoor jobs are fixed in the code (ask Claude to change them)." : "Chris or an admin can change these."}
+    The starting numbers came from Brandon's walk-through on Nov 2, 2026; the ones marked “starting guess” are Claude's, for you to set.</div>
+    ${all.map(r => { const nums = Object.entries(r.params).filter(([k]) => PL[k]);
+      return `<div class="card" data-set="${r.key}"><div class="top"><h2>${r.kind === "dont" ? "Don't do: " : ""}${esc(r.label)}</h2>${r.off ? `<span class="pill">Off</span>` : ""}</div>
+      <div class="muted">${esc(r.why || "")}</div>
+      <div class="set">${nums.map(([k, v]) => `<label>${PL[k]}${k === "next_day" ? `<input type="checkbox" data-p="${k}"${v ? " checked" : ""}${ed ? "" : " disabled"} style="width:auto;display:inline;margin-left:6px">`
+        : `<input data-p="${k}" value="${esc(v)}"${ed ? "" : " disabled"}${/from|since/.test(k) ? ` placeholder="MM-DD"` : ` inputmode="decimal"`}>`}</label>`).join("")}</div>
+      ${r.kind !== "dont" ? `<div class="months">${MON.map((m, i) => `<label><input type="checkbox" data-m="${i + 1}"${(r.months || []).includes(i + 1) ? " checked" : ""}${ed ? "" : " disabled"}> ${m}</label>`).join("")}</div>` : ""}
+      ${ed ? `<div class="bar"><label><input type="checkbox" data-off${r.off ? " checked" : ""}> Turned off</label><input data-note placeholder="Why (optional)" style="flex:1;min-width:160px">
+        <button class="btn sm primary" data-save="${r.key}">Save</button><span class="err" data-err="${r.key}"></span></div>` : ""}</div>`; }).join("")}`;
+}
+
+function render(){
+  const P = S.plan, app = $("#app");
+  if(!P){ app.innerHTML = `<p class="empty">This page isn't available.</p>`; return; }
+  const go = P.rules.filter(r => r.hit && r.key !== "heat_check").reduce((n, r) => n + r.homes.filter(h => h.status === "todo").length, 0);
+  app.innerHTML = `<div class="top" style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><h1>🌦 Weather plan</h1>
+      <span class="muted">${go} home job${go === 1 ? "" : "s"} the weather says to schedule · ${P.blockers.length} outdoor job${P.blockers.length === 1 ? "" : "s"} on a bad day</span></div>
+    ${forecast()}
+    <div class="tabs">${[["plan", "Plan"], ["lists", "Home lists"], ["settings", "Rules & numbers"]].map(([k, n]) => `<button class="tab${S.tab === k ? " on" : ""}" data-tab="${k}">${n}</button>`).join("")}</div>
+    <div id="pane">${S.tab === "lists" ? lists() : S.tab === "settings" ? settings() : plan()}</div>
+    <p class="muted">Nothing here schedules itself. When you schedule, the hub makes the Breezeway task with its template and normal priority within a minute, for the person you picked.</p>`;
+  wire(app);
+}
+
+const rpc = async (fn, args, btn) => { if(btn) btn.disabled = true; const r = await sb.rpc(fn, args);
+  if(r.error){ alert(errText(r.error)); if(btn) btn.disabled = false; return false; } return true; };
+const refresh = async () => { await load(); render(); poll(); };
+function wire(app){
+  $$("[data-tab]", app).forEach(b => b.onclick = () => { S.tab = b.dataset.tab; render(); });
+  $$("[data-list]", app).forEach(b => b.onclick = () => { S.list = b.dataset.list; render(); });
+  $$("details[data-det]", app).forEach(d => d.ontoggle = () => S.open[d.dataset.det] = d.open);
+  $$("[data-chip]", app).forEach(b => b.onclick = () => { const i = app.querySelector(`[data-due="${CSS.escape(b.dataset.chip)}"]`); if(i) i.value = b.dataset.day; });
+  $$("[data-one]", app).forEach(b => b.onclick = async () => { const id = b.dataset.one, [rule, home] = id.split("|"), d = app.querySelector(`[data-due="${CSS.escape(id)}"]`).value,
+      pp = app.querySelector(`[data-pp="${CSS.escape("all|" + rule)}"]`);
+    if(!d) return alert("Pick a day.");
+    if(await rpc("wx_schedule", { p_rule:rule, p_home:home, p_due:d, p_person:pp && pp.value ? +pp.value : null }, b)) refresh(); });
+  $$("[data-bulk]", app).forEach(b => b.onclick = async () => { const rule = b.dataset.bulk, from = app.querySelector(`[data-bfrom="${rule}"]`).value,
+      pp = app.querySelector(`[data-pp="all|${rule}"]`), homes = $$(`[data-tick="${rule}"]:checked`, app).map(x => x.value);
+    if(!homes.length) return alert("Tick at least one home.");
+    const r = S.plan.rules.find(x => x.key === rule);
+    if(!confirm(`Schedule “${r.task_name}” at ${homes.length} home${homes.length === 1 ? "" : "s"}, each on its first empty day from ${day(from)}, for ${pp && pp.selectedOptions[0] ? pp.selectedOptions[0].text : "Chris"}?`)) return;
+    b.disabled = true; let bad = 0;
+    for(const h of homes){ const hh = r.homes.find(x => x.home === h) || {}, d = hh.suggest || free(h, 1, from)[0]; const x = await sb.rpc("wx_schedule", { p_rule:rule, p_home:h, p_due:d, p_person:pp && pp.value ? +pp.value : null }); if(x.error) bad++; }
+    if(bad) alert(`${bad} couldn't be scheduled (already scheduled, or no empty day soon).`);
+    refresh(); });
+  $$("[data-move]", app).forEach(b => b.onclick = async () => { const id = b.dataset.move, [src, ref] = id.split("|"), d = app.querySelector(`[data-due="${CSS.escape(id)}"]`).value;
+    if(!d) return alert("Pick a day.");
+    if(await rpc("wx_move", { p_src:src, p_ref:+ref, p_due:d, p_rule:b.dataset.rule }, b)) refresh(); });
+  $$("[data-ck]", app).forEach(b => b.onclick = async () => { const ok = b.dataset.ok === "1", note = ok ? null : prompt("What did you see? (this goes to Chris)");
+    if(!ok && !note) return;
+    if(await rpc("wx_check_answer", { p_home:b.dataset.ck, p_ok:ok, p_note:note }, b)) refresh(); });
+  $$("[data-again]", app).forEach(b => b.onclick = async () => { const h = b.dataset.again, d = free(h, 1)[0];
+    if(!confirm(`Schedule “Turn ON Heat Tape” at ${h} on ${day(d)} for Chris? (The drive-by said the snow isn't melting.)`)) return;
+    if(await rpc("wx_schedule", { p_rule:"heat_on", p_home:h, p_due:d, p_person:null, p_note:"Drive-by check: snow not melting along the heat tape line" }, b)) refresh(); });
+  $$("[data-hs]", app).forEach(s => s.onchange = async () => { if(await rpc("wx_home_set", { p_kind:S.list, p_home:s.dataset.hs, p_state:s.value }, s)) refresh(); });
+  $$("[data-confirm]", app).forEach(b => b.onclick = async () => { if(confirm(`Confirm the ${LISTS[b.dataset.confirm]} list as it is now?`) && await rpc("wx_home_confirm", { p_kind:b.dataset.confirm }, b)) refresh(); });
+  const ab = $("#addb", app); if(ab) ab.onclick = async () => { const h = $("#addh", app).value; if(!h) return alert("Pick a home.");
+    if(await rpc("wx_home_set", { p_kind:S.list, p_home:h, p_state:$("#adds", app).value }, ab)) refresh(); };
+  $$("[data-save]", app).forEach(b => b.onclick = async () => { const c = b.closest("[data-set]"), p = {};
+    $$("[data-p]", c).forEach(i => p[i.dataset.p] = i.type === "checkbox" ? i.checked : i.value.trim());
+    const m = $$("[data-m]", c); const mo = m.length ? m.filter(x => x.checked).map(x => +x.dataset.m) : null;
+    if(mo && !mo.length) return $(`[data-err="${b.dataset.save}"]`, c).textContent = "Pick at least one month (or turn it off).";
+    if(await rpc("wx_rule_set", { p_key:b.dataset.save, p_params:p, p_months:mo, p_off:$("[data-off]", c).checked, p_note:$("[data-note]", c).value || null }, b)) refresh(); });
+}
+let pollT = null;
+function poll(){ clearTimeout(pollT); const q = S.plan && S.plan.rules.some(r => r.homes.some(h => h.sched && h.sched.status === "queued"));
+  if(q) pollT = setTimeout(refresh, 20e3); }
+
+(async () => {
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){ $("#app").innerHTML = `<p class="empty">Please sign in to the Moose Hub first.</p>`; return; }
+    if(P.get("list") && LISTS[P.get("list")]) S.list = P.get("list");
+    await load(); render(); poll();
+  } catch(e){ $("#app").innerHTML = `<p class="empty">Couldn't load: ${esc(errText(e))}</p>`; }
+})();
+window.__wx = { S, render };   // for the stub test
+</script>
+</body>
+</html>
