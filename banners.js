@@ -44,17 +44,20 @@ const ago = d => { const h = Math.round((Date.now() - new Date(d)) / 36e5); retu
    counts only, "Open" goes to #/maint_alerts (maint_alerts.js). ✕ hides it on this device until something new shows up. */
 let MA = null;
 const maSig = () => { const a = MA || {}; return [...(a.dups || []).map(g => "d" + g.id), ...(a.guest || []).filter(j => !j.sched || j.sched.status === "failed").map(j => "g" + j.id),
-  ...(GW || []).filter(g => g.status === "open" || g.status === "failed").map(g => "w" + g.id), ...(a.season || []).map(j => "s" + j.id)].sort().join(","); };
+  ...(GW || []).filter(g => g.status === "open" || g.status === "failed").map(g => "w" + g.id), ...(a.season || []).map(j => "s" + j.id), "w" + (((a.weather || {}).ready || 0) + "." + ((a.weather || {}).blockers || 0) + "." + ((a.weather || {}).checks || 0))].sort().join(","); };
 function drawGw(){
   document.querySelectorAll(".gwbanner").forEach(x => x.remove());
-  const v = document.getElementById("view"); if(!v || !v.parentNode || /^#\/(gateways|maint_alerts)/.test(location.hash)) return;
+  const v = document.getElementById("view"); if(!v || !v.parentNode || /^#\/(gateways|maint_alerts|maint_weather)/.test(location.hash)) return;
   const gw = (GW || []).filter(g => g.status === "open" || g.status === "failed").length, d = ((MA || {}).dups || []).length,
-        gj = ((MA || {}).guest || []).filter(j => !j.sched || j.sched.status === "failed").length, sn = ((MA || {}).season || []).length, sig = maSig();
-  if(!gw && !d && !gj && !sn) return;
+        gj = ((MA || {}).guest || []).filter(j => !j.sched || j.sched.status === "failed").length, sn = ((MA || {}).season || []).length, sig = maSig(), wx = (MA || {}).weather || {};
+  if(!gw && !d && !gj && !sn && !wx.ready && !wx.blockers && !wx.checks) return;
   try { if(localStorage.getItem("mm_ma_hide") === sig) return; } catch(_){}
-  const parts = [gw && `${gw} gateway${gw === 1 ? "" : "s"} offline`, d && `${d} duplicate job${d === 1 ? "" : "s"}`, gj && `${gj} guest-reported job${gj === 1 ? "" : "s"} to schedule`, sn && `${sn} out-of-season job${sn === 1 ? "" : "s"}`].filter(Boolean);
+  const parts = [gw && `${gw} gateway${gw === 1 ? "" : "s"} offline`, d && `${d} duplicate job${d === 1 ? "" : "s"}`, gj && `${gj} guest-reported job${gj === 1 ? "" : "s"} to schedule`, sn && `${sn} out-of-season job${sn === 1 ? "" : "s"}`,
+    wx.ready && `${wx.ready} weather job${wx.ready === 1 ? "" : "s"} to schedule`, wx.blockers && `${wx.blockers} outdoor job${wx.blockers === 1 ? "" : "s"} on a bad-weather day`,
+    wx.checks && `${wx.checks} heat tape check${wx.checks === 1 ? "" : "s"}`].filter(Boolean);
+  const onlyWx = !gw && !d && !gj && !sn;   // Weather plan (hub_weather_plan.sql, 2026-11-02): its own page
   const b = document.createElement("div"); b.className = "cbanner gwbanner"; b.style.background = "#7a4b00"; b.setAttribute("role", "status");
-  b.innerHTML = `<span>🔧</span><span class="bm"><b>Maintenance alerts</b>: ${parts.join(" · ")}</span><a href="#/maint_alerts">Open →</a><button data-mahide title="Hide until something new comes in">✕</button>`;
+  b.innerHTML = `<span>🔧</span><span class="bm"><b>Maintenance alerts</b>: ${parts.join(" · ")}</span>${onlyWx ? "" : `<a href="#/maint_alerts">Open →</a>`}${wx.ready || wx.blockers || wx.checks ? `<a href="#/maint_weather">Weather plan →</a>` : ""}<button data-mahide title="Hide until something new comes in">✕</button>`;
   v.parentNode.insertBefore(b, v);
   b.querySelector("[data-mahide]").onclick = () => { try { localStorage.setItem("mm_ma_hide", sig); } catch(_){} b.remove(); };
 }
