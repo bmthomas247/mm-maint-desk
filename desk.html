@@ -1016,14 +1016,14 @@ function routineRow(r){
     return '<div class="rout'+(okAll?' doneit':'')+'"><span class="badge ok" style="align-self:start">Auto</span><span class="rt">'+esc(r.title)+'</span>'+
       '<span class="rm"><span>daily</span><span>· every morning</span><span>· checked by Claude on each Breezeway run</span></span>'+guestBlock()+'</div>'; }
   var lg=rlogFor(r), done=lg&&!lg.undone, ld=lastDone(r);
-  return '<div class="rout'+(done?' doneit':'')+'"><input type="checkbox" class="cb" data-rtick="'+esc(r.id)+'"'+(done?' checked':'')+' aria-label="Done this period">'+
+  return '<div class="rout'+(done?' doneit':'')+'">'+(r.autoBw?'<span class="badge ok" style="align-self:start" title="Breezeway makes these tasks by itself">Auto</span>':'<input type="checkbox" class="cb" data-rtick="'+esc(r.id)+'"'+(done?' checked':'')+' aria-label="Done this period">')+
     '<span class="rt">'+esc(r.title)+(r.draft?' <span class="badge draft">Draft</span>':'')+'</span>'+
     '<span class="rm"><span>'+esc(r.cadence)+'</span>'+(r.when?'<span>· '+esc(r.when)+'</span>':'')+(r.who?'<span>· '+esc(r.who)+'</span>':'')+(routineVendor(r)?'<span>· vendor '+esc(routineVendor(r).name||"")+'</span>':'')+
     (r.props&&r.props.length?'<span>· '+r.props.length+' homes</span>':'')+
     (done?'<span>· done by '+esc(nameFor(lg.by))+'</span>':(ld?'<span>· last '+esc(ago(ymd(ld.at)))+' by '+esc(nameFor(ld.by))+'</span>':''))+'</span>'+
     (isTrash(r)?trashBlock(r):'')+(r.detail?'<span class="rd">'+esc(r.detail)+'</span>':'')+
     '<span class="rbtns">'+(r.draft?'<button class="btn sm" data-rconfirm="'+esc(r.id)+'">Confirm</button>':'')+
-    (r.cadence==="monthly"||r.cadence==="seasonal"?routineBwBtn(r):'')+
+    (r.autoBw?'<span class="pill done">Breezeway schedules it</span>':(r.cadence==="monthly"||r.cadence==="seasonal"?routineBwBtn(r):''))+
     (r.cadence==="seasonal"&&vemMode()?'<button class="btn sm ghost" data-rvem="'+esc(r.id)+'">✉ Vendor email</button>':'')+
     '<button class="btn sm ghost" data-redit="'+esc(r.id)+'">Edit</button>'+(r.url?'<a class="golink" href="'+esc(r.url)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'</span></div>';
 }
