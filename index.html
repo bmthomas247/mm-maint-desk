@@ -649,6 +649,7 @@ function noAccess(err){
 }
 /* The sidebar's desk list for a desk list + saved order (shell() uses the signed-in person's; View as uses another person's) */
 function sideNav(DESKS, ORD){
+  if(DESKS.some(x => x.key === "competitor" && x.status === "live")) DESKS = DESKS.filter(x => x.key !== "competitor_add");   // Brandon 2026-11-02: Add competitor intel is a button in the playbook; front desk (add only) keeps the sidebar entry
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
   const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","team_ratings","pto_reports","work_check","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const CALK = ["cal_res","cal_office","cal_me","cal_meet"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
