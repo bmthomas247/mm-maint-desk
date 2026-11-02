@@ -273,6 +273,7 @@ body.pennyonly #pennyBox .ph{cursor:default}
 <script src="perks.js"></script>
 <script src="calls.js"></script>
 <script src="market_watch.js"></script>
+<script src="maint_alerts.js"></script>
 <script src="signals.js"></script>
 <script src="config_guide.js"></script>
 <script>
@@ -782,6 +783,7 @@ function route(){
   if(k === "meet_maint" && d && window.meetJoin) meetJoin(k);   // Monday meeting Join button in the banner (meetings.js, 2026-10-29)
   if(window.trackBanner) trackBanner();   // checks.js: Wednesdays 4-11 pm Track maintenance banner (Brandon 2026-10-29)
   if((k === "checks" || k === "daily_checks") && window.checksView) return checksView(v);   // checks.js: Reports ▸ Daily checks; RLS decides what each person sees
+  if(k === "maint_alerts" && window.maintAlertsView){ $("#ttl").textContent = $("#utl").textContent = "Maintenance alerts"; return maintAlertsView(v, hashArg()); }   // maint_alerts.js: duplicate jobs, guest-reported jobs, gateways (Brandon 2026-11-02)
   if(k === "gateways" && window.gatewayView){ $("#ttl").textContent = $("#utl").textContent = "Gateway alerts"; return gatewayView(v); }   // banners.js: Brivo gateway alerts, maintenance manager + admins (gateway_alerts_mine is null for others -> Home) (Brandon 2026-11-02)
   if(k === "market_watch" && window.marketWatchView) return marketWatchView(v);   // market_watch.js: Zillow / Google / ad libraries / news via SerpApi (Brandon 2026-10-30); rows gated per desk in Supabase
   if(k === "feedback") return feedbackView(v);
