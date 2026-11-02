@@ -337,10 +337,45 @@ function histDialog(imei){
           <br><span class="muted">by ${esc((s.entered_name || "").split(" ")[0])}</span></td>
           <td class="n">${s.odometer == null ? "" : mi(s.odometer)}</td><td>${esc(s.vendor)}</td><td class="n">${s.cost == null ? "" : "$" + (+s.cost).toFixed(2)}</td>
           <td style="white-space:normal">${s.invoice_no ? "#" + esc(s.invoice_no) + "<br>" : ""}${fs.map(f => `<a href="#" data-file="${f.id}">📎 ${esc(f.file_name || "file")}</a>`).join("<br>")}</td>
-          <td><button class="btn" data-hide="${s.id}" title="Hide this record (kept in the history log)">Hide</button></td></tr>`; }).join("") + `</tbody></table></div>`
+          <td><button class="btn" data-addph="${s.id}">📷 Add photo</button> <button class="btn" data-hide="${s.id}" title="Hide this record (kept in the history log)">Hide</button></td></tr>`; }).join("") + `</tbody></table></div>`
       : `<p class="muted">No records yet. Add services, repairs, invoices, registration and insurance papers with "+ Add service / invoice".</p>`}
     <div class="bar"><button class="btn primary" data-svc="${esc(imei)}">+ Add service / invoice</button><button class="btn" id="hc">Close</button></div>`;
   if(!d.open) d.showModal(); $("#hc", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
+}
+async function shrink(f){   // phone photos are often 5-12 MB; an invoice stays readable at 2,400 px
+  if(!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 2.5 * 1024 * 1024) return f;
+  try {
+    const img = await createImageBitmap(f), k = Math.min(1, 2400 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const b = await new Promise(res => c.toBlob(res, "image/jpeg", 0.85));
+    return b ? new File([b], f.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : f;
+  } catch { return f; }
+}
+async function uploadFiles(imei, serviceId, files){
+  let bad = 0;
+  for(let f of files){
+    f = await shrink(f);
+    if(f.size > 25 * 1024 * 1024){ bad++; continue; }
+    const ext = (f.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";
+    const path = `v/${imei}/${new Date().toISOString().slice(0, 7)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const up = await sb.storage.from("vehicle-docs").upload(path, f, { contentType: f.type || undefined, upsert: false });
+    if(up.error){ bad++; continue; }
+    const fr = await sb.from("vehicle_service_files").insert({ service_id: serviceId, path, file_name: f.name.slice(0, 200), mime: f.type || "", size_bytes: f.size });
+    if(fr.error) bad++;
+  }
+  return bad;
+}
+function addPhoto(id){   // add an invoice photo to a record that's already saved
+  const s = S.service.find(x => x.id === id); if(!s) return;
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*,application/pdf"; inp.multiple = true; inp.setAttribute("capture", "environment");
+  inp.onchange = async () => {
+    const files = [...(inp.files || [])]; if(!files.length) return;
+    const bad = await uploadFiles(s.imei, id, files);
+    await load(); render(); histDialog(s.imei);
+    if(bad) alert(bad + " file(s) didn't upload. Try again.");
+  };
+  inp.click();
 }
 async function openFile(id){
   const f = S.files.find(x => x.id === +id); if(!f) return;
@@ -373,30 +408,33 @@ function svcDialog(imei){
     ${plan.length ? `<div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:10px 0 4px">Items done (from the maker's schedule)</div><div id="sitems" style="columns:2;font-size:13.5px">${plan.map(p =>
       `<div><input type="checkbox" value="${esc(p.item)}" id="it_${esc(p.item)}" style="width:auto;display:inline;margin:0 6px 0 0;padding:0"><label for="it_${esc(p.item)}" style="display:inline;margin:0;font-weight:600">${esc(p.label)}</label></div>`).join("")}</div>` : ""}
     <label>Note<input id="sn" maxlength="600" placeholder="What was done, parts, warranty…"></label>
-    <label>Invoice / photos (PDF, picture, Word; up to 25 MB each)<input id="sf" type="file" multiple accept="application/pdf,image/*,.doc,.docx"></label>
+    <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:12px 0 4px">Invoice</div>
+    <div class="bar" style="margin:0"><button type="button" class="btn primary" id="scam">📷 Take a photo of the invoice</button>
+      <button type="button" class="btn" id="spick">📎 Choose a file or photo</button></div>
+    <input id="scamf" type="file" accept="image/*" capture="environment" multiple hidden><input id="sf" type="file" multiple accept="application/pdf,image/*,.doc,.docx" hidden>
+    <div id="sflist" class="muted" style="font-size:13px;margin-top:6px">No invoice added yet. PDF, picture or Word, up to 25 MB each.</div>
     <div class="err" id="se"></div>
     <div class="bar"><button class="btn primary" id="ss">Save</button><button class="btn" id="sx">Cancel</button></div>`;
   if(!d.open) d.showModal();
   $("#sk", d).onchange = () => { const c = $("#it_oil", d); if(c && $("#sk", d).value === "oil_change") c.checked = true; };
+  let picked = [];
+  const showPicked = () => { $("#sflist", d).innerHTML = picked.length ? picked.map((f, i) => `📎 ${esc(f.name)} <a href="#" data-unpick="${i}">remove</a>`).join("<br>")
+    : "No invoice added yet. PDF, picture or Word, up to 25 MB each."; };
+  const add = inp => { picked = picked.concat([...(inp.files || [])]); inp.value = ""; showPicked(); };
+  $("#scam", d).onclick = () => $("#scamf", d).click(); $("#spick", d).onclick = () => $("#sf", d).click();
+  $("#scamf", d).onchange = e => add(e.target); $("#sf", d).onchange = e => add(e.target);
+  $("#sflist", d).onclick = e => { const a = e.target.closest("[data-unpick]"); if(!a) return; e.preventDefault(); picked.splice(+a.dataset.unpick, 1); showPicked(); };
   $("#sx", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
   $("#ss", d).onclick = async () => {
     const odo = $("#so", d).value === "" ? null : Number($("#so", d).value), cost = $("#sc", d).value === "" ? null : Number($("#sc", d).value);
-    const items = $$("#sitems input:checked", d).map(c => c.value), files = [...($("#sf", d).files || [])];
+    const items = $$("#sitems input:checked", d).map(c => c.value), files = picked;
     if(odo != null && !(odo >= 0)){ $("#se", d).textContent = "The odometer doesn't look right."; return; }
     if(files.some(f => f.size > 25 * 1024 * 1024)){ $("#se", d).textContent = "A file is over 25 MB."; return; }
     $("#ss", d).disabled = true; $("#se", d).textContent = "Saving…";
     const r = await sb.from("vehicle_service").insert({ imei, kind: $("#sk", d).value, items, done_on: $("#sd", d).value || null, odometer: odo,
       vendor: $("#sv", d).value.trim(), cost, invoice_no: $("#si", d).value.trim(), note: $("#sn", d).value.trim() }).select("id").single();
     if(r.error){ $("#se", d).textContent = errText(r.error); $("#ss", d).disabled = false; return; }
-    let bad = 0;
-    for(const f of files){
-      const ext = (f.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";
-      const path = `v/${imei}/${new Date().toISOString().slice(0, 7)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const up = await sb.storage.from("vehicle-docs").upload(path, f, { contentType: f.type || undefined, upsert: false });
-      if(up.error){ bad++; continue; }
-      const fr = await sb.from("vehicle_service_files").insert({ service_id: r.data.id, path, file_name: f.name.slice(0, 200), mime: f.type || "", size_bytes: f.size });
-      if(fr.error) bad++;
-    }
+    const bad = await uploadFiles(imei, r.data.id, files);
     await load(); render(); histDialog(imei);
     if(bad) alert(bad + " file(s) didn't upload. The record is saved; add the file again with a new record.");
   };
@@ -407,7 +445,7 @@ async function refresh(){
   catch(e){ $("#app").innerHTML = `<h1>Vehicles</h1><div class="note">Couldn't load: ${esc(errText(e))}</div>`; }
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan]"); if(!b) return;
+  const b = e.target.closest("[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan],[data-addph]"); if(!b) return;
   if(b.dataset.file) e.preventDefault();
   if(b.dataset.days){ S.days = +b.dataset.days; refresh(); }
   else if(b.dataset.oil) oilDialog(b.dataset.oil);
@@ -416,6 +454,7 @@ document.addEventListener("click", e => {
   else if(b.dataset.file) openFile(b.dataset.file);
   else if(b.dataset.hide) hideSvc(+b.dataset.hide);
   else if(b.dataset.plan) planDialog(b.dataset.plan);
+  else if(b.dataset.addph) addPhoto(+b.dataset.addph);
 });
 document.addEventListener("change", e => {
   if(e.target.id === "veh"){ S.veh = e.target.value; render(); }
