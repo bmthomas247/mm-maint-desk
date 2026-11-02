@@ -411,6 +411,7 @@ tr.xtr:hover td{background:var(--surface-2)} tr.xtr.open td{background:var(--acc
     <button class="btn sm" id="newhere_ok">Got it</button>
   </div>
 
+  <div id="wxhold" hidden></div>
   <main id="view"></main>
 </div>
 
@@ -709,7 +710,7 @@ function render0(){
   // keep focus + caret in text inputs across re-render
   var a=document.activeElement, aid=a&&a.id, ss=a&&a.selectionStart, se=a&&a.selectionEnd;
   var sc=document.querySelector(".listp .rows"), st=sc?sc.scrollTop:0, hp=$("hpop"), hst=hp?hp.scrollTop:0, hpc=hp&&hp.getAttribute("aria-label");
-  v.innerHTML=f();
+  v.innerHTML=f(); wxHold();
   var hp2=$("hpop"); if(hp2 && hp2.getAttribute("aria-label")===hpc) hp2.scrollTop=hst; document.body.classList.toggle("hpopen",!!hp2);
   if(aid && $(aid)){ var n=$(aid); n.focus(); try{ if(ss!=null) n.setSelectionRange(ss,se); }catch(e){} }
   var sc2=document.querySelector(".listp .rows"); if(sc2) sc2.scrollTop=st;
@@ -990,6 +991,26 @@ function isDueNow(r){
 }
 function routinesDue(){ return routines().filter(isDueNow).map(function(r){ r.doneNow=isGuestRoutine(r)?guestIssues().every(function(x){ return x.ok; }):!!(rlogFor(r)&&!rlogFor(r).undone); return r; })
   .sort(function(a,b){ return (a.doneNow-b.doneNow)||(["daily","weekly","monthly","seasonal"].indexOf(a.cadence)-["daily","weekly","monthly","seasonal"].indexOf(b.cadence)); }); }
+/* 🌦 Weather plan inside Seasonal & yearly (Brandon 2026-11-02: "they need to work together and be one tab"). weather.html?embed=1 sits above the
+   routines (kept outside #view so a re-render never reloads it); wx_plan() decides who sees it (null = hidden, no hint). A routine the weather
+   covers gets a line saying what the forecast says, and tapping it opens that rule in the Weather plan. */
+var WXR=[[/heat\s*tape.*\bon\b/i,"heat_on"],[/heat\s*tape.*\boff\b/i,"heat_off"],[/portable\s*a\/?c.*\bon\b/i,"ac_install"],[/portable\s*a\/?c.*\boff\b/i,"ac_remove"],
+  [/winter\s*(conditions|supplies)|salt|shovel/i,"salt"]];
+function wxFrame(){ var f=$("wxf"); return f&&f.contentWindow&&f.contentWindow.__wx; }
+function wxHold(){ var h=$("wxhold"); if(!h) return; var on=S.tab==="routines"&&!S.ui.meeting&&!D._wxNone; h.hidden=!on; if(!on||$("wxf")) return;
+  h.innerHTML='<iframe id="wxf" src="weather.html?embed=1" title="Weather plan" style="width:100%;border:0;height:420px;display:block"></iframe>'; }
+window.addEventListener("message",function(e){ var m=e.data; if(!m||!m.wx||e.origin!==location.origin) return; var f=$("wxf"), h=$("wxhold");
+  if(m.none){ D._wxNone=true; if(h) h.hidden=true; return; }
+  if(m.h&&f) f.style.height=(m.h+4)+"px";
+  if(m.y!=null&&f) window.scrollTo({top:f.getBoundingClientRect().top+window.scrollY+m.y-12,behavior:"smooth"});
+  if(m.ready) render(); });
+function wxTag(r){ var w=wxFrame(), pl=w&&w.S&&w.S.plan; if(!pl) return ""; var k=null;
+  WXR.some(function(x){ if(x[0].test(r.title||"")){ k=x[1]; return true; } }); if(!k) return "";
+  var ru=pl.rules.filter(function(x){ return x.key===k; })[0]; if(!ru) return "";
+  var todo=ru.homes.filter(function(h){ return h.status==="todo"; }).length;
+  var t=ru.off?"Weather plan: turned off":!ru.in_season?"Weather plan: not this time of year":ru.warn?"Snow coming · "+todo+" homes not done":ru.hit?"Weather says now · "+todo+" to schedule":"Waiting on the weather";
+  return '<button class="btn sm ghost" data-wxgo="'+k+'" style="margin:0 0 4px;'+(ru.hit||ru.warn?'color:var(--wait);font-weight:700':'')+'">🌦 '+esc(t)+' →</button>'; }
+document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-wxgo]"); if(!b) return; ev.preventDefault(); var w=wxFrame(); if(w&&w.jump) w.jump(b.dataset.wxgo); });
 function routineRow(r){
   if(isGuestRoutine(r)){ var gb=guestIssues(), okAll=gb.every(function(x){ return x.ok; });
     return '<div class="rout'+(okAll?' doneit':'')+'"><span class="badge ok" style="align-self:start">Auto</span><span class="rt">'+esc(r.title)+'</span>'+
@@ -1031,7 +1052,7 @@ function vRoutines(){
       .sort(function(a,b){ return (a._next||"9999").localeCompare(b._next||"9999"); });
     var left=list.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
     var card=function(r){ var n=r._next, dd=n?daysBetween(today(),n):null;
-        return '<div class="rcard"><div class="note" style="padding:0 0 4px;'+(dd!=null&&dd<=45?'color:var(--wait);font-weight:600':'')+'">'+(n?'Next: '+esc(fmtD(n))+(dd<=0?' — now':' · in '+dd+' days'):'No date set')+'</div>'+routineRow(r)+'</div>'; };
+        return '<div class="rcard">'+wxTag(r)+'<div class="note" style="padding:0 0 4px;'+(dd!=null&&dd<=45?'color:var(--wait);font-weight:600':'')+'">'+(n?'Next: '+esc(fmtD(n))+(dd<=0?' — now':' · in '+dd+' days'):'No date set')+'</div>'+routineRow(r)+'</div>'; };
     var mOrd=function(r,st){ var mi=whenMonth(r.when); return mi<0?99:(mi-st+12)%12; };
     var groups=seasonOrder().map(function(x,i){ return {k:x[0],t:x[1],m:x[2],now:i===0,st:x[3]}; }).concat([{k:"any",t:"Any time of year",m:"no month set",st:0}]);
     h+='<section class="panel rcol"><div class="ph"><h3>'+c[1]+'<span>'+c[2]+'</span></h3><span class="ct">'+left+' / '+list.length+'</span></div>'+
@@ -2673,6 +2694,8 @@ function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.u
   var cards=Object.keys(byHood).sort().map(function(h){ return '<div class="thood">'+esc(h)+'</div>'+
     byHood[h].sort(function(a,b){ return a.c.localeCompare(b.c,undefined,{numeric:true}); }).map(function(x){ return trashCard(r,p,x); }).join(""); }).join("");
   var heavy=hv.length?'<div class="tbig theavy"><b>Heavy trash day — first pickup after '+esc(hv.map(function(h){ return h.k+" ("+fmtD(h.d)+")"; }).join(" and "))+'.</b> One of our worst trash days: bring extra bags, check every bin, the garage and the curb, and plan extra time.</div>':'';
+  var wxs=(r.props||[]).filter(function(c){ return trashWx()[canon(c)] && !todo.some(function(x){ return canon(x.c)===canon(c); }); });
+  heavy+=wxs.length?'<div class="tcard twxc"><div class="tch"><b>❄️ Heat tape check</b><span class="muted">no trash this week, just look from the road</span></div>'+wxs.map(function(c){ return '<div class="tch" style="margin-top:6px"><b class="tcode">'+esc(c)+'</b></div>'+trashWxRow(c); }).join("")+'</div>':'';
   return '<section class="troute" data-troute="'+rid+'">'+bar+heavy+(todo.length&&n<todo.length?trashGpsRow(r,p,todo,at):'')+
     (todo.length?cards:'<div class="tcard"><div class="twhy">Nothing to take out — nobody stayed and no work was finished since '+esc(fmtD(p.from))+'.</div></div>')+
     (p.skip.length?'<details class="tskip"><summary>Skip '+p.skip.length+' — no stay, clean or finished work since '+esc(fmtD(p.from))+'</summary>'+
@@ -2680,13 +2703,30 @@ function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.u
 function trashCard(r,p,x){ var tk=trashTick(r.id,p.day,x.c), key=esc(r.id+"|"+p.day+"|"+x.c);
   var far=x._m!=null?'<span class="tfar">'+esc(trashFar(x._m))+'</span>':'';
   if(tk) return '<div class="tcard tdone" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill '+(tk.state==="out"?'ok':'mute')+'">'+(tk.state==="out"?'Out':'N/A')+'</span></div>'+
-    '<div class="tdid">'+(tk.state==="out"?'Taken out':'Not needed')+' by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tundo="'+key+'">Undo</button></div></div>';
+    '<div class="tdid">'+(tk.state==="out"?'Taken out':'Not needed')+' by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tundo="'+key+'">Undo</button></div>'+trashWxRow(x.c)+'</div>';
   var heads=[]; if(x.big) heads.push('Long stay — '+x.big.n+' nights'); var hols=x.hols||[]; if(hols.length) heads.push('Stay over '+hols.join(" and "));
   var bg=heads.length?'<div class="tbig"><b>'+esc(heads.join(" · "))+'.</b> Expect extra trash'+(hols.indexOf("Christmas")>-1?' (boxes and wrapping)':hols.length?' (food and party trash)':'')+': bring spare bags and check the bins and garage.'+
     (x.still?' Guests are still there until '+esc(fmtD(x.still))+' — knock first.':'')+'</div>':'';
   return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b>'+far+(x.check?'<span class="pill waiting">Check</span>':'')+(x.big?'<span class="pill waiting">Long stay</span>':'')+hols.map(function(k){ return '<span class="pill waiting">'+esc(k)+'</span>'; }).join("")+'</div>'+
-    '<div class="twhy">'+(x.whys||[x.why]).map(esc).join("<br>")+'</div>'+bg+trashGarage(x.c)+
+    '<div class="twhy">'+(x.whys||[x.why]).map(esc).join("<br>")+'</div>'+bg+trashGarage(x.c)+trashWxRow(x.c)+
     '<div class="tbtns"><button class="btn tgo" data-tout="'+key+'">✓ Out</button><button class="btn tna" data-tna="'+key+'">N/A → next</button></div></div>'; }
+/* ❄️ Heat tape drive-by (Weather plan, hub_weather_plan.sql; Brandon 2026-11-02): once 4"+ of snow has fallen since a home's heat tape went ON
+   ("we need at least 4-6 inches of snow fall to see if theyre on"), the trash route looks at the roof line. Yes = snow is melting along the heat tape
+   line (good); No asks what they saw and shows on Maintenance > Weather plan for Chris. wx_trash_checks() lists the homes (Trash people only). */
+function trashWx(){ var now=Date.now(); if(D._wx&&now-D._wxAt<6e5) return D._wx; if(D._wxP) return D._wx||{}; var sb=window.MM_SB; if(!sb) return {};
+  D._wxP=sb.rpc("wx_trash_checks").then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ m[canon(x.home)]=x; }); D._wx=m; D._wxAt=Date.now(); D._wxP=null;
+    if(Object.keys(m).length) render(); }, function(){ D._wxP=null; D._wxAt=Date.now(); D._wx=D._wx||{}; });
+  return D._wx||{}; }
+function trashWxRow(c){ var w=trashWx()[canon(c)]; if(!w) return '';
+  return '<div class="tbig twx" style="background:#e3edf8;color:#173f66"><b>❄️ Heat tape check:</b> is the snow melting along the heat tape line?'+
+    '<div class="tbtns" style="margin-top:6px"><button class="btn sm" data-wxok="'+esc(c)+'">Yes, melting</button><button class="btn sm" data-wxno="'+esc(c)+'">No</button></div></div>'; }
+document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-wxok],[data-wxno]"); if(!b) return; ev.preventDefault();
+  var sb=window.MM_SB, ok=b.dataset.wxok!=null, c=ok?b.dataset.wxok:b.dataset.wxno, w=trashWx()[canon(c)]; if(!sb||!w) return;
+  var note=ok?null:prompt("What did you see? (this goes to Chris)"); if(!ok&&!(note||"").trim()) return;
+  b.disabled=true; sb.rpc("wx_check_answer",{p_home:w.home,p_ok:ok,p_note:note}).then(function(r){
+    if(r&&r.error){ b.disabled=false; toast("Not saved — "+(r.error.message||"try again")); return; }
+    delete D._wx[canon(c)]; toast(ok?"Thanks — heat tape is working":"Thanks — Chris will see it on the Weather plan"); render(); },
+    function(){ b.disabled=false; toast("Not saved — check your signal and try again"); }); });
 /* 📍 I'm at the home: GPS of our homes = Track unit latitude/longitude (locks/locks_sync.py → lock_places; every Trash person reads it,
    checked 2026-10-28). Distances are worked out on the phone; the location is never saved. */
 function trashPlaces(){ if(D._tpP) return D._tpP; var sb=window.MM_SB; if(!sb) return Promise.resolve({});
