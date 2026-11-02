@@ -1342,7 +1342,7 @@ function settingsView2(v){
     : `<div class="card"><b style="font-size:17px">🎂 My birthday</b>${bdBody()}</div>`;
   const draw = () => {
     v.innerHTML = `<div class="page setpage"><h2>My settings</h2><p class="muted">Only you see these. They follow you to any computer or phone you sign in on.</p>
-    <div class="card"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
+    <div class="card" data-one="keep"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
     <div class="card"><b style="font-size:17px">🔑 My password</b><p class="muted" style="margin:4px 0 8px">Set or change the password you sign in with (Hub and Moose Locks). You'll need your current password or a code from your email.</p><button class="btn small" id="mypw">Set a new password</button></div>
