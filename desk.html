@@ -382,6 +382,7 @@ i.cost{background:var(--sunk);box-shadow:inset 0 0 0 1.5px var(--ink-2)}
 #ctip b{display:block;font-size:12.5px}
 tr.xtr:hover td{background:var(--surface-2)} tr.xtr.open td{background:var(--accent-soft)}
 .dhead{cursor:pointer} .dhead:hover b{text-decoration:underline}
+.seasgrp{padding:6px 0 2px}.seashd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px 6px;border-top:1px solid var(--line-2)}.seasgrp:first-child .seashd{border-top:0}.seashd b{font-size:15px}.seashd span{color:var(--muted);font-size:12.5px}.seashd .ct{margin-left:auto}.seashd.now b{color:var(--go)}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;padding:12px}
 .rcard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);display:flex;flex-direction:column;min-width:0}
 .rcard .rout{border:0;padding:0;display:flex;flex-direction:column;gap:4px;flex:1}
@@ -1013,6 +1014,15 @@ function routineBwBtn(r){ var k=sid("r_"+r.id+"_"+period(r)), q=S.bwq[k], ps=pla
   var nh=routineHomes(r).length;
   return (r.cadence==="seasonal"&&nh>1?'<button class="btn sm pri" data-rplan="'+esc(r.id)+'">Plan by community ('+nh+' homes)</button>':'')+
     '<button class="btn sm'+(r.cadence==="seasonal"&&nh>1?' ghost':' pri')+'" data-rbw="'+esc(r.id)+'">'+(r.cadence==="seasonal"&&nh>1?'All on one day':'Schedule in Breezeway'+(r.props&&r.props.length?' ('+r.props.length+' homes)':''))+'</button>'; }
+/* Seasons on Seasonal & yearly (Brandon 2026-11-02: "break down the season and yearly by season and have them rotate through ... the fall stuff
+   should be at the top followed by the winter stuff then spring stuff then summer stuff"). Season = r.season if picked in Edit routine, else the
+   first month in "When" (Sep-Nov fall, Dec-Feb winter, Mar-May spring, Jun-Aug summer). The season we're in comes first, then the next ones. */
+var SEASONS=[["fall","Fall","Sep – Nov",8],["winter","Winter","Dec – Feb",11],["spring","Spring","Mar – May",2],["summer","Summer","Jun – Aug",5]];
+function seasonOfMonth(mi){ return mi>=8&&mi<=10?"fall":(mi===11||mi<=1)?"winter":mi<=4?"spring":"summer"; }
+function whenMonth(w){ var m=String(w||"").toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/); return m?MON.indexOf(m[1]):-1; }
+function routineSeason(r){ if(r.season&&r.season!=="auto") return r.season; var mi=whenMonth(r.when); return mi<0?"any":seasonOfMonth(mi); }
+function seasonOrder(){ var now=seasonOfMonth(new Date().getMonth()), i=SEASONS.map(function(x){ return x[0]; }).indexOf(now);
+  return SEASONS.slice(i).concat(SEASONS.slice(0,i)); }
 function vRoutines(){
   var rs=routines(), cols=[["seasonal","Seasonal & yearly","once a year"]];
   var h='<div class="sechead"><h2>Seasonal & yearly</h2><p>Heat tape, irrigation, spring and fall services — the once-a-year work. Plan each one by community so it spreads over the month. '+
@@ -1020,9 +1030,17 @@ function vRoutines(){
   cols.forEach(function(c){ var list=rs.filter(function(r){ return r.cadence===c[0]; }).map(function(r){ r._next=nextWhen(r.when); return r; })
       .sort(function(a,b){ return (a._next||"9999").localeCompare(b._next||"9999"); });
     var left=list.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
+    var card=function(r){ var n=r._next, dd=n?daysBetween(today(),n):null;
+        return '<div class="rcard"><div class="note" style="padding:0 0 4px;'+(dd!=null&&dd<=45?'color:var(--wait);font-weight:600':'')+'">'+(n?'Next: '+esc(fmtD(n))+(dd<=0?' — now':' · in '+dd+' days'):'No date set')+'</div>'+routineRow(r)+'</div>'; };
+    var mOrd=function(r,st){ var mi=whenMonth(r.when); return mi<0?99:(mi-st+12)%12; };
+    var groups=seasonOrder().map(function(x,i){ return {k:x[0],t:x[1],m:x[2],now:i===0,st:x[3]}; }).concat([{k:"any",t:"Any time of year",m:"no month set",st:0}]);
     h+='<section class="panel rcol"><div class="ph"><h3>'+c[1]+'<span>'+c[2]+'</span></h3><span class="ct">'+left+' / '+list.length+'</span></div>'+
-      (list.length?'<div class="rgrid">'+list.map(function(r){ var n=r._next, dd=n?daysBetween(today(),n):null;
-        return '<div class="rcard"><div class="note" style="padding:0 0 4px;'+(dd!=null&&dd<=45?'color:var(--wait);font-weight:600':'')+'">'+(n?'Next: '+esc(fmtD(n))+(dd<=0?' — now':' · in '+dd+' days'):'No date set')+'</div>'+routineRow(r)+'</div>'; }).join("")+'</div>':'<div class="empty">None yet.</div>');
+      (list.length?groups.map(function(g){ var gl=list.filter(function(r){ return routineSeason(r)===g.k; })
+          .sort(function(a,b){ return (mOrd(a,g.st)-mOrd(b,g.st))||(a._next||"9999").localeCompare(b._next||"9999"); });
+        if(!gl.length) return g.k==="any"?"":'<div class="seasgrp"><div class="seashd'+(g.now?' now':'')+'"><b>'+esc(g.t)+'</b><span>'+esc(g.m)+'</span></div><div class="empty" style="padding:4px 14px 10px">Nothing set for '+esc(g.t.toLowerCase())+' yet.</div></div>';
+        var gleft=gl.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
+        return '<div class="seasgrp"><div class="seashd'+(g.now?' now':'')+'"><b>'+esc(g.t)+'</b><span>'+esc(g.m)+'</span>'+(g.now?'<span class="pill waiting">Now</span>':'')+'<span class="ct">'+gleft+' / '+gl.length+'</span></div>'+
+          '<div class="rgrid">'+gl.map(card).join("")+'</div></div>'; }).join(""):'<div class="empty">None yet.</div>');
     if(c[0]==="seasonal"){
       var sea=D.jobs.filter(function(j){ return j.kind==="seasonal"; }), grp={};
       sea.forEach(function(j){ var g=(j.list||"").split(" · ")[1]||"Spring/Fall Services"; grp[g]=grp[g]||{open:0,all:0}; grp[g].all++; if(j.status!=="done") grp[g].open++; });
@@ -3871,7 +3889,7 @@ function mTime(id,pre){ var e=id?S.time[id]:(pre||{});
 
 function mRoutine(id){ var r=id?S.recurring[id]:{cadence:"weekly"};
   openModal(id?"Edit routine":"New routine",'<div class="fields">'+fld("m_title","Routine",r.title||"")+sel("m_cad","How often",[["daily","Daily"],["weekly","Weekly"],["monthly","Monthly"],["seasonal","Seasonal / yearly"]],r.cadence)+
-    fld("m_when","When",r.when||"","text",'placeholder="e.g. Tuesday, 1st week, Early Nov"')+'<label class="f"><span>Who</span><select id="m_who">'+whoOptions(r.who||"","—")+'</select></label>'+
+    fld("m_when","When",r.when||"","text",'placeholder="e.g. Tuesday, 1st week, Early Nov"')+sel("m_season","Season (seasonal / yearly)",[["auto","From “When”"],["fall","Fall"],["winter","Winter"],["spring","Spring"],["summer","Summer"],["any","Any time of year"]],r.season||"auto")+'<label class="f"><span>Who</span><select id="m_who">'+whoOptions(r.who||"","—")+'</select></label>'+
     '<label class="f"><span>Vendor</span><select id="m_vendor">'+vendorOptions((routineVendor(r)||{}).id||"")+'</select></label>'+
     fld("m_cph","Cost per home $ (for projections)",r.costPerHome||"","number",'min="0" step="1"')+
     area("m_detail","Details",r.detail)+area("m_props","Homes (one per line or comma)",(r.props||[]).join(", "))+'</div>'+
@@ -3879,7 +3897,7 @@ function mRoutine(id){ var r=id?S.recurring[id]:{cadence:"weekly"};
   function(){ var t=fv("m_title"); if(!t){ toast("Name the routine"); return; } var k=id||uid("r-");
     var props=fv("m_props").split(/[,\n]+/).map(function(s){return s.trim();}).filter(Boolean);
     var vd=D.vendors.filter(function(v){ return v.id===fv("m_vendor"); })[0];
-    return put("recurring",k,{title:t,cadence:fv("m_cad"),when:fv("m_when"),who:fv("m_who"),vendorId:vd?vd.id:"",vendorName:vd?vd.name:"",detail:fv("m_detail"),props:props,costPerHome:+fv("m_cph")||0,draft:false,active:true},id?S.recurring[id]:null)
+    return put("recurring",k,{title:t,cadence:fv("m_cad"),when:fv("m_when"),season:fv("m_season")||"auto",who:fv("m_who"),vendorId:vd?vd.id:"",vendorName:vd?vd.name:"",detail:fv("m_detail"),props:props,costPerHome:+fv("m_cph")||0,draft:false,active:true},id?S.recurring[id]:null)
       .then(function(){ toast("Routine saved"); closeModal(); }); },"Save",
   id?'<button class="btn warn" data-act="mrouteoff" data-id="'+esc(id)+'" style="margin-right:auto">Turn off</button>':''); }
 
