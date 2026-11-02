@@ -647,7 +647,7 @@ function homesFor(j){ if(j._homes) return j._homes; var text=(j.title||"")+" "+(
 function bwState(j){ /* "on" | "done" | "queued" | "missing" | "noprop" | "" */
   if(!D.bwLoaded || j.src==="breezeway" || j.company || j.status==="done" || j.kind==="info" || j.kind==="seasonal" || j.autoDone) return "";
   var q=S.bwq[sid(j.id)]; if(j.bw) return j.bw.t.status==="done"?"done":"on";
-  if(q && q.status==="queued") return "queued";
+  if(q && (q.status==="queued"||q.status==="sending")) return "queued";
   if(q && q.status==="created") return "on";
   if(!j.prop && homesFor(j).length) return "multi";
   return j.prop?"missing":"noprop";
@@ -867,13 +867,14 @@ function jobDetail(j){
   if(os && os.in<=t) h+='<div class="warnbox"><b>Owner is in the home until '+esc(fmtD(os.out))+'.</b> Get their OK before a visit.</div>';
   else if(os && daysBetween(t,os.in)<=14) h+='<div class="infobox">Owner arrives '+esc(fmtD(os.in))+' (until '+esc(fmtD(os.out))+'). Finish before then if you can.</div>';
   if(photosFor(j).length) h+='<div class="block"><h4>Photos from Breezeway</h4>'+thumbs(j,4,true,120)+'</div>';
+  var bp=(S.edits[sid(j.id)]||{}).bwPush; if(bp) h+='<div class="'+(bp.ok?'okbox':'stopbox')+'"><b>Breezeway:</b> '+esc(bp.msg||'')+' <span class="muted">· '+esc(new Date(bp.at).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))+'</span>'+(bp.ok?'':' — fix it in Breezeway or try again')+'</div>';
   var bs=bwState(j);
   if(bs==="on"||bs==="done"){ var b=j.bw?j.bw.t:null;
     h+='<div class="'+(bs==="done"?"okbox":"infobox")+'"><b>'+(bs==="done"?"Done in Breezeway":"In Breezeway")+'</b>'+(b?': <a href="'+esc(b.srcUrl)+'" target="_blank" rel="noopener">'+esc(b.title)+'</a> · '+esc(b.status==="done"?("finished "+fmtD(b.finished)+(b.doneByName?" by "+b.doneByName:"")):("due "+fmtD(b.due)+(b.who?" · "+b.who:"")))+
       (j.bw.how==="match"?' <span class="muted">(matched by home and words — check it\'s the same job)</span>':''):' — task being created')+
       (bs==="done"?'<div style="margin-top:6px"><button class="btn sm" data-act="donejob">Mark done here too</button></div>':'')+'</div>'; }
-  else if(bs==="queued") h+='<div class="warnbox"><b>Going to Breezeway.</b> Claude creates it on the next run (weekdays 9am, noon, 3pm).</div>';
-  else if(bs==="missing") h+='<div class="stopbox"><b>Not in Breezeway.</b> Nobody will see this on the schedule. <button class="btn sm pri" data-act="bwq" style="margin-left:6px">Put it in Breezeway</button>'+
+  else if(bs==="queued") h+='<div class="warnbox"><b>Going to Breezeway.</b> The hub creates it within a minute or two.</div>';
+  else if(bs==="missing") h+='<div class="stopbox">'+(((S.bwq[sid(j.id)]||{}).status==="failed")?'<b>Breezeway refused it:</b> '+esc(S.bwq[sid(j.id)].error||'')+'<br>':'')+'<b>Not in Breezeway.</b> Nobody will see this on the schedule. <button class="btn sm pri" data-act="bwq" style="margin-left:6px">Put it in Breezeway</button>'+
     '<div class="note" style="color:inherit;margin-top:4px">Already there? Paste the Breezeway task link in a note and it links up on the next refresh.</div></div>';
   else if(bs==="noprop") h+='<div class="warnbox"><b>No home on this job</b>, so I can\'t check Breezeway. Set the property below and save.</div>';
   else if(bs==="multi"){ var hf=homesFor(j), qm=S.bwq[sid(j.id)];
@@ -2457,7 +2458,7 @@ function vCheck(){
   h+='<div class="grid2"><div style="display:flex;flex-direction:column;gap:14px">';
   h+='<section class="panel" id="c-missing"><div class="ph"><h3>Not in Breezeway yet</h3><span class="ct'+(missing.length?' hot':'')+'">'+missing.length+'</span>'+
     (missing.filter(function(j){return j.prop;}).length?'<button class="btn sm pri" data-act="bwqall">Put all '+missing.filter(function(j){return j.prop;}).length+' in Breezeway</button>':'')+'</div>'+
-    '<div class="pad note" style="padding-bottom:0">Open items from Slack, Asana and Freshdesk links with no Breezeway task I can find. Put them in and Claude creates the tasks on its next run. Click one to open it right here.</div>'+
+    '<div class="pad note" style="padding-bottom:0">Open items from Slack, Asana and Freshdesk links with no Breezeway task I can find. Put them in and the hub creates the tasks within a minute or two. Click one to open it right here.</div>'+
     (missing.length?missing.slice(0,60).map(missRow).join(""):'<div class="empty">Everything open is in Breezeway.</div>')+'</section>';
   h+='<div id="c-fu">'+fuPanel(30)+'</div>';
   h+='</div><div style="display:flex;flex-direction:column;gap:14px" id="c-fix">';
@@ -2740,10 +2741,10 @@ function trashBlock(r){ var p=trashPlan(r); if(!p) return '<span class="rd">Occu
 /* skipped homes get checked off on the Asana trash task (its subtasks, one per home) — the desk queues it, the Asana run does it */
 function trashGid(r){ var m=String(r.id||"").match(/^r-asana-(\d+)$/); return m?m[1]:""; }
 function trashQid(r,p){ return sid("trash_"+trashGid(r)+"_"+p.day); }
-function trashAsanaState(r,p){ if(!trashGid(r)) return ""; var q=S.asanaq[trashQid(r,p)];
+function trashAsanaState(r,p){ return ""; /* Asana off for Trash 2026-11-02 */ if(!trashGid(r)) return ""; var q=S.asanaq[trashQid(r,p)];
   return '<br><span class="note">Asana: '+(!q?'will check off the '+p.skip.length+' skipped homes':q.status==="done"?'checked off '+((q.checked||[]).length)+' skipped homes'+((q.unmatched||[]).length?' · couldn\'t match '+esc(q.unmatched.join(", ")):''):'checking off '+p.skip.length+' skipped homes on the next Asana run')+'</span>'; }
 var _trashQ={};
-function queueTrashAsana(){ if(!S.db||!S.me||!S.asanaq||!(S.feeds.occupancy||{}).units) return; var t=today();
+function queueTrashAsana(){ return; /* Asana off for Trash 2026-11-02 (Trash runs on Track stays + Breezeway work) */ if(!S.db||!S.me||!S.asanaq||!(S.feeds.occupancy||{}).units) return; var t=today();
   routines().filter(function(r){ return /^trash/i.test(r.title||"") && trashGid(r) && (r.props||[]).length; }).forEach(function(r){ var p=trashPlan(r); if(!p) return;
     var gap=daysBetween(t,p.day); if(gap<0||gap>1) return; var id=trashQid(r,p), cur=S.asanaq[id], sk=p.skip.map(function(x){ return x.c; }).sort(), keep=p.out.concat(p.check).map(function(x){ return x.c; }).sort();
     if(cur && (cur.status==="done" || JSON.stringify(cur.skip)===JSON.stringify(sk))) return; if(_trashQ[id]) return; _trashQ[id]=1;
@@ -2845,7 +2846,7 @@ function mPlan(rid,obj){ var r=obj||Object.assign({id:rid},S.recurring[rid]), df
       return Promise.all(p.days.map(function(d,i){ return S.db.doc("bwq/"+sid("r_"+r.id+"_"+per+"_d"+(i+1))).set({kind:"routine",routineId:r.id,period:per,day:i+1,of:p.days.length,
         title:r.title+" — "+d.comms.map(function(c){ return COMM[c]||c; }).join(" + "),detail:r.detail||"",props:d.homes,who:d.who||r.who||"",due:d.date,
         dept:r.dept||(/inspect|smoke|detector|fire/i.test(r.title)?"inspection":"maintenance"),template:r.template||"",when:r.when||"",status:"queued",by:S.me,at:Date.now()}); }))
-        .then(function(){ closeModal(); toast(p.days.length+" days queued — Claude creates the Breezeway tasks on the next run"); }); },"Put these days in Breezeway");
+        .then(function(){ closeModal(); toast(p.days.length+" days queued — the hub creates the Breezeway tasks within a minute or two"); }); },"Put these days in Breezeway");
   ["pl_s","pl_e","pl_n"].forEach(function(id){ $(id).addEventListener("input",draw); }); [].forEach.call(document.querySelectorAll(".pl_t"),function(x){ x.addEventListener("change",draw); }); draw(); }
 function planState(r){ var pre=sid("r_"+r.id+"_"+period(r)+"_d"), ks=Object.keys(S.bwq).filter(function(k){ return k.indexOf(pre)===0; });
   if(!ks.length) return null; var c=ks.filter(function(k){ return S.bwq[k].status==="created"; }).length, f=ks.filter(function(k){ return S.bwq[k].status==="failed"; }).length;
@@ -2869,7 +2870,7 @@ function mSchedule(id){ var j=D.byId[id]; if(!j) return;
     '<label class="f"><span>Tech</span><select id="bs_w"><option value="">Chris (he hands it out)</option>'+TECH_LIST.concat(["Brandon"]).filter(function(w){ return w!=="Chris"; }).map(function(w){ return '<option>'+esc(w)+'</option>'; }).join("")+'</select></label>'+
     '<label class="f" style="grid-column:1/-1"><span>Note for the tech (optional)</span><input id="bs_n"></label></div>',
     function(){ if(!need()) return; return S.db.doc("bwq/"+sid("sch_"+j.id)).set({kind:"schedule",taskId:j.id.slice(3),taskUrl:j.srcUrl,props:[j.prop],title:j.title,due:fv("bs_d"),who:fv("bs_w"),note:fv("bs_n"),status:"queued",by:S.me,at:Date.now()})
-      .then(function(){ closeModal(); toast("Queued — Claude puts the date and tech on it in Breezeway next run"); }); },"Schedule it"); }
+      .then(function(){ closeModal(); toast("Queued — the hub puts the date and tech on it in Breezeway within a minute or two"); }); },"Schedule it"); }
 
 /* Follow up: write the message, pick who gets it in Slack */
 function mFollow(id){ var j=D.byId[id]; if(!j) return; var d=blFollowDoc(j), ppl=slackPeople();
@@ -3963,7 +3964,7 @@ document.addEventListener("click",function(ev){
     var qk=sid("r_"+rr.id+"_"+period(rr));
     return S.db.doc("bwq/"+qk).set({kind:"routine",routineId:rr.id,period:period(rr),title:rr.title,detail:rr.detail||"",props:rr.props,who:rr.who||"",
       dept:/inspect|smoke|detector|fire/i.test(rr.title)?"inspection":"maintenance",when:rr.when||"",status:"queued",by:S.me,at:Date.now()})
-      .then(function(){ toast(rr.props.length+" Breezeway task"+(rr.props.length===1?"":"s")+" queued — Claude creates them on the next run"); }); }
+      .then(function(){ toast(rr.props.length+" Breezeway task"+(rr.props.length===1?"":"s")+" queued — the hub creates them within a minute or two"); }); }
   if(d.proj){ S.ui.proj=d.proj; return render(); }
   if(d.htype){ S.ui.htype=d.htype; S.ui.home=""; return render(); }
   if(d.careopen && !ev.target.closest("button[data-careplan],button[data-caredone],button[data-caresnooze],a")){ S.ui.careOpen=S.ui.careOpen===d.careopen?"":d.careopen; if(S.tab!=="care") return go("care"); return render(); }
@@ -4041,7 +4042,7 @@ document.addEventListener("click",function(ev){
   if(d.vuopen){ S.ui.vuOpen=S.ui.vuOpen===d.vuopen?"":d.vuopen; return render(); }
   if(d.rexp){ ev.preventDefault(); var rj=D.byId[d.rexp]; return mExpense(null,{jobId:d.rexp,prop:rj?rj.prop:"",vendor:""}); }
   if(d.fuq||d.fuok||d.fuundo){ ev.preventDefault(); if(!need()) return; var fk=d.fuq||d.fuok||d.fuundo, fx=followups().filter(function(f){ return f.key===fk; })[0], ek=sid("fu_"+fk);
-    if(d.fuq){ if(!fx) return; return S.db.doc("bwq/"+ek).set(fuQueueDoc(fx)).then(function(){ toast("Queued — Claude creates the Breezeway task for "+fx.home+" next run"); }); }
+    if(d.fuq){ if(!fx) return; return S.db.doc("bwq/"+ek).set(fuQueueDoc(fx)).then(function(){ toast("Queued — the hub creates the Breezeway task for "+fx.home+" within a minute or two"); }); }
     return put("edits",ek,{handled:!!d.fuok,by:S.me,at:Date.now()},S.edits[ek]).then(function(){ toast(d.fuok?"Marked handled":"Back on the list"); }); }
   var j=S.ui.sel&&D.byId[S.ui.sel];
   switch(d.act){
@@ -4055,7 +4056,7 @@ document.addEventListener("click",function(ev){
       return editJob(j,{status:fv("e_status"),who:fv("e_who"),vendor:fv("e_vendor"),due:fv("e_due"),prop:fv("e_prop"),cost:fv("e_cost"),estimate:fv("e_est"),
         doneBy:fv("e_status")==="done"&&j.status!=="done"?S.me:(S.edits[sid(j.id)]||{}).doneBy||"",
         doneAt:fv("e_status")==="done"&&j.status!=="done"?Date.now():(S.edits[sid(j.id)]||{}).doneAt||0}).then(function(){ toast("Saved"); });
-    case "donejob": if(!j) return; return editJob(j,{status:"done",doneBy:S.me,doneAt:Date.now()}).then(function(){ toast("Marked done — close it in "+(SRCNAME[j.src]||"its app")+" too"); });
+    case "donejob": if(!j) return; return editJob(j,{status:"done",doneBy:S.me,doneAt:Date.now()}).then(function(){ toast(j.src==="breezeway"||(S.bwq[sid(j.id)]||{}).status==="created"?"Marked done — the hub closes it in Breezeway within a minute":"Marked done — close it in "+(SRCNAME[j.src]||"its app")+" too"); });
     case "notejob": if(!j) return; var tx=fv("e_note"); if(!tx) return; var cur=S.edits[sid(j.id)]||{};
       return editJob(j,{notes:(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:tx}])}).then(function(){ toast("Note added"); });
     case "expjob": if(!j) return; return mExpense(null,{jobId:j.id,prop:j.prop,vendor:j.vendor});
