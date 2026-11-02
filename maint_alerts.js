@@ -95,14 +95,15 @@ const md = s => { const [m, d] = s.split("-").map(Number); return new Date(2000,
 async function season(el, A){
   const js = A.season || [];
   if(!js.length){ el.innerHTML = `<div class="card">Nothing out of season right now.</div>`; return; }
-  const w = await highs(), by = {};
-  js.forEach(j => { const k = j.task.replace(/^(SAME ?DAY|SAMEDAY)[!\/: ]*/i, "").trim(); (by[k] = by[k] || { season:j.season, jobs:[] }).jobs.push(j); });
+  const ac = A.ac || {}, w = ac.days ? { lo:ac.min_high, hi:ac.max_high } : await highs(), by = {};
+  js.forEach(j => { if(j.why === "weather") j.season = null; const k = j.task.replace(/^(SAME ?DAY|SAMEDAY)[!\/: ]*/i, "").trim(); (by[k] = by[k] || { season:j.season, jobs:[] }).jobs.push(j); });
   el.innerHTML = `<div class="card muted" style="margin-bottom:10px">These routine jobs are open outside their season, so they aren't needed right now even though the schedule made them.
-      ${w && !w.err ? `Park City highs the next 7 days: <b>${w.lo}–${w.hi}°F</b> (Open-Meteo).` : ""} Untick any you still want, then skip the rest: they close here and in Breezeway,
-      and an AC routine with no season gets June 1 – Sept 30 so it stops until summer. The hub never skips them by itself.</div>`
-    + Object.entries(by).map(([k, g], gi) => `<div class="card grp"><b style="font-size:17px">${e(k)}</b> <span class="muted">· season ${md(g.season[0])} – ${md(g.season[1])} · ${g.jobs.length} open</span>
+      ${w && !w.err ? `Park City highs the next 7 days: <b>${w.lo}–${w.hi}°F</b> (Open-Meteo, the same forecast as the Home page).` : ""}
+      AC jobs come back on their own as soon as a day in the forecast reaches <b>${ac.hot || 80}°F</b>. Untick any you still want, then skip the rest: they close here and in Breezeway.
+      The hub never skips them by itself.</div>`
+    + Object.entries(by).map(([k, g], gi) => `<div class="card grp"><b style="font-size:17px">${e(k)}</b> <span class="muted">· ${g.season ? `season ${md(g.season[0])} – ${md(g.season[1])}` : `needed when the forecast reaches ${ac.hot || 80}°F`} · ${g.jobs.length} open</span>
       <div class="row" style="flex-direction:column;align-items:flex-start;gap:4px">${g.jobs.map(j => `<label><input type="checkbox" data-sk="${gi}" value="${j.id}" checked> <b>${e(j.home || "")}</b>
-        <span class="muted">#${j.id}${j.due_date ? " · due " + day(j.due_date) : ""}${j.routine_has_season ? "" : " · routine has no season yet"}</span> ${bw(j.bw_task_id)}</label>`).join("")}</div>
+        <span class="muted">#${j.id}${j.due_date ? " · due " + day(j.due_date) : ""}</span> ${bw(j.bw_task_id)}</label>`).join("")}</div>
       <div class="row"><button class="btn primary" data-skip="${gi}">Skip the ticked ones until the season</button></div></div>`).join("");
   el.querySelectorAll("[data-skip]").forEach(b => b.onclick = async () => {
     const ids = [...el.querySelectorAll(`[data-sk="${b.dataset.skip}"]:checked`)].map(x => +x.value);
