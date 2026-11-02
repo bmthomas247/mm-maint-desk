@@ -83,6 +83,7 @@ dialog textarea{min-height:70px;resize:vertical}
   .two{grid-template-columns:1fr}
 }
 body.inhub .wrap{padding-top:10px}
+.btn.primary{background:var(--forest);border-color:var(--forest)}
 .icard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;padding:14px 16px}
 .icard .top{display:flex;gap:8px 12px;align-items:baseline;flex-wrap:wrap}
 .icard .top b{font-size:17px} .icard .top .muted{margin-left:auto}
@@ -115,6 +116,10 @@ const day = d => d ? new Date(String(d).slice(0, 10) + "T12:00").toLocaleDateStr
 const when = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
 const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
 const tmr = () => { const d = new Date(Date.now() + 864e5); return d.toISOString().slice(0, 10); };
+const base = h => String(h || "").replace(/^(2H-|L-)/, "").toUpperCase();
+const free = (home, n = 4) => { const out = []; for(let i = 1; i <= 45 && out.length < n; i++){ const d = new Date(Date.now() + i * 864e5).toISOString().slice(0, 10);
+  if(!(S.stays || []).some(x => base(x.unit) === base(home) && x.in <= d && d < x.out)) out.push(d); } return out; };
+const pick = id => `<select data-pp="${id}" title="Assign to">${(S.ppl || []).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("") || `<option value="">Chris Robinson</option>`}</select>`;
 if(window.top !== window) document.body.classList.add("inhub");
 const P = new URLSearchParams(location.search);
 const AREA = P.get("area") === "housekeeping" ? "housekeeping" : "maintenance";
@@ -126,6 +131,10 @@ async function load(){
   if(r.error) throw r.error;
   S.rows = r.data;                                                    // null = can't open
   if(AREA === "housekeeping"){ const c = await sb.rpc("review_cleaners_list", { p_since:null }); S.cl = c.error ? null : c.data; }
+  if(AREA === "maintenance" && S.rows && !S.ppl){       // "Assign to" + next empty days (Brandon 2026-11-02)
+    const iso = d => d.toISOString().slice(0, 10);
+    const [pp, st] = await Promise.all([sb.rpc("maint_people"), sb.rpc("cal_stays", { p_from:iso(new Date()), p_to:iso(new Date(Date.now() + 45 * 864e5)) })]);
+    S.ppl = pp.data || []; S.stays = (st.data && st.data.stays) || []; }
 }
 
 function render(){
@@ -173,11 +182,12 @@ function list(el){
     if(x.error){ alert("Couldn't save: " + errText(x.error)); b.disabled = false; return; }
     await load(); list(el); });
   $$("[data-sch]").forEach(b => b.onclick = async () => {
-    const id = +b.dataset.sch, due = $(`[data-due="${id}"]`).value;
-    b.disabled = true; const x = await sb.rpc("improvement_schedule", { p_id:id, p_due:due });
+    const id = +b.dataset.sch, due = $(`[data-due="${id}"]`).value, pp = $(`[data-pp="${id}"]`);
+    b.disabled = true; const x = await sb.rpc("improvement_schedule", { p_id:id, p_due:due, p_person:pp && pp.value ? +pp.value : null });
     if(x.error){ alert(errText(x.error)); b.disabled = false; return; }
     await load(); list(el); poll(el); });
   $$("[data-more]").forEach(b => b.onclick = () => { S.open[b.dataset.more] = !S.open[b.dataset.more]; list(el); });
+  $$("[data-fd]").forEach(b => b.onclick = () => { const i = $(`[data-due="${b.dataset.fd}"]`); if(i) i.value = b.dataset.day; });
 }
 let pollT;
 function poll(el){ clearTimeout(pollT); if(S.rows && S.rows.some(r => r.sched === "queued")) pollT = setTimeout(async () => { await load(); if(S.tab === "list") list(el); poll(el); }, 20e3); }
@@ -185,9 +195,11 @@ function poll(el){ clearTimeout(pollT); if(S.rows && S.rows.some(r => r.sched ==
 function card(r){
   const rv = r.reviews || [], more = S.open[r.id], n = more ? rv.length : 3;
   const sched = AREA !== "maintenance" ? "" : r.sched === "queued" ? `<span class="pill st-scheduled">Making the Breezeway task for ${day(r.due)}…</span>`
-    : r.sched === "scheduled" ? `<span class="pill st-scheduled">In Breezeway ${day(r.due)}</span>${r.bw_url ? ` <a href="${esc(r.bw_url)}" target="_blank" rel="noopener">Open task ↗</a>` : ""}`
+    : r.sched === "scheduled" ? `<span class="pill st-scheduled">In Breezeway ${day(r.due)}${r.person ? " · " + esc(((S.ppl || []).find(p => p.id === r.person) || {}).name || "") : ""}</span>${r.bw_url ? ` <a href="${esc(r.bw_url)}" target="_blank" rel="noopener">Open task ↗</a>` : ""}`
     : `${r.sched === "failed" ? `<span style="color:var(--red);font-size:13px">Couldn't schedule: ${esc(r.sched_note || "")}</span>` : ""}
-       <label class="muted">Breezeway task on <input type="date" data-due="${r.id}" value="${tmr()}"></label><button class="btn" data-sch="${r.id}">Schedule in Breezeway</button>`;
+       <label class="muted">Breezeway task on <input type="date" data-due="${r.id}" value="${free(r.home, 1)[0] || tmr()}"></label> for ${pick(r.id)}
+       <button class="btn primary" data-sch="${r.id}">Schedule in Breezeway</button><span style="flex-basis:100%"></span>
+       ${free(r.home).length ? `<span class="muted">Next empty:</span> ${free(r.home).map(d => `<button type="button" class="btn sm" data-fd="${r.id}" data-day="${d}">${day(d)}</button>`).join(" ")}` : ""}`;
   return `<div class="icard"><div class="top"><b>${esc(r.home)}</b><span>${esc(r.topic)}</span><span class="pill st-${r.status}">${SL[r.status] || r.status}</span>
       <span class="muted">${r.review_count} reviews · last ${day(r.last_review)}</span></div>
     ${rv.slice(0, n).map(x => `<div class="rv"><small>${day(x.date)} · ${(+x.stars).toLocaleString()}★${x.channel ? " · " + esc(x.channel) : ""}</small>
