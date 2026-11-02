@@ -40,15 +40,23 @@ const GWOPEN = g => ["open", "queued", "failed"].includes(g.status);
 const day = d => new Date(d + "T12:00").toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" });
 const tmr = () => { const d = new Date(Date.now() + 864e5); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const ago = d => { const h = Math.round((Date.now() - new Date(d)) / 36e5); return h < 1 ? "just now" : h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`; };
+/* One "Maintenance alerts" banner (hub_maint_alerts.sql, Brandon 2026-11-02): gateways + duplicate jobs + guest-reported jobs,
+   counts only, "Open" goes to #/maint_alerts (maint_alerts.js). ✕ hides it on this device until something new shows up. */
+let MA = null;
+const maSig = () => { const a = MA || {}; return [...(a.dups || []).map(g => "d" + g.id), ...(a.guest || []).filter(j => !j.sched || j.sched.status === "failed").map(j => "g" + j.id),
+  ...(GW || []).filter(g => g.status === "open" || g.status === "failed").map(g => "w" + g.id)].sort().join(","); };
 function drawGw(){
   document.querySelectorAll(".gwbanner").forEach(x => x.remove());
-  const open = (GW || []).filter(g => g.status === "open" || g.status === "failed");
-  const v = document.getElementById("view"); if(!v || !v.parentNode || !open.length || location.hash.startsWith("#/gateways")) return;
+  const v = document.getElementById("view"); if(!v || !v.parentNode || /^#\/(gateways|maint_alerts)/.test(location.hash)) return;
+  const gw = (GW || []).filter(g => g.status === "open" || g.status === "failed").length, d = ((MA || {}).dups || []).length,
+        gj = ((MA || {}).guest || []).filter(j => !j.sched || j.sched.status === "failed").length, sig = maSig();
+  if(!gw && !d && !gj) return;
+  try { if(localStorage.getItem("mm_ma_hide") === sig) return; } catch(_){}
+  const parts = [gw && `${gw} gateway${gw === 1 ? "" : "s"} offline`, d && `${d} duplicate job${d === 1 ? "" : "s"}`, gj && `${gj} guest-reported job${gj === 1 ? "" : "s"} to schedule`].filter(Boolean);
   const b = document.createElement("div"); b.className = "cbanner gwbanner"; b.style.background = "#7a4b00"; b.setAttribute("role", "status");
-  const first = open[open.length - 1];
-  b.innerHTML = `<span>📡</span><span class="bm">${open.length === 1 ? `Brivo gateway offline at <b>${e(first.home)}</b> (alert ${ago(first.alert_at)})`
-    : `<b>${open.length} Brivo gateway alerts</b>: ${open.slice(0, 3).map(g => e(g.home)).join(", ")}${open.length > 3 ? "…" : ""}`}</span><a href="#/gateways">Open alerts →</a>`;
+  b.innerHTML = `<span>🔧</span><span class="bm"><b>Maintenance alerts</b>: ${parts.join(" · ")}</span><a href="#/maint_alerts">Open →</a><button data-mahide title="Hide until something new comes in">✕</button>`;
   v.parentNode.insertBefore(b, v);
+  b.querySelector("[data-mahide]").onclick = () => { try { localStorage.setItem("mm_ma_hide", sig); } catch(_){} b.remove(); };
 }
 window.gatewayView = async function(v){
   await loadGw();
@@ -86,7 +94,9 @@ window.gatewayView = async function(v){
   clearTimeout(window._gwT); if(open.some(g => g.status === "queued")) window._gwT = setTimeout(() => { if(location.hash.startsWith("#/gateways")) gatewayView(v); }, 20e3);
   drawGw();
 };
-async function loadGw(){ try { const r = await sb.rpc("gateway_alerts_mine"); if(!r.error) GW = r.data; } catch(_){ } }
+async function loadGw(){ try { const r = await sb.rpc("gateway_alerts_mine"); if(!r.error) GW = r.data; } catch(_){ }
+  if(GW !== null){ try { const m = await sb.rpc("maint_alerts"); if(!m.error) MA = m.data; } catch(_){ } } }
+window.mmLoadAlerts = async () => { await loadGw(); drawGw(); return { GW, MA }; };
 window.customBanners = async function(force){
   if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
   if(force || Date.now() - CB.at > 5 * 60e3){ const r = await sb.rpc("hub_banners_mine"); CB = { at:Date.now(), a: r.error ? CB.a : (r.data || []) }; await loadGw(); }
