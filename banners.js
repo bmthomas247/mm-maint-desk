@@ -29,10 +29,36 @@ function draw(){
     v.parentNode.insertBefore(b, v); });
   document.querySelectorAll("[data-cbx]").forEach(b => b.onclick = async () => { const id = +b.dataset.cbx;
     CB.a = CB.a.filter(x => x.id !== id); draw(); await sb.rpc("hub_banner_dismiss", { p_id:id }); });
+  drawGw();
 }
+/* Brivo gateway alerts (hub_gateway_alerts.sql, Brandon 2026-11-02): maintenance manager + admins only (the database decides; others get
+   an empty list). Brivo never says when a gateway comes back, so Chris decides: schedule a reset (the hub makes the Breezeway task
+   within a minute) or mark it back online. */
+let GW = [];
+const day = d => new Date(d + "T12:00").toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" });
+const tmr = () => { const d = new Date(Date.now() + 864e5); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+function drawGw(){
+  document.querySelectorAll(".gwbanner").forEach(x => x.remove());
+  const v = document.getElementById("view"); if(!v || !v.parentNode || !GW.length) return;
+  const b = document.createElement("div"); b.className = "cbanner gwbanner"; b.style.background = "#7a4b00"; b.setAttribute("role", "status");
+  b.innerHTML = `<span>📡</span><span class="bm"><b>Brivo gateway alerts</b> — Brivo doesn't tell us when a gateway comes back, so check the Brivo app.${GW.map(g => {
+    const since = `alert ${when(g.alert_at)}`;
+    const act = g.status === "queued" ? `reset asked for ${day(g.due)} — making the Breezeway task…`
+      : g.status === "scheduled" ? `reset scheduled ${day(g.due)}${g.bw_url ? ` · <a href="${e(g.bw_url)}" target="_blank" rel="noopener">Open task</a>` : ""}`
+      : `${g.status === "failed" ? `couldn't schedule (${e(g.note || "")}) · ` : ""}<input type="date" data-gwd="${g.id}" value="${tmr()}" style="font:inherit;font-size:13px;padding:1px 4px;border-radius:6px;border:0">
+         <button data-gws="${g.id}">Schedule a reset</button> <button data-gwc="${g.id}">It's back online</button>`;
+    return `<br>• <b>${e(g.home)}</b> (${since}): ${act}`; }).join("")}</span>`;
+  v.parentNode.insertBefore(b, v);
+  const go = async (id, act, due) => { const r = await sb.rpc("gateway_alert_act", { p_id:id, p_act:act, p_due:due || null });
+    if(r.error) alert(r.error.message.replace(/^.*?: /, "")); await loadGw(); drawGw(); };
+  b.querySelectorAll("[data-gws]").forEach(x => x.onclick = () => { const d = b.querySelector(`[data-gwd="${x.dataset.gws}"]`); go(+x.dataset.gws, "schedule", d && d.value); });
+  b.querySelectorAll("[data-gwc]").forEach(x => x.onclick = () => go(+x.dataset.gwc, "clear"));
+}
+async function loadGw(){ try { const r = await sb.rpc("gateway_alerts_mine"); if(!r.error) GW = r.data || []; } catch(_){ } }
 window.customBanners = async function(force){
   if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
-  if(force || Date.now() - CB.at > 5 * 60e3){ const r = await sb.rpc("hub_banners_mine"); CB = { at:Date.now(), a: r.error ? CB.a : (r.data || []) }; }
+  if(force || Date.now() - CB.at > 5 * 60e3){ const r = await sb.rpc("hub_banners_mine"); CB = { at:Date.now(), a: r.error ? CB.a : (r.data || []) }; await loadGw(); }
+  else if(GW.some(g => g.status === "queued")) await loadGw();      // waiting on the task: check every minute
   draw();
 };
 const boot = setInterval(() => { if(typeof ME !== "undefined" && ME && document.getElementById("view")){ clearInterval(boot); customBanners(true);
