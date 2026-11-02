@@ -619,9 +619,10 @@ function addDerived(DESKS, ex){
   // Property Set Up drop-down (Brandon 2026-10-29): Launch Pad (the board) · AI Description Tool · Photo Compressor · QR Code Generator.
   // The three tools follow property_setup's access (each page checks hub_can('property_setup'); psu-describe too) and are live now; the board waits for cut-over.
   const psD = DESKS.find(x => x.key === "property_setup");
-  // 2026-11-02 (Brandon): the three tools moved from Owners into the Tools drop-down (GROUPS.tools); access unchanged (property_setup)
-  if(psD) DESKS.push({ key:"psu_desc", label:"Tools · AI Description Tool", icon:"grid", url:"psu_desc.html", status:"live", sort:70.1 },
-    { key:"psu_photos", label:"Tools · Photo Compressor", icon:"grid", url:"psu_photos.html", status:"live", sort:70.2 },
+  // 2026-11-02 (Brandon): the three tools moved from Owners into the Tools drop-down (GROUPS.tools). The AI Description Tool still follows
+  // property_setup; Photo Compressor + QR Code Generator are for everyone (Brandon: "Yes, everyone"; they run in the browser and read no data)
+  if(psD) DESKS.push({ key:"psu_desc", label:"Tools · AI Description Tool", icon:"grid", url:"psu_desc.html", status:"live", sort:70.1 });
+  DESKS.push({ key:"psu_photos", label:"Tools · Photo Compressor", icon:"grid", url:"psu_photos.html", status:"live", sort:70.2 },
     { key:"psu_qr", label:"Tools · QR Code Generator", icon:"grid", url:"psu_qr.html", status:"live", sort:70.3 });
   // Tools also has a copy of Rates ▸ Revenue Estimator (same desk, access + status) and a Report folio for anything (hub_tools_desk.sql;
   // follows res_report = every team; reports land in the managers' folio review list)
