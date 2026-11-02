@@ -8,10 +8,10 @@
   "use strict";
   var KEY = "mm_last_active", LIMIT = 60 * 60e3, WARN = 2 * 60e3, wrote = 0, sb = null, out = false, first = true;
   var get = function(){ try{ return +localStorage.getItem(KEY) || 0; }catch(e){ return 0; } };
+  var put = function(t){ try{ localStorage.setItem(KEY, String(t)); }catch(e){} };
   var bootLast = get();   // read before any tap on this page, so opening the page after hours away can't reset the clock
   // arriving from an emailed sign-in link = just signed in
   if(/access_token=|refresh_token=|[?&]code=|type=(magiclink|recovery|signup|invite)/.test(location.hash + location.search)){ bootLast = Date.now(); put(bootLast); }
-  var put = function(t){ try{ localStorage.setItem(KEY, String(t)); }catch(e){} };
   function poke(){ var t = Date.now(); if(t - wrote > 10e3){ wrote = t; put(t); } hideBar(); }
   function listen(w){
     try{ ["pointerdown","keydown","wheel","touchstart","scroll","mousemove"].forEach(function(ev){ w.addEventListener(ev, poke, { capture:true, passive:true }); }); }catch(e){}
