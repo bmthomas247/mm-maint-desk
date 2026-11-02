@@ -188,7 +188,9 @@ function render(){
       <button class="btn sm" id="rf">↻ Refresh</button></div></div>
     <div class="tabs">${[["yesterday","Yesterday"],["today","Today"],["tomorrow","Tomorrow"],["week","Next 7 days"]].map(([k, l]) =>
       `<button class="tab${S.range === k ? " on" : ""}" data-r="${k}">${l}</button>`).join("")}
-      <input type="date" id="pick" class="tab${S.range === "pick" ? " on" : ""}" value="${S.range === "pick" ? S.day : ""}" aria-label="Pick a day"></div>
+      <input type="date" id="pick" class="tab${S.range === "pick" ? " on" : ""}" value="${S.range === "pick" ? S.day : ""}" aria-label="Pick a day">
+      ${S.impr ? `<a class="tab" href="improvements.html?area=housekeeping" style="text-decoration:none;display:inline-flex;align-items:center">Improvements</a>
+      <a class="tab" href="improvements.html?area=housekeeping&tab=cleaners" style="text-decoration:none;display:inline-flex;align-items:center">Cleaning reviews by cleaner</a>` : ""}</div>
     <div class="tiles">${T.map(([k, l, v]) => `<button class="tile${S.show === k ? " on" : ""}" data-show="${k}"><b>${v}</b><span>${l}</span></button>`).join("")}</div>
     <div class="bar"><input type="search" id="q" placeholder="Search home, task or person…" value="${esc(S.q)}" aria-label="Search">
       <label><input type="checkbox" id="dhk"${S.depts.housekeeping ? " checked" : ""}> Cleans</label>
@@ -289,6 +291,8 @@ setInterval(() => { if(S.B && !document.hidden && !$("#dlg").open && (document.a
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("hk_ok");
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Housekeeping</h1><p class="muted">Coming soon.</p>`; return; }
+  // 2026-11-02 (Brandon): Improvements + "Cleaning reviews by cleaner" tabs, only for the housekeeping manager + admins (hub_improvements.sql decides)
+  try { const im = await sb.rpc("hub_can", { p_desk:"hk_improve" }); S.impr = im.data === true; } catch(_){ S.impr = false; }
   load();
 })();
 window.__hk = { S, render, state, stayFlags, span, counts };   // for the stub test
