@@ -27,6 +27,11 @@ const CSS = `
 .rq3 .st{align-items:flex-end} .rq3 .why{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end} .rq3 .why .pill{font-size:11px;padding:2px 7px}
 @media(min-width:1000px){ .rpage{max-width:1180px!important} }
 @media(max-width:640px){ .rq3{grid-template-columns:minmax(0,1fr) minmax(0,44%)} .rq3 .when{grid-column:1 / -1;grid-row:2} .rrow{flex-wrap:wrap;gap:4px 10px} .rrow .g{order:3;flex-basis:100%;white-space:normal} .rrow .d{flex:1} .rrow .rbar{display:none} }
+/* check list as a pop-up over the list (Brandon 2026-11-03) */
+.rpop{position:fixed;inset:0;z-index:45;background:rgba(8,14,17,.5);overflow-y:auto;padding:24px 16px}
+.rpbox{position:relative;max-width:1040px;margin:0 auto;background:var(--ground);border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,.3);padding:4px 0 12px}
+.rpbox .rpage{margin:0 auto} .rpx{position:sticky;top:8px;float:right;margin:8px 10px 0 0;z-index:2;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:17px;cursor:pointer;box-shadow:var(--shadow)}
+body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{border-radius:0;min-height:100%} }
 /* queue in the Locks office look (Brandon 2026-10-30) */
 .rlk{max-width:min(1800px,calc(100vw - 48px))!important}
 .rhead{display:flex;align-items:center;gap:12px;color:#fff;background:linear-gradient(135deg,var(--forest),var(--forest-2));border-radius:var(--radius);padding:12px 16px;margin-bottom:12px}
@@ -473,12 +478,14 @@ async function queue(v){
 
 /* ---------- one check list */
 async function card(v, res){
-  v.innerHTML = `<div class="page rpage"><p class="muted">Loading…</p></div>`;
+  const pop = v.closest && v.closest("#rpop"), keepY = pop ? pop.scrollTop : 0;
+  if(!(pop && v.firstElementChild)) v.innerHTML = `<div class="page rpage"><p class="muted">Loading…</p></div>`;
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load: ${esc(e.message)}</p></div></div>`; return; }
   const s = B && B.stays.find(x => x.res === res);
   if(!s){ v.innerHTML = `<div class="page"><div class="card"><a class="btn small" href="#/reservations">← Back</a><p>No check list for #${esc(res)} (only stays from 60 days back are here).</p></div></div>`; return; }
   const occ = s.occ || {}, grp = {};
   s.steps.forEach(t => (grp[t.grp] = grp[t.grp] || []).push(t));
+  requestAnimationFrame(() => { if(pop) pop.scrollTop = keepY; });
   v.innerHTML = `<div class="page rpage">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a class="btn small" href="#/reservations">← Back</a>
       <h2 style="margin:0;flex:1">${esc(s.unit || "")} · ${esc(s.guest || "")}</h2><span class="pill">${esc(s.state)}</span></div>
@@ -611,5 +618,36 @@ async function held(v){
       || `<div class="card"><p class="muted">Nothing is held up.</p></div>`}</div>`;
 }
 
-window.resCheckView = function(v){ css(); const a = hashArg(); return a === "held" ? held(v) : a ? card(v, a) : queue(v); };
+/* ---------- check list as a pop-up (Brandon 2026-11-03: "when you click onto a check list we would like it to pop up as a pop up window").
+   The address stays #/reservations/<res #> (links, Penny's nudge). The list (or Held up report) stays underneath with its filters + scroll;
+   closing redraws it only when something was saved. */
+let UNDER = null;
+const underOk = v => UNDER && UNDER.node && UNDER.node.isConnected && v.contains(UNDER.node);
+const scrollKeep = v => { const els = [document.scrollingElement, v, v.parentElement].filter(Boolean), tops = els.map(e => e.scrollTop); return () => els.forEach((e, i) => e.scrollTop = tops[i]); };
+function popClose(go){ const p = document.getElementById("rpop"); if(p) p.remove(); document.body.classList.remove("rpopen");
+  if(go) location.hash = UNDER && UNDER.kind === "held" ? "#/reservations/held" : "#/reservations"; }
+async function popOpen(v, res){
+  if(!underOk(v)){ await queue(v); UNDER = { kind:"queue", node:v.firstElementChild, b:B }; }
+  if(!document.getElementById("rpop")) UNDER.keep = scrollKeep(v);   // where the list was when the pop-up opened
+  let p = document.getElementById("rpop");
+  if(!p){ p = document.createElement("div"); p.id = "rpop"; p.className = "rpop";
+    p.innerHTML = `<div class="rpbox" role="dialog" aria-modal="true" aria-label="Check list"><button class="rpx" type="button" aria-label="Close" title="Close (Esc)">✕</button><div class="rpin"></div></div>`;
+    document.body.appendChild(p);
+    p.addEventListener("click", e => { if(e.target === p) popClose(true); });
+    p.querySelector(".rpx").onclick = () => popClose(true); }
+  document.body.classList.add("rpopen");
+  const box = p.querySelector(".rpin"); box.innerHTML = ""; p.scrollTop = 0;
+  await card(box, res); p.scrollTop = 0;
+}
+window.addEventListener("hashchange", () => { if(!/^#\/reservations\/\d+/.test(location.hash)) popClose(false); });
+document.addEventListener("keydown", e => { if(e.key !== "Escape" || !document.getElementById("rpop")) return;
+  if([...document.querySelectorAll("body > div")].some(d => d.id !== "rpop" && /z-index:\s*60/.test(d.style.cssText))) return;   // a box opened on top (charge, UAA form) closes first
+  popClose(true); });
+window.resCheckView = async function(v){ css(); const a = hashArg();
+  if(a && a !== "held") return popOpen(v, a);
+  const kind = a === "held" ? "held" : "queue";
+  const back = underOk(v) && UNDER.kind === kind ? UNDER.keep || scrollKeep(v) : null;
+  if(back && UNDER.b === B){ popClose(false); back(); return; }   // nothing changed: just close the pop-up
+  popClose(false); await (kind === "held" ? held(v) : queue(v));
+  UNDER = { kind, node:v.firstElementChild, b:B }; if(back) back(); };
 })();
