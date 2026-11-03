@@ -289,6 +289,7 @@ document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.targe
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("hub_can", { p_desk:"inventory" });
+  if(ok.error){ $("#app").innerHTML = `<h1>Inventory</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Inventory</h1><p class="muted">Coming soon.</p>`; return; }
   const ed = await sb.rpc("hub_can", { p_desk:"inventory_edit" });   // all managers see; Chris, Cheree, Janae + admins change (RLS enforces it too)
   document.body.classList.toggle("ro", ed.error || ed.data !== true);
