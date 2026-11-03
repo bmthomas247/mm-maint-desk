@@ -802,6 +802,7 @@ function restoreFilters(){ $$("select[data-f]").forEach(s => s.value = S.f[s.dat
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("hub_can", { p_desk:"advertising" });
+  if(ok.error){ $("#app").innerHTML = `<h1>Advertising</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Advertising</h1><p class="muted">Nothing to show.</p>`; return; }
   await refresh(); restoreFilters();
 })();
