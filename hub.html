@@ -810,6 +810,8 @@ function shell(){
     <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="fbback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Tell Brandon</h2><button class="btn small" id="fbx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
     <div class="seg" id="kind"><button class="btn small on" data-v="bug">🐞 Something's broken</button><button class="btn small" data-v="upgrade">⬆️ Upgrade I want</button><button class="btn small" data-v="idea">💡 Idea</button></div>
     <label class="field"><span>What happened, or what would help?</span><textarea id="fbtext" placeholder="Example: On Locks · Office the Alerts tab won't load on my phone."></textarea></label>
+    <div id="fbshots" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px"><button class="btn small" id="fbpic" type="button">📷 Add a screenshot</button><span class="muted" id="fbpichint" style="font-size:13px">or paste one (Ctrl+V) · up to 3</span></div>
+    <input type="file" id="fbfile" accept="image/*" multiple hidden>
     <p class="muted" style="margin:0 0 6px">You're on: <b id="fbwhere"></b></p>
     <p class="muted" style="margin:0 0 10px">Goes to Brandon in Slack and saves to the hub list. Don't type codes or passwords here.</p>
     <div style="display:flex;gap:8px"><button class="btn" id="fbcancel">Cancel</button><button class="btn primary" style="flex:1" id="fbsend">Send</button></div>
@@ -830,17 +832,44 @@ function shell(){
   document.querySelectorAll("#kind button").forEach(b => b.onclick = () => { kind = b.dataset.v;
     document.querySelectorAll("#kind button").forEach(x => x.classList.toggle("on", x === b)); });
   let WHERE = { label:"", page:"" };
+  /* screenshots (2026-11-03, Brandon): paste, drop or pick; shrunk to ≤1600 px JPEG in the browser; sent with the report */
+  let SHOTS = [];
+  const shotDraw = () => { $("#fbshots").querySelectorAll(".fbth").forEach(x => x.remove());
+    SHOTS.forEach((sh, i) => $("#fbpic").insertAdjacentHTML("beforebegin", `<span class="fbth" style="position:relative;display:inline-block"><img src="${sh.url}" alt="Screenshot ${i+1}" style="height:64px;max-width:120px;object-fit:cover;border-radius:8px;border:1px solid var(--line,#ddd)"><button type="button" data-rm="${i}" aria-label="Remove screenshot" title="Remove" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;min-height:0;padding:0;border-radius:50%;border:0;background:#333;color:#fff;font-size:12px;cursor:pointer">✕</button></span>`));
+    $("#fbshots").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { URL.revokeObjectURL(SHOTS[+b.dataset.rm].url); SHOTS.splice(+b.dataset.rm, 1); shotDraw(); });
+    $("#fbpic").style.display = SHOTS.length >= 3 ? "none" : ""; $("#fbpichint").style.display = SHOTS.length >= 3 ? "none" : ""; };
+  const shrink = f => new Promise(res => { const im = new Image(), u = URL.createObjectURL(f);
+    im.onload = () => { const k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u); c.toBlob(b => res(b), "image/jpeg", 0.86); };
+    im.onerror = () => { URL.revokeObjectURL(u); res(null); }; im.src = u; });
+  const shotAdd = async files => { for(const f of [...files]){ if(SHOTS.length >= 3) break; if(!/^image\//.test(f.type)) continue;
+      const b = await shrink(f); if(!b) { $("#fbmsg").textContent = "Couldn't read that picture."; continue; } SHOTS.push({ blob:b, url:URL.createObjectURL(b) }); } shotDraw(); };
+  $("#fbpic").onclick = () => $("#fbfile").click();
+  $("#fbfile").onchange = e => { shotAdd(e.target.files); e.target.value = ""; };
+  $("#fb").addEventListener("paste", e => { const fs = [...(e.clipboardData && e.clipboardData.items || [])].filter(x => x.kind === "file" && /^image\//.test(x.type)).map(x => x.getAsFile()).filter(Boolean);
+    if(fs.length){ e.preventDefault(); shotAdd(fs); } });
+  $("#fb").addEventListener("dragover", e => e.preventDefault());
+  $("#fb").addEventListener("drop", e => { if(e.dataTransfer && e.dataTransfer.files.length){ e.preventDefault(); shotAdd(e.dataTransfer.files); } });
   $("#fbopen").onclick = e => { e.preventDefault(); WHERE = whereAmI(); $("#fbwhere").textContent = WHERE.label; $("#fbmsg").textContent = ""; $("#fb").classList.add("on"); $("#fbtext").focus(); };
   $("#fbcancel").onclick = $("#fbback").onclick = $("#fbx").onclick = () => $("#fb").classList.remove("on");
-  $("#fb").onclick = e => { if(e.target.id === "fb" && !$("#fbtext").value.trim()) $("#fb").classList.remove("on"); };
+  $("#fb").onclick = e => { if(e.target.id === "fb" && !$("#fbtext").value.trim() && !SHOTS.length) $("#fb").classList.remove("on"); };
   $("#fbsend").onclick = async () => {
     const body = $("#fbtext").value.trim(); if(body.length < 3) return $("#fbmsg").textContent = "Write a little more first.";
     $("#fbsend").disabled = true; $("#fbmsg").textContent = "Sending…";
     const cur = DESKS.find(x => x.key === current());
-    const r = await sb.functions.invoke("hub-feedback", { body:{ kind, body, desk: cur ? cur.key : "", deskLabel: WHERE.label || (cur ? cur.label : ""), page: (WHERE.label + " | " + WHERE.page).slice(0, 500) } });
+    const paths = [];
+    if(SHOTS.length){ $("#fbmsg").textContent = "Uploading screenshot" + (SHOTS.length > 1 ? "s" : "") + "…";
+      const uid = ((await sb.auth.getSession()).data.session || {}).user; 
+      for(const sh of SHOTS){ const p = (uid ? uid.id : "x") + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
+        const u = await sb.storage.from("hub-feedback").upload(p, sh.blob, { contentType:"image/jpeg" });
+        if(u.error){ $("#fbsend").disabled = false; $("#fbmsg").textContent = "Couldn't upload the screenshot: " + u.error.message; return; }
+        paths.push(p); }
+      $("#fbmsg").textContent = "Sending…"; }
+    const r = await sb.functions.invoke("hub-feedback", { body:{ kind, body, shots:paths, desk: cur ? cur.key : "", deskLabel: WHERE.label || (cur ? cur.label : ""), page: (WHERE.label + " | " + WHERE.page).slice(0, 500) } });
     $("#fbsend").disabled = false;
     if(r.error || !r.data || !r.data.ok){ $("#fbmsg").textContent = "Couldn't send: " + ((r.data && r.data.error) || (r.error && r.error.message) || "try again"); return; }
-    $("#fbtext").value = ""; $("#fbmsg").textContent = "Sent - thanks! Brandon will see it." ;
+    $("#fbtext").value = ""; SHOTS.forEach(x => URL.revokeObjectURL(x.url)); SHOTS = []; shotDraw(); $("#fbmsg").textContent = "Sent - thanks! Brandon will see it." ;
     setTimeout(() => $("#fb").classList.remove("on"), 1200);
   };
 }
@@ -989,12 +1018,16 @@ async function feedbackView(v){
   box.innerHTML = r.data.map(x => `<div class="fb" data-kind="${x.kind}" data-mine="${x.mine ? 1 : 0}"><div class="hd"><b>${label[x.kind]||x.kind}</b><span class="pill ${tone[x.status]||""}">${esc(x.status)}</span>
       <span class="muted">#${x.id} · ${esc(x.user_name||"")} · ${esc(deskName(x.desk_key))} · ${new Date(x.created_at).toLocaleString()}</span>
       ${ME.admin ? `<select data-id="${x.id}" style="width:auto;min-height:34px;padding:4px 8px;margin-left:auto">${["new","seen","doing","done","wont"].map(s => `<option ${s===x.status?"selected":""}>${s}</option>`).join("")}</select>` : ""}</div>
-      <p>${esc(x.body)}</p>${x.page_url ? `<p class="muted" style="margin-top:4px">📍 ${esc(String(x.page_url).split(" | ")[0])}</p>` : ""}${x.admin_note ? `<p class="muted">${x.kind === "ask" ? "Answer" : "Brandon"}: ${esc(x.admin_note)}</p>` : ""}
+      <p>${esc(x.body)}</p><div class="fbsh" data-sh="${x.id}" style="display:flex;gap:8px;flex-wrap:wrap"></div>${x.page_url ? `<p class="muted" style="margin-top:4px">📍 ${esc(String(x.page_url).split(" | ")[0])}</p>` : ""}${x.admin_note ? `<p class="muted">${x.kind === "ask" ? "Answer" : "Brandon"}: ${esc(x.admin_note)}</p>` : ""}
       ${ME.admin && x.kind === "ask" ? `<details class="acc2" style="margin-top:6px"${x.admin_note ? "" : " open"}><summary>${x.admin_note ? "Change the answer" : "✍️ Answer this"}</summary>
         <label class="field"><span>Your answer (they see it the next time they open Penny; no codes or passwords)</span><textarea data-ans="${x.id}">${esc(x.admin_note || "")}</textarea></label>
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-teach="${x.id}" style="width:auto;min-height:0" checked> 🎓 Teach Penny this answer</label>
         <label class="field"><span>Penny shares it with</span><select data-tdesk="${x.id}"><option value="">Everyone</option>${DESKS.map(d => `<option value="${esc(d.key)}">People who can open ${esc(d.label)}</option>`).join("")}</select></label>
         <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn primary small" data-asave="${x.id}">Save answer</button><span class="muted" data-amsg="${x.id}"></span></div></details>` : ""}</div>`).join("");
+  sb.rpc("hub_feedback_shots", { p_ids: r.data.map(x => x.id) }).then(async s => { for(const row of (s.data || [])){
+      const el = box.querySelector(`[data-sh="${row.id}"]`); if(!el) continue;
+      const u = await sb.storage.from("hub-feedback").createSignedUrls(row.shots, 600);
+      (u.data || []).filter(x => x.signedUrl).forEach((x, i) => el.insertAdjacentHTML("beforeend", `<a href="${esc(x.signedUrl)}" target="_blank" rel="noopener" title="Open screenshot ${i+1}"><img src="${esc(x.signedUrl)}" alt="Screenshot ${i+1}" style="height:90px;max-width:180px;object-fit:cover;border-radius:8px;border:1px solid var(--line,#ddd);margin:4px 0"></a>`)); } });
   document.querySelectorAll("#fbf button").forEach(b => b.onclick = () => { document.querySelectorAll("#fbf button").forEach(x => x.classList.toggle("on", x === b));
     box.querySelectorAll(".fb").forEach(el => el.style.display = b.dataset.f === "all" || (b.dataset.f === "mine" ? el.dataset.mine === "1" : el.dataset.kind === b.dataset.f) ? "" : "none"); });
   box.querySelectorAll("[data-asave]").forEach(b => b.onclick = async () => { const id = +b.dataset.asave, m = box.querySelector(`[data-amsg="${id}"]`);
