@@ -62,7 +62,7 @@ function lineChart(el, title, labels, series, fmt){
   svg.addEventListener("pointermove", show); svg.addEventListener("pointerleave", hide);
 }
 const C1 = "var(--forest-2,#2f5d3a)", C2 = "var(--muted,#7a857d)", C3 = "var(--blue,#2b5c8a)";
-const noAccess = v => v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This report isn't on your teams. Ask Brandon or Kim.</p></div></div>`;
+const noAccess = v => location.replace("#/reports");
 const homeLink = (id, label) => `<a class="anlink" href="#/an/home/${encodeURIComponent(id)}">${esc(label || id)}</a>`;
 // sortable table: cols = [{ k, t, f(row)->html, v(row)->sort value, l (left) }]
 function table(el, cols, rows, sortK, cls, asc){   // asc = start ascending (dates, ranks)
@@ -80,7 +80,7 @@ let MK = null;
 async function market(v){
   v.innerHTML = `<div class="page wide">${back}<h2>Market trends by neighborhood</h2><p class="muted">Loading…</p></div>`;
   if(!MK){ const r = await sb.rpc("analytics_market_trend"); if(r.error) return fail(v, r.error); MK = r.data || []; }
-  if(!MK.length){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This report isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
+  if(!MK.length){ location.replace("#/reports"); return; }
   const markets = [...new Set(MK.map(x => x.market))].sort(), cap = MK.reduce((a, x) => x.captured_at > a ? x.captured_at : a, "");
   const thisMonth = new Date().toISOString().slice(0, 7) + "-01";
   v.innerHTML = `<div class="page wide">${back}<h2>Market trends by neighborhood</h2>
@@ -133,7 +133,7 @@ async function comps(v){
   v.innerHTML = `<div class="page wide">${back}<h2>Moose homes vs. their comps</h2><p class="muted">Loading…</p></div>`;
   const r = await sb.rpc("analytics_vs_comps"); if(r.error) return fail(v, r.error);
   const H = r.data || [];
-  if(!H.length){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This report isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
+  if(!H.length){ location.replace("#/reports"); return; }
   const W = H[0], areas = [...new Set(H.map(x => x.area).filter(Boolean))].sort();
   H.forEach(x => { ["our_occ","our_adr","comp_occ","comp_adr","our_rent","kd_occ","kd_adr"].forEach(f => x[f] = x[f] == null ? null : +x[f]);
     x.kd = x.kd_months > 0 && x.kd_occ != null && x.comp_occ != null;
@@ -718,7 +718,7 @@ async function insights(el, tab, ctx){
   const [I, RN, ED, AD] = await Promise.all([sb.from("review_insights").select("*").order("id"),
     sb.from("review_insight_runs").select("id,ran_at,by_name,read,stats,found,new_count,error").order("id", { ascending:false }).limit(6),
     sb.rpc("review_insight_can_edit"), sb.rpc("hub_is_admin")]);
-  if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(I.error.message)}</p></div>`; return; }
+  if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(I.error) : I.error.message))}</p></div>`; return; }
   const L = I.data || [], runs = RN.data || [], run = runs.find(r => !r.error && r.stats && r.stats.summary) || null, edit = !!ED.data, admin = !!AD.data;
   const pr = { high:"red", medium:"amber", low:"" };
   const lines = s => esc(s).replace(/:\s+- /g, ":\n• ").replace(/\s+- (?=\S)/g, "\n• ").replace(/(^|\n)- /g, "$1• ");   // "- a - b" lists onto their own lines
@@ -748,13 +748,13 @@ async function insights(el, tab, ctx){
     el.querySelectorAll("[data-home]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showHome(a.dataset.home); });
     el.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const c = b.closest("[data-i]"), m = c.querySelector("[data-msg]"); b.disabled = true; m.textContent = "Saving…";
       const r = await sb.rpc("review_insight_set", { p_id:+c.dataset.i, p_status:c.querySelector("[data-st]").value, p_owner:c.querySelector("[data-ow]").value, p_note:c.querySelector("[data-no]").value, p_tip:!!(c.querySelector("[data-tip]") || {}).checked });
-      b.disabled = false; if(r.error){ m.textContent = r.error.message; return; } m.textContent = "Saved" + (r.data && r.data.tips ? ` · tip sent to ${r.data.tips}` : "") + ".";
+      b.disabled = false; if(r.error){ m.textContent = (window.niceErr ? niceErr(r.error) : r.error.message); return; } m.textContent = "Saved" + (r.data && r.data.tips ? ` · tip sent to ${r.data.tips}` : "") + ".";
       setTimeout(() => insights(el, tab, ctx), 700); }); };
   const runLine = `<p class="ansrc">${run ? `Last read ${esc(dt(run.ran_at))} (${esc(run.by_name || "")}): ${(run.read || {}).reviews || 0} reviews from the last 2 years, ${(run.read || {}).jobs || 0} maintenance jobs; ${run.found} findings, ${run.new_count} new. Re-read every Tuesday.` : "The first read hasn't finished yet."}
     Findings are written by Claude (AI) from the reviews and checked by the hub: every finding needs 2+ real reviews, and quotes must match the review word for word. Read the reviews before acting.
     ${runs[0] && runs[0].error ? ` Last try failed: ${esc(runs[0].error)}.` : ""}${admin ? ` <button class="btn small" id="riRun">Look again now</button> <span id="riMsg"></span>` : ""}</p>`;
   const runBtn = () => { const b = el.querySelector("#riRun"); if(!b) return; b.onclick = async () => { b.disabled = true; el.querySelector("#riMsg").textContent = "Started — takes about 5 minutes. Come back and reload.";
-    const r = await sb.functions.invoke("review-insights", { body:{} }); if(r.error) el.querySelector("#riMsg").textContent = "Couldn't start: " + r.error.message; }; };
+    const r = await sb.functions.invoke("review-insights", { body:{} }); if(r.error) el.querySelector("#riMsg").textContent = "Couldn't start: " + (window.niceErr ? niceErr(r.error) : r.error.message); }; };
 
   if(tab === "patterns"){
     const G = L.filter(x => x.kind !== "improve" && !x.gone), st = (run && run.stats) || {};
@@ -810,7 +810,7 @@ async function insights(el, tab, ctx){
         <input id="rfH" placeholder="Homes, comma separated"><button class="btn small" id="rfGo">Add</button><span class="muted" id="rfM"></span></div></div>`;
     f.querySelector("#rfGo").onclick = async () => { const r = await sb.rpc("review_insight_add", { p_title:f.querySelector("#rfT").value, p_suggestion:f.querySelector("#rfS").value,
         p_area:f.querySelector("#rfA").value, p_homes:f.querySelector("#rfH").value.split(",").map(s => s.trim()).filter(Boolean), p_teams:[f.querySelector("#rfTm").value].filter(Boolean), p_review_ids:[], p_priority:f.querySelector("#rfP").value });
-      if(r.error){ f.querySelector("#rfM").textContent = r.error.message; return; } insights(el, tab, ctx); }; };
+      if(r.error){ f.querySelector("#rfM").textContent = (window.niceErr ? niceErr(r.error) : r.error.message); return; } insights(el, tab, ctx); }; };
   draw(); runBtn();
 }
 
@@ -829,7 +829,7 @@ async function revMore(el, tab, ctx){
   if(tab === "alerts"){
     const days = (() => { try { return localStorage.getItem("rv_al_days") || "30"; } catch(e){ return "30"; } })();
     const r = await sb.rpc("review_alerts", { p_days:+days });
-    if(r.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`; return; }
+    if(r.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(r.error) : r.error.message))}</p></div>`; return; }
     const L = r.data || [];
     el.innerHTML = `<p class="muted" style="margin:0 0 8px">Bad reviews that need handling before the next guest: 3 stars or less, a category at 3 or less, or a private note. Each shows when the next guest arrives and the home's open jobs.${edit ? " Mark each one handled (say what was done) or no action needed." : ""}</p>
       <div class="anbar"><select id="ras"><option value="open">Still open</option><option value="handled">Handled</option><option value="not_needed">No action needed</option><option value="">All</option></select>
@@ -854,7 +854,7 @@ async function revMore(el, tab, ctx){
         : `<div class="card"><p class="muted">${s === "open" ? "No open alerts — nothing bad in these days still needs handling." : "Nothing here."}</p></div>`;
       el.querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { const c = b.closest("[data-rv]"), m = c.querySelector("[data-msg]");
         const q = await sb.rpc("review_alert_mark", { p_review:+c.dataset.rv, p_status:b.dataset.m, p_note:c.querySelector("[data-n]").value });
-        if(q.error){ m.textContent = q.error.message; return; } revMore(el, tab, ctx); }); };
+        if(q.error){ m.textContent = (window.niceErr ? niceErr(q.error) : q.error.message); return; } revMore(el, tab, ctx); }); };
     el.querySelector("#ras").onchange = draw; el.querySelector("#rah").oninput = draw;
     el.querySelector("#rad").onchange = () => { try { localStorage.setItem("rv_al_days", el.querySelector("#rad").value); } catch(e){} revMore(el, tab, ctx); };
     draw(); return;
@@ -876,7 +876,7 @@ async function revMore(el, tab, ctx){
 
   // Listing ideas
   const [I, RN] = await Promise.all([sb.from("review_listing_ideas").select("*").order("home"), sb.from("review_listing_runs").select("home,ran_at,error").order("ran_at", { ascending:false }).limit(1000)]);
-  if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(I.error.message)}</p></div>`; return; }
+  if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(I.error) : I.error.message))}</p></div>`; return; }
   const L = I.data || [], runs = RN.data || [], homesRead = new Set(runs.filter(x => !x.error).map(x => x.home)).size, last = runs[0];
   const INL = { no:["Not in the listing", "red"], partly:["Listing undersells it", "amber"], yes:["Already in the listing", "green"] };
   const ST = { new:"New", planned:"Planned", done:"Added to the listing", not_doing:"Not doing" };
@@ -909,7 +909,7 @@ async function revMore(el, tab, ctx){
       try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch(e){ b.textContent = "Select + Ctrl+C"; } });
     el.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const c = b.closest("[data-li]"), m = c.querySelector("[data-msg]");
       const q2 = await sb.rpc("review_listing_set", { p_id:+c.dataset.li, p_status:c.querySelector("[data-st]").value, p_owner:null, p_note:c.querySelector("[data-no]").value });
-      if(q2.error){ m.textContent = q2.error.message; return; } revMore(el, tab, ctx); }); };
+      if(q2.error){ m.textContent = (window.niceErr ? niceErr(q2.error) : q2.error.message); return; } revMore(el, tab, ctx); }); };
   ["rls"].forEach(i => el.querySelector("#" + i).onchange = draw); el.querySelector("#rlh").oninput = el.querySelector("#rlq").oninput = draw;
   draw();
 }
