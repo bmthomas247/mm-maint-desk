@@ -1339,6 +1339,7 @@ function homeDetail(code){
     '<div class="note">Breezeway isn\'t feeding this board yet — once it is, the last three finished tasks show here.</div>')+'</div>';
   // recent
   h+=inspBlock(code);
+  h+=paintBlock(code);
   h+=npiBlock(code);
   h+='<div class="block"><h4>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">all sources, newest first</span></h4>'+
     (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
@@ -3294,6 +3295,22 @@ function inspRow(r,showHome){
     '<div class="muted" style="font-size:12.5px">'+esc(inspKind(r.kind))+(r.insp_date?' · '+esc(fmtD(r.insp_date)):'')+(r.uploaded_name?' · added by '+esc(r.uploaded_name)+' '+esc(ago(r.uploaded_at)):'')+'</div>'+
     (r.note?'<div class="note">'+esc(r.note)+'</div>':'')+'</div>'+
     (D._insCan?'<button class="btn sm ghost" data-insedit="'+r.id+'" style="align-self:flex-start">Edit</button>':'')+'</div>'; }
+/* Paint colors (Brandon 2026-11-02: "some of the homes have paint samples saved so we have the colors number" -> "Yes, read them").
+   home_paint = what Claude read off the paint-can photos from the Breezeway new-property inspection (Edge Function paint-read); latest read per home.
+   An estimate: every color shows the photo it came from and how sure the read was. Read = hub_can('homes'). */
+function paintLoad(){ var sb=window.MM_SB; if(!sb) return; if(D._paintP) return; D._paintP=sb.from("home_paint").select("home,inspected_on,report_url,photos,colors,notes,read_at")
+    .order("read_at",{ascending:false}).limit(2000).then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ var c=canon(x.home); if(!m[c]) m[c]=x; }); D._paint=m; schedule(); }); }
+function paintBlock(code){ paintLoad(); if(!D._paint) return ""; var p=D._paint[canon(code)]; if(!p) return "";
+  var sure={yes:"clear on the label",likely:"mostly readable",guess:"partly hidden - check"}, C=p.colors||[];
+  return '<div class="block"><h4>Paint colors <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">read from the paint-can photos'+
+    (p.inspected_on?' · Breezeway inspection '+esc(fmtD(p.inspected_on)):'')+'</span>'+(p.report_url?' <a class="golink" href="'+esc(p.report_url)+'" target="_blank" rel="noopener">Report ↗</a>':'')+'</h4>'+
+    (C.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+C.map(function(c){ var u=(p.photos||[])[(c.photo||1)-1];
+      return '<div class="bwrow"><span><b>'+esc([c.brand,c.code].filter(Boolean).join(" ")||"No number readable")+'</b>'+(c.name?' '+esc(c.name):'')+
+        (c.sheen?' <span class="muted">· '+esc(c.sheen)+'</span>':'')+(c.where?' <span class="muted">· '+esc(c.where)+'</span>':'')+'</span>'+
+        '<span class="when">'+(c.sure==="yes"?'':'<span class="tag">'+esc(sure[c.sure]||c.sure||"")+'</span> ')+(u?'<a href="'+esc(u)+'" target="_blank" rel="noopener">photo '+esc(c.photo||1)+' ↗</a>':'')+'</span></div>'; }).join("")+'</div>':
+      '<div class="note">No color number could be read from the photos.</div>')+
+    (p.notes?'<details style="margin-top:6px"><summary class="muted" style="cursor:pointer">What the photos show</summary><div class="note">'+esc(p.notes)+'</div></details>':'')+
+    '<div class="note">Read by Claude from the photos '+esc(ago(p.read_at))+'. Check the can label before buying paint.</div></div>'; }
 function inspBlock(code){ var all=inspFor(code,true), L=S.ui.insHidden?all:all.filter(function(r){ return !r.off; }), hid=all.length-all.filter(function(r){ return !r.off; }).length;
   return '<div class="block"><h4>Inspections <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">uploaded reports</span>'+
     (D._insCan?' <button class="btn sm pri" data-insup="'+esc(code)+'" style="margin-left:6px">+ Upload inspection</button>':'')+'</h4>'+
