@@ -574,12 +574,15 @@ async function boot(){
     const r = await sb.auth.refreshSession();
     if(r.error){ await sb.auth.signOut({ scope:"local" }); return loginView("You were signed out. Sign in again."); }
     return noAccess(me.error ? me.error.message : ""); }
-  ME = me.data; ME.canNews = !!(await sb.rpc("hub_can_post_news")).data;
-  const d = await sb.rpc("hub_my_desks"); DESKS = d.data || [];
-  const ex = {}; try { ex.maint_money = !!(await sb.rpc("hub_can", { p_desk:"maint_money" })).data; } catch(e){}
-  try { const [mp, mt] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto")]); ex.perf = !!((mp.data || []).length || (mt.data || []).length); } catch(e){}
+  ME = me.data;
+  // 2026-11-03 (Brandon: "even faster"): these 6 reads don't need each other, so they run at the same time (were one after another, ~0.6 s)
+  const ok = p => p.then(r => r, () => ({}));
+  const [nw, d, mm, mp, mt, pf] = await Promise.all([sb.rpc("hub_can_post_news"), sb.rpc("hub_my_desks"), sb.rpc("hub_can", { p_desk:"maint_money" }),
+    sb.rpc("my_performance"), sb.rpc("my_pto"), sb.rpc("hub_my_prefs")].map(ok));
+  ME.canNews = !!nw.data; DESKS = d.data || [];
+  const ex = { maint_money: !!mm.data, perf: !!((mp.data || []).length || (mt.data || []).length) };
   addDerived(DESKS, ex);
-  try { const p = await sb.rpc("hub_my_prefs"); if(p.data) PREFS = Object.assign(PREFS, p.data); } catch(e){}
+  if(pf.data) PREFS = Object.assign(PREFS, pf.data);
   PREFS.desk_order = fixOrder(PREFS.desk_order);
   shell(); pennyMount(); route();
   if(new URLSearchParams(location.search).get("penny") === "1") pennySolo();   // Penny's own window (pennyPop)
