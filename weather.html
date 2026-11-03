@@ -137,7 +137,7 @@ const ST = { no_guest:["No guest arriving in the hot days", ""], todo:["To sched
   due:["Check on the trash route", "warn"], wait_days:["Waiting a few days", "wait"], wait_snow:["Waiting for 4\"+ of snow", "wait"], checked:["Checked", "go"] };
 function homeRow(r, h){
   const s = h.status === "todo" && !r.hit ? ["Not done yet", ""] : ST[h.status] || [h.status, ""], last = h.last, sc = h.sched;
-  const info = [h.state && r.list === "ac" ? stName("ac", h.state) : "", h.guest ? `guest arrives ${day(h.guest)}` : "", last ? `${last.finished ? "done" : "open"} ${day(last.date)} <a href="https://app.breezeway.io/task/${last.id}" target="_blank" rel="noopener">Breezeway ↗</a>` : "",
+  const info = [h.state && r.list === "ac" ? stName("ac", h.state) : "", h.note ? `<b style="min-width:0">${esc(h.note)}</b>` : "", h.guest ? `guest arrives ${day(h.guest)}` : "", last ? `${last.finished ? "done" : "open"} ${day(last.date)} <a href="https://app.breezeway.io/task/${last.id}" target="_blank" rel="noopener">Breezeway ↗</a>` : "",
     sc ? `${sc.status === "failed" ? `<span class="err">couldn't make the task: ${esc(sc.note || "")}</span>` : sc.status === "skipped" ? esc(sc.note || "") : `${day(sc.due)}${sc.person ? " · " + esc(sc.person) : ""}${sc.status === "queued" ? " · making the Breezeway task…" : ""}`}` : "",
     h.confirmed === false ? `<span class="muted">suggested list</span>` : ""].filter(Boolean).join(" · ");
   const can = r.hit && (h.status === "todo" || (sc && sc.status === "failed" && h.status !== "done" && h.status !== "open"));
