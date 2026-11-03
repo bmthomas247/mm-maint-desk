@@ -1271,13 +1271,39 @@ function tLine(l,plain){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l), v=function(x){ 
 function kbc(v){ return String(v||"").replace(/\s*\(\s*private\s*\)/ig,"").trim(); }   /* Track key box codes carry "(PRIVATE)" (Brandon 2026-11-03) */
 function tCell(label,src,lines,plain,cls){ lines=(lines||[]).filter(Boolean); if(!lines.length) return "";
   return '<div class="hql'+(cls?' '+cls:'')+'"><div class="qvh">'+esc(label)+(src?'<span class="hsrc">· '+esc(src)+'</span>':'')+'</div>'+lines.map(function(l){ return typeof l==="string"?tLine(l,plain):l.html; }).join("")+'</div>'; }
+/* the 4 code sections on a tile (Brandon 2026-11-03: "lock system … master code and owner code / garage/gate … garage and gate code /
+   keybox with the keybox code and location / the owner lockout information if applicable"). Track codes first, then the lockout note's
+   labeled lines sorted by their label; a number already shown isn't shown twice. Lines the database masked (•••) stay masked. */
+function lockSecs(c,t,q){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},gate:{},kb:{},own:{}}, seen={}, loc=homeInfo(c)||{};
+  var add=function(k,label,val,s){ val=String(val||"").replace(/\s+/g," ").trim(); if(!val) return; var d=val.replace(/\D/g,""); d=d.length>=3?d:val.toLowerCase();
+    if(seen[d]) return; seen[d]=1; if(S[k].length>=4) return; if(val.length>60) val=val.slice(0,58)+"…";
+    S[k].push(label?label+": "+val:val); src[k][s||"Asana"]=1; };
+  var kind=function(L){ return /padlock|lock ?box|locker|safe|attic|mechanical|thermostat/.test(L)?null
+      :/owner/.test(L)?(/lock.?out|closet|garage/.test(L)?"own":"lock"):/master/.test(L)?"lock"
+      :/key ?box|keybox|cage/.test(L)||/^location$/.test(L)?"kb":/garage|gate|bldg|building|clubhouse|pool/.test(L)?"gate"
+      :/door|lock|schlage/.test(L)?"lock":null; };
+  var tidy=function(k,lab){ var L=lab.toLowerCase(); if(k==="kb") return /location/.test(L)?"Location":/^(key ?box|keybox)( code)?$/.test(L)?"Code":lab;
+      return lab.charAt(0).toUpperCase()+lab.slice(1).toLowerCase(); };
+  var lines=function(text,s,force){ String(text||"").replace(/<[^>]+>/g," ").split("\n").forEach(function(l){
+      l=l.replace(/\s+/g," ").replace(/^\[codes\]\s*/i,"").trim(); var m=/^([^:]{1,40}):\s*(.+)$/.exec(l); if(!m) return;
+      var lab=m[1].replace(/^\[codes\]\s*/i,"").trim(), k=force||kind(lab.toLowerCase()); if(!k) return;
+      if(!(k==="kb"&&/location/i.test(lab)) && !/\d|•{3,}/.test(m[2])) return; add(k,tidy(k,lab),m[2],s); }); };
+  if(t.door_code) add("lock","Front door",t.door_code,"Track");
+  if(t.garage_code) add("gate","Garage code",t.garage_code,"Track");
+  if(t.gate_code) add("gate","Gate / building",t.gate_code,"Track");
+  if(t.keybox_code) add("kb","Code",kbc(t.keybox_code),"Track");
+  if(t.owner_garage_code) add("own","Owner garage",t.owner_garage_code,"Track");
+  if(t.owner_closet_code) add("own","Owner closet",t.owner_closet_code,"Track");
+  lines(q.entry,(q.src.entry||"Asana").split(" + ")[0]);
+  if(!t.garage_code) lines(q.garage,q.src.garage,"gate");
+  if(loc.keybox && !S.kb.some(function(l){ return /^Location:/.test(l); })) add("kb","Location",loc.keybox,(loc.src&&loc.src.keybox)||"Hub edit");
+  if(t.owner_hidden) S.own.push({html:'<div class="tl muted">Open Home details to view</div>'});
+  var sv=function(k){ return Object.keys(src[k]).join(" + "); };
+  return [tCell("Lock system",sv("lock"),S.lock),tCell("Garage / gate",sv("gate"),S.gate),tCell("Key box",sv("kb"),S.kb),tCell("Owner lockout",sv("own")||(t.owner_hidden?"Locks":""),S.own)]; }
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
   var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+t.wifi_name:"",t.wifi_pass?"Password: "+t.wifi_pass:""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+pe.wifiName:"",pe.wifiPass?"Password: "+pe.wifiPass:""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
   cells.push(tCell("Wi-Fi",q.src.wifi,wifi,true));
-  cells.push(tCell("Door / gate","Track",[t.door_code?"Front door: "+t.door_code:"",t.gate_code?"Gate / building: "+t.gate_code:""]));
-  cells.push(tCell("Lockout",q.src.entry,codeLines(q.entry,3)));
-  cells.push(tCell("Garage",q.src.garage,t.garage_code?["Garage code: "+t.garage_code]:codeLines(q.garage,2)));
-  cells.push(tCell("Key box","Track",[t.keybox_code?"Code: "+kbc(t.keybox_code):""]));
+  cells=cells.concat(lockSecs(c,t,q));
   var pc=paintCell(c); if(pc) cells.push(pc);
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   if(o.can && o.list.length){ var w=o.list[0];
