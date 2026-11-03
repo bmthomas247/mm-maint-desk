@@ -180,7 +180,7 @@ function lay(list){   // overlapping timed blocks side by side, like Outlook
     let c = cols.findIndex(e => e <= x.s); if(c < 0){ c = cols.length; cols.push(0); } cols[c] = x.e; x.c = c; grp.push(x); end = Math.max(end, x.e); });
   fin(); return list;
 }
-const attrs = x => (x.href ? `href="${esc(x.href)}"` : `href="#"`) + (x.ev ? ` data-ev="${x.ev}"` : "") + (x.mt ? ` data-mt="${x.mt}"` : "") + (x.drag ? " data-drag" : "");
+const attrs = x => (x.href ? `href="${esc(x.href)}"` : `href="#"`) + (x.ev ? ` data-ev="${x.ev}"` : "") + (x.mt ? ` data-mt="${x.mt}"` : "") + (x.sm ? ` data-sm="${esc(x.sm)}" data-smd="${esc(x.smd || "")}"` : "") + (x.drag ? " data-drag" : "");
 const chip = x => `<a class="ev ${x.cls || ""}" ${attrs(x)} title="${esc(x.title + (x.start ? " · " + ftime(x.start.slice(0, 5)) : ""))}">${x.start ? esc(ftime(x.start.slice(0, 5))) + " " : ""}${esc(x.title)}</a>`;
 function timeGrid(key, items, canAdd, hours){
   const days = gridDays(key), n = days.length, t = today(), sel = ST.sel[key], H = (WE - WS) * HPX, nw = new Date(), nowM = nw.getHours() * 60 + nw.getMinutes();
@@ -218,7 +218,8 @@ function wireGrid(v, onSlot, onMove, onOpen){
   const b = v.querySelector(".wkb"); if(b){ const n = new Date(), m = n.getHours() * 60 + n.getMinutes(); b.scrollTop = Math.max(0, ((m > 9 * 60 && m < WE * 60 ? m - 90 : 8 * 60) - WS * 60) / 60 * HPX); }
   if(onSlot) v.querySelectorAll(".wkc.add").forEach(c => c.onclick = e => { if(e.target.closest(".bk")) return;
     const y = e.clientY - c.getBoundingClientRect().top; onSlot(c.dataset.slot, hhmm(WS * 60 + Math.floor(y / HPX * 2) * 30)); });
-  v.querySelectorAll("[data-ev]").forEach(el => {
+  v.querySelectorAll("[data-ev],[data-mt]").forEach(el => {
+    const kid = () => el.dataset.ev ? +el.dataset.ev : "m" + el.dataset.mt;   // "m<id>" = a hub meeting (Schedule a meeting / booking)
     el.addEventListener("click", e => e.preventDefault());
     el.addEventListener("pointerdown", e => {
       if(e.button) return; const sx = e.clientX, sy = e.clientY, inGrid = el.classList.contains("bk"), top0 = el.offsetTop; let moved = false, drop = null;
@@ -231,7 +232,7 @@ function wireGrid(v, onSlot, onMove, onOpen){
         else { const cell = under && under.closest("[data-dropday]"); drop = cell ? { day:cell.dataset.dropday } : null; if(cell) cell.classList.add("drop"); } };
       const up = () => { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up);
         el.classList.remove("dragging"); v.querySelectorAll(".drop").forEach(x => x.classList.remove("drop"));
-        if(moved && drop && onMove) onMove(+el.dataset.ev, drop); else if(!moved) onOpen(+el.dataset.ev); };
+        if(moved && drop && onMove) onMove(kid(), drop); else if(!moved) onOpen(kid()); };
       document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up); });
   });
 }
@@ -306,15 +307,15 @@ async function evCal(v, key){
     if(isRes || (isMe && layerOn("checkins"))){ stays.filter(x => x.in === s).forEach(x => out.push({ title:(x.owner ? "OWNER " : "") + "CHECK-IN " + x.unit + (x.guest ? " · " + x.guest : ""), cls:"ar", href:"#/cal_res" }));
       if(isRes) stays.filter(x => x.out === s).forEach(x => out.push({ title:"CHECK-OUT " + x.unit, cls:"dp", href:"#/cal_res" })); }
     if(isMe) hubMeets.filter(m => m.day === s).forEach(m => out.push({ start:m.start, end:endTime(m.start, m.minutes), title:"📹 " + m.title,
-      sub:[m.guest_name ? "booked by " + m.guest_name : "", m.host_id !== myId ? "host " + (m.host || "").split(" ")[0] : ""].filter(Boolean).join(" · "), cls:"mt", mt:m.id, join:m.zoom_join }));
-    if(isMe){ mt.filter(x => x.day === s).forEach(x => out.push({ start:x.start, end:x.start && x.minutes ? endTime(x.start, x.minutes) : null, title:NAMES[x.meet] + " meeting", cls:"mt", href:"#/" + x.meet }));
+      sub:[m.guest_name ? "booked by " + m.guest_name : "", m.host_id !== myId ? "host " + (m.host || "").split(" ")[0] : ""].filter(Boolean).join(" · "), cls:"mt", mt:m.id, join:m.zoom_join, drag:!!(m.mine || ME.admin) }));
+    if(isMe){ mt.filter(x => x.day === s).forEach(x => out.push({ start:x.start, end:x.start && x.minutes ? endTime(x.start, x.minutes) : null, title:NAMES[x.meet] + " meeting", cls:"mt", sm:x.meet, smd:s }));
       const att = e => (e.attendees || []).includes(myId);   // office events you're going to show with your own events
-      if(layerOn("personal")) mine.concat(evs.filter(e => e.cal === "office" && att(e))).filter(e => evOn(e, s)).forEach(e => out.push(e.cal === "office" ? Object.assign(evItem(e), { cls:"of", drag:false }) : evItem(e)));
-      if(layerOn("office")) evs.filter(e => e.cal === "office" && (e.kind || "event") === "event" && !(layerOn("personal") && att(e)) && evOn(e, s)).forEach(e => out.push(Object.assign(evItem(e), { cls:"of", drag:false }))); }
+      if(layerOn("personal")) mine.concat(evs.filter(e => e.cal === "office" && att(e))).filter(e => evOn(e, s)).forEach(e => out.push(e.cal === "office" ? Object.assign(evItem(e), { cls:"of" }) : evItem(e)));
+      if(layerOn("office")) evs.filter(e => e.cal === "office" && (e.kind || "event") === "event" && !(layerOn("personal") && att(e)) && evOn(e, s)).forEach(e => out.push(Object.assign(evItem(e), { cls:"of" }))); }
     if(isOff){
       mine.filter(e => evOn(e, s) && ((e.kind || "event") === "event" ? layerOn("events") : layerOn("people"))).forEach(e => out.push(evItem(e)));
       if(layerOn("meet")) ox.meetings.filter(m => m.day === s).forEach(m => out.push({ start:m.start, end:m.end, title:m.meet ? NAMES[m.meet] + " meeting" : "In a meeting",
-        sub:(m.people || []).map(fn).join(", "), cls:"mt", href:m.meet ? "#/" + m.meet : "#/cal_office" }));
+        sub:(m.people || []).map(fn).join(", "), cls:"mt", sm:m.meet || "", smd:s, smp:m.people || [], sms:m.start, sme:m.end }));
       const timed = viewOf(key) === "day";   // week/month: schedules sit in the all-day row so the hours stay readable
       if(layerOn("sched")) ox.shifts.filter(x => x.day === s).sort((x, y) => x.start.localeCompare(y.start)).forEach(x => out.push(timed
         ? { start:x.start, end:x.end > x.start ? x.end : "23:59", title:fn(x.user_id), sub:"Scheduled" + (x.end > x.start ? "" : " until " + ftime(x.end) + " next day"), cls:"sh", href:"#/stf_sched" }
@@ -330,21 +331,26 @@ async function evCal(v, key){
     const main = body(key, items, canAdd, !isRes) + (isRes ? `<p class="muted" style="font-size:12px">Source: ${esc((sr && sr.data && sr.data.source) || "Track reservations")}. Guest names only; contact info stays on Home for the teams that have it.</p>` : "");
     v.innerHTML = `<div class="page cal wide">${tabs(key)}${calNav(key, isRes ? "Reservations" : isOff ? "Office" : "My calendar", addBtns)}
       ${isOff ? `<div class="cols"><div>${main}${detail}</div><div class="side">${whoPanel(ppl, mine, sel, ox, fn)}</div></div>` : main + detail}
-      <p class="muted" style="font-size:12px">${isOff ? "Everyone on the hub sees the Office calendar. Mark yourself out or working; managers and admins add work events (with who's going) and can mark anyone. Schedules and time off: " + (ox.source || "Hubstaff") + (ox.at ? " (updated " + new Date(ox.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) + ")" : "") + "; set or changed by managers under Staffing ▸ Schedule. Meetings: Calendar ▸ Meetings times; who's in each = everyone the meeting is for." : isMe ? "Only you see your personal events. Drag your own events to move them; click an empty time to add one. Meetings come from Calendar ▸ Meetings." : ""}</p>
+      <p class="muted" style="font-size:12px">${isOff ? "Everyone on the hub sees the Office calendar. Mark yourself out or working; managers and admins add work events (with who's going) and can mark anyone. Schedules and time off: " + (ox.source || "Hubstaff") + (ox.at ? " (updated " + new Date(ox.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) + ")" : "") + "; set or changed by managers under Staffing ▸ Schedule. Meetings: Calendar ▸ Meetings times; who's in each = everyone the meeting is for." : isMe ? "Only you see your personal events. Click anything to see it, then Edit, Move or Cancel; drag your own events (and office events you manage) to move them; click an empty time to add one. Meetings come from Calendar ▸ Meetings." : ""}</p>
       <div class="modal" id="evm"><div class="card" id="evcard"></div></div></div>`;
     wireNav(v, key, draw, () => evCal(v, key));
     wireGrid(v, canAdd && !isRes ? (d, s) => form(null, { day:d, start:s, kind:isOff ? (boss ? "event" : "working") : "event" }) : null,
-      async (id, to) => { const e = evs.find(x => x.id === id); if(!e || !canEdit(e)) return;
+      async (id, to) => { if(typeof id === "string"){ const m = hubMeets.find(y => "m" + y.id === id); if(!m) return;
+          const r = await sb.rpc("meet_move", { p_id:m.id, p_day:to.day, p_start:to.start || m.start, p_minutes:m.minutes });
+          if(r.error) return alert("Couldn't move it: " + r.error.message); ST.sel[key] = to.day; return evCal(v, key); }
+        const e = evs.find(x => x.id === id); if(!e || !canEdit(e)) return;
         const len = e.end_day ? (D(e.end_day) - D(e.day)) / 864e5 : null, dur = e.start_time && e.end_time ? toMin(e.end_time) - toMin(e.start_time) : null;
         const st = to.start || (e.start_time ? e.start_time.slice(0, 5) : null);
         const r = await save(e, { p_day:to.day, p_end_day:len != null ? addD(to.day, len) : null, p_start:st, p_end:st && dur != null ? endTime(st, dur) : (e.end_time || null) });
         if(!r.error){ ST.sel[key] = to.day; evCal(v, key); } },
-      id => { const e = evs.find(x => x.id === id); if(e) form(e); });
+      id => { if(typeof id === "string"){ const m = hubMeets.find(y => "m" + y.id === id); if(m) meetBox(m); return; }
+        const e = evs.find(x => x.id === id); if(e) evPeek(e); });
+    v.querySelectorAll("[data-sm]").forEach(el => el.onclick = x => { x.preventDefault(); x.stopPropagation(); smPeek(el.dataset.sm, el.dataset.smd); });
     v.querySelectorAll("[data-add]").forEach(bt => bt.onclick = () => form(null, { kind:bt.dataset.add }));
     v.querySelectorAll("[data-sched]").forEach(bt => bt.onclick = () => schedForm());
     if(ST.justMade){ const m = hubMeets.find(y => y.id === ST.justMade); ST.justMade = null; if(m) meetBox(m, true); }
     v.querySelectorAll("[data-blinks]").forEach(bt => bt.onclick = () => linksBox());
-    v.querySelectorAll("[data-mt]").forEach(el => el.onclick = x => { x.preventDefault(); x.stopPropagation(); const m = hubMeets.find(y => y.id === +el.dataset.mt); if(m) meetBox(m); });
+    v.querySelectorAll("[data-mt]").forEach(el => el.addEventListener("click", x => x.preventDefault()));
     v.querySelectorAll("[data-askoff]").forEach(bt => bt.onclick = () => { ST.askOff = true; });
     v.querySelectorAll(".pp [data-mailto]").forEach(x => x.onclick = e => e.stopPropagation());
     const q = v.querySelector("#ppq"); if(q) q.oninput = () => v.querySelectorAll(".pp[data-n]").forEach(p => p.style.display = p.dataset.n.includes(q.value.trim().toLowerCase()) ? "" : "none");
@@ -380,6 +386,51 @@ async function evCal(v, key){
       if(!r.ok){ $("#sm_go").disabled = false; return $("#sm_m").textContent = "Couldn't make it: " + r.error; }
       const dy = $("#sm_d").value || today(); ST.sel[key] = dy; ST.justMade = r.id; evCal(v, key); };   // the redrawn calendar opens it (ST.justMade)
   }
+  // click on an event = this summary first; Edit opens the full form
+  function evPeek(e){
+    const k = e.kind || "event", ok = canEdit(e), lk = links[e.id], gs = guests[e.id] || [];
+    const when = fday(e.day) + (e.end_day && e.end_day !== e.day ? " – " + fday(e.end_day) : "") + (e.start_time ? " · " + ftime(e.start_time.slice(0, 5)) + (e.end_time ? "–" + ftime(e.end_time.slice(0, 5)) : "") : " · all day");
+    const ttl = k === "event" ? e.title : (k === "out" ? "Out" : "Working") + " · " + who(e.person_id);
+    modal({ h:esc(ttl), b:`<p style="margin:6px 0"><b>${esc(when)}</b><br><span class="muted">${e.cal === "office" ? "Office calendar" : "Only you see this"}${e.virtual ? " · 💻 Virtual" : e.location ? " · " + esc(e.location) : ""}</span></p>
+      ${lk ? `<a class="btn primary" href="${esc(lk)}" target="_blank" rel="noopener noreferrer">💻 Join the meeting</a>` : ""}
+      ${(e.attendees || []).length ? `<p style="margin:8px 0 2px"><b>From Moose:</b> ${esc(e.attendees.map(who).join(", "))}</p>` : ""}
+      ${gs.length ? `<p style="margin:8px 0 2px"><b>From outside Moose:</b></p>${gs.map(g => `<div style="margin:2px 0 2px 8px">${esc(g.name)}${g.company ? ` <span class="muted">· ${esc(g.company)}</span>` : ""}${g.email ? ` · <a href="mailto:${esc(g.email)}">${esc(g.email)}</a>` : ""}${g.phone ? ` · <a href="tel:${esc(g.phone.replace(/[^0-9+]/g, ""))}">${esc(g.phone)}</a>` : ""}</div>`).join("")}` : ""}
+      ${e.notes ? `<p class="muted" style="white-space:pre-wrap;margin:8px 0">${esc(e.notes)}</p>` : ""}
+      <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap">${ok ? `<button class="btn primary" id="pk_ed" style="flex:1">✎ Edit</button><button class="btn" id="pk_mv">Move</button><button class="btn" id="pk_cx">${k === "event" ? "Cancel meeting" : "Remove"}</button>` : `<button class="btn" id="pk_ed" style="flex:1">See all details</button>`}</div><p class="muted" id="pk_m" style="margin:0 0 10px"></p>` });
+    $("#pk_ed").onclick = () => form(e);
+    if(!ok) return;
+    $("#pk_mv").onclick = () => moveBox({ day:e.day, start:e.start_time ? e.start_time.slice(0, 5) : "", minutes:e.start_time && e.end_time ? toMin(e.end_time) - toMin(e.start_time) : 60, title:ttl },
+      async (d, st, mins) => { const len = e.end_day ? (D(e.end_day) - D(e.day)) / 864e5 : null;
+        return save(e, { p_day:d, p_end_day:len != null ? addD(d, len) : null, p_start:st || null, p_end:st ? endTime(st, mins) : null }); });
+    $("#pk_cx").onclick = async () => { if(!confirm((k === "event" ? "Cancel “" + ttl + "”?" : "Remove this?") + " It comes off the calendar for everyone.")) return;
+      const r = await save(e, { p_off:true }); if(!r.error){ $("#evm").classList.remove("on"); evCal(v, key); } };
+  }
+  // pick a new day + time (keeps the length unless changed)
+  function moveBox(it, doMove){
+    const L = [15, 30, 45, 60, 90, 120, 150, 180, 240, 480];
+    modal({ h:"Move " + esc(it.title), b:`<div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Day</span><input type="date" id="mv_d" value="${esc(it.day)}"></label>
+      <label class="field" style="flex:1;min-width:120px"><span>Starts</span><select id="mv_s">${(() => { const l = []; for(let m = 5 * 60; m < 24 * 60; m += 15) l.push(hhmm(m)); if(it.start && !l.includes(it.start)) l.push(it.start); l.sort();
+        return `<option value="">All day</option>` + l.map(t => `<option value="${t}" ${t === it.start ? "selected" : ""}>${ftime(t)}</option>`).join(""); })()}</select></label>
+      <label class="field" style="flex:1;min-width:110px"><span>How long</span><select id="mv_l">${(L.includes(it.minutes) ? L : L.concat([it.minutes]).sort((a, b) => a - b)).map(m => `<option value="${m}" ${m === it.minutes ? "selected" : ""}>${m < 60 ? m + " min" : (m / 60) + (m === 60 ? " hour" : " hours")}</option>`).join("")}</select></label></div>
+      ${it.note ? `<p class="muted" style="font-size:12.5px">${esc(it.note)}</p>` : ""}
+      <div class="evft"><button class="btn primary" style="width:100%" id="mv_go">Move it</button><p class="muted" id="mv_m" style="margin:6px 0 0"></p></div>` });
+    $("#mv_go").onclick = async () => { const d = $("#mv_d").value, st = $("#mv_s").value; if(!d) return $("#mv_m").textContent = "Pick a day.";
+      $("#mv_go").disabled = true; const r = await doMove(d, st, +$("#mv_l").value);
+      if(r && r.error){ $("#mv_go").disabled = false; return $("#mv_m").textContent = "Couldn't move it: " + r.error.message; }
+      $("#evm").classList.remove("on"); ST.sel[key] = d; evCal(v, key); };
+  }
+  // staff meetings (Calendar ▸ Meetings): summary with Open agenda + Join
+  async function smPeek(meet, day){
+    const all = await meetings(); const t = all.find(x => x.meet === meet) || {};
+    const o = (ox.meetings || []).find(x => x.meet === meet && x.day === day) || {};
+    const st = t.start || o.start, en = st ? (t.minutes ? endTime(st, t.minutes) : o.end) : null;
+    modal({ h:esc(meet ? NAMES[meet] + " meeting" : "In a meeting"), b:`<p style="margin:6px 0"><b>${esc(fday(day))}${st ? " · " + ftime(st) + (en ? "–" + ftime(en) : "") : ""}</b></p>
+      ${(o.people || []).length ? `<p class="muted" style="margin:4px 0">For: ${esc(o.people.map(fn).join(", "))}</p>` : ""}
+      ${t.link ? `<a class="btn primary" href="${esc(t.link)}" target="_blank" rel="noopener noreferrer">▶ Join</a>` : ""}
+      <p class="muted" style="font-size:12.5px">A weekly meeting: its time is set for every week under Calendar ▸ Meetings${ME.admin ? " (Change time)" : ""}.</p>
+      <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap">${meet ? `<a class="btn primary" style="flex:1" href="#/${esc(meet)}">Open the agenda</a>` : ""}${ME.admin ? `<a class="btn" href="#/cal_meet">Change time</a>` : ""}</div>` });
+    $("#evcard").querySelectorAll(".evft a").forEach(a => a.addEventListener("click", () => $("#evm").classList.remove("on")));
+  }
   function meetBox(m, fresh){
     const url = pageUrl("meet.html", "t=" + m.token), canCx = m.mine || ME.admin;
     modal({ h:esc(m.title), b:`${fresh ? `<p class="pill green" style="display:inline-block">Made ✓ Send the link below</p>` : ""}
@@ -389,11 +440,13 @@ async function evCal(v, key){
       ${m.guest_name ? `<div class="card" style="padding:10px 12px;margin:8px 0"><b>Booked by ${esc(m.guest_name)}</b><br>${m.guest_email ? `<a href="mailto:${esc(m.guest_email)}">${esc(m.guest_email)}</a>` : ""}${m.guest_phone ? " · " + esc(m.guest_phone) : ""}${m.guest_note ? `<div class="muted" style="white-space:pre-wrap;margin-top:4px">${esc(m.guest_note)}</div>` : ""}</div>` : ""}
       ${m.note ? `<p class="muted" style="white-space:pre-wrap">${esc(m.note)}</p>` : ""}
       ${(m.staff || []).length ? `<p class="muted">Also from Moose: ${esc(m.staff.map(id => (ppl.find(p => p.id === id) || {}).name || "").filter(Boolean).join(", "))}</p>` : ""}
-      <div class="evft" style="display:flex;gap:8px"><a class="btn" style="flex:1" href="${esc(url)}" target="_blank" rel="noopener">Open the page</a>${canCx ? `<button class="btn" id="mx">Cancel meeting</button>` : ""}</div>
+      <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" style="flex:1" href="${esc(url)}" target="_blank" rel="noopener">Open the page</a>${canCx ? `<button class="btn" id="mmv">Move</button><button class="btn" id="mx">Cancel meeting</button>` : ""}</div>
       <p class="muted" id="mm" style="margin:0 0 10px"></p>` });
     $("#mc").onclick = () => copy(url, $("#mc"));
     if($("#mz")) $("#mz").onclick = async () => { $("#mz").disabled = true; const r = await fnCall({ action:"zoom", id:m.id }); if(!r.ok) $("#mm").textContent = r.error;
       const l = await sb.rpc("meet_mine", { p_from:m.day, p_to:m.day }); const n = ((l && l.data) || []).find(x => x.id === m.id); if(n) meetBox(n); };
+    if($("#mmv")) $("#mmv").onclick = () => moveBox({ day:m.day, start:m.start, minutes:m.minutes, title:m.title, note:"The link you sent stays the same and shows the new time." },
+      async (d, st, mins) => sb.rpc("meet_move", { p_id:m.id, p_day:d, p_start:st, p_minutes:mins }));
     if($("#mx")) $("#mx").onclick = async () => { const why = prompt("Cancel this meeting? The link will say it's cancelled. Add a note (optional):", ""); if(why === null) return;
       const r = await sb.rpc("meet_cancel", { p_id:m.id, p_note:why }); if(r.error) return $("#mm").textContent = "Couldn't cancel: " + r.error.message;
       $("#evm").classList.remove("on"); evCal(v, key); };
