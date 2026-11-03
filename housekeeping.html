@@ -290,6 +290,7 @@ setInterval(() => { if(S.B && !document.hidden && !$("#dlg").open && (document.a
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("hk_ok");
+  if(ok.error){ $("#app").innerHTML = `<h1>Housekeeping</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Housekeeping</h1><p class="muted">Coming soon.</p>`; return; }
   // 2026-11-02 (Brandon): Improvements + "Cleaning reviews by cleaner" tabs, only for the housekeeping manager + admins (hub_improvements.sql decides)
   try { const im = await sb.rpc("hub_can", { p_desk:"hk_improve" }); S.impr = im.data === true; } catch(_){ S.impr = false; }
