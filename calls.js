@@ -97,7 +97,7 @@ function uploadBox(last, done){
     for(let i = 0; i < p.rows.length; i += 2000){
       msg.textContent = `Saving ${Math.min(i + 2000, p.rows.length)} of ${p.rows.length} calls…`;
       const r = await sb.rpc("calls_upload", { p_rows: p.rows.slice(i, i + 2000), p_file: file.name });
-      if(r.error) return msg.textContent = "Couldn't save: " + r.error.message;
+      if(r.error) return msg.textContent = "Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message);
       n += r.data.rows; nw += r.data.new; d1 = d1 && d1 < r.data.first_day ? d1 : r.data.first_day; d2 = d2 && d2 > r.data.last_day ? d2 : r.data.last_day;
     }
     msg.innerHTML = `✅ Saved <b>${n}</b> calls (${nw} new, ${n - nw} already here), ${esc(dayf(d1))} – ${esc(dayf(d2))}. Transcripts show up within about 10 minutes.`;
@@ -133,7 +133,7 @@ async function showCall(c, tr){
   });
   if(!tr || tr.status !== "ok") return $("#cvt").innerHTML = `<p class="muted">${tr ? "Track has no transcript for this call (short calls, voicemail and calls that weren't recorded usually don't get one). The office computer checks again for 3 days after the call." : "Not checked yet. Transcripts are pulled within about 10 minutes of an upload."}</p>`;
   const r = await sb.from("track_call_transcripts").select("lines,engine,coverage,language,words").eq("call_id", c.call_id).maybeSingle();
-  if(r.error || !r.data) return $("#cvt").innerHTML = `<p class="muted">Couldn't load: ${esc(r.error ? r.error.message : "not found")}</p>`;
+  if(r.error || !r.data) return $("#cvt").innerHTML = `<p class="muted">Couldn't load: ${esc(r.error ? (window.niceErr ? niceErr(r.error) : r.error.message) : "not found")}</p>`;
   const t = r.data;
   $("#cvt").innerHTML = `<p class="muted" style="font-size:12.5px">Transcript by Track Pulse (${esc(t.engine || "speech to text")}, ${t.coverage != null ? t.coverage + "% of the call" : ""}, ${t.words} words). Machine-made, so names and numbers can be off. Codes and card numbers are hidden.</p>
     ${(t.lines || []).map(l => `<div class="trl ${esc(l.s || "")}"><div class="who">${esc(l.s === "agent" ? (c.agents || "Agent").split(",")[0] : l.s === "customer" ? "Caller" : l.s || "")}<small>${ms(l.a)}</small></div><div>${esc(l.t)}</div></div>`).join("")}`;
@@ -290,7 +290,7 @@ window.followupsView = async function(v){
     if(note === null) return;
     b.disabled = true;
     const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
-    if(r.error){ b.disabled = false; return alert("Couldn't save: " + r.error.message); }
+    if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
     followupsView(v); });
   $("#fbody").querySelectorAll("[data-call]").forEach(b => b.onclick = () => { const id = +b.dataset.call; showCall({ ...C[id], call_id:id }, { status:"ok" }); });
 };
@@ -361,7 +361,7 @@ window.ownerCallsView = async function(v){
       if(note === null) return;
       b.disabled = true;
       const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
-      if(r.error){ b.disabled = false; return alert("Couldn't save: " + r.error.message); }
+      if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       FU[+b.dataset.fu] = { status:b.dataset.s, note, by_name:(ME && ME.name) || "", at:new Date().toISOString() }; draw(); });
   }
   draw();
@@ -456,7 +456,7 @@ window.guestCallsView = async function(v){
       if(note === null) return;
       b.disabled = true;
       const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
-      if(r.error){ b.disabled = false; return alert("Couldn't save: " + r.error.message); }
+      if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       FU[+b.dataset.fu] = { status:b.dataset.s, note, by_name:(ME && ME.name) || "", at:new Date().toISOString() }; draw(); });
   }
   draw();
