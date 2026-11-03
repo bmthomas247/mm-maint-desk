@@ -290,6 +290,9 @@ async function evCal(v, key){
     ox.off.push({ user_id:r.user_id, day:s, start:r.start, end:r.end, req:r.status === "pending" }); });
   const vids = evs.filter(e => e.virtual).map(e => e.id), links = {};   // join links: cal_links() gives only the ones this person may see
   if(vids.length){ const lr = await sb.rpc("cal_links", { p_ids:vids }); ((lr && lr.data) || []).forEach(x => links[x.event_id] = x.url); }
+  const guests = {};   // people from outside Moose (cal_guests: email/phone only for the people on it, managers, admins)
+  { const eids = evs.filter(e => (e.kind || "event") === "event").map(e => e.id);
+    if(eids.length){ const gr = await sb.rpc("cal_guests", { p_ids:eids }); ((gr && gr.data) || []).forEach(x => guests[x.event_id] = x.guests || []); } }
   if(current() !== key) return;
   const mine = evs.filter(e => isMe ? e.cal === "personal" : e.cal === "office");
   const canAdd = isMe || isOff, boss = canOffice();
@@ -297,7 +300,7 @@ async function evCal(v, key){
   const myId = (ppl.find(p => p.name === ME.name) || {}).id;
   const canEdit = e => e.cal === "personal" || boss || (e.kind !== "event" && e.person_id === myId);
   const evItem = e => { const k = e.kind || "event", nm = k === "event" ? e.title : (k === "out" ? "Out" : "Working") + " · " + who(e.person_id) + (e.title && !/^(out|working)$/i.test(e.title) ? " · " + e.title : "");
-    return { start:e.start_time, end:e.end_time, title:nm, sub:[e.virtual ? "💻 Virtual" : "", e.location, (e.attendees || []).map(fn).join(", ")].filter(Boolean).join(" · "), join:links[e.id], cls:k === "out" ? "outp" : k === "working" ? "work" : isMe ? "" : "of", ev:e.id, drag:canEdit(e) }; };
+    return { start:e.start_time, end:e.end_time, title:nm, sub:[e.virtual ? "💻 Virtual" : "", e.location, (e.attendees || []).map(fn).join(", "), (guests[e.id] || []).length ? "with " + guests[e.id].map(g => g.name + (g.company ? " (" + g.company + ")" : "")).join(", ") : ""].filter(Boolean).join(" · "), join:links[e.id], cls:k === "out" ? "outp" : k === "working" ? "work" : isMe ? "" : "of", ev:e.id, drag:canEdit(e) }; };
   const items = s => {
     const out = [];
     if(isRes || (isMe && layerOn("checkins"))){ stays.filter(x => x.in === s).forEach(x => out.push({ title:(x.owner ? "OWNER " : "") + "CHECK-IN " + x.unit + (x.guest ? " · " + x.guest : ""), cls:"ar", href:"#/cal_res" }));
@@ -461,17 +464,40 @@ async function evCal(v, key){
       ${pick}<label class="field"><span>${kind === "event" ? "What" : "Note (optional, e.g. PTO, sick, on call)"}</span><input id="ev_t" value="${esc(e && !/^(out|working)$/i.test(e.title) ? e.title : "")}" ${ro ? "disabled" : ""}></label>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>Day</span><input type="date" id="ev_d" value="${esc(e ? e.day : pre.day || ST.sel[key])}" ${ro ? "disabled" : ""}></label><label class="field" style="flex:1"><span>Until (optional)</span><input type="date" id="ev_e" value="${esc(e && e.end_day || "")}" ${ro ? "disabled" : ""}></label></div>
       ${timeH}${showOn}${whereH}
-      <label class="field"><span>Where (optional)</span><input id="ev_l" value="${esc(e && e.location || "")}" ${ro ? "disabled" : ""}></label>${attH}
+      <label class="field" id="ev_lw" style="display:${virt0 && kind === "event" ? "none" : "block"}"><span>Where (optional)</span><input id="ev_l" value="${esc(e && e.location || "")}" ${ro ? "disabled" : ""}></label>${attH}${kind === "event" ? `<div class="field"><span>People from outside Moose (vendors, owners, anyone you're meeting)</span><div id="ev_gl"></div>${ro ? "" : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><select id="ev_vp" style="flex:1;min-width:180px"><option value="">+ Pick a vendor…</option></select><button class="btn small" id="ev_ga" type="button">+ Add a person</button></div>`}</div>` : ""}
       <label class="field"><span>Notes</span><textarea id="ev_n" style="min-height:70px" placeholder="Don't type codes or passwords here." ${ro ? "disabled" : ""}>${esc(e && e.notes || "")}</textarea></label>
       <div class="evft">${ro ? "" : `<div style="display:flex;gap:8px"><button class="btn primary" style="flex:1" id="ev_go">Save</button>${e ? `<button class="btn" id="ev_off">Remove</button>` : ""}</div>`}<p class="muted" id="ev_m" style="margin:6px 0 0"></p></div>`;
     $("#evm").classList.add("on");
     $("#evx").onclick = () => $("#evm").classList.remove("on");
     $("#evm").onclick = x => { if(x.target === $("#evm")) $("#evm").classList.remove("on"); };   // click outside the form closes it
     $("#evcard").scrollTop = 0;
+    // people from outside Moose: a vendor from the Vendors list or anyone typed in
+    const G = (e ? (guests[e.id] || []) : []).map(g => Object.assign({}, g));
+    const gDraw = () => { const box = $("#ev_gl"); if(!box) return;
+      if(ro){ box.innerHTML = G.length ? G.map(g => `<div style="margin:4px 0"><b>${esc(g.name)}</b>${g.company ? ` <span class="muted">· ${esc(g.company)}</span>` : ""}${g.email ? ` · <a href="mailto:${esc(g.email)}">${esc(g.email)}</a>` : ""}${g.phone ? ` · <a href="tel:${esc(g.phone.replace(/[^0-9+]/g, ""))}">${esc(g.phone)}</a>` : ""}</div>`).join("") : `<span class="muted">Nobody added.</span>`; return; }
+      box.innerHTML = G.map((g, i) => `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;align-items:center">
+        <input data-gi="${i}" data-gk="name" placeholder="Name" value="${esc(g.name || "")}" style="flex:1.2;min-width:120px">
+        <input data-gi="${i}" data-gk="company" placeholder="Company" value="${esc(g.company || "")}" style="flex:1;min-width:110px">
+        <input data-gi="${i}" data-gk="email" type="email" placeholder="Email" value="${esc(g.email || "")}" style="flex:1.3;min-width:150px">
+        <input data-gi="${i}" data-gk="phone" type="tel" placeholder="Phone" value="${esc(g.phone || "")}" style="flex:.9;min-width:110px">
+        <button class="btn small" type="button" data-gx="${i}" aria-label="Remove" style="width:34px;padding:0">✕</button></div>`).join("");
+      box.querySelectorAll("[data-gi]").forEach(x => x.oninput = () => { G[+x.dataset.gi][x.dataset.gk] = x.value; });
+      box.querySelectorAll("[data-gx]").forEach(x => x.onclick = () => { G.splice(+x.dataset.gx, 1); gDraw(); }); };
+    gDraw();
     if(ro) return;
+    if($("#ev_ga")) $("#ev_ga").onclick = () => { G.push({ name:"", company:"", email:"", phone:"" }); gDraw(); const n = $("#ev_gl").querySelectorAll('[data-gk="name"]'); if(n.length) n[n.length - 1].focus(); };
+    if($("#ev_vp")){ (async () => { try { const vr = await sb.from("vendors").select("id,name,trade,phone,email").eq("active", true).order("name");
+        const V = (vr && vr.data) || []; if(!V.length){ $("#ev_vp").style.display = "none"; return; }
+        $("#ev_vp").insertAdjacentHTML("beforeend", V.map(x => `<option value="${esc(String(x.id))}">${esc(x.name)}${x.trade ? " · " + esc(x.trade) : ""}</option>`).join(""));
+        $("#ev_vp").onchange = () => { const x = V.find(y => String(y.id) === $("#ev_vp").value); $("#ev_vp").value = ""; if(!x || G.some(g => String(g.vendor_id) === String(x.id))) return;
+          G.push({ name:x.name, company:x.trade ? "Vendor (" + x.trade + ")" : "Vendor", email:x.email || "", phone:x.phone || "", vendor_id:String(x.id) }); gDraw(); };
+      } catch(_){ $("#ev_vp").style.display = "none"; } })(); }
     const calNow = () => { const r = $("#evcard").querySelector("[name=ev_cal]:checked"); return r ? r.value : cal; };
     $("#evcard").querySelectorAll("[name=ev_cal]").forEach(r => r.onchange = () => { const a = $("#ev_att"); if(a) a.style.display = calNow() === "office" ? "block" : "none"; });
-    $("#evcard").querySelectorAll("[name=ev_v]").forEach(r => r.onchange = () => { const on = r.value === "1"; $("#ev_vbox").style.display = on ? "block" : "none"; if(on && $("#ev_link")) $("#ev_link").focus(); });
+    $("#evcard").querySelectorAll("[name=ev_v]").forEach(r => r.onchange = () => { const on = r.value === "1"; $("#ev_vbox").style.display = on ? "block" : "none"; $("#ev_lw").style.display = on ? "none" : "block"; if(on && $("#ev_link")) $("#ev_link").focus(); });
+    // a link copied out of an email or Google search is often wrapped (google.com/url?q=…) - keep the real meeting link
+    const unwrap = u => { try { const x = new URL(u); if(/(^|\.)google\.[a-z.]+$/i.test(x.hostname) && x.pathname === "/url"){ const q = x.searchParams.get("q") || x.searchParams.get("url"); if(q && /^https:\/\//i.test(q)) return q; } } catch(_){} return u; };
+    if($("#ev_link")) $("#ev_link").onchange = () => { $("#ev_link").value = unwrap($("#ev_link").value.trim()); };
     { const S = $("#ev_s"), L = $("#ev_len"), F = $("#ev_f");
       const setEnd = () => { if(!S.value || !L.value) return; const t = endTime(S.value, +L.value); if(![...F.options].some(o => o.value === t)) F.add(new Option(ftime(t), t)); F.value = t; };
       S.onchange = () => { L.disabled = F.disabled = !S.value; if(S.value && !L.value) L.value = "60"; setEnd(); };
@@ -481,12 +507,18 @@ async function evCal(v, key){
       if((kind === "event" && !t) || !d) return $("#ev_m").textContent = "Add what and which day.";
       const c = calNow(), sT = $("#ev_s").value || null, fT = sT ? $("#ev_f").value || null : null;
       if(sT && fT && fT <= sT) return $("#ev_m").textContent = "The end time has to be after the start.";
-      const vr = $("#evcard").querySelector("[name=ev_v]:checked"), virt = !!(vr && vr.value === "1"), link = $("#ev_link") ? $("#ev_link").value.trim() : "";
+      const vr = $("#evcard").querySelector("[name=ev_v]:checked"), virt = !!(vr && vr.value === "1"), link = $("#ev_link") ? unwrap($("#ev_link").value.trim()) : "";
+      const gl = G.filter(g => (g.name || "").trim() || (g.email || "").trim() || (g.phone || "").trim());
+      if(gl.some(g => !(g.name || "").trim())) return $("#ev_m").textContent = "Add a name for each person from outside Moose (or remove the empty row).";
+      if(gl.some(g => (g.email || "").trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(g.email.trim()))) return $("#ev_m").textContent = "Check the email of the people from outside Moose.";
       if(virt && link && !/^https:\/\/\S+$/i.test(link)) return $("#ev_m").textContent = "The meeting link has to start with https://";
       const att = c === "office" && kind === "event" ? [...$("#evcard").querySelectorAll("[data-att]:checked")].map(x => x.dataset.att) : null;
       const r = await sb.rpc("cal_event_save4", { p_attendees:att, p_id:e ? e.id : null, p_cal:c, p_kind:kind, p_person:$("#ev_p") ? $("#ev_p").value : null, p_title:t, p_day:d, p_end_day:$("#ev_e").value || null,
-        p_start:sT, p_end:fT, p_location:$("#ev_l").value, p_notes:$("#ev_n").value, p_off:!!off, p_virtual:virt, p_link:virt ? link : null });
+        p_start:sT, p_end:fT, p_location:virt ? "" : $("#ev_l").value, p_notes:$("#ev_n").value, p_off:!!off, p_virtual:virt, p_link:virt ? link : null });
       if(r.error) return $("#ev_m").textContent = "Couldn't save: " + r.error.message;
+      if(kind === "event" && !off && (gl.length || (e && (guests[e.id] || []).length))){
+        const gr = await sb.rpc("cal_guests_set", { p_event:r.data, p_guests:gl.map(g => ({ name:g.name, company:g.company, email:g.email, phone:g.phone, vendor_id:g.vendor_id || null })) });
+        if(gr.error) return $("#ev_m").textContent = "Saved the event, but not the people from outside Moose: " + gr.error.message; }
       ST.sel[key] = d; evCal(v, key); };
     $("#ev_go").onclick = () => go(false);
     if($("#ev_off")) $("#ev_off").onclick = () => { if(confirm("Remove this from the calendar?")) go(true); };
