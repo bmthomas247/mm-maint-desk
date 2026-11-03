@@ -228,6 +228,7 @@ body.only-trash header.top{position:static}
 .tnear .tnote{margin-top:0}
 .tnear .chip{min-height:40px}
 /* Property Details = Moose Locks look (2026-10-29): tiles by neighborhood + home pop-up */
+.hhacc{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;border-bottom:1px solid var(--line);cursor:pointer;text-align:left;font-family:inherit} .hhacc:hover{color:var(--ink)} .hhacc.open{color:var(--ink)} .hhar{font-size:13px;width:14px}
 .hhood{padding:16px 4px 8px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);margin-bottom:12px}
 .hgrid{display:grid;grid-template-columns:1fr;gap:12px;align-items:start}
 .ocon{all:unset;cursor:pointer;color:inherit;text-decoration:underline;text-underline-offset:2px;font:inherit;max-width:100%;overflow-wrap:anywhere}
@@ -1227,8 +1228,10 @@ function vHomes(){
   if(ht==="co") return h+'<section class="panel detail">'+homeDetail(list.length?list[0].code:"Moose company")+'</section>';
   /* Moose Locks look (Brandon 2026-10-29): one tile per home grouped by neighborhood, codes + Wi-Fi on the tile; the full home opens in a pop-up */
   var by={}; list.forEach(function(p){ var c=commOf(p)||"Other"; (by[c]=by[c]||[]).push(p); });
-  h+=Object.keys(by).sort().map(function(c){ var L=by[c], pre=(L[0].code.replace(/^(L-|2H-)/i,"").match(/^[A-Za-z]+/)||[""])[0], hd=hoodOf(L[0]);
-      return '<div class="hhood">'+esc(c)+(pre&&pre.toUpperCase()!==c.toUpperCase()?' · '+esc(pre):'')+(hd&&!nb?' · '+esc(hd):'')+' · '+L.length+' home'+(L.length===1?'':'s')+'</div><div class="hgrid">'+L.map(homeTile).join("")+'</div>'; }).join("")||'<div class="empty">No homes match.</div>';
+  /* each neighborhood folds open like an accordion, one at a time (Brandon 2026-11-03); a search or a single group opens them */
+  var hk=Object.keys(by).sort(), allOpen=hk.length===1||!!q;
+  h+=hk.map(function(c){ var L=by[c], pre=(L[0].code.replace(/^(L-|2H-)/i,"").match(/^[A-Za-z]+/)||[""])[0], hd=hoodOf(L[0]), op=allOpen||u.hhOpen===c;
+      return '<button type="button" class="hhood hhacc'+(op?' open':'')+'" data-act="hhood" data-c="'+esc(c)+'" aria-expanded="'+op+'"><span class="hhar">'+(op?'▾':'▸')+'</span>'+esc(c)+(pre&&pre.toUpperCase()!==c.toUpperCase()?' · '+esc(pre):'')+(hd&&!nb?' · '+esc(hd):'')+' · '+L.length+' home'+(L.length===1?'':'s')+'</button>'+(op?'<div class="hgrid">'+L.map(homeTile).join("")+'</div>':''); }).join("")||'<div class="empty">No homes match.</div>';
   if(u.home && homeType(u.home)!=="co") h+='<div class="hpop" id="hpop" role="dialog" aria-modal="true" aria-label="'+esc(coName(u.home))+'"><div class="hpbox"><div class="hpbar"><button class="btn sm" data-act="hclose">← All homes</button><button class="mx" data-act="hclose" aria-label="Close" title="Close">✕</button></div>'+
     '<div class="hpbody"><section class="panel detail">'+homeDetail(u.home)+'</section></div></div></div>';
   return h;
@@ -1274,7 +1277,7 @@ function tCell(label,src,lines,plain,cls){ lines=(lines||[]).filter(Boolean); if
 /* the 4 code sections on a tile (Brandon 2026-11-03: "lock system … master code and owner code / garage/gate … garage and gate code /
    keybox with the keybox code and location / the owner lockout information if applicable"). Track codes first, then the lockout note's
    labeled lines sorted by their label; a number already shown isn't shown twice. Lines the database masked (•••) stay masked. */
-function lockSecs(c,t,q){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},gate:{},kb:{},own:{}}, seen={}, loc=homeInfo(c)||{};
+function lockSecs(c,t,q,p){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},gate:{},kb:{},own:{}}, seen={}, loc=homeInfo(c)||{};
   var add=function(k,label,val,s){ val=String(val||"").replace(/\s+/g," ").trim(); if(!val) return; var d=val.replace(/\D/g,""); d=d.length>=3?d:val.toLowerCase();
     if(seen[d]) return; seen[d]=1; if(S[k].length>=4) return; if(val.length>60) val=val.slice(0,58)+"…";
     S[k].push(label?label+": "+val:val); src[k][s||"Asana"]=1; };
@@ -1282,18 +1285,24 @@ function lockSecs(c,t,q){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},gat
       :/owner/.test(L)?(/lock.?out|closet|garage/.test(L)?"own":"lock"):/master/.test(L)?"lock"
       :/key ?box|keybox|cage/.test(L)||/^location$/.test(L)?"kb":/garage|gate|bldg|building|clubhouse|pool/.test(L)?"gate"
       :/door|lock|schlage/.test(L)?"lock":null; };
-  var tidy=function(k,lab){ var L=lab.toLowerCase(); if(k==="kb") return /location/.test(L)?"Location":/^(key ?box|keybox)( code)?$/.test(L)?"Code":lab;
+  var tidy=function(k,lab){ var L=lab.toLowerCase(); if(k==="own"&&/location/.test(L)) return "Location"; if(k==="kb") return /location/.test(L)?"Location":/^(key ?box|keybox)( code)?$/.test(L)?"Code":lab;
       return lab.charAt(0).toUpperCase()+lab.slice(1).toLowerCase(); };
-  var lines=function(text,s,force){ String(text||"").replace(/<[^>]+>/g," ").split("\n").forEach(function(l){
+  var lines=function(text,s,force,only){ String(text||"").replace(/<[^>]+>/g," ").split("\n").forEach(function(l){
       l=l.replace(/\s+/g," ").replace(/^\[codes\]\s*/i,"").trim(); var m=/^([^:]{1,40}):\s*(.+)$/.exec(l); if(!m) return;
-      var lab=m[1].replace(/^\[codes\]\s*/i,"").trim(), k=force||kind(lab.toLowerCase()); if(!k) return;
-      if(!(k==="kb"&&/location/i.test(lab)) && !/\d|•{3,}/.test(m[2])) return; add(k,tidy(k,lab),m[2],s); }); };
+      var lab=m[1].replace(/^\[codes\]\s*/i,"").trim(), k=force||kind(lab.toLowerCase()); if(!k || (only&&k!==only)) return;
+      if(!((k==="kb"||k==="own")&&/location/i.test(lab)) && !/\d|•{3,}/.test(m[2])) return; add(k,tidy(k,lab),m[2],s); }); };
   if(t.door_code) add("lock","Front door",t.door_code,"Track");
   if(t.garage_code) add("gate","Garage code",t.garage_code,"Track");
   if(t.gate_code) add("gate","Gate / building",t.gate_code,"Track");
   if(t.keybox_code) add("kb","Code",kbc(t.keybox_code),"Track");
   if(t.owner_garage_code) add("own","Owner garage",t.owner_garage_code,"Track");
-  if(t.owner_closet_code) add("own","Owner closet",t.owner_closet_code,"Track");
+  /* Track keeps a note in brackets after the owner closet code ("0746 (entry-pvt)"): the code goes on its own, the note becomes the location
+     unless it only says private / pvt / owner */
+  var ocl="", oc=String(t.owner_closet_code||""), om=/^(.*?)\s*\(([^)]*)\)\s*$/.exec(oc);
+  if(om){ oc=om[1]; ocl=om[2].replace(/\b(private|pvt|owner)\b/ig,"").replace(/^[\s\-\/,]+|[\s\-\/,]+$/g,"").replace(/\bbdrm\b/i,"bedroom"); }
+  if(oc) add("own","Owner closet",oc,"Track");
+  var onote=p&&infoNote(p,/^owner clos/i); if(onote) lines(onote.text,"Asana",null,"own");
+  if(ocl && !S.own.some(function(l){ return /^Location:/.test(l); })) add("own","Location",ocl,"Track");
   lines(q.entry,(q.src.entry||"Asana").split(" + ")[0]);
   if(!t.garage_code) lines(q.garage,q.src.garage,"gate");
   if(loc.keybox && !S.kb.some(function(l){ return /^Location:/.test(l); })) add("kb","Location",loc.keybox,(loc.src&&loc.src.keybox)||"Hub edit");
@@ -1303,7 +1312,7 @@ function lockSecs(c,t,q){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},gat
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
   var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+t.wifi_name:"",t.wifi_pass?"Password: "+t.wifi_pass:""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+pe.wifiName:"",pe.wifiPass?"Password: "+pe.wifiPass:""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
   cells.push(tCell("Wi-Fi",q.src.wifi,wifi,true));
-  cells=cells.concat(lockSecs(c,t,q));
+  cells=cells.concat(lockSecs(c,t,q,p));
   /* paint stays in Home details only (Brandon 2026-11-03) */
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   if(o.can && o.list.length){ var w=o.list[0];
@@ -4234,6 +4243,7 @@ document.addEventListener("click",function(ev){
     case "vback": S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return;
     case "newhome": return mNewHome();
     case "hclose": S.ui.home=""; return render();
+    case "hhood": S.ui.hhOpen=(S.ui.hhOpen===d.c?"":d.c); render(); if(S.ui.hhOpen){ var hb=[].slice.call(document.querySelectorAll(".hhacc")).filter(function(x){ return x.dataset.c===S.ui.hhOpen; })[0]; if(hb) hb.scrollIntoView({block:"start"}); } return;
     case "editquick": return mQuick(d.code);
     case "ownerview": return ownerView(d.code);
     case "savehoa": var hc=d.code, hk=sid(hc); return put("propedits",hk,{hoaName:fv("hoa_name"),hoaMgmt:fv("hoa_mgmt"),hoaContact:fv("hoa_contact"),hoaPhone:fv("hoa_phone"),hoaEmail:fv("hoa_email"),hoaPortal:fv("hoa_portal"),hoaRules:fv("hoa_rules")},S.propedits[hk]).then(function(){ toast("HOA saved"); });
