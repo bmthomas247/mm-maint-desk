@@ -1277,6 +1277,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   cells.push(tCell("Lockout",q.src.entry,codeLines(q.entry,3)));
   cells.push(tCell("Garage",q.src.garage,t.garage_code?["Garage code: "+t.garage_code]:codeLines(q.garage,2)));
   cells.push(tCell("Key box","Track",[t.keybox_code?"Code: "+t.keybox_code:""]));
+  var pc=paintCell(c); if(pc) cells.push(pc);
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   if(o.can && o.list.length){ var w=o.list[0];
     cells.push(tCell("Owner",w.plan?"Contract: "+w.plan:"",[{html:'<div class="tl" title="From '+(w.src==="Track"?"Track":"a hub edit")+'"><span class="ql qin">Name - </span><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
@@ -1316,6 +1317,7 @@ function homeDetail(code){
   else if(os && daysBetween(t,os.in)<=30) h+='<div class="infobox">Owner stay '+esc(fmtD(os.in))+' → '+esc(fmtD(os.out))+'.</div>';
   h+=homeHeads(code);
   h+=quickView(code,p);
+  h+=paintBlock(code);
   h+=ownerRelBlock(jobs);
   // basics
   var hi=homeInfo(code), src=function(k){ return hi.src[k]?'<span class="hint">From '+hi.src[k]+'</span>':''; };
@@ -1339,7 +1341,6 @@ function homeDetail(code){
     '<div class="note">Breezeway isn\'t feeding this board yet — once it is, the last three finished tasks show here.</div>')+'</div>';
   // recent
   h+=inspBlock(code);
-  h+=paintBlock(code);
   h+=npiBlock(code);
   h+='<div class="block"><h4>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">all sources, newest first</span></h4>'+
     (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
@@ -3300,6 +3301,11 @@ function inspRow(r,showHome){
    An estimate: every color shows the photo it came from and how sure the read was. Read = hub_can('homes'). */
 function paintLoad(){ var sb=window.MM_SB; if(!sb) return; if(D._paintP) return; D._paintP=sb.from("home_paint").select("home,inspected_on,report_url,photos,colors,notes,read_at")
     .order("read_at",{ascending:false}).limit(2000).then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ var c=canon(x.home); if(!m[c]) m[c]=x; }); D._paint=m; schedule(); }); }
+function paintCell(code){ paintLoad(); var p=D._paint&&D._paint[canon(code)]; if(!p) return ""; var C=(p.colors||[]).filter(function(c){ return c.code||c.name; });
+  if(!C.length) return "";
+  var L=C.slice(0,2).map(function(c){ return (c.where?c.where.replace(/^interior /i,"")+": ":"")+[c.brand,c.code,c.name].filter(Boolean).join(" ")+(c.sure==="guess"?" (check)":""); });
+  if(C.length>2) L.push("+"+(C.length-2)+" more on Home details");
+  return tCell("Paint","can photos",L,true); }
 function paintBlock(code){ paintLoad(); if(!D._paint) return ""; var p=D._paint[canon(code)]; if(!p) return "";
   var sure={yes:"clear on the label",likely:"mostly readable",guess:"partly hidden - check"}, C=p.colors||[];
   return '<div class="block"><h4>Paint colors <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">read from the paint-can photos'+
