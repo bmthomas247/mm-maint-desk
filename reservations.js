@@ -423,12 +423,21 @@ function prep(s){
   s.stage = (s.list && s.list.stage) || (s.status === "Cancelled" ? "cancelling" : s.depart < today ? (s.chan === "owner" ? "owner_done" : "checkout") : "in_progress");
   // Kim 2026-11-02: Checkout only once nothing is owed, so a payment can't be missed. Still owed before check-out = Waiting on payment
   // (Track takes the later payments from the card); declined payment or no card for it = back to In progress.
-  s.stageSet = s.stage; s.payWhy = "";
-  const owed = (s.balance || 0) > 0.005 && s.status !== "Cancelled" && s.depart >= today, fp = owed && B.failed && B.failed[String(s.res)];
-  if(fp){ s.blockers.push("Payment declined"); s.payWhy = fp.what || "Track declined a payment in the last few days."; }
-  else if(owed && s.td && s.td.card === false && s.stage === "checkout"){ s.blockers.push("No card on file for the next payment"); s.payWhy = "No card on file in Track for the payments still due."; }
-  if(s.stage === "checkout" && owed) s.stage = s.payWhy ? "in_progress" : "waiting_pay";
+  s.stageSet = s.stage; s.payWhy = ""; s.payFlag = "";
   s.waiting = (s.list && s.list.waiting) || [];
+  // Janae, Pyper, Kim 2026-11-03: tabs move by themselves. Steps done + nothing held = Waiting on payment while anything is owed, else Checkout
+  // (Checkout = paid in full, the next step; stays there after the guest leaves). A declined payment / no card stays in Waiting on payment with an alert.
+  // A stage a PERSON picked (not the Asana import) sticks until a step is ticked after they picked it. Cancelled stays leave In progress / Checkout.
+  const owed = (s.balance || 0) > 0.005 && s.status !== "Cancelled", fp = owed && B.failed && B.failed[String(s.res)];
+  if(fp) s.payFlag = s.payWhy = fp.what || "Track declined a payment in the last few days.";
+  else if(owed && s.depart >= today && s.td && s.td.card === false) s.payFlag = s.payWhy = "No card on file in Track for the payments still due.";
+  const L = s.list || {}, byPerson = L.stage && L.by && L.by !== "Asana import",
+    tickedSince = byPerson && L.at && Object.values(ticks).some(k => k && k.at && k.at > L.at),
+    ready = s.got >= s.need && !s.blockers.length && !s.waiting.length;
+  if(s.status === "Cancelled" && (s.stage === "in_progress" || s.stage === "checkout")) s.stage = "cancelling";
+  else if(s.stage === "in_progress" && ready && s.chan !== "owner" && (!byPerson || tickedSince)) s.stage = "checkout";
+  if(s.stage === "checkout" && owed) s.stage = "waiting_pay";
+  if(s.stage === "waiting_pay" && s.payFlag) s.blockers.push(fp ? "Payment declined" : "No card on file for the next payment");
   s.state = s.stage === "closed" ? "Complete" : s.status === "Cancelled" && s.stage !== "closed" ? "Cancelling" : s.got === 0 ? "Not started"
     : s.got >= s.need ? (s.depart < today ? "Ready to close" : "Paperwork done") : s.waiting.length ? "Waiting" : "In progress";
 }
@@ -512,7 +521,12 @@ async function queue(v){
     const groups = []; rows.forEach(s => { const k = gKey(s), g = groups.find(x => x.k === k); g ? g.s.push(s) : groups.push({ k, s:[s] }); });
     if(F.group === "hood") groups.sort((a, b) => gName(a.k).localeCompare(gName(b.k)));
     else if(ALLQ){ const so = Object.keys(STAGE); groups.sort((a, b) => so.indexOf(a.k.slice(1)) - so.indexOf(b.k.slice(1))); }
-    $("#rqbody").innerHTML = (ALLQ ? `<p class="muted" style="margin:4px 2px 10px">Searching every tab · ${rows.length} ${rows.length === 1 ? "stay" : "stays"} found. Tap a tab to clear the search.</p>` : "") + (rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
+    // Janae, Pyper, Kim 2026-11-03: failed payments stay in Waiting on payment, listed here (daily failed-payments check + no card on file)
+    const fpl = !ALLQ && F.stage === "waiting_pay" ? inStage.filter(s => s.payFlag) : [];
+    $("#rqbody").innerHTML = (ALLQ ? `<p class="muted" style="margin:4px 2px 10px">Searching every tab · ${rows.length} ${rows.length === 1 ? "stay" : "stays"} found. Tap a tab to clear the search.</p>` : "")
+      + (fpl.length ? `<div class="card" style="border-color:var(--red,#c0392b)"><b>⚠️ ${fpl.length} ${fpl.length === 1 ? "reservation has" : "reservations have"} a payment problem</b> <span class="muted">· from the daily failed payments check and Track's card on file</span>
+        ${fpl.map(s => `<div style="padding:6px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(s.res)}"><b>${esc(s.unit || "")} · ${esc(s.guest || "#" + s.res)}</b></a> <span class="muted">#${esc(s.res)} · arrives ${esc(dayY(s.arrive))} · ${esc(money(s.balance))} due</span><div style="font-size:13px">${esc(s.payFlag)}</div></div>`).join("")}</div>` : "")
+      + (rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
       return `<div class="rgh" data-g="${esc(g.k)}"><span>${esc(gName(g.k).toUpperCase())} · ${g.s.length} ${g.s.length === 1 ? "STAY" : "STAYS"}</span><span>${shut ? "▾" : "▴"}</span></div>
       ${shut ? "" : `<div class="rgrid">${g.s.map(tile).join("")}</div>`}`; }).join("")
       : `<div class="card"><p class="muted" style="margin:0">Nothing here${F.q || F.chan || F.held || F.area || F.kind ? " with these filters" : ""}.</p></div>`);
@@ -598,9 +612,9 @@ async function card(v, res){
       ${s.next.length && s.stage !== "closed" ? `<div class="rnext big"><b>Next up:</b> ${s.next.map(esc).join(" · then ")}${s.waiting.length ? ` <span class="muted">· waiting on ${esc(s.waiting.join(", "))}</span>` : ""}</div>` : ""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="flex:1">${s.got} of ${s.need} steps done</b>
         <label class="muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rx_ext" style="width:20px;height:20px;min-height:0" ${s.list && s.list.extending ? "checked" : ""}> Extending</label>
-        <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay").map(([k, l]) => `<option value="${k}" ${s.stageSet === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-      ${s.stage === "waiting_pay" ? `<div class="rrule info">Waiting on payment: ${money(s.balance)} is still due. Track takes the next payments from the card on file, so nothing to do unless one fails. It moves to Checkout by itself once the balance is $0.</div>`
-        : s.payWhy ? `<div class="rrule stop">${s.stageSet === "checkout" ? "Back in progress: " : ""}${esc(s.payWhy)} ${money(s.balance)} still due. ${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : "Ask the guest to add a card in the guest portal, or pay the balance."}</div>` : ""}
+        <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay").map(([k, l]) => `<option value="${k}" ${(s.stage === "waiting_pay" ? "checkout" : s.stage) === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      ${s.stage === "waiting_pay" && !s.payFlag ? `<div class="rrule info">Waiting on payment: ${money(s.balance)} is still due. Track takes the next payments from the card on file, so nothing to do unless one fails. It moves to Checkout by itself once the balance is $0.</div>`
+        : s.payWhy ? `<div class="rrule stop">${s.stage === "waiting_pay" ? "Waiting on payment: " : ""}${esc(s.payWhy)} ${money(s.balance)} still due. ${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : "Ask the guest to add a card in the guest portal, or pay the balance."}</div>` : ""}
       <div class="rchips"><span class="muted" style="align-self:center">Waiting on</span>${WAIT.map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}">${esc(w)}</button>`).join("")}</div>
       ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
       ${trkSection(s)}
