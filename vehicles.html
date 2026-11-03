@@ -482,6 +482,7 @@ document.addEventListener("change", e => {
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("bouncie_can_read");
+  if(ok.error){ $("#app").innerHTML = `<h1>Vehicles</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Vehicles</h1><p class="muted">Nothing to show.</p>`; return; }
   // Bouncie log-in button: managers + admins only (Brandon 2026-11-03)
   const [ad, mg] = await Promise.all([sb.rpc("hub_is_admin"), sb.rpc("hub_is_manager")]);
