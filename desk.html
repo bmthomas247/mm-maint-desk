@@ -666,7 +666,7 @@ function bwState(j){ /* "on" | "done" | "queued" | "missing" | "noprop" | "" */
 }
 
 /* ================= db ================= */
-function need(){ if(!S.me){ toast("Pick your name top right first"); $("who").focus(); return false; }
+function need(){ if(!S.me){ toast(EMB?"Your desk name isn't set up yet. Tell Brandon.":"Pick your name top right first"); $("who").focus(); return false; }
   if(!S.db){ toast("Not connected — changes can't be saved yet"); return false; } return true; }
 function put(coll,id,patch,cur){ if(!need()) return Promise.reject();
   var base=Object.assign({},cur||{},patch,{at:Date.now(),by:S.me});
@@ -932,7 +932,7 @@ function jobDetail(j){
     '<div class="log" style="margin-top:10px">'+allNotes(j).map(function(n){ return '<div class="logrow"><div class="logmeta">'+esc(nameFor(n.by))+' · '+esc(new Date(n.at).toLocaleString())+(n.from?' · <span class="muted">from '+esc(n.from)+'</span>':'')+'</div><div class="logtxt">'+esc(n.text)+'</div></div>'; }).join("")+'</div></div>';
   if(j.src==="desk") h+='<div><button class="btn sm warn" data-act="deljob">Remove this desk job</button></div>';
   if(j.src==="freshdesk") h+=fdDraftBox(j);
-  h+=askBox("j_"+sid(j.id),j);
+  if(EMB) h+='<div class="pad"><button class="btn sm ghost" data-act="askpenny">💬 Ask Penny about this job</button> <span class="note">She can see which job you have open.</span></div>';   // 2026-11-03: the old "Ask Claude" box never got answers
   h+='</div>'; return h;
 }
 
@@ -1016,7 +1016,7 @@ document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-w
 function routineRow(r){
   if(isGuestRoutine(r)){ var gb=guestIssues(), okAll=gb.every(function(x){ return x.ok; });
     return '<div class="rout'+(okAll?' doneit':'')+'"><span class="badge ok" style="align-self:start">Auto</span><span class="rt">'+esc(r.title)+'</span>'+
-      '<span class="rm"><span>daily</span><span>· every morning</span><span>· checked by Claude on each Breezeway run</span></span>'+guestBlock()+'</div>'; }
+      '<span class="rm"><span>daily</span><span>· every morning</span><span>· checked automatically on each Breezeway pull</span></span>'+guestBlock()+'</div>'; }
   var lg=rlogFor(r), done=lg&&!lg.undone, ld=lastDone(r);
   return '<div class="rout'+(done?' doneit':'')+'">'+(r.autoBw?'<span class="badge ok" style="align-self:start" title="Breezeway makes these tasks by itself">Auto</span>':'<input type="checkbox" class="cb" data-rtick="'+esc(r.id)+'"'+(done?' checked':'')+' aria-label="Done this period">')+
     '<span class="rt">'+esc(r.title)+(r.draft?' <span class="badge draft">Draft</span>':'')+'</span>'+
@@ -1950,7 +1950,7 @@ function incidentsOf(jobs){ var d=function(j){ return (j.created||j.when||"").sl
 function vRepeats(){
   var w=S.ui.rwin, r=repeats(w), bwOn=!!Object.keys(S.feeds).some(function(k){ return k.indexOf("jobs-breezeway")===0; });
   var h='<div class="sechead"><h2>Repeats</h2><p>The same problem at the same home, or the same problem across many homes. Sorted into '+CATS.length+' kinds of work by the words in each job. '+
-    (bwOn?'':'Right now this reads Asana, Slack and desk jobs — Breezeway tasks join once it feeds the board.')+'</p>'+
+    (bwOn?'':'Breezeway data did not load. Reload to try again.')+'</p>'+
     '<div class="chiprow">'+[30,90,180,365].map(function(n){ return '<button class="chip" data-rwin="'+n+'" aria-pressed="'+(w===n)+'">'+n+' days</button>'; }).join("")+'</div></div>';
   h+='<div class="grid2"><section class="panel"><div class="ph"><h3>Same home, same problem</h3><span class="ct">'+r.same.length+'</span></div>'+
     (r.same.length?r.same.map(function(x){ return '<div class="pad" style="border-bottom:1px solid var(--line-2)"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">'+propLink(x.prop)+
@@ -2019,7 +2019,7 @@ function vMoney(){
     names.map(function(w){ var x=per[w], c=(+R.techCost[w]||R.defaultCost), cost=x.allMin/60*c+x.miles*R.mileage, b=x.allMin/60*R.billRate, cj=closed[w]||0;
       return '<tr><td>'+esc(w)+(c?'':' <span class="badge draft">no rate</span>')+'</td><td class="num">'+(x.allMin/60).toFixed(1)+'</td><td class="num">'+x.trips+'</td><td class="num">'+x.miles.toFixed(0)+'</td><td class="num">'+Object.keys(x.props).length+'</td><td class="num">'+cj+'</td><td class="num">'+money(cost)+'</td><td class="num">'+money(b)+'</td><td class="num">'+(cj?money(cost/cj):"—")+'</td></tr>'; }).join("")+'</tbody></table></div>':
     '<div class="empty">No time logged this month.</div>';
-  G.crew+='<div class="pad note">Time comes from "+ Time on site" on a job or here. Hubstaff (hours and GPS stops) isn\'t connected yet — when it is, visits fill in by themselves and this table stops depending on anyone remembering to log. '+
+  G.crew+='<div class="pad note">Time comes from "+ Time on site" on a job or here. Hubstaff hours and GPS stops fill in below until Hubstaff ends on Nov 11. '+
     'Jobs closed = tasks finished in Breezeway that month plus jobs marked done on this desk.</div></section>';
   var showAll=!!S.ui.bwAll, isIgn=function(j){ var t=S.taskbill[j.id.slice(3)]; return !!(t&&t.ignored); }, ignN=bwDone.filter(isIgn).length, movedN=0, list=bwDone.filter(function(j){ var st=tbState(j.id.slice(3)); if(st && st.k!=="stop"){ movedN++; return false; } return (showAll || (!j.auto && j.kind!=="inspection")) && (S.ui.showIgn || !isIgn(j)); });
   var fees=((S.feeds["bw-fees"]||{}).tasks)||{}, feeOf=function(j){ var f=fees[j.id.slice(3)]; return f&&f.fees?f.fees.reduce(function(a,x){ return a+(+x.amount||0); },0):0; };
@@ -2183,8 +2183,8 @@ function billingPanel(m,bwDone){
     (homes.length?'<button class="btn sm pri" data-act="billall">Send all to Breezeway</button>':'')+'</div>';
   h+=homes.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Home</th><th>Plan</th><th class="num">Tasks</th><th class="num">Tech hours</th><th class="num">Labor</th><th class="num">Parts</th><th class="num">Fees found</th><th class="num">Total</th><th></th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div>':
     '<div class="empty">No one-off Breezeway work finished this month yet.</div>';
-  h+='<div class="pad note">Labor = time on the Breezeway task × techs on it, at the home\'s plan rate (from Asana: Prime $55/h, All Inclusive $45/h after 4 free hours, Complete $75/h). Parts = expenses logged as "Owner-billed". Fees found = amounts Claude read out of the task notes and comments. '+
-    'Set each home\'s plan on its Homes page. "Send to Breezeway" puts the labor and parts on each task\'s Cost tab with Bill to: Owner — Claude does it on its next run and marks it here.</div></section>';
+  h+='<div class="pad note">Labor = time on the Breezeway task × techs on it, at the home\'s plan rate (from Asana: Prime $55/h, All Inclusive $45/h after 4 free hours, Complete $75/h). Parts = expenses logged as "Owner-billed". Fees found = amounts read from the task notes and comments (that reader is paused). '+
+    'Set each home\'s plan on its Homes page. Breezeway can\'t take costs from the hub yet, so add the labor and parts on each task\'s Cost tab in Breezeway (Bill to: Owner).</div></section>';
   return h;
 }
 
@@ -2268,19 +2268,19 @@ function readyPanel(m){
         '<td>'+(r.st?'<span class="pill '+r.st.k+'"'+(r.st.e?' title="'+esc(r.st.e)+'"':'')+'>'+r.st.t+'</span>':'')+'</td>'+
         '<td style="white-space:nowrap"><button class="btn sm ghost" data-rdyopen="'+esc(r.tid)+'">Edit</button>'+(pushed?'':'<button class="btn sm ghost" data-rdyoff="'+esc(r.tid)+'">Not ready</button>')+'</td></tr>'; }).join("")+
     '<tr><td colspan="6" style="text-align:right"><b>Waiting to push</b></td><td class="num"><b>'+money2(waitT)+'</b></td><td colspan="2"></td></tr></tbody></table></div>'+
-    '<div class="pad note">Push sends these to Breezeway: Claude puts labor, parts and fees on each task\'s Cost tab with Bill to: Owner on its next run, so they land on the Track owner statement. Nothing already on a Cost tab is changed.</div>'+partnerBox(m,rows,toPush)+'</section>';
+    '<div class="pad note">Not automated yet: add the labor, parts and fees on each task\'s Cost tab in Breezeway with Bill to: Owner, so they land on the Track owner statement. Nothing already on a Cost tab is changed.</div>'+partnerBox(m,rows,toPush)+'</section>';
   return h; }
 /* month done: every push landed in Breezeway → Export to Partner (Track) */
 function partnerBox(m,rows,toPush){ var q=S.bwq[sid("partner_"+m)], done=rows.filter(function(r){ return r.st&&r.st.k==="done"; }), wait=rows.filter(function(r){ return r.st&&r.st.k==="waiting"; });
   var mn=new Date(m+"-15").toLocaleDateString(undefined,{month:"long"});
   var h='<div class="pad" style="border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
   if(q&&q.status==="created") return h+'<span class="pill done">Exported to Partner</span><span class="note">'+(q.tasks||[]).length+' tasks sent to Track '+esc(ago(ymd(q.doneAt||q.at)))+'.</span></div>';
-  if(q&&q.status==="queued") return h+'<span class="pill waiting">Ready to push</span><span class="note">Claude selects the '+(q.tasks||[]).length+' tasks in Breezeway and runs Export to Partner on the next run.</span><button class="btn sm ghost" data-act="partnerundo">Undo</button></div>';
+  if(q&&q.status==="queued") return h+'<span class="pill waiting">Ready to push</span><span class="note">'+(q.tasks||[]).length+' tasks are queued. Export to Partner isn\'t automated yet, so run it in Breezeway.</span><button class="btn sm ghost" data-act="partnerundo">Undo</button></div>';
   if(q&&q.status==="failed") h+='<span class="pill stop" title="'+esc(q.error||"")+'">Export failed</span>';
   var ok=done.length&&!toPush.length&&!wait.length;
   return h+'<button class="btn pri" data-act="partnerpush"'+(ok?'':' disabled')+'>✓ '+esc(mn)+' done — ready to push to Partner</button><span class="note">'+
     (ok?done.length+' tasks are billed in Breezeway. This queues Breezeway\'s Bulk Actions → Export to Partner so they go to Track.':
-     toPush.length?'Push the '+toPush.length+' ready task'+(toPush.length===1?'':'s')+' first.':wait.length?wait.length+' still waiting on Breezeway — this unlocks once Claude has put them on.':'Nothing billed in Breezeway yet this month.')+'</span></div>'; }
+     toPush.length?'Push the '+toPush.length+' ready task'+(toPush.length===1?'':'s')+' first.':wait.length?wait.length+' still waiting on Breezeway — this unlocks once they\'re on the Cost tab in Breezeway.':'Nothing billed in Breezeway yet this month.')+'</span></div>'; }
 
 /* ---- receipts: picture + line items, check what goes on this job and how much ---- */
 function rcItems(e){ var it=(e.items&&e.items.length)?e.items:[{what:(e.note||"Receipt").replace(/ · from Breezeway$/,""),qty:1,amount:+e.amount||0}];
@@ -2579,7 +2579,7 @@ function vCheck(){
   h+='<div id="c-ts"></div>'+chkSection("Finished with no time",fx.notime,"No time on the clock, so the timesheet and owner bill are short. Add the time in Breezeway.",function(j){ return chkRow(j,"notime",esc((j.crew||[]).join(", "))); });
   h+=chkSection("Timer left running",fx.timer,"Over 12 hours on the clock — fix the time in Breezeway. Left out of the timesheet until then.",function(j){ return chkRow(j,"timer",esc((j.crew||[]).join(", "))+' · '+Math.round(j.minutes/60)+'h'); });
   h+=chkSection("Report left blank",fx.noreport,"The report asks what was done and it was left empty.",function(j){ return chkRow(j,"noreport",esc((j.crew||[]).join(", "))); });
-  h+='<div id="c-rec">'+chkSection("Receipt photo, not logged",fx.receipt,"A receipt is on the report but not in expenses yet. Claude reads these on its runs, or log one now.",function(j){ var r=reportOf(j);
+  h+='<div id="c-rec">'+chkSection("Receipt photo, not logged",fx.receipt,"A receipt is on the report but not in expenses yet. Log it here.",function(j){ var r=reportOf(j);
     return chkRow(j,"receipt",(r.receipts||[]).map(function(u,i){ return '<a href="'+esc(u)+'" target="_blank" rel="noopener">receipt '+(i+1)+' ↗</a>'; }).join(" "),'<button class="btn sm" data-rexp="'+esc(j.id)+'">Log expense</button>'); })+'</div>';
   h+='<section class="panel" id="c-up"><div class="ph"><h3>Maintenance next 7 days</h3><span class="ct">'+up.length+'</span></div>'+
     (up.length?up.map(function(j){ return '<div class="row" style="display:flex;gap:10px;align-items:center;padding:7px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap"><span class="mono note" style="min-width:52px">'+esc(fmtD(j.due))+'</span>'+propLink(j.prop)+
@@ -3785,7 +3785,7 @@ function bwReadAt(){ var f=S.feeds||{}; return Math.max.apply(null,[0].concat(Ob
 function bwAgo(t){ var h=(Date.now()-t)/36e5; return h<1?Math.max(1,Math.round(h*60))+" min ago":h<36?Math.round(h)+" h ago":Math.round(h/24)+" days ago"; }
 function bwStale(){ var t=bwReadAt(); if(!t) return ""; var h=(Date.now()-t)/36e5; if(h<7) return "";
   return '<div class="stopbox" style="margin-bottom:14px"><b>Breezeway hasn\'t been read since '+esc(new Date(t).toLocaleString([], {weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))+'.</b> '+
-    'New tasks, finished tasks and "Created in Breezeway today" are out of date until it runs again. It runs on the ThinkStation 8 times a day (6am–8pm) and whenever someone opens the desk and it\'s more than 2 hours old — that computer needs to be awake with Chrome open and the Claude extension connected. '+
+    'New tasks, finished tasks and "Created in Breezeway today" are out of date until it runs again. The office PC reads Breezeway every 2 hours and checks for changes every few minutes, so if this stays up the office PC may be off. Tell Brandon. '+
     '<button class="btn sm pri" data-act="syncnow">Read Breezeway now</button>'+(SYNC_POKED?' <span class="note" style="color:inherit">Asked the ThinkStation to run '+esc(bwAgo(SYNC_POKED))+'.</span>':'')+'</div>'; }
 /* opening the desk wakes the Breezeway run when the data is over 2 hours old (at most once an hour, shared by everyone) */
 var SYNC_TRIG="trig_015bZuADHf3da9S7jmBrVT76", SYNC_POKED=0, _syncTried=false;
@@ -4032,8 +4032,8 @@ function mRates(){ var R=rates(), r=S.config.rates||{};
     return put("config","rates",{defaultCost:+fv("m_def")||0,mileage:+fv("m_mile")||0,billRate:+fv("m_bill")||0,techCost:tcm,budget:b,life:r.life||{}},r).then(function(){ toast("Rates saved"); closeModal(); }); },"Save"); }
 
 function mHelp(){ openModal("How the desk works",'<div class="prose" style="font-size:13px">'+
-  '<b>Pick your name</b> top right — every change is saved against a person.\n\n'+
-  '<b>Breezeway check</b> — what should be in Breezeway and isn\'t: open Slack, Asana and Freshdesk items with no Breezeway task, follow-ups techs wrote in reports, and Breezeway tasks that need fixing (late, nobody on it, no time, timer left running, blank report, receipt not logged). "Put in Breezeway" queues it; Claude creates the task on its next run.\n\n'+
+  (EMB?'':'<b>Pick your name</b> top right — every change is saved against a person.\n\n')+
+  '<b>Breezeway check</b> — what should be in Breezeway and isn\'t: open Slack, Asana and Freshdesk items with no Breezeway task, follow-ups techs wrote in reports, and Breezeway tasks that need fixing (late, nobody on it, no time, timer left running, blank report, receipt not logged). "Put in Breezeway" and the hub creates the task within a minute or two.\n\n'+
   '<b>Expenses & Time</b> — timesheets per tech built from finished Breezeway tasks, what was done from each report, owner billing, receipts and expenses for month-end.\n\n'+
   '<b>Vendors used</b> — vendor visits and office scheduling notes on the Breezeway schedule. Kept out of Expenses & Time.\n\n'+
   '<b>Daily · Weekly · Monthly</b> — tick a routine when it\'s done; it resets by itself next day / week / month / season.\n\n'+
@@ -4069,7 +4069,7 @@ document.addEventListener("click",function(ev){
       var pb=$("iz_p"), nb=$("iz_n"); if(pb) pb.onclick=function(){ show(i-1); }; if(nb) nb.onclick=function(){ show(i+1); }; }; return show(zi); }
   if(d.pzoom){ ev.preventDefault(); ev.stopPropagation(); var pz=d.pzoom.split("|"), pi=+pz.pop(); return mPhoto(pz.join("|"),pi); }
   if(d.firebw||d.fireall){ if(!need()) return; var fc=(d.firebw||d.fireall).split(",");
-    return Promise.all(fc.map(function(c){ return S.db.doc("bwq/"+sid("fire_"+c)).set(fireDoc(c)); })).then(function(){ toast(fc.length+" fire safety check task"+(fc.length===1?"":"s")+" queued — Claude creates "+(fc.length===1?"it":"them")+" in Breezeway next run"); }); }
+    return Promise.all(fc.map(function(c){ return S.db.doc("bwq/"+sid("fire_"+c)).set(fireDoc(c)); })).then(function(){ toast(fc.length+" fire safety check task"+(fc.length===1?"":"s")+" queued — the hub sends "+(fc.length===1?"it":"them")+" to Breezeway within 30 minutes"); }); }
   if(d.licask){ return mLicMsg([d.licask]); }
   if(d.licall){ return mLicMsg(d.licall.split(",")); }
   if(d.vmode){ ev.preventDefault(); S.ui.vmode=d.vmode; if(S.tab!=="vendors") return go("vendors"); return render(); }
@@ -4219,7 +4219,8 @@ document.addEventListener("click",function(ev){
       return Promise.all(ms.map(function(x){ return S.db.doc("bwq/"+sid(x.id)).set(bwqDoc(x)); })).then(function(){ toast(ms.length+" jobs queued for Breezeway"); });
     case "syncnow": if(!need()) return; return syncPoke(true).then(function(ok){ if(ok) toast("Asked the ThinkStation to read Breezeway now — give it about 15 minutes"); });
     case "partnerpush": if(!need()) return; var pm=S.ui.month, pts=Object.keys(S.taskbill).filter(function(tid){ var st=tbState(tid), t=S.taskbill[tid], jj=D.byId["bw-"+tid]; return st&&st.k==="done"&&(t.month||(jj&&(jj.finished||"").slice(0,7)))===pm; });
-      return S.db.doc("bwq/"+sid("partner_"+pm)).set({kind:"partner_export",month:pm,tasks:pts.map(function(tid){ var jj=D.byId["bw-"+tid]; return {taskId:tid,taskUrl:jj?jj.srcUrl:"https://app.breezeway.io/task/"+tid,prop:jj?jj.prop:(S.taskbill[tid].prop||"")}; }),status:"queued",by:S.me,at:Date.now()}).then(function(){ toast("Ready to push — Claude runs Export to Partner next Breezeway run"); });
+      return S.db.doc("bwq/"+sid("partner_"+pm)).set({kind:"partner_export",month:pm,tasks:pts.map(function(tid){ var jj=D.byId["bw-"+tid]; return {taskId:tid,taskUrl:jj?jj.srcUrl:"https://app.breezeway.io/task/"+tid,prop:jj?jj.prop:(S.taskbill[tid].prop||"")}; }),status:"queued",by:S.me,at:Date.now()}).then(function(){ toast("Queued. Export to Partner isn't automated yet, so run it in Breezeway"); });
+    case "askpenny": try{ var _t=window.top; _t.pennyOpen(true); var _q=_t.document.getElementById("pennyQ"); if(_q&&!_q.value) _q.value="About this job: "; }catch(e){} return;
     case "partnerundo": if(!need()) return; var pq=S.bwq[sid("partner_"+S.ui.month)]; return S.db.doc("bwq/"+sid("partner_"+S.ui.month)).set(Object.assign({},pq,{status:"cancelled"})).then(function(){ toast("Undone"); });
     case "tbpush": if(!need()) return; var rp=readyToPush(S.ui.month); if(!rp.length) return;
       return rp.reduce(function(p,tid){ return p.then(function(){ return S.db.doc("bwq/"+sid("tbill_"+tid)).set(tbillDoc(tid)); }).then(function(){ return put("taskbill",tid,{sent:true,sentAt:Date.now()},S.taskbill[tid]); }); },Promise.resolve())
