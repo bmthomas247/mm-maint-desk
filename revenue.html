@@ -454,6 +454,7 @@ document.addEventListener("change", e => {
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("est_hub_ok");
+  if(ok.error){ $("#app").innerHTML = `<h1>Revenue Estimator</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Revenue Estimator</h1><p class="muted">Nothing to show.</p>`; return; }
   const [h, me] = await Promise.all([sb.rpc("est_hub_homes"), sb.rpc("hub_me")]);
   S.homes = h.data || []; S.me = me.data || null;
