@@ -265,6 +265,11 @@ body.pennyonly #pennyBox .ph{cursor:default}
 .ord{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)} .ord:last-child{border-bottom:0}
 .ord .oi{width:32px;height:32px;border-radius:9px;background:var(--moose-soft);color:var(--moose-ink);display:grid;place-items:center;flex:none} .ord .oi svg{width:17px;height:17px}
 .ord b{flex:1;min-width:0} .ord .btn.small{min-width:40px;padding:0 10px}
+/* drag to reorder (Brandon 2026-11-03): handle on phones, whole row with a mouse */
+.ord .ograb{cursor:grab;touch-action:none;user-select:none;color:var(--muted);font-size:20px;line-height:1;padding:6px 2px;flex:none}
+.ord{cursor:default} @media (pointer:fine){ .ord{cursor:grab} .ord .btn{cursor:pointer} }
+.ord.drag{background:var(--moose-soft);border-radius:10px;box-shadow:0 6px 18px rgba(10,30,20,.18);position:relative;z-index:2;cursor:grabbing}
+body.ordrag{user-select:none;cursor:grabbing}
 .ints{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0} .ints label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);border-radius:999px;padding:7px 12px;font-weight:700;font-size:14px;cursor:pointer;background:var(--card)}
 .ints input{width:auto;min-height:0;margin:0} .ints label.on{background:var(--moose-soft);border-color:var(--moose);color:var(--moose-ink)}
 </style>
@@ -1426,7 +1431,7 @@ function settingsView2(v){
   const byOrd = a => a.slice().sort((a, b) => { const ia = ORD.indexOf(a.k), ib = ORD.indexOf(b.k); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; }).map(x => x.k);
   let ilist = byOrd(items.filter(x => x.info)), dlist = byOrd(items.filter(x => !x.info)), desksFirst = ORD.includes("@desks_first");
   const az = l => l.slice().sort((a, b) => L(a).label.localeCompare(L(b).label)), std = l => l.slice().sort((a, b) => L(a).sort - L(b).sort);
-  const ordRows = (l, tag) => l.map((k, i) => { const x = L(k); return `<div class="ord"><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
+  const ordRows = (l, tag) => l.map((k, i) => { const x = L(k); return `<div class="ord" data-k="${esc(k)}" data-tag="${tag}"><span class="ograb" title="Drag to move" aria-hidden="true">⠿</span><span class="oi">${ICON[x.icon] || ICON.grid}</span><b>${esc(x.label)}</b>
         <button class="btn small" data-up="${tag}:${i}" ${i ? "" : "disabled"} aria-label="Move ${esc(x.label)} up">↑</button><button class="btn small" data-dn="${tag}:${i}" ${i < l.length - 1 ? "" : "disabled"} aria-label="Move ${esc(x.label)} down">↓</button></div>`; }).join("");
   let ints = (PREFS.interests || []).slice(), ks = (PREFS.kinds || []).slice();
   const ORDO = { card:false, i:true, d:true };   // Arrange my sidebar = accordion (Brandon 2026-11-02): card closed at first, Moose Info + Desks fold inside
@@ -1471,10 +1476,29 @@ function settingsView2(v){
     <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
     $("#ordcard").ontoggle = () => { ORDO.card = $("#ordcard").open; };
     v.querySelectorAll("[data-ordo]").forEach(x => x.ontoggle = () => { ORDO[x.dataset.ordo] = x.open; });
-    const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; draw(); };
+    const redraw = () => { const p = v.querySelector(".setpage"), y = p ? p.scrollTop : 0; draw(); const q = v.querySelector(".setpage"); if(q) q.scrollTop = y; };   // keep the page where it was (the page box is rebuilt)
+    const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; redraw(); };
     v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => mv(b.dataset.up, -1));
     v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => mv(b.dataset.dn, 1));
-    v.querySelectorAll("[data-az]").forEach(b => b.onclick = () => { if(b.dataset.az === "i") ilist = az(ilist); else dlist = az(dlist); draw(); });
+    // drag and drop: the row follows the pointer inside its own list (Moose Info or Desks), then the new order is saved like ↑/↓
+    v.querySelectorAll(".ord[data-tag]").forEach(row => row.onpointerdown = e => {
+      if(e.button > 0 || e.target.closest("button")) return;
+      if(e.pointerType !== "mouse" && !e.target.closest(".ograb")) return;   // phones: only the ⠿ handle, so swiping still scrolls
+      e.preventDefault(); const box = row.parentElement, sc = row.closest(".setpage") || document.scrollingElement;
+      row.classList.add("drag"); document.body.classList.add("ordrag");
+      const move = ev => {
+        if(ev.clientY < 70) sc.scrollBy(0, -14); else if(ev.clientY > innerHeight - 70) sc.scrollBy(0, 14);
+        let before = null;
+        for(const r of box.children){ if(r === row) continue; const b = r.getBoundingClientRect(); if(ev.clientY < b.top + b.height / 2){ before = r; break; } }
+        if(before !== row.nextSibling) box.insertBefore(row, before);
+      };
+      const end = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", end); removeEventListener("pointercancel", end);
+        row.classList.remove("drag"); document.body.classList.remove("ordrag");
+        const order = [...box.children].map(r => r.dataset.k).filter(Boolean);
+        if(row.dataset.tag === "i") ilist = order; else dlist = order; redraw(); };
+      addEventListener("pointermove", move); addEventListener("pointerup", end); addEventListener("pointercancel", end);   // on the window: moving the row in the page drops pointer capture
+    });
+    v.querySelectorAll("[data-az]").forEach(b => b.onclick = () => { if(b.dataset.az === "i") ilist = az(ilist); else dlist = az(dlist); redraw(); });
     v.querySelectorAll("[data-first]").forEach(b => b.onclick = () => { desksFirst = b.dataset.first === "desks"; draw(); });
     v.querySelectorAll("[data-int]").forEach(c => c.onchange = () => { ints = c.checked ? ints.concat(c.dataset.int) : ints.filter(x => x !== c.dataset.int); draw(); });
     v.querySelectorAll("[data-kind]").forEach(c => c.onchange = () => { ks = c.checked ? ks.concat(c.dataset.kind) : ks.filter(x => x !== c.dataset.kind); draw(); });
