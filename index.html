@@ -265,6 +265,8 @@ body.pennyonly #pennyBox .ph{cursor:default}
 .ord{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)} .ord:last-child{border-bottom:0}
 .ord .oi{width:32px;height:32px;border-radius:9px;background:var(--moose-soft);color:var(--moose-ink);display:grid;place-items:center;flex:none} .ord .oi svg{width:17px;height:17px}
 .ord b{flex:1;min-width:0} .ord .btn.small{min-width:40px;padding:0 10px}
+#savedtip{position:fixed;right:18px;bottom:18px;z-index:60;background:var(--forest);color:#fff;font-weight:700;font-size:14px;padding:9px 14px;border-radius:999px;box-shadow:0 6px 18px rgba(10,30,20,.25);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none}
+#savedtip.on{opacity:1;transform:none} #savedtip.bad{background:var(--red)}
 /* drag to reorder (Brandon 2026-11-03): handle on phones, whole row with a mouse */
 .ord .ograb{cursor:grab;touch-action:none;user-select:none;color:var(--muted);font-size:20px;line-height:1;padding:6px 2px;flex:none}
 .ord{cursor:default} @media (pointer:fine){ .ord{cursor:grab} .ord .btn{cursor:pointer} }
@@ -587,7 +589,7 @@ async function boot(){
   shell(); pennyMount(); route();
   if(new URLSearchParams(location.search).get("penny") === "1") pennySolo();   // Penny's own window (pennyPop)
 }
-const fixOrder = o => (o || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:own" : k === "g:psu" ? "g:own" : k);   // Property Set Up moved into Owners 2026-11-02   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
+const fixOrder = o => (o || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:own" : k === "g:psu" ? "g:own" : k === "g:competitor" ? "g:own" : k);   // Property Set Up moved into Owners 2026-11-02   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
 /* Desks made in the page from a parent desk (no DB rows). ex = { maint_money, perf } worked out for the person (View as passes another person's). */
 function addDerived(DESKS, ex){
   /* Maintenance drop-down (Brandon 2026-10-28): Workbench · Projects · Expenses & Time. Projects follows Maintenance;
@@ -793,6 +795,15 @@ function boardView(v){
   $("#ttl").textContent = $("#utl").textContent = "Message board";
   v.innerHTML = `<div class="page"><div class="card" style="text-align:center;padding:28px 18px"><div style="font-size:40px">💬</div><h2 style="margin:6px 0">Message board</h2><p class="muted">Coming soon: a place to post and talk with the whole Moose team.</p><a class="btn" href="#/home">← Home</a></div></div>`;
 }
+function wireNav(root){
+  root.querySelectorAll(".dk.par").forEach(a => a.onclick = e => { e.preventDefault();
+    const closeOthers = () => document.querySelectorAll(".gbox.open").forEach(g => { if(g !== a.parentElement) g.classList.remove("open"); });   // accordion (Brandon 2026-10-28)
+    if(document.body.classList.contains("mini")){ document.body.classList.remove("mini"); try { localStorage.setItem("hub_mini","0"); } catch(e){} closeOthers(); a.parentElement.classList.add("open"); return; }
+    closeOthers(); a.parentElement.classList.toggle("open"); });
+}
+/* "Saved ✓" note that pops up bottom-right when a setting saves on its own (Brandon 2026-11-03: all settings auto save) */
+function savedTip(t, bad){ let e = $("#savedtip"); if(!e){ e = document.createElement("div"); e.id = "savedtip"; document.body.appendChild(e); }
+  e.textContent = t || "Saved ✓"; e.className = bad ? "bad on" : "on"; clearTimeout(savedTip.t); savedTip.t = setTimeout(() => e.className = bad ? "bad" : "", bad ? 6000 : 1800); }
 function shell(){
   const SN = sideNav(DESKS, PREFS.desk_order || []);
   const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
@@ -832,10 +843,7 @@ function shell(){
   try { if(localStorage.getItem("hub_mini") === "1") document.body.classList.add("mini"); } catch(e){}
   $("#rtoggle").onclick = () => { if(window.innerWidth <= 820) return document.body.classList.remove("open");
     const m = document.body.classList.toggle("mini"); try { localStorage.setItem("hub_mini", m ? "1" : "0"); } catch(e){} };
-  document.querySelectorAll(".dk.par").forEach(a => a.onclick = e => { e.preventDefault();
-    const closeOthers = () => document.querySelectorAll(".gbox.open").forEach(g => { if(g !== a.parentElement) g.classList.remove("open"); });   // accordion (Brandon 2026-10-28)
-    if(document.body.classList.contains("mini")){ document.body.classList.remove("mini"); try { localStorage.setItem("hub_mini","0"); } catch(e){} closeOthers(); a.parentElement.classList.add("open"); return; }
-    closeOthers(); a.parentElement.classList.toggle("open"); });
+  wireNav(document);
   hubSearchSetup();
   $("#scrim").onclick = () => document.body.classList.remove("open");
   let kind = "bug";
@@ -1435,11 +1443,11 @@ async function pennyBriefCard(box){
     <label style="display:flex;gap:10px;align-items:center;margin:10px 0;font-weight:700;cursor:pointer"><input type="checkbox" id="pbon"${p.enabled ? " checked" : ""}> Send me the morning briefing</label>
     <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:6px 0 12px"><label style="display:flex;gap:8px;align-items:center;font-weight:700">Time <select id="pbat" style="width:auto;min-height:40px;padding:6px 10px">${times.map(t => `<option value="${t}"${t === p.send_at ? " selected" : ""}>${t12(t)}</option>`).join("")}</select></label>
       <label style="display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer"><input type="checkbox" id="pbwk"${p.weekends ? " checked" : ""}> Weekends too</label></div>
-    <div style="display:flex;gap:8px;align-items:center"><button class="btn small" id="pbsave">Save</button><span class="muted" id="pbmsg"></span></div></div>`;
-  $("#pbsave").onclick = async () => { $("#pbsave").disabled = true;
-    const x = await sb.rpc("penny_brief_set", { p_enabled:$("#pbon").checked, p_send_at:$("#pbat").value, p_weekends:$("#pbwk").checked });
-    $("#pbsave").disabled = false;
-    $("#pbmsg").textContent = x.error ? "Couldn't save: " + x.error.message : (x.data.enabled ? `Saved. Next one at ${t12(x.data.send_at)}${x.data.weekends ? "" : " on a weekday"}.` : "Saved. You won't get the briefing."); };
+    <p class="muted" id="pbmsg" style="margin:0"></p></div>`;
+  const save = async () => { const x = await sb.rpc("penny_brief_set", { p_enabled:$("#pbon").checked, p_send_at:$("#pbat").value, p_weekends:$("#pbwk").checked });
+    if(x.error) return savedTip("Couldn't save: " + x.error.message, true);
+    $("#pbmsg").textContent = x.data.enabled ? `Next one at ${t12(x.data.send_at)}${x.data.weekends ? "" : " on a weekday"}.` : "You won't get the briefing."; savedTip(); };
+  ["pbon", "pbat", "pbwk"].forEach(id => $("#" + id).onchange = save);
 }
 async function settingsView(v){
   const [a, b, c, d] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] }),
@@ -1472,7 +1480,7 @@ function setOneOpen(v){
 let SETOBS = null;
 function settingsView2(v){
   const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","maint_weather","team_ratings","pto_reports","work_check","staff_calls","guest_followups","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config"];   // same list the sidebar leaves out (2026-11-03: monthly meetings + report-only pages showed here); calendar: its tabs show as "Calendar" under Moose Info
-  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", maint_inv:"maint", maint_improve:"maint",  housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", hk_inv:"hk", hk_improve:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", call_review:"guest", guest_followups:"guest", owner_calls:"own", competitor:"own", competitor_add:"own", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"rev", rev_alerts:"rev", rev_respond:"rev", rev_patterns:"rev", rev_improve:"rev", rev_listing:"rev", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"own", psu_desc:"tools", psu_photos:"tools", psu_qr:"tools", tools_revenue:"tools", tools_report:"tools", competitor:"competitor", competitor_add:"competitor", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
+  const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", maint_inv:"maint", maint_improve:"maint",  housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", hk_inv:"hk", hk_improve:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", call_review:"guest", guest_followups:"guest", owner_calls:"own", competitor:"own", competitor_add:"own", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"rev", rev_alerts:"rev", rev_respond:"rev", rev_patterns:"rev", rev_improve:"rev", rev_listing:"rev", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"own", psu_desc:"tools", psu_photos:"tools", psu_qr:"tools", tools_revenue:"tools", tools_report:"tools", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], own:["Owners","key"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rev:["Reviews","star"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], tools:["Tools","grid"], meet:["Meetings","people"], cal:["Calendar","calendar"], stf:["Staffing","clock"] };
   const seen = {}, items = [];
   DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
@@ -1491,12 +1499,20 @@ function settingsView2(v){
   const ORDO = { card:false, i:true, d:true };   // Arrange my sidebar = accordion (Brandon 2026-11-02): card closed at first, Moose Info + Desks fold inside
   const L = k => items.find(x => x.k === k);
   const bdBody = () => `<p class="muted" style="margin:4px 0 8px">Month and day only — so the team can celebrate you.</p>
-      <div class="bdsel">${bdSelects("bd", BD.mine)}<button class="btn small" id="bdsave">Save birthday</button><span class="muted" id="bdmsg"></span></div>
+      <div class="bdsel">${bdSelects("bd", BD.mine)}<span class="muted" id="bdmsg"></span></div>
       ${ME.admin ? `<details class="acc2"><summary><b>Everyone's birthdays</b><span class="muted">(Brandon & Kim) ${BD.people.filter(x => x.month).length} of ${BD.people.length} set</span></summary>
-        ${BD.people.map((x, i) => `<div class="bdrow"><b style="flex:1">${esc(x.name)}</b><span class="bdsel">${bdSelects("bp" + i, x)}<button class="btn small" data-bdp="${i}">Save</button></span></div>`).join("")}</details>` : ""}`;
+        ${BD.people.map((x, i) => `<div class="bdrow"><b style="flex:1">${esc(x.name)}</b><span class="bdsel" data-bdp="${i}">${bdSelects("bp" + i, x)}</span></div>`).join("")}</details>` : ""}`;
   // after it's saved, My birthday drops to the bottom as a closed accordion (Brandon 2026-10-28)
   const bdCard = () => BD.mine ? `<details class="card acc"><summary><b style="font-size:17px">🎂 My birthday</b><span class="muted">${MONTHS[BD.mine.month - 1]} ${BD.mine.day}</span></summary>${bdBody()}</details>`
     : `<div class="card"><b style="font-size:17px">🎂 My birthday</b>${bdBody()}</div>`;
+  let saveT = null;
+  const autoSave = () => { clearTimeout(saveT); saveT = setTimeout(async () => {
+    const cur = (desksFirst ? ["@desks_first"] : []).concat(ilist, dlist), order = cur.join() === std(ilist).concat(std(dlist)).join() ? [] : cur;
+    const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
+    if(r.error) return savedTip("Couldn't save: " + r.error.message, true);
+    PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks });
+    const nav = document.querySelector("aside.rail nav.desks"); if(nav){ nav.innerHTML = sideNav(DESKS, order).nav; wireNav(nav); }
+    savedTip(); }, 600); };
   const draw = () => {
     v.innerHTML = `<div class="page setpage"><h2>My settings</h2><p class="muted">Only you see these. They follow you to any computer or phone you sign in on.</p>
     <div class="card" data-one="keep"><b style="font-size:17px">🖼️ My picture</b><div style="display:flex;align-items:center;gap:16px;margin-top:10px;flex-wrap:wrap">${avatarHtml(true)}
@@ -1527,10 +1543,10 @@ function settingsView2(v){
     ${accCard()}
     ${ME.admin ? `<div id="pdesk"></div>` : ""}
     <div id="bnrbox"></div>
-    <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="prefsave">Save my settings</button><span class="muted" id="prefmsg"></span></div></div>`;
+    <p class="muted" style="margin:0">Changes save on their own. <span id="prefmsg"></span></p></div>`;
     $("#ordcard").ontoggle = () => { ORDO.card = $("#ordcard").open; };
     v.querySelectorAll("[data-ordo]").forEach(x => x.ontoggle = () => { ORDO[x.dataset.ordo] = x.open; });
-    const redraw = () => { const p = v.querySelector(".setpage"), y = p ? p.scrollTop : 0; draw(); const q = v.querySelector(".setpage"); if(q) q.scrollTop = y; };   // keep the page where it was (the page box is rebuilt)
+    const redraw = (save = true) => { const p = v.querySelector(".setpage"), y = p ? p.scrollTop : 0; draw(); const q = v.querySelector(".setpage"); if(q) q.scrollTop = y; if(save) autoSave(); };   // keep the page where it was (the page box is rebuilt); every change saves itself
     const mv = (spec, d) => { const [t, n] = spec.split(":"), l = t === "i" ? ilist : dlist, i = +n; [l[i + d], l[i]] = [l[i], l[i + d]]; redraw(); };
     v.querySelectorAll("[data-up]").forEach(b => b.onclick = () => mv(b.dataset.up, -1));
     v.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => mv(b.dataset.dn, 1));
@@ -1553,29 +1569,28 @@ function settingsView2(v){
       addEventListener("pointermove", move); addEventListener("pointerup", end); addEventListener("pointercancel", end);   // on the window: moving the row in the page drops pointer capture
     });
     v.querySelectorAll("[data-az]").forEach(b => b.onclick = () => { if(b.dataset.az === "i") ilist = az(ilist); else dlist = az(dlist); redraw(); });
-    v.querySelectorAll("[data-first]").forEach(b => b.onclick = () => { desksFirst = b.dataset.first === "desks"; draw(); });
-    v.querySelectorAll("[data-int]").forEach(c => c.onchange = () => { ints = c.checked ? ints.concat(c.dataset.int) : ints.filter(x => x !== c.dataset.int); draw(); });
-    v.querySelectorAll("[data-kind]").forEach(c => c.onchange = () => { ks = c.checked ? ks.concat(c.dataset.kind) : ks.filter(x => x !== c.dataset.kind); draw(); });
+    v.querySelectorAll("[data-first]").forEach(b => b.onclick = () => { desksFirst = b.dataset.first === "desks"; redraw(); });
+    v.querySelectorAll("[data-int]").forEach(c => c.onchange = () => { ints = c.checked ? ints.concat(c.dataset.int) : ints.filter(x => x !== c.dataset.int); redraw(); });
+    v.querySelectorAll("[data-kind]").forEach(c => c.onchange = () => { ks = c.checked ? ks.concat(c.dataset.kind) : ks.filter(x => x !== c.dataset.kind); redraw(); });
     $("#avfile").onchange = async e => { const f = e.target.files[0]; if(!f) return; $("#avmsg").textContent = "Saving…";
       try { const d = await shrinkPic(f); const r = await sb.rpc("hub_set_avatar", { p_avatar:d }); if(r.error) throw r.error;
         PREFS.avatar = d; shell(); route(); } catch(err){ $("#avmsg").textContent = "Couldn't save: " + (err.message || err); } };
     if($("#avdel")) $("#avdel").onclick = async () => { const r = await sb.rpc("hub_set_avatar", { p_avatar:null }); if(!r.error){ PREFS.avatar = null; shell(); route(); } };
-    $("#bdsave").onclick = async () => { const r = await sb.rpc("hub_set_birthday", { p_user:null, p_month:+$("#bd_m").value || null, p_day:+$("#bd_d").value || null });
-      $("#bdmsg").textContent = r.error ? "Couldn't save: " + r.error.message : "Saved 🎉"; if(!r.error){ BD.mine = { month:+$("#bd_m").value, day:+$("#bd_d").value }; draw(); $("#prefmsg").textContent = "Birthday saved 🎉"; } };
-    v.querySelectorAll("[data-bdp]").forEach(b => b.onclick = async () => { const i = +b.dataset.bdp, x = BD.people[i];
-      const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:+$("#bp" + i + "_m").value || null, p_day:+$("#bp" + i + "_d").value || null });
-      b.textContent = r.error ? "Error" : "Saved ✓"; if(r.error) alertMsg(r.error.message); });
+    const bdBoth = p => { const m = $("#" + p + "_m").value, d = $("#" + p + "_d").value; return (m && d) || (!m && !d) ? { m:+m || null, d:+d || null } : null; };   // save only a whole date (or a cleared one)
+    ["bd_m", "bd_d"].forEach(id => $("#" + id).onchange = async () => { const b = bdBoth("bd"); if(!b) return;
+      const r = await sb.rpc("hub_set_birthday", { p_user:null, p_month:b.m, p_day:b.d });
+      if(r.error) return savedTip("Couldn't save: " + r.error.message, true);
+      BD.mine = b.m ? { month:b.m, day:b.d } : null; redraw(false); savedTip("Birthday saved 🎉"); });
+    v.querySelectorAll("[data-bdp]").forEach(b => b.querySelectorAll("select").forEach(sel => sel.onchange = async () => { const i = +b.dataset.bdp, x = BD.people[i], w = bdBoth("bp" + i); if(!w) return;
+      const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:w.m, p_day:w.d });
+      if(r.error) return savedTip("Couldn't save: " + r.error.message, true);
+      x.month = w.m; x.day = w.d; savedTip(x.name + "'s birthday saved"); }));
     v.querySelectorAll("[data-acc]").forEach(b => b.onclick = () => { const [act, id] = b.dataset.acc.split(":"), x = ACC.find(p => p.id === id);
       (act === "pw" ? accPw : (p, f) => accAsk(act, p, f))(x, async msg => { ACC = (await sb.rpc("hub_admin_people")).data || []; draw(); const c = $("#acccard"); if(c){ SETOPEN = (c.querySelector("summary b") || {}).textContent; c.open = true; } $("#prefmsg").textContent = msg; }); });
-    $("#ordreset").onclick = () => { ilist = std(ilist); dlist = std(dlist); desksFirst = false; draw(); };
+    $("#ordreset").onclick = () => { ilist = std(ilist); dlist = std(dlist); desksFirst = false; redraw(); };
     $("#intown").onchange = () => { const own = $("#intown").value.split(",").map(x => x.trim().replace(/\s+/g, " ").slice(0, 40)).filter(x => x.length > 1);
       ints = ints.filter(x => INTERESTS.some(([k]) => k === x)).concat([...new Set(own.map(x => x.toLowerCase()))]).slice(0, 20); };
-    $("#prefsave").onclick = async () => { $("#intown").onchange(); $("#prefsave").disabled = true;
-      const cur = (desksFirst ? ["@desks_first"] : []).concat(ilist, dlist), order = cur.join() === std(ilist).concat(std(dlist)).join() ? [] : cur;
-      const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
-      $("#prefsave").disabled = false;
-      if(r.error) return $("#prefmsg").textContent = "Couldn't save: " + r.error.message;
-      PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks }); shell(); route(); setTimeout(() => { const m = $("#prefmsg"); if(m) m.textContent = "Saved."; }, 50); };
+    $("#intown").onblur = () => { $("#intown").onchange(); autoSave(); };
     $("#mypw").onclick = myPwBox;
     v.querySelectorAll("[data-pwp]").forEach(b => b.onclick = () => accPw(PWP.find(p => p.id === b.dataset.pwp), msg => { $("#prefmsg").textContent = msg; }));
     pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
