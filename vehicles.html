@@ -61,6 +61,9 @@ tr:last-child td{border-bottom:0}
 .note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
 dialog{border:1px solid var(--line);border-radius:16px;padding:20px;max-width:420px;width:calc(100% - 32px);max-height:calc(100vh - 32px);overflow:auto;background:var(--card);color:var(--ink)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
+.dlgx{position:sticky;top:-8px;float:right;margin:-8px -8px 0 8px;z-index:2;width:36px;height:36px;border-radius:50%;border:1px solid var(--line-2);
+  background:var(--card);color:var(--ink);font-size:16px;font-weight:800;cursor:pointer;display:grid;place-items:center}
+.dlgx:hover{background:var(--line)}
 dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
 dialog input{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
 .err{color:var(--red);font-size:13px;min-height:1em}
@@ -463,6 +466,18 @@ document.addEventListener("change", e => {
   if(e.target.id === "lim"){ S.limit = Math.max(30, Math.min(120, +e.target.value || 75)); render(); }
 });
 
+// every pop-up: ✕ in the top right + a click outside closes it (Brandon 2026-11-03)
+(function dlgClose(){
+  const d = $("#dlg"), shut = () => { d.close(); d.style.maxWidth = ""; };
+  const addX = () => { if(!d.querySelector(":scope > .dlgx")) d.insertAdjacentHTML("afterbegin", `<button type="button" class="dlgx" aria-label="Close" title="Close">✕</button>`); };
+  new MutationObserver(addX).observe(d, { childList: true });
+  d.addEventListener("click", e => {
+    if(e.target.closest(".dlgx")) return shut();
+    if(e.target !== d) return;
+    const r = d.getBoundingClientRect();
+    if(e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) shut();
+  });
+})();
 (async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
