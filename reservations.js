@@ -428,16 +428,22 @@ function prep(s){
   // Janae, Pyper, Kim 2026-11-03: tabs move by themselves. Steps done + nothing held = Waiting on payment while anything is owed, else Checkout
   // (Checkout = paid in full, the next step; stays there after the guest leaves). A declined payment / no card stays in Waiting on payment with an alert.
   // A stage a PERSON picked (not the Asana import) sticks until a step is ticked after they picked it. Cancelled stays leave In progress / Checkout.
-  const owed = (s.balance || 0) > 0.005 && s.status !== "Cancelled", fp = owed && B.failed && B.failed[String(s.res)];
+  // Q4 (same day): ANY balance, owed or credit, even cents and even after check-out (Vrbo commission pennies show up after the stay) = Waiting on payment.
+  // Full payment is due 14 days before arrival, so a balance inside 14 days or after the stay, or a credit, is flagged. Cancelled = Cancellations tab.
+  const bal = s.balance || 0, owed = Math.abs(bal) > 0.005 && s.status !== "Cancelled", fp = owed && B.failed && B.failed[String(s.res)];
   if(fp) s.payFlag = s.payWhy = fp.what || "Track declined a payment in the last few days.";
-  else if(owed && s.depart >= today && s.td && s.td.card === false) s.payFlag = s.payWhy = "No card on file in Track for the payments still due.";
+  else if(owed && bal < 0) s.payFlag = s.payWhy = `Credit of ${money(-bal)} on the folio: refund it or fix the folio.`;
+  else if(owed && s.depart < today) s.payFlag = s.payWhy = "Checked out with a balance and no payment coming (Vrbo commission pennies show up like this).";
+  else if(owed && s.td && s.td.card === false) s.payFlag = s.payWhy = "No card on file in Track for the payments still due.";
+  else if(owed && daysTo(today, s.arrive) <= 14 && !(s.nights >= 30)) s.payFlag = s.payWhy = "Full payment was due 14 days before arrival. Check the payment schedule in Track.";
+  if(s.stage === "closed" && owed) s.stage = "checkout";
   const L = s.list || {}, byPerson = L.stage && L.by && L.by !== "Asana import",
     tickedSince = byPerson && L.at && Object.values(ticks).some(k => k && k.at && k.at > L.at),
     ready = s.got >= s.need && !s.blockers.length && !s.waiting.length;
   if(s.status === "Cancelled" && (s.stage === "in_progress" || s.stage === "checkout")) s.stage = "cancelling";
   else if(s.stage === "in_progress" && ready && s.chan !== "owner" && (!byPerson || tickedSince)) s.stage = "checkout";
   if(s.stage === "checkout" && owed) s.stage = "waiting_pay";
-  if(s.stage === "waiting_pay" && s.payFlag) s.blockers.push(fp ? "Payment declined" : "No card on file for the next payment");
+  if(s.stage === "waiting_pay" && s.payFlag) s.blockers.push(fp ? "Payment declined" : /No card/.test(s.payFlag) ? "No card on file for the next payment" : "Balance off");
   s.state = s.stage === "closed" ? "Complete" : s.status === "Cancelled" && s.stage !== "closed" ? "Cancelling" : s.got === 0 ? "Not started"
     : s.got >= s.need ? (s.depart < today ? "Ready to close" : "Paperwork done") : s.waiting.length ? "Waiting" : "In progress";
 }
@@ -524,8 +530,8 @@ async function queue(v){
     // Janae, Pyper, Kim 2026-11-03: failed payments stay in Waiting on payment, listed here (daily failed-payments check + no card on file)
     const fpl = !ALLQ && F.stage === "waiting_pay" ? inStage.filter(s => s.payFlag) : [];
     $("#rqbody").innerHTML = (ALLQ ? `<p class="muted" style="margin:4px 2px 10px">Searching every tab · ${rows.length} ${rows.length === 1 ? "stay" : "stays"} found. Tap a tab to clear the search.</p>` : "")
-      + (fpl.length ? `<div class="card" style="border-color:var(--red,#c0392b)"><b>⚠️ ${fpl.length} ${fpl.length === 1 ? "reservation has" : "reservations have"} a payment problem</b> <span class="muted">· from the daily failed payments check and Track's card on file</span>
-        ${fpl.map(s => `<div style="padding:6px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(s.res)}"><b>${esc(s.unit || "")} · ${esc(s.guest || "#" + s.res)}</b></a> <span class="muted">#${esc(s.res)} · arrives ${esc(dayY(s.arrive))} · ${esc(money(s.balance))} due</span><div style="font-size:13px">${esc(s.payFlag)}</div></div>`).join("")}</div>` : "")
+      + (fpl.length ? `<div class="card" style="border-color:var(--red,#c0392b)"><b>⚠️ ${fpl.length} ${fpl.length === 1 ? "reservation has" : "reservations have"} a payment problem</b> <span class="muted">· declined payments, no card on file, credits, balances inside 14 days or after the stay · Track reports: <a href="https://moosemanagement.trackhs.com/reports/pms-folio-balance/" target="_blank" rel="noopener">Folio balance ↗</a> · <a href="https://moosemanagement.trackhs.com/reports/pms-cancellation-balance/" target="_blank" rel="noopener">Cancellation balance ↗</a></span>
+        ${fpl.map(s => `<div style="padding:6px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(s.res)}"><b>${esc(s.unit || "")} · ${esc(s.guest || "#" + s.res)}</b></a> <span class="muted">#${esc(s.res)} · arrives ${esc(dayY(s.arrive))} · ${s.balance < 0 ? "credit " + esc(money(-s.balance)) : esc(money(s.balance)) + " due"}</span><div style="font-size:13px">${esc(s.payFlag)}</div></div>`).join("")}</div>` : "")
       + (rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
       return `<div class="rgh" data-g="${esc(g.k)}"><span>${esc(gName(g.k).toUpperCase())} · ${g.s.length} ${g.s.length === 1 ? "STAY" : "STAYS"}</span><span>${shut ? "▾" : "▴"}</span></div>
       ${shut ? "" : `<div class="rgrid">${g.s.map(tile).join("")}</div>`}`; }).join("")
@@ -614,7 +620,7 @@ async function card(v, res){
         <label class="muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rx_ext" style="width:20px;height:20px;min-height:0" ${s.list && s.list.extending ? "checked" : ""}> Extending</label>
         <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay").map(([k, l]) => `<option value="${k}" ${(s.stage === "waiting_pay" ? "checkout" : s.stage) === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       ${s.stage === "waiting_pay" && !s.payFlag ? `<div class="rrule info">Waiting on payment: ${money(s.balance)} is still due. Track takes the next payments from the card on file, so nothing to do unless one fails. It moves to Checkout by itself once the balance is $0.</div>`
-        : s.payWhy ? `<div class="rrule stop">${s.stage === "waiting_pay" ? "Waiting on payment: " : ""}${esc(s.payWhy)} ${money(s.balance)} still due. ${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : "Ask the guest to add a card in the guest portal, or pay the balance."}</div>` : ""}
+        : s.payWhy ? `<div class="rrule stop">${s.stage === "waiting_pay" ? "Waiting on payment: " : ""}${esc(s.payWhy)} ${s.balance > 0 ? money(s.balance) + " still due. " : ""}${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : /No card/.test(s.payWhy) ? "Ask the guest to add a card in the guest portal, or pay the balance." : "Fix it on the folio in Track; it moves to Checkout by itself once the balance is $0."}</div>` : ""}
       <div class="rchips"><span class="muted" style="align-self:center">Waiting on</span>${WAIT.map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}">${esc(w)}</button>`).join("")}</div>
       ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
       ${trkSection(s)}
