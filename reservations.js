@@ -20,6 +20,14 @@ const CSS = `
 .rstep .who{font-size:12px;color:var(--muted);white-space:nowrap;min-width:200px;text-align:right}
 @media(max-width:640px){ .rstep{flex-wrap:wrap} .rstep .who{min-width:0;flex-basis:100%;text-align:left;padding-left:32px;white-space:normal} } .rstep.done .l{text-decoration:line-through;text-decoration-color:var(--line-2)}
 .rhist{font-size:13px;border-top:1px solid var(--line);padding:6px 0}
+/* Brandon 2026-11-03: check list groups are an accordion (one open at a time, the first one with steps left opens) */
+details.racc{margin-top:0;border-top:1px solid var(--line)} details.racc>summary{list-style:none;cursor:pointer;padding:10px 2px;border-radius:8px}
+details.racc>summary::-webkit-details-marker{display:none} details.racc>summary:hover{background:var(--ground)} details.racc>summary h3{margin:0}
+details.racc>summary h3::before{content:"▸";color:var(--muted);width:12px;display:inline-block} details.racc[open]>summary h3::before{content:"▾"}
+details.racc[open]{padding-bottom:8px} .rgall{background:none;border:0;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0;min-height:0}
+.rwhy{background:none;border:1px solid var(--line);color:var(--muted);border-radius:50%;width:20px;height:20px;min-height:0;padding:0;font-size:12px;font-weight:700;line-height:18px;cursor:pointer;margin-left:6px;vertical-align:1px}
+.rwhyt{display:inline-block;width:100%;box-sizing:border-box;font-size:13px;color:var(--ink-2);background:var(--ground);border-radius:8px;padding:6px 9px;margin-top:5px;font-weight:400}   /* inline-block: a done step's line-through doesn't reach it */
+.rwhyt[hidden]{display:none}
 /* Track automations (Brandon 2026-11-03): Track's logo purple = Track's automation happened, grey = it hasn't */
 .trk{display:inline-flex;flex:none;color:#b9b9bf} .rstep .l .trk{vertical-align:-3px} .trk.on{color:#411064} .trk svg{width:22px;height:16px;display:block}
 .rstep.trkrow{align-items:center} .rstep.trkrow .who{white-space:normal;max-width:280px} .rstep.trkrow .l{font-size:14px} .rstep.trkrow.on .l{color:var(--ink)} .rstep.trkrow:not(.on) .l{color:var(--muted)}
@@ -277,12 +285,25 @@ function tdOk(s, a){
 }
 // Names as they are in Track on 2026-10-28 (tags, fee charge names, esign document subjects) — track_res_details.py pull of 456 stays.
 const PETS = /^\d+\s*pets?$/i, OWNER_CL = /cleaning & laundry|clean\/laundry/i;
+// VRBO / direct pet fee (Kim + Pyper 2026-11-03): Track adds "Pet Hosting Fee (Adjust)" at $1 a pet; staff set it to $25 a night per pet,
+// at least $100 and at most $350 per pet (monthly 30+ nights: $450 + $200 a month, not checked). track_res_details keeps v (amount) + q
+// (quantity) on pet fees only. 2 pets at 13+ nights: the cap ($600 or $700) isn't settled yet, so no "doesn't match" there.
+const PET_FEE_RE = /pet hosting|pet fee|pet approval/i;
+function petFee(s){
+  const fs = ((s.td && s.td.fees) || []).filter(f => PET_FEE_RE.test(f.n)), pets = (s.occ && s.occ.pets) || 0;
+  if(!fs.length) return { ok:false, none:true, pets };
+  const kn = fs.filter(f => f.v != null);
+  if(!kn.length) return { ok:true, pets };   // amount not read yet (older copy): name only, as before
+  const v = kn.reduce((a, f) => a + f.v, 0), q = kn.reduce((a, f) => a + (f.q || 0), 0), ph = v <= Math.max(q, pets, 1) + 0.005;
+  const per = Math.max(100, Math.min(350, (s.nights || 0) * 25)), want = (s.nights || 0) >= 30 || !pets ? null : pets * per;
+  return { ok:!ph, ph, v, per, want, pets, off:!ph && want != null && Math.abs(v - want) > 0.5 && !(pets > 1 && (s.nights || 0) * 25 > 300) };
+}
 const TD_RULES = {
   td_pet_tag:    s => tag(s, PETS),
   td_pet_owner:  s => tag(s, PETS) && fee(s, /pet/i),
   td_pet_gp:     s => tag(s, PETS) && fee(s, /pet/i, false),
   td_pet_clean:  s => fee(s, /pet cleaning/i),
-  td_pet_fee:    s => fee(s, /pet hosting|pet fee|pet approval/i),
+  td_pet_fee:    s => s.chan === "abnb" ? fee(s, PET_FEE_RE) : petFee(s).ok,   // Airbnb: name only until Kim's Nov 20 flat fee
   td_30:         s => tag(s, /over 30 nights/i),
   td_pcwg:       s => tag(s, /pc\/wg confirmed/i),
   td_ticket:     s => !!(s.td.notes && s.td.notes.ticket),
@@ -364,15 +385,15 @@ const TRK = [
 ];
 const TRK_STEP = { i_contract:CONTRACT_IDS, g_35:[71, 72], t_email:[99] };   // check list steps Track's automations do
 const trkLogo = (on, title) => `<span class="trk ${on ? "on" : ""}" title="${esc(title || "")}"><svg viewBox="0 0 500 354.4" aria-hidden="true"><path fill="currentColor" transform="translate(-303 2197)" d="M674.3-2197h-248c-68.5,0.4-123.7,56.2-123.3,124.7c0.4,67.9,55.4,122.9,123.3,123.3h85.8v-62h-85.8c-32.7,0-57.2-29.6-57.2-62c-0.7-30.9,23.8-56.5,54.7-57.2c0.8,0,1.6,0,2.5,0h248c30.9-0.7,56.6,23.9,57.2,54.8c0,0.8,0,1.6,0,2.4c0,32.4-24.5,62-57.2,62h-85.8v157.4l52.5-95.4h33.4c69.6,0,128.8-55.1,128.8-124C803-2141.9,743.9-2197,674.3-2197z"/><path fill="currentColor" opacity=".75" d="M284.9,354.4V185.5h92.8L284.9,354.4z"/></svg></span>`;
-function trkSection(s){
+function trkSection(s, og){
   if(!s.td || !s.td.auto) return "";
   const rows = TRK.filter(r => r.on(s));
   if(!rows.length) return "";
   const got = rows.filter(r => trkHit(s, r.ids)).length;
-  return `<div class="rgrp"><h3>${trkLogo(got > 0, "Track automations")} Track automations <span class="muted" style="font-weight:600">${got} happened</span></h3>
+  return `<details class="rgrp racc" data-g="Track automations" ${og === "*" || og === "Track automations" ? "open" : ""}><summary><h3>${trkLogo(got > 0, "Track automations")} Track automations <span class="muted" style="font-weight:600">${got} of ${rows.length} happened</span></h3></summary>
     ${rows.map(r => { const at = trkSeen(s, r.ids), sk = !at && r.skip && r.skip(s);
       return `<div class="rstep trkrow ${at ? "on" : ""}">${trkLogo(!!at, at ? "Track did this" : sk || "Not yet")}<span class="l">${esc(r.l)}${!at && !sk && r.why ? ` <span class="muted" style="font-size:12.5px">(${esc(r.why)})</span>` : ""}</span>
-        <span class="who">${at ? "Track · " + esc(when(at)) : sk ? esc(sk) : "Not yet"}</span></div>`; }).join("")}</div>`;
+        <span class="who">${at ? "Track · " + esc(when(at)) : sk ? esc(sk) : "Not yet"}</span></div>`; }).join("")}</details>`;
 }
 const addDay =(d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
 const bwHas = (s, dp, re, from, to, who) => (s.bw || []).some(t => t.dp === dp && t.sd >= from && t.sd <= to && re.test(t.n) && (!who || (t.who || []).some(w => who.test(w))));
@@ -406,6 +427,15 @@ function prep(s){
       s.alerts2.push({ lvl:d >= 7 ? "stop" : "warn", t:d >= 7
         ? `Day ${d} without the ${miss.join(", ")}. Act today: call the guest, send "FINAL NOTICE to Complete Reservation Requirements" with a deadline, then cancel${s.chan === "abnb" ? " (Airbnb: call Airbnb, we can't cancel it ourselves; our house rules say 24 hours)" : ""}. A manager handles this one.`
         : `Day ${d}: still no ${miss.join(", ")}. Track's reminders have gone; reach out now. Day 7 = act (call, last email, cancel).` }); }
+  }
+  // VRBO / direct walkthrough 2026-11-03: the contract sometimes doesn't send by itself (mostly direct bookings); pet fee left at $1
+  if(live && ["vrbo", "ws"].includes(s.chan)){
+    if(s.agreement === "not-sent" && s.bookedAt && String(s.bookedAt).slice(0, 10) < today){ s.blockers.push("Contract not sent");
+      s.alerts2.push({ lvl:"stop", t:`Track hasn't sent the contract (booked ${day(String(s.bookedAt).slice(0, 10))}). Send it by hand from Track's e-Sign tab.` }); }
+    const pf = (s.occ && s.occ.pets) ? petFee(s) : null;
+    if(pf && pf.ph){ s.blockers.push("Pet fee still $1");
+      s.alerts2.push({ lvl:"stop", t:`Pet fee is still Track's $1 placeholder (${money(pf.v)}). ${pf.want != null ? `Set it to ${money(pf.want)}: ${pf.pets} pet${pf.pets > 1 ? "s" : ""} × ${money(pf.per)} ($25 a night per pet, $100–$350 per pet).` : "Monthly stay: $450 a month for the first pet + $200 a month for a second."} Then add the pet cleaning fee.` }); }
+    else if(pf && pf.off) s.alerts2.push({ lvl:"warn", t:`Pet fee is ${money(pf.v)}; the rule gives ${money(pf.want)} (${pf.pets} pet${pf.pets > 1 ? "s" : ""} × ${money(pf.per)}: $25 a night per pet, $100–$350 per pet). Check it.` });
   }
   // Owner guests: agreement + payment due now; 35-day reminder (Track sends it); 30 days = change it to an Owner Stay (Kim 2026-11-02, OG 23)
   if(live && s.chan === "oguest"){
@@ -574,6 +604,7 @@ async function queue(v){
 }
 
 /* ---------- one check list */
+const GOPEN = {};   // res # → open group ("" = none, "*" = all), kept while the page is open
 async function card(v, res){
   const pop = v.closest && v.closest("#rpop"), keepY = pop ? pop.scrollTop : 0;
   if(!(pop && v.firstElementChild)) v.innerHTML = `<div class="page rpage"><p class="muted">Loading…</p></div>`;
@@ -582,6 +613,7 @@ async function card(v, res){
   if(!s){ v.innerHTML = `<div class="page"><div class="card"><a class="btn small" href="#/reservations">← Back</a><p>No check list for #${esc(res)} (only stays from 60 days back are here).</p></div></div>`; return; }
   const occ = s.occ || {}, grp = {};
   s.steps.forEach(t => (grp[t.grp] = grp[t.grp] || []).push(t));
+  const og = s.res in GOPEN ? GOPEN[s.res] : ((Object.entries(grp).find(([g, ts]) => ts.some(t => !t.opt && !t.done)) || [])[0] || "");
   requestAnimationFrame(() => { if(pop) pop.scrollTop = keepY; });
   v.innerHTML = `<div class="page rpage">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a class="btn small" href="#/reservations">← Back</a>
@@ -591,7 +623,7 @@ async function card(v, res){
       <div class="rfacts"><span>Res <a href="${folioUrl(s.res)}" target="_blank" rel="noopener"><b>#${esc(s.res)}</b></a></span><span><b>${esc(day(s.arrive))}</b> → <b>${esc(day(s.depart))}</b> · ${esc(s.nights)} nights</span>
         <span>${esc(s.type || "")} <span class="muted">(${esc(CH[s.chan])})</span></span><span>Track: <b>${esc(s.status || "")}</b></span>
         <span>${occ.adults || 0} adults${occ.children ? ", " + occ.children + " kids" : ""}${occ.pets ? `, <b>${occ.pets} pet${occ.pets > 1 ? "s" : ""}</b>` : ""}</span>
-        ${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">Do not rent</span>` : ""}${s.list && s.list.asana ? `<a href="${esc(s.list.asana)}" target="_blank" rel="noopener" class="muted">Asana checklist (both run until Nov 9)</a>` : ""}</div>
+        ${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">Do not rent</span>` : ""}${s.list && s.list.asana ? `<a href="${esc(s.list.asana)}" target="_blank" rel="noopener" class="muted">Asana checklist (ends Nov 9)</a>` : ""}</div>
       <div class="rmoney"><span class="muted">From Track</span><span>Campaign: <b>${esc(s.campaign || "—")}</b></span><span>Res agent: <b>${esc(s.agent || "—")}</b></span>
         <span>Guarantee: <b>${esc(s.guarantee || "—")}</b></span><span>Agreement: <b>${esc(s.agreement || "—")}</b></span>
         ${B.money ? `<span>Rent ${money(s.rent)}</span><span>Fees ${money(s.fees)}</span><span>Taxes ${money(s.taxes)}</span><span>Total <b>${money(s.total)}</b></span>` : ""}
@@ -612,6 +644,7 @@ async function card(v, res){
       ${s.heads.length ? `<div class="rrule warn" style="background:var(--amber-soft)"><div>⚠️ Heads-up for ${esc(s.unit)} before you book</div>${s.heads.map(a => `<div style="font-weight:${a.level === "warn" ? 600 : 400};margin-top:3px">• ${esc(a.text)} <span style="font-weight:400;opacity:.8">· ${esc(a.source)}</span></div>`).join("")}</div>` : ""}
       ${s.rules.map(r => `<div class="rrule ${r.kind}">${esc(r.text)} <span style="font-weight:400;opacity:.8">· ${esc(r.source)}</span></div>`).join("")}
       ${s.alerts2.map(a => `<div class="rrule ${a.lvl}">${esc(a.t)}</div>`).join("")}
+      ${s.status === "Cancelled" && ["vrbo", "ws"].includes(s.chan) ? `<div class="rrule info">Cancelled. Our policy (VRBO + direct, Kim 2026-11-03): every payment is non-refundable once it's made, so when the guest cancels, ${money(s.paid)} paid → <b>$0 back</b>. Reason in Track: always “Canceled by guest”. A refund only when we cancel or the home has a problem (write why on the check list; Refund Transaction, never Void).${s.td && s.td.tx && s.td.tx.credit ? " A refund is already on the folio." : ""}</div>` : ""}
       ${s.chan === "oguest" && s.status !== "Cancelled" ? `<div class="rmoney"><span class="muted">Owner guest payment</span><span>Due now <b>${money(payDue(s))}</b> <span class="muted">(${daysTo(B.today, s.arrive) > 30 ? "10% down, 30+ days out" : "full payment, inside 30 days"})</span></span><span>Paid <b>${money(s.paid)}</b></span>${autoOk(s, "pay_due") ? `<span class="pill green">OK</span>` : `<span class="pill amber">Not yet: send the guest portal link ("Make A Payment Email Guest Portal")</span>`}</div>` : ""}
     </div>
     <div class="card">
@@ -623,12 +656,14 @@ async function card(v, res){
         : s.payWhy ? `<div class="rrule stop">${s.stage === "waiting_pay" ? "Waiting on payment: " : ""}${esc(s.payWhy)} ${s.balance > 0 ? money(s.balance) + " still due. " : ""}${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : /No card/.test(s.payWhy) ? "Ask the guest to add a card in the guest portal, or pay the balance." : "Fix it on the folio in Track; it moves to Checkout by itself once the balance is $0."}</div>` : ""}
       <div class="rchips"><span class="muted" style="align-self:center">Waiting on</span>${WAIT.map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}">${esc(w)}</button>`).join("")}</div>
       ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
-      ${trkSection(s)}
-      ${Object.entries(grp).map(([g, ts]) => `<div class="rgrp"><h3>${esc(g)} <span class="muted" style="font-weight:600">${ts.filter(t => !t.opt && t.done).length}/${ts.filter(t => !t.opt).length}</span></h3>
+      ${trkSection(s, og)}
+      <div style="margin-top:8px"><button class="rgall" id="rx_gall">${og === "*" ? "Close all" : "Open all"}</button></div>
+      ${Object.entries(grp).map(([g, ts]) => { const n = ts.filter(t => !t.opt).length, d = ts.filter(t => !t.opt && t.done).length;
+        return `<details class="rgrp racc" data-g="${esc(g)}" ${og === "*" || og === g ? "open" : ""}><summary><h3>${esc(g)} <span class="muted" style="font-weight:600">${d}/${n}</span>${n && d >= n ? `<span class="pill green" style="font-size:11px;padding:1px 7px">done</span>` : ""}</h3></summary>
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
-          <span class="l">${TRK_STEP[t.key] && s.td && s.td.auto ? trkLogo(trkHit(s, TRK_STEP[t.key]), trkHit(s, TRK_STEP[t.key]) ? "Track's automation did this" : "Track's automation hasn't happened yet") + " " : ""}${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : ""}</span></label>`; }).join("")}</div>`).join("")}
+          <span class="l">${TRK_STEP[t.key] && s.td && s.td.auto ? trkLogo(trkHit(s, TRK_STEP[t.key]), trkHit(s, TRK_STEP[t.key]) ? "Track's automation did this" : "Track's automation hasn't happened yet") + " " : ""}${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.help ? `<button type="button" class="rwhy" data-why="${t.key}" title="Why? / how">i</button>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}${t.help ? `<div class="rwhyt" data-whyt="${t.key}" hidden>${esc(t.help)}</div>` : ""}</span>
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : ""}</span></label>`; }).join("")}</details>`; }).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
@@ -651,6 +686,12 @@ async function card(v, res){
     const r = await sb.rpc("res_ask", { p_res:s.res, p_step:b.dataset.ask, p_note:note });
     if(r.error){ b.disabled = false; return msg("Couldn't ask: " + r.error.message); }
     await load(true); card(v, res); });
+  v.querySelectorAll("details.racc").forEach(d => d.ontoggle = () => {
+    if(GOPEN[s.res] === "*") return;
+    if(d.open){ GOPEN[s.res] = d.dataset.g; v.querySelectorAll("details.racc").forEach(o => { if(o !== d && o.open) o.open = false; }); }
+    else if(GOPEN[s.res] === d.dataset.g || !(s.res in GOPEN)) GOPEN[s.res] = ""; });
+  $("#rx_gall").onclick = () => { const all = GOPEN[s.res] === "*"; GOPEN[s.res] = all ? "" : "*"; v.querySelectorAll("details.racc").forEach(d => d.open = !all); $("#rx_gall").textContent = all ? "Open all" : "Close all"; };
+  v.querySelectorAll("[data-why]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const x = v.querySelector(`[data-whyt="${b.dataset.why}"]`); if(x) x.hidden = !x.hidden; });
   v.querySelectorAll("[data-uaa]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); uaaPanel(s); });
   v.querySelectorAll("[data-copyform]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
     try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
