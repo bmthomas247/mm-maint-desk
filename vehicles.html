@@ -30,6 +30,7 @@
 body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
 .wrap{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
 h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+.vtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap} .vtop .btn{margin-top:6px;text-decoration:none;display:inline-flex;align-items:center}
 h2{font-size:17px;margin:26px 0 8px;font-weight:800}
 .muted{color:var(--muted);font-size:13.5px}
 .btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;
@@ -194,7 +195,8 @@ function lastAt(imei, kind){
 }
 function render(){
   const vs = S.vehicles;
-  let h = `<h1>Vehicles</h1><p class="muted">Bouncie trackers · trips, speed, hard braking, idle time, time at places, oil changes</p>`;
+  let h = `<div class="vtop"><div><h1>Vehicles</h1><p class="muted">Bouncie trackers · trips, speed, hard braking, idle time, time at places, oil changes</p></div>` +
+    (S.mgr ? `<a class="btn primary" href="https://www.bouncie.app/" target="_blank" rel="noopener">Bouncie log in ↗</a>` : "") + `</div>`;
   if(!vs.length){
     $("#app").innerHTML = h + `<div class="note">Waiting for the trackers. Once they're plugged in, added in the Bouncie app and authorized for the Moose Hub,
       each vehicle shows up here with its trips.</div>`; return;
@@ -466,6 +468,9 @@ document.addEventListener("change", e => {
   if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
   const ok = await sb.rpc("bouncie_can_read");
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Vehicles</h1><p class="muted">Nothing to show.</p>`; return; }
+  // Bouncie log-in button: managers + admins only (Brandon 2026-11-03)
+  const [ad, mg] = await Promise.all([sb.rpc("hub_is_admin"), sb.rpc("hub_is_manager")]);
+  S.mgr = ad.data === true || mg.data === true;
   refresh();
 })();
 window.__veh = { S, decode, meters, computeVisits, render };   // for the stub test
