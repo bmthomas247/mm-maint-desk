@@ -1277,7 +1277,6 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   cells.push(tCell("Garage",q.src.garage,t.garage_code?["Garage code: "+t.garage_code]:codeLines(q.garage,2)));
   cells.push(tCell("Key box","Track",[t.keybox_code?"Code: "+t.keybox_code:""]));
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
-  if(t.my_code) cells.push(tCell("Your door code","Locks",["Code: "+t.my_code]));
   if(o.can && o.list.length){ var w=o.list[0];
     cells.push(tCell("Owner",w.src==="Track"?"Track":"Hub edit",[{html:'<div class="tl"><span class="ql">Name</span><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
       w.plan?{html:'<div class="tl"><span class="ql">Contract</span>'+esc(w.plan)+'</div>'}:"",
@@ -1628,7 +1627,7 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
     qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),entry.s+ownerViewHtml(code,q),"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
     (window.MM_CODES===false?'':qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
-    qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+(q.mine?qCard("Your door code",q.mine,"From Locks",""):'')+'</div>'+
+    qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+'</div>'+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
 /* field crew: owner lockout lines are masked; "View" opens them and the database pings Chris + the admins (home_owner_reveal) */
 function ownerViewHtml(code,q){ if(!q.ownerView) return ""; var v=(D._ov||{})[code];
