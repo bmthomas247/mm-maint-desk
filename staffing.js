@@ -231,7 +231,7 @@ window.staffingView = async function(v){
             <button class="btn small" data-otp="${p.user_id}" data-h="${Math.round(tH(p) * 100) / 100}">${ot && ot.plan_kind ? "Change overtime plan" : "Approve overtime / set clock-out"}</button></div>` : ""}
           <div class="row" style="margin-top:6px">${(!ok || changed) && w < wk(today) ? `<button class="btn small primary" data-wok="${p.user_id}" data-h="${hrs}">Approve ${hm(hrs)} for this week</button>` : w >= wk(today) ? `<span class="muted sm">Approve the week once it's over.</span>` : ""}</div>
           ${addForm(p.user_id, true)}</details>`; }).join("")}</div>`;
-  } else if(!meOn) h += `<div class="card"><p class="muted" style="margin:0">Nobody on your team clocks in on the hub yet. People move here from Hubstaff one at a time.</p></div>`;
+  } else if(!meOn) h += `<div class="card"><p class="muted" style="margin:0">Nobody on your team has clocked in this week.</p></div>`;
   h += `<p class="muted sm">Hours count from each clock-in to the next clock-out, on the day of the clock-in (Park City time). Source: the hub time clock. Scheduled times come from Staffing ▸ Schedule; clocking in or out within 15 minutes of the schedule counts as on time.</p></div>`;
   v.innerHTML = h;
   const re = () => staffingView(v), err = r => { if(r.error){ alert(/failed to fetch|networkerror|load failed/i.test(r.error.message) ? "No signal right now. Try again when you have service (a missed clock-in can be added later)." : r.error.message.replace(/^.*?: /, "")); return true; } return false; };
