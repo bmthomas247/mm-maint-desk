@@ -1127,7 +1127,7 @@ function vemBuild(){ var sb=window.MM_SB, hs=fv("ve_homes").split(/[,\n]+/).map(
       var addr=[h.address,h.city,("UT "+(h.postal||"")).trim()].filter(Boolean).join(", "), L=["**"+h.code+"** - Address: "+(addr||"(no address in Track)")];
       if(h.gate) L.push("Gate code: "+h.gate); if(h.garage) L.push("Garage code: "+h.garage);
       if(h.vendor_code && !all) L.push("Door code (yours): "+h.vendor_code); else if(h.door && !all) L.push("Door code: "+h.door);
-      if(h.keybox) L.push("Key box: "+h.keybox);
+      if(h.keybox) L.push("Key box: "+kbc(h.keybox));
       if(!h.garage && !h.door && !h.keybox && !h.vendor_code && !all){ L.push("Access: call us before you go"); warn.push(h.code+": no code in Track — add one or call them"); }
       var lease=(h.stays||[]).some(function(s){ return s.lease; });
       if(lease){ L.push("Availability: tenant lives here - please call us to set a time"); }
@@ -1252,7 +1252,7 @@ function homeQuick(code,p){ var pe=pedit(code), t=hqOf(code)||{}, a=function(rx)
   var wl=function(n,pw,x){ return [n?"Network: "+n:"",pw?"Password: "+pw:"",x||""].filter(Boolean).join("\n"); };
   pick("wifi",[["Track",t.wifi_name||t.wifi_pass?wl(t.wifi_name,t.wifi_pass,t.wifi_note):""],["Hub edit",pe.wifiName||pe.wifiPass?wl(pe.wifiName,pe.wifiPass):""],["Asana",noStayfi(a(/^(wifi|wi-fi|stay[- ]?fi)/i))]]);
   pick("garage",[["Track",t.garage_code?["Garage code: "+t.garage_code,t.garage_note||""].filter(Boolean).join("\n"):(t.garage_note||"")],["Hub edit",pe.garageCode],["Asana",a(/^parking\/? ?garage info$|^parking$/i)]]);
-  var loc=homeInfo(code); r.keybox=[t.keybox_code?"Key box code: "+t.keybox_code:"",loc.keybox||""].filter(Boolean).join("\n"); r.src.keybox=t.keybox_code?"Track":(loc.src&&loc.src.keybox)||"";
+  var loc=homeInfo(code); r.keybox=[t.keybox_code?"Key box code: "+kbc(t.keybox_code):"",loc.keybox||""].filter(Boolean).join("\n"); r.src.keybox=t.keybox_code?"Track":(loc.src&&loc.src.keybox)||"";
   r.door=[t.door_code?"Front door: "+t.door_code:"",t.gate_code?"Gate / building: "+t.gate_code:""].filter(Boolean).join("\n"); r.src.door=r.door?"Track":"";
   pick("entry",[["Hub edit",pe.lockoutCode],["Asana",a(/^lockout info/i)]]);
   if(t.owner_garage_code){ r.entry=(r.entry?r.entry+"\n":"")+"Owner garage: "+t.owner_garage_code; r.src.entry=r.src.entry?r.src.entry+" + Track":"Track"; }
@@ -1266,8 +1266,9 @@ function htLine(label,val,src){ return '<div class="hql"><div class="qvh">'+esc(
 function codeLines(t,max){ var out=[]; String(t||"").replace(/<[^>]+>/g," ").split("\n").forEach(function(l){ l=l.replace(/\s+/g," ").trim();
     if(l && /\d{3,}|\d+#|[•]{3,}/.test(l) && out.length<max) out.push(l.length>70?l.slice(0,68)+"…":l); }); return out; }
 /* Brandon 2026-10-30: each label on its own line with the value under it; Wi-Fi isn't a code, so its numbers aren't highlighted */
-function tLine(l,plain){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l), v=function(x){ return plain?esc(x):qBold(x); };
+function tLine(l,plain){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l), v=function(x){ return plain?'<b>'+esc(x)+'</b>':qBold(x); };
   return '<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+v(m[2]):v(l))+'</div>'; }
+function kbc(v){ return String(v||"").replace(/\s*\(\s*private\s*\)/ig,"").trim(); }   /* Track key box codes carry "(PRIVATE)" (Brandon 2026-11-03) */
 function tCell(label,src,lines,plain,cls){ lines=(lines||[]).filter(Boolean); if(!lines.length) return "";
   return '<div class="hql'+(cls?' '+cls:'')+'"><div class="qvh">'+esc(label)+(src?'<span class="hsrc">· '+esc(src)+'</span>':'')+'</div>'+lines.map(function(l){ return typeof l==="string"?tLine(l,plain):l.html; }).join("")+'</div>'; }
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
@@ -1276,7 +1277,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   cells.push(tCell("Door / gate","Track",[t.door_code?"Front door: "+t.door_code:"",t.gate_code?"Gate / building: "+t.gate_code:""]));
   cells.push(tCell("Lockout",q.src.entry,codeLines(q.entry,3)));
   cells.push(tCell("Garage",q.src.garage,t.garage_code?["Garage code: "+t.garage_code]:codeLines(q.garage,2)));
-  cells.push(tCell("Key box","Track",[t.keybox_code?"Code: "+t.keybox_code:""]));
+  cells.push(tCell("Key box","Track",[t.keybox_code?"Code: "+kbc(t.keybox_code):""]));
   var pc=paintCell(c); if(pc) cells.push(pc);
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   if(o.can && o.list.length){ var w=o.list[0];
