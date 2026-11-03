@@ -9,6 +9,9 @@
      hub_owner_calls.sql) with Penny's notes + reach-out marks. For people who can open it, those calls leave Call review + Follow-ups.
    - guestCallsView(v): #/guest_desk — Guest ▸ Communication (2026-11-02): calls with guests / people looking to book (track_calls.guest_kind,
      hub_guest_calls.sql), same cards + reach-out marks. Guest calls also stay in Call review (that page is for reviewing calls by agent).
+     Follow-ups was folded in 2026-11-03 (team filter + Called, never booked tab).
+   - staffCallsView(v): #/staff_calls — Reports ▸ Team ▸ Staff calls (2026-11-03): calls with our own people (track_calls.staff_name).
+   - showCall opens with Penny's quick summary above the transcript (2026-11-03).
    Who sees which calls is decided by RLS: admins + office managers all, owner relations owner calls, everyone else their own;
    owner calls also for everyone with the Owner communication desk (owner relations + the 4 manager teams). */
 (function(){
@@ -36,13 +39,14 @@ function css(){
 .calls .flt{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:12px} .calls .flt label{font-size:12px;color:var(--muted);font-weight:700}
 .calls .flt select,.calls .flt input{width:auto;min-height:40px;font-size:14px}
 .calls table{width:100%;border-collapse:collapse;font-size:13.5px} .calls td,.calls th{padding:7px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
-.calls th{font-weight:600;color:var(--muted);white-space:nowrap} .calls tr.cl{cursor:pointer} .calls tr.cl:hover td{background:color-mix(in srgb,var(--line) 40%,transparent)}
+.calls th{font-weight:600;color:var(--muted);white-space:nowrap} .calls tr.on td{background:color-mix(in srgb,var(--forest-2) 12%,transparent);font-weight:600} .calls tr.cl{cursor:pointer} .calls tr.cl:hover td{background:color-mix(in srgb,var(--line) 40%,transparent)}
 .calls .drop{border:2px dashed var(--line-2);border-radius:14px;padding:22px;text-align:center;margin:10px 0;cursor:pointer}
 .calls .drop.on{border-color:var(--forest-2);background:color-mix(in srgb,var(--forest-2) 8%,transparent)}
 .calls ol{padding-left:20px;margin:8px 0} .calls ol li{margin:6px 0}
 .cbanner{background:#7a4b00;color:#fff;padding:8px 18px;font-weight:600;font-size:14px;flex:none} .cbanner a{color:#fff;text-decoration:underline;margin-left:8px;white-space:nowrap}
 .trl{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:14px} .trl .who{flex:none;width:86px;font-weight:700;font-size:12.5px}
 .trl .who small{display:block;font-weight:400;color:var(--muted)} .trl.agent .who{color:var(--forest-2)} .trl.customer .who{color:var(--blue)}
+.cvsum{background:color-mix(in srgb,var(--forest-2) 9%,var(--card));border:1px solid color-mix(in srgb,var(--forest-2) 30%,var(--line));border-radius:12px;padding:12px 14px;margin:8px 0 12px;font-size:14.5px}
 @media (max-width:640px){.calls .hide-s{display:none}.trl .who{width:64px}}`;
   document.head.appendChild(s);
 }
@@ -107,9 +111,26 @@ async function showCall(c, tr){
       <a class="btn small" href="${TRACK}/pulse/calls/view/?id=${c.call_id}" target="_blank" rel="noopener" title="Opens the call in Track Pulse, where the recording plays (Track sign-in)">▶ Listen in Track</a><button class="btn small" id="cvx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
     <p class="muted" style="margin:8px 0">${[c.agents && "Agent: " + esc(c.agents), c.caller_name && "Caller: " + esc(c.caller_name), (c.caller_city || c.caller_state) && esc([c.caller_city, c.caller_state].filter(Boolean).join(", ")),
       c.call_result && "Result: " + esc(c.call_result), c.routing_result && esc(c.routing_result), c.queues && "Queue: " + esc(c.queues), "Talk " + dur(c.duration_s), c.hold_s ? "Hold " + dur(c.hold_s) : ""].filter(Boolean).join(" · ")}</p>
-    <div id="cvt"><p class="muted">Loading the transcript…</p></div></div></div>`);
+    <div id="cvs"></div><div id="cvt"><p class="muted">Loading the transcript…</p></div></div></div>`);
   $("#cvx").onclick = () => $("#callv").remove();
   $("#callv").onclick = e => { if(e.target.id === "callv") $("#callv").remove(); };
+  // quick summary first (Brandon 2026-11-03: "when clicking into the call, we want a quick summary for anyone to read") = Penny's call note
+  sb.from("track_call_notes").select("summary,caller_type,outcome,celebration,celebration_detail,not_booked_reason,follow_up,follow_up_what,follow_up_team,data").eq("call_id", c.call_id).maybeSingle().then(r => {
+    const box = document.getElementById("cvs"); if(!box) return;
+    const n = r.data;
+    if(!n){ if(tr && tr.status === "ok") box.innerHTML = `<div class="cvsum"><b>Quick summary</b><p class="muted" style="margin:4px 0 0">Penny hasn't summarized this call yet (she reads new transcripts within about 10 minutes).</p></div>`; return; }
+    const d = n.data || {}, t = d.trip || {};
+    const trip = [t.arrive && (dayf(t.arrive) + (t.depart ? " – " + dayf(t.depart) : "")), t.adults != null && t.adults + " adults", t.kids ? t.kids + " kids" : "", t.pets ? t.pets + " pets" : "", (t.homes_or_areas || []).join(", ")].filter(Boolean).join(" · ");
+    const line = (l, v) => v ? `<div style="margin-top:4px"><b>${l}:</b> ${esc(v)}</div>` : "";
+    box.innerHTML = `<div class="cvsum"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>Quick summary</b>
+        ${CT[n.caller_type] ? `<span class="pill">${esc(CT[n.caller_type])}</span>` : n.caller_type ? `<span class="pill">${esc(nice(n.caller_type))}</span>` : ""}
+        ${n.outcome ? `<span class="pill">${esc(nice(n.outcome))}</span>` : ""}
+        ${n.celebration && n.celebration !== "none" ? `<span class="pill amber">🎉 ${esc(n.celebration_detail || nice(n.celebration))}</span>` : ""}</div>
+      <p style="margin:6px 0 0">${esc(n.summary || "")}</p>
+      ${line("Trip", trip)}${line("Wants", (d.wants || []).join(", "))}${line("Concerns", (d.concerns || []).join(", "))}${line("For the stay", (d.stay_notes || []).join(" · "))}${line("Didn't book", n.not_booked_reason)}
+      ${n.follow_up && n.follow_up_what ? line("Next step" + (n.follow_up_team && TEAM[n.follow_up_team] ? " · " + TEAM[n.follow_up_team] : ""), n.follow_up_what) : ""}
+      <div class="muted" style="font-size:12px;margin-top:6px">Penny's summary of the transcript below. Machine-made, so check names and numbers.</div></div>`;
+  });
   if(!tr || tr.status !== "ok") return $("#cvt").innerHTML = `<p class="muted">${tr ? "Track has no transcript for this call (short calls, voicemail and calls that weren't recorded usually don't get one). The office computer checks again for 3 days after the call." : "Not checked yet. Transcripts are pulled within about 10 minutes of an upload."}</p>`;
   const r = await sb.from("track_call_transcripts").select("lines,engine,coverage,language,words").eq("call_id", c.call_id).maybeSingle();
   if(r.error || !r.data) return $("#cvt").innerHTML = `<p class="muted">Couldn't load: ${esc(r.error ? r.error.message : "not found")}</p>`;
@@ -159,7 +180,7 @@ window.callsView = async function(v){
     const has = c => T[c.call_id] && T[c.call_id].status === "ok";
     const ql = S.q.toLowerCase(), qd = digits(S.q);
     const hit = c => !ql || who(c).toLowerCase().includes(ql) || (qd.length >= 3 && digits(c.outside_number).includes(qd)) || [c.caller_city, c.caller_state].join(" ").toLowerCase().includes(ql);
-    const list = calls.filter(c => (!S.agent || (c.agents || "").split(",").map(x => x.trim()).includes(S.agent)) && (!S.dir || dirName(c.direction) === S.dir)
+    const list = calls.filter(c => (!S.agent || (S.agent === "No agent" ? !(c.agents || "").trim() : (c.agents || "").split(",").map(x => x.trim()).includes(S.agent))) && (!S.dir || dirName(c.direction) === S.dir)
       && (!S.result || c.call_result === S.result) && (!S.queue || (c.queues || "").split(",").map(x => x.trim()).includes(S.queue)) && (!S.tr || (S.tr === "y") === has(c))
       && (!S.party || (MT[c.call_id] || {}).party === S.party) && hit(c));
     if(!calls.length) return $("#cbody").innerHTML = `<div class="card"><p class="muted">No calls for these dates yet.${canUp ? " Press <b>⬆ Upload calls from Track</b>." : ""}</p></div>`;
@@ -173,14 +194,18 @@ window.callsView = async function(v){
         <div class="kpi"><span class="muted">Avg talk time</span><b>${avg != null ? dur(avg) : "–"}</b></div>
         <div class="kpi"><span class="muted">With transcript</span><b>${list.filter(has).length}</b></div></div>
       <div class="card" style="overflow-x:auto"><b>By agent</b><table><tr><th>Agent</th><th>Calls</th><th>Inbound</th><th>Outbound</th><th>Avg talk</th><th>Transcripts</th></tr>
-        ${Object.entries(ag).sort((a, b) => b[1].n - a[1].n).map(([a, o]) => `<tr><td>${esc(a)}</td><td>${o.n}</td><td>${o.i}</td><td>${o.o}</td><td>${dur(Math.round(o.t / o.n))}</td><td>${o.tr}</td></tr>`).join("")}</table></div>
+        ${Object.entries(ag).sort((a, b) => b[1].n - a[1].n).map(([a, o]) => `<tr class="cl${S.agent === a ? " on" : ""}" data-ag="${esc(a)}" title="${S.agent === a ? "Show every agent" : "Show only " + esc(a) + "'s calls"}"><td>${S.agent === a ? "✓ " : ""}<u>${esc(a)}</u></td><td>${o.n}</td><td>${o.i}</td><td>${o.o}</td><td>${dur(Math.round(o.t / o.n))}</td><td>${o.tr}</td></tr>`).join("")}</table></div>
       <div class="card" style="overflow-x:auto"><b>Calls</b> <span class="muted">· click a call for its transcript${S.q ? ` · searching ${esc(dayf(S.from))} to ${esc(dayf(S.to))}, set From earlier to search older calls` : ""}</span><table><tr><th>When</th><th>Direction</th><th>Agent</th><th class="hide-s">Caller</th><th>Result</th><th class="hide-s">Queue</th><th>Talk</th><th>Transcript</th></tr>
         ${list.slice(0, 500).map(c => `<tr class="cl" data-id="${c.call_id}"><td style="white-space:nowrap">${esc(dayf(c.call_at || c.call_day))}<br><span class="muted">${esc(timef(c.call_at))}</span></td><td>${esc(dirName(c.direction))}</td>
           <td>${esc(c.agents || "")}</td><td class="hide-s">${esc(who(c))}${MT[c.call_id] ? ` <span class="pill">${esc((PARTY[MT[c.call_id].party] || "").split(" (")[0])}</span>` : ""}${c.outside_number ? `<br><span class="muted">${esc(phonef(c.outside_number))}</span>` : ""}${c.caller_city || c.caller_state ? `<br><span class="muted">${esc([c.caller_city, c.caller_state].filter(Boolean).join(", "))}</span>` : ""}</td>
           <td>${esc(c.call_result || "")}${c.routing_result ? `<br><span class="muted">${esc(c.routing_result)}</span>` : ""}</td><td class="hide-s">${esc(c.queues || "")}</td><td>${dur(c.duration_s)}</td>
           <td>${has(c) ? `<span class="pill green">${T[c.call_id].words} words</span>` : T[c.call_id] ? `<span class="pill">none</span>` : `<span class="pill amber">pending</span>`}</td></tr>`).join("")}</table>
         ${list.length > 500 ? `<p class="muted">Showing the newest 500 of ${list.length}. Narrow the dates or filters to see the rest.</p>` : ""}</div>`;
-    $("#cbody").querySelectorAll("tr.cl").forEach(tr => tr.onclick = () => { const c = calls.find(x => x.call_id === +tr.dataset.id); showCall(c, T[c.call_id]); });
+    $("#cbody").querySelectorAll("tr.cl[data-id]").forEach(tr => tr.onclick = () => { const c = calls.find(x => x.call_id === +tr.dataset.id); showCall(c, T[c.call_id]); });
+    // click an agent in By agent = filter the calls to them (Brandon 2026-11-03); click again = everyone
+    $("#cbody").querySelectorAll("tr[data-ag]").forEach(tr => tr.onclick = () => { const a = tr.dataset.ag; S.agent = S.agent === a ? "" : a;
+      const sel = $("#cag"); if(sel){ if(S.agent && ![...sel.options].some(o => o.value === S.agent)) sel.insertAdjacentHTML("beforeend", `<option>${esc(S.agent)}</option>`); sel.value = S.agent; }
+      draw(); const k = [...document.querySelectorAll("#cbody .card b")].find(x => x.textContent === "Calls"); if(k && S.agent) k.scrollIntoView({ behavior:"smooth", block:"start" }); });
   }
   draw();
 };
@@ -344,7 +369,7 @@ window.ownerCallsView = async function(v){
 // ---------- Guest ▸ Communication (Brandon 2026-11-02): "a guest communication like we did with the owner one". Calls with
 // track_calls.guest_kind (hub_guest_calls.sql): guest = has stayed or has a stay booked, prospect = looking to book. The stay comes from
 // track_call_match (phone number vs Track contacts + reservations). Marks go in track_call_followups (followup_set).
-let G = { tab:"reach", from: iso(new Date(Date.now() - 59 * 864e5)), to: iso(new Date()), q:"", agent:"", dir:"" };
+let G = { tab:"reach", from: iso(new Date(Date.now() - 59 * 864e5)), to: iso(new Date()), q:"", agent:"", dir:"", team:"" };   // Follow-ups folded in 2026-11-03 (Brandon): team filter + Never booked
 window.guestCallsView = async function(v){
   css(); $("#ttl").textContent = $("#utl").textContent = "Guest communication";
   v.innerHTML = `<div class="page wide calls"><h2 style="margin:0 0 4px">Guest communication</h2>
@@ -371,10 +396,12 @@ window.guestCallsView = async function(v){
   $("#gflt").innerHTML = `<div><label>Search</label><br><input type="search" id="gq" placeholder="Name, phone or home" value="${esc(G.q)}" style="width:200px"></div>
     <div><label>From</label><br><input type="date" id="gfrom" value="${G.from}"></div><div><label>To</label><br><input type="date" id="gto" value="${G.to}"></div>
     <div><label>Inbound / outbound</label><br><select id="gdir"><option value="">Both</option><option value="in" ${G.dir === "in" ? "selected" : ""}>Inbound</option><option value="out" ${G.dir === "out" ? "selected" : ""}>Outbound</option></select></div>
-    <div><label>Agent</label><br><select id="gag"><option value="">All</option>${agents.map(a => `<option ${a === G.agent ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></div>`;
+    <div><label>Agent</label><br><select id="gag"><option value="">All</option>${agents.map(a => `<option ${a === G.agent ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></div>
+    <div><label>Who should follow up</label><br><select id="gteam"><option value="">Every team</option>${Object.entries(TEAM).map(([k, l]) => `<option value="${k}" ${G.team === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>`;
   $("#gfrom").onchange = $("#gto").onchange = () => { G.from = $("#gfrom").value; G.to = $("#gto").value; guestCallsView(v); };
   $("#gag").onchange = () => { G.agent = $("#gag").value; draw(); };
   $("#gdir").onchange = () => { G.dir = $("#gdir").value; draw(); };
+  $("#gteam").onchange = () => { G.team = $("#gteam").value; draw(); };
   let qt; $("#gq").oninput = () => { clearTimeout(qt); qt = setTimeout(() => { G.q = $("#gq").value.trim(); draw(); }, 250); };
   function draw(){
     const ql = G.q.toLowerCase(), qd = digits(G.q);
@@ -383,9 +410,14 @@ window.guestCallsView = async function(v){
       && (!ql || who(c).toLowerCase().includes(ql) || ((MT[c.call_id] || {}).res_unit || "").toLowerCase().includes(ql)
         || [c.caller_city, c.caller_state].join(" ").toLowerCase().includes(ql) || (qd.length >= 3 && digits(c.outside_number).includes(qd)));
     const base = calls.filter(hit);
-    const L = { reach: base.filter(c => open(c) && N[c.call_id] && N[c.call_id].follow_up), stay: base.filter(c => c.guest_kind === "guest"),
+    // never booked: callers looking to book (one row per phone number) where no call in these dates was followed by a booking within 30 days
+    const NB = {};
+    base.filter(c => c.guest_kind === "prospect").forEach(c => { const k = digits(c.outside_number).slice(-10) || "c" + c.call_id;
+      const o = NB[k] = NB[k] || { calls:[], booked:false }; o.calls.push(c); if((MT[c.call_id] || {}).booked_after) o.booked = true; });
+    const never = Object.values(NB).filter(o => !o.booked).map(o => o.calls[0]);
+    const L = { reach: base.filter(c => open(c) && N[c.call_id] && N[c.call_id].follow_up && (!G.team || N[c.call_id].follow_up_team === G.team)), never, stay: base.filter(c => c.guest_kind === "guest"),
       pros: base.filter(c => c.guest_kind === "prospect"), cele: base.filter(cele), done: base.filter(c => !open(c)) };
-    const tabs = [["reach", "Penny says reach out"], ["stay", "Staying or booked"], ["pros", "Looking to book"], ["cele", "Celebrations"], ["done", "Handled"]];
+    const tabs = [["reach", "Penny says reach out"], ["stay", "Staying or booked"], ["pros", "Looking to book"], ["never", "Called, never booked"], ["cele", "Celebrations"], ["done", "Handled"]];
     $("#gtabs").innerHTML = tabs.map(([k, l]) => `<button class="btn small ${G.tab === k ? "primary" : ""}" data-t="${k}">${l} <span class="pill" style="margin-left:4px">${L[k].length}</span></button>`).join("");
     $("#gtabs").querySelectorAll("[data-t]").forEach(b => b.onclick = () => { G.tab = b.dataset.t; draw(); });
     const card = c => { const n = N[c.call_id] || {}, m = MT[c.call_id] || {}, f = FU[c.call_id], d = n.data || {}, t = d.trip || {};
@@ -413,8 +445,10 @@ window.guestCallsView = async function(v){
             : `<button class="btn small" data-fu="${c.call_id}" data-s="open">Re-open</button>`}
           ${has(c) ? `<button class="btn small" data-call="${c.call_id}">Read the call (${T[c.call_id].words} words)</button>` : ""}
           <a class="btn small" href="${TRACK}/pulse/calls/view/?id=${c.call_id}" target="_blank" rel="noopener" title="Opens the call in Track Pulse, where the recording plays (Track sign-in)">▶ Listen in Track</a></div></div>`; };
-    const list = L[G.tab], empty = { reach:"No guest calls waiting on a reach-out for these dates.", stay:"No calls from guests for these dates.", pros:"No calls from people looking to book for these dates.", cele:"No celebrations heard on calls for these dates.", done:"Nothing marked yet." }[G.tab];
-    $("#gbody").innerHTML = list.length ? list.slice(0, 200).map(card).join("") + (list.length > 200 ? `<p class="muted">Showing the newest 200 of ${list.length}. Narrow the dates or search to see the rest.</p>` : "")
+    const list = L[G.tab], empty = { reach:"No guest calls waiting on a reach-out for these dates.", stay:"No calls from guests for these dates.", pros:"No calls from people looking to book for these dates.", cele:"No celebrations heard on calls for these dates.", never:"Everyone who called about booking in these dates booked within 30 days.", done:"Nothing marked yet." }[G.tab];
+    const nbCount = c => { const o = NB[digits(c.outside_number).slice(-10) || "c" + c.call_id]; return o && o.calls.length > 1 ? `<p class="muted" style="margin:-4px 0 10px 4px">${o.calls.length} calls from this number in these dates (newest shown).</p>` : ""; };
+    const nbIntro = G.tab === "never" ? `<p class="muted" style="margin:0 0 8px">People who called about booking, one card per phone number (newest call), with no Track booking within 30 days of any of their calls in these dates. Set From earlier to look further back.</p>` : "";
+    $("#gbody").innerHTML = list.length ? nbIntro + list.slice(0, 200).map(c => card(c) + (G.tab === "never" ? nbCount(c) : "")).join("") + (list.length > 200 ? `<p class="muted">Showing the newest 200 of ${list.length}. Narrow the dates or search to see the rest.</p>` : "")
       : `<div class="card"><p class="muted">${empty}</p></div>`;
     $("#gbody").querySelectorAll("[data-call]").forEach(b => b.onclick = () => { const c = calls.find(x => x.call_id === +b.dataset.call); showCall(c, T[c.call_id]); });
     $("#gbody").querySelectorAll("[data-fu]").forEach(b => b.onclick = async () => {
@@ -424,6 +458,48 @@ window.guestCallsView = async function(v){
       const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
       if(r.error){ b.disabled = false; return alert("Couldn't save: " + r.error.message); }
       FU[+b.dataset.fu] = { status:b.dataset.s, note, by_name:(ME && ME.name) || "", at:new Date().toISOString() }; draw(); });
+  }
+  draw();
+};
+// ---------- Reports ▸ Team ▸ Staff calls (Brandon 2026-11-03): calls between our own people, moved out of Call review / Guest / Owners.
+// track_calls.staff_name (hub_staff_calls.sql). RLS: admins all; managers the people they look after (never their own calls).
+let SC = { from: iso(new Date(Date.now() - 59 * 864e5)), to: iso(new Date()), who:"", q:"" };
+window.staffCallsView = async function(v){
+  css(); $("#ttl").textContent = $("#utl").textContent = "Staff calls";
+  v.innerHTML = `<div class="page wide calls"><h2 style="margin:0 0 4px">Staff calls</h2>
+    <p class="muted">Track Pulse calls between our own people: a staff member calling the office, or the office calling them. A call counts when the Track contact on that number is on our staff list, or Penny heard an employee on the call. These calls are kept out of Call review, Guest and Owner communication. Source: Pulse Recent Calls export + Track API (transcripts, contacts).</p>
+    <div class="flt" id="sflt"></div><div id="sbody"><p class="muted">Loading…</p></div></div>`;
+  let calls, trs, nts;
+  try {
+    calls = await all(() => sb.from("track_calls").select("call_id,call_at,call_day,direction,duration_s,hold_s,agents,queues,call_result,routing_result,caller_name,caller_city,caller_state,outside_number,staff_name")
+      .not("staff_name", "is", null).gte("call_day", SC.from).lte("call_day", SC.to).order("call_at", { ascending:false }));
+    const lo = calls.length ? Math.min(...calls.map(c => c.call_id)) : 0;
+    [trs, nts] = await Promise.all([all(() => sb.from("track_call_transcripts").select("call_id,status,words").gte("call_id", lo)),
+      all(() => sb.from("track_call_notes").select("call_id,summary").gte("call_id", lo))]);
+  } catch(e){ return $("#sbody").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(e.message)}</p></div>`; }
+  const T = Object.fromEntries(trs.map(t => [t.call_id, t])), N = Object.fromEntries(nts.map(n => [n.call_id, n]));
+  const has = c => T[c.call_id] && T[c.call_id].status === "ok";
+  const names = [...new Set(calls.map(c => c.staff_name))].sort();
+  $("#sflt").innerHTML = `<div><label>Search</label><br><input type="search" id="sq" placeholder="Name, agent or phone" value="${esc(SC.q)}" style="width:200px"></div>
+    <div><label>From</label><br><input type="date" id="sfrom" value="${SC.from}"></div><div><label>To</label><br><input type="date" id="sto" value="${SC.to}"></div>
+    <div><label>Staff member</label><br><select id="swho"><option value="">Everyone</option>${names.map(n => `<option ${n === SC.who ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></div>`;
+  $("#sfrom").onchange = $("#sto").onchange = () => { SC.from = $("#sfrom").value; SC.to = $("#sto").value; staffCallsView(v); };
+  $("#swho").onchange = () => { SC.who = $("#swho").value; draw(); };
+  let qt; $("#sq").oninput = () => { clearTimeout(qt); qt = setTimeout(() => { SC.q = $("#sq").value.trim(); draw(); }, 250); };
+  function draw(){
+    const ql = SC.q.toLowerCase(), qd = digits(SC.q);
+    const list = calls.filter(c => (!SC.who || c.staff_name === SC.who) && (!ql || (c.staff_name + " " + (c.agents || "")).toLowerCase().includes(ql) || (qd.length >= 3 && digits(c.outside_number).includes(qd))));
+    const by = {}; list.forEach(c => { const o = by[c.staff_name] = by[c.staff_name] || { n:0, t:0 }; o.n++; o.t += c.duration_s || 0; });
+    $("#sbody").innerHTML = !calls.length ? `<div class="card"><p class="muted">No staff calls for these dates.</p></div>`
+      : `<div class="card" style="overflow-x:auto"><b>By staff member</b> <span class="muted">· click a name to see only their calls</span><table><tr><th>Staff member</th><th>Calls</th><th>Total talk</th></tr>
+        ${Object.entries(by).sort((a, b) => b[1].n - a[1].n).map(([n, o]) => `<tr class="cl${SC.who === n ? " on" : ""}" data-who="${esc(n)}"><td><u>${esc(n)}</u></td><td>${o.n}</td><td>${dur(o.t)}</td></tr>`).join("")}</table></div>
+      <div class="card" style="overflow-x:auto"><b>Calls</b> <span class="muted">· click a call for its summary and transcript</span><table><tr><th>When</th><th>Staff member</th><th>Direction</th><th>Agent</th><th class="hide-s">Penny's summary</th><th>Talk</th></tr>
+        ${list.slice(0, 500).map(c => `<tr class="cl" data-id="${c.call_id}"><td style="white-space:nowrap">${esc(dayf(c.call_at || c.call_day))}<br><span class="muted">${esc(timef(c.call_at))}</span></td>
+          <td>${esc(c.staff_name)}${c.outside_number ? `<br><span class="muted">${esc(phonef(c.outside_number))}</span>` : ""}</td><td>${esc(dirName(c.direction))}</td><td>${esc(c.agents || "")}</td>
+          <td class="hide-s">${N[c.call_id] ? esc(N[c.call_id].summary || "") : has(c) ? `<span class="muted">Not summarized yet</span>` : `<span class="muted">No transcript</span>`}</td><td>${dur(c.duration_s)}</td></tr>`).join("")}</table>
+        ${list.length > 500 ? `<p class="muted">Showing the newest 500 of ${list.length}.</p>` : ""}</div>`;
+    $("#sbody").querySelectorAll("tr[data-id]").forEach(tr => tr.onclick = () => { const c = calls.find(x => x.call_id === +tr.dataset.id); showCall(c, T[c.call_id]); });
+    $("#sbody").querySelectorAll("tr[data-who]").forEach(tr => tr.onclick = () => { SC.who = SC.who === tr.dataset.who ? "" : tr.dataset.who; $("#swho").value = SC.who; draw(); });
   }
   draw();
 };
