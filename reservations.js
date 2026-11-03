@@ -12,6 +12,7 @@ const CSS = `
 .rbar{height:6px;border-radius:6px;background:var(--line);width:70px;overflow:hidden;flex:0 0 auto} .rbar i{display:block;height:100%;background:var(--moose,#4f7a3a)}
 .rfacts{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;margin:6px 0} .rfacts b{font-weight:800}
 .rmoney{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13.5px;background:var(--ground);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:8px 0}
+.rnext{font-size:13px;color:var(--ink-2);margin-top:7px;line-height:1.35} .rnext.stop{color:var(--red);font-weight:700} .rnext.big{font-size:14.5px;margin:0 0 10px;padding:8px 12px;border-radius:12px;background:var(--moose-soft);color:var(--moose-ink)}
 .rrule{border-radius:12px;padding:8px 12px;margin:6px 0;font-size:14px;font-weight:600;background:var(--blue-soft);color:var(--blue)} .rrule.warn{background:var(--amber-soft);color:var(--amber)} .rrule.stop{background:var(--red-soft);color:var(--red)}
 .rgrp{margin-top:14px} .rgrp h3{font-size:15px;margin:0 0 4px;display:flex;gap:8px;align-items:center}
 .rstep{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)} .rstep:last-child{border-bottom:0}
@@ -37,7 +38,7 @@ const CSS = `
 .rtabs button{display:inline-flex;align-items:center;gap:8px;padding:9px 14px 9px 10px;font:inherit;font-size:14px;font-weight:800;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);cursor:pointer}
 .rtabs button svg{width:22px;height:22px} .rtabs button.on{background:var(--forest-2);color:#fff;border-color:var(--forest-2)}
 .rtabs .badge{background:var(--line);color:var(--ink-2);border-radius:999px;font-size:11.5px;padding:1px 7px} .rtabs .on .badge{background:rgba(255,255,255,.22);color:#fff}
-.rlk .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.rlk .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
 .rlk .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow)}
 .rlk .stat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1} .rlk .stat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px} .rlk .stat.warn .n{color:var(--red)}
 .rlk .syncbar{display:flex;align-items:center;gap:12px} .rlk .syncbar .ic{width:40px;height:40px;border-radius:12px;background:var(--moose-soft);color:var(--forest-2);display:grid;place-items:center;flex:none} .rlk .syncbar .ic svg{width:20px;height:20px}
@@ -160,7 +161,15 @@ async function load(force){
   return B;
 }
 // Safely excludes these Track types (Kim, OneNote, 2026-10-30; Janae is asking Safely for the full list)
-const SAFELY_NO = /^(owner stay|owner guest \(guest pays fees\)|3month\+ 10% commission)$/i;
+// Kim 2026-11-02: Safely won't insure a type named "Owner ..." (Owner Stay, Owner Guest ...), so DI stays use the O-Guest types (OGPA, OGOP-DI)
+const SAFELY_NO = /^owner|^3month\+ 10% commission$/i, OWNER_NAMED = /^owner/i;
+const OG_TYPE = /^(owner guest|o-?\s?guest)/i, OG_DI = /add di/i, OG_RENT = /guest pays rent/i;
+const DW_FEE = f => /damage waiver|safely/i.test(f.n);   // "Damage Waiver Crossout" counts too (same as td_fees)
+const hasDW = s => !!(s.td && (s.td.fees || []).some(DW_FEE));
+const daysTo = (a, b) => Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5);
+// Owner guest payment rule (Kim/Janae 2026-11-02): 10% down at booking when 30+ days out; full payment inside 30 days
+const payDue = s => { const tot = (s.paid || 0) + Math.max(0, s.balance || 0), d = daysTo(B.today, s.arrive);
+  return Math.round((d > 30 ? tot * 0.10 : tot) * 100) / 100; };
 // Autohost review a front desk person may approve: only "Guest under 25" (and "Last minute reservation") at a studio-2 BR (Kim 2026-10-30)
 const UNDER25_OK = /^\s*(guest under 25|last minute reservation)\s*$/i;
 // Stays booked before the Oct 30 rules (Brandon 2026-10-30: "yes" to grandfathering) keep what the old steps said, so the team isn't
@@ -178,12 +187,12 @@ function conds(s){
   const easy = rl.length > 0 && rl.every(r => UNDER25_OK.test(r)) && s.beds != null && s.beds <= 2;   // same rule as res_tick()
   return { pets:(occ.pets || 0) > 0, pl:u.startsWith("PL "), wg:u.startsWith("WG "), pv:u.startsWith("PV "), wp:u.startsWith("WP "),
     thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "UM 3013" || u === "BHV 5604", gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
-    extend:!!(s.list && s.list.extending), cancel:cx,
+    extend:!!(s.list && s.list.extending), cancel:cx, cxlate:cx && !!s.cancelledAt && s.cancelledAt.slice(0, 10) >= s.arrive,
     // round 4 (Kim + Janae 2026-10-30): Safely only on insured types; door code by home; Autohost review: who may approve; reminder when half done
     safely:s.chan !== "owner" && !SAFELY_NO.test(s.type || ""), keycard:u.startsWith("PL ") || u.startsWith("WG "), wp129:u === "WP 129",
     codehome:!(u.startsWith("PL ") || u.startsWith("WG ") || u === "WP 129"),
     review:rv, review_easy:rv && easy, review_hard:rv && !easy,
-    half:!cx && ahOk !== (s.agreement === "received") };
+    half:!cx && !["owner", "oguest"].includes(s.chan) && ahOk !== (s.agreement === "received") };   // owner guests do no ID check (Janae 2026-11-02)
 }
 function autoOk(s, a){
   switch(a){
@@ -194,7 +203,9 @@ function autoOk(s, a){
     case "agreement_received": return s.agreement === "received";
     case "ah_verified": return !!(s.ah && s.ah.verify === "verified") || tag(s, /^autohost verified$/i);
     case "cancelled": return s.status === "Cancelled";
-    case "og_type": return /^owner guest/i.test(s.type || "");
+    case "og_type": return OG_TYPE.test(s.type || "") && !(hasDW(s) && OWNER_NAMED.test(s.type || ""));   // DI on an "owner" type = Safely won't cover it
+    case "pay_due": return (s.paid || 0) + 0.01 >= payDue(s);
+    case "og_pet_known": return tag(s, PETS) || tag(s, /^no pets$/i) || (s.occ && s.occ.pets || 0) > 0;
     // Home takes dogs: Track unit allows pets, no "No Pets" tag, and no more pets than the cap (2, or a property rule "Pet cap: N")
     case "pets_ok": { const cap = Math.min(2, ...s.rules.map(r => +((/pet cap:\s*(\d+)/i.exec(r.text) || [])[1] || 9)));
       return s.unitPets === true && (s.occ && s.occ.pets || 0) <= cap && !tag(s, /^no pets$/i); }
@@ -244,11 +255,13 @@ const TD_RULES = {
   td_door:       s => s.td.door === true,
   td_card:       s => s.td.card === true,
   td_fees:       s => fee(s, /clean/i, false) && fee(s, /damage waiver/i) && fee(s, /admin|guest services/i),   // Admin fee renamed "Guest Services Fee" (Kim 2026-10-30)
-  td_gp_cl:      s => fee(s, /clean/i, false),
-  td_dw:         s => fee(s, /damage waiver/i),
+  td_gp_cl:      s => fee(s, /clean\/laundry\)?\s*gp|owner guest.*clean/i, false),   // "Owner Guest (Clean/Laundry) GP" (Track 2026-11-02)
+  td_dw:         s => hasDW(s),
+  td_nofee_ok:   s => OG_DI.test(s.type || "") ? hasDW(s) : !hasDW(s),
+  td_og_conf:    s => doc(s, /rental confirmation/i),   // e-sign subject "Park City Rental Confirmation-Action Required" (docs 25 / 62)
   td_gp_not:     s => !fee(s, OWNER_CL, true),
   td_owner_cl:   s => fee(s, OWNER_CL, true),
-  td_no_dw:      s => !fee(s, /damage waiver|safely/i),
+  td_no_dw:      s => !hasDW(s),
   td_pet_doc:    s => doc(s, /pet/i),
   td_pet_doc_ok: s => doc(s, /pet/i, true),
   td_addendum:   s => doc(s, /change addendum/i),
@@ -301,6 +314,32 @@ function prep(s){
   s.need = req.length; s.got = req.filter(t => t.done).length;
   s.blockers = [...new Set(req.filter(t => !t.done && t.blocker).map(t => t.blocker))];
   const today = B.today;
+  s.next = req.filter(t => !t.done).slice(0, 2).map(t => t.label);   // hand-off "next up" (Q8: what needs to be done next)
+  s.alerts2 = []; s.dayFlag = 0;
+  const live = s.status !== "Cancelled" && s.arrive >= today && !(s.list && s.list.stage === "closed");
+  // Guests (not owners / owner guests): contract + ID + payment are due within 24 hours (house rules). Day 4 = notice, day 7 = act today (Kim 2026-11-02, Q10)
+  if(live && ["abnb", "vrbo", "ws"].includes(s.chan) && s.bookedAt){
+    const miss = [s.agreement !== "received" && "signed contract", !autoOk(s, "ah_verified") && "ID verification", s.chan !== "abnb" && !(s.paid > 0) && (s.balance || 0) > 0 && "payment"].filter(Boolean);
+    const d = daysTo(String(s.bookedAt).slice(0, 10), today) + 1;   // booking day = day 1
+    if(miss.length && d >= 4){
+      s.dayFlag = d >= 7 ? 7 : 4; s.blockers.push(d >= 7 ? "Day 7: act today" : "Day 4: missing documents");
+      s.alerts2.push({ lvl:d >= 7 ? "stop" : "warn", t:d >= 7
+        ? `Day ${d} without the ${miss.join(", ")}. Act today: call the guest, send "FINAL NOTICE to Complete Reservation Requirements" with a deadline, then cancel${s.chan === "abnb" ? " (Airbnb: call Airbnb, we can't cancel it ourselves; our house rules say 24 hours)" : ""}. A manager handles this one.`
+        : `Day ${d}: still no ${miss.join(", ")}. Track's reminders have gone; reach out now. Day 7 = act (call, last email, cancel).` }); }
+  }
+  // Owner guests: agreement + payment due now; 35-day reminder (Track sends it); 30 days = change it to an Owner Stay (Kim 2026-11-02, OG 23)
+  if(live && s.chan === "oguest"){
+    const d = daysTo(today, s.arrive), ty = s.type || "", miss = [s.agreement !== "received" && "signed agreement", !autoOk(s, "pay_due") && `payment (${money(payDue(s))} due now)`,
+      !tdOk(s, "td_contact_ep") && "guest email + phone (ask the owner)"].filter(Boolean);
+    if(miss.length && d <= 35) s.alerts2.push({ lvl:d <= 30 ? "stop" : "warn", t:d <= 30
+      ? `${d} days out, still missing: ${miss.join(", ")}. Change it to an Owner Stay and send "Res Changed From OG to Owner" (the owner stays liable; the guest gets no check-in info).`
+      : `${d} days out, still missing: ${miss.join(", ")}. Track's 35-day reminder goes to the guest; no check-in info until it's done.` });
+    if(hasDW(s) && OWNER_NAMED.test(ty)) s.alerts2.push({ lvl:"stop", t:`Safely won't insure this stay: it has damage insurance but the type "${ty}" starts with "Owner". Change it to "O-Guest Owner Pays-Add DI" (free stay) or "O-Guest (Guest pays RENT/TAXES/FEES)" (discounted rent).` });
+    else if(/guest pays/i.test(ty) && !hasDW(s)) s.alerts2.push({ lvl:"warn", t:"Guest pays fees: add damage insurance, and use an O-Guest type so Safely covers it." });
+    if(OG_DI.test(ty) && !hasDW(s)) s.alerts2.push({ lvl:"warn", t:`Type is "${ty}" but there's no damage insurance fee yet.` });
+    if(s.rent != null && OG_RENT.test(ty) && !(s.rent > 0)) s.alerts2.push({ lvl:"warn", t:"Guest pays RENT type with $0 rent: a free stay with DI should be \"O-Guest Owner Pays-Add DI\"." });
+    if(s.rent != null && OG_DI.test(ty) && s.rent > 0) s.alerts2.push({ lvl:"warn", t:"Owner Pays-Add DI with rent on it: a discounted rate should be \"O-Guest (Guest pays RENT/TAXES/FEES)\"." });
+  }
   s.stage = (s.list && s.list.stage) || (s.status === "Cancelled" ? "cancelling" : s.depart < today ? (s.chan === "owner" ? "owner_done" : "checkout") : "in_progress");
   // Kim 2026-11-02: Checkout only once nothing is owed, so a payment can't be missed. Still owed before check-out = Waiting on payment
   // (Track takes the later payments from the card); declined payment or no card for it = back to In progress.
@@ -336,7 +375,8 @@ const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1
 // Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
 const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Booking date" };
 // "Held up by" groups (Brandon 2026-10-30): pick the group, then filter down to one of its members
-const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management", "Payment declined":"Payment", "No card on file for the next payment":"Payment" };
+const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management", "Payment declined":"Payment", "No card on file for the next payment":"Payment",
+  "Day 7: act today":"Day 4 / day 7", "Day 4: missing documents":"Day 4 / day 7" };
 const heldKey = b => HELD_GROUP[b] || b;
 const heldHas = (s, k) => [...s.blockers, ...s.waiting].some(b => b === k || heldKey(b) === k);
 async function queue(v){
@@ -356,8 +396,10 @@ async function queue(v){
         <div class="rsub"><b>${esc(s.unit || "")}</b>${HOODS[s.area] ? " · " + esc(HOODS[s.area]) : ""}</div></div>
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))} · #${esc(s.res)}</span></div>
-      <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^Owner Guest\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
-        <span class="pill plain grey">${s.got} of ${s.need} steps</span>${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill amber">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
+      <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^(Owner Guest|O-Guest)\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
+        <span class="pill plain grey">${s.got} of ${s.need} steps</span>${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill ${/^Day 7/.test(b) ? "red" : "amber"}">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
+      ${s.alerts2.some(a => a.lvl === "stop") ? `<div class="rnext stop">⚠ ${esc(s.alerts2.find(a => a.lvl === "stop").t.split(". ")[0])}</div>` : ""}
+      ${s.next.length && (s.stage === "in_progress" || s.stage === "waiting_pay") ? `<div class="rnext"><b>Next:</b> ${esc(s.next[0])}</div>` : ""}
       <div class="progress"><i style="width:${pct}%"></i></div></a>`; };
   const draw = () => {
     const dk = s => String(s[F.by] || "").slice(0, 10);
@@ -376,7 +418,8 @@ async function queue(v){
     $("#rq_tabs").innerHTML = Object.entries(STAGE).map(([k, l]) => `<button class="${F.stage === k ? "on" : ""}" data-stage="${k}">${RI[k]}<span>${l}</span><span class="badge">${cnt(k)}</span></button>`).join("");
     $("#rq_stats").innerHTML = [[ip.length, "In progress"], [soon.length, "Arriving next 7 days"],
       [soon.filter(s => s.got < s.need).length, "Arriving in 7 days, steps left", true],
-      [ip.filter(s => s.blockers.length || s.waiting.length).length, "Held up", true]]
+      [ip.filter(s => s.blockers.length || s.waiting.length).length, "Held up", true],
+      [base.filter(s => s.alerts2.some(a => a.lvl === "stop")).length, "Act today (day 7, owner guest 30 days, Safely)", true]]
       .map(([n, l, w]) => `<div class="stat ${w && n ? "warn" : ""}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
     const kc = {}; B.stays.filter(s => s.stage === F.stage).forEach(s => kc[kindOf(s)] = (kc[kindOf(s)] || 0) + 1);
     $("#rq_kinds").innerHTML = Object.entries(KIND).map(([k, l]) => `<button class="kpill k-${k} ${F.kind === k ? "on" : ""} ${F.kind && F.kind !== k ? "dim" : ""}" data-kind="${k}">${l}<span class="n">${kc[k] || 0}</span></button>`).join("");
@@ -464,8 +507,11 @@ async function card(v, res){
       ${s.hk && s.hk.length ? `<div class="rmoney"><span class="muted">#housekeeping @Cheree</span>${s.hk.slice(-4).map(m => `<a href="${esc(m.link)}" target="_blank" rel="noopener">${esc(when(m.at))}${m.by ? " · " + esc(m.by) : ""} ↗</a>`).join("")}</div>` : ""}
       ${s.heads.length ? `<div class="rrule warn" style="background:var(--amber-soft)"><div>⚠️ Heads-up for ${esc(s.unit)} before you book</div>${s.heads.map(a => `<div style="font-weight:${a.level === "warn" ? 600 : 400};margin-top:3px">• ${esc(a.text)} <span style="font-weight:400;opacity:.8">· ${esc(a.source)}</span></div>`).join("")}</div>` : ""}
       ${s.rules.map(r => `<div class="rrule ${r.kind}">${esc(r.text)} <span style="font-weight:400;opacity:.8">· ${esc(r.source)}</span></div>`).join("")}
+      ${s.alerts2.map(a => `<div class="rrule ${a.lvl}">${esc(a.t)}</div>`).join("")}
+      ${s.chan === "oguest" && s.status !== "Cancelled" ? `<div class="rmoney"><span class="muted">Owner guest payment</span><span>Due now <b>${money(payDue(s))}</b> <span class="muted">(${daysTo(B.today, s.arrive) > 30 ? "10% down, 30+ days out" : "full payment, inside 30 days"})</span></span><span>Paid <b>${money(s.paid)}</b></span>${autoOk(s, "pay_due") ? `<span class="pill green">OK</span>` : `<span class="pill amber">Not yet: send the guest portal link ("Make A Payment Email Guest Portal")</span>`}</div>` : ""}
     </div>
     <div class="card">
+      ${s.next.length && s.stage !== "closed" ? `<div class="rnext big"><b>Next up:</b> ${s.next.map(esc).join(" · then ")}${s.waiting.length ? ` <span class="muted">· waiting on ${esc(s.waiting.join(", "))}</span>` : ""}</div>` : ""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="flex:1">${s.got} of ${s.need} steps done</b>
         <label class="muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rx_ext" style="width:20px;height:20px;min-height:0" ${s.list && s.list.extending ? "checked" : ""}> Extending</label>
         <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay").map(([k, l]) => `<option value="${k}" ${s.stageSet === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
