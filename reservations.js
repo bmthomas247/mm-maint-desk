@@ -154,7 +154,7 @@ window.resCtx = r => { const s = B && B.stays.find(x => String(x.res) === String
     heads:(s.heads || []).map(a => a.title || a.text || a.what || "").filter(Boolean).slice(0, 3) } : { res:String(r) }; };
 async function load(force){
   if(B && !force && Date.now() - loadedAt < 60000) return B;
-  const [r, al, ch] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts"), sb.rpc("res_charge_allowed")]); if(r.error) throw r.error;
+  const [r, al, ch, sn] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts"), sb.rpc("res_charge_allowed"), sb.rpc("res_auto_seen_list")]); if(r.error) throw r.error;
   B = r.data; loadedAt = Date.now();
   if(B) B.alerts = al.data || [];   // home heads-ups (hub_penny_3.sql, Brandon 2026-10-28): warn before booking a home with a big open problem
   if(B) B.canCharge = ch.data === true;   // charge-the-balance button (hub_res_charge.sql switch + access)
@@ -168,8 +168,32 @@ async function load(force){
       if(run && run.day >= addDay(B.today, -2)) (Array.isArray(run.items) ? run.items : []).forEach(i => { if(i && i.res) B.failed[String(i.res)] = i; });
     } catch(e){} }
   if(B) B.stays.forEach(prep);
+  if(B) seenRecord(sn && sn.data);
   return B;
 }
+/* ---------- When each automatic tick happened (Brandon 2026-11-03: "date and time next to all automations").
+   Real time when the data has one (exact); otherwise the first time the hub saw the step done ("by …", res_auto_seen). */
+function seenRecord(seen){
+  B.seen = seen || {};
+  const now = new Date().toISOString(), add = [];
+  B.stays.forEach(s => s.steps.forEach(t => { if(t.auto && !t.tick && !(B.seen[s.res] || {})[t.key]){
+    add.push({ res:s.res, step:t.key, src:t.auto }); (B.seen[s.res] = B.seen[s.res] || {})[t.key] = now; } }));
+  for(let i = 0; i < add.length; i += 2000) sb.rpc("res_auto_seen_add", { p_items:add.slice(i, i + 2000) }).then(() => {}, () => {});
+}
+const lastOf = a => (a || []).filter(Boolean).sort().slice(-1)[0] || null;
+function autoWhen(s, t){
+  const td = s.td || {}, pays = (td.tx && td.tx.payDates) || [];
+  const exact = { agreement_sent:() => trkSeen(s, CONTRACT_IDS), agreement_received:() => trkSeen(s, [10]),
+    trk_35:() => trkSeen(s, [71, 72]), trk_adv:() => trkSeen(s, [99]),
+    td_msgs_ok:() => td.msgs && td.msgs.lastOut, hk_any:() => lastOf((s.hk || []).map(m => m.at)),
+    hk_after_cancel:() => lastOf((s.hk || []).map(m => m.at)), hk_after_extend:() => lastOf((s.hk || []).map(m => m.at)),
+    td_paid_some:() => pays.slice().sort()[0], pay_due:() => lastOf(pays), balance_zero:() => lastOf(pays) }[t.autoKey];
+  const at = exact && exact();
+  if(at) return { at, exact:true };
+  const seen = (B.seen && B.seen[s.res] || {})[t.key];
+  return seen ? { at:seen, exact:false } : null;
+}
+const whenAny = at => at && at.length === 10 ? day(at) : when(at);
 // Safely excludes these Track types (Kim, OneNote, 2026-10-30; Janae is asking Safely for the full list)
 // Kim 2026-11-02: Safely won't insure a type named "Owner ..." (Owner Stay, Owner Guest ...), so DI stays use the O-Guest types (OGPA, OGOP-DI)
 const SAFELY_NO = /^owner|^3month\+ 10% commission$/i, OWNER_NAMED = /^owner/i;
@@ -364,7 +388,7 @@ function prep(s){
   s.heads = (B.alerts || []).filter(a => a.key === uk);
   s.steps = B.steps.filter(t => t.chans.includes(s.chan) && t.cond.every(k => c[k]))
     .map(t => { const k = ticks[t.key], au = t.auto && autoOk(s, t.auto), gf = !au && !k && GRANDFATHER[t.key] && (s.bookedAt || "") < GF_DAY && GRANDFATHER[t.key](s, ticks);
-      return { ...t, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : gf ? "Earlier rule" : null, done:k ? k.d : !!(au || gf) }; });
+      return { ...t, autoKey:t.auto, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : gf ? "Earlier rule" : null, done:k ? k.d : !!(au || gf) }; });
   const req = s.steps.filter(t => !t.opt);
   s.need = req.length; s.got = req.filter(t => t.done).length;
   s.blockers = [...new Set(req.filter(t => !t.done && t.blocker).map(t => t.blocker))];
@@ -581,7 +605,7 @@ async function card(v, res){
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
           <span class="l">${TRK_STEP[t.key] && s.td && s.td.auto ? trkLogo(trkHit(s, TRK_STEP[t.key]), trkHit(s, TRK_STEP[t.key]) ? "Track's automation did this" : "Track's automation hasn't happened yet") + " " : ""}${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : ""}</span></label>`; }).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
@@ -620,6 +644,10 @@ async function card(v, res){
     $("#rx_hl").innerHTML = all.length ? all.map(x => `<div class="rhist">${esc(when(x.at))} · <b>${esc(x.by || "")}</b>${x.src && x.src !== "hub" ? " (" + esc(x.src) + ")" : ""} — ${esc(x.t)}</div>`).join("") : "Nothing yet."; };
 }
 
+function autoWho(s, t){
+  const w = autoWhen(s, t);
+  return `<span class="pill green">${esc(t.auto)} ✓</span>${w ? ` <span title="${w.exact ? "When it happened" : "First time the hub saw it done"}">· ${w.exact ? "" : "by "}${esc(whenAny(w.at))}</span>` : ""}`;
+}
 /* ---------- Charge the balance to the card on file (Brandon 2026-10-29; res-charge function + hub_res_charge.sql).
    Amount only, never the breakdown; Track is re-read live and the person confirms the exact amount first. */
 const chargeBtn = s => B.canCharge && s.status !== "Cancelled" && (s.balance || 0) > 0
