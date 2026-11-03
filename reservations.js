@@ -44,6 +44,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rhead .lk{position:absolute;right:-4px;bottom:-4px;width:20px;height:20px;border-radius:50%;background:var(--moose);display:grid;place-items:center;box-shadow:0 0 0 2px var(--forest)} .rhead .lk svg{width:11px;height:11px;color:#16220a}
 .rhead h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-.01em;line-height:1.15;color:#fff} .rhead .sub{font-size:13px;opacity:.8;font-weight:600} .rhead .grow{flex:1;min-width:0}
 .rhead .deskbtn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;text-decoration:none;font-weight:800;font-size:14px;white-space:nowrap} .rhead .deskbtn svg{width:18px;height:18px}
+.rhead .rhbtns{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end} .rhead .rsync{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;max-width:560px} .rhead .rsync>svg{width:18px;height:18px;flex:none} .rhead .rsync b{display:block;font-size:13px;font-weight:800;line-height:1.2} .rhead .rsync small{display:block;font-size:11.5px;opacity:.85;line-height:1.3}
 .rtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
 .rtabs button{display:inline-flex;align-items:center;gap:8px;padding:9px 14px 9px 10px;font:inherit;font-size:14px;font-weight:800;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);cursor:pointer}
 .rtabs button svg{width:22px;height:22px} .rtabs button.on{background:var(--forest-2);color:#fff;border-color:var(--forest-2)}
@@ -69,7 +70,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rhome .rmeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} .rhome .rmeta .pill{font-size:11.5px;padding:2px 8px}
 .rhome .progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px} .rhome .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--moose),var(--moose-2));border-radius:99px}
 @media(max-width:1100px){ .rfg{grid-template-columns:repeat(3,minmax(0,1fr))} }
-@media(max-width:640px){ .rlk{max-width:none!important} .rlk .stats{grid-template-columns:repeat(2,1fr)} .rfg{grid-template-columns:1fr 1fr} .rgrid{grid-template-columns:1fr} .rhead .deskbtn span{display:none} .rtabs button{padding:7px 10px 7px 8px;font-size:13px} }`;
+@media(max-width:640px){ .rlk{max-width:none!important} .rlk .stats{grid-template-columns:repeat(2,1fr)} .rfg{grid-template-columns:1fr 1fr} .rgrid{grid-template-columns:1fr} .rhead .deskbtn span{display:none} .rhead{flex-wrap:wrap} .rhead .rhbtns{flex-basis:100%;justify-content:flex-start} .rhead .rsync{max-width:none;flex:1} .rtabs button{padding:7px 10px 7px 8px;font-size:13px} }`;
 const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / BDC / Hopper", oguest:"Owner guest", owner:"Owner stay" };
 // waiting_pay is never saved: a Checkout stay with a balance still due shows there (Kim 2026-11-02, see prep)
 const STAGE = { in_progress:"In progress", waiting_pay:"Waiting on payment", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
@@ -525,7 +526,8 @@ async function queue(v){
   v.innerHTML = `<div class="page rpage rlk">
     <div class="rhead"><div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${RI.list}</span></div>
       <div class="grow"><h1>Moose Check lists</h1><div class="sub" id="rq_sub"></div></div>
-      <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a></div>
+      <div class="rhbtns"><div class="rsync" title="Steps tick themselves as these update">${RI.sync}<div><b>Data sync</b><small>Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""}</small></div></div>
+      <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a></div></div>
     ${B.canMgr && (B.asks || []).some(a => a.status === "open") ? `<div class="card" style="border-color:var(--amber)"><b>🙋 Waiting on a manager</b> <span class="muted">· reply in Slack or open the check list</span>
       ${B.asks.filter(a => a.status === "open").map(a => { const st = B.stays.find(x => x.res === a.res) || {};
         return `<div style="padding:5px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(a.res)}"><b>${esc(st.unit || "#" + a.res)} · ${esc(st.guest || "")}</b></a> — ${esc(a.by_name || "")}: “${esc(a.note)}” <span class="muted">${esc(when(a.at))}</span></div>`; }).join("")}</div>` : ""}
@@ -533,8 +535,6 @@ async function queue(v){
     <div class="stats" id="rq_stats"></div>
     <label class="field rqfind"><input id="rq_q" type="search" placeholder="🔎 Find a guest, home or res # (searches every tab)" value="${esc(F.q)}"></label>
     <div class="rkinds" id="rq_kinds"></div>
-    <div class="card syncbar"><span class="ic">${RI.sync}</span><div style="flex:1;min-width:0"><b>Data sync</b>
-      <div class="muted" style="font-size:13px">Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""} · steps tick themselves as these update</div></div></div>
     <div class="card"><div class="rfg">
       <label class="field"><span>Neighborhood</span>${sel("rq_a", [["", "All neighborhoods"], ...[...new Set(B.stays.map(s => s.area).filter(Boolean))].map(a => [a, HOODS[a] ? HOODS[a] + " (" + a + ")" : a]).sort((x, y) => x[1].localeCompare(y[1]))], F.area)}</label>
       <label class="field"><span>Sort by</span>${sel("rq_by", Object.entries(BY), F.by)}</label>
