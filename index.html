@@ -793,7 +793,7 @@ function shell(){
   <div class="shell">
     <aside class="rail">
       <div class="railtop"><button class="rtoggle" id="rtoggle" title="Open / close the menu" aria-label="Open or close the menu">${ICON.menu}</button>
-        <div class="brand"><div class="logo"><img src="moose-logo.png" alt=""></div><div><b>Moose Hub</b><small>crew.moosemanagement.com</small></div></div></div>
+        <a class="brand" href="#/home" title="Home" style="color:inherit;text-decoration:none"><div class="logo"><img src="moose-logo.png" alt=""></div><div><b>Moose Hub</b><small>crew.moosemanagement.com</small></div></a></div>
       <div class="rsearch"><span class="ic">${ICON.search}</span><input id="hsearch" type="search" placeholder="Search desks, properties, vendors" autocomplete="off" title="Search"></div>
       <div class="sres" id="sres"></div>
       <nav class="desks">
@@ -1251,12 +1251,16 @@ let BD = { mine:null, people:[] }, ACC = [], PWP = [], PDWHO = null, PDMODE = "p
 function accCard(){
   if(!ME.admin || !ACC.length) return "";
   const ago = t => t ? new Date(t).toLocaleDateString([], { month:"short", day:"numeric" }) : "never";
-  return `<details class="card acc" id="acccard"><summary><b style="font-size:17px">🔐 Sign-in control</b><span class="muted">${ACC.filter(x => !x.active).length} locked out</span></summary>
+  return `<details class="card acc" id="acccard"><summary><b style="font-size:17px">🔐 Sign-in control</b><span class="muted">${ACC.filter(x => !x.active && !x.removed).length} locked out</span></summary>
     <p class="muted" style="margin:4px 0 8px">Set someone's password, sign them out of every phone and computer, or lock them out until you let them back in. Every change is logged.</p>
-    ${ACC.map(x => `<div class="ord"><b>${esc(x.name)}${x.active ? "" : ` <span class="pill red">Locked out</span>`}
-        <div class="muted" style="font-weight:600;font-size:13px">2-step ${x.two_step ? "✓" : "not yet"} · signed in on ${x.devices} device${x.devices === 1 ? "" : "s"} · last sign-in ${ago(x.last_sign_in)}${x.last_action ? ` · ${{ sign_out:"signed out", lock:"locked", unlock:"let back in", set_password:"password set" }[x.last_action]} ${ago(x.last_action_at)}` : ""}</div></b>
+    ${ACC.filter(x => !x.removed).map(x => `<div class="ord"><b>${esc(x.name)}${x.active ? "" : ` <span class="pill red">Locked out</span>`}
+        <div class="muted" style="font-weight:600;font-size:13px">2-step ${x.two_step ? "✓" : "not yet"} · signed in on ${x.devices} device${x.devices === 1 ? "" : "s"} · last sign-in ${ago(x.last_sign_in)}${x.last_action ? ` · ${{ sign_out:"signed out", lock:"locked", unlock:"let back in", set_password:"password set", remove:"removed", restore:"put back" }[x.last_action]} ${ago(x.last_action_at)}` : ""}</div></b>
       ${x.active ? `<button class="btn small" data-acc="pw:${x.id}">Set password</button><button class="btn small" data-acc="out:${x.id}" ${x.devices ? "" : "disabled"}>Sign out everywhere</button>${x.admin ? "" : `<button class="btn small" data-acc="lock:${x.id}" style="color:var(--red)">Lock out</button>`}`
-        : `<button class="btn small" data-acc="unlock:${x.id}">Let back in</button>`}</div>`).join("")}</details>`;
+        : `<button class="btn small" data-acc="unlock:${x.id}">Let back in</button><button class="btn small" data-acc="remove:${x.id}" style="color:var(--red)">Remove</button>`}</div>`).join("")}
+    ${ACC.some(x => x.removed) ? `<details class="acc2" style="margin-top:10px"><summary><b>Removed</b><span class="muted">${ACC.filter(x => x.removed).length}</span></summary>
+      <p class="muted" style="margin:4px 0 6px">Still locked out. Nothing was deleted; their history stays.</p>
+      ${ACC.filter(x => x.removed).map(x => `<div class="ord"><b>${esc(x.name)}<div class="muted" style="font-weight:600;font-size:13px">removed ${ago(x.removed_at)}${x.removed_by ? " by " + esc(x.removed_by) : ""}</div></b>
+        <button class="btn small" data-acc="restore:${x.id}">Put back in the list</button></div>`).join("")}</details>` : ""}</details>`;
 }
 /* Set someone's password (hub_admin_set_password.sql; Brandon 2026-11-02): admins anyone, managers their own staff (hub_pw_can).
    Saving signs them out of every phone and computer. The password is saved only in their sign-in, never logged. */
@@ -1291,18 +1295,22 @@ function accPw(x, done){
 function accAsk(act, x, done){
   const T = { out:["Sign " + x.name + " out everywhere?", "Every phone and computer they're signed in on stops working right away. They can sign straight back in.", "Sign out everywhere"],
     lock:["Lock " + x.name + " out?", "They're signed out everywhere and can't open the Hub, Moose Locks or the Maintenance site until you let them back in.", "Lock out"],
-    unlock:["Let " + x.name + " back in?", "Their access comes back the way it was. They sign in again as usual.", "Let back in"] }[act];
+    unlock:["Let " + x.name + " back in?", "Their access comes back the way it was. They sign in again as usual.", "Let back in"],
+    remove:["Remove " + x.name + "?", "They stay locked out and leave this list. Nothing is deleted: their history stays, and you can put them back from Removed at the bottom of this card.", "Remove"],
+    restore:["Put " + x.name + " back in the list?", "They show in the list again, still locked out. Use Let back in to give their access back.", "Put back"] }[act];
   document.querySelectorAll("#accm").forEach(e => e.remove());
   document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="accm"><div class="card">
     <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="accback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">${esc(T[0])}</h2><button class="btn small" id="accx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
-    <p>${esc(T[1])}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="accgo" ${act === "lock" ? `style="background:var(--red);border-color:var(--red)"` : ""}>${esc(T[2])}</button><button class="btn" id="accno">Cancel</button></div>
+    <p>${esc(T[1])}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="accgo" ${act === "lock" || act === "remove" ? `style="background:var(--red);border-color:var(--red)"` : ""}>${esc(T[2])}</button><button class="btn" id="accno">Cancel</button></div>
     <p class="muted" id="accmsg"></p></div></div>`);
   const close = () => $("#accm").remove();
   $("#accback").onclick = $("#accx").onclick = $("#accno").onclick = close;
   $("#accgo").onclick = async () => { $("#accgo").disabled = true; $("#accmsg").textContent = "Working…";
-    const r = act === "out" ? await sb.rpc("hub_admin_sign_out", { p_person:x.id }) : await sb.rpc("hub_admin_lock", { p_person:x.id, p_lock:act === "lock" });
+    const r = act === "out" ? await sb.rpc("hub_admin_sign_out", { p_person:x.id })
+      : act === "remove" || act === "restore" ? await sb.rpc("hub_admin_remove", { p_person:x.id, p_remove:act === "remove" })
+      : await sb.rpc("hub_admin_lock", { p_person:x.id, p_lock:act === "lock" });
     if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + r.error.message; }
-    close(); done(act === "unlock" ? x.name + " can sign in again." : x.name + " was signed out of " + r.data + " device" + (r.data === 1 ? "" : "s") + "."); };
+    close(); done(act === "remove" ? x.name + " was removed from the list." : act === "restore" ? x.name + " is back in the list (still locked out)." : act === "unlock" ? x.name + " can sign in again." : x.name + " was signed out of " + r.data + " device" + (r.data === 1 ? "" : "s") + "."); };
 }
 /* Who sees which desk (hub admins only, hub_person_desks.sql). Brandon 2026-10-29: Kim can open a desk for one person, or hide one,
    on top of what their teams give. Show / Hide / Team (= back to their teams). The database (hub_can) enforces it. */
