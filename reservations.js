@@ -20,6 +20,11 @@ const CSS = `
 .rstep .who{font-size:12px;color:var(--muted);white-space:nowrap;min-width:200px;text-align:right}
 @media(max-width:640px){ .rstep{flex-wrap:wrap} .rstep .who{min-width:0;flex-basis:100%;text-align:left;padding-left:32px;white-space:normal} } .rstep.done .l{text-decoration:line-through;text-decoration-color:var(--line-2)}
 .rhist{font-size:13px;border-top:1px solid var(--line);padding:6px 0}
+/* Track automations (Brandon 2026-11-03): Track's logo purple = Track's automation happened, grey = it hasn't */
+.trk{display:inline-flex;flex:none;color:#b9b9bf} .rstep .l .trk{vertical-align:-3px} .trk.on{color:#411064} .trk svg{width:22px;height:16px;display:block}
+.rstep.trkrow{align-items:center} .rstep.trkrow .who{white-space:normal;max-width:280px} .rstep.trkrow .l{font-size:14px} .rstep.trkrow.on .l{color:var(--ink)} .rstep.trkrow:not(.on) .l{color:var(--muted)}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .trk{color:#55555c} :root:not([data-theme="light"]) .trk.on{color:#b98be0} }
+:root[data-theme="dark"] .trk{color:#55555c} :root[data-theme="dark"] .trk.on{color:#b98be0}
 .rq3{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,1fr);gap:6px 14px;align-items:start}
 .rq3 .who,.rq3 .when,.rq3 .st{display:flex;flex-direction:column;gap:2px;min-width:0} .rq3 .who b{font-size:15.5px}
 .rq3 .sub{font-size:13px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rq3 .sub+.sub{color:var(--muted)}
@@ -298,14 +303,59 @@ const TD_RULES = {
   td_wg_sent:      s => !!(s.td.fdc && s.td.fdc.wg),
   td_wg_pet:       s => !!(s.td.fdc && s.td.fdc.wg && s.td.fdc.wg.pet),
   td_extra_notes:  s => !!(s.td.notes && s.td.notes.extra && s.td.notes.extra[0] >= s.td.notes.extra[1]),
+  // 2026-11-03: Track's own automations that fired on this stay (folio events stamp the automation number; track_res_details.py)
+  trk_35:          s => trkHit(s, [71, 72]),   // Owner Guest Payment / Agreement Reminder (35 Days), Track sends to guest + owner
+  trk_adv:         s => trkHit(s, [99]),       // 30+ Day Reservations to Advantage Mgmt. (RentalManager@amres.co + hello@)
 };
+/* ---------- Track automations (Track ▸ Automation jobs + triggers, read 2026-11-03 in Brandon's Chrome; numbers are Track's own).
+   Shown with Track's logo: purple = Track's automation happened on this stay (with when), grey = it hasn't (yet).
+   The hub sends none of these; it only shows what Track did. Review requests left out until Reviews is finished (Brandon). */
+const trkSeen = (s, ids) => { const a = (s.td && s.td.auto) || {}; return ids.map(i => a[String(i)]).filter(Boolean).sort()[0] || null; };
+const trkHit = (s, ids) => !!trkSeen(s, ids);
+const GUEST = ["abnb", "vrbo", "ws"];
+const CONTRACT_IDS = [35, 36, 38, 39, 40, 41, 42, 43, 44, 45, 74, 75, 76, 77, 78, 79, 82, 83, 84, 85, 86];
+// "Not sent · … now" = Track never sent it and the thing it asks for is done now (no reason left to send it)
+const docsIn = s => s.agreement === "received" && (s.chan !== "abnb" && s.chan !== "vrbo" && s.chan !== "ws" || autoOk(s, "ah_verified"));
+const NN = "Not sent · documents are in now";
+const TRK = [
+  { l:"Rental agreement sent", ids:CONTRACT_IDS, on:s => GUEST.includes(s.chan), skip:s => !trkHit(s, CONTRACT_IDS) && ["sent", "received"].includes(s.agreement) ? "Sent another way (by hand or the channel)" : null },
+  { l:"Contract / ID reminder · 6 hours", ids:[55, 56], on:s => GUEST.includes(s.chan), why:"only if the contract or ID is still missing", skip:s => docsIn(s) && NN },
+  { l:"Contract / ID reminder · 24 hours", ids:[58, 59], on:s => GUEST.includes(s.chan), why:"only if still missing", skip:s => docsIn(s) && NN },
+  { l:"Contract / ID reminder · 48 hours", ids:[62, 63], on:s => GUEST.includes(s.chan), why:"only if still missing", skip:s => docsIn(s) && NN },
+  { l:"Contract reminder · 24 hours", ids:[57], on:s => s.chan === "oguest", why:"only if the agreement is still out", skip:s => docsIn(s) && "Not sent · agreement is back now" },
+  { l:"Contract reminder · 72 hours", ids:[60], on:s => s.chan === "oguest", why:"only if still out", skip:s => docsIn(s) && "Not sent · agreement is back now" },
+  { l:"35-day agreement reminder to guest + owner", ids:[72], on:s => s.chan === "oguest", why:"only if the agreement is still out", skip:s => docsIn(s) && "Not sent · agreement is back now" },
+  { l:"35-day payment reminder to guest + owner", ids:[71], on:s => s.chan === "oguest", why:"only if a balance is still due", skip:s => (s.balance || 0) <= 1 && "Not sent · paid now" },
+  { l:"Office told: owner guest agreement or payment not in", ids:[73], on:s => s.chan === "oguest", why:"only if missing", skip:s => docsIn(s) && (s.balance || 0) <= 1 && "Not sent · agreement + payment are in now" },
+  { l:"Office told: e-sign document signed", ids:[10], on:s => GUEST.includes(s.chan) || s.chan === "oguest" },
+  { l:"“Documents received” email to the guest", ids:[54], on:s => GUEST.includes(s.chan), why:"when the documents come in 4+ days before arrival" },
+  { l:"Office told: day 4, documents still missing", ids:[91], on:s => GUEST.includes(s.chan), why:"only if missing", skip:s => docsIn(s) && NN },
+  { l:"Office told: day 7, documents still missing", ids:[90], on:s => GUEST.includes(s.chan), why:"only if missing", skip:s => docsIn(s) && NN },
+  { l:"Check-in info (78 hours before, or when documents come in inside 4 days)", ids:[9, 26, 48, 93, 61, 64, 65, 66, 87, 88, 89], on:s => GUEST.includes(s.chan) || s.chan === "oguest", why:"once the agreement is back and it's paid" },
+  { l:"Door code text (24 hours before)", ids:[49, 50], on:s => GUEST.includes(s.chan) },
+  { l:"First impressions email (day after check-in)", ids:[67], on:s => GUEST.includes(s.chan) },
+  { l:"Departure email (18 hours before check-out)", ids:[68, 69, 70], on:s => GUEST.includes(s.chan) },
+  { l:"Advantage Mgmt. told (30+ nights)", ids:[99], on:s => (s.nights || 0) >= 30 && s.chan !== "owner", why:"once the agreement is back and the ID is verified" },
+];
+const TRK_STEP = { i_contract:CONTRACT_IDS, g_35:[71, 72], t_email:[99] };   // check list steps Track's automations do
+const trkLogo = (on, title) => `<span class="trk ${on ? "on" : ""}" title="${esc(title || "")}"><svg viewBox="0 0 500 354.4" aria-hidden="true"><path fill="currentColor" transform="translate(-303 2197)" d="M674.3-2197h-248c-68.5,0.4-123.7,56.2-123.3,124.7c0.4,67.9,55.4,122.9,123.3,123.3h85.8v-62h-85.8c-32.7,0-57.2-29.6-57.2-62c-0.7-30.9,23.8-56.5,54.7-57.2c0.8,0,1.6,0,2.5,0h248c30.9-0.7,56.6,23.9,57.2,54.8c0,0.8,0,1.6,0,2.4c0,32.4-24.5,62-57.2,62h-85.8v157.4l52.5-95.4h33.4c69.6,0,128.8-55.1,128.8-124C803-2141.9,743.9-2197,674.3-2197z"/><path fill="currentColor" opacity=".75" d="M284.9,354.4V185.5h92.8L284.9,354.4z"/></svg></span>`;
+function trkSection(s){
+  if(!s.td || !s.td.auto) return "";
+  const rows = TRK.filter(r => r.on(s));
+  if(!rows.length) return "";
+  const got = rows.filter(r => trkHit(s, r.ids)).length;
+  return `<div class="rgrp"><h3>${trkLogo(got > 0, "Track automations")} Track automations <span class="muted" style="font-weight:600">${got} happened</span></h3>
+    ${rows.map(r => { const at = trkSeen(s, r.ids), sk = !at && r.skip && r.skip(s);
+      return `<div class="rstep trkrow ${at ? "on" : ""}">${trkLogo(!!at, at ? "Track did this" : sk || "Not yet")}<span class="l">${esc(r.l)}${!at && !sk && r.why ? ` <span class="muted" style="font-size:12.5px">(${esc(r.why)})</span>` : ""}</span>
+        <span class="who">${at ? "Track · " + esc(when(at)) : sk ? esc(sk) : "Not yet"}</span></div>`; }).join("")}</div>`;
+}
 const addDay =(d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
 const bwHas = (s, dp, re, from, to, who) => (s.bw || []).some(t => t.dp === dp && t.sd >= from && t.sd <= to && re.test(t.n) && (!who || (t.who || []).some(w => who.test(w))));
 const bwClean = s => bwHas(s, "housekeeping", /^(?!.*(assessment|spring)).*(clean)/i, s.depart, s.depart);
 const bwInOut = s => bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive) && bwHas(s, "inspection", /check-?out/i, s.depart, s.depart);
 // Only trust "no clean left" when this home was in the Breezeway pull (it has a Breezeway id and the stay is in the window)
 const bwKnown = s => !!B.bwUpdated && !(B.bwMissing || []).includes(s.unit) && s.depart >= addDay(B.today, -7) && s.arrive <= addDay(B.today, 75);
-const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", td_msgs_ok:"Track messages", td_pl_conf:"Freshdesk", td_pl_noted:"Freshdesk", td_wg_sent:"Freshdesk", td_wg_pet:"Freshdesk", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
+const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", td_msgs_ok:"Track messages", trk_35:"Track automation", trk_adv:"Track automation", td_pl_conf:"Freshdesk", td_pl_noted:"Freshdesk", td_wg_sent:"Freshdesk", td_wg_pet:"Freshdesk", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
 function prep(s){
   const c = conds(s), ticks = s.ticks || {};
   s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
@@ -526,10 +576,11 @@ async function card(v, res){
         : s.payWhy ? `<div class="rrule stop">${s.stageSet === "checkout" ? "Back in progress: " : ""}${esc(s.payWhy)} ${money(s.balance)} still due. ${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : "Ask the guest to add a card in the guest portal, or pay the balance."}</div>` : ""}
       <div class="rchips"><span class="muted" style="align-self:center">Waiting on</span>${WAIT.map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}">${esc(w)}</button>`).join("")}</div>
       ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
+      ${trkSection(s)}
       ${Object.entries(grp).map(([g, ts]) => `<div class="rgrp"><h3>${esc(g)} <span class="muted" style="font-weight:600">${ts.filter(t => !t.opt && t.done).length}/${ts.filter(t => !t.opt).length}</span></h3>
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
-          <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
+          <span class="l">${TRK_STEP[t.key] && s.td && s.td.auto ? trkLogo(trkHit(s, TRK_STEP[t.key]), trkHit(s, TRK_STEP[t.key]) ? "Track's automation did this" : "Track's automation hasn't happened yet") + " " : ""}${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}</span>
           ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "") + (t.tick.src !== "hub" ? " · " + t.tick.src : "") + " · " + when(t.tick.at)) : t.auto ? `<span class="pill green">${t.auto} ✓</span>` : ""}</span></label>`; }).join("")}</div>`).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
