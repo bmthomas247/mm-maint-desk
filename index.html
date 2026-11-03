@@ -341,6 +341,13 @@ const ICON = {
   grid: I('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>')
 };
 let ME = null, DESKS = [], PREFS = { desk_order:[], interests:[], kinds:[] };
+/* 2026-11-03 (Brandon: quick fixes): technical errors in plain words for staff; anything else passes through unchanged */
+window.niceErr = e => { const m = String((e && e.message) || e || "");
+  if(/failed to fetch|networkerror|network error|load failed/i.test(m)) return "No signal right now. Check your connection and try again.";
+  if(/jwt expired|invalid jwt|refresh token|not authenticated/i.test(m)) return "Your sign-in ran out. Reload the page.";
+  if(/statement timeout|57014|canceling statement/i.test(m)) return "That took too long. Try again in a minute.";
+  if(/permission denied|row-level security|42501/i.test(m)) return "Your sign-in can't change that.";
+  return m; };
 
 /* ---------- sign in (same accounts as Moose Locks and the Maintenance site) */
 function loginView(msg){
@@ -575,7 +582,7 @@ async function boot(){
     if(window.MMOFF && (OFFLINE || await MMOFF.offline())) return offView();   // no signal is not a sign-out: keep the saved copy
     const r = await sb.auth.refreshSession();
     if(r.error){ await sb.auth.signOut({ scope:"local" }); return loginView("You were signed out. Sign in again."); }
-    return noAccess(me.error ? me.error.message : ""); }
+    return noAccess(me.error ? niceErr(me.error) : ""); }
   ME = me.data;
   // 2026-11-03 (Brandon: "even faster"): these 6 reads don't need each other, so they run at the same time (were one after another, ~0.6 s)
   const ok = p => p.then(r => r, () => ({}));
@@ -671,7 +678,8 @@ function noAccess(err){
   $("#out").onclick = async () => { await sb.auth.signOut(); loginView(); };
 }
 /* The sidebar's desk list for a desk list + saved order (shell() uses the signed-in person's; View as uses another person's) */
-function sideNav(DESKS, ORD){
+function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
+  if(!admin) DESKS = DESKS.filter(x => x.status === "live");   // Brandon 2026-11-03: staff don't see "Coming soon" desks; admins still preview them
   if(DESKS.some(x => x.key === "competitor" && x.status === "live")) DESKS = DESKS.filter(x => x.key !== "competitor_add");   // Brandon 2026-11-02: Add competitor intel is a button in the playbook; front desk (add only) keeps the sidebar entry
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
   const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","maint_weather","team_ratings","pto_reports","work_check","staff_calls","guest_followups","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
@@ -705,7 +713,7 @@ function sideNav(DESKS, ORD){
       if(isSoon && DESKS.some(y => G.kids[y.key] && y.status === "live")) return "";   // a group with any live child shows once, with the live desks
       const kids = DESKS.filter(y => G.kids[y.key]).sort((a, b) => a.sort - b.sort);
       return `<div class="gbox" data-g="${g}"><a class="dk par" href="#" data-g="${g}" title="${esc(G.label)}"><span class="ic">${ICON[G.icon]}</span><span class="lb">${esc(G.label)}</span><span class="chev">${ICON.chev}</span></a>
-        <div class="subs">${kids.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(y.label)}"><span class="lb">${esc(G.kids[y.key])}</span>${y.status !== "live" ? soonTag : ""}</a>`).join("")}</div></div>`; }).join(""); };
+        <div class="subs">${kids.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(G.label + " ▸ " + G.kids[y.key])}"><span class="lb">${esc(G.kids[y.key])}</span>${y.status !== "live" ? soonTag : ""}</a>`).join("")}</div></div>`; }).join(""); };
   const okey =x => { const g = grouped(x.key); return g ? "g:" + g : x.key; };
   const byMine = list => !ORD.length ? list : list.slice().sort((a, b) => { const ia = ORD.indexOf(okey(a)), ib = ORD.indexOf(okey(b));
       return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
@@ -808,7 +816,7 @@ function shell(){
   const SN = sideNav(DESKS, PREFS.desk_order || []);
   const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
   // 2026-10-28 (Brandon): profile, settings and sign out sit top right (were at the bottom of the sidebar)
-  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button class="mgear mbell" title="Notifications" aria-label="Notifications">${ICON.bell}<span class="bdot"></span></button><a class="mgear mboard" href="#/board" title="Message board" aria-label="Message board">${ICON.chat}</a><a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
+  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button class="mgear mbell" title="Notifications" aria-label="Notifications">${ICON.bell}<span class="bdot"></span></button>${ME && ME.admin ? `<a class="mgear mboard" href="#/board" title="Message board" aria-label="Message board">${ICON.chat}</a>` : ""}<a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b>${meHtml}</div>
   <div class="scrim" id="scrim"></div>
   <div class="shell">
@@ -881,12 +889,12 @@ function shell(){
       const uid = ((await sb.auth.getSession()).data.session || {}).user; 
       for(const sh of SHOTS){ const p = (uid ? uid.id : "x") + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
         const u = await sb.storage.from("hub-feedback").upload(p, sh.blob, { contentType:"image/jpeg" });
-        if(u.error){ $("#fbsend").disabled = false; $("#fbmsg").textContent = "Couldn't upload the screenshot: " + u.error.message; return; }
+        if(u.error){ $("#fbsend").disabled = false; $("#fbmsg").textContent = "Couldn't upload the screenshot: " + niceErr(u.error); return; }
         paths.push(p); }
       $("#fbmsg").textContent = "Sending…"; }
     const r = await sb.functions.invoke("hub-feedback", { body:{ kind, body, shots:paths, desk: cur ? cur.key : "", deskLabel: WHERE.label || (cur ? cur.label : ""), page: (WHERE.label + " | " + WHERE.page).slice(0, 500) } });
     $("#fbsend").disabled = false;
-    if(r.error || !r.data || !r.data.ok){ $("#fbmsg").textContent = "Couldn't send: " + ((r.data && r.data.error) || (r.error && r.error.message) || "try again"); return; }
+    if(r.error || !r.data || !r.data.ok){ $("#fbmsg").textContent = "Couldn't send: " + ((r.data && r.data.error) || (r.error && niceErr(r.error)) || "try again"); return; }
     $("#fbtext").value = ""; SHOTS.forEach(x => URL.revokeObjectURL(x.url)); SHOTS = []; shotDraw(); $("#fbmsg").textContent = "Sent - thanks! Brandon will see it." ;
     setTimeout(() => $("#fb").classList.remove("on"), 1200);
   };
@@ -971,7 +979,7 @@ function route(){
   if(d && k === "owner_calls" && d.status === "live" && window.ownerCallsView) return ownerCallsView(v);   // calls.js: Owners > Calls (Brandon 2026-11-01); data RLS hub_owner_calls.sql   // calls.js: Guest > Follow-ups (Brandon 2026-10-29); data RLS = Call review rule
   if(d && k === "reservations" && d.status === "live" && window.resCheckView) return resCheckView(v);   // reservations.js (2026-10-28)
   if(d && k === "rates_report"){ v.innerHTML = `<div class="page"><h2>Report folio</h2><div id="rflag"></div></div>`; return loadRateFlag(); }
-  if(!d){ v.innerHTML = `<div class="page"><div class="card"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div></div>`; return; }
+  if(!d){ location.replace("#/home"); return; }   // rule 3 (2026-11-03): never tell someone a desk exists that they can't open
   if((d.status !== "live" && !ME.admin) || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a Bug / Upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
   const arg = hashArg(), sep = d.url.includes("?") ? "&" : "?";
@@ -1032,7 +1040,7 @@ async function feedbackView(v){
     <div class="seg" id="fbf" style="margin:0 0 10px"><button class="btn small on" data-f="all">All</button><button class="btn small" data-f="bug">🐞 Bugs</button><button class="btn small" data-f="upgrade">⬆️ Upgrades</button><button class="btn small" data-f="idea">💡 Ideas</button><button class="btn small" data-f="mine">Mine</button></div><div class="card" id="fblist"><p class="muted">Loading…</p></div></div>`;
   const r = await sb.rpc("hub_feedback_board");
   const box = $("#fblist");
-  if(r.error) return box.innerHTML = `<p class="muted">Couldn't load: ${esc(r.error.message)}</p>`;
+  if(r.error) return box.innerHTML = `<p class="muted">Couldn't load: ${esc(niceErr(r.error))}</p>`;
   if(!r.data.length) return box.innerHTML = `<p class="muted">Nothing yet.</p>`;
   const label = { bug:"🐞 Bug", upgrade:"⬆️ Upgrade", idea:"💡 Idea", ask:"🙋 Asked via Penny" }, tone = { new:"red", seen:"blue", doing:"amber", done:"green", wont:"" };
   const deskName = k => (DESKS.find(x => x.key === k) || {}).label || k || "Hub";
@@ -1054,10 +1062,10 @@ async function feedbackView(v){
   box.querySelectorAll("[data-asave]").forEach(b => b.onclick = async () => { const id = +b.dataset.asave, m = box.querySelector(`[data-amsg="${id}"]`);
     const r = await sb.rpc("penny_answer_ask", { p_id:id, p_answer:box.querySelector(`[data-ans="${id}"]`).value, p_teach:box.querySelector(`[data-teach="${id}"]`).checked,
       p_desk:box.querySelector(`[data-tdesk="${id}"]`).value, p_topic:null });
-    m.textContent = r.error ? "Couldn't save: " + r.error.message : "Saved ✓" + (box.querySelector(`[data-teach="${id}"]`).checked ? " · Penny knows it now" : ""); });
+    m.textContent = r.error ? "Couldn't save: " + niceErr(r.error) : "Saved ✓" + (box.querySelector(`[data-teach="${id}"]`).checked ? " · Penny knows it now" : ""); });
   box.querySelectorAll("select[data-id]").forEach(s => s.onchange = async () => {
     const u = await sb.from("hub_feedback").update({ status:s.value }).eq("id", s.dataset.id);
-    if(u.error){ s.insertAdjacentHTML("afterend", `<span class="muted"> couldn't save: ${esc(u.error.message)}</span>`); } });
+    if(u.error){ s.insertAdjacentHTML("afterend", `<span class="muted"> couldn't save: ${esc(niceErr(u.error))}</span>`); } });
 }
 /* Reports ▸ Messages sent by the hub (2026-10-28): your own; managers also their desks'; admins all (hub_messages_report decides) */
 async function messagesView(v){
@@ -1066,7 +1074,7 @@ async function messagesView(v){
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px"><input id="msq" type="search" placeholder="Search messages" style="flex:1;min-width:200px"><select id="msd" style="width:auto"><option value="">All desks</option></select></div>
     <div class="card" id="mslist"><p class="muted">Loading…</p></div></div>`;
   const r = await sb.rpc("hub_messages_report"); const rows = r.data || [];
-  if(r.error){ $("#mslist").innerHTML = `<p class="muted">Couldn't load: ${esc(r.error.message)}</p>`; return; }
+  if(r.error){ $("#mslist").innerHTML = `<p class="muted">Couldn't load: ${esc(niceErr(r.error))}</p>`; return; }
   const dn = k => (DESKS.find(x => x.key === k) || {}).label || ({ sync_status:"Sync" })[k] || k || "Hub";
   [...new Set(rows.map(x => x.desk_key).filter(Boolean))].sort().forEach(k => $("#msd").insertAdjacentHTML("beforeend", `<option value="${esc(k)}">${esc(dn(k))}</option>`));
   const draw = () => { const q = $("#msq").value.toLowerCase(), dk = $("#msd").value;
@@ -1126,7 +1134,7 @@ async function loadWeather(){
 async function loadStays(pick){
   const box = $("#stays"); if(!box) return;
   const r = await sb.rpc("hub_home_stays"); const j = r.data;
-  if(r.error || !j){ box.innerHTML = `<b style="font-size:17px">🏠 Who's in house</b><p class="muted">Couldn't load stays${r.error ? ": " + esc(r.error.message) : ""}.</p>`; return; }
+  if(r.error || !j){ box.innerHTML = `<b style="font-size:17px">🏠 Who's in house</b><p class="muted">Couldn't load stays${r.error ? ": " + esc(niceErr(r.error)) : ""}.</p>`; return; }
   const dn = d => new Date(d + "T12:00"), md = d => dn(d).toLocaleDateString(undefined, { month:"short", day:"numeric" });
   const add1 = d => { const x = dn(d); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10); };
   const t0 = pick && j.days.some(d => d.day === pick) ? pick : j.days[0].day, t1 = add1(t0), td = j.days.find(d => d.day === t0) || {}, isToday = t0 === j.today;
@@ -1310,7 +1318,7 @@ function accPw(x, done){
     if(pwMissing(pw).some(([ok]) => !ok)) return $("#accmsg").textContent = "Needs every item on the list.";
     $("#accgo").disabled = true; $("#accmsg").textContent = "Saving…";
     const r = await sb.rpc("hub_set_password", { p_person:x.id, p_password:pw, p_must_change:mc });
-    if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + r.error.message; }
+    if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + niceErr(r.error); }
     close(); done(x.name + "'s password is set and they're signed out" + (r.data ? " of " + r.data + " device" + (r.data === 1 ? "" : "s") : "") + "." + (mc ? " They'll pick their own at their next sign-in." : "")); };
 }
 function accAsk(act, x, done){
@@ -1330,7 +1338,7 @@ function accAsk(act, x, done){
     const r = act === "out" ? await sb.rpc("hub_admin_sign_out", { p_person:x.id })
       : act === "remove" || act === "restore" ? await sb.rpc("hub_admin_remove", { p_person:x.id, p_remove:act === "remove" })
       : await sb.rpc("hub_admin_lock", { p_person:x.id, p_lock:act === "lock" });
-    if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + r.error.message; }
+    if(r.error){ $("#accgo").disabled = false; return $("#accmsg").textContent = "Didn't work: " + niceErr(r.error); }
     close(); done(act === "remove" ? x.name + " was removed from the list." : act === "restore" ? x.name + " is back in the list (still locked out)." : act === "unlock" ? x.name + " can sign in again." : x.name + " was signed out of " + r.data + " device" + (r.data === 1 ? "" : "s") + "."); };
 }
 /* Who sees which desk (hub admins only, hub_person_desks.sql). Brandon 2026-10-29: Kim can open a desk for one person, or hide one,
@@ -1362,7 +1370,7 @@ async function pdCard(box){
     box.querySelectorAll("[data-pd]").forEach(b => b.onclick = async () => { const [k, m] = b.dataset.pd.split(":"), note = $("#pdnote").value;
       box.querySelectorAll("[data-pd]").forEach(x => x.disabled = true);
       const r = await sb.rpc("hub_person_desk_set", { p_person:who, p_desk:k, p_mode:m, p_note:note || null });
-      if(r.error){ box.querySelectorAll("[data-pd]").forEach(x => x.disabled = false); return $("#pdmsg").textContent = "Didn't save: " + r.error.message; }
+      if(r.error){ box.querySelectorAll("[data-pd]").forEach(x => x.disabled = false); return $("#pdmsg").textContent = "Didn't save: " + niceErr(r.error); }
       await load(who); $("#pdmsg").textContent = "Saved. It takes effect the next time " + (people.find(p => p.id === who) || {}).name + " opens or reloads the hub."; });
   };
   const load = async id => { who = PDWHO = id; rows = []; hist = [];
@@ -1382,10 +1390,10 @@ async function viewAs(id, name){
   $("#vam").onclick = e => { if(e.target.id === "vam") close(); };
   const r = await sb.rpc("hub_view_as", { p_user:id });
   if(!$("#vam")) return;
-  if(r.error || !r.data) return $("#vabody").innerHTML = `<p class="muted">Couldn't work it out: ${esc(r.error ? r.error.message : "no answer")}</p>`;
+  if(r.error || !r.data) return $("#vabody").innerHTML = `<p class="muted">Couldn't work it out: ${esc(r.error ? niceErr(r.error) : "no answer")}</p>`;
   const j = r.data, D = (j.desks || []).slice();
   addDerived(D, { maint_money:!!j.maint_money, perf:!!j.perf });
-  const SN = sideNav(D, fixOrder((j.prefs || {}).desk_order));
+  const SN = sideNav(D, fixOrder((j.prefs || {}).desk_order), (j.me || {}).admin === true);
   const rep = j.reports || [], dn = k => (D.find(x => x.key === k) || {}).label || k.replace(/_/g, " "), grp = {};
   rep.forEach(x => (grp[dn(x.desk_key)] = grp[dn(x.desk_key)] || []).push(x));
   const teams = ((j.me || {}).teams || []).map(t => t.replace(/_/g, " ")).join(" · ");
@@ -1424,7 +1432,7 @@ async function ptCard(box){
       if(v === "0" && t.members.length && !confirm(`Take "${r0.label}" away from ${t.label} (${t.members.length} ${t.members.length === 1 ? "person" : "people"})? Anyone given it under By person keeps it.`)) return;
       box.querySelectorAll("[data-pt]").forEach(x => x.disabled = true);
       const r = await sb.rpc("hub_team_desk_set", { p_team:team, p_desk:k, p_on:v === "1", p_note:note || null });
-      if(r.error){ box.querySelectorAll("[data-pt]").forEach(x => x.disabled = false); return $("#ptmsg").textContent = "Didn't save: " + r.error.message; }
+      if(r.error){ box.querySelectorAll("[data-pt]").forEach(x => x.disabled = false); return $("#ptmsg").textContent = "Didn't save: " + niceErr(r.error); }
       await load(team); $("#ptmsg").textContent = "Saved. It takes effect the next time each person opens or reloads the hub."; });
   };
   const load = async k => { team = PDTEAM = k; rows = []; hist = [];
@@ -1445,7 +1453,7 @@ async function pennyBriefCard(box){
       <label style="display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer"><input type="checkbox" id="pbwk"${p.weekends ? " checked" : ""}> Weekends too</label></div>
     <p class="muted" id="pbmsg" style="margin:0"></p></div>`;
   const save = async () => { const x = await sb.rpc("penny_brief_set", { p_enabled:$("#pbon").checked, p_send_at:$("#pbat").value, p_weekends:$("#pbwk").checked });
-    if(x.error) return savedTip("Couldn't save: " + x.error.message, true);
+    if(x.error) return savedTip("Couldn't save: " + niceErr(x.error), true);
     $("#pbmsg").textContent = x.data.enabled ? `Next one at ${t12(x.data.send_at)}${x.data.weekends ? "" : " on a weekday"}.` : "You won't get the briefing."; savedTip(); };
   ["pbon", "pbat", "pbwk"].forEach(id => $("#" + id).onchange = save);
 }
@@ -1509,7 +1517,7 @@ function settingsView2(v){
   const autoSave = () => { clearTimeout(saveT); saveT = setTimeout(async () => {
     const cur = (desksFirst ? ["@desks_first"] : []).concat(ilist, dlist), order = cur.join() === std(ilist).concat(std(dlist)).join() ? [] : cur;
     const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
-    if(r.error) return savedTip("Couldn't save: " + r.error.message, true);
+    if(r.error) return savedTip("Couldn't save: " + niceErr(r.error), true);
     PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks });
     const nav = document.querySelector("aside.rail nav.desks"); if(nav){ nav.innerHTML = sideNav(DESKS, order).nav; wireNav(nav); }
     savedTip(); }, 600); };
@@ -1579,11 +1587,11 @@ function settingsView2(v){
     const bdBoth = p => { const m = $("#" + p + "_m").value, d = $("#" + p + "_d").value; return (m && d) || (!m && !d) ? { m:+m || null, d:+d || null } : null; };   // save only a whole date (or a cleared one)
     ["bd_m", "bd_d"].forEach(id => $("#" + id).onchange = async () => { const b = bdBoth("bd"); if(!b) return;
       const r = await sb.rpc("hub_set_birthday", { p_user:null, p_month:b.m, p_day:b.d });
-      if(r.error) return savedTip("Couldn't save: " + r.error.message, true);
+      if(r.error) return savedTip("Couldn't save: " + niceErr(r.error), true);
       BD.mine = b.m ? { month:b.m, day:b.d } : null; redraw(false); savedTip("Birthday saved 🎉"); });
     v.querySelectorAll("[data-bdp]").forEach(b => b.querySelectorAll("select").forEach(sel => sel.onchange = async () => { const i = +b.dataset.bdp, x = BD.people[i], w = bdBoth("bp" + i); if(!w) return;
       const r = await sb.rpc("hub_set_birthday", { p_user:x.id, p_month:w.m, p_day:w.d });
-      if(r.error) return savedTip("Couldn't save: " + r.error.message, true);
+      if(r.error) return savedTip("Couldn't save: " + niceErr(r.error), true);
       x.month = w.m; x.day = w.d; savedTip(x.name + "'s birthday saved"); }));
     v.querySelectorAll("[data-acc]").forEach(b => b.onclick = () => { const [act, id] = b.dataset.acc.split(":"), x = ACC.find(p => p.id === id);
       (act === "pw" ? accPw : (p, f) => accAsk(act, p, f))(x, async msg => { ACC = (await sb.rpc("hub_admin_people")).data || []; draw(); const c = $("#acccard"); if(c){ SETOPEN = (c.querySelector("summary b") || {}).textContent; c.open = true; } $("#prefmsg").textContent = msg; }); });
@@ -1604,7 +1612,7 @@ async function loadMentions(){
   const r = await sb.rpc("hub_my_mentions", { p_n:5 }), j = r.data;
   const ago = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 60 ? Math.max(1, m) + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; };
   const head = `<div class="shead"><b style="font-size:17px">🔔 Your Slack mentions</b><span class="muted" style="margin-left:auto">last 5</span></div>`;
-  if(r.error || !j){ box.innerHTML = head + `<p class="muted">Couldn't load${r.error ? ": " + esc(r.error.message) : ""}.</p>`; return; }
+  if(r.error || !j){ box.innerHTML = head + `<p class="muted">Couldn't load${r.error ? ": " + esc(niceErr(r.error)) : ""}.</p>`; return; }
   if(!j.linked){ box.innerHTML = head + `<p class="muted">We couldn't match you to a Slack account yet. Tell Brandon with Report a Bug / Upgrade.</p>`; return; }
   box.innerHTML = head + ((j.items || []).length ? j.items.map(x => `<a class="ment" href="${esc(x.permalink)}" target="_blank" rel="noopener">
       <div class="hd" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px"><b>${esc(x.author || "")}</b><span class="pill">${esc(x.channel_name || "")}</span><span class="muted" style="margin-left:auto">${ago(x.at)}</span></div>
@@ -1625,7 +1633,7 @@ async function loadRateFlag(){
     $("#rf_s").disabled = true; $("#rf_m").textContent = "Sending…";
     const r = await sb.rpc("rates_flag_folio", { p_folio:f, p_kind:$("#rf_k").value, p_note:$("#rf_n").value });
     $("#rf_s").disabled = false;
-    if(r.error){ $("#rf_m").textContent = "Couldn't send: " + r.error.message; return; }
+    if(r.error){ $("#rf_m").textContent = "Couldn't send: " + niceErr(r.error); return; }
     $("#rf_f").value = ""; $("#rf_n").value = ""; $("#rf_m").textContent = r.data < 0 ? "Sent ✓ That's a guest / stay issue, so it went to the Reservations folio list." : "Sent ✓ Thanks — it's been passed along."; };
 }
 /* Reservations ▸ Report folio (2026-10-28): guest / stay issues by Track folio. "Rate looks wrong" goes to the Rates list instead. */
@@ -1660,7 +1668,7 @@ async function resReportView(v, mode){
     if(!f && !u) return $("#rr_m").textContent = "Enter the folio number (or the home).";
     $("#rr_s").disabled = true; $("#rr_m").textContent = "Sending…";
     const kd = $("#rr_k").value, r = await sb.rpc(tools ? "tools_report_folio" : "res_report_folio", { p_folio:f, p_unit:u, p_kind:tools && kd === "guest" ? "complaint" : kd, p_note:$("#rr_n").value }); $("#rr_s").disabled = false;
-    if(r.error){ $("#rr_m").textContent = "Couldn't send: " + r.error.message; return; }
+    if(r.error){ $("#rr_m").textContent = "Couldn't send: " + niceErr(r.error); return; }
     $("#rr_f").value = $("#rr_u").value = $("#rr_n").value = "";
     $("#rr_m").textContent = r.data && r.data.list === "rates" ? "Sent ✓ That's a rate question, so it went to the Rates folio list." : "Sent ✓ Thanks — a manager will look at it.";
     list(); };
@@ -1731,13 +1739,13 @@ async function homeView(v){
   $("#solist").innerHTML = so.length ? so.map(x => `<div class="fb"><div class="hd"><b>${esc(x.about_name||"")}</b><span class="muted">${x.source === "Guest review" ? "⭐ from a guest review" : "from " + esc(x.author_name||"")} · ${when(x.created_at)}</span>${ME.admin ? `<button class="btn small" data-sohide="${x.id}" style="margin-left:auto">Hide</button>` : ""}</div><p>${esc(x.body)}</p></div>`).join("") : `<p class="muted">No shout-outs yet. Be the first.</p>`;
   $("#nwlist").innerHTML = nw.length ? nw.map(x => `<div class="fb"><div class="hd">${x.pinned ? `<span class="pill green">Pinned</span>` : ""}<b>${esc(x.title||"")}</b><span class="muted">${esc(x.author_name||"")} · ${when(x.created_at)}</span></div><p>${esc(x.body)}</p></div>`).join("") : `<p class="muted">No news yet.</p>`;
   document.querySelectorAll("[data-sohide]").forEach(b => b.onclick = async () => { if(!confirm("Hide this shout-out from Home? (It's kept, not deleted.)")) return;
-    const u = await sb.from("hub_posts").update({ hidden:true }).eq("id", +b.dataset.sohide); if(u.error) alert("Couldn't hide: " + u.error.message); else homeView(v); });   // admins (hub_posts hub_admin_upd)
+    const u = await sb.from("hub_posts").update({ hidden:true }).eq("id", +b.dataset.sohide); if(u.error) alert("Couldn't hide: " + niceErr(u.error)); else homeView(v); });   // admins (hub_posts hub_admin_upd)
   $("#soadd").onclick = () => { $("#soform").style.display = "block"; $("#soabout").focus(); };
   $("#sosend").onclick = async () => { const p = await sb.rpc("hub_post", { p_kind:"shoutout", p_title:"", p_body:$("#sobody").value, p_about:$("#soabout").value });
-    if(p.error) $("#somsg").textContent = "Couldn't post: " + p.error.message; else homeView(v); };
+    if(p.error) $("#somsg").textContent = "Couldn't post: " + niceErr(p.error); else homeView(v); };
   if(ME.canNews){ $("#nwadd").onclick = () => { $("#nwform").style.display = "block"; $("#nwtitle").focus(); };
     $("#nwsend").onclick = async () => { const p = await sb.rpc("hub_post", { p_kind:"news", p_title:$("#nwtitle").value, p_body:$("#nwbody").value, p_about:"" });
-      if(p.error) $("#nwmsg").textContent = "Couldn't post: " + p.error.message; else homeView(v); }; }
+      if(p.error) $("#nwmsg").textContent = "Couldn't post: " + niceErr(p.error); else homeView(v); }; }
 }
 /* Reports: Track-style index (Brandon 2026-10-28) — one column per desk, plain report links A-Z, our look. Only desks you can open. */
 async function hubReportsView(v){
@@ -1746,12 +1754,12 @@ async function hubReportsView(v){
   if(ME.admin) sb.from("hub_sync_requests").select("id").eq("status","needs_approval").then(w => { const n = (w.data || []).length;
     if(n && $("#rpwait")) $("#rpwait").innerHTML = `<div class="card" style="border-color:var(--amber)"><b>⏳ ${n} sync request${n === 1 ? "" : "s"} waiting for your OK</b> <a href="#/sync" style="margin-left:8px">Review →</a></div>`; });
   const r = await sb.from("hub_reports").select("*").order("sort");
-  if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`;
+  if(r.error) return $("#rplist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(niceErr(r.error))}</p></div>`;
   const name = k => k === "g_reviews" ? "Guest reviews" : k === "g_team" ? "Team" : k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : k === "competitor" ? "Competitor Playbook" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
   const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team", work_check:"g_team", staff_calls:"g_team", cmp_open:"competitor", cmp_add:"competitor" };   // Guest reviews section (Brandon 2026-10-29)
-  const groups = {}; r.data.forEach(x => { const sb = SUB[x.desk_key], g = GRP[x.key] || (sb ? sb[0] : x.desk_key); (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
+  const groups = {}; r.data.filter(x => ME.admin || x.status === "live").forEach(x => { const sb = SUB[x.desk_key], g = GRP[x.key] || (sb ? sb[0] : x.desk_key); (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => (b === "analytics") - (a === "analytics") || name(a).localeCompare(name(b)));   // Analytics first
   const link = x => x.status === "live"
         ? `<a href="#" class="rpl" data-run="${esc(x.url)}" title="${esc(x.note || "")}">${esc(x.label)}${x.admin_only ? ` <span class="pill">admins</span>` : ""}</a>`
@@ -1777,7 +1785,7 @@ async function syncReport(v, kind){
   v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a> · <a href="#/sync">Manual sync</a></p><h2>${kind === "errors" ? "Error report" : "Recent sync report"}</h2>
     <p class="muted">${kind === "errors" ? "Data sources with a problem on their last run, or that haven't synced in over a day." : "When each data source last synced, newest first, and the syncs people started by hand."}</p><div id="srep"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
   const [s, q] = await Promise.all([ sb.from("hub_sync_sources").select("*"), sb.from("hub_sync_requests").select("*").order("id", { ascending:false }).limit(40) ]);
-  if(s.error) return $("#srep").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(s.error.message)}</p></div>`;
+  if(s.error) return $("#srep").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(niceErr(s.error))}</p></div>`;
   const src = s.data || [], label = k => k ? ((src.find(x => x.key === k) || {}).label || k) : "Every data source";
   const stale = x => !x.last_ok_at || (Date.now() - new Date(x.last_ok_at)) / 36e5 > 26;
   const row = x => { const bad = x.last_status === "error", old = stale(x);
@@ -1808,7 +1816,7 @@ async function syncView(v, only){
     return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m/60) + " h ago" : Math.round(m/1440) + " days ago"; };
   const [s, q] = await Promise.all([ sb.from("hub_sync_sources").select("*").order("label"),
     sb.from("hub_sync_requests").select("*").order("id", { ascending:false }).limit(60) ]);
-  if(s.error) return $("#srcs").innerHTML = `<p class="muted">Couldn't load: ${esc(s.error.message)}</p>`;
+  if(s.error) return $("#srcs").innerHTML = `<p class="muted">Couldn't load: ${esc(niceErr(s.error))}</p>`;
   const reqs = q.data || [], lastFor = k => reqs.find(r => (r.source_key || null) === k), label = k => ((s.data.find(x => x.key === k) || {}).label) || "Every data source";
   const COST = { big:"big data pull", paid:"costs money" };
   // admins: requests waiting for an OK
@@ -1830,7 +1838,7 @@ async function syncView(v, only){
         ${x.last_detail ? `<p class="muted" style="margin:4px 0 0;font-size:12.5px">${esc(x.last_detail)}</p>` : ""}</div>`; }).join("");
   const all = lastFor(null);
   if(all) $("#syncmsg").textContent = all.status === "needs_approval" ? "Asked " + ago(all.requested_at) + " - waiting for Brandon or Kim" : all.status === "declined" ? "Last full sync ask was declined" : all.done_at ? "Last full sync finished " + ago(all.done_at) + (all.result ? " - " + all.result : "") : "Full sync asked " + ago(all.requested_at) + " - waiting for the ThinkStation.";
-  const ask = async key => { const r = await sb.rpc("hub_sync_request", { p_key:key }); if(r.error) return "Couldn't ask: " + r.error.message;
+  const ask = async key => { const r = await sb.rpc("hub_sync_request", { p_key:key }); if(r.error) return "Couldn't ask: " + niceErr(r.error);
     return (r.data && r.data.status) === "needs_approval" ? "Sent to Brandon and Kim to approve." : "Asked. The ThinkStation picks it up within a minute."; };
   if($("#syncall")) $("#syncall").onclick = async () => { $("#syncall").disabled = true; $("#syncmsg").textContent = await ask(null); setTimeout(() => syncView(v, only), 2500); };
   $("#srcs").querySelectorAll("[data-sync]").forEach(b => b.onclick = async () => { b.disabled = true; b.textContent = "Asking…"; const m = await ask(b.dataset.sync); b.textContent = /approve/.test(m) ? "Sent for OK" : /Couldn't/.test(m) ? "Couldn't ask" : "Asked ✓"; b.title = m; setTimeout(() => syncView(v, only), 2500); });
@@ -1972,19 +1980,19 @@ async function pennyHubUpdate(d){
   if(d.target === "job"){
     let ok = true, err = "";
     if(Object.keys(d.patch || {}).length){ const r = await sb.from("work_orders").update(d.patch).eq("id", d.id).select("id");
-      if(r.error || !(r.data || []).length){ ok = false; err = deny(r.error ? r.error.message : "not allowed"); } }
+      if(r.error || !(r.data || []).length){ ok = false; err = deny(r.error ? niceErr(r.error) : "not allowed"); } }
     if(ok && d.note){ const u = (await sb.auth.getUser()).data.user;
       const r2 = await sb.from("work_order_events").insert({ work_order_id:d.id, by_email:u && u.email, kind:"note", note:d.note + " (via Ask Penny)" });
-      if(r2.error){ ok = false; err = deny(r2.error.message); } }
+      if(r2.error){ ok = false; err = deny(niceErr(r2.error)); } }
     await log("job " + d.id, Object.keys(d.patch || {}).concat(d.note ? ["note"] : []).join(","), JSON.stringify(d.old || {}), JSON.stringify(d.patch || {}) + (d.note ? " note: " + d.note : ""), ok, err);
     return ok ? "✅ Job #" + d.id + " updated." : "Couldn't update the job: " + err;
   }
   if(d.target === "checklist_note"){ const r = await sb.rpc("res_note", { p_res:d.res, p_text:d.value + " (via Ask Penny)" });
-    await log("res " + d.res, "check list note", "", d.value, !r.error, r.error && r.error.message);
-    return r.error ? "Couldn't add the note: " + deny(r.error.message) : "✅ Note added to the check list."; }
+    await log("res " + d.res, "check list note", "", d.value, !r.error, r.error && niceErr(r.error));
+    return r.error ? "Couldn't add the note: " + deny(niceErr(r.error)) : "✅ Note added to the check list."; }
   if(["home", "owner_contact", "moose_office"].includes(d.target)){
     const g = await sb.from("desk_docs").select("data").eq("collection", d.coll).eq("id", d.id).maybeSingle();
-    if(g.error) return "Couldn't read it: " + deny(g.error.message);
+    if(g.error) return "Couldn't read it: " + deny(niceErr(g.error));
     const cur = (g.data && g.data.data) || {}, now = String(d.target === "moose_office" ? ((cur[d.field] || {})[d.key] ?? "") : (cur[d.field] ?? ""));
     if(now !== String(d.old ?? "")) return "It changed since Penny drafted this. Ask her again.";
     let patch;
@@ -1992,8 +2000,8 @@ async function pennyHubUpdate(d){
       patch = { [d.field]:m }; if(d.field === "co_ext" || d.field === "co_ext_lines") patch.co_ext_src = "edited in the hub by " + ME.name + " (via Ask Penny), " + new Date().toLocaleDateString("en-CA"); }
     else patch = { [d.field]:d.value };
     const r = await sb.from("desk_docs").upsert({ collection:d.coll, id:d.id, data:Object.assign({}, cur, patch, { at:Date.now(), by:ME.initials || ME.name }) }, { onConflict:"collection,id" });
-    await log(d.coll + "/" + d.id, d.target === "moose_office" ? d.field + "." + d.key : d.field, d.old, d.value, !r.error, r.error && r.error.message);
-    return r.error ? "Couldn't save it: " + deny(r.error.message) : "✅ Saved in the hub."; }
+    await log(d.coll + "/" + d.id, d.target === "moose_office" ? d.field + "." + d.key : d.field, d.old, d.value, !r.error, r.error && niceErr(r.error));
+    return r.error ? "Couldn't save it: " + deny(niceErr(r.error)) : "✅ Saved in the hub."; }
   return "Penny drafted something the hub doesn't know how to do.";
 }
 async function pennyAct(a, btn, box){
@@ -2001,13 +2009,13 @@ async function pennyAct(a, btn, box){
   if(a.kind === "job"){ const id = "desk-penny-" + Date.now().toString(36), d = new Date().toLocaleDateString("en-CA");
     r = await sb.from("desk_docs").upsert({ collection:"deskjobs", id, data:{ id, src:"desk", title:a.data.title, prop:a.data.prop || "", kind:a.data.kind || "repair", who:"", vendor:"",
       due:a.data.due || "", detail:(a.data.detail || "") + "\n(Made with Ask Penny by " + ME.name + ")", status:"open", created:d, updated:d, list:"Desk", props:[], links:[], at:Date.now(), by:ME.name } }, { onConflict:"collection,id" });
-    msg = r.error ? "Couldn't create it: " + r.error.message : "✅ Job created on the Maintenance desk."; }
+    msg = r.error ? "Couldn't create it: " + niceErr(r.error) : "✅ Job created on the Maintenance desk."; }
   else if(a.kind === "hub_update"){ try { msg = await pennyHubUpdate(a.data || {}); } catch(e){ msg = "Couldn't do it: " + e.message; } }
   else if(a.kind === "tick"){ r = await sb.rpc("res_tick", { p_res:a.data.res, p_step:a.data.step, p_done:true, p_note:a.data.note || "Ticked with Ask Penny" });
-    msg = r.error ? "Couldn't tick it: " + r.error.message : "✅ Ticked on the check list."; }
+    msg = r.error ? "Couldn't tick it: " + niceErr(r.error) : "✅ Ticked on the check list."; }
   else if(a.kind === "fd_note" || a.kind === "slack_post" || a.kind === "track_update"){ r = await sb.functions.invoke("penny", { body:{ act:{ kind:a.kind, data:a.data } } }); let d = r.data || {};
     if(r.error && r.error.context && r.error.context.json){ try { d = await r.error.context.json(); } catch(e){} }   // show the function's own reason, not "non-2xx"
-    msg = d.ok ? "✅ " + d.done : (a.kind === "slack_post" ? "Couldn't send it: " : a.kind === "track_update" ? "Couldn't update Track: " : "Couldn't add it: ") + (d.error || (r.error && r.error.message) || "error"); }
+    msg = d.ok ? "✅ " + d.done : (a.kind === "slack_post" ? "Couldn't send it: " : a.kind === "track_update" ? "Couldn't update Track: " : "Couldn't add it: ") + (d.error || (r.error && niceErr(r.error)) || "error"); }
   box.innerHTML = `<span>${esc(msg)}</span>`;
 }
 async function pennyAsk(q){
@@ -2034,7 +2042,7 @@ async function pennyAsk(q){
       if(!d) d = { error:"Penny's answer got cut off — please ask again." };
     } else { got = true; d = await resp.json().catch(() => ({ error:"Penny couldn't answer right now." })); }
   } catch(e){ if(got) d = { error:"Penny's answer got cut off — please ask again." }; }
-  if(!d){ const r = await sb.functions.invoke("penny", { body }); d = r.data || { error:r.error && r.error.message }; }
+  if(!d){ const r = await sb.functions.invoke("penny", { body }); d = r.data || { error:r.error && niceErr(r.error) }; }
   wait.remove();
   const a = d.ok ? d.answer : (d.error || "Penny couldn't answer right now.");
   const el = pennySay("assistant", a, d.id, d.links);
@@ -2098,7 +2106,7 @@ async function homeQuick(el){
   };
   const save = async why => { if(busy || pick == null) return; busy = true; $("#hqmsg").textContent = "Saving…";
     const s = await sb.rpc("home_quick_answer", { p_a:a.id, p_b:b.id, p_winner:pick === 0 ? 1 : 0, p_why:why });
-    busy = false; if(s.error){ $("#hqmsg").textContent = s.error.message; return; }
+    busy = false; if(s.error){ $("#hqmsg").textContent = niceErr(s.error); return; }
     n++;
     el.innerHTML = `<div class="card"><b style="font-size:17px">⭐ Thanks!</b><p style="margin:6px 0">Saved to the Home Rater: <b>${esc(q.homes[pick].name)}</b>${why ? " for its " + esc(why.toLowerCase()) : ""}.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="hqmore">Another one</button>${DESKS.some(x => x.key === "rates_home_rater") ? `<a href="#/rates_home_rater">Open the Home Rater →</a>` : ""}</div></div>`;
@@ -2141,7 +2149,7 @@ async function pennyTips(box){
   // signals.js rules (2026-10-29): "✅ Do it" approves the action; the hub does it within ~30 minutes (Breezeway task / Rates Findings)
   box.querySelectorAll("[data-do]").forEach(b => b.onclick = async () => { b.disabled = true;
     const x = await sb.rpc("signal_do", { p_tip:+b.dataset.do });
-    if(x.error){ b.disabled = false; return alert("Couldn't do it: " + x.error.message); }
+    if(x.error){ b.disabled = false; return alert("Couldn't do it: " + niceErr(x.error)); }
     b.outerHTML = `<p class="muted" style="margin:0">On it ✓ The hub will do this within about 30 minutes.</p>`; });
   box.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => { const ts = b.dataset.ask.split(",").map(Number).map(id => T.find(x => x.id === id)).filter(Boolean);
     pennyOpen(true);
@@ -2153,7 +2161,7 @@ async function pennyTips(box){
     const ta = bx.querySelector("textarea"); ta.focus(); bx.querySelector("[data-x]").onclick = () => bx.innerHTML = "";
     bx.querySelector(".primary").onclick = async e => { const v = ta.value.trim(); if(!v) return ta.focus(); e.target.disabled = true;
       const x = await sb.rpc("tip_note_add", { p_tip:t.id, p_note:v });
-      if(x.error){ e.target.disabled = false; return alert("Couldn't save: " + x.error.message); }
+      if(x.error){ e.target.disabled = false; return alert("Couldn't save: " + niceErr(x.error)); }
       (NOTES[t.key] = NOTES[t.key] || []).push({ by_name:(ME && ME.name) || "You", note:v, at:new Date().toISOString() });
       box.querySelectorAll(`[data-notes="${t.id}"]`).forEach(n => n.innerHTML = noteList(t)); bx.innerHTML = ""; }; });
   let PEOPLE = null;
@@ -2172,7 +2180,7 @@ async function pennyTips(box){
       e.target.disabled = true; m.textContent = "Sending…";
       const x = await sb.functions.invoke("penny", { body:{ act:{ kind:"slack_post", data:{ to, text, via:"tip" } } } }); const d = x.data || {};
       if(d.ok){ bx.innerHTML = `<p class="muted" style="margin:6px 0 0">✓ ${esc(d.done || "Sent.")}</p>`; }
-      else { e.target.disabled = false; m.textContent = "Couldn't send: " + (d.error || (x.error && x.error.message) || "error"); } }; });
+      else { e.target.disabled = false; m.textContent = "Couldn't send: " + (d.error || (x.error && niceErr(x.error)) || "error"); } }; });
 }
 /* On a stay's check list, Penny pops in with what's left to finish it (reservations.js window.resCtx(res).left). Once a day per stay. */
 function pennyNudge(){
@@ -2229,7 +2237,7 @@ async function pennyCleanupView(v){
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Penny — data cleanup</h2>
     <p class="muted">Data that looks wrong or stale, grouped by who owns the fix. Run it any time; copy a person's list to send it to them.</p><div id="pclean"><div class="card"><p class="muted">Checking…</p></div></div></div>`;
   const r = await sb.rpc("penny_data_issues"); const j = r.data || {};
-  if(r.error) return $("#pclean").innerHTML = `<div class="card"><p class="muted">Couldn't run: ${esc(r.error.message)}</p></div>`;
+  if(r.error) return $("#pclean").innerHTML = `<div class="card"><p class="muted">Couldn't run: ${esc(niceErr(r.error))}</p></div>`;
   const items = j.items || [], by = {}; items.forEach(x => (by[x.owners || x.team] = by[x.owners || x.team] || []).push(x));
   const text = L => L.map(x => `• ${x.issue}: ${x.count}\n` + (x.examples || []).slice(0, 8).map(e => "   - " + e).join("\n")).join("\n");
   $("#pclean").innerHTML = (Object.keys(by).length ? Object.entries(by).map(([who, L], i) => `<div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:17px;flex:1">${esc(who)}</b><span class="muted">${L.reduce((a, x) => a + x.count, 0)} things</span><button class="btn small" data-copy="${i}">Copy list</button></div>
@@ -2265,7 +2273,7 @@ async function pennyPatternsView(v){
     $("#pplist").querySelectorAll("[data-pa]").forEach(b => b.onclick = async () => { const card = b.closest("[data-pp]"), id = +card.dataset.pp, m = card.querySelector("[data-pm]"), tip = card.querySelector("[data-pt]");
       b.disabled = true;
       const r = await sb.rpc("penny_pattern_decide", { p_id:id, p_status:b.dataset.pa, p_lesson:b.dataset.pa === "approved" ? card.querySelector("[data-pl]").value : null, p_desk:card.querySelector("[data-pd]").value, p_tip:!!(tip && tip.checked), p_note:null });
-      if(r.error){ b.disabled = false; return m.textContent = "Couldn't save: " + r.error.message; }
+      if(r.error){ b.disabled = false; return m.textContent = "Couldn't save: " + niceErr(r.error); }
       m.textContent = b.dataset.pa === "approved" ? `Approved ✓${r.data && r.data.doc ? " — Penny knows it now" : ""}${r.data && r.data.tips ? ` · tip on ${r.data.tips} people's Home` : ""}` : "Saved ✓";
       setTimeout(load, 1500); });
   };
@@ -2273,7 +2281,7 @@ async function pennyPatternsView(v){
   $("#pprun").onclick = async () => { const b = $("#pprun"), m = $("#ppmsg"); b.disabled = true; m.textContent = "Penny is looking… (2–4 minutes; this page updates when she's done)";
     const before = ((await sb.from("penny_pattern_runs").select("id").order("id", { ascending:false }).limit(1)).data || [])[0]?.id || 0;
     const r = await sb.functions.invoke("penny-patterns", { body:{} });
-    if(r.error){ b.disabled = false; return m.textContent = "Couldn't start: " + r.error.message; }
+    if(r.error){ b.disabled = false; return m.textContent = "Couldn't start: " + niceErr(r.error); }
     for(let i = 0; i < 60; i++){ await new Promise(z => setTimeout(z, 8000)); if(current() !== "penny") return;
       const x = ((await sb.from("penny_pattern_runs").select("id, found, new_count, error").order("id", { ascending:false }).limit(1)).data || [])[0];
       if(x && x.id > before){ b.disabled = false; m.textContent = x.error ? "Penny hit a problem: " + x.error : `Done: ${x.found} patterns, ${x.new_count} new.`; return load(); } }
@@ -2297,11 +2305,11 @@ async function pennyTeachView(v){
     : `<div class="card"><p>Nothing missed this week. 🎉</p></div>`;
   const go = async (id, alsoCheck) => { const m = $(`[data-tmsg="${id}"]`), ans = $(`[data-ta="${id}"]`).value, x = rows.find(r => r.id === id);
     const r = await sb.rpc("penny_teach", { p_chat:id, p_answer:ans, p_desk:$(`[data-td="${id}"]`).value, p_topic:null });
-    if(r.error) return m.textContent = "Couldn't save: " + r.error.message;
+    if(r.error) return m.textContent = "Couldn't save: " + niceErr(r.error);
     if(alsoCheck){ const must = $(`[data-tm="${id}"]`).value.split("\n").map(t => t.trim().toLowerCase()).filter(Boolean);
       if(!must.length) return m.textContent = "Taught ✓ — add words the answer must include to make a check.";
       const c2 = await sb.from("penny_checks").insert({ question:x.question, must, must_not:[], why:"Taught from a missed question", source:`Taught by ${ME.name}, ${new Date().toLocaleDateString("en-CA")} (Penny question #${id})`, created_by:ME.name });
-      if(c2.error) return m.textContent = "Taught ✓, check not saved: " + c2.error.message; }
+      if(c2.error) return m.textContent = "Taught ✓, check not saved: " + niceErr(c2.error); }
     m.textContent = alsoCheck ? "Taught ✓ and added to the checks" : "Taught ✓ — Penny knows it now"; };
   $("#pteach").querySelectorAll("[data-teach]").forEach(b => b.onclick = () => go(+b.dataset.teach, false));
   $("#pteach").querySelectorAll("[data-tcheck]").forEach(b => b.onclick = () => go(+b.dataset.tcheck, true));
@@ -2334,7 +2342,7 @@ async function pennyChecksView(v){
     $("#pc_save").onclick = async () => { const lines = id => $(id).value.split("\n").map(t => t.trim().toLowerCase()).filter(Boolean);
       if(!$("#pc_q").value.trim() || !$("#pc_s").value.trim()) return $("#pc_msg").textContent = "Question and source are required.";
       const r = await sb.from("penny_checks").insert({ question:$("#pc_q").value.trim(), must:lines("#pc_m"), must_not:lines("#pc_n"), source:$("#pc_s").value.trim(), created_by:ME.name });
-      if(r.error) return $("#pc_msg").textContent = r.error.message; $("#pcform").innerHTML = ""; checks = await load(); }; };
+      if(r.error) return $("#pc_msg").textContent = niceErr(r.error); $("#pcform").innerHTML = ""; checks = await load(); }; };
   $("#pcrun").onclick = async () => { const b = $("#pcrun"); b.disabled = true; const run = "run-" + Date.now();
     for(const [i, x] of checks.entries()){ b.textContent = `Running ${i + 1} of ${checks.length}…`;
       const r = await sb.functions.invoke("penny", { body:{ question:x.question, page:"Reports › Penny accuracy checks", check:true } });
@@ -2372,7 +2380,7 @@ async function pennyView(v){
       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary small" id="pk_s">Save note</button><button class="btn small" id="pk_c">Cancel</button><span class="muted" id="pk_m"></span></div></div>`;
     $("#pk_c").onclick = () => $("#pkbform").innerHTML = "";
     $("#pk_s").onclick = async () => { const r = await sb.rpc("penny_kb_save", { p_topic:$("#pk_t").value, p_body:$("#pk_b").value, p_desk:$("#pk_d").value, p_active:$("#pk_a").checked });
-      if(r.error) $("#pk_m").textContent = r.error.message; else pennyView(v); }; };
+      if(r.error) $("#pk_m").textContent = niceErr(r.error); else pennyView(v); }; };
   $("#pkbnew").onclick = () => form({});
   $("#plog").querySelectorAll("[data-teach]").forEach(b => b.onclick = () => { const x = rows[+b.dataset.teach];
     form({ topic:String(x.question || "").slice(0, 80), body:x.answer || "", active:true }); $("#pkbform").scrollIntoView({ behavior:"smooth" }); });
@@ -2390,7 +2398,7 @@ async function patrickView(v){
     <div class="card" id="pbook" style="display:none"></div><div class="card" id="pclk" style="display:none"></div><div class="card" id="pins"><p class="muted">Loading…</p></div><div class="card" id="plog"></div><div id="plists"></div></div>`;
   const [c, rv, l, bk] = await Promise.all([ sb.from("patrick_chats").select("*").order("id", { ascending:false }).limit(5000),
     sb.from("patrick_reviews").select("*").order("id", { ascending:false }).limit(2000), sb.rpc("patrick_lists"), sb.rpc("patrick_bookings") ]);
-  if(c.error) return $("#pins").innerHTML = `<p class="muted">Couldn't load: ${esc(c.error.message)}</p>`;
+  if(c.error) return $("#pins").innerHTML = `<p class="muted">Couldn't load: ${esc(niceErr(c.error))}</p>`;
   const L = (l.data || [])[0] || {}, all = c.data || [], revs = rv.data || [];
   $("#pwhen").textContent = L.last_pull ? "Last copied " + new Date(L.last_pull).toLocaleString() + "." : "";
   if(!L.paired && ME.admin){   // one time: Brandon pastes the key from WordPress › Settings › Ask Patrick: Hub desk (shown there once)
@@ -2399,7 +2407,7 @@ async function patrickView(v){
     $("#pkgo").onclick = async () => { const k = $("#pkey").value.trim(); if(k.length < 32){ $("#pkm").textContent = "That key looks too short."; return; }
       $("#pkm").textContent = "Connecting…"; $("#pkgo").disabled = true;
       const r = await sb.functions.invoke("patrick-desk", { body:{ action:"pair", secret:k } }); $("#pkey").value = "";
-      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || r.error.message : r.data && r.data.error;
+      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || niceErr(r.error) : r.data && r.data.error;
       if(err){ $("#pkm").textContent = err; $("#pkgo").disabled = false; return; }
       $("#pkm").textContent = "Connected. Copied " + ((r.data && r.data.pulled) || 0) + " chats."; setTimeout(() => patrickView(v), 800); };
     $("#plog").remove(); return; }
@@ -2470,7 +2478,7 @@ async function patrickView(v){
       if(kind === "note" || kind === "wrong"){ note = prompt(kind === "wrong" ? "What's wrong with it? (optional)" : "Note", "") || ""; if(kind === "note" && !note) return; }
       m.textContent = "Saving…";
       const r = await sb.functions.invoke("patrick-desk", { body:{ action:"apply", kind, chat_id:x.id, question:x.question, answer, note } });
-      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || r.error.message : r.data && r.data.error;
+      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || niceErr(r.error) : r.data && r.data.error;
       if(err){ m.textContent = err; return; } patrickView(v); }); };
   $("#plog").innerHTML = `<b style="font-size:17px">Questions</b><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><input id="pq" placeholder="Search questions, answers, pages" value="${esc(P.q)}" style="flex:1 1 220px">
       <select id="ptopic" style="width:auto"><option value="">All topics</option>${topics.map(t => `<option ${P.topic === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
@@ -2485,7 +2493,7 @@ async function patrickView(v){
     $("#plists").innerHTML = `<div class="card"><b style="font-size:17px">What Patrick is told</b>${box("crew", "Crew answers", "answers staff gave him", L.crew_answers)}${box("avoid", "Avoid list", "things he must not say", L.avoid)}</div>`;
     $("#plists").querySelectorAll("[data-pl]").forEach(b => b.onclick = async () => { const k = b.dataset.pl, m = $("#plm_" + k); m.textContent = "Saving…";
       const r = await sb.functions.invoke("patrick-desk", { body:{ action:"apply", kind: k + "_set", answer: $("#pl_" + k).value } });
-      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || r.error.message : r.data && r.data.error;
+      const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || niceErr(r.error) : r.data && r.data.error;
       m.textContent = err || "Saved."; });
   }
 }
