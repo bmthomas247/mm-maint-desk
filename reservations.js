@@ -52,7 +52,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rlk .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow)}
 .rlk .stat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1} .rlk .stat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px} .rlk .stat.warn .n{color:var(--red)}
 .rlk .syncbar{display:flex;align-items:center;gap:12px} .rlk .syncbar .ic{width:40px;height:40px;border-radius:12px;background:var(--moose-soft);color:var(--forest-2);display:grid;place-items:center;flex:none} .rlk .syncbar .ic svg{width:20px;height:20px}
-.rfg{display:grid;grid-template-columns:2fr repeat(6,minmax(0,1fr));gap:10px;align-items:end} .rfg .field{display:block;margin:0} .rfg .field>span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:700} .rfg input,.rfg select{width:100%;min-width:0;max-width:100%;box-sizing:border-box} .rfg .field{min-width:0}
+.rfg{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:end} .rfg .field{display:block;margin:0} .rfg .field>span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:700} .rfg input,.rfg select{width:100%;min-width:0;max-width:100%;box-sizing:border-box} .rfg .field{min-width:0}
 .rgh{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;letter-spacing:.04em;color:var(--muted);margin:16px 2px 8px;cursor:pointer;user-select:none}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px} .rgrid>.card{margin:0}
 .rhome{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px!important} .rhome:hover{border-color:var(--forest-2)}
@@ -62,13 +62,13 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 :root[data-theme="dark"] .kpill{--ks:color-mix(in srgb,var(--kc) 22%,transparent)}
 .kpill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 9px;font:inherit;font-size:11.5px;font-weight:800;background:var(--ks);color:var(--kc);border:1px solid transparent;white-space:nowrap}
 .kpill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--kc)}
-.rkinds{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px} .rkinds .kpill{font-size:13px;padding:5px 11px;cursor:pointer} .rkinds .kpill .n{opacity:.7;font-weight:700}
+.rqfind{display:block;margin:0 0 10px} .rqfind input{width:100%;box-sizing:border-box;font-size:16px;padding:11px 14px;border-radius:12px} .rkinds{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px} .rkinds .kpill{font-size:13px;padding:5px 11px;cursor:pointer} .rkinds .kpill .n{opacity:.7;font-weight:700}
 .rkinds .kpill.on{border-color:var(--kc)} .rkinds .kpill.dim{opacity:.45}
 .rhome .rtop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start} .rhome .rtop>.pill{flex:none} .rhome .rcode{font-size:20px;font-weight:800;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rhome .rsub{font-size:13.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rhome .rdates{font-size:13.5px;margin-top:6px}
 .rhome .rmeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px} .rhome .rmeta .pill{font-size:11.5px;padding:2px 8px}
 .rhome .progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px} .rhome .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--moose),var(--moose-2));border-radius:99px}
-@media(max-width:1100px){ .rfg{grid-template-columns:repeat(3,minmax(0,1fr))} .rfg .field:first-child{grid-column:1 / -1} }
+@media(max-width:1100px){ .rfg{grid-template-columns:repeat(3,minmax(0,1fr))} }
 @media(max-width:640px){ .rlk{max-width:none!important} .rlk .stats{grid-template-columns:repeat(2,1fr)} .rfg{grid-template-columns:1fr 1fr} .rgrid{grid-template-columns:1fr} .rhead .deskbtn span{display:none} .rtabs button{padding:7px 10px 7px 8px;font-size:13px} }`;
 const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / BDC / Hopper", oguest:"Owner guest", owner:"Owner stay" };
 // waiting_pay is never saved: a Checkout stay with a balance still due shows there (Kim 2026-11-02, see prep)
@@ -531,12 +531,11 @@ async function queue(v){
         return `<div style="padding:5px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(a.res)}"><b>${esc(st.unit || "#" + a.res)} · ${esc(st.guest || "")}</b></a> — ${esc(a.by_name || "")}: “${esc(a.note)}” <span class="muted">${esc(when(a.at))}</span></div>`; }).join("")}</div>` : ""}
     <nav class="rtabs" id="rq_tabs"></nav>
     <div class="stats" id="rq_stats"></div>
+    <label class="field rqfind"><input id="rq_q" type="search" placeholder="🔎 Find a guest, home or res # (searches every tab)" value="${esc(F.q)}"></label>
     <div class="rkinds" id="rq_kinds"></div>
     <div class="card syncbar"><span class="ic">${RI.sync}</span><div style="flex:1;min-width:0"><b>Data sync</b>
       <div class="muted" style="font-size:13px">Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""} · steps tick themselves as these update</div></div></div>
     <div class="card"><div class="rfg">
-      <label class="field"><span>Find</span><input id="rq_q" placeholder="Guest, home or res #" value="${esc(F.q)}"></label>
-      <label class="field"><span>Type</span>${sel("rq_c", [["", "All types"], ...Object.entries(CH)], F.chan)}</label>
       <label class="field"><span>Neighborhood</span>${sel("rq_a", [["", "All neighborhoods"], ...[...new Set(B.stays.map(s => s.area).filter(Boolean))].map(a => [a, HOODS[a] ? HOODS[a] + " (" + a + ")" : a]).sort((x, y) => x[1].localeCompare(y[1]))], F.area)}</label>
       <label class="field"><span>Sort by</span>${sel("rq_by", Object.entries(BY), F.by)}</label>
       <label class="field"><span>Group by</span>${sel("rq_g", [["date", "Date"], ["hood", "Neighborhood"]], F.group)}</label>
@@ -545,7 +544,7 @@ async function queue(v){
       <div class="rchips" id="rq_held" style="margin:8px 0 0"></div></div>
     <div id="rqbody"></div></div>`;
   $("#rq_q").oninput = e => { F.q = e.target.value; draw(); };
-  $("#rq_c").onchange = e => { F.chan = e.target.value; draw(); };
+  F.chan = "";   // Brandon 2026-11-03: Type drop-down removed (the colored booking buttons do the same)
   $("#rq_a").onchange = e => { F.area = e.target.value; draw(); };
   $("#rq_by").onchange = e => { F.by = e.target.value; draw(); };
   $("#rq_g").onchange = e => { F.group = e.target.value; draw(); };
