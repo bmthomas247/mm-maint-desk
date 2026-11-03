@@ -43,7 +43,7 @@ async function doneBtn(b, after){
   if(note === null) return;
   b.disabled = true;
   const r = await sb.rpc("check_done", { p_key:b.dataset.done, p_day:b.dataset.day, p_note:note });
-  if(r.error){ b.disabled = false; alert("Couldn't save: " + r.error.message); return; }
+  if(r.error){ b.disabled = false; alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); return; }
   after();
 }
 window.checksHome = async function(el){
@@ -65,7 +65,7 @@ window.checksView = async function(v){
   v.innerHTML = `<div class="page wide chk"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Daily checks & reminders</h2><p class="muted">What has to happen, when it last ran, and what it found. Automatic checks run on the office computer each morning; the rest are done by people (press Done).</p><div id="chkl"><p class="muted">Loading…</p></div></div>`;
   const since = new Date(Date.now() - 14 * 864e5).toLocaleDateString("en-CA");
   const [c, r] = await Promise.all([sb.from("hub_checks").select("*").eq("off", false).order("sort"), sb.from("hub_check_runs").select("check_key,day,status,summary,items,by_name,at").gte("day", since).order("at", { ascending:false }).limit(500)]);
-  if(c.error) return $("#chkl").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(c.error.message)}</p></div>`;
+  if(c.error) return $("#chkl").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(c.error) : c.error.message))}</p></div>`;
   if(!(c.data || []).length) return $("#chkl").innerHTML = `<div class="card"><p class="muted">No checks for you yet.</p></div>`;
   const runs = {}; (r.data || []).forEach(x => { const k = x.check_key + "|" + x.day; if(!runs[k]) runs[k] = x; });
   const byCheck = k => Object.values(runs).filter(x => x.check_key === k).sort((a, b) => b.day.localeCompare(a.day));
