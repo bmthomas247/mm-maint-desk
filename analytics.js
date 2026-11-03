@@ -600,12 +600,12 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
   // staff praised by name (review_kudos, found nightly by review_kudos.py; same readers as the reviews)
   let K = []; try { const k = await sb.from("review_kudos").select("*").order("submitted_at", { ascending:false }).limit(300); K = k.data || []; } catch(e){}
   const TN = Object.fromEntries(THEMES.map(t => [t[0], t[1]])), hoods = [...new Set(A.map(x => x.hood).filter(Boolean))].sort(), homes = [...new Set(A.map(x => x.code).filter(Boolean))].sort();
-  // tabs (2026-10-30): All reviews · Patterns · Improvements (#/reviews/patterns, #/reviews/improvements)
-  const TABS = { patterns:"patterns", improvements:"improve" };
-  let tab = TABS[String(pre || "").toLowerCase()] || "list"; if(tab !== "list") pre = "";
+  // tabs (2026-10-30, Reviews desk 2026-11-03): Alerts · Respond · Research · Patterns · Improvements · Listing ideas (#/reviews/<tab>)
+  const TABS = { alerts:"alerts", respond:"respond", research:"list", patterns:"patterns", improvements:"improve", listing:"listing" };
+  let tab = TABS[String(pre || "").toLowerCase()] || "list"; if(TABS[String(pre || "").toLowerCase()]) pre = "";
   let only = null;   // review ids picked from an improvement ("Read the N reviews")
   v.innerHTML = `<div class="page wide">${bk}<h2>${h2}</h2>
-    <div class="anbar" id="rvtabs" style="gap:6px">${[["list", "All reviews"], ["patterns", "Patterns"], ["improve", "Improvements"]].map(([k, t]) =>
+    <div class="anbar" id="rvtabs" style="gap:6px">${[["alerts", "Alerts"], ["respond", "Respond"], ["list", "Research"], ["patterns", "Patterns"], ["improve", "Improvements"], ["listing", "Listing ideas"]].map(([k, t]) =>
       `<button class="btn small" data-tab="${k}">${t}</button>`).join("")}</div>
     <div id="rvins" hidden></div><div id="rvmain">
     <p class="muted">Every guest review (Airbnb, Vrbo, our website, Google, Trustpilot) with what guests bring up, by home and neighborhood. Topics are a keyword count: a <b>complaint</b> is a sentence that reads negative ("the hot tub was cold"), a <b>mention</b> is any sentence with the topic's words. Read the reviews before acting on a count. Click a topic or a home to filter.</p>
@@ -694,7 +694,7 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
   const clear = () => { ["rvh", "rvt", "rvr", "rvc", "rva"].forEach(i => $("#" + i).value = ""); $("#rvu").value = $("#rvq").value = ""; shown = 30; };
   const setTab = t => { tab = t; v.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("primary", b.dataset.tab === t));
     $("#rvmain").hidden = t !== "list"; $("#rvins").hidden = t === "list";
-    if(t !== "list") insights($("#rvins"), t, ctx); };
+    if(t === "alerts" || t === "respond" || t === "listing") revMore($("#rvins"), t, ctx); else if(t !== "list") insights($("#rvins"), t, ctx); };
   const ctx = {
     all: async () => (await load("730")) || [],
     showIds: async ids => { if($("#rvs").value !== "730" && $("#rvs").value !== "all"){ $("#rvs").value = "730"; try { A = await load("730"); } catch(e){ return oops(e); } }
@@ -814,8 +814,108 @@ async function insights(el, tab, ctx){
   draw(); runBtn();
 }
 
+/* Reviews ▸ Alerts · Respond · Listing ideas (Brandon 2026-11-03: "make reviews its own desk … a few chairs in it").
+   Alerts: review_alerts(days) (hub_review_alerts.sql) = bad reviews with the home's next check-in + open jobs; managers mark handled.
+   Respond: public reviews with no reply from us (from the loaded reviews); replies themselves come later.
+   Listing ideas: review_listing_ideas (hub_review_listing.sql), written by the Edge Function review-listing. */
+async function revMore(el, tab, ctx){
+  el.innerHTML = `<p class="muted">Loading…</p>`;
+  const ED = await sb.rpc("review_insight_can_edit"), edit = !!ED.data;
+  const stars = s => s == null ? "" : `<span class="pill ${+s >= 5 ? "green" : +s >= 4 ? "" : +s >= 3 ? "amber" : "red"}">${(+s).toFixed(0)} ★</span>`;
+  const lowCats = r => Object.entries(r.ratings || {}).filter(([, s]) => s != null && +s <= 3).map(([k, s]) => `<span class="pill amber">${esc(k)} ${+s}</span>`).join("");
+  const dd = s => s ? dt(String(s).slice(0, 10) + "T12:00") : "—";
+  const daysTo = s => s ? Math.round((new Date(String(s).slice(0, 10) + "T12:00") - new Date(new Date().toISOString().slice(0, 10) + "T12:00")) / 864e5) : null;
+
+  if(tab === "alerts"){
+    const days = (() => { try { return localStorage.getItem("rv_al_days") || "30"; } catch(e){ return "30"; } })();
+    const r = await sb.rpc("review_alerts", { p_days:+days });
+    if(r.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(r.error.message)}</p></div>`; return; }
+    const L = r.data || [];
+    el.innerHTML = `<p class="muted" style="margin:0 0 8px">Bad reviews that need handling before the next guest: 3 stars or less, a category at 3 or less, or a private note. Each shows when the next guest arrives and the home's open jobs.${edit ? " Mark each one handled (say what was done) or no action needed." : ""}</p>
+      <div class="anbar"><select id="ras"><option value="open">Still open</option><option value="handled">Handled</option><option value="not_needed">No action needed</option><option value="">All</option></select>
+        <select id="rad"><option value="14">Last 14 days</option><option value="30">Last 30 days</option><option value="60">Last 60 days</option><option value="90">Last 90 days</option></select>
+        <input id="rah" placeholder="Home (e.g. PL 805)"></div><div id="ral"></div>
+      <p class="ansrc">Source: guest reviews in the hub (track_reviews: Airbnb + Vrbo from Track, Google, Trustpilot; our website's are left out), by the date the review came in. Next guest check-in: Track (properties.next_guest_checkin). Open jobs: Workbench. Reviews that name a staff member in a complaint aren't shown here.</p>`;
+    el.querySelector("#rad").value = days;
+    const draw = () => { const s = el.querySelector("#ras").value, h = el.querySelector("#rah").value.trim().toLowerCase();
+      const M = L.filter(x => (!s || x.status === s) && (!h || String(x.code).toLowerCase().includes(h)));
+      el.querySelector("#ral").innerHTML = M.length ? M.map(x => { const n = daysTo(x.next_in);
+        return `<div class="card" style="margin:0 0 10px;padding:12px 14px" data-rv="${x.id}">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${stars(x.overall)}<b>${esc(x.code)}</b>
+          <span class="muted" style="font-size:13px">${esc(x.channel)} · came in ${esc(dd(x.submitted))}${x.check_in ? " · stay " + esc(dd(x.check_in)) : ""}</span>${lowCats(x)}
+          ${x.status !== "open" ? `<span class="pill green">${x.status === "handled" ? "Handled" : "No action needed"}</span>` : ""}</div>
+        ${x.text ? `<p style="margin:6px 0 2px">${esc(x.text)}</p>` : ""}${x.private ? `<p style="margin:6px 0 2px"><b>Private note to us:</b> ${esc(x.private)}</p>` : ""}
+        <p style="margin:6px 0 0;font-size:13.5px">${x.next_in ? `<span class="pill ${n != null && n <= 7 ? "red" : n != null && n <= 21 ? "amber" : ""}">Next guest ${esc(dd(x.next_in))}${n != null ? (n <= 0 ? " (today)" : ` (in ${n} day${n === 1 ? "" : "s"})`) : ""}</span>` : `<span class="muted">No upcoming guest in Track</span>`}
+          · ${x.open_jobs ? `<a class="anlink" href="#/maintenance">${x.open_jobs} open job${x.open_jobs === 1 ? "" : "s"}</a>` : `<span class="muted">no open jobs</span>`}
+          · ${x.replied ? "we replied" : x.text ? `<b>no reply from us yet</b>` : "no public text"}</p>
+        ${x.mark_by ? `<p class="muted" style="margin:4px 0 0;font-size:13px">${esc(x.mark_by)}, ${esc(dt(x.mark_at))}${x.mark_note ? ": " + esc(x.mark_note) : ""}</p>` : ""}
+        ${edit ? `<div class="anbar" style="margin:8px 0 0"><input data-n placeholder="What was done / why no action">
+          ${x.status === "open" ? `<button class="btn small primary" data-m="handled">✓ Handled</button><button class="btn small" data-m="not_needed">No action needed</button>` : `<button class="btn small" data-m="open">Reopen</button>`}<span class="muted" data-msg></span></div>` : ""}</div>`; }).join("")
+        : `<div class="card"><p class="muted">${s === "open" ? "No open alerts — nothing bad in these days still needs handling." : "Nothing here."}</p></div>`;
+      el.querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { const c = b.closest("[data-rv]"), m = c.querySelector("[data-msg]");
+        const q = await sb.rpc("review_alert_mark", { p_review:+c.dataset.rv, p_status:b.dataset.m, p_note:c.querySelector("[data-n]").value });
+        if(q.error){ m.textContent = q.error.message; return; } revMore(el, tab, ctx); }); };
+    el.querySelector("#ras").onchange = draw; el.querySelector("#rah").oninput = draw;
+    el.querySelector("#rad").onchange = () => { try { localStorage.setItem("rv_al_days", el.querySelector("#rad").value); } catch(e){} revMore(el, tab, ctx); };
+    draw(); return;
+  }
+
+  if(tab === "respond"){
+    const A = await ctx.all(), since = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+    const open = A.filter(x => x.text && !x.response && ["Airbnb", "Homeaway", "Google"].includes(x.channel) && String(x.check_in) >= since);
+    const easy = open.filter(x => +x.overall >= 5 && !x.tc.size && !x.private), look = open.filter(x => !easy.includes(x));
+    const card = x => `<div class="card" style="margin:0 0 8px;padding:10px 14px"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${stars(x.overall)}<b>${esc(x.code)}</b>
+      <span class="muted" style="font-size:13px">${esc(x.channel === "Homeaway" ? "Vrbo" : x.channel)} · ${esc(dd(x.check_in))}</span>${lowCats(x)}</div><p style="margin:6px 0 0">${esc(x.text)}</p></div>`;
+    el.innerHTML = `<div class="card" style="margin:0 0 12px;padding:12px 14px"><b>Coming next: replies from the hub.</b>
+      <p style="margin:6px 0 0">The plan: 5-star reviews with nothing to fix get a short thank-you reply automatically; anything lower, or with a complaint or private note, goes to a manager to look at first. Until that's built, this lists the public reviews from the last 60 days that have no reply from us, split the same way.</p></div>
+      <h3 class="anh3">A manager should look (${look.length})</h3>${look.length ? look.map(card).join("") : `<p class="muted">None.</p>`}
+      <h3 class="anh3">Simple thank-you (${easy.length})</h3>${easy.length ? easy.map(card).join("") : `<p class="muted">None.</p>`}
+      <p class="ansrc">Source: guest reviews in the hub (Airbnb + Vrbo from Track, Google). "No reply" = the review has no host response saved. Our website's reviews can't be replied to and are left out.</p>`;
+    return;
+  }
+
+  // Listing ideas
+  const [I, RN] = await Promise.all([sb.from("review_listing_ideas").select("*").order("home"), sb.from("review_listing_runs").select("home,ran_at,error").order("ran_at", { ascending:false }).limit(1000)]);
+  if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(I.error.message)}</p></div>`; return; }
+  const L = I.data || [], runs = RN.data || [], homesRead = new Set(runs.filter(x => !x.error).map(x => x.home)).size, last = runs[0];
+  const INL = { no:["Not in the listing", "red"], partly:["Listing undersells it", "amber"], yes:["Already in the listing", "green"] };
+  const ST = { new:"New", planned:"Planned", done:"Added to the listing", not_doing:"Not doing" };
+  el.innerHTML = `<p class="muted" style="margin:0 0 8px">What guests keep praising that the home's listing doesn't say (or undersells), with their own words, so new travelers see what reviews already prove. Fix anything in a ⚠ caution before the listing promotes it.${edit ? " Mark an idea once it's in the listing." : ""}</p>
+    <div class="anbar"><select id="rls"><option value="todo">To add (not in, or undersold)</option><option value="caution">With a caution</option><option value="done">Added to the listing</option><option value="">All</option></select>
+      <input id="rlh" placeholder="Home (e.g. DS 12797)"><input id="rlq" placeholder="Words (fireplace, view…)"></div><div id="rll"></div>
+    <p class="ansrc">Source: each home's public guest reviews from the last 2 years (Airbnb, Vrbo, Google, our website) and its listing text on our website (vacationrentalsparkcity.com, read by the hub), read by Claude (AI) and checked by the hub: quotes and the listing's words must match word for word. Airbnb and Vrbo listings can differ from the website. ${homesRead} homes read${last ? `, last ${esc(dt(last.ran_at))}` : ""}; a home is read again when it gets new reviews or its listing changes. Nothing here changes a listing — edit it in Track or the channel.</p>`;
+  const draw = () => { const s = el.querySelector("#rls").value, h = el.querySelector("#rlh").value.trim().toLowerCase(), q = el.querySelector("#rlq").value.trim().toLowerCase();
+    const M = L.filter(x => !x.gone && (!s || (s === "todo" ? x.in_listing !== "yes" && !["done", "not_doing"].includes(x.status) : s === "caution" ? !!x.caution : x.status === s))
+      && (!h || x.home.toLowerCase().includes(h)) && (!q || [x.theme, x.guests_say, x.suggestion, JSON.stringify(x.quotes)].join(" ").toLowerCase().includes(q)));
+    const by = {}; M.forEach(x => (by[x.home] = by[x.home] || []).push(x));
+    const homes = Object.keys(by).sort();
+    el.querySelector("#rll").innerHTML = homes.length ? homes.map(hm => `<div class="card" style="margin:0 0 12px;padding:12px 14px"><h3 style="margin:0 0 8px;font-size:16px">${esc(hm)}
+        <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#" data-home="${esc(hm)}">all its reviews →</a></h3>
+      ${by[hm].sort((a, b) => (a.in_listing === "no" ? 0 : 1) - (b.in_listing === "no" ? 0 : 1) || b.review_ids.length - a.review_ids.length).map(x => `<div style="border-top:1px solid var(--line);padding:10px 0" data-li="${x.id}">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${esc(x.theme)}</b><span class="pill ${INL[x.in_listing][1]}">${INL[x.in_listing][0]}</span>
+          <span class="pill">${x.review_ids.length} review${x.review_ids.length === 1 ? "" : "s"}</span>${x.status !== "new" ? `<span class="pill green">${esc(ST[x.status])}</span>` : ""}</div>
+        ${x.guests_say ? `<p style="margin:6px 0 2px">${esc(x.guests_say)}</p>` : ""}
+        ${(x.quotes || []).map(qq => `<div style="border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:4px 0">“${esc(qq.text)}” <small class="muted">— ${qq.stars != null ? (+qq.stars).toFixed(0) + "★ · " : ""}${esc(qq.channel || "")} · ${esc(dd(qq.stay))}</small></div>`).join("")}
+        <p style="margin:6px 0 2px;font-size:13.5px"><b>Listing says now:</b> ${x.listing_now ? `“${esc(x.listing_now)}”` : `<span class="muted">nothing about it</span>`}</p>
+        ${x.suggestion ? `<p style="margin:4px 0 2px;font-size:13.5px"><b>Line to add:</b> <span data-sg>${esc(x.suggestion)}</span> <button class="btn small" data-cp>Copy</button></p>` : ""}
+        ${x.caution ? `<p style="margin:6px 0 2px;padding:6px 10px;border-radius:8px;background:#fff4dc;color:#5a4300;font-size:13.5px">⚠ ${esc(x.caution)}${(x.caution_ids || []).length ? ` <a class="anlink" href="#" data-ids="${x.caution_ids.join(",")}">read them →</a>` : ""}</p>` : ""}
+        <p class="muted" style="margin:4px 0 0;font-size:12.5px"><a class="anlink" href="#" data-ids="${x.review_ids.join(",")}">Read the ${x.review_ids.length} review${x.review_ids.length === 1 ? "" : "s"} →</a>${x.status_by ? ` · ${esc(x.status_by)}, ${esc(dt(x.status_at))}${x.note ? ": " + esc(x.note) : ""}` : ""}</p>
+        ${edit ? `<div class="anbar" style="margin:6px 0 0"><select data-st>${Object.entries(ST).map(([k, t]) => `<option value="${k}"${k === x.status ? " selected" : ""}>${t}</option>`).join("")}</select>
+          <input data-no placeholder="Note (where it was added, when)"><button class="btn small" data-save>Save</button><span class="muted" data-msg></span></div>` : ""}</div>`).join("")}</div>`).join("")
+      : `<div class="card"><p class="muted">${L.length ? "Nothing matches." : "The first read is still running — homes appear here as they're read."}</p></div>`;
+    el.querySelectorAll("[data-ids]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showIds(a.dataset.ids.split(",").map(Number)); });
+    el.querySelectorAll("[data-home]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showHome(a.dataset.home); });
+    el.querySelectorAll("[data-cp]").forEach(b => b.onclick = async () => { const t = b.parentElement.querySelector("[data-sg]").textContent;
+      try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch(e){ b.textContent = "Select + Ctrl+C"; } });
+    el.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const c = b.closest("[data-li]"), m = c.querySelector("[data-msg]");
+      const q2 = await sb.rpc("review_listing_set", { p_id:+c.dataset.li, p_status:c.querySelector("[data-st]").value, p_owner:null, p_note:c.querySelector("[data-no]").value });
+      if(q2.error){ m.textContent = q2.error.message; return; } revMore(el, tab, ctx); }); };
+  ["rls"].forEach(i => el.querySelector("#" + i).onchange = draw); el.querySelector("#rlh").oninput = el.querySelector("#rlq").oninput = draw;
+  draw();
+}
+
 const VIEWS = { comps, demand, pace, top, channels, worst, reviews };
-window.reviewsDesk = function(v){ css(); return reviews(v, hashArg(), true); };   // #/reviews · #/guest_reviews (· /<home code>); data: hub_can('reviews') or analytics
+window.reviewsDesk = function(v, tab){ css(); return reviews(v, tab || hashArg(), true); };   // #/reviews (· /<tab or home code>) and the Reviews drop-down chairs (#/rev_<tab>); data: hub_can('reviews') or analytics
 window.anView = function(v){ css(); const a = hashArg();
   if(a.startsWith("reviews/")) return reviews(v, decodeURIComponent(a.slice(8)));
   if(a.startsWith("home/")) return home(v, decodeURIComponent(a.slice(5)));
