@@ -523,7 +523,7 @@ try{ var _emb=window.top!==window.self, _sp=["projects","money","routines","reca
   if(!ONLY && (_emb || new URLSearchParams(location.search).get("split"))){
     var _one=_sp.indexOf(S.tab)>=0 && TABS.some(function(x){ return x[0]===S.tab; });
     TABS=TABS.filter(function(x){ return _one ? x[0]===S.tab : _sp.indexOf(x[0])<0; }); } }catch(e){}
-try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(HT_FIXED) S.ui.htype=HT_FIXED; if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; if(ONLY==="vendors" && location.hash==="#preferred") S.ui.vmode="pref"; }catch(e){}
+try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=HT_FIXED||homeType(S.ui.home); }catch(e){} } if(HT_FIXED) S.ui.htype=HT_FIXED; if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; if(ONLY==="vendors" && location.hash==="#preferred") S.ui.vmode="pref"; }catch(e){}
 if(!ONLY && !TABS.some(function(t){return t[0]===S.tab;}) && ["jobs","homes","vendors","fire"].indexOf(S.tab)<0) S.tab="today";
 /* 2026-10-28 (Brandon): inside the hub, the hub's green banner is the only header (profile, settings, sign out live there), so the desk
    header is hidden (moose-theme.css) and ← Back, the meeting button and + Job move down next to the tabs. Help is gone - Ask Penny does that.
@@ -1222,7 +1222,8 @@ function vHomes(){
   if(ht==="hoa") return (HT_FIXED?'':'<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
       return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div></div>')+hoaView();
   var nb=u.hnb||"", cm=u.hcm||"";
-  var typed=D.homes.filter(function(p){ return !HOME_HIDE[p.code] && homeType(p.code)===ht; });
+  /* a typed search looks through every kind of home, whichever page it's typed on (Brandon 2026-11-04) */
+  var typed=D.homes.filter(function(p){ return !HOME_HIDE[p.code] && (q?homeType(p.code)!=="co":homeType(p.code)===ht); });
   var nbs={}, cms={}; typed.forEach(function(p){ var h=hoodOf(p)||"Other"; nbs[h]=(nbs[h]||0)+1; if(!nb||h===nb){ var c=commOf(p)||"Other"; cms[c]=(cms[c]||0)+1; } });
   if(cm && !cms[cm]) cm=u.hcm="";
   var list=typed.filter(function(p){ return (!nb || (hoodOf(p)||"Other")===nb) && (!cm || (commOf(p)||"Other")===cm) &&
@@ -1230,12 +1231,12 @@ function vHomes(){
   if(u.home && D.homes.length && !D.homes.some(function(p){ return p.code===u.home; })) u.home="";
   var h='<div class="toolbar">'+(HT_FIXED?'':'<div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
       return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div>')+
-    '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search home or community…" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
+    '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search any home or community…" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
     (ht==="co"?'':'<div class="hfil"><select id="hnb" aria-label="Neighborhood"><option value="">All neighborhoods</option>'+Object.keys(nbs).sort().map(function(k){ return '<option value="'+esc(k)+'"'+(k===nb?' selected':'')+'>'+esc(k)+' ('+nbs[k]+')</option>'; }).join("")+'</select>'+
       '<select id="hcm" aria-label="Community"><option value="">All communities</option>'+Object.keys(cms).sort().map(function(k){ return '<option value="'+esc(k)+'"'+(k===cm?' selected':'')+'>'+esc(k)+' ('+cms[k]+')</option>'; }).join("")+'</select></div>')+
     '<span class="qcount">'+list.length+' shown</span><button class="btn sm" data-inssearch="1">🔎 Inspections</button><button class="btn sm pri" data-act="newhome">+ Add property</button></div>';
   /* Moose Office is one page, not a list: it stays open on its own tab */
-  if(ht==="co") return h+'<section class="panel detail">'+homeDetail(list.length?list[0].code:"Moose company")+'</section>';
+  if(ht==="co" && !q) return h+'<section class="panel detail">'+homeDetail(list.length?list[0].code:"Moose company")+'</section>';
   /* Moose Locks look (Brandon 2026-10-29): one tile per home grouped by neighborhood, codes + Wi-Fi on the tile; the full home opens in a pop-up */
   var by={}; list.forEach(function(p){ var c=commOf(p)||"Other"; (by[c]=by[c]||[]).push(p); });
   /* each neighborhood folds open like an accordion, one at a time (Brandon 2026-11-03); a search or a single group opens them */
@@ -1335,7 +1336,7 @@ function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=h
   var jobs=(D.byProp[c]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
   var rc=homeAppl(p.code,p).some(function(a){ return a.recalls&&a.recalls.length; });
   var st=occ?"owner":jobs.length?"open":"ok", sub=(p.track&&p.track.name)||p.community||"";
-  return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'<span class="htpl">'+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'</span></div>'+
+  return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'<span class="htpl">'+(homeType(c)!==(S.ui.htype||"str")?'<span class="pill">'+esc({str:"STR",lease:"Lease","2h":"2nd Home"}[homeType(c)]||"")+'</span>':'')+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'</span></div>'+
     '<div class="htp"><span class="htmore">Home details →</span></div></div>'+
     '<div class="htq">'+tileCells(c,p,q)+'</div>'+
     '</div>'; }
@@ -1816,7 +1817,7 @@ function mNewHome(){ if(!need()) return;
   function(){ var c=fv("n_code").replace(/\s+/g," ").trim(); if(!c) return toast("Unit code");
     var k=sid(c); if(S.profiles[k]||profile(c)) return toast(c+" is already in Property Details");
     return put("profiles",k,{code:c,community:fv("n_comm"),active:true,info:[],appliances:[],bedrooms:fv("n_beds"),sqft:fv("n_sqft"),yearBuilt:fv("n_yb"),address:fv("n_addr"),addedBy:S.me,addedAt:Date.now()}).then(function(){
-      closeModal(); toast(c+" added"); S.ui.htype=homeType(c); S.ui.home=c; S.ui.hq=""; render(); }); },"Add property"); }
+      closeModal(); toast(c+" added"); S.ui.htype=HT_FIXED||homeType(c); S.ui.home=c; S.ui.hq=""; render(); }); },"Add property"); }
 
 /* ================= VENDORS ================= */
 /* Plain words for what's broken -> the kinds of work in Asana's VENDOR INFORMATION. */
@@ -3518,7 +3519,7 @@ document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-i
   if(d.insup) return mInspUp(d.insup);
   if(d.insedit) return mInspUp("",d.insedit);
   if(d.inssearch) return mInspSearch();
-  if(d.inshome){ closeModal(); S.ui.htype=homeType(d.inshome); S.ui.home=d.inshome; return render(); } });
+  if(d.inshome){ closeModal(); S.ui.htype=HT_FIXED||homeType(d.inshome); S.ui.home=d.inshome; return render(); } });
 document.addEventListener("input",function(ev){ var t=ev.target; if(!t.dataset || t.dataset.insq==null) return; var q=t.value.trim().toLowerCase().split(/\s+/).filter(Boolean),
   box=t.closest(".block")||t.closest("#modal")||document; [].forEach.call(box.querySelectorAll("[data-insrow]"),function(r){ var s=r.dataset.insrow; r.style.display=q.every(function(w){ return s.indexOf(w)>-1; })?"":"none"; }); });
 document.addEventListener("change",function(ev){ if(ev.target.dataset && ev.target.dataset.inshid!=null){ S.ui.insHidden=ev.target.checked; render(); } });
@@ -4219,7 +4220,7 @@ document.addEventListener("click",function(ev){
   if(d.job){ ev.preventDefault(); S.ui.sel=d.job; if(S.tab!=="jobs"){ S.ui.q=""; S.ui.st={}; S.ui.kind={}; S.ui.src={}; S.ui.hideOld=false; S.ui.hideInfo=false; S.ui.who=""; S.ui.vendor=""; return go("jobs"); }
     render(); if(window.innerWidth<=1000){ var el=$("jdetail"); if(el) el.scrollIntoView({behavior:"smooth"}); } return; }
   if(d.home && t.classList.contains("htile") && String(window.getSelection&&getSelection()||"")) return;
-  if(d.home){ ev.preventDefault(); S.ui.home=d.home; S.ui.htype=homeType(d.home); if(S.tab!=="homes") return go("homes"); render(); return; }
+  if(d.home){ ev.preventDefault(); S.ui.home=d.home; S.ui.htype=HT_FIXED||homeType(d.home); if(S.tab!=="homes") return go("homes"); render(); return; }
   if(d.chip){ var g=S.ui[d.chip]; if(g[d.k]) delete g[d.k]; else g[d.k]=1; S.ui.sel=""; return render(); }
   if(d.rwin){ S.ui.rwin=+d.rwin; return render(); }
   if(d.bwf){ S.ui.bwf=S.ui.bwf==="missing"?"":"missing"; S.ui.sel=""; return render(); }
@@ -4417,7 +4418,7 @@ document.addEventListener("click",function(ev){
     var calls=(D.byProp[z[0]]||[]).filter(function(x){ return daysBetween(x.created||x.when||today(),today())<=365 && catOf(x)===catOf({title:ap.type}); }).length;
     S.ui.rvr={code:z[0],key:z[1],label:ap.type+(ap.brand?" · "+ap.brand:"")+(ap.model?" "+ap.model:""),type:LIFE[ap.type]?ap.type:"Other",
       age:ap.age!=null?ap.age:"",life:ap.life,calls:calls,repair:ap.repairQ||"",replace:ap.replaceQ||""};
-    S.ui.home=z[0]; S.ui.htype=homeType(z[0]); if(S.tab!=="homes") go("homes"); else render(); var bx=$("rvrbox"); if(bx) bx.scrollIntoView({block:"center",behavior:"smooth"}); return; }
+    S.ui.home=z[0]; S.ui.htype=HT_FIXED||homeType(z[0]); if(S.tab!=="homes") go("homes"); else render(); var bx=$("rvrbox"); if(bx) bx.scrollIntoView({block:"center",behavior:"smooth"}); return; }
   if(d.rvrpick){ ev.preventDefault(); S.ui.rvr={}; return render(); }
   if(d.rvrsave){ var i=S.ui.rvr, pe=pedit(i.code), k3=sid(i.code), apl=Object.assign({},pe.appl||{});
     apl[i.key]=Object.assign({},apl[i.key]||{},{decision:d.rvrsave,decidedAt:Date.now(),decidedBy:S.me,repairQ:+i.repair,replaceQ:+i.replace});
