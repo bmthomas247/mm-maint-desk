@@ -300,7 +300,7 @@ const C = window.MM_CONFIG;
 try{ if(/type=(magiclink|recovery|signup|invite)/.test(location.hash)) sessionStorage.setItem("mm_pw_offer", "1"); }catch(e){}   // signed in from an emailed link -> offer "Set a password?" (2026-11-02)
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" }, global:{ fetch:(...a) => window.MMOFF ? MMOFF.fetch(...a) : fetch(...a) } });   // offline.js: saved copy on this device (2026-10-30)
 /* weak / no signal (offline.js, Brandon 2026-10-30): these pages open from the saved copy; the rest say they need signal */
-const OFFK = ["homes", "staffing", "stf_sched", "stf_perf", "cal_off"];
+const OFFK = ["homes", "homes_str", "homes_lease", "homes_2h", "homes_hoa", "homes_co", "staffing", "stf_sched", "stf_perf", "cal_off"];
 let OFFLINE = false;
 function offView(){ app.innerHTML = `<div class="login"><div class="logo"><img src="moose-logo.png" alt=""></div><h2>No signal</h2>
     <p class="muted">The hub needs service to open, and there's no copy saved on this phone yet. Open Property Details and Staffing once with service and they'll open here next time, even with no signal.</p>
@@ -599,6 +599,12 @@ async function boot(){
 const fixOrder = o => (o || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:own" : k === "g:psu" ? "g:own" : k === "g:competitor" ? "g:own" : k);   // Property Set Up moved into Owners 2026-11-02   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
 /* Desks made in the page from a parent desk (no DB rows). ex = { maint_money, perf } worked out for the person (View as passes another person's). */
 function addDerived(DESKS, ex){
+  // Property Details drop-down (Brandon 2026-11-04: "under property details it has: STR, Lease, 2nd-Home, HOA"): each opens desk.html on its
+  // own home type (desk.html ?htype=, chips hidden); Moose Office stays in it as the last entry. All follow the homes desk's access.
+  const pdD = DESKS.find(x => x.key === "homes" && x.status === "live" && x.url);
+  if(pdD){ const pu = ty => pdD.url + (pdD.url.includes("?") ? "&" : "?") + "htype=" + ty;
+    [["homes_str","str","STR"],["homes_lease","lease","Lease"],["homes_2h","2h","2nd Home"],["homes_hoa","hoa","HOA"],["homes_co","co","Moose Office"]]
+      .forEach((x, i) => DESKS.push({ key:x[0], label:"Property Details · " + x[2], icon:pdD.icon, url:pu(x[1]), status:"live", sort:pdD.sort + 0.01 * (i + 1) })); }
   /* Maintenance drop-down (Brandon 2026-10-28): Workbench · Projects · Expenses & Time. Projects follows Maintenance;
      Expenses & Time follows the maint_money section (hub_can; RLS on desk_docs enforces it too). */
   const mD = DESKS.find(x => x.key === "maintenance" && x.status === "live");
@@ -684,13 +690,15 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
   const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","maint_weather","team_ratings","pto_reports","work_check","staff_calls","guest_followups","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const CALK = ["cal_res","cal_office","cal_me","cal_meet"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
+  const PDK = ["homes_str","homes_lease","homes_2h","homes_hoa","homes_co"];   // Property Details drop-down (2026-11-04), sits under Moose Info
   const CMPK = [];   // Brandon 2026-11-02: Competitor Playbook moved from Moose Info into Owners (GROUPS.own); was ["competitor","competitor_add"]
-  const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key) && !CALK.includes(x.key) && !CMPK.includes(x.key)),
+  const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key) && !CALK.includes(x.key) && !CMPK.includes(x.key) && !PDK.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
   const anD = DESKS.some(x => x.key === "analytics");
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
-  const GROUPS = { maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_recalls:"Recalls", maint_inv:"Inventory", maint_improve:"Improvements" } },
+  const GROUPS = { pd:{ label:"Property Details", icon:(DESKS.find(x => x.key === "homes") || {}).icon || "home", kids:{ homes_str:"STR", homes_lease:"Lease", homes_2h:"2nd Home", homes_hoa:"HOA", homes_co:"Moose Office" } },
+                   maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_recalls:"Recalls", maint_inv:"Inventory", maint_improve:"Improvements" } },
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly", hk_inv:"Inventory", hk_improve:"Improvements" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
                    guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", call_review:"Call review" } },
@@ -724,7 +732,8 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
   // 2026-10-28 (Brandon): no "Moose Info" drop-down; Property Details, Vendors… sit under the Moose Info heading like the desks do
   const calKids = DESKS.filter(x => CALK.includes(x.key)).sort((a, b) => a.sort - b.sort);
   const cmpKids = DESKS.filter(x => CMPK.includes(x.key) && x.status === "live").sort((a, b) => a.sort - b.sort);
-  const infoBlock = infoK.map(y => ({ k:"i:" + y.key, s:y.sort, h:item(y.key, y.label, y.icon) })).concat(calKids.length ? [{ k:"i:cal", s:999, h:navList(calKids) }] : [])
+  const pdKids = DESKS.filter(x => PDK.includes(x.key)).sort((a, b) => a.sort - b.sort);
+  const infoBlock = infoK.map(y => ({ k:"i:" + y.key, s:y.sort, h:y.key === "homes" && pdKids.length ? navList(pdKids) : item(y.key, y.label, y.icon) })).concat(calKids.length ? [{ k:"i:cal", s:999, h:navList(calKids) }] : [])
     .concat(cmpKids.length ? [{ k:"i:cmp", s:1000, h:navList(cmpKids) }] : [])
     .sort((a, b) => { const ia = ORD.indexOf(a.k), ib = ORD.indexOf(b.k); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.s - b.s; }).map(x => x.h).join("");
   const deskBlock = live.length ? `<div class="grp">Desks</div>` + navList(byMine(live)) : "";
@@ -983,10 +992,13 @@ function route(){
   if((d.status !== "live" && !ME.admin) || !d.url){ v.innerHTML = `<div class="page"><div class="card"><span class="pill amber">Coming soon</span><h2 style="margin-top:10px">${esc(d.label)}</h2>
       <p class="muted">This desk is being moved into the hub. Want something on it? Use <b>Report a Bug / Upgrade</b> at the bottom of the sidebar.</p></div></div>`; return; }
   const arg = hashArg(), sep = d.url.includes("?") ? "&" : "?";
+  // old Property Details links (#/homes, #/homes/<code>, the search) open the drop-down entry for that kind of home (2026-11-04)
+  if(k === "homes"){ const ty = !arg ? "str" : arg === "Moose company" ? "co" : /^2H-/i.test(arg) ? "2h" : /^L-/i.test(arg) ? "lease" : "str";
+    if(DESKS.some(x => x.key === "homes_" + ty)){ location.replace("#/homes_" + ty + (arg ? "/" + encodeURIComponent(arg) : "")); return; } }
   if(k === "maintenance"){ const to = { projects:"maint_projects", money:"maint_money", routines:"maint_routines", recalls:"maint_recalls", trash:"trash" }[arg];
     if(to && DESKS.some(x => x.key === to)){ location.replace("#/" + to); return; } }
   const url = k === "maintenance" ? d.url + sep + "split=1" : d.url;
-  const src = !arg ? url : k === "maintenance" ? url + "#" + encodeURIComponent(arg) : k === "homes" ? d.url + sep + "home=" + encodeURIComponent(arg) : k === "vendors" ? d.url + sep + "vq=" + encodeURIComponent(arg) : d.url + "#" + encodeURIComponent(arg);
+  const src = !arg ? url : k === "maintenance" ? url + "#" + encodeURIComponent(arg) : /^homes(_|$)/.test(k) ? d.url + sep + "home=" + encodeURIComponent(arg) : k === "vendors" ? d.url + sep + "vq=" + encodeURIComponent(arg) : d.url + "#" + encodeURIComponent(arg);
   v.innerHTML = `<iframe class="desk" id="deskframe" title="${esc(d.label)}" src="${esc(src)}"></iframe>`;
   const f = $("#deskframe");
   f.addEventListener("load", () => { try {   // same site: hide the old "jump to other desk" header buttons - the sidebar does that now
@@ -1491,7 +1503,7 @@ function settingsView2(v){
   const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", maint_inv:"maint", maint_improve:"maint",  housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", hk_inv:"hk", hk_improve:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", call_review:"guest", guest_followups:"guest", owner_calls:"own", competitor:"own", competitor_add:"own", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"rev", rev_alerts:"rev", rev_respond:"rev", rev_patterns:"rev", rev_improve:"rev", rev_listing:"rev", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"own", psu_desc:"tools", psu_photos:"tools", psu_qr:"tools", tools_revenue:"tools", tools_report:"tools", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], own:["Owners","key"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rev:["Reviews","star"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], tools:["Tools","grid"], meet:["Meetings","people"], cal:["Calendar","calendar"], stf:["Staffing","clock"] };
   const seen = {}, items = [];
-  DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home").forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
+  DESKS.filter(x => x.status === "live" && !FOOT.includes(x.key) && x.key !== "home" && !/^homes_/.test(x.key)).forEach(x => { const g = x.key === "trash" ? (DESKS.some(y => y.key === "maintenance") ? "maint" : null) : G[x.key];   // Trash orders with Maintenance only for people who have it
     if(INFO.includes(x.key)) return items.push({ k:"i:" + x.key, label:x.label, icon:x.icon, sort:x.sort, info:true });
     if(/^cal_(res|office|me|meet)$/.test(x.key)){ if(!seen.cal){ seen.cal = 1; items.push({ k:"i:cal", label:"Calendar", icon:"calendar", sort:999, info:true }); } return; }   // Calendar sits under Moose Info (2026-10-29)
     if(g === "meet") return;   // meetings open from Calendar ▸ Meetings, no sidebar entry of their own
