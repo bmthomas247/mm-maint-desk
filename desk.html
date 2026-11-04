@@ -3559,29 +3559,41 @@ function fireFields(code){ var f=fireInfo(code), l=licInfo(code), pe=pedit(code)
     '<label class="f"><span>Fire tag expires</span><input id="h_fe" type="date" value="'+esc(f.exp)+'"><span class="hint">'+(f.exp?dueState(f.exp).t:'a year after the inspection')+'</span></label>'+
     '<label class="f"><span>License #</span><input id="h_ln" value="'+esc(l.no)+'"></label>'+
     '<label class="f"><span>License expires</span><input id="h_le" type="date" value="'+esc(l.exp)+'"><span class="hint">'+(l.exp?dueState(l.exp).t:'')+'</span></label></div>'; }
+/* Haylee 2026-11-04: Wasatch County is two licenses from two offices (her 2 Dropbox sheets), so Licensing shows them as 2 "counties" */
+var WASATCH_SPLIT=[{name:"Wasatch Clerk",rx:/clerk/i},{name:"Wasatch Health Department",rx:/health/i}];
+function licOfKind(l,w){ var o={no:"",exp:"",why:[],county:w.name,summit:false};
+  if(!l.lic){ o.no=l.no; o.exp=l.exp; return o; }
+  var es=l.lic.filter(function(e){ return w.rx.test(e.kind||""); }); o.lic=es; o.sheet=es.length>0;
+  var ok=es.filter(function(e){ return e.exp; }), pend=es.filter(function(e){ return !e.exp; });
+  o.exp=ok.map(function(e){ return e.exp; }).sort()[0]||""; o.no=ok.map(function(e){ return e.no; }).filter(Boolean).join(" / ");
+  if(pend.length) o.pending=pend.map(function(e){ return e.kind.replace(/ (business )?(license|permit)$/,"")+": "+e.note; }).join(" · ");
+  o.notes=ok.filter(function(e){ return e.note; }).map(function(e){ return e.note; }).join(" · "); return o; }
 function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(function(h){ return !h.company; });
-  var rows0=homes.map(function(h){ var f=fireInfo(h.code), l=licInfo(h.code); return {code:h.code,f:f,l:l,fs:dueState(f.exp),ls:licState(l),county:countyOf(h.code)||"County not set",hood:(h.community||"").trim()||"Neighborhood not set"}; });
+  if(u.licCounty==="Wasatch") u.licCounty="";
+  var rows0=[]; homes.forEach(function(h){ var f=fireInfo(h.code), l=licInfo(h.code), r={code:h.code,f:f,l:l,fs:dueState(f.exp),ls:licState(l),county:countyOf(h.code)||"County not set",hood:(h.community||"").trim()||"Neighborhood not set"};
+    if(r.county!=="Wasatch") return rows0.push(r);
+    WASATCH_SPLIT.forEach(function(w,i){ var lw=licOfKind(l,w); rows0.push({code:r.code,f:f,l:lw,fs:r.fs,ls:licState(lw),county:w.name,hood:r.hood,dup:i>0}); }); });
   var rows=rows0.filter(function(r){ return (!u.licCounty||r.county===u.licCounty)&&(!u.licHood||r.hood===u.licHood); });
   var lrows=rows.filter(function(r){ return needsLicense(r.code); });
-  var fire=rows.filter(function(r){ return r.f.has!==false; }), cnt=function(a,key,k){ return a.filter(function(r){ return r[key].k===k; }).length; };
+  var fire=rows.filter(function(r){ return r.f.has!==false && !r.dup; }), cnt=function(a,key,k){ return a.filter(function(r){ return r[key].k===k; }).length; };
   var pick=function(a,key){ return a.filter(function(r){ return flt==="all"||(flt==="due"?(r[key].k==="late"||r[key].k==="soon"):r[key].k===flt); }).sort(function(a1,b1){ return (a1[key==="fs"?"f":"l"].exp||"9999").localeCompare(b1[key==="fs"?"f":"l"].exp||"9999"); }); };
   var chips='<div class="chiprow">'+[["due","Expired or due in 60 days"],["late","Expired"],["soon","Due soon"],["none","No date"],["ok","Up to date"],["all","All"]].map(function(c){ return '<button class="chip" data-firef="'+c[0]+'" aria-pressed="'+(flt===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>';
   /* 2026-10-28 (Brandon): fire suppression is its own tab (Licensing ▸ Fire suppression); New properties sit on top here */
   var h=(LIC?LIC.newSection():'')+licOverview(rows0)+'<div class="sechead"><h2>Licenses'+(u.licHood?' · '+esc(u.licHood):u.licCounty?' · '+esc(u.licCounty):'')+'</h2><p>When each home\'s license expires. A license can\'t be renewed without a current fire system tag, so those homes say so here. Fix any home on its Homes page.</p>'+chips+'</div>';
   var F=pick(fire.filter(function(r){ return r.f.has===true||flt==="all"||flt==="none"; }),"fs"), L=pick(lrows,"ls");
   var fneed=F.filter(function(r){ return r.fs.k!=="ok" && !fireQ(r.code); }).map(function(r){ return r.code; });
-  var askable=L.filter(function(r){ return r.ls.k!=="ok"; }).map(function(r){ return r.code; });
+  var askable=L.filter(function(r){ return r.ls.k!=="ok"; }).map(function(r){ return r.code; }).filter(function(c,i,a){ return a.indexOf(c)===i; });
   h+='<section class="panel"><div class="ph"><h3>Licenses</h3><span class="ct">'+cnt(lrows,"ls","late")+' expired · '+cnt(lrows,"ls","soon")+' due soon · '+cnt(lrows,"ls","none")+' no date</span>'+
     (askable.length?'<button class="btn sm pri" data-licall="'+esc(askable.join(","))+'">Message Haylee about '+askable.length+'</button>':'')+'</div>'+
     (L.length?'<div class="appl" style="border:0;border-radius:0;max-height:640px;overflow-y:auto"><table class="t"><thead><tr><th>Home</th><th>License #</th><th>Expires</th><th>Haylee</th></tr></thead><tbody>'+L.map(function(r){ var q=licQ(r.code);
       return '<tr><td><a href="#" data-home="'+esc(r.code)+'">'+esc(r.code)+'</a>'+licDocLinks(r.code,1)+'</td><td class="mono">'+esc(r.l.no||"—")+'</td><td>'+duePill(r.ls)+(r.l.county?' <span class="note">'+esc(r.l.county)+(r.l.summit?' · renews every Jan 15':'')+'</span>':'')+(r.l.pending?'<div class="note">'+esc(r.l.pending)+'</div>':'')+(r.l.notes?'<div class="note">'+esc(r.l.notes)+'</div>':'')+(!r.l.sheet&&(r.l.county||needsLicense(r.code))?'<div class="note">Not on the Dropbox license sheet</div>':'')+(LIC?LIC.fireBlock(r.code,r.l):'')+'</td><td>'+(q?licAsk(q)+' ':'')+'<button class="btn sm ghost" data-licask="'+esc(r.code)+'">'+(q?'Ask again':'Ask Haylee')+'</button></td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">Nothing here.</div>')+
-    '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept) within 30 minutes of each save. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out (lease licenses: Licensing ▸ Leases).</div></section>';
+    '<div class="pad note">Read from the Dropbox license sheets (2b-Licenses → Summit County, Park City Proper, Wasatch County Clerk + Health Dept, shown as Wasatch Clerk and Wasatch Health Department) within 30 minutes of each save. Summit County renews every Jan 15. Update the sheet and the desk follows. Second-home and lease homes don\'t need a rental license, so they\'re left out (lease licenses: Licensing ▸ Leases).</div></section>';
   return h; }
 
 /* Licensing main page (Brandon 2026-10-28): property status by county, then by neighborhood. Click to drill in; the tables below follow. */
 function licOverview(rows){ var u=S.ui, needs=function(r){ return needsLicense(r.code); };
   var tally=function(list){ var t={n:list.length,ok:0,soon:0,late:0,none:0,fire:0,fireBad:0};
-    list.forEach(function(r){ if(needs(r)) t[r.ls.k]=(t[r.ls.k]||0)+1; if(r.f.has===true){ t.fire++; if(r.fs.k==="late"||r.fs.k==="soon") t.fireBad++; } }); return t; };
+    list.forEach(function(r){ if(needs(r)) t[r.ls.k]=(t[r.ls.k]||0)+1; if(r.f.has===true && !r.dup){ t.fire++; if(r.fs.k==="late"||r.fs.k==="soon") t.fireBad++; } }); return t; };
   var bar=function(t){ var lic=t.ok+t.soon+t.late+t.none||1, seg=function(k,c){ return t[k]?'<span class="lseg" style="flex:0 0 '+(t[k]/lic*100)+'%;background:'+c+'"></span>':''; };
     return '<div class="lbar">'+seg("ok","var(--go)")+seg("soon","var(--wait)")+seg("late","var(--stop)")+seg("none","var(--line-2)")+'</div>'; };
   /* pills filter the tables below when clicked (Brandon 2026-10-28); c/hd = the county / neighborhood the pill belongs to */
