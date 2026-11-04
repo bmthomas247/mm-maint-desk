@@ -27,7 +27,7 @@ const MCSS = `
 .mtg .mask{margin:7px 0 0;font-size:14px;font-weight:700;color:var(--moose-ink,#24452c)}
 .mtg .msrc{font-size:12px;color:var(--muted);margin:5px 0 0}
 .mtg .mprev{margin:6px 0 0;border-left:2px solid var(--line);padding-left:8px;font-size:13px;color:var(--ink-2)}
-.mtg .mrow{display:flex;gap:6px;margin-top:8px;align-items:flex-start} .mtg .mrow textarea{flex:1;min-height:44px;font-size:14px}
+.mtg .mrow{display:flex;gap:6px;margin-top:8px;align-items:flex-start} .mtg .mrow textarea{flex:1;min-height:44px;font-size:14px} .mtg .mrow select{max-width:150px;font-size:13px}
 .mtg .mtask{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px} .mtg .mtask input{flex:1;min-width:140px;width:auto} .mtg .mtask input[type=date]{flex:0 0 auto}
 .mtg .tk{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px} .mtg .tk:last-child{border-bottom:0}
 .mtg .tk input[type=checkbox]{width:20px;height:20px;margin-top:1px;flex:0 0 auto} .mtg .tk.done span.tx{text-decoration:line-through;color:var(--muted)}
@@ -94,7 +94,10 @@ function render(v, key, data, ppl){
   const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
   const noteFor = (d, k) => notes.find(n => n.day === d && n.item === k);
   const past = [...new Set(notes.map(n => n.day))].filter(d => d < day).sort().reverse();
-  const covered = items.filter(it => (noteFor(day, it.key) || {}).text).length;
+  // a note's state (hub_meeting_note_state.sql): only 'covered' counts; 'waiting' / 'scheduled' stay open (Jeff's test log #11)
+  const stOf = n => n && n.text ? (n.state || "covered") : "";
+  const covered = items.filter(it => stOf(noteFor(day, it.key)) === "covered").length;
+  const waiting = items.filter(it => /^(waiting|scheduled)$/.test(stOf(noteFor(day, it.key)))).length;
   const open = tasks.filter(t => !t.done_at), done = tasks.filter(t => t.done_at);
   const dl = `<datalist id="mppl">${ppl.map(p => `<option value="${esc(p)}">`).join("")}</datalist>`;
   const taskRow = t => `<div class="tk${t.done_at ? " done" : ""}"><input type="checkbox" data-tdone="${t.id}" ${t.done_at ? "checked" : ""} aria-label="Done">
@@ -105,7 +108,7 @@ function render(v, key, data, ppl){
   let h = `<div class="page mtg">${dl}<div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
       <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}. Go down the list; write what was decided and add tasks.</p></div>
     <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻ Refresh</button><button class="btn small" id="mprint">Print / PDF</button></div></div>
-    <div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${covered} of ${items.length} covered</b><span class="muted" style="font-size:13px">${past[0] ? "Last meeting " + esc(fmt(past[0])) : "First meeting"}</span></div>
+    <div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${covered} of ${items.length} covered${waiting ? ` · ${waiting} waiting / scheduled` : ""}</b><span class="muted" style="font-size:13px">${past[0] ? "Last meeting " + esc(fmt(past[0])) : "First meeting"}</span></div>
       <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div></div>
     <h3 class="mg">Open tasks <span class="muted">${open.length}</span></h3><div class="card" style="padding:8px 14px">
       ${open.length ? open.map(taskRow).join("") : `<p class="muted" style="margin:6px 0">No open tasks.</p>`}
@@ -115,16 +118,19 @@ function render(v, key, data, ppl){
   Object.keys(grps).forEach(g => {
     h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3>`;
     grps[g].forEach(it => {
-      const mine = noteFor(day, it.key) || {}, cov = !!mine.text, dv = ST.drafts[key + "|" + it.key];
+      const mine = noteFor(day, it.key) || {}, st = stOf(mine), cov = st === "covered", dv = ST.drafts[key + "|" + it.key];
+      const pill = st === "covered" ? `<span class="pill green">covered</span>` : st === "waiting" ? `<span class="pill amber">waiting on owner</span>` : st === "scheduled" ? `<span class="pill amber">scheduled</span>` : "";
       const prev = past.slice(0, 3).map(d => { const n = noteFor(d, it.key); return n && n.text ? `<div><b>${esc(fmt(d))}:</b> ${esc(n.text)}</div>` : ""; }).join("");
       const itTasks = open.filter(t => t.item_key === it.key);
-      h += `<div class="card mi${cov ? " cov" : ""}"><div class="mt"><b>${esc(it.title)}</b>${cov ? `<span class="pill green">covered</span>` : ""}${linkHtml(it.link)}</div>
+      h += `<div class="card mi${cov ? " cov" : ""}"><div class="mt"><b>${esc(it.title)}</b>${pill}${linkHtml(it.link)}</div>
         ${(it.lines || []).filter(Boolean).length ? `<ul>${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
         ${it.ask ? `<p class="mask">❓ ${esc(it.ask)}</p>` : ""}
         <p class="msrc">Source: ${esc(it.src || "")}</p>
         ${prev ? `<div class="mprev">${prev}</div>` : ""}
         ${itTasks.length ? `<div class="mprev">${itTasks.map(t => "☐ " + esc(t.text) + (t.who ? " · " + esc(t.who) : "")).join("<br>")}</div>` : ""}
-        <div class="mrow"><textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(dv != null ? dv : (mine.text || ""))}</textarea><button class="btn small primary" data-nsave="${esc(it.key)}">${cov ? "Update" : "Save"}</button></div>
+        <div class="mrow"><textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(dv != null ? dv : (mine.text || ""))}</textarea>
+          <select data-nstate="${esc(it.key)}" aria-label="Where it stands">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
+          <button class="btn small primary" data-nsave="${esc(it.key)}">${st ? "Update" : "Save"}</button></div>
         ${mine.by ? `<p class="msrc">Saved by ${esc(mine.by)}</p>` : ""}
         ${taskForm(it.key)}</div>`; }); });
   const gen = noteFor(day, "_notes") || {}, gdv = ST.drafts[key + "|_notes"];
@@ -144,8 +150,8 @@ function render(v, key, data, ppl){
   $("#mprint").onclick = () => window.print();
   v.querySelectorAll("[data-mday]").forEach(a => a.onclick = e => { e.preventDefault(); ST.day[key] = a.dataset.mday; ST.drafts = {}; render(v, key, data, ppl); window.scrollTo(0, 0); });
   v.querySelectorAll("[data-nsave]").forEach(b => b.onclick = async () => {
-    const k = b.dataset.nsave, t = v.querySelector(`textarea[data-note="${CSS.escape(k)}"]`);
-    b.disabled = true; const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:k, p_text:t.value.trim() }); b.disabled = false;
+    const k = b.dataset.nsave, t = v.querySelector(`textarea[data-note="${CSS.escape(k)}"]`), s = v.querySelector(`select[data-nstate="${CSS.escape(k)}"]`);
+    b.disabled = true; const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:k, p_text:t.value.trim(), p_state:s ? s.value : "covered" }); b.disabled = false;
     if(r.error) return alert("Couldn't save: " + r.error.message);
     delete ST.drafts[key + "|" + k]; redraw(); });
   v.querySelectorAll("[data-tadd]").forEach(b => b.onclick = async () => {
