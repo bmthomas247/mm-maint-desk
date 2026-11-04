@@ -235,6 +235,12 @@ body.only-trash header.top{position:static}
 .ocon.oem{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
 .ocon:focus-visible{outline:2px solid var(--accent,#3c5f12);outline-offset:2px;border-radius:3px}
 .hql.hown,.hql.hhoa{grid-column:span 2}
+.hoagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin-bottom:6px}
+.hoacard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.hoacard.tov{border-style:dashed}.hoacard.none{opacity:.85}
+.hoah{display:flex;gap:8px;align-items:center}.hoah b{flex:1;min-width:0}.hoah .pill{flex:none}.hoah .btn{flex:none}
+.hoacard .ql{color:var(--muted);font-size:12px;margin-right:6px}
+.hoaflag{color:var(--bad,#b42318);font-weight:700;font-size:12px}
 #oconm{position:fixed;z-index:9999;min-width:170px;max-width:calc(100vw - 16px);background:var(--surface,#fff);color:var(--ink,#1d2316);border:1px solid var(--line,#d9dccf);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:6px;display:flex;flex-direction:column;gap:2px;font-size:14px}
 #oconm .ocv{padding:6px 10px 4px;color:var(--muted,#6b7160);font-size:12px;overflow-wrap:anywhere}
 #oconm a,#oconm button{all:unset;cursor:pointer;padding:9px 10px;border-radius:8px;color:inherit;font-weight:600}
@@ -507,6 +513,7 @@ var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["mo
 /* Moose Hub (2026-10-27): Expenses & Time = maintenance manager + admins (MM_MONEY from hub_can, enforced in RLS);
    Homes, Vendors and Fire & licenses are their own hub desks (desk.html?only=<tab>). */
 var ONLY=(function(){ try{ return new URLSearchParams(location.search).get("only")||""; }catch(e){ return ""; } })();
+var HT_FIXED=(function(){ try{ return new URLSearchParams(location.search).get("htype")||""; }catch(e){ return ""; } })();   /* hub Property Details drop-down (2026-11-04) */
 if(!window.MM_MONEY) TABS=TABS.filter(function(x){ return x[0]!=="money"; });
 if(ONLY){ TABS=TABS.filter(function(x){ return x[0]===ONLY; }); S.tab=ONLY; }
 else TABS=TABS.filter(function(x){ return ["homes","vendors","fire","firesys","lease"].indexOf(x[0])<0; });
@@ -516,7 +523,7 @@ try{ var _emb=window.top!==window.self, _sp=["projects","money","routines","reca
   if(!ONLY && (_emb || new URLSearchParams(location.search).get("split"))){
     var _one=_sp.indexOf(S.tab)>=0 && TABS.some(function(x){ return x[0]===S.tab; });
     TABS=TABS.filter(function(x){ return _one ? x[0]===S.tab : _sp.indexOf(x[0])<0; }); } }catch(e){}
-try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; if(ONLY==="vendors" && location.hash==="#preferred") S.ui.vmode="pref"; }catch(e){}
+try{ var _qp=new URLSearchParams(location.search); if(_qp.get("home")){ S.ui.home=_qp.get("home"); S.ui.hq=_qp.get("home"); try{ S.ui.htype=homeType(S.ui.home); }catch(e){} } if(HT_FIXED) S.ui.htype=HT_FIXED; if(_qp.get("vq")) S.ui.vq=_qp.get("vq"); if(ONLY==="vendors" && location.hash==="#changes") S.ui.vmode="changes"; if(ONLY==="vendors" && location.hash==="#preferred") S.ui.vmode="pref"; }catch(e){}
 if(!ONLY && !TABS.some(function(t){return t[0]===S.tab;}) && ["jobs","homes","vendors","fire"].indexOf(S.tab)<0) S.tab="today";
 /* 2026-10-28 (Brandon): inside the hub, the hub's green banner is the only header (profile, settings, sign out live there), so the desk
    header is hidden (moose-theme.css) and ← Back, the meeting button and + Job move down next to the tabs. Help is gone - Ask Penny does that.
@@ -1165,7 +1172,7 @@ document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-v
   if(d.rvem!=null) return mVendorEmail(d.rvem); if(d.vem==="build") return vemBuild(); if(d.vem==="copy") return vemCopy(); if(d.vem==="send") return vemSend(); });
 
 /* ================= HOMES ================= */
-var HTYPES=[["str","Short-term rentals"],["lease","Lease"],["2h","Second homes"],["co","Moose Office"]];
+var HTYPES=[["str","Short-term rentals"],["lease","Lease"],["2h","Second homes"],["hoa","HOA"],["co","Moose Office"]];
 /* Track units that aren't homes: kept in the data, left out of the Property Details list (Brandon 2026-10-28: BHL 1101 is just the office address) */
 var HOME_HIDE={"BHL 1101":1};
 function homeType(code){ if(code==="Moose company") return "co"; return /^2H-/i.test(code)?"2h":/^L-/i.test(code)?"lease":"str"; }
@@ -1211,6 +1218,9 @@ function vHomes(){
   /* filters (Brandon 2026-10-30: "filter by community and by neighborhood"): neighborhood + community come from Track's node tree
      (hub_homes.neighborhood / community, track_homes_sync.py) */
   var hoodOf=function(p){ return (p.track&&p.track.neighborhood)||""; }, commOf=function(p){ return ((p.track&&p.track.community)||p.community||"").trim(); };
+  hoaLoad(); cnt.hoa=D._hoas?D._hoas.filter(function(x){ return x.kind==="community"; }).length:"";
+  if(ht==="hoa") return (HT_FIXED?'':'<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
+      return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div></div>')+hoaView();
   var nb=u.hnb||"", cm=u.hcm||"";
   var typed=D.homes.filter(function(p){ return !HOME_HIDE[p.code] && homeType(p.code)===ht; });
   var nbs={}, cms={}; typed.forEach(function(p){ var h=hoodOf(p)||"Other"; nbs[h]=(nbs[h]||0)+1; if(!nb||h===nb){ var c=commOf(p)||"Other"; cms[c]=(cms[c]||0)+1; } });
@@ -1218,8 +1228,8 @@ function vHomes(){
   var list=typed.filter(function(p){ return (!nb || (hoodOf(p)||"Other")===nb) && (!cm || (commOf(p)||"Other")===cm) &&
     (!q || (coName(p.code)+" "+p.code+" "+commOf(p)+" "+hoodOf(p)).toLowerCase().indexOf(q)>-1); });
   if(u.home && D.homes.length && !D.homes.some(function(p){ return p.code===u.home; })) u.home="";
-  var h='<div class="toolbar"><div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
-      return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div>'+
+  var h='<div class="toolbar">'+(HT_FIXED?'':'<div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
+      return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div>')+
     '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search home or community…" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
     (ht==="co"?'':'<div class="hfil"><select id="hnb" aria-label="Neighborhood"><option value="">All neighborhoods</option>'+Object.keys(nbs).sort().map(function(k){ return '<option value="'+esc(k)+'"'+(k===nb?' selected':'')+'>'+esc(k)+' ('+nbs[k]+')</option>'; }).join("")+'</select>'+
       '<select id="hcm" aria-label="Community"><option value="">All communities</option>'+Object.keys(cms).sort().map(function(k){ return '<option value="'+esc(k)+'"'+(k===cm?' selected':'')+'>'+esc(k)+' ('+cms[k]+')</option>'; }).join("")+'</select></div>')+
@@ -1699,29 +1709,107 @@ function hoaOf(code,p){ var pe=pedit(code);
   var com=p&&p.community; if(!com) return null;
   for(var i=0;i<D.homes.length;i++){ var h=D.homes[i]; if(h.code!==p.code && h.community===com){ var m=infoNote(h,/^hoa/i); if(m) return {text:m.text,url:m.url,src:"Asana",from:h.code}; } }
   return null; }
+/* Property Details ▸ HOA (Brandon 2026-11-04: "individual homes have the hoas info plus … a neighborhood hoa section"; "porsha info will be
+   the most up to date"): hub_hoas = Porsha's Asana project "2026 HOA INFORMATION" copied by hoa_asana_sync.py (her facts win; the hub adds
+   which communities / homes each covers + a note). Read = Property Details; edit = hub_hoa_can_edit() (hub_hoas.sql). */
+function hoaLoad(){ var sb=window.MM_SB; if(!sb||D._hoaP) return; D._hoaP=1;
+  sb.from("hub_hoas").select("*").eq("off",false).order("name").limit(1000).then(function(r){ D._hoas=(r&&r.data)||[]; schedule(); });
+  sb.rpc("hub_hoa_can_edit").then(function(r){ D._hoaEdit=!!(r&&r.data); schedule(); }); }
+function hoaComm(p){ return ((p&&p.track&&p.track.community)||(p&&p.community)||"").trim(); }
+function hoaHood(p){ return (p&&p.track&&p.track.neighborhood)||""; }
+/* the HOAs for one home: ones that name this home; else its community's; plus a master association for its neighborhood */
+function hoasFor(code,p){ hoaLoad(); if(!D._hoas) return []; var c=hoaComm(p), n=hoaHood(p), k=canon(code);
+  var C=D._hoas.filter(function(h){ return h.kind==="community"; });
+  var own=C.filter(function(h){ return (h.homes||[]).some(function(x){ return canon(x)===k; }); });
+  var com=C.filter(function(h){ return !(h.homes||[]).length && c && (h.communities||[]).indexOf(c)>-1; });
+  var nb=C.filter(function(h){ return n && (h.neighborhoods||[]).indexOf(n)>-1; });
+  return (own.length?own:com).concat(nb); }
+function hoaFlag(h){ return h.flag?' <span class="hoaflag">'+esc(h.flag)+'</span>':''; }
+function hoaPill(h){ return h.status==="verified"?'<span class="pill ok" title="'+esc("Contacted "+(h.verified_on||"")+(h.verified_by?" by "+h.verified_by:""))+'">Verified'+(h.verified_on?' '+esc(h.verified_on):'')+'</span>'
+  :h.status==="to_verify"?'<span class="pill waiting">To verify</span>':''; }
+function hoaCard(h,extra){
+  return '<div class="hoacard'+(h.status==="to_verify"?' tov':'')+'"><div class="hoah"><b>'+esc(h.name)+'</b>'+hoaFlag(h)+hoaPill(h)+
+      (D._hoaEdit?'<button class="btn sm ghost" data-act="hoaedit" data-id="'+h.id+'">Edit</button>':'')+'</div>'+
+    [["Management",h.mgmt],["Contact",h.contact],["Phone",h.phone],["Email",h.email]].filter(function(x){ return x[1]; }).map(function(x){ return hoaLine(x[0]+": "+x[1]).html; }).join("")+
+    (/^https:\/\//i.test(h.portal||"")?'<div class="tl"><a href="'+esc(h.portal)+'" target="_blank" rel="noopener">HOA website ↗</a></div>':'')+
+    (h.info?'<details class="infocat"><summary>Community information</summary><div class="prose">'+esc(h.info)+'</div></details>':'')+
+    ((h.manages||[]).length?'<div class="tl"><span class="ql">Manages</span>'+esc(h.manages.join(", "))+'</div>':'')+
+    (h.note?'<div class="tl"><span class="ql">Hub note</span>'+esc(h.note)+'</div>':'')+(extra||'')+
+    '<div class="hsrc">'+esc(h.source||"")+(h.left_out?' · '+h.left_out+' code line'+(h.left_out>1?'s':'')+' left out (open the Asana task)':'')+
+      (h.asana_url?' · <a href="'+esc(h.asana_url)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'</div></div>'; }
+function norm2(s){ return String(s||"").toLowerCase().replace(/\b(management|properties|property|llc|inc|hoa|the)\b/g,"").replace(/[^a-z0-9]/g,""); }
+function hoaView(){ hoaLoad(); var u=S.ui, q=(u.hq||"").trim().toLowerCase(), st=u.hoast||"";
+  if(!D._hoas) return '<div class="empty">Loading HOAs…</div>';
+  var byC={}; D.homes.forEach(function(p){ if(HOME_HIDE[p.code] || homeType(p.code)==="co" || p.company) return; var c=hoaComm(p)||"Other";
+    (byC[c]=byC[c]||{hood:hoaHood(p),homes:[]}).homes.push(p.code); });
+  var used={}, C=D._hoas.filter(function(h){ return h.kind==="community"; });
+  var G=Object.keys(byC).sort().map(function(c){ var g=byC[c];
+    var H=C.filter(function(h){ return (h.communities||[]).indexOf(c)>-1 || (g.hood && (h.neighborhoods||[]).indexOf(g.hood)>-1) || (h.homes||[]).some(function(x){ return g.homes.indexOf(canon(x))>-1; }); });
+    H.forEach(function(h){ used[h.id]=1; }); return {c:c,hood:g.hood,homes:g.homes,H:H}; });
+  var ver=function(g){ return g.H.some(function(h){ return h.status==="verified"; }); };
+  var nV=G.filter(ver).length, nT=G.filter(function(g){ return g.H.length && !ver(g); }).length, nM=G.filter(function(g){ return !g.H.length; }).length;
+  var hit=function(g){ if(st==="verified" && !ver(g)) return false; if(st==="to_verify" && !(g.H.length && !ver(g))) return false; if(st==="missing" && g.H.length) return false;
+      if(!q) return true; return (g.c+" "+g.hood+" "+g.homes.join(" ")+" "+g.H.map(function(h){ return [h.name,h.mgmt,h.contact,h.email].join(" "); }).join(" ")).toLowerCase().indexOf(q)>-1; };
+  var L=G.filter(hit), h='<div class="toolbar"><div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search community, HOA, company or home…" value="'+esc(u.hq||"")+'" autocomplete="off"></div>'+
+    '<div class="hfil"><select id="hoast" aria-label="Show"><option value="">All communities ('+G.length+')</option><option value="verified"'+(st==="verified"?' selected':'')+'>Verified ('+nV+')</option><option value="to_verify"'+(st==="to_verify"?' selected':'')+'>To verify ('+nT+')</option><option value="missing"'+(st==="missing"?' selected':'')+'>No HOA on file ('+nM+')</option></select></div>'+
+    '<span class="qcount">'+L.length+' shown</span>'+(D._hoaEdit?'<button class="btn sm pri" data-act="hoaedit" data-id="">+ Add HOA</button>':'')+'</div>'+
+    '<div class="note">Each community our homes are in, with its HOA. The facts come from Porsha\'s Asana project "2026 HOA INFORMATION" (the most up to date, so change them there); the hub adds which homes each HOA covers and notes. Every home\'s tile shows its HOA too.</div>';
+  h+=L.map(function(g){ var codes=g.homes.slice().sort();
+    return '<div class="hhood">'+esc(g.c)+(g.hood?' · '+esc(g.hood):'')+' · '+codes.length+' home'+(codes.length===1?'':'s')+'</div><div class="hoagrid">'+
+      (g.H.length?g.H.map(function(x){ var only=(x.homes||[]).length?'<div class="tl muted">Only: '+esc(x.homes.join(", "))+'</div>':(x.neighborhoods||[]).length?'<div class="tl muted">Covers all of '+esc(x.neighborhoods.join(", "))+'</div>':'';
+          return hoaCard(x,only); }).join(""):
+        '<div class="hoacard tov none"><b>No HOA on file</b><div class="muted">Not in Porsha\'s HOA project yet.</div>'+(D._hoaEdit?'<div><button class="btn sm" data-act="hoaedit" data-id="" data-c="'+esc(g.c)+'">+ Add HOA</button></div>':'')+'</div>')+
+      '</div><div class="note" style="margin:-2px 0 10px">Homes: '+esc(codes.join(", "))+'</div>'; }).join("")||'<div class="empty">Nothing matches.</div>';
+  var rest=C.filter(function(x){ return !used[x.id]; }), co=D._hoas.filter(function(x){ return x.kind==="company"; });
+  if(!st && !q && rest.length) h+='<details class="infocat" style="margin-top:12px"><summary>HOAs with none of our active homes ('+rest.length+')</summary><div class="hoagrid" style="margin-top:8px">'+rest.map(function(x){ return hoaCard(x); }).join("")+'</div></details>';
+  if(!st && !q && co.length) h+='<details class="infocat" style="margin-top:8px"><summary>HOA management companies ('+co.length+')</summary><div class="hoagrid" style="margin-top:8px">'+co.map(function(x){
+      var cs=C.filter(function(y){ var a=norm2(y.mgmt), b=norm2(x.name); return a && b && (a.indexOf(b)>-1 || b.indexOf(a)>-1); }).map(function(y){ return y.name; });
+      return hoaCard(x,cs.length&&!(x.manages||[]).length?'<div class="tl"><span class="ql">Our HOAs with them</span>'+esc(cs.join(", "))+'</div>':''); }).join("")+'</div></details>';
+  return h; }
+function mHoa(id,comm){ var h=id?(D._hoas||[]).filter(function(x){ return x.id===id; })[0]:null, asana=!!(h&&h.asana_gid);
+  var list=function(a){ return (a||[]).join(", "); };
+  var body=(asana?'<div class="infobox">The HOA facts come from Porsha\'s Asana task, the most up to date copy. Change them there'+(h.asana_url?' (<a href="'+esc(h.asana_url)+'" target="_blank" rel="noopener">open it ↗</a>)':'')+'; the hub picks them up within 30 minutes.</div>'
+      :'<div class="fields">'+fld("ho_name","HOA name",h?h.name:(comm||""))+fld("ho_mgmt","Management company",h?h.mgmt:"")+fld("ho_contact","Contact person",h?h.contact:"")+
+        fld("ho_phone","Phone",h?h.phone:"","tel")+fld("ho_email","Email",h?h.email:"","email")+fld("ho_portal","Website (https://)",h?h.portal:"","url")+'</div>'+
+        area("ho_info","Community information (rules, parking, trash, who to call after hours) - no codes",h?h.info:"")+fld("ho_source","Where this came from (required)",h?h.source:""))+
+    '<div class="fields" style="margin-top:8px">'+fld("ho_comms","Track communities it covers (comma between)",h?list(h.communities):(comm||""))+fld("ho_hoods","Whole neighborhoods it covers (a master association)",h?list(h.neighborhoods):"")+
+      fld("ho_homes","Only these homes (when it covers part of a community)",h?list(h.homes):"")+'</div>'+
+    area("ho_note","Hub note",h?h.note:"")+(h?'<label class="f"><span><input type="checkbox" id="ho_off"> Hide this HOA card (nothing is deleted)</span></label>':'');
+  openModal(h?"HOA · "+h.name:"Add an HOA",body,function(){ var sp=function(v){ return v.split(",").map(function(x){ return x.trim(); }).filter(Boolean); };
+    var p={communities:sp(fv("ho_comms")),neighborhoods:sp(fv("ho_hoods")),homes:sp(fv("ho_homes")),note:fv("ho_note")};
+    if(!asana){ p.name=fv("ho_name"); p.mgmt=fv("ho_mgmt"); p.contact=fv("ho_contact"); p.phone=fv("ho_phone"); p.email=fv("ho_email"); p.portal=fv("ho_portal"); p.info=fv("ho_info"); p.source=fv("ho_source"); }
+    if($("ho_off") && $("ho_off").checked) p.off=true;
+    return window.MM_SB.rpc("hub_hoa_save",{p_id:h?h.id:null,p:p}).then(function(r){ if(r.error){ toast((r.error.message||"Couldn't save").replace(/^.*?: /,"")); return; }
+      D._hoaP=0; D._hoas=null; hoaLoad(); toast("HOA saved"); closeModal(); }); },"Save"); }
 /* phone numbers and emails in the HOA text open the same Call / Text / Email / Copy menu as the owner's */
 function hoaLink(l){ var re=/((?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4})|([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/g, out="", last=0, m;
   while((m=re.exec(l))){ out+=esc(l.slice(last,m.index))+ocon(m[2]?"mail":"tel",m[0]); last=re.lastIndex; } return out+esc(l.slice(last)); }
 function hoaLine(l){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l);
   return {html:'<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+hoaLink(m[2]):hoaLink(l))+'</div>'}; }
-function hoaCell(code,p){ var h=hoaOf(code,p); if(!h) return ""; var L=[], more=false;
-  if(h.pe){ var e=h.pe; [["Name",e.hoaName],["Management",e.hoaMgmt],["Contact",e.hoaContact],["Phone",e.hoaPhone],["Email",e.hoaEmail]].forEach(function(x){ if(x[1]) L.push(hoaLine(x[0]+": "+x[1])); });
+function hoaCell(code,p){ var H=hoasFor(code,p), L=[], src=[];
+  H.slice(0,2).forEach(function(x){ L.push({html:'<div class="tl"><b>'+esc(x.name)+'</b>'+hoaFlag(x)+(x.status==="to_verify"?' <span class="muted">(to verify)</span>':'')+'</div>'});
+    [["Management",x.mgmt],["Contact",x.contact],["Phone",x.phone],["Email",x.email]].forEach(function(y){ if(y[1]) L.push(hoaLine(y[0]+": "+y[1])); }); });
+  if(H.length) src.push(H.some(function(x){ return x.asana_gid; })?"Porsha's HOA list":"HOA page");
+  var h=hoaOf(code,p), more=H.length>2;
+  if(h && h.pe){ var e=h.pe; [["This home",e.hoaName],["Management",e.hoaMgmt],["Contact",e.hoaContact],["Phone",e.hoaPhone],["Email",e.hoaEmail]].forEach(function(x){ if(x[1]) L.push(hoaLine(x[0]+": "+x[1])); });
     if(/^https:\/\//i.test(e.hoaPortal||"")) L.push({html:'<div class="tl"><a href="'+esc(e.hoaPortal)+'" target="_blank" rel="noopener">HOA website ↗</a></div>'});
-    more=!!e.hoaRules; }
-  else { var all=String(h.text||"").replace(/<[^>]+>/g," ").split("\n").map(function(l){ return l.replace(/\s+/g," ").trim(); })
+    more=more||!!e.hoaRules; src.push("hub edit"); }
+  else if(!H.length && h){ var all=String(h.text||"").replace(/<[^>]+>/g," ").split("\n").map(function(l){ return l.replace(/\s+/g," ").trim(); })
       .filter(function(l){ return l && !/code|password|wi-?fi|key ?card|lock ?box|•{3,}|^fax\b/i.test(l); });
     all.slice(0,5).forEach(function(l){ var link=/\d{3}\D{0,2}\d{3}\D?\d{4}|@/.test(l); L.push(hoaLine(!link&&l.length>80?l.slice(0,78)+"…":l)); });
-    more=all.length>5 || all.length<String(h.text||"").split("\n").filter(function(l){ return l.trim(); }).length; }
-  if(!L.length) L.push({html:'<div class="tl muted">Open Home details to view</div>'});
-  else if(more) L.push({html:'<div class="tl muted">More in Home details</div>'});
-  return tCell("HOA",h.src+(h.from?" · same community as "+h.from:""),L,false,"hhoa"); }
+    more=true; src.push(h.src+(h.from?" · same community as "+h.from:"")); }
+  if(!L.length) return "";
+  if(more) L.push({html:'<div class="tl muted">More in Home details</div>'});
+  return tCell("HOA",src.join(" + "),L,false,"hhoa"); }
 function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i), hb=n?null:hoaOf(code,p); if(hb&&hb.from) n={text:hb.text,url:hb.url};
-  return '<div class="block"><h4>HOA</h4><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+
+  var H=hoasFor(code,p), mine=!!(pe.hoaName||pe.hoaMgmt||pe.hoaContact||pe.hoaPhone||pe.hoaEmail||pe.hoaPortal||pe.hoaRules);
+  return '<div class="block"><h4>HOA</h4>'+(H.length?'<div class="hoagrid">'+H.map(function(x){ return hoaCard(x); }).join("")+'</div>':D._hoas?'<div class="note">No HOA on file for '+esc(hoaComm(p)||code)+' yet (Property Details ▸ HOA).</div>':'')+
+    '<details class="infocat" style="margin-top:8px"'+(mine||!H.length?' open':'')+'><summary>'+(H.length?'Only for this home (when it differs from the HOA above)':'HOA for this home')+'</summary><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+
     fld("hoa_name","HOA name",pe.hoaName||"")+fld("hoa_mgmt","Management company",pe.hoaMgmt||"")+fld("hoa_contact","Contact person",pe.hoaContact||"")+
     fld("hoa_phone","Phone",pe.hoaPhone||"","tel")+fld("hoa_email","Email",pe.hoaEmail||"","email")+fld("hoa_portal","Website / portal",pe.hoaPortal||"","url")+'</div>'+
     '<label class="f" style="margin-top:8px"><span>HOA rules &amp; notes (parking, trash, quiet hours, pool/clubhouse, who to call after hours)</span><textarea id="hoa_rules" style="min-height:70px">'+esc(pe.hoaRules||"")+'</textarea></label>'+
     (n?'<details class="infocat" style="margin-top:8px"><summary>HOA Info from Asana'+(hb&&hb.from?' (on '+esc(hb.from)+', same community)':'')+'</summary><div class="prose">'+esc(n.text)+(n.url?'\n<a href="'+esc(n.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>':'')+
-    '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehoa" data-code="'+esc(code)+'">Save HOA</button></div></div>'; }
+    '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehoa" data-code="'+esc(code)+'">Save HOA</button></div></details></div>'; }
 function mNewHome(){ if(!need()) return;
   openModal("Add a property",'<div class="note">Use the Track unit code (e.g. BHL 123, 2H-… for second homes, L-… for leases). Everyone sees it under Property Details right away.</div><div class="fields" style="margin-top:8px">'+
     fld("n_code","Unit code","",null,'list="dl_newunits"')+'<datalist id="dl_newunits">'+Object.keys(((S.feeds.owners||{}).homes)||{}).filter(function(c){ return !profile(c) && !/accounting/i.test(c); }).sort().map(function(c){ return '<option value="'+esc(c)+'">'; }).join("")+'</datalist>'+fld("n_comm","Community")+fld("n_beds","Bedrooms","","number")+fld("n_sqft","Sq ft","","number")+fld("n_yb","Year built","","number")+'</div>'+area("n_addr","Address","","Street, city"),
@@ -4285,6 +4373,7 @@ document.addEventListener("click",function(ev){
     case "hhood": S.ui.hhOpen=(S.ui.hhOpen===d.c?"":d.c); render(); if(S.ui.hhOpen){ var hb=[].slice.call(document.querySelectorAll(".hhacc")).filter(function(x){ return x.dataset.c===S.ui.hhOpen; })[0]; if(hb) hb.scrollIntoView({block:"start"}); } return;
     case "editquick": return mQuick(d.code);
     case "ownerview": return ownerView(d.code);
+    case "hoaedit": return mHoa(d.id?+d.id:null,d.c||"");
     case "savehoa": var hc=d.code, hk=sid(hc); return put("propedits",hk,{hoaName:fv("hoa_name"),hoaMgmt:fv("hoa_mgmt"),hoaContact:fv("hoa_contact"),hoaPhone:fv("hoa_phone"),hoaEmail:fv("hoa_email"),hoaPortal:fv("hoa_portal"),hoaRules:fv("hoa_rules")},S.propedits[hk]).then(function(){ toast("HOA saved"); });
     case "newexp": return mExpense();
     case "newtime": return mTime();
@@ -4360,6 +4449,7 @@ document.addEventListener("change",function(ev){
   if(t.id==="bwall"){ S.ui.bwAll=t.checked; return render(); }
   if(/^bwf_(tech|home|from|to)$/.test(t.id||"")){ S.ui.bwF=S.ui.bwF||{}; S.ui.bwF[t.id.slice(4)]=t.value; return render(); }
   if(t.id==="mmonth"){ S.ui.month=t.value; return render(); }
+  if(t.id==="hoast"){ S.ui.hoast=t.value; return render(); }
   if(t.id==="hnb"){ S.ui.hnb=t.value; S.ui.hcm=""; return render(); }
   if(t.id==="hcm"){ S.ui.hcm=t.value; return render(); }
   if(t.id==="r_type"){ S.ui.rvr.type=t.value; S.ui.rvr.life=rates().life[t.value]||12; return render(); }
