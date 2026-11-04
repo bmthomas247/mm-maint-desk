@@ -234,7 +234,7 @@ body.only-trash header.top{position:static}
 .ocon{all:unset;cursor:pointer;color:inherit;text-decoration:underline;text-underline-offset:2px;font:inherit;max-width:100%;overflow-wrap:anywhere}
 .ocon.oem{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
 .ocon:focus-visible{outline:2px solid var(--accent,#3c5f12);outline-offset:2px;border-radius:3px}
-.hql.hown{grid-column:span 2}
+.hql.hown,.hql.hhoa{grid-column:span 2}
 #oconm{position:fixed;z-index:9999;min-width:170px;max-width:calc(100vw - 16px);background:var(--surface,#fff);color:var(--ink,#1d2316);border:1px solid var(--line,#d9dccf);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:6px;display:flex;flex-direction:column;gap:2px;font-size:14px}
 #oconm .ocv{padding:6px 10px 4px;color:var(--muted,#6b7160);font-size:12px;overflow-wrap:anywhere}
 #oconm a,#oconm button{all:unset;cursor:pointer;padding:9px 10px;border-radius:8px;color:inherit;font-weight:600}
@@ -1315,6 +1315,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   cells=cells.concat(lockSecs(c,t,q,p));
   /* paint stays in Home details only (Brandon 2026-11-03) */
   if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
+  cells.push(hoaCell(c,p));
   if(o.can && o.list.length){ var w=o.list[0];
     cells.push(tCell("Owner",w.plan?"Contract: "+w.plan:"",[{html:'<div class="tl" title="From '+(w.src==="Track"?"Track":"a hub edit")+'"><span class="ql qin">Name - </span><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
       w.phone?{html:'<div class="tl"><span class="ql">Phone</span>'+ocon("tel",w.phone)+'</div>'}:"",
@@ -1354,6 +1355,7 @@ function homeDetail(code){
   h+=homeHeads(code);
   h+=quickView(code,p);
   h+=paintBlock(code);
+  h+=hoaBlock(code,p);
   h+=ownerRelBlock(jobs);
   // basics
   var hi=homeInfo(code), src=function(k){ return hi.src[k]?'<span class="hint">From '+hi.src[k]+'</span>':''; };
@@ -1370,7 +1372,6 @@ function homeDetail(code){
       (/^(2H-|L-)?BHL\b/.test(code)?'<span class="hint">Bear Hollow Lodges — HOA handles it</span>':src("heatTape"))+'</label>'+(function(){ var bq=hasBBQ(code); var ht2=hasHotTub(code); return '<label class="f"><span>Private hot tub</span><select id="h_hk"><option value="yes"'+(ht2.v===true?' selected':'')+'>Yes</option><option value="no"'+(ht2.v===false?' selected':'')+'>No</option>'+(ht2.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(ht2.why)+'</span></label><label class="f"><span>Private BBQ</span><select id="h_bq"><option value="yes"'+(bq.v===true?' selected':'')+'>Yes</option><option value="no"'+(bq.v===false?' selected':'')+'>No</option>'+(bq.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(bq.why)+'</span></label>'; })()+'</div>'+fireFields(code)+
     '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehome" data-code="'+esc(code)+'">Save</button>'+
     (pe.by?'<span class="note" style="align-self:center">Last changed by '+esc(nameFor(pe.by))+' '+esc(ago(ymd(pe.at)))+'</span>':'')+'</div></div>';
-  h+=hoaBlock(code,p);
   // breezeway
   var bw=bwRecent(code);
   h+='<div class="block"><h4>Last 3 done in Breezeway'+(bh.bwId?' <a class="golink" href="https://app.breezeway.io/property/'+esc(bh.bwId)+'" target="_blank" rel="noopener">Breezeway ↗</a>':'')+'</h4>'+(bw&&bw.length?'<div class="bwlist">'+bw.slice(0,3).map(function(b){ return '<div class="bwrow"><span>'+(b.url?'<a href="'+esc(b.url)+'" target="_blank" rel="noopener">'+esc(b.title)+'</a>':esc(b.title))+(b.by?' <span class="muted">· '+esc(b.by)+'</span>':'')+'</span><span class="when">'+esc(fmtD(b.on))+'</span></div>'; }).join("")+'</div>':
@@ -1689,12 +1690,37 @@ function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||
     var a=put("propedits",k,qp,S.propedits[k]);
     var b=o.can?put("ownercontacts",k,{code:code,name:fv("o_name"),phone:fv("o_phone"),email:fv("o_email"),notes:fv("o_notes")},(S.ownercontacts||{})[k]):Promise.resolve();
     return Promise.all([a,b]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
-function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i);
+/* HOA section (Brandon 2026-11-04: "HOA info in property details - lets add it as a section"): hub edits (Home details ▸ HOA) first,
+   else the Asana "HOA Info" note; a home with neither borrows the note of another home in the same community (says which).
+   The tile leaves out code lines (gate / pool / building codes stay in Home details). */
+function hoaOf(code,p){ var pe=pedit(code);
+  if(pe.hoaName||pe.hoaMgmt||pe.hoaContact||pe.hoaPhone||pe.hoaEmail||pe.hoaPortal||pe.hoaRules) return {pe:pe,src:"Hub edit"};
+  var n=p&&infoNote(p,/^hoa/i); if(n) return {text:n.text,url:n.url,src:"Asana"};
+  var com=p&&p.community; if(!com) return null;
+  for(var i=0;i<D.homes.length;i++){ var h=D.homes[i]; if(h.code!==p.code && h.community===com){ var m=infoNote(h,/^hoa/i); if(m) return {text:m.text,url:m.url,src:"Asana",from:h.code}; } }
+  return null; }
+/* phone numbers and emails in the HOA text open the same Call / Text / Email / Copy menu as the owner's */
+function hoaLink(l){ var re=/((?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4})|([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/g, out="", last=0, m;
+  while((m=re.exec(l))){ out+=esc(l.slice(last,m.index))+ocon(m[2]?"mail":"tel",m[0]); last=re.lastIndex; } return out+esc(l.slice(last)); }
+function hoaLine(l){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l);
+  return {html:'<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+hoaLink(m[2]):hoaLink(l))+'</div>'}; }
+function hoaCell(code,p){ var h=hoaOf(code,p); if(!h) return ""; var L=[], more=false;
+  if(h.pe){ var e=h.pe; [["Name",e.hoaName],["Management",e.hoaMgmt],["Contact",e.hoaContact],["Phone",e.hoaPhone],["Email",e.hoaEmail]].forEach(function(x){ if(x[1]) L.push(hoaLine(x[0]+": "+x[1])); });
+    if(/^https:\/\//i.test(e.hoaPortal||"")) L.push({html:'<div class="tl"><a href="'+esc(e.hoaPortal)+'" target="_blank" rel="noopener">HOA website ↗</a></div>'});
+    more=!!e.hoaRules; }
+  else { var all=String(h.text||"").replace(/<[^>]+>/g," ").split("\n").map(function(l){ return l.replace(/\s+/g," ").trim(); })
+      .filter(function(l){ return l && !/code|password|wi-?fi|key ?card|lock ?box|•{3,}|^fax\b/i.test(l); });
+    all.slice(0,5).forEach(function(l){ var link=/\d{3}\D{0,2}\d{3}\D?\d{4}|@/.test(l); L.push(hoaLine(!link&&l.length>80?l.slice(0,78)+"…":l)); });
+    more=all.length>5 || all.length<String(h.text||"").split("\n").filter(function(l){ return l.trim(); }).length; }
+  if(!L.length) L.push({html:'<div class="tl muted">Open Home details to view</div>'});
+  else if(more) L.push({html:'<div class="tl muted">More in Home details</div>'});
+  return tCell("HOA",h.src+(h.from?" · same community as "+h.from:""),L,false,"hhoa"); }
+function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i), hb=n?null:hoaOf(code,p); if(hb&&hb.from) n={text:hb.text,url:hb.url};
   return '<div class="block"><h4>HOA</h4><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+
     fld("hoa_name","HOA name",pe.hoaName||"")+fld("hoa_mgmt","Management company",pe.hoaMgmt||"")+fld("hoa_contact","Contact person",pe.hoaContact||"")+
     fld("hoa_phone","Phone",pe.hoaPhone||"","tel")+fld("hoa_email","Email",pe.hoaEmail||"","email")+fld("hoa_portal","Website / portal",pe.hoaPortal||"","url")+'</div>'+
     '<label class="f" style="margin-top:8px"><span>HOA rules &amp; notes (parking, trash, quiet hours, pool/clubhouse, who to call after hours)</span><textarea id="hoa_rules" style="min-height:70px">'+esc(pe.hoaRules||"")+'</textarea></label>'+
-    (n?'<details class="infocat" style="margin-top:8px"><summary>HOA Info from Asana</summary><div class="prose">'+esc(n.text)+(n.url?'\n<a href="'+esc(n.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>':'')+
+    (n?'<details class="infocat" style="margin-top:8px"><summary>HOA Info from Asana'+(hb&&hb.from?' (on '+esc(hb.from)+', same community)':'')+'</summary><div class="prose">'+esc(n.text)+(n.url?'\n<a href="'+esc(n.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>':'')+
     '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehoa" data-code="'+esc(code)+'">Save HOA</button></div></div>'; }
 function mNewHome(){ if(!need()) return;
   openModal("Add a property",'<div class="note">Use the Track unit code (e.g. BHL 123, 2H-… for second homes, L-… for leases). Everyone sees it under Property Details right away.</div><div class="fields" style="margin-top:8px">'+
