@@ -35,7 +35,8 @@ self.addEventListener("fetch", function(e){
   e.respondWith(new Promise(function(ok){
     var done = false, saved = function(){ return caches.match(key); };
     var t = setTimeout(function(){ saved().then(function(hit){ if(hit && !done){ done = true; ok(hit); } }); }, WAIT);
-    fetch(r).then(function(res){
+    /* 2026-11-04: ask the server each time (cache no-cache = a quick 304 when nothing changed); a plain fetch reused the browser's 10-minute copy even after a hard refresh */
+    fetch(r.mode === "navigate" ? new Request(r.url, { cache:"no-cache", credentials:"same-origin" }) : new Request(r, { cache:"no-cache" })).then(function(res){
       if(res.ok){ var cp = res.clone(); caches.open(V).then(function(c){ c.put(key, cp); }); }
       if(!done){ done = true; clearTimeout(t); ok(res); }
     }, function(){
