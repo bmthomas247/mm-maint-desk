@@ -296,6 +296,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="signals.js"></script>
 <script src="config_guide.js"></script>
 <script src="build_list.js?v=20261104i"></script>
+<script src="accounting.js?v=20261105a"></script>
 <script>
 const C = window.MM_CONFIG;
 try{ if(/type=(magiclink|recovery|signup|invite)/.test(location.hash)) sessionStorage.setItem("mm_pw_offer", "1"); }catch(e){}   // signed in from an emailed link -> offer "Set a password?" (2026-11-02)
@@ -689,7 +690,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
   if(!admin) DESKS = DESKS.filter(x => x.status === "live");   // Brandon 2026-11-03: staff don't see "Coming soon" desks; admins still preview them
   if(DESKS.some(x => x.key === "competitor" && x.status === "live")) DESKS = DESKS.filter(x => x.key !== "competitor_add");   // Brandon 2026-11-02: Add competitor intel is a button in the playbook; front desk (add only) keeps the sidebar entry
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","maint_weather","team_ratings","pto_reports","work_check","staff_calls","guest_followups","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config","build"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","maint_weather","team_ratings","pto_reports","work_check","staff_calls","guest_followups","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config","build","accounting"];   // meetings open from Calendar ▸ Meetings tiles (2026-10-29)   // advertising shows as its Owners · Guest drop-down; Ask Patrick lives in Reports (Brandon 2026-10-28)
   const CALK = ["cal_res","cal_office","cal_me","cal_meet"];   // Brandon 2026-10-29: the Calendar drop-down sits under Moose Info
   const PDK = ["homes_str","homes_lease","homes_2h","homes_hoa","homes_co"];   // Property Details drop-down (2026-11-04), sits under Moose Info
   const CMPK = [];   // Brandon 2026-11-02: Competitor Playbook moved from Moose Info into Owners (GROUPS.own); was ["competitor","competitor_add"]
@@ -744,6 +745,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
         ${desksFirst ? deskBlock + (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") : (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") + deskBlock}
         ${soonHtml ? `<div class="grp">Coming soon</div>` + soonHtml : ""}`;
   return { nav, foot: (repD ? item("reports", anD ? "Reports & Analytics" : repD.label, repD.icon || "chart") : "")
+    + (DESKS.some(x => x.key === "accounting") ? item("accounting", "Accounting", "chart") : "")   // admins + the accountant (desk accounting; Brandon 2026-11-05)
     + (DESKS.some(x => x.key === "build") ? item("build", "Build list", "list") : "")   // admins + Jeff (desk build; Brandon 2026-11-04)
     + (DESKS.some(x => x.key === "config") ? item("config", "Configuration", "gear") : "") };   // admins only (desk config has no teams; Brandon 2026-11-01)
 }
@@ -951,6 +953,9 @@ function route(){
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "advertising" && d){ location.replace("#/adv_owners"); return; }   // Advertising became a drop-down 2026-10-28
   if(k === "calendar" && d){ location.replace("#/cal_res"); return; }   // Calendar is a drop-down (2026-10-29)
+  if(k === "accounting"){ if(!DESKS.some(x => x.key === "accounting") || !window.accountingView){ location.replace("#/home"); return; }   // accounting.js; acct_* RPCs check hub_can('accounting')
+    $("#ttl").textContent = $("#utl").textContent = "Accounting"; return accountingView(v, hashArg()); }
+  if(k === "home" && !DESKS.some(x => x.key === "home") && DESKS.some(x => x.key === "accounting")){ location.replace("#/accounting"); return; }   // the accountant has no Home page
   if(k === "build"){ if(!DESKS.some(x => x.key === "build") || !window.buildListView){ location.replace("#/home"); return; }   // build_list.js; RLS hub_can('build')
     $("#ttl").textContent = $("#utl").textContent = "Build list"; return buildListView(v); }
   if(k === "config"){ if(!DESKS.some(x => x.key === "config") || !window.configGuideView){ location.replace("#/home"); return; }   // config_guide.js; text RLS hub_can('config') (Brandon 2026-11-01)
@@ -1503,7 +1508,7 @@ function setOneOpen(v){
 }
 let SETOBS = null;
 function settingsView2(v){
-  const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","maint_weather","team_ratings","pto_reports","work_check","staff_calls","guest_followups","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config","build"];   // same list the sidebar leaves out (2026-11-03: monthly meetings + report-only pages showed here); calendar: its tabs show as "Calendar" under Moose Info
+  const INFO = ["home","homes","vendors"], FOOT = ["reports","inventory","inventory_edit","maint_weather","team_ratings","pto_reports","work_check","staff_calls","guest_followups","sync","daily_checks","analytics","advertising","patrick_log","patrick_fix","calendar","meet_maint","meet_or","meet_bd","meet_kd","meet_beyond","meet_mgr","meet_fd","meet_track","meet_trackmk","config","build","accounting"];   // same list the sidebar leaves out (2026-11-03: monthly meetings + report-only pages showed here); calendar: its tabs show as "Calendar" under Moose Info
   const G = { maintenance:"maint", maint_projects:"maint", maint_money:"maint", maint_routines:"maint", maint_recalls:"maint", maint_inv:"maint", maint_improve:"maint",  housekeeping:"hk", linen_calc:"hk", hk_routines:"hk", hk_inv:"hk", hk_improve:"hk", licensing:"lic", lic_fire:"lic", lic_lease:"lic", guest_desk:"guest", breezeway_assist:"guest", call_review:"guest", guest_followups:"guest", owner_calls:"own", competitor:"own", competitor_add:"own", adv_owners:"adv", adv_guest:"adv", adv_realtor:"adv", adv_general:"adv", locks_office:"locks", locks_field:"locks", patrick_log:"patrick", patrick_fix:"patrick", reservations:"res", reviews:"rev", rev_alerts:"rev", rev_respond:"rev", rev_patterns:"rev", rev_improve:"rev", rev_listing:"rev", res_report:"res", rates:"rates", rates_report:"rates", revenue:"rates", rates_pulse:"rates", rates_hotels:"rates", rates_home_rater:"rates", property_setup:"own", psu_desc:"tools", psu_photos:"tools", psu_qr:"tools", tools_revenue:"tools", tools_report:"tools", meet_maint:"meet", meet_or:"meet", meet_bd:"meet", meet_kd:"meet", meet_beyond:"meet", meet_mgr:"meet", cal_res:"cal", cal_office:"cal", cal_me:"cal", cal_meet:"cal", cal_off:"stf", staffing:"stf", stf_sched:"stf", stf_perf:"stf", stf_perks:"stf" },
     GL = { maint:["Maintenance","wrench"], hk:["Housekeeping","spark"], lic:["Licensing","badge"], guest:["Guest","chat"], own:["Owners","key"], adv:["Advertising","megaphone"], locks:["Locks","lock"], patrick:["Ask Patrick","chat"], res:["Reservations","calendar"], rev:["Reviews","star"], rates:["Rates","chart"], competitor:["Competitor Playbook","target"], psu:["Property Set Up","home"], tools:["Tools","grid"], meet:["Meetings","people"], cal:["Calendar","calendar"], stf:["Staffing","clock"] };
   const seen = {}, items = [];
