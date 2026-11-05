@@ -47,7 +47,7 @@ function css(){
 .bl .fr:last-child{display:flex} .bl .fr:last-child .lab{width:120px}
 .bl .filt label{display:grid;gap:4px;font-size:13.5px;font-weight:700;color:var(--ink)} .bl .filt label.wide{grid-column:span 2}
 .bl .filt select,.bl .filt input{border-radius:13px;min-height:44px;font-size:15px;padding:0 12px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
-.bl .seg{display:flex;gap:6px;flex-wrap:wrap} .bl .seg button{border-radius:11px;min-height:38px;padding:6px 14px;font-weight:700;font-size:14px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
+.bl .seg{display:flex;gap:6px;flex-wrap:wrap} .bl .seg button{flex:0 0 auto;width:auto;white-space:nowrap;border-radius:11px;min-height:38px;padding:6px 14px;font-weight:700;font-size:14px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
 .bl .seg button.on{background:var(--bl-green);border-color:var(--bl-green);color:#fff;font-weight:800}
 .bl .sech{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:20px 0 8px;padding:0 2px 6px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
 .bl .sech b{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)} .bl .sech b span{font-weight:700}
