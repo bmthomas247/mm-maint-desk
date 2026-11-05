@@ -115,7 +115,7 @@ const prompt = i => {
 function shownRows(){
   const q = BL.q.toLowerCase();
   return BL.rows.filter(i => (BL.fS === "all" || (BL.fS === "open" ? i.status !== "done" : i.status === BL.fS))
-    && (BL.fP === "all" || i.pri === BL.fP) && (BL.fA === "all" || i.desk === BL.fA) && (!BL.fJ || i.jeff)
+    && (BL.fP === "all" || i.pri === BL.fP) && (BL.fA === "all" || i.desk === BL.fA) 
     && (BL.fW === "all" || (BL.fW === "free" ? !(i.worker_names || []).length : (i.worker_names || []).includes(BL.fW)))
     && (!q || [i.title, i.detail, i.source, i.waits, i.note, i.id, (i.worker_names || []).join(" ")].join(" ").toLowerCase().includes(q)));
 }
@@ -134,7 +134,7 @@ function itemHtml(i){
   return `<div class="it p-${esc(i.pri || "next")}${isMe ? " me" : w.length && i.status !== "done" ? " taken" : ""}" data-s="${i.status}" data-id="${esc(i.id)}" tabindex="0" role="button" aria-label="Open ${esc(i.title)}">
     <div class="top"><div style="min-width:0"><div class="t">${esc(i.title)}</div><div class="sub">${esc(AL[i.desk] || i.desk)}${wl ? ` · <b>${wl}</b>` : ""}</div></div>${badgeHtml(i)}</div>
     ${i.detail ? `<div class="d">${esc(i.detail)}</div>` : ""}
-    <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.jeff ? `<span class="chip jeff">Jeff could build</span>` : ""}${i.plan ? `<span class="chip">📋 Has steps</span>` : ""}</div>
+    <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.plan ? `<span class="chip">📋 Has steps</span>` : ""}</div>
     ${i.note ? `<div class="note">${esc(i.note)}</div>` : ""}
     <div class="acts">${claimBtns(i)}<button class="btn small" data-edit>Open</button></div>
   </div>`;
@@ -154,7 +154,7 @@ async function openItem(v, id, edit){
   const sec = (h, body) => `<section><h4>${h}</h4>${body}</section>`, wl = whoLine(i);
   d.innerHTML = `<div class="blbox p-${esc(i.pri || "next")}" role="dialog" aria-modal="true" aria-label="${esc(i.title)}">
     <div class="mh"><div style="min-width:0"><div class="mt">${esc(i.title)}</div>
-      <div class="chips"><span class="chip">${esc(AL[i.desk] || i.desk)}</span><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"} priority</span>${badgeHtml(i)}${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.jeff ? `<span class="chip jeff">Jeff could build</span>` : ""}</div>
+      <div class="chips"><span class="chip">${esc(AL[i.desk] || i.desk)}</span><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"} priority</span>${badgeHtml(i)}${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}</div>
       ${wl ? `<div class="sub" style="margin-top:4px"><b>${wl[0].toUpperCase() + wl.slice(1)}</b></div>` : ""}</div><button class="btn small" data-x aria-label="Close">✕</button></div>
     ${edit ? `<div class="ed">
       <label>Title<input data-f="title" value="${esc(i.title)}" maxlength="200"></label>
@@ -217,7 +217,7 @@ function draw(v){
       <div class="fr"><span class="lab">Find</span><input id="blq" type="search" placeholder="Search (e.g. Track, Penny, Chris)" value="${esc(BL.q)}"></div>
       <div class="fr"><span class="lab">Status</span><div class="seg">${[["open", "Not done"], ["all", "All"], ...Object.entries(ST)].map(([k, l]) => `<button type="button" class="${BL.fS === k ? "on" : ""}" data-fs="${k}">${l}</button>`).join("")}</div></div>
       <div class="fr"><span class="lab">Priority</span><div class="seg">${[["all", "Any"], ...Object.entries(PRI)].map(([k, l]) => `<button type="button" class="${BL.fP === k ? "on" : ""}" data-fp="${k}">${l}</button>`).join("")}</div></div>
-      <div class="fr"><span class="lab">Who's on it</span><div class="seg">${WHO.map(([k, l]) => `<button type="button" class="${BL.fW === k ? "on" : ""}" data-fw="${esc(k)}">${l}</button>`).join("")}<button type="button" class="${BL.fJ ? "on" : ""}" data-fj>Jeff could build</button></div></div>
+      <div class="fr"><span class="lab">Who's on it</span><div class="seg">${WHO.map(([k, l]) => `<button type="button" class="${BL.fW === k ? "on" : ""}" data-fw="${esc(k)}">${l}</button>`).join("")}</div></div>
       <div class="fr"><span class="lab">Desk</span><div class="seg">${[["all", "All desks"], ...AREAS].map(([k, l]) => { const n = k === "all" ? 0 : R.filter(i => i.desk === k && i.status !== "done").length; return k !== "all" && !n ? "" : `<button type="button" class="${BL.fA === k ? "on" : ""}" data-fa="${k}">${esc(l)}${k === "all" ? "" : ` (${n})`}</button>`; }).join("")}</div></div>
       <div class="fr"><span class="lab">Order</span><select id="bl_o">${opt(BL.order, ORD)}</select><button type="button" class="chip" id="blref" title="Refresh">↻</button></div></div>`}
     ${list || `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${BL.tab === "mine" ? "You're not on anything right now. Pick an item on Build list and tap \"I'm on it\"." : "Nothing matches these filters."}</p></div>`}
@@ -285,7 +285,6 @@ function wire(v){
   v.querySelectorAll("[data-fa]").forEach(b => b.onclick = () => { BL.fA = b.dataset.fa; draw(v); });
   const rf = v.querySelector("#blref"); if(rf) rf.onclick = async () => { await load(); draw(v); };
   v.querySelectorAll("[data-fw]").forEach(b => b.onclick = () => { BL.fW = b.dataset.fw; draw(v); });
-  const fj = v.querySelector("[data-fj]"); if(fj) fj.onclick = () => { BL.fJ = !BL.fJ; draw(v); };
   v.querySelectorAll("[data-fold]").forEach(h => h.onclick = () => { const k = h.dataset.fold; BL.fold[k] = !BL.fold[k]; try { localStorage.setItem("bl_fold", JSON.stringify(BL.fold)); } catch(e) {} draw(v); });
   v.querySelectorAll(".it").forEach(el => {
     const id = el.dataset.id, it = BL.rows.find(x => x.id === id);
