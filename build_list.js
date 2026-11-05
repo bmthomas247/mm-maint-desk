@@ -84,6 +84,7 @@ function css(){
 .blmod .mh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:6px} .blmod .mt{font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.25;margin-bottom:6px}
 .blmod section{margin-top:16px} .blmod h4{margin:0 0 6px;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .blmod section p{margin:0 0 6px;font-size:15px;line-height:1.55} .blmod section ol{margin:0;padding-left:22px;font-size:15px;line-height:1.55} .blmod section li{margin:3px 0}
+.blmod .addnote{display:flex;gap:8px;align-items:flex-end;margin-top:8px} .blmod .addnote textarea{flex:1;min-height:44px;border-radius:12px;font-size:14.5px}
 .blmod .mf{border-top:1px solid var(--line);margin-top:18px;padding-top:12px}
 .blmod .ed{display:grid;gap:10px;margin-top:10px} .blmod .ed label{display:grid;gap:4px;font-size:13px;font-weight:700} .blmod .ed .r{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
 .blmod .ed input,.blmod .ed select,.blmod .ed textarea{border-radius:12px;font-size:14.5px}
@@ -168,7 +169,8 @@ async function openItem(v, id, edit){
     : `${sec("What we need to build", i.detail ? txt(i.detail) : `<p class="muted">No details yet. Tap Edit to add them.</p>`)}
       ${sec("How to build it", i.plan ? txt(i.plan) : `<p class="muted">No step-by-step plan yet. Tap <b>Open in Claude Code</b> and Claude plans it with you first, or tap <b>Edit</b> and write the steps here.</p>`)}
       ${i.jeff && i.jeff_note ? sec("Jeff's part", txt(i.jeff_note)) : ""}
-      ${i.note ? sec("Notes", txt(i.note)) : ""}
+      ${sec("Notes", `${i.note ? txt(i.note) : `<p class="muted">No notes yet.</p>`}
+        <div class="addnote"><textarea data-newnote rows="2" placeholder="Add a note (you don't have to start the item)"></textarea><button class="btn small primary" data-addnote>Add note</button></div>`)}
       ${sec("Where it came from", `<p>${esc(i.source || "Not recorded")}</p>`)}
       ${sec("History", `<div class="hist">${(BL.hist[id] || []).map(h => `<div>${esc(new Date(h.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} · ${esc(h.by_name || "")} · ${esc(h.what)}</div>`).join("") || "<div>No changes yet.</div>"}</div>`)}
       <div class="acts mf">${claimBtns(i)}<button class="btn small" data-editm>Edit</button></div>`}
@@ -184,6 +186,10 @@ async function openItem(v, id, edit){
   if(q("[data-save]")) q("[data-save]").onclick = async () => { const f = n => q(`[data-f="${n}"]`).value;
     const r = await sb.rpc("build_item_save", { p_id:id, p_title:f("title"), p_detail:f("detail"), p_plan:f("plan"), p_desk:f("desk"), p_pri:f("pri"), p_waits:f("waits"), p_note:f("note") });
     if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
+  // a note without starting the item (Brandon 2026-11-04): added under the earlier notes as "Name, Nov 4: …"
+  if(q("[data-addnote]")) q("[data-addnote]").onclick = async () => { const t = q("[data-newnote]").value.trim(); if(!t) return q("[data-newnote]").focus();
+    const line = `${first(meName()) || "Someone"}, ${fday(new Date())}: ${t}`, cur = (BL.rows.find(x => x.id === id) || {}).note || "";
+    const r = await sb.rpc("build_item_save", { p_id:id, p_note:(cur ? cur + "\n" : "") + line }); if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
   if(q("[data-off]")) q("[data-off]").onclick = async () => { if(!confirm("Take this item off the list? (It's kept in the history, not deleted.)")) return;
     const r = await sb.rpc("build_item_save", { p_id:id, p_off:true }); if(r.error) return alert("Didn't save: " + err(r.error)); close(); await load(); show(v); };
   wireItem(v, d, i, again);
