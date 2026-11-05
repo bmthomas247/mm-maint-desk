@@ -84,6 +84,8 @@ function css(){
 .blmod .mh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:6px} .blmod .mt{font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.25;margin-bottom:6px}
 .blmod section{margin-top:16px} .blmod h4{margin:0 0 6px;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .blmod section p{margin:0 0 6px;font-size:15px;line-height:1.55} .blmod section ol{margin:0;padding-left:22px;font-size:15px;line-height:1.55} .blmod section li{margin:3px 0}
+.bl .acts select{width:auto;flex:0 0 auto;max-width:170px}
+.bl .qnote{display:flex;gap:6px;align-items:flex-end;margin-top:4px} .bl .qnote textarea{flex:1;min-height:40px;border-radius:12px;font-size:14px}
 .blmod .addnote{display:flex;gap:8px;align-items:flex-end;margin-top:8px} .blmod .addnote textarea{flex:1;min-height:44px;border-radius:12px;font-size:14.5px}
 .blmod .mf{border-top:1px solid var(--line);margin-top:18px;padding-top:12px}
 .blmod .ed{display:grid;gap:10px;margin-top:10px} .blmod .ed label{display:grid;gap:4px;font-size:13px;font-weight:700} .blmod .ed .r{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
@@ -137,7 +139,8 @@ function itemHtml(i){
     ${i.detail ? `<div class="d">${esc(i.detail)}</div>` : ""}
     <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.plan ? `<span class="chip">📋 Has steps</span>` : ""}</div>
     ${i.note ? `<div class="note">${esc(i.note)}</div>` : ""}
-    <div class="acts">${claimBtns(i)}<button class="btn small" data-edit>Open</button></div>
+    <div class="acts">${claimBtns(i)}<button class="btn small" data-qnote>📝 Note</button><button class="btn small" data-edit>Open</button></div>
+    ${BL.qn === i.id ? `<div class="qnote"><textarea data-qtext rows="2" placeholder="Quick note (doesn't start the item)"></textarea><button class="btn small primary" data-qsave>Add</button><button class="btn small" data-qx>✕</button></div>` : ""}
   </div>`;
 }
 // lines that start with "1." / "-" show as a list
@@ -297,6 +300,13 @@ function wire(v){
     el.onclick = e => { if(e.target.closest("button,select,a,input,textarea")) return; openItem(v, id); };
     el.onkeydown = e => { if((e.key === "Enter" || e.key === " ") && e.target === el){ e.preventDefault(); openItem(v, id); } };
     el.querySelector("[data-edit]").onclick = () => openItem(v, id);
+    // quick note on the tile (Brandon 2026-11-04): same "Name, date: text" line as the pop-up, item not started
+    el.querySelector("[data-qnote]").onclick = () => { BL.qn = BL.qn === id ? null : id; const y = window.scrollY; draw(v); window.scrollTo(0, y); const t = v.querySelector(`.it[data-id="${CSS.escape(id)}"] [data-qtext]`); if(t) t.focus(); };
+    const qx = el.querySelector("[data-qx]"); if(qx) qx.onclick = () => { BL.qn = null; const y = window.scrollY; draw(v); window.scrollTo(0, y); };
+    const qs = el.querySelector("[data-qsave]"); if(qs) qs.onclick = async () => { const t = el.querySelector("[data-qtext]").value.trim(); if(!t) return el.querySelector("[data-qtext]").focus();
+      const line = `${first(meName()) || "Someone"}, ${fday(new Date())}: ${t}`;
+      qs.disabled = true; const r = await sb.rpc("build_item_save", { p_id:id, p_note:(it.note ? it.note + "\n" : "") + line }); qs.disabled = false;
+      if(r.error) return alert("Didn't save: " + err(r.error)); BL.qn = null; delete BL.hist[id]; await load(); const y = window.scrollY; draw(v); window.scrollTo(0, y); };
     wireItem(v, el, it, async () => { await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); });
   });
   const add = v.querySelector("#bladd"); if(add) add.onsubmit = e => { e.preventDefault(); const g = s => v.querySelector(s).value.trim();
@@ -309,7 +319,7 @@ window.buildListView = async function(v){
   // pick up the other person's changes (claims) every minute while the page is open and nobody is typing
   clearInterval(BL.timer); BL.timer = setInterval(async () => {
     if(!document.body.contains(v) || !v.querySelector(".bl")){ clearInterval(BL.timer); return; }
-    if(document.hidden || BL.modal || (document.activeElement && document.activeElement.matches("input,textarea,select"))) return;
+    if(document.hidden || BL.modal || BL.qn || (document.activeElement && document.activeElement.matches("input,textarea,select"))) return;
     try { await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); } catch(e) {}
   }, 60000);
 };
