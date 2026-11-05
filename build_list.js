@@ -22,6 +22,7 @@ function css(){
   /* Locks office look (Brandon 2026-11-04: "make it look like the office locks page"): forest gradient header with stat tiles,
      pill tabs, 18px cards with soft shadows, forest-green "on" state - same palette as locks-desk.html / rates.html locksLook */
   s.textContent = `.bl{--bl-forest:#3c5f12;--bl-forest2:#5b8a1e;--bl-moose:#88B535;--bl-moose2:#A6CE39;--bl-shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06);font-family:"Manrope",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1}
+.page.bl{max-width:min(1800px,100%)}   /* office-desk page (Brandon 2026-11-04: "we can make it wider") */
 .bl .blhead{background:linear-gradient(135deg,var(--bl-forest),var(--bl-forest2));color:#fff;border-radius:18px;padding:16px 18px 14px;box-shadow:0 2px 12px rgba(10,30,20,.18);margin:0 0 12px}
 .bl .blhead h2{margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em;color:#fff} .bl .blhead h2 span{color:var(--bl-moose2)}
 .bl .blhead p{margin:2px 0 12px;color:rgba(255,255,255,.82);font-size:13.5px}
