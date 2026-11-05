@@ -77,6 +77,16 @@ function css(){
 .bl .ed{display:grid;gap:8px;margin-top:6px} .bl .ed .r{display:flex;gap:8px;flex-wrap:wrap} .bl .ed .r > *{flex:1;min-width:160px}
 .bl .ed input,.bl .ed select,.bl .ed textarea{border-radius:12px} .bl textarea{width:100%;min-height:80px}
 .bl .hist{font-size:12.5px;color:var(--muted)} .bl .hist div{padding:3px 0;border-top:1px solid var(--line)}
+.bl .it{cursor:pointer} .bl .it:hover{box-shadow:0 2px 6px rgba(20,40,25,.10),0 8px 22px rgba(20,40,25,.10)} .bl .it:focus-visible{outline:3px solid var(--bl-moose);outline-offset:2px}
+.blmod{position:fixed;inset:0;z-index:70;background:rgba(10,20,12,.45);overflow:auto;padding:4vh 16px}
+.blmod .blbox{max-width:880px;margin:0 auto;background:var(--card);color:var(--ink);border-radius:18px;border-left:8px solid #cfd8cb;box-shadow:0 10px 40px rgba(0,0,0,.25);padding:20px 22px}
+.blmod .blbox.p-now{border-left-color:#c8382b} .blmod .blbox.p-next{border-left-color:#b5770a} .blmod .blbox.p-later{border-left-color:var(--bl-moose)}
+.blmod .mh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:6px} .blmod .mt{font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.25;margin-bottom:6px}
+.blmod section{margin-top:16px} .blmod h4{margin:0 0 6px;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.blmod section p{margin:0 0 6px;font-size:15px;line-height:1.55} .blmod section ol{margin:0;padding-left:22px;font-size:15px;line-height:1.55} .blmod section li{margin:3px 0}
+.blmod .mf{border-top:1px solid var(--line);margin-top:18px;padding-top:12px}
+.blmod .ed{display:grid;gap:10px;margin-top:10px} .blmod .ed label{display:grid;gap:4px;font-size:13px;font-weight:700} .blmod .ed .r{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.blmod .ed input,.blmod .ed select,.blmod .ed textarea{border-radius:12px;font-size:14.5px}
 .bl .add{margin-top:24px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--bl-shadow);padding:14px 16px;display:grid;gap:8px}
 .bl .add .r{display:flex;gap:8px;flex-wrap:wrap} .bl .add .r > *{flex:1;min-width:160px} .bl .add input,.bl .add select{border-radius:12px;min-height:42px}
 .bl table.done{width:100%;border-collapse:collapse} .bl .done td,.bl .done th{padding:8px;border-top:1px solid var(--line);text-align:left;vertical-align:top;font-size:14px}
@@ -98,7 +108,7 @@ const RULES = `House rules (Moose Hub):
 - Ask before sending any email, Slack or text to anyone; show the text first.
 - Plain, short words. Lead with what the reader needs to do.`;
 const prompt = i => {
-  const head = `Moose Hub build list item "${i.id}": ${i.title}\n${i.detail || ""}${i.note ? "\nOur note: " + i.note : ""}${i.jeff_note ? "\nFor Jeff: " + i.jeff_note : ""}\nWhere it came from: ${i.source || "build list"}\nBuild list: https://crew.moosemanagement.com/#/build (item ${i.id})`;
+  const head = `Moose Hub build list item "${i.id}": ${i.title}\n${i.detail || ""}${i.note ? "\nOur note: " + i.note : ""}${i.plan ? "\nHow to build it:\n" + i.plan : ""}${i.jeff_note ? "\nFor Jeff: " + i.jeff_note : ""}\nWhere it came from: ${i.source || "build list"}\nBuild list: https://crew.moosemanagement.com/#/build (item ${i.id})`;
   if(typeof ME !== "undefined" && ME && ME.admin) return head + `\n\nRead CLAUDE.md first. Plan it, ask me anything you need, then build it. When it's done, set this item to Done on the hub's Build list (table hub_build_items, id ${i.id}) and add a line to CLAUDE.md.`;
   return head + `\n\nI'm ${meName() || "on the Moose Management team"} and I'm working on this item with Brandon. You (Claude) can't change the live hub or its database from here; your job is to help me get it ready.\n${RULES}\n\nHow we work:\n1. Plan it with me step by step and ask me what you need. If it needs data from Track, Freshdesk, Key Data etc., tell me what to pull and where.\n2. Write the finished piece: the text, the exact steps, or the code with a short note on where it goes.\n3. Write a short summary for Brandon: what it is, what it changes, and anything he must decide.\n4. I send it to Brandon from the hub (Report a Bug / Upgrade, "Upgrade I want", mention item ${i.id}). For Launch Pad code: Launch Pad > </> Code.\n5. I set the item to Finishing touches on the Build list and put "waiting on Brandon" in its note.`;
 };
@@ -109,37 +119,79 @@ function shownRows(){
     && (BL.fW === "all" || (BL.fW === "free" ? !(i.worker_names || []).length : (i.worker_names || []).includes(BL.fW)))
     && (!q || [i.title, i.detail, i.source, i.waits, i.note, i.id, (i.worker_names || []).join(" ")].join(" ").toLowerCase().includes(q)));
 }
+function whoLine(i){ const w = i.worker_names || [], isMe = w.includes(meName());
+  return w.length && i.status !== "done" ? (isMe ? "you're on it" : esc(w.map(first).join(" + ")) + (w.length > 1 ? " are" : " is") + " on it") + (i.claimed_at ? " since " + esc(fday(i.claimed_at)) : "") : ""; }
+function badgeHtml(i){ const w = i.worker_names || [], isMe = w.includes(meName()), others = w.filter(n => n !== meName());
+  return w.length && i.status !== "done" ? `<span class="st who${isMe ? " me" : ""}">🔨 ${isMe ? "You" + (others.length ? " + " + esc(others.map(first).join(", ")) : "") : esc(w.map(first).join(" + "))}</span>` : `<span class="st ${i.status}">${ST[i.status] || i.status}</span>`; }
+function claimBtns(i){ const w = i.worker_names || [], isMe = w.includes(meName()), s = i.status;
+  return (s !== "done" ? (!w.length ? `<button class="btn small primary" data-claim>🔨 I'm on it</button>` : isMe ? `<button class="btn small" data-rel>Step off</button>` : `<button class="btn small" data-join>Work on it together</button>`) : "")
+    + (s !== "done" && !isMe && w.length && ME && ME.admin ? `<button class="btn small" data-free>Free it</button>` : "")
+    + (s !== "done" ? `<button class="btn small" data-copy>Open in Claude Code</button>` : "")
+    + `<select data-st aria-label="Status">${Object.entries(ST).map(([v, l]) => `<option value="${v}"${v === s ? " selected" : ""}>${l}</option>`).join("")}</select>`; }
+// card in the grid: tap anywhere on it (not a button) to open the full explanation
 function itemHtml(i){
-  const w = i.worker_names || [], isMe = w.includes(meName()), others = w.filter(n => n !== meName()), s = i.status, open = BL.open === i.id;
-  const badge = w.length && s !== "done"
-    ? `<span class="st who${isMe ? " me" : ""}">🔨 ${isMe ? "You" + (others.length ? " + " + esc(others.map(first).join(", ")) : "") : esc(w.map(first).join(" + "))}</span>`
-    : `<span class="st ${s}">${ST[s] || s}</span>`;
-  return `<div class="it p-${esc(i.pri || "next")}${isMe ? " me" : w.length ? " taken" : ""}${open ? " open" : ""}" data-s="${s}" data-id="${esc(i.id)}">
-    <div class="top"><div style="min-width:0"><div class="t">${esc(i.title)}</div>
-      <div class="sub">${esc(AL[i.desk] || i.desk)}${w.length && s !== "done" ? ` · <b>${isMe ? "you're on it" : esc(w.map(first).join(" + ")) + (w.length > 1 ? " are" : " is") + " on it"}</b>${i.claimed_at ? " since " + esc(fday(i.claimed_at)) : ""}` : ""}</div></div>${badge}</div>
+  const w = i.worker_names || [], isMe = w.includes(meName()), wl = whoLine(i);
+  return `<div class="it p-${esc(i.pri || "next")}${isMe ? " me" : w.length && i.status !== "done" ? " taken" : ""}" data-s="${i.status}" data-id="${esc(i.id)}" tabindex="0" role="button" aria-label="Open ${esc(i.title)}">
+    <div class="top"><div style="min-width:0"><div class="t">${esc(i.title)}</div><div class="sub">${esc(AL[i.desk] || i.desk)}${wl ? ` · <b>${wl}</b>` : ""}</div></div>${badgeHtml(i)}</div>
     ${i.detail ? `<div class="d">${esc(i.detail)}</div>` : ""}
-    <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.jeff ? `<span class="chip jeff">Jeff could build</span>` : ""}</div>
-    ${open && i.jeff && i.jeff_note ? `<div class="sub"><b>For Jeff:</b> ${esc(i.jeff_note)}</div>` : ""}
-    ${i.note && !open ? `<div class="note">${esc(i.note)}</div>` : ""}
-    ${open ? `<div class="src">Source: ${esc(i.source || "")}${i.updated_by ? ` · last change ${esc(i.updated_by)} ${esc(fday(i.updated_at))}` : ""}</div>` : ""}
-    <div class="acts">${s !== "done" ? (!w.length ? `<button class="btn small primary" data-claim>🔨 I'm on it</button>` : isMe ? `<button class="btn small" data-rel>Step off</button>` : `<button class="btn small" data-join>Work on it together</button>`) : ""}
-      ${s !== "done" && !isMe && w.length && ME && ME.admin ? `<button class="btn small" data-free>Free it</button>` : ""}
-      ${s !== "done" ? `<button class="btn small" data-copy>Open in Claude Code</button>` : ""}
-      <select data-st aria-label="Status">${Object.entries(ST).map(([v, l]) => `<option value="${v}"${v === s ? " selected" : ""}>${l}</option>`).join("")}</select>
-      <button class="btn small" data-edit>${open ? "Close" : "Open"}</button></div>
-    ${open ? `<div class="ed"><input data-f="title" value="${esc(i.title)}" maxlength="200" aria-label="Title"><textarea data-f="detail" aria-label="Details">${esc(i.detail)}</textarea>
-      <div class="r"><select data-f="desk" aria-label="Desk">${AREAS.map(([k, l]) => `<option value="${k}"${k === i.desk ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
-        <select data-f="pri" aria-label="Priority">${Object.entries(PRI).map(([k, l]) => `<option value="${k}"${k === i.pri ? " selected" : ""}>${l}</option>`).join("")}</select>
-        <input data-f="waits" value="${esc(i.waits)}" placeholder="Waiting on (optional)" maxlength="60"></div>
-      <textarea data-f="note" placeholder="Note (what was done, what's left)">${esc(i.note)}</textarea>
-      <div class="r" style="justify-content:flex-start"><button class="btn small primary" data-save style="flex:0">Save</button><button class="btn small" data-hist style="flex:0">${BL.hist[i.id] ? "Hide history" : "History"}</button><button class="btn small" data-off style="flex:0">Remove from the list</button></div>
-      ${BL.hist[i.id] ? `<div class="hist">${BL.hist[i.id].map(h => `<div>${esc(new Date(h.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} · ${esc(h.by_name || "")} · ${esc(h.what)}</div>`).join("") || "<div>No changes yet.</div>"}</div>` : ""}</div>` : ""}
+    <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.jeff ? `<span class="chip jeff">Jeff could build</span>` : ""}${i.plan ? `<span class="chip">📋 Has steps</span>` : ""}</div>
+    ${i.note ? `<div class="note">${esc(i.note)}</div>` : ""}
+    <div class="acts">${claimBtns(i)}<button class="btn small" data-edit>Open</button></div>
   </div>`;
+}
+// lines that start with "1." / "-" show as a list
+function txt(t){ const L = String(t || "").split(/\r?\n/); if(L.some(l => /^\s*(\d+[.)]|[-*•])\s+/.test(l))){
+    let h = "", inL = false; L.forEach(l => { const m = l.match(/^\s*(?:\d+[.)]|[-*•])\s+(.*)/); if(m){ if(!inL){ h += "<ol>"; inL = true; } h += `<li>${esc(m[1])}</li>`; } else { if(inL){ h += "</ol>"; inL = false; } if(l.trim()) h += `<p>${esc(l)}</p>`; } });
+    return h + (inL ? "</ol>" : ""); }
+  return `<p>${esc(t).replace(/\n/g, "<br>")}</p>`; }
+// the full explanation pop-up (Brandon 2026-11-04: "click into each build tile and it explain what we need to build")
+async function openItem(v, id, edit){
+  const i = BL.rows.find(x => x.id === id); let d = document.getElementById("blmod");
+  if(!i){ if(d) d.remove(); return; }
+  if(!d){ d = document.createElement("div"); d.id = "blmod"; d.className = "blmod bl"; document.body.appendChild(d); }
+  BL.modal = id;
+  if(!BL.hist[id]){ const r = await sb.from("hub_build_log").select("at,by_name,what").eq("item_id", id).order("at", { ascending:false }).limit(30); BL.hist[id] = r.data || []; }
+  const sec = (h, body) => `<section><h4>${h}</h4>${body}</section>`, wl = whoLine(i);
+  d.innerHTML = `<div class="blbox p-${esc(i.pri || "next")}" role="dialog" aria-modal="true" aria-label="${esc(i.title)}">
+    <div class="mh"><div style="min-width:0"><div class="mt">${esc(i.title)}</div>
+      <div class="chips"><span class="chip">${esc(AL[i.desk] || i.desk)}</span><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"} priority</span>${badgeHtml(i)}${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.jeff ? `<span class="chip jeff">Jeff could build</span>` : ""}</div>
+      ${wl ? `<div class="sub" style="margin-top:4px"><b>${wl[0].toUpperCase() + wl.slice(1)}</b></div>` : ""}</div><button class="btn small" data-x aria-label="Close">✕</button></div>
+    ${edit ? `<div class="ed">
+      <label>Title<input data-f="title" value="${esc(i.title)}" maxlength="200"></label>
+      <label>What we need to build<textarea data-f="detail" rows="5">${esc(i.detail)}</textarea></label>
+      <label>How to build it (steps, one per line)<textarea data-f="plan" rows="8" placeholder="1. ...&#10;2. ...">${esc(i.plan || "")}</textarea></label>
+      <div class="r"><label>Desk<select data-f="desk">${AREAS.map(([k, l]) => `<option value="${k}"${k === i.desk ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+        <label>Priority<select data-f="pri">${Object.entries(PRI).map(([k, l]) => `<option value="${k}"${k === i.pri ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label>Waiting on<input data-f="waits" value="${esc(i.waits)}" maxlength="60" placeholder="(optional)"></label></div>
+      <label>Note (what was done, what's left)<textarea data-f="note" rows="3">${esc(i.note)}</textarea></label>
+      <div class="acts"><button class="btn small primary" data-save>Save</button><button class="btn small" data-cancel>Cancel</button><button class="btn small" data-off style="margin-left:auto">Remove from the list</button></div></div>`
+    : `${sec("What we need to build", i.detail ? txt(i.detail) : `<p class="muted">No details yet. Tap Edit to add them.</p>`)}
+      ${sec("How to build it", i.plan ? txt(i.plan) : `<p class="muted">No step-by-step plan yet. Tap <b>Open in Claude Code</b> and Claude plans it with you first, or tap <b>Edit</b> and write the steps here.</p>`)}
+      ${i.jeff && i.jeff_note ? sec("Jeff's part", txt(i.jeff_note)) : ""}
+      ${i.note ? sec("Notes", txt(i.note)) : ""}
+      ${sec("Where it came from", `<p>${esc(i.source || "Not recorded")}</p>`)}
+      ${sec("History", `<div class="hist">${(BL.hist[id] || []).map(h => `<div>${esc(new Date(h.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} · ${esc(h.by_name || "")} · ${esc(h.what)}</div>`).join("") || "<div>No changes yet.</div>"}</div>`)}
+      <div class="acts mf">${claimBtns(i)}<button class="btn small" data-editm>Edit</button></div>`}
+  </div>`;
+  const q = s => d.querySelector(s), close = () => { BL.modal = null; d.remove(); document.removeEventListener("keydown", esc_); };
+  const esc_ = e => { if(e.key === "Escape") close(); };
+  document.addEventListener("keydown", esc_);
+  d.onclick = e => { if(e.target === d) close(); };
+  q("[data-x]").onclick = close;
+  const again = async () => { await load(); show(v); openItem(v, id); };
+  if(q("[data-editm]")) q("[data-editm]").onclick = () => openItem(v, id, true);
+  if(q("[data-cancel]")) q("[data-cancel]").onclick = () => openItem(v, id);
+  if(q("[data-save]")) q("[data-save]").onclick = async () => { const f = n => q(`[data-f="${n}"]`).value;
+    const r = await sb.rpc("build_item_save", { p_id:id, p_title:f("title"), p_detail:f("detail"), p_plan:f("plan"), p_desk:f("desk"), p_pri:f("pri"), p_waits:f("waits"), p_note:f("note") });
+    if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
+  if(q("[data-off]")) q("[data-off]").onclick = async () => { if(!confirm("Take this item off the list? (It's kept in the history, not deleted.)")) return;
+    const r = await sb.rpc("build_item_save", { p_id:id, p_off:true }); if(r.error) return alert("Didn't save: " + err(r.error)); close(); await load(); show(v); };
+  wireItem(v, d, i, again);
 }
 const tabsHtml = () => `<div class="tabs"><button class="${BL.tab === "list" ? "on" : ""}" data-tab="list">${ico("list")} Build list</button>
   <button class="${BL.tab === "mine" ? "on" : ""}" data-tab="mine">${ico("me")} I'm on (${BL.rows.filter(i => mine(i) && i.status !== "done").length})</button>
   <button class="${BL.tab === "done" ? "on" : ""}" data-tab="done">${ico("check")} Completed (${BL.rows.filter(i => i.status === "done").length})</button></div>`;
-function wireTabs(v){ v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { BL.tab = b.dataset.tab; BL.q = ""; BL.open = null; show(v); }); }
+function wireTabs(v){ v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { BL.tab = b.dataset.tab; BL.q = ""; show(v); }); }
 const show = v => BL.tab === "done" ? drawDone(v) : draw(v);
 function draw(v){
   const R = BL.rows, c = { todo:0, doing:0, waiting:0, finishing:0, done:0 }; R.forEach(i => c[i.status] = (c[i.status] || 0) + 1);
@@ -208,6 +260,22 @@ async function act(v, fn){
   const r = await fn(); if(r && r.error){ alert("Didn't save: " + err(r.error)); return null; }
   await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); return r;
 }
+// buttons shared by a card and the pop-up; `after` redraws whatever is showing
+function wireItem(v, el, it, after){
+  const id = it.id, b = s => el.querySelector(s);
+  if(b("[data-st]")) b("[data-st]").onchange = async e => { const r = await sb.rpc("build_item_save", { p_id:id, p_status:e.target.value }); if(r.error) alert("Didn't save: " + err(r.error)); after(); };
+  if(b("[data-claim]")) b("[data-claim]").onclick = async () => {
+    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:false }); if(r.error) return alert("Didn't save: " + err(r.error));
+    if(r.data && r.data.ok === false){ if(!confirm(`${(r.data.busy || []).join(" + ")} just took this one. Work on it together?`)) return after();
+      const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return alert("Didn't save: " + err(j.error)); }
+    await copyGo(it); after(); };
+  if(b("[data-join]")) b("[data-join]").onclick = async () => { if(!confirm(`${(it.worker_names || []).join(" + ")} ${it.worker_names.length > 1 ? "are" : "is"} already on this. Work on it together?`)) return;
+    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(r.error) return alert("Didn't save: " + err(r.error)); await copyGo(it); after(); };
+  if(b("[data-rel]")) b("[data-rel]").onclick = async () => { const r = await sb.rpc("build_item_release", { p_id:id }); if(r.error) alert("Didn't save: " + err(r.error)); after(); };
+  if(b("[data-free]")) b("[data-free]").onclick = async () => { if(!confirm(`Take ${it.worker_names.join(" + ")} off this item?`)) return;
+    for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error){ alert("Didn't save: " + err(r.error)); break; } } after(); };
+  if(b("[data-copy]")) b("[data-copy]").onclick = () => copyGo(it);
+}
 function wire(v){
   wireTabs(v); wireFind(v, draw);
   const sel = (id, k) => { const e = v.querySelector(id); if(e) e.onchange = () => { BL[k] = e.value; if(k === "order") try { localStorage.setItem("bl_order", BL.order); } catch(x) {} draw(v); }; };
@@ -220,26 +288,11 @@ function wire(v){
   const fj = v.querySelector("[data-fj]"); if(fj) fj.onclick = () => { BL.fJ = !BL.fJ; draw(v); };
   v.querySelectorAll("[data-fold]").forEach(h => h.onclick = () => { const k = h.dataset.fold; BL.fold[k] = !BL.fold[k]; try { localStorage.setItem("bl_fold", JSON.stringify(BL.fold)); } catch(e) {} draw(v); });
   v.querySelectorAll(".it").forEach(el => {
-    const id = el.dataset.id, it = BL.rows.find(x => x.id === id), b = s => el.querySelector(s);
-    b("[data-st]").onchange = e => act(v, () => sb.rpc("build_item_save", { p_id:id, p_status:e.target.value }));
-    if(b("[data-claim]")) b("[data-claim]").onclick = async () => {
-      const r = await sb.rpc("build_item_claim", { p_id:id, p_together:false }); if(r.error) return alert("Didn't save: " + err(r.error));
-      if(r.data && r.data.ok === false){ if(!confirm(`${(r.data.busy || []).join(" + ")} just took this one. Work on it together?`)){ await load(); return draw(v); }
-        const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return alert("Didn't save: " + err(j.error)); }
-      await copyGo(it); await load(); draw(v); };
-    if(b("[data-join]")) b("[data-join]").onclick = async () => { if(!confirm(`${(it.worker_names || []).join(" + ")} ${it.worker_names.length > 1 ? "are" : "is"} already on this. Work on it together?`)) return;
-      const r = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(r.error) return alert("Didn't save: " + err(r.error)); await copyGo(it); await load(); draw(v); };
-    if(b("[data-rel]")) b("[data-rel]").onclick = () => act(v, () => sb.rpc("build_item_release", { p_id:id }));
-    if(b("[data-free]")) b("[data-free]").onclick = () => { if(confirm(`Take ${it.worker_names.join(" + ")} off this item?`)) act(v, async () => { for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error) return r; } }); };
-    if(b("[data-copy]")) b("[data-copy]").onclick = () => copyGo(it);
-    b("[data-edit]").onclick = () => { BL.open = BL.open === id ? null : id; draw(v); };
-    if(b("[data-hist]")) b("[data-hist]").onclick = async () => {
-      if(BL.hist[id]){ delete BL.hist[id]; return draw(v); }
-      const r = await sb.from("hub_build_log").select("at,by_name,what").eq("item_id", id).order("at", { ascending:false }).limit(30);
-      BL.hist[id] = r.data || []; draw(v); };
-    if(b("[data-save]")) b("[data-save]").onclick = () => { const f = n => b(`[data-f="${n}"]`).value; BL.open = null;
-      act(v, () => sb.rpc("build_item_save", { p_id:id, p_title:f("title"), p_detail:f("detail"), p_desk:f("desk"), p_pri:f("pri"), p_waits:f("waits"), p_note:f("note") })); };
-    if(b("[data-off]")) b("[data-off]").onclick = () => { if(confirm("Take this item off the list? (It's kept in the history, not deleted.)")){ BL.open = null; act(v, () => sb.rpc("build_item_save", { p_id:id, p_off:true })); } };
+    const id = el.dataset.id, it = BL.rows.find(x => x.id === id);
+    el.onclick = e => { if(e.target.closest("button,select,a,input,textarea")) return; openItem(v, id); };
+    el.onkeydown = e => { if((e.key === "Enter" || e.key === " ") && e.target === el){ e.preventDefault(); openItem(v, id); } };
+    el.querySelector("[data-edit]").onclick = () => openItem(v, id);
+    wireItem(v, el, it, async () => { await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); });
   });
   const add = v.querySelector("#bladd"); if(add) add.onsubmit = e => { e.preventDefault(); const g = s => v.querySelector(s).value.trim();
     act(v, () => sb.rpc("build_item_save", { p_id:null, p_title:g("#bla_t"), p_desk:g("#bla_a"), p_pri:g("#bla_p"), p_detail:g("#bla_d"), p_source:g("#bla_s") })); };
@@ -251,7 +304,7 @@ window.buildListView = async function(v){
   // pick up the other person's changes (claims) every minute while the page is open and nobody is typing
   clearInterval(BL.timer); BL.timer = setInterval(async () => {
     if(!document.body.contains(v) || !v.querySelector(".bl")){ clearInterval(BL.timer); return; }
-    if(document.hidden || BL.open || (document.activeElement && document.activeElement.matches("input,textarea,select"))) return;
+    if(document.hidden || BL.modal || (document.activeElement && document.activeElement.matches("input,textarea,select"))) return;
     try { await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); } catch(e) {}
   }, 60000);
 };
