@@ -2,58 +2,86 @@
    working on the same thing at the same time unless we want to"). Sidebar foot ▸ Build list (#/build, desk `build` = admins + Jeff by a
    per-person Show). Loaded by hub.html; uses its sb / $ / esc / ME / niceErr. Data: hub_build_items (RLS hub_can('build')), changes only
    through build_item_save / build_item_claim / build_item_release (hub_build_list.sql); every change in hub_build_log.
-   "I'm on it" puts your name on an item; anyone else sees it taken and has to choose "Work on it together" to join. */
+   "I'm on it" puts your name on an item; anyone else sees it taken and has to choose "Work on it together" to join.
+   Look = the Locks office page (locks-desk.html Homes tab): icon pill tabs, white stat tiles, one filter card of labeled drop-downs,
+   grey uppercase section headings that fold, item cards in a grid. Office-desk width. */
 (function(){
+// Items are filed under the hub's own sidebar desks (Brandon 2026-11-04), in sidebar order; Penny + Whole hub for the rest.
 const AREAS = [
-  ["decide","Waiting on Brandon or Kim"], ["new","New builds"], ["comm","Moving off Slack"], ["quick","Quick fixes"], ["run","Running beautifully"],
-  ["res","Reservations & guests"], ["rev","Reviews"], ["own","Owners, marketing & growth"], ["rates","Rates"], ["maint","Maintenance, vehicles & housekeeping"],
-  ["staff","Staffing, PTO & perks"], ["penny","Penny"], ["homes","Property details, licensing & set up"], ["clean","Data clean-up"], ["idea","Claude's suggestions"]];
+  ["homes","Property Details"], ["vendors","Vendors"], ["calendar","Calendar"], ["maintenance","Maintenance"], ["locks","Locks"], ["housekeeping","Housekeeping"],
+  ["reservations","Reservations"], ["guest","Guest"], ["reviews","Reviews"], ["owners","Owners"], ["rates","Rates"], ["staffing","Staffing"], ["licensing","Licensing"],
+  ["tools","Tools"], ["advertising","Advertising"], ["freshdesk","Freshdesk"], ["lease","Lease"], ["penny","Penny"], ["hub","Whole hub"]];
 const AL = Object.fromEntries(AREAS), AO = Object.fromEntries(AREAS.map(([k], n) => [k, n]));
-const ST = { todo:"To do", doing:"Doing", waiting:"Waiting", done:"Done" }, PRI = { now:"Now", next:"Next", later:"Later" }, PO = { now:0, next:1, later:2 };
-const BL = { tab:"list", rows:null, fS:"open", fP:"all", fA:"all", fW:"all", q:"", order:"area", open:null, hist:{}, timer:null };
-try { BL.order = localStorage.getItem("bl_order") === "pri" ? "pri" : "area"; } catch(e) {}
+// statuses (Brandon 2026-11-04): Queued, Started, Paused, Finishing touches (+ Done); keys stay todo / doing / waiting / finishing / done
+const ST = { todo:"Queued", doing:"Started", waiting:"Paused", finishing:"Finishing touches", done:"Done" }, PRI = { now:"Now", next:"Next", later:"Later" }, PO = { now:0, next:1, later:2 };
+const ORD = [["area", "By desk"], ["pri", "High → low priority"], ["abc", "A → Z"]];
+// Who's on it (Brandon 2026-11-04: "Anyone, Nobody, Brandon, Jeff"): value = the worker name to match
+const WHO = [["all","Anyone"], ["free","Nobody"], ["Brandon Thomas","Brandon"], ["Jeff","Jeff"]];
+const BL = { tab:"list", rows:null, fS:"open", fP:"all", fA:"all", fW:"all", fJ:false, q:"", order:"area", open:null, hist:{}, fold:{}, timer:null };
+try { const o = localStorage.getItem("bl_order"); BL.order = ORD.some(([k]) => k === o) ? o : "area"; BL.fold = JSON.parse(localStorage.getItem("bl_fold") || "{}") || {}; } catch(e) {}
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const fday = s => s ? new Date(s).toLocaleDateString(undefined, { month:"short", day:"numeric" }) : "";
 const meName = () => (typeof ME !== "undefined" && ME && ME.name) || "";
 const mine = r => (r.worker_names || []).includes(meName());
+const first = n => String(n || "").split(" ")[0];
+const SVG = {
+  list:'<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  me:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>' };
+const ico = k => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
 function css(){
   if(document.getElementById("blcss")) return;
   const s = document.createElement("style"); s.id = "blcss";
-  /* Locks office look (Brandon 2026-11-04: "make it look like the office locks page"): forest gradient header with stat tiles,
-     pill tabs, 18px cards with soft shadows, forest-green "on" state - same palette as locks-desk.html / rates.html locksLook */
-  s.textContent = `.bl{--bl-forest:#3c5f12;--bl-forest2:#5b8a1e;--bl-moose:#88B535;--bl-moose2:#A6CE39;--bl-shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06);font-family:"Manrope",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1}
+  s.textContent = `.bl{--bl-forest:#3c5f12;--bl-green:#5b8a1e;--bl-moose:#88B535;--bl-shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06);font-family:"Manrope",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1}
 .page.bl{max-width:min(1800px,100%)}   /* office-desk page (Brandon 2026-11-04: "we can make it wider") */
-.bl .blhead{background:linear-gradient(135deg,var(--bl-forest),var(--bl-forest2));color:#fff;border-radius:18px;padding:16px 18px 14px;box-shadow:0 2px 12px rgba(10,30,20,.18);margin:0 0 12px}
-.bl .blhead h2{margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em;color:#fff} .bl .blhead h2 span{color:var(--bl-moose2)}
-.bl .blhead p{margin:2px 0 12px;color:rgba(255,255,255,.82);font-size:13.5px}
-.bl .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px} .bl .tabs button{border-radius:14px;min-height:38px;padding:8px 16px;font-weight:800;font-size:14px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;box-shadow:none}
-.bl .tabs button.on{background:#fff;border-color:#fff;color:var(--bl-forest)}
-.bl .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:0}
-.bl .tile{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:16px;padding:10px 12px} .bl .tile b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em;color:#fff} .bl .tile span{font-size:12px;color:rgba(255,255,255,.8);font-weight:700}
-.bl .bar{height:8px;background:rgba(255,255,255,.2);border-radius:99px;overflow:hidden;margin:12px 0 0} .bl .bar i{display:block;height:100%;background:var(--bl-moose2)}
-.bl .filt{position:sticky;top:0;z-index:3;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--bl-shadow);padding:10px 12px;display:grid;gap:7px}
-.bl .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center} .bl .lab{font-size:12px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
-.bl .chip{border-radius:11px;min-height:32px;padding:5px 12px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink)} .bl .chip.on{background:var(--bl-forest2);border-color:var(--bl-forest2);color:#fff;font-weight:800}
-.bl input,.bl select,.bl textarea{border-radius:13px} .bl .btn.primary{background:var(--bl-forest2);border-color:var(--bl-forest2);color:#fff;font-weight:800}
-.bl .pill{border-radius:999px;font-weight:800}
-.bl #blq{flex:1;min-width:180px}
-.bl h3{margin:20px 0 4px;font-size:17px} .bl h3 small{font-weight:600;color:var(--muted);font-size:12px;margin-left:6px}
-.bl .it{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;background:var(--card);border:1px solid var(--line);border-left:6px solid #cfd8cb;border-radius:18px;box-shadow:var(--bl-shadow);padding:12px 14px;margin-top:8px}
-.bl .it[data-s="doing"]{border-left-color:#1f6fb2} .bl .it[data-s="waiting"]{border-left-color:#c77700} .bl .it[data-s="done"]{border-left-color:#2e7d32;opacity:.7}
-.bl .it[data-s="done"] .t{text-decoration:line-through}
-.bl .it.taken{background:color-mix(in srgb,#1f6fb2 10%,var(--card));border:2px solid #1f6fb2;border-left-width:6px} .bl .it.me{background:color-mix(in srgb,#2e7d32 12%,var(--card));border:2px solid #2e7d32;border-left-width:6px}
-.bl .flag{grid-column:1/-1;font-weight:800;font-size:13px;color:#fff;background:#1f6fb2;border-radius:8px;padding:4px 10px;width:max-content;max-width:100%} .bl .flag.me{background:#2e7d32}
-.bl table.done{width:100%;border-collapse:collapse} .bl .done td,.bl .done th{padding:6px;border-top:1px solid var(--line);text-align:left;vertical-align:top;font-size:13.5px}
-.bl .t{font-weight:700} .bl .d{font-size:14px;color:var(--ink-2);margin-top:2px;white-space:pre-wrap}
-.bl .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12px;color:var(--muted)}
-.bl .who{font-weight:700;color:#1f6fb2} .bl .who.me{color:#2e7d32}
-.bl .note{margin-top:6px;font-size:13px;background:var(--moose-soft);border-radius:8px;padding:6px 8px;white-space:pre-wrap}
-.bl .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px} .bl .acts .btn{min-height:30px;font-size:13px}
-.bl .ed{display:grid;gap:6px;margin-top:8px} .bl .ed .row > *{flex:1;min-width:140px} .bl textarea{width:100%;min-height:70px}
-.bl .hist{margin-top:6px;font-size:12.5px;color:var(--muted)} .bl .hist div{padding:2px 0;border-top:1px solid var(--line)}
-.bl .add{margin-top:24px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:8px}
-.bl .add .row > *{flex:1;min-width:150px}
-@media (max-width:620px){.bl .it{grid-template-columns:1fr}}`;
+.bl .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.bl .tabs button{display:inline-flex;align-items:center;gap:8px;border-radius:14px;min-height:42px;padding:9px 16px 9px 12px;font-weight:800;font-size:14.5px;background:var(--card);border:1px solid var(--line);color:var(--ink);box-shadow:var(--bl-shadow)}
+.bl .tabs button.on{background:var(--bl-green);border-color:var(--bl-green);color:#fff}
+.bl .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 12px}
+.bl .tile{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--bl-shadow);padding:12px 14px} .bl .tile b{display:block;font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.1} .bl .tile b small{font-size:15px;color:var(--muted);font-weight:700}
+.bl .tile span{font-size:13px;color:var(--ink-2);font-weight:600}
+.bl .bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin:8px 0 0} .bl .bar i{display:block;height:100%;background:var(--bl-moose)}
+.bl .filt{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--bl-shadow);padding:12px 16px;display:grid;gap:10px;margin:0 0 6px}
+.bl .fr{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:center} .bl .fr > select{max-width:260px}
+.bl .fr .lab{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.bl .fr:last-child{display:flex} .bl .fr:last-child .lab{width:120px}
+.bl .filt label{display:grid;gap:4px;font-size:13.5px;font-weight:700;color:var(--ink)} .bl .filt label.wide{grid-column:span 2}
+.bl .filt select,.bl .filt input{border-radius:13px;min-height:44px;font-size:15px;padding:0 12px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
+.bl .seg{display:flex;gap:6px;flex-wrap:wrap} .bl .seg button{border-radius:11px;min-height:38px;padding:6px 14px;font-weight:700;font-size:14px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
+.bl .seg button.on{background:var(--bl-green);border-color:var(--bl-green);color:#fff;font-weight:800}
+.bl .sech{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:20px 0 8px;padding:0 2px 6px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+.bl .sech b{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)} .bl .sech b span{font-weight:700}
+.bl .sech i{font-style:normal;color:var(--muted);font-size:14px;transition:transform .15s} .bl .sech.shut i{transform:rotate(180deg)}
+.bl .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px}
+.bl .it{position:relative;background:var(--card);border:1px solid var(--line);border-left:6px solid #cfd8cb;border-radius:18px;box-shadow:var(--bl-shadow);padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.bl .it.p-now{border-left-color:#c8382b} .bl .it.p-next{border-left-color:#b5770a} .bl .it.p-later{border-left-color:var(--bl-moose)}
+.bl .it.open{grid-column:1/-1}
+.bl .it[data-s="done"]{opacity:.7} .bl .it[data-s="done"] .t{text-decoration:line-through}
+.bl .it.taken{background:color-mix(in srgb,#1f6fb2 7%,var(--card));border:2px solid #1f6fb2;border-left-width:6px} .bl .it.me{background:color-mix(in srgb,#5b8a1e 9%,var(--card));border:2px solid var(--bl-green);border-left-width:6px}
+.bl .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.bl .t{font-weight:800;font-size:17px;letter-spacing:-.01em;line-height:1.25}
+.bl .sub{font-size:13.5px;color:var(--ink-2)}
+.bl .d{font-size:14px;color:var(--ink-2);white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden} .bl .it.open .d{display:block}
+.bl .st{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-weight:800;font-size:12.5px;white-space:nowrap}
+.bl .st:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.bl .st.todo{background:#eef1ea;color:#5d6b55} .bl .st.doing{background:#e2eef9;color:#1f6fb2} .bl .st.waiting{background:#fbf0d9;color:#b5770a} .bl .st.done{background:#e2f2e3;color:#2e7d32} .bl .st.finishing{background:#efe6fa;color:#6a3fb5}
+.bl .st.who{background:#1f6fb2;color:#fff} .bl .st.who.me{background:var(--bl-green)}
+.bl .chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.bl .chip{border:1px solid var(--line);border-radius:10px;padding:2px 9px;font-size:12.5px;font-weight:700;background:var(--card)}
+.bl .chip.now{border-color:#f0c4bf;color:#c8382b} .bl .chip.wait{border-color:#f0d9a8;color:#b5770a} .bl .chip.jeff{border-color:#cfe2b0;color:var(--bl-forest)}
+.bl .src{font-size:12px;color:var(--muted)}
+.bl .note{font-size:13px;background:var(--moose-soft,#eef5e0);border-radius:10px;padding:6px 9px;white-space:pre-wrap}
+.bl .acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:auto;padding-top:6px}
+.bl .acts .btn{min-height:34px;font-size:13px;border-radius:11px} .bl .acts select{min-height:34px;border-radius:11px;font-size:13px;padding:0 8px}
+.bl .btn.primary{background:var(--bl-green);border-color:var(--bl-green);color:#fff;font-weight:800}
+.bl .ed{display:grid;gap:8px;margin-top:6px} .bl .ed .r{display:flex;gap:8px;flex-wrap:wrap} .bl .ed .r > *{flex:1;min-width:160px}
+.bl .ed input,.bl .ed select,.bl .ed textarea{border-radius:12px} .bl textarea{width:100%;min-height:80px}
+.bl .hist{font-size:12.5px;color:var(--muted)} .bl .hist div{padding:3px 0;border-top:1px solid var(--line)}
+.bl .add{margin-top:24px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--bl-shadow);padding:14px 16px;display:grid;gap:8px}
+.bl .add .r{display:flex;gap:8px;flex-wrap:wrap} .bl .add .r > *{flex:1;min-width:160px} .bl .add input,.bl .add select{border-radius:12px;min-height:42px}
+.bl table.done{width:100%;border-collapse:collapse} .bl .done td,.bl .done th{padding:8px;border-top:1px solid var(--line);text-align:left;vertical-align:top;font-size:14px}
+.bl .card.tbl{border-radius:18px;box-shadow:var(--bl-shadow);overflow-x:auto}
+@media (max-width:700px){.bl .grid{grid-template-columns:1fr} .bl .fr{grid-template-columns:1fr}}`;
   document.head.appendChild(s);
 }
 async function load(){
@@ -72,78 +100,103 @@ const RULES = `House rules (Moose Hub):
 const prompt = i => {
   const head = `Moose Hub build list item "${i.id}": ${i.title}\n${i.detail || ""}${i.note ? "\nOur note: " + i.note : ""}${i.jeff_note ? "\nFor Jeff: " + i.jeff_note : ""}\nWhere it came from: ${i.source || "build list"}\nBuild list: https://crew.moosemanagement.com/#/build (item ${i.id})`;
   if(typeof ME !== "undefined" && ME && ME.admin) return head + `\n\nRead CLAUDE.md first. Plan it, ask me anything you need, then build it. When it's done, set this item to Done on the hub's Build list (table hub_build_items, id ${i.id}) and add a line to CLAUDE.md.`;
-  return head + `\n\nI'm ${meName() || "on the Moose Management team"} and I'm working on this item with Brandon. You (Claude) can't change the live hub or its database from here; your job is to help me get it ready.\n${RULES}\n\nHow we work:\n1. Plan it with me step by step and ask me what you need. If it needs data from Track, Freshdesk, Key Data etc., tell me what to pull and where.\n2. Write the finished piece: the text, the exact steps, or the code with a short note on where it goes.\n3. Write a short summary for Brandon: what it is, what it changes, and anything he must decide.\n4. I send it to Brandon from the hub (Report a Bug / Upgrade, "Upgrade I want", mention item ${i.id}). For Launch Pad code: Launch Pad > </> Code.\n5. I set the item to Waiting (on Brandon) on the Build list.`;
+  return head + `\n\nI'm ${meName() || "on the Moose Management team"} and I'm working on this item with Brandon. You (Claude) can't change the live hub or its database from here; your job is to help me get it ready.\n${RULES}\n\nHow we work:\n1. Plan it with me step by step and ask me what you need. If it needs data from Track, Freshdesk, Key Data etc., tell me what to pull and where.\n2. Write the finished piece: the text, the exact steps, or the code with a short note on where it goes.\n3. Write a short summary for Brandon: what it is, what it changes, and anything he must decide.\n4. I send it to Brandon from the hub (Report a Bug / Upgrade, "Upgrade I want", mention item ${i.id}). For Launch Pad code: Launch Pad > </> Code.\n5. I set the item to Finishing touches on the Build list and put "waiting on Brandon" in its note.`;
 };
 function shownRows(){
-  const q = BL.q.toLowerCase(), me = meName();
+  const q = BL.q.toLowerCase();
   return BL.rows.filter(i => (BL.fS === "all" || (BL.fS === "open" ? i.status !== "done" : i.status === BL.fS))
-    && (BL.fP === "all" || i.pri === BL.fP) && (BL.fA === "all" || i.area === BL.fA)
-    && (BL.fW === "all" || (BL.fW === "free" ? !(i.worker_names || []).length : BL.fW === "jeffc" ? i.jeff : (i.worker_names || []).includes(BL.fW === "me" ? me : BL.fW)))
+    && (BL.fP === "all" || i.pri === BL.fP) && (BL.fA === "all" || i.desk === BL.fA) && (!BL.fJ || i.jeff)
+    && (BL.fW === "all" || (BL.fW === "free" ? !(i.worker_names || []).length : (i.worker_names || []).includes(BL.fW)))
     && (!q || [i.title, i.detail, i.source, i.waits, i.note, i.id, (i.worker_names || []).join(" ")].join(" ").toLowerCase().includes(q)));
 }
 function itemHtml(i){
-  const w = i.worker_names || [], isMe = w.includes(meName()), others = w.filter(n => n !== meName()), s = i.status;
-  const who = w.length ? `<span class="who${isMe ? " me" : ""}">🔨 ${isMe ? (others.length ? "You + " + esc(others.join(", ")) : "You're on it") : esc(w.join(" + ")) + (w.length > 1 ? " are" : " is") + " on it"}${i.claimed_at ? " since " + esc(fday(i.claimed_at)) : ""}</span>` : "";
-  const open = BL.open === i.id;
-  return `<div class="it${isMe ? " me" : w.length ? " taken" : ""}" data-s="${s}" data-id="${esc(i.id)}">${w.length && s !== "done" ? `<div class="flag${isMe ? " me" : ""}">🔨 ${isMe ? "You're working on this" + (others.length ? " with " + esc(others.join(", ")) : "") : esc(w.join(" + ")) + (w.length > 1 ? " are" : " is") + " working on this"}</div>` : ""}
-    <div><select data-st aria-label="Status">${Object.entries(ST).map(([v, l]) => `<option value="${v}"${v === s ? " selected" : ""}>${l}</option>`).join("")}</select></div>
-    <div style="min-width:0"><div class="t">${esc(i.title)}</div>${i.detail ? `<div class="d">${esc(i.detail)}</div>` : ""}
-      <div class="meta">${who}${BL.order === "pri" ? `<span class="pill">${esc(AL[i.area] || i.area)}</span>` : ""}<span class="pill ${i.pri === "now" ? "red" : i.pri === "next" ? "blue" : "green"}">${PRI[i.pri] || "Next"}</span>
-        ${i.waits ? `<span class="pill amber">Waiting on ${esc(i.waits)}</span>` : ""}${i.jeff ? `<span class="pill green">Jeff could build</span>` : ""}
-        ${i.source ? `<span>Source: ${esc(i.source)}</span>` : ""}${i.updated_by ? `<span>· ${esc(i.updated_by)} ${esc(fday(i.updated_at))}</span>` : ""}</div>
-      ${i.jeff && i.jeff_note ? `<div class="d"><b>For Jeff:</b> ${esc(i.jeff_note)}</div>` : ""}
-      ${i.note && !open ? `<div class="note">${esc(i.note)}</div>` : ""}
-      ${s !== "done" ? `<div class="acts">${!w.length ? `<button class="btn small primary" data-claim>🔨 I'm on it</button>` : isMe ? `<button class="btn small" data-rel>Step off</button>` : `<button class="btn small" data-join>Work on it together</button>`}
-        ${!isMe && w.length && ME && ME.admin ? `<button class="btn small" data-free>Free it</button>` : ""}
-        <button class="btn small" data-copy>Open in Claude Code</button><button class="btn small" data-edit>${open ? "Close" : "Edit / note"}</button><button class="btn small" data-hist>History</button></div>`
-        : `<div class="acts"><button class="btn small" data-hist>History</button></div>`}
-      ${open ? `<div class="ed"><input data-f="title" value="${esc(i.title)}" maxlength="200" aria-label="Title"><textarea data-f="detail" aria-label="Details">${esc(i.detail)}</textarea>
-        <div class="row"><select data-f="area" aria-label="Desk">${AREAS.map(([k, l]) => `<option value="${k}"${k === i.area ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
-          <select data-f="pri" aria-label="Priority">${Object.entries(PRI).map(([k, l]) => `<option value="${k}"${k === i.pri ? " selected" : ""}>${l}</option>`).join("")}</select>
-          <input data-f="waits" value="${esc(i.waits)}" placeholder="Waiting on (optional)" maxlength="60"></div>
-        <textarea data-f="note" placeholder="Note (what was done, what's left)">${esc(i.note)}</textarea>
-        <div class="row"><button class="btn small primary" data-save style="flex:0">Save</button><button class="btn small" data-off style="flex:0">Remove from the list</button></div></div>` : ""}
-      ${BL.hist[i.id] ? `<div class="hist">${BL.hist[i.id].map(h => `<div>${esc(new Date(h.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} · ${esc(h.by_name || "")} · ${esc(h.what)}</div>`).join("") || "<div>No changes yet.</div>"}</div>` : ""}
-    </div></div>`;
+  const w = i.worker_names || [], isMe = w.includes(meName()), others = w.filter(n => n !== meName()), s = i.status, open = BL.open === i.id;
+  const badge = w.length && s !== "done"
+    ? `<span class="st who${isMe ? " me" : ""}">🔨 ${isMe ? "You" + (others.length ? " + " + esc(others.map(first).join(", ")) : "") : esc(w.map(first).join(" + "))}</span>`
+    : `<span class="st ${s}">${ST[s] || s}</span>`;
+  return `<div class="it p-${esc(i.pri || "next")}${isMe ? " me" : w.length ? " taken" : ""}${open ? " open" : ""}" data-s="${s}" data-id="${esc(i.id)}">
+    <div class="top"><div style="min-width:0"><div class="t">${esc(i.title)}</div>
+      <div class="sub">${esc(AL[i.desk] || i.desk)}${w.length && s !== "done" ? ` · <b>${isMe ? "you're on it" : esc(w.map(first).join(" + ")) + (w.length > 1 ? " are" : " is") + " on it"}</b>${i.claimed_at ? " since " + esc(fday(i.claimed_at)) : ""}` : ""}</div></div>${badge}</div>
+    ${i.detail ? `<div class="d">${esc(i.detail)}</div>` : ""}
+    <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.jeff ? `<span class="chip jeff">Jeff could build</span>` : ""}</div>
+    ${open && i.jeff && i.jeff_note ? `<div class="sub"><b>For Jeff:</b> ${esc(i.jeff_note)}</div>` : ""}
+    ${i.note && !open ? `<div class="note">${esc(i.note)}</div>` : ""}
+    ${open ? `<div class="src">Source: ${esc(i.source || "")}${i.updated_by ? ` · last change ${esc(i.updated_by)} ${esc(fday(i.updated_at))}` : ""}</div>` : ""}
+    <div class="acts">${s !== "done" ? (!w.length ? `<button class="btn small primary" data-claim>🔨 I'm on it</button>` : isMe ? `<button class="btn small" data-rel>Step off</button>` : `<button class="btn small" data-join>Work on it together</button>`) : ""}
+      ${s !== "done" && !isMe && w.length && ME && ME.admin ? `<button class="btn small" data-free>Free it</button>` : ""}
+      ${s !== "done" ? `<button class="btn small" data-copy>Open in Claude Code</button>` : ""}
+      <select data-st aria-label="Status">${Object.entries(ST).map(([v, l]) => `<option value="${v}"${v === s ? " selected" : ""}>${l}</option>`).join("")}</select>
+      <button class="btn small" data-edit>${open ? "Close" : "Open"}</button></div>
+    ${open ? `<div class="ed"><input data-f="title" value="${esc(i.title)}" maxlength="200" aria-label="Title"><textarea data-f="detail" aria-label="Details">${esc(i.detail)}</textarea>
+      <div class="r"><select data-f="desk" aria-label="Desk">${AREAS.map(([k, l]) => `<option value="${k}"${k === i.desk ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+        <select data-f="pri" aria-label="Priority">${Object.entries(PRI).map(([k, l]) => `<option value="${k}"${k === i.pri ? " selected" : ""}>${l}</option>`).join("")}</select>
+        <input data-f="waits" value="${esc(i.waits)}" placeholder="Waiting on (optional)" maxlength="60"></div>
+      <textarea data-f="note" placeholder="Note (what was done, what's left)">${esc(i.note)}</textarea>
+      <div class="r" style="justify-content:flex-start"><button class="btn small primary" data-save style="flex:0">Save</button><button class="btn small" data-hist style="flex:0">${BL.hist[i.id] ? "Hide history" : "History"}</button><button class="btn small" data-off style="flex:0">Remove from the list</button></div>
+      ${BL.hist[i.id] ? `<div class="hist">${BL.hist[i.id].map(h => `<div>${esc(new Date(h.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} · ${esc(h.by_name || "")} · ${esc(h.what)}</div>`).join("") || "<div>No changes yet.</div>"}</div>` : ""}</div>` : ""}
+  </div>`;
 }
+const tabsHtml = () => `<div class="tabs"><button class="${BL.tab === "list" ? "on" : ""}" data-tab="list">${ico("list")} Build list</button>
+  <button class="${BL.tab === "mine" ? "on" : ""}" data-tab="mine">${ico("me")} I'm on (${BL.rows.filter(i => mine(i) && i.status !== "done").length})</button>
+  <button class="${BL.tab === "done" ? "on" : ""}" data-tab="done">${ico("check")} Completed (${BL.rows.filter(i => i.status === "done").length})</button></div>`;
+function wireTabs(v){ v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { BL.tab = b.dataset.tab; BL.q = ""; BL.open = null; show(v); }); }
+const show = v => BL.tab === "done" ? drawDone(v) : draw(v);
 function draw(v){
-  const R = BL.rows, c = { todo:0, doing:0, waiting:0, done:0 }; R.forEach(i => c[i.status] = (c[i.status] || 0) + 1);
-  const me = meName(), names = [...new Set(R.flatMap(i => i.worker_names || []))].filter(n => n !== me).sort();
-  const chip = (attr, val, cur, label) => `<button class="chip${cur === val ? " on" : ""}" ${attr}="${esc(val)}">${label}</button>`;
-  const rows = shownRows();
-  const groups = BL.order === "pri"
-    ? Object.keys(PRI).map(p => [{ now:"Now (high priority)", next:"Next", later:"Later (low priority)" }[p], i => i.pri === p, (a, b) => (AO[a.area] ?? 99) - (AO[b.area] ?? 99) || a.sort - b.sort])
-    : AREAS.map(([k, l]) => [l, i => i.area === k, (a, b) => (PO[a.pri] ?? 1) - (PO[b.pri] ?? 1) || a.sort - b.sort]);
+  const R = BL.rows, c = { todo:0, doing:0, waiting:0, finishing:0, done:0 }; R.forEach(i => c[i.status] = (c[i.status] || 0) + 1);
+  const openN = R.length - (c.done || 0), inNow = R.filter(i => (i.worker_names || []).length && i.status !== "done").length;
+  const rows = BL.tab === "mine" ? R.filter(i => mine(i) && i.status !== "done") : shownRows();
+  const groups = BL.order === "abc" ? [["abc", "A → Z", () => true, (a, b) => String(a.title).localeCompare(String(b.title))]]
+    : BL.order === "pri"
+    ? Object.keys(PRI).map(p => [ "p:" + p, { now:"Now (high priority)", next:"Next", later:"Later (low priority)" }[p], i => i.pri === p, (a, b) => (AO[a.desk] ?? 99) - (AO[b.desk] ?? 99) || a.sort - b.sort])
+    : AREAS.map(([k, l]) => [k, l, i => i.desk === k, (a, b) => (PO[a.pri] ?? 1) - (PO[b.pri] ?? 1) || a.sort - b.sort]);
   let list = "";
-  for(const [label, inG, ord] of groups){
+  for(const [gk, label, inG, ord] of groups){
     const g = rows.filter(inG).sort(ord); if(!g.length) continue;
-    const all = R.filter(inG), dn = all.filter(i => i.status === "done").length;
-    list += `<h3>${esc(label)}<small>${dn} of ${all.length} done</small></h3>` + g.map(itemHtml).join("");
+    const shut = !!BL.fold[gk] && !BL.q;
+    list += `<div class="sech${shut ? " shut" : ""}" data-fold="${esc(gk)}"><b>${esc(label)} <span>· ${g.length} ${g.length === 1 ? "item" : "items"}</span></b><i>⌃</i></div>${shut ? "" : `<div class="grid">${g.map(itemHtml).join("")}</div>`}`;
   }
-  v.innerHTML = `<div class="page bl">${headHtml(`<div class="tiles"><div class="tile"><b>${R.length}</b><span>Items</span></div>${Object.entries(ST).map(([k, l]) => `<div class="tile"><b>${c[k] || 0}</b><span>${l}</span></div>`).join("")}
-      <div class="tile"><b>${R.filter(mine).length}</b><span>You're on</span></div></div>
-    <div class="bar"><i style="width:${R.length ? (c.done || 0) / R.length * 100 : 0}%"></i></div>`)}
-    <div class="filt">
-      <div class="row"><span class="lab">Status</span>${chip("data-fs", "open", BL.fS, "Not done")}${chip("data-fs", "all", BL.fS, "All")}${Object.entries(ST).map(([k, l]) => chip("data-fs", k, BL.fS, l)).join("")}
-        <span class="lab" style="margin-left:8px">Priority</span>${chip("data-fp", "all", BL.fP, "Any")}${Object.entries(PRI).map(([k, l]) => chip("data-fp", k, BL.fP, l)).join("")}</div>
-      <div class="row"><span class="lab">Who's on it</span>${chip("data-fw", "all", BL.fW, "Anyone")}${chip("data-fw", "free", BL.fW, "Nobody yet")}${chip("data-fw", "me", BL.fW, "Me")}${names.map(n => chip("data-fw", n, BL.fW, esc(n))).join("")}${chip("data-fw", "jeffc", BL.fW, "Jeff could build")}</div>
-      <div class="row"><span class="lab">Desk</span>${chip("data-fa", "all", BL.fA, "All desks")}${AREAS.map(([k, l]) => chip("data-fa", k, BL.fA, `${esc(l)} (${R.filter(i => i.area === k && i.status !== "done").length})`)).join("")}</div>
-      <div class="row"><input id="blq" type="search" placeholder="Search (e.g. Track, Penny, Chris)" value="${esc(BL.q)}" aria-label="Search the list">
-        <span class="lab">Order</span>${chip("data-ord", "area", BL.order, "By desk")}${chip("data-ord", "pri", BL.order, "High → low priority")}<button class="chip" id="blref">↻</button></div>
-    </div>
-    ${list || `<div class="card" style="margin-top:12px"><p class="muted" style="margin:0">Nothing matches these filters.</p></div>`}
-    <form class="add" id="bladd"><b>Add an item</b>
-      <div class="row"><input id="bla_t" placeholder="What needs doing" maxlength="200" required><select id="bla_a" aria-label="Desk">${AREAS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select>
+  const opt = (cur, pairs) => pairs.map(([k, l]) => `<option value="${esc(k)}"${cur === k ? " selected" : ""}>${esc(l)}</option>`).join("");
+  v.innerHTML = `<div class="page bl">${tabsHtml()}
+    <div class="tiles"><div class="tile"><b>${openN}<small>/${R.length}</small></b><span>Still to do</span><div class="bar"><i style="width:${R.length ? (c.done || 0) / R.length * 100 : 0}%"></i></div></div>
+      <div class="tile"><b>${R.filter(i => i.pri === "now" && i.status !== "done").length}</b><span>Now (high priority)</span></div>
+      <div class="tile"><b>${inNow}</b><span>Being worked on</span></div><div class="tile"><b>${c.waiting || 0}</b><span>Paused</span></div><div class="tile"><b>${c.finishing || 0}</b><span>Finishing touches</span></div>
+      <div class="tile"><b>${c.done || 0}</b><span>Done</span></div></div>
+    ${BL.tab === "mine" ? "" : `<div class="filt">
+      <div class="fr"><span class="lab">Find</span><input id="blq" type="search" placeholder="Search (e.g. Track, Penny, Chris)" value="${esc(BL.q)}"></div>
+      <div class="fr"><span class="lab">Status</span><div class="seg">${[["open", "Not done"], ["all", "All"], ...Object.entries(ST)].map(([k, l]) => `<button type="button" class="${BL.fS === k ? "on" : ""}" data-fs="${k}">${l}</button>`).join("")}</div></div>
+      <div class="fr"><span class="lab">Priority</span><div class="seg">${[["all", "Any"], ...Object.entries(PRI)].map(([k, l]) => `<button type="button" class="${BL.fP === k ? "on" : ""}" data-fp="${k}">${l}</button>`).join("")}</div></div>
+      <div class="fr"><span class="lab">Who's on it</span><div class="seg">${WHO.map(([k, l]) => `<button type="button" class="${BL.fW === k ? "on" : ""}" data-fw="${esc(k)}">${l}</button>`).join("")}<button type="button" class="${BL.fJ ? "on" : ""}" data-fj>Jeff could build</button></div></div>
+      <div class="fr"><span class="lab">Desk</span><div class="seg">${[["all", "All desks"], ...AREAS].map(([k, l]) => { const n = k === "all" ? 0 : R.filter(i => i.desk === k && i.status !== "done").length; return k !== "all" && !n ? "" : `<button type="button" class="${BL.fA === k ? "on" : ""}" data-fa="${k}">${esc(l)}${k === "all" ? "" : ` (${n})`}</button>`; }).join("")}</div></div>
+      <div class="fr"><span class="lab">Order</span><select id="bl_o">${opt(BL.order, ORD)}</select><button type="button" class="chip" id="blref" title="Refresh">↻</button></div></div>`}
+    ${list || `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${BL.tab === "mine" ? "You're not on anything right now. Pick an item on Build list and tap \"I'm on it\"." : "Nothing matches these filters."}</p></div>`}
+    ${BL.tab === "list" ? `<form class="add" id="bladd"><b>Add an item</b>
+      <div class="r"><input id="bla_t" placeholder="What needs doing" maxlength="200" required><select id="bla_a" aria-label="Desk">${AREAS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select>
         <select id="bla_p" aria-label="Priority"><option value="now">Now</option><option value="next" selected>Next</option><option value="later">Later</option></select></div>
-      <div class="row"><input id="bla_d" placeholder="Details (optional)" maxlength="2000"><input id="bla_s" placeholder="Where it came from (source)" maxlength="300"><button class="btn primary" type="submit" style="flex:0">Add</button></div></form>
+      <div class="r"><input id="bla_d" placeholder="Details (optional)" maxlength="2000"><input id="bla_s" placeholder="Where it came from (source)" maxlength="300"><button class="btn primary" type="submit" style="flex:0">Add</button></div></form>` : ""}
   </div>`;
   wire(v);
+}
+// Completed tab (Brandon 2026-11-04: "a history tab for the ones we completed"): newest first, who finished it (done_at / done_by)
+function drawDone(v){
+  const R = BL.rows.filter(i => i.status === "done").sort((a, b) => String(b.done_at || "").localeCompare(String(a.done_at || "")));
+  const q = BL.q.toLowerCase(), rows = R.filter(i => !q || [i.title, i.detail, i.note, i.done_by].join(" ").toLowerCase().includes(q));
+  const wk = R.filter(i => i.done_at && Date.now() - new Date(i.done_at) < 7 * 864e5).length;
+  v.innerHTML = `<div class="page bl">${tabsHtml()}
+    <div class="tiles"><div class="tile"><b>${R.length}</b><span>Finished</span></div><div class="tile"><b>${wk}</b><span>Finished this week</span></div></div>
+    <div class="filt"><label class="wide">Find<input id="blq" type="search" placeholder="Search finished items" value="${esc(BL.q)}"></label></div>
+    <div class="card tbl"><table class="done"><tr><th>Finished</th><th>Item</th><th>Desk</th><th>By</th></tr>
+    ${rows.map(i => `<tr><td style="white-space:nowrap">${esc(fday(i.done_at))}</td><td><b>${esc(i.title)}</b>${i.note ? `<div class="muted">${esc(i.note)}</div>` : ""}</td><td>${esc(AL[i.desk] || i.desk)}</td><td>${esc(i.done_by || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nothing finished yet.</td></tr>`}</table></div></div>`;
+  wireTabs(v); wireFind(v, drawDone);
+}
+function wireFind(v, redraw){
+  const q = v.querySelector("#blq"); if(!q) return;
+  q.oninput = () => { BL.q = q.value; clearTimeout(BL.qt); BL.qt = setTimeout(() => { redraw(v); const n = v.querySelector("#blq"); if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 250); };
 }
 // "I'm on it" and "Open in Claude Code" copy the item's prompt and say where to paste it.
 async function copyGo(it){
   const t = prompt(it); let ok = false; try { await navigator.clipboard.writeText(t); ok = true; } catch(e) {}
   const d = document.createElement("div");
-  d.innerHTML = `<div class="card" style="max-width:640px;margin:8vh auto;padding:16px"><b>${ok ? "Copied ✓ - now open Claude Code and paste" : "Copy this into Claude Code"}</b>
+  d.innerHTML = `<div class="card" style="max-width:640px;margin:8vh auto;padding:16px;border-radius:18px"><b>${ok ? "Copied ✓ - now open Claude Code and paste" : "Copy this into Claude Code"}</b>
     <p class="muted" style="margin:6px 0 8px">${ME && ME.admin ? "Open the Claude app (Code tab) in the maintenance_desk folder, start a new session and paste." : "Open Claude Code (or a new chat in your Claude project), start a new session and paste. It tells Claude the house rules and how to send the finished work to Brandon."}</p>
     <textarea readonly style="width:100%;min-height:200px;font-size:12.5px">${esc(t)}</textarea>
     <div style="text-align:right;margin-top:8px"><button class="btn primary" data-x>Done</button></div></div>`;
@@ -151,34 +204,21 @@ async function copyGo(it){
   d.onclick = e => { if(e.target === d || e.target.hasAttribute("data-x")) d.remove(); };
   document.body.appendChild(d); if(!ok){ const ta = d.querySelector("textarea"); ta.focus(); ta.select(); }
 }
-// Completed tab (Brandon 2026-11-04: "a history tab for the ones we completed"): newest first, who finished it (done_at / done_by)
-function drawDone(v){
-  const R = BL.rows.filter(i => i.status === "done").sort((a, b) => String(b.done_at || "").localeCompare(String(a.done_at || "")));
-  const q = BL.q.toLowerCase(), rows = R.filter(i => !q || [i.title, i.detail, i.note, i.done_by].join(" ").toLowerCase().includes(q));
-  v.innerHTML = `<div class="page bl">${headHtml(`<div class="tiles"><div class="tile"><b>${R.length}</b><span>Finished</span></div><div class="tile"><b>${R.filter(i => i.done_at && Date.now() - new Date(i.done_at) < 7 * 864e5).length}</b><span>This week</span></div></div>`)}
-    <div class="row" style="margin-bottom:8px"><input id="blq" type="search" placeholder="Search finished items" value="${esc(BL.q)}" aria-label="Search finished items"></div>
-    <div class="card" style="overflow-x:auto"><table class="done"><tr><th>Finished</th><th>Item</th><th>Desk</th><th>By</th></tr>
-    ${rows.map(i => `<tr><td style="white-space:nowrap">${esc(fday(i.done_at))}</td><td><b>${esc(i.title)}</b>${i.note ? `<div class="muted">${esc(i.note)}</div>` : ""}</td><td>${esc(AL[i.area] || i.area)}</td><td>${esc(i.done_by || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nothing finished yet.</td></tr>`}</table></div></div>`;
-  wireTabs(v);
-  const qq = v.querySelector("#blq"); qq.oninput = () => { BL.q = qq.value; clearTimeout(BL.qt); BL.qt = setTimeout(() => { drawDone(v); const n = v.querySelector("#blq"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
-}
-const headHtml = inner => `<div class="blhead"><h2>Moose Hub <span>build list</span></h2><p>Everything still to build, decide or clean up. Say "I'm on it" so nobody doubles up.</p>${tabsHtml()}${inner}</div>`;
-const tabsHtml = () => `<div class="tabs"><button class="${BL.tab === "list" ? "on" : ""}" data-tab="list">Build list</button><button class="${BL.tab === "done" ? "on" : ""}" data-tab="done">Completed (${BL.rows.filter(i => i.status === "done").length})</button></div>`;
-function wireTabs(v){ v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { BL.tab = b.dataset.tab; BL.q = ""; show(v); }); }
-const show = v => BL.tab === "done" ? drawDone(v) : draw(v);
-async function act(v, fn, okMsg){
+async function act(v, fn){
   const r = await fn(); if(r && r.error){ alert("Didn't save: " + err(r.error)); return null; }
-  await load(); const y = window.scrollY; draw(v); window.scrollTo(0, y); return r;
+  await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); return r;
 }
 function wire(v){
-  wireTabs(v);
+  wireTabs(v); wireFind(v, draw);
+  const sel = (id, k) => { const e = v.querySelector(id); if(e) e.onchange = () => { BL[k] = e.value; if(k === "order") try { localStorage.setItem("bl_order", BL.order); } catch(x) {} draw(v); }; };
+  sel("#bl_o", "order");
   v.querySelectorAll("[data-fs]").forEach(b => b.onclick = () => { BL.fS = b.dataset.fs; draw(v); });
   v.querySelectorAll("[data-fp]").forEach(b => b.onclick = () => { BL.fP = b.dataset.fp; draw(v); });
   v.querySelectorAll("[data-fa]").forEach(b => b.onclick = () => { BL.fA = b.dataset.fa; draw(v); });
+  const rf = v.querySelector("#blref"); if(rf) rf.onclick = async () => { await load(); draw(v); };
   v.querySelectorAll("[data-fw]").forEach(b => b.onclick = () => { BL.fW = b.dataset.fw; draw(v); });
-  v.querySelectorAll("[data-ord]").forEach(b => b.onclick = () => { BL.order = b.dataset.ord; try { localStorage.setItem("bl_order", BL.order); } catch(e) {} draw(v); });
-  const q = v.querySelector("#blq"); q.oninput = () => { BL.q = q.value; clearTimeout(BL.qt); BL.qt = setTimeout(() => { draw(v); const n = v.querySelector("#blq"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
-  v.querySelector("#blref").onclick = async () => { await load(); draw(v); };
+  const fj = v.querySelector("[data-fj]"); if(fj) fj.onclick = () => { BL.fJ = !BL.fJ; draw(v); };
+  v.querySelectorAll("[data-fold]").forEach(h => h.onclick = () => { const k = h.dataset.fold; BL.fold[k] = !BL.fold[k]; try { localStorage.setItem("bl_fold", JSON.stringify(BL.fold)); } catch(e) {} draw(v); });
   v.querySelectorAll(".it").forEach(el => {
     const id = el.dataset.id, it = BL.rows.find(x => x.id === id), b = s => el.querySelector(s);
     b("[data-st]").onchange = e => act(v, () => sb.rpc("build_item_save", { p_id:id, p_status:e.target.value }));
@@ -192,17 +232,17 @@ function wire(v){
     if(b("[data-rel]")) b("[data-rel]").onclick = () => act(v, () => sb.rpc("build_item_release", { p_id:id }));
     if(b("[data-free]")) b("[data-free]").onclick = () => { if(confirm(`Take ${it.worker_names.join(" + ")} off this item?`)) act(v, async () => { for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error) return r; } }); };
     if(b("[data-copy]")) b("[data-copy]").onclick = () => copyGo(it);
-    if(b("[data-edit]")) b("[data-edit]").onclick = () => { BL.open = BL.open === id ? null : id; draw(v); };
-    b("[data-hist]").onclick = async () => {
+    b("[data-edit]").onclick = () => { BL.open = BL.open === id ? null : id; draw(v); };
+    if(b("[data-hist]")) b("[data-hist]").onclick = async () => {
       if(BL.hist[id]){ delete BL.hist[id]; return draw(v); }
       const r = await sb.from("hub_build_log").select("at,by_name,what").eq("item_id", id).order("at", { ascending:false }).limit(30);
       BL.hist[id] = r.data || []; draw(v); };
     if(b("[data-save]")) b("[data-save]").onclick = () => { const f = n => b(`[data-f="${n}"]`).value; BL.open = null;
-      act(v, () => sb.rpc("build_item_save", { p_id:id, p_title:f("title"), p_detail:f("detail"), p_area:f("area"), p_pri:f("pri"), p_waits:f("waits"), p_note:f("note") })); };
+      act(v, () => sb.rpc("build_item_save", { p_id:id, p_title:f("title"), p_detail:f("detail"), p_desk:f("desk"), p_pri:f("pri"), p_waits:f("waits"), p_note:f("note") })); };
     if(b("[data-off]")) b("[data-off]").onclick = () => { if(confirm("Take this item off the list? (It's kept in the history, not deleted.)")){ BL.open = null; act(v, () => sb.rpc("build_item_save", { p_id:id, p_off:true })); } };
   });
-  v.querySelector("#bladd").onsubmit = e => { e.preventDefault(); const g = s => v.querySelector(s).value.trim();
-    act(v, () => sb.rpc("build_item_save", { p_id:null, p_title:g("#bla_t"), p_area:g("#bla_a"), p_pri:g("#bla_p"), p_detail:g("#bla_d"), p_source:g("#bla_s") })); };
+  const add = v.querySelector("#bladd"); if(add) add.onsubmit = e => { e.preventDefault(); const g = s => v.querySelector(s).value.trim();
+    act(v, () => sb.rpc("build_item_save", { p_id:null, p_title:g("#bla_t"), p_desk:g("#bla_a"), p_pri:g("#bla_p"), p_detail:g("#bla_d"), p_source:g("#bla_s") })); };
 }
 window.buildListView = async function(v){
   css(); v.innerHTML = `<div class="page bl"><p class="muted">Loading the build list…</p></div>`;
