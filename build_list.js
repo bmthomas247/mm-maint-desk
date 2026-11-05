@@ -19,20 +19,29 @@ const mine = r => (r.worker_names || []).includes(meName());
 function css(){
   if(document.getElementById("blcss")) return;
   const s = document.createElement("style"); s.id = "blcss";
-  s.textContent = `.bl .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:0 0 10px}
-.bl .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px} .bl .tile b{display:block;font-size:22px} .bl .tile span{font-size:12px;color:var(--muted)}
-.bl .bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:0 0 12px} .bl .bar i{display:block;height:100%;background:#2e7d32}
-.bl .filt{position:sticky;top:0;z-index:3;background:var(--ground);padding:8px 0;border-bottom:1px solid var(--line);display:grid;gap:6px}
-.bl .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center} .bl .lab{font-size:12px;color:var(--muted);margin-right:2px}
-.bl .chip{border-radius:999px;min-height:30px;padding:0 11px;font-size:13px} .bl .chip.on{background:var(--moose);border-color:var(--moose);color:#fff}
+  /* Locks office look (Brandon 2026-11-04: "make it look like the office locks page"): forest gradient header with stat tiles,
+     pill tabs, 18px cards with soft shadows, forest-green "on" state - same palette as locks-desk.html / rates.html locksLook */
+  s.textContent = `.bl{--bl-forest:#3c5f12;--bl-forest2:#5b8a1e;--bl-moose:#88B535;--bl-moose2:#A6CE39;--bl-shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06);font-family:"Manrope",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1}
+.bl .blhead{background:linear-gradient(135deg,var(--bl-forest),var(--bl-forest2));color:#fff;border-radius:18px;padding:16px 18px 14px;box-shadow:0 2px 12px rgba(10,30,20,.18);margin:0 0 12px}
+.bl .blhead h2{margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em;color:#fff} .bl .blhead h2 span{color:var(--bl-moose2)}
+.bl .blhead p{margin:2px 0 12px;color:rgba(255,255,255,.82);font-size:13.5px}
+.bl .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px} .bl .tabs button{border-radius:14px;min-height:38px;padding:8px 16px;font-weight:800;font-size:14px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;box-shadow:none}
+.bl .tabs button.on{background:#fff;border-color:#fff;color:var(--bl-forest)}
+.bl .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:0}
+.bl .tile{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:16px;padding:10px 12px} .bl .tile b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em;color:#fff} .bl .tile span{font-size:12px;color:rgba(255,255,255,.8);font-weight:700}
+.bl .bar{height:8px;background:rgba(255,255,255,.2);border-radius:99px;overflow:hidden;margin:12px 0 0} .bl .bar i{display:block;height:100%;background:var(--bl-moose2)}
+.bl .filt{position:sticky;top:0;z-index:3;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--bl-shadow);padding:10px 12px;display:grid;gap:7px}
+.bl .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center} .bl .lab{font-size:12px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
+.bl .chip{border-radius:11px;min-height:32px;padding:5px 12px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink)} .bl .chip.on{background:var(--bl-forest2);border-color:var(--bl-forest2);color:#fff;font-weight:800}
+.bl input,.bl select,.bl textarea{border-radius:13px} .bl .btn.primary{background:var(--bl-forest2);border-color:var(--bl-forest2);color:#fff;font-weight:800}
+.bl .pill{border-radius:999px;font-weight:800}
 .bl #blq{flex:1;min-width:180px}
 .bl h3{margin:20px 0 4px;font-size:17px} .bl h3 small{font-weight:600;color:var(--muted);font-size:12px;margin-left:6px}
-.bl .it{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;background:var(--card);border:1px solid var(--line);border-left:4px solid #8a9480;border-radius:12px;padding:10px 12px;margin-top:6px}
+.bl .it{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;background:var(--card);border:1px solid var(--line);border-left:6px solid #cfd8cb;border-radius:18px;box-shadow:var(--bl-shadow);padding:12px 14px;margin-top:8px}
 .bl .it[data-s="doing"]{border-left-color:#1f6fb2} .bl .it[data-s="waiting"]{border-left-color:#c77700} .bl .it[data-s="done"]{border-left-color:#2e7d32;opacity:.7}
 .bl .it[data-s="done"] .t{text-decoration:line-through}
 .bl .it.taken{background:color-mix(in srgb,#1f6fb2 10%,var(--card));border:2px solid #1f6fb2;border-left-width:6px} .bl .it.me{background:color-mix(in srgb,#2e7d32 12%,var(--card));border:2px solid #2e7d32;border-left-width:6px}
 .bl .flag{grid-column:1/-1;font-weight:800;font-size:13px;color:#fff;background:#1f6fb2;border-radius:8px;padding:4px 10px;width:max-content;max-width:100%} .bl .flag.me{background:#2e7d32}
-.bl .tabs{display:flex;gap:6px;margin:0 0 10px} .bl .tabs button{border-radius:999px;min-height:36px;padding:0 14px} .bl .tabs button.on{background:var(--moose);border-color:var(--moose);color:#fff}
 .bl table.done{width:100%;border-collapse:collapse} .bl .done td,.bl .done th{padding:6px;border-top:1px solid var(--line);text-align:left;vertical-align:top;font-size:13.5px}
 .bl .t{font-weight:700} .bl .d{font-size:14px;color:var(--ink-2);margin-top:2px;white-space:pre-wrap}
 .bl .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12px;color:var(--muted)}
@@ -110,10 +119,9 @@ function draw(v){
     const all = R.filter(inG), dn = all.filter(i => i.status === "done").length;
     list += `<h3>${esc(label)}<small>${dn} of ${all.length} done</small></h3>` + g.map(itemHtml).join("");
   }
-  v.innerHTML = `<div class="page bl">${tabsHtml()}
-    <div class="tiles"><div class="tile"><b>${R.length}</b><span>Items</span></div>${Object.entries(ST).map(([k, l]) => `<div class="tile"><b>${c[k] || 0}</b><span>${l}</span></div>`).join("")}
+  v.innerHTML = `<div class="page bl">${headHtml(`<div class="tiles"><div class="tile"><b>${R.length}</b><span>Items</span></div>${Object.entries(ST).map(([k, l]) => `<div class="tile"><b>${c[k] || 0}</b><span>${l}</span></div>`).join("")}
       <div class="tile"><b>${R.filter(mine).length}</b><span>You're on</span></div></div>
-    <div class="bar"><i style="width:${R.length ? (c.done || 0) / R.length * 100 : 0}%"></i></div>
+    <div class="bar"><i style="width:${R.length ? (c.done || 0) / R.length * 100 : 0}%"></i></div>`)}
     <div class="filt">
       <div class="row"><span class="lab">Status</span>${chip("data-fs", "open", BL.fS, "Not done")}${chip("data-fs", "all", BL.fS, "All")}${Object.entries(ST).map(([k, l]) => chip("data-fs", k, BL.fS, l)).join("")}
         <span class="lab" style="margin-left:8px">Priority</span>${chip("data-fp", "all", BL.fP, "Any")}${Object.entries(PRI).map(([k, l]) => chip("data-fp", k, BL.fP, l)).join("")}</div>
@@ -146,13 +154,14 @@ async function copyGo(it){
 function drawDone(v){
   const R = BL.rows.filter(i => i.status === "done").sort((a, b) => String(b.done_at || "").localeCompare(String(a.done_at || "")));
   const q = BL.q.toLowerCase(), rows = R.filter(i => !q || [i.title, i.detail, i.note, i.done_by].join(" ").toLowerCase().includes(q));
-  v.innerHTML = `<div class="page bl">${tabsHtml()}
+  v.innerHTML = `<div class="page bl">${headHtml(`<div class="tiles"><div class="tile"><b>${R.length}</b><span>Finished</span></div><div class="tile"><b>${R.filter(i => i.done_at && Date.now() - new Date(i.done_at) < 7 * 864e5).length}</b><span>This week</span></div></div>`)}
     <div class="row" style="margin-bottom:8px"><input id="blq" type="search" placeholder="Search finished items" value="${esc(BL.q)}" aria-label="Search finished items"></div>
     <div class="card" style="overflow-x:auto"><table class="done"><tr><th>Finished</th><th>Item</th><th>Desk</th><th>By</th></tr>
     ${rows.map(i => `<tr><td style="white-space:nowrap">${esc(fday(i.done_at))}</td><td><b>${esc(i.title)}</b>${i.note ? `<div class="muted">${esc(i.note)}</div>` : ""}</td><td>${esc(AL[i.area] || i.area)}</td><td>${esc(i.done_by || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Nothing finished yet.</td></tr>`}</table></div></div>`;
   wireTabs(v);
   const qq = v.querySelector("#blq"); qq.oninput = () => { BL.q = qq.value; clearTimeout(BL.qt); BL.qt = setTimeout(() => { drawDone(v); const n = v.querySelector("#blq"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
 }
+const headHtml = inner => `<div class="blhead"><h2>Moose Hub <span>build list</span></h2><p>Everything still to build, decide or clean up. Say "I'm on it" so nobody doubles up.</p>${tabsHtml()}${inner}</div>`;
 const tabsHtml = () => `<div class="tabs"><button class="${BL.tab === "list" ? "on" : ""}" data-tab="list">Build list</button><button class="${BL.tab === "done" ? "on" : ""}" data-tab="done">Completed (${BL.rows.filter(i => i.status === "done").length})</button></div>`;
 function wireTabs(v){ v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { BL.tab = b.dataset.tab; BL.q = ""; show(v); }); }
 const show = v => BL.tab === "done" ? drawDone(v) : draw(v);
