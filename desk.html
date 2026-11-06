@@ -1624,7 +1624,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     '.cooffice{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:14px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}'+
     '.cooh{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cooh i{font-style:normal;font-size:22px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2)}.cooh b{font-size:16px}.cooh button{margin-left:auto}'+
     '.cofs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 22px}.cof.w{grid-column:span 2}.cof span{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}.cof b{font-size:14px;line-height:1.45;font-weight:600}.cof .hint{font-size:11.5px}'+
-    '.dbody .hint:empty{display:none}'+
+    '.dbody .hint:empty{display:none}.cooh small{display:block;color:var(--muted);font-size:12.5px}.costore .coact{margin-top:-46px;margin-bottom:10px}.costore .counits{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}'+
     '@media (max-width:560px){.cotiles{grid-template-columns:1fr}.cotile{min-height:0}.cof.w{grid-column:auto}}</style>';
   var veh='<div class="coact"><button class="btn sm ghost" data-cov="">+ Add vehicle</button></div>'+
     (on.length?'<div class="vtiles">'+on.map(tile).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
@@ -1648,7 +1648,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var ov=coVal("office","addr").v.split("\n")[0], op=coVal("office","phone").v.split("\n")[0], oh=coVal("office","hours").v.split("\n")[0];
   var ws=coVal("social","web").v.split("\n")[0], lg=coVal("general","legal").v.split("\n")[0], su=coUnits().filter(coUnitOn);
   var T=[["veh","\ud83d\ude97","Vehicles",n(on.length,"vehicle","vehicles"),[on.slice(0,3).map(function(v){ return v.name||v.ymm; }).join(" · ")+(on.length>3?" +"+(on.length-3)+" more":"")],veh],
-    ["storage","\ud83d\udce6",CO_TITLES.storage,"Protection Storage - "+su.length+" total",[],coStorage()],
+
     ["emp","\ud83d\udc65","Employees",D._staff?n(st.length,"person","people"):"the team",["Names, titles, phone extensions and who handles what"],emp],
     ["brand","\ud83c\udfa8","Logos & colors",n(cols.length,"color","colors")+" \u00b7 "+n(CO_FACTS.logos.length-1,"logo file","logo files"),['<div class="cosw">'+cols.slice(0,8).map(function(c){ return '<span style="background:'+esc(c.hex)+'"></span>'; }).join("")+'</div>'],brand],
     ["social","\ud83c\udf10",CO_TITLES.social,"website, Facebook, Instagram\u2026",[ws],coBlock("social")],
@@ -1659,6 +1659,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
       var v=esc(x.v).replace(/\n/g,"<br>"); if(em) v=v.replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g,'<a href="mailto:$1">$1</a>'); if(tel) v=v.replace(/(\d{3}[-. ]\d{3}[-. ]\d{4})/g,function(m){ return '<a href="tel:'+m.replace(/\D/g,"")+'">'+m+'</a>'; });
       return '<div class="cof'+(f[0]==="addr"||f[0]==="notes"?' w':'')+'"><span>'+esc(f[1])+'</span><b>'+v+'</b><div class="hint">'+coSrc(x.s)+'</div></div>'; }).join("");
   h+='<section class="cooffice"><div class="cooh"><i>\ud83c\udfe2</i><b>'+esc(CO_TITLES.office)+'</b><button class="btn sm ghost" data-co="office">Edit</button></div><div class="cofs">'+(ofc||'<div class="note">Nothing recorded yet.</div>')+'</div></section>';
+  h+='<section class="cooffice costore"><div class="cooh"><i>\ud83d\udce6</i><div><b>'+esc(CO_TITLES.storage)+'</b><small>Protection Storage - '+su.length+' total</small></div></div>'+coStorage()+'</section>';
   h+='<div class="cotiles">'+T.map(function(t){ var o=t[0]===op2;
       return '<button class="cotile" data-cotile="'+t[0]+'" aria-pressed="'+o+'"><div class="cti"><i>'+t[1]+'</i><div><b>'+esc(t[2])+'</b><small>'+esc(t[3])+'</small></div></div>'+
         t[4].filter(Boolean).map(function(l,i){ return l.charAt(0)==="<"?l:'<div class="ctl'+(i?' m':'')+'">'+esc(l)+'</div>'; }).join("")+'<span class="ctgo">'+(o?'Close \u25b4':'Open \u25be')+'</span></button>'; }).join("")+'</div>'+
