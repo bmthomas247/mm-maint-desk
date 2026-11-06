@@ -1274,7 +1274,8 @@ function homeQuick(code,p){ var pe=pedit(code), t=hqOf(code)||{}, a=function(rx)
   pick("entry",[["Hub edit",pe.lockoutCode],["Asana",a(/^lockout info/i)]]);
   if(t.owner_garage_code){ r.entry=(r.entry?r.entry+"\n":"")+"Owner garage: "+t.owner_garage_code; r.src.entry=r.src.entry?r.src.entry+" + Track":"Track"; }
   r.ownerView=!!t.owner_hidden;
-  if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); r.guest="Guest door code: "+t.guest_code+"\n"+(inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)+" – "+fmtD(t.guest_out)); r.src.guest="Locks"; }
+  /* guest door codes stay on the Locks desk, not Property Details (Brandon 2026-11-06) */
+  if(false && t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); r.guest="Guest door code: "+t.guest_code+"\n"+(inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)+" – "+fmtD(t.guest_out)); r.src.guest="Locks"; }
   r.closet=t.owner_closet_code?"Owner closet: "+t.owner_closet_code:""; r.src.closet=r.closet?"Track":"";
   if(t.my_code){ r.mine="Your code: "+t.my_code+(t.my_code_label?"\n"+t.my_code_label:""); r.src.mine="Locks"; }
   return r; }
@@ -1334,7 +1335,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   cells.push(tCell("Wi-Fi",q.src.wifi,wifi,true));
   cells=cells.concat(lockSecs(c,t,q,p));
   /* paint stays in Home details only (Brandon 2026-11-03) */
-  if(t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
+  if(false && t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   cells.push(hoaCell(c,p));
   if(o.can && o.list.length){ var w=o.list[0];
     cells.push(tCell("Owner",w.plan?"Contract: "+w.plan:"",[{html:'<div class="tl" title="From '+(w.src==="Track"?"Track":"a hub edit")+'"><span class="ql qin">Name - </span><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
