@@ -105,6 +105,9 @@ const STEP_LINK = {};
   .forEach(([k, keys]) => keys.split(" ").forEach(s => STEP_LINK[s] = k));
 const openFor = (key, s) => { const k = STEP_LINK[key]; if(!k) return "";
   return `<a class="btn small" style="min-height:28px;padding:0 9px;font-size:12px" href="${esc(LINKS[k].replace("{res}", encodeURIComponent(s.res)))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${LINK_NAME[k]} ↗</a>`; };
+// Office Received (Brandon 2026-11-06): Track's API can't change a campaign, so this opens the stay in Track to set it by hand
+const CAMP_HOW = "In Track: on the reservation, change Campaign to Office Received and save. The hub ticks this step on its next check (about 30 minutes).";
+const campBtn = s => `<a class="btn small primary" style="min-height:28px;padding:0 9px;font-size:12px" href="${esc(LINKS.track.replace("{res}", encodeURIComponent(s.res)))}" target="_blank" rel="noopener" title="${esc(CAMP_HOW)}" onclick="event.stopPropagation()">Set Office Received in Track ↗</a>`;
 const WAIT = ["Guest to reply", "Owner to reply"];
 // 🙋 Ask a manager (Brandon 2026-10-30): Slack DM to the managers on shift; their reply comes back here (res_ask_notify.py)
 const askBtn = step => `<button class="btn small" data-ask="${step}" style="min-height:28px;padding:0 9px;font-size:12px">🙋 Ask a manager</button>`;
@@ -663,7 +666,7 @@ async function card(v, res){
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
           <span class="l">${TRK_STEP[t.key] && s.td && s.td.auto ? trkLogo(trkHit(s, TRK_STEP[t.key]), trkHit(s, TRK_STEP[t.key]) ? "Track's automation did this" : "Track's automation hasn't happened yet") + " " : ""}${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.help ? `<button type="button" class="rwhy" data-why="${t.key}" title="Why? / how">i</button>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}${t.help ? `<div class="rwhyt" data-whyt="${t.key}" hidden>${esc(t.help)}</div>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : ""}</span></label>`; }).join("")}</details>`; }).join("")}
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${t.key === "i_campaign" && !t.done ? campBtn(s) : openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : ""}</span></label>`; }).join("")}</details>`; }).join("")}
     </div>
     <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
