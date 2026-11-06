@@ -309,7 +309,12 @@ function wireItem(v, el, it, after){
   if(b("[data-rel]")) b("[data-rel]").onclick = async () => { const r = await sb.rpc("build_item_release", { p_id:id }); if(r.error) alert("Didn't save: " + err(r.error)); after(); };
   if(b("[data-free]")) b("[data-free]").onclick = async () => { if(!confirm(`Take ${it.worker_names.join(" + ")} off this item?`)) return;
     for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error){ alert("Didn't save: " + err(r.error)); break; } } after(); };
-  if(b("[data-copy]")) b("[data-copy]").onclick = () => copyGo(it);
+  // Open in Claude Code also puts you on the item (Brandon 2026-11-06); copy first so the clipboard keeps the tap
+  if(b("[data-copy]")) b("[data-copy]").onclick = async () => { await copyGo(it);
+    if(!ADM() || it.status === "done" || mine(it)) return;
+    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:(it.workers || []).length > 0 }); if(r.error) return alert("Copied, but couldn't put you on it: " + err(r.error));
+    if(r.data && r.data.ok === false){ const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return alert("Copied, but couldn't put you on it: " + err(j.error)); }
+    after(); };
   if(b("[data-like]")) b("[data-like]").onclick = async () => { const r = await sb.rpc("build_like", { p_id:id, p_on:!it.mine }); if(r.error) return alert("Didn't save: " + err(r.error)); after(); };
 }
 function wire(v){
