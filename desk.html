@@ -1364,7 +1364,7 @@ function homeRO(html,code){ if(!document.getElementById('homerocss')){ var st=do
     .replace(/<textarea\b[^>]*>([\s\S]*?)<\/textarea>/g,function(t,v){ return val(v); })
     .replace(/<span class="hint">From [^<]*<\/span>/g,"")
     .replace(/<button class="btn sm pri" data-act="savehome"[^>]*>Save<\/button><button class="btn sm ghost" data-act="cancelhome">Cancel<\/button>/,
-      '<button class="btn sm" data-act="edithome" data-code="'+esc(code)+'">✎ Edit</button>');
+      '').replace('<h4>The home</h4>','<h4 style="display:flex;align-items:center">The home<button class="btn sm" style="margin-left:auto" data-act="edithome" data-code="'+esc(code)+'">\u270e Edit</button></h4>');
   return '<div class="homero">'+html+'</div>'; }
 function homeDetail(code){
   var p=profile(code); if(!p) return '<div class="empty">No profile for '+esc(code)+'.</div>';
