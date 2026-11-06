@@ -1369,6 +1369,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
     cells.push(tCell("Owner",w.plan?"Contract: "+w.plan:"",[{html:'<div class="tl" title="From '+(w.src==="Track"?"Track":"a hub edit")+'"><span class="ql">Name</span>'+esc(w.name||"")+''+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
       w.phone?{html:'<div class="tl"><span class="ql">Phone</span>'+ocon("tel",w.phone)+'</div>'}:"",
       w.email?{html:'<div class="tl"><span class="ql">Email</span>'+ocon("mail",w.email)+'</div>'}:""],false,"hown")); }
+  cells.push(tnCell(c));
   return cells.join("")||'<div class="hql"><div class="muted">No codes on file yet.</div></div>'; }
 function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=homeQuick(c,p);
   var jobs=(D.byProp[c]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
@@ -1887,7 +1888,7 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=(function(g){ g.v=parkFix(g.v); return g; })(qs("garage",/^parking\/? ?garage info$|^parking$/i)), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+emergHtml(p)+'</div>';
-  return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
+  return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+tnCard(code)+
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
     qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+(function(){ var out=[], seen={}, txt=String(garage.v||"").replace(/<[^>]+>/g," ");
       txt.split("\n").forEach(function(l){ var pm=/assigned parking spot\s*#?\s*([A-Za-z]?\d{1,5}[A-Za-z]?)/i.exec(l), l2=l.replace(/assigned parking spot\s*#?\s*[A-Za-z]?\d{1,5}[A-Za-z]?/ig," ");
@@ -1899,6 +1900,67 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
     (function(h){ var ph=kbPhotos(code); if(!ph) return h; return h?h.replace(/<\/div>$/,ph+'</div>'):'<div class="qv"><div class="qvh">Key box</div>'+ph+'</div>'; })(qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"",""))+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+'</div>'+
     hnCard(code)+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
+/* Tenant info on Lease + 2nd Home (Brandon 2026-11-06, hub_home_tenants.sql). Only tenant_info people (managers, front desk,
+   leasing, licensing, admins) get anything: tenant_ok() false = no tile cell, no box, no hint. 2nd Home can be set "No tenant" (hides it). */
+function tnHas(c){ var t=homeType(c); return t==="lease"||t==="2h"; }
+function tnBoot(){ var sb=window.MM_SB; if(!sb||D._tnAsk) return; D._tnAsk=1;
+  sb.rpc("tenant_ok").then(function(r){ D._tnok=!r.error&&r.data===true; if(!D._tnok){ D._tnt={}; return; }
+    sb.rpc("home_tenants_tiles").then(function(r2){ var m={}; (r2.data||[]).forEach(function(x){ var h=m[x.home]=m[x.home]||{rows:[],none:false}; if(x.no_tenant) h.none=true; if(x.id) h.rows.push(x); }); D._tnt=m; render(); }); }); }
+function tnNext(v){ var t=today(); return (v||[]).filter(function(d){ return String(d)>=t; }).sort()[0]||""; }
+function tnMinus(d,n){ var t=Date.parse(d+"T12:00:00"); return ymd(t-n*864e5); }
+function tnCell(c){ if(!tnHas(c)) return ""; tnBoot(); if(!D._tnok||!D._tnt) return ""; var h=D._tnt[c]||{rows:[],none:false};
+  if(homeType(c)==="2h" && h.none && !h.rows.length) return "";
+  if(!h.rows.length) return tCell("Tenant","",[{html:'<div class="tl muted">No tenant on file. Add one in Home details.</div>'}],false,"hown");
+  var w=h.rows[0], nx=tnNext(w.visits);
+  return tCell("Tenant","",[{html:'<div class="tl"><span class="ql">Name</span>'+esc(w.name)+(h.rows.length>1?' <span class="muted">+'+(h.rows.length-1)+' more</span>':'')+'</div>'},
+    w.phone?{html:'<div class="tl"><span class="ql">Phone</span>'+ocon("tel",w.phone)+'</div>'}:"",
+    w.email?{html:'<div class="tl"><span class="ql">Email</span>'+ocon("mail",w.email)+'</div>'}:"",
+    w.lease_end?{html:'<div class="tl"><span class="ql">Lease ends</span>'+esc(fmtD(w.lease_end))+'</div>'}:"",
+    nx?{html:'<div class="tl"><span class="ql">Next visit</span>'+esc(fmtD(nx))+' <span class="muted">(notice by '+esc(fmtD(tnMinus(nx,3)))+')</span></div>'}:""],false,"hown"); }
+function tnLoad(c,force){ var sb=window.MM_SB; D._tn=D._tn||{}; if(!sb||(D._tn[c]&&!force)) return; if(!D._tn[c]) D._tn[c]={loading:1,rows:[]};
+  Promise.all([sb.rpc("home_tenants",{p_home:c}),sb.rpc("home_tenant_none",{p_home:c})]).then(function(r){
+    D._tn[c]={rows:r[0].error?[]:(r[0].data||[]),none:!!(r[1].data&&r[1].data.none),noneBy:r[1].data&&r[1].data.by,err:r[0].error?niceE(r[0].error):""}; render(); }); }
+function niceE(e){ return (window.top&&window.top.niceErr)?window.top.niceErr(e):((e&&e.message)||"Couldn't load."); }
+var TN_F=[["name","Name *","text"],["phone","Phone","tel"],["email","Email","email"],["others","Others living there","text"],["move_in","Move-in","date"],["lease_end","Lease ends","date"],
+  ["pets","Pets","text"],["vehicles","Vehicles / plates","text"],["emergency","Emergency contact (name + phone)","text"],["visits","Visit / inspection dates (one per line)","area"],["note","Note","area"]];
+function tnForm(c,x){ x=x||{};
+  return '<div class="tnform">'+TN_F.map(function(f){ var v=f[0]==="visits"?(x.visits||[]).join("\n"):(x[f[0]]||"");
+    return '<label class="f'+(f[2]==="area"?' tnw':'')+'"><span>'+esc(f[1])+'</span>'+(f[2]==="area"?'<textarea id="tn_'+f[0]+'" rows="2">'+esc(v)+'</textarea>':'<input id="tn_'+f[0]+'" type="'+f[2]+'" value="'+esc(v)+'">')+'</label>'; }).join("")+
+    '<div class="tnw" style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm ghost" data-act="tncancel">Cancel</button><button class="btn sm pri" data-act="tnsave" data-code="'+esc(c)+'" data-id="'+(x.id||"")+'">Save</button></div>'+
+    '<div class="hint tnw">No rent, bank or card numbers, and no codes — codes go in the Quick view Edit.</div></div>'; }
+function tnCard(c){ if(!tnHas(c)) return ""; tnBoot(); if(!D._tnok) return ""; tnLoad(c); var n=D._tn[c]||{rows:[]}, ed=S.ui.tnEd||{}, is2=homeType(c)==="2h";
+  var cur=n.rows.filter(function(x){ return !x.off; }), past=n.rows.filter(function(x){ return x.off; });
+  var css='<style>.qv.tenant{grid-column:1/-1;border-left:4px solid var(--info)}.tnrow{padding:6px 0;border-bottom:1px solid var(--line-2)}.tnrow:last-child{border-bottom:0}.tnform{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;margin-top:6px}.tnform .tnw{grid-column:1/-1}.tnform label span{display:block;font-size:12px;color:var(--muted)}.tnform input,.tnform textarea{width:100%}.tnhead{display:flex;justify-content:space-between;align-items:center;gap:8px}</style>';
+  if(is2 && n.none && !cur.length) return css+'<div class="qv tenant"><div class="tnhead"><div class="muted">No tenant at this home'+(n.noneBy?' · set by '+esc(n.noneBy):'')+'.</div><button class="btn sm ghost" data-act="tnnone" data-code="'+esc(c)+'" data-v="0">It has a tenant now</button></div></div>';
+  var row=function(x){ if(ed.code===c&&String(ed.id)===String(x.id)) return '<div class="tnrow">'+tnForm(c,x)+'</div>';
+    var nx=tnNext(x.visits), L=[];
+    L.push('<b>'+esc(x.name)+'</b>'+(x.off?' <span class="muted">· moved out '+esc(fmtD(x.moved_out))+'</span>':''));
+    var kv=function(k,v){ if(v) L.push('<span class="muted">'+k+'</span> '+v); };
+    kv("Phone",x.phone?ocon("tel",x.phone):""); kv("Email",x.email?ocon("mail",x.email):""); kv("Others",esc(x.others||""));
+    kv("Move-in",x.move_in?esc(fmtD(x.move_in)):""); kv("Lease ends",x.lease_end?esc(fmtD(x.lease_end)):"");
+    kv("Pets",esc(x.pets||"")); kv("Vehicles",esc(x.vehicles||"")); kv("Emergency",esc(x.emergency||""));
+    if((x.visits||[]).length) kv("Visits",(x.visits||[]).map(function(d){ var p=d<today(); return '<span'+(p?' class="muted"':'')+'>'+esc(fmtD(d))+'</span>'; }).join(", ")+(nx&&!x.off?' <span class="muted">· send the tenant notice by '+esc(fmtD(tnMinus(nx,3)))+'</span>':''));
+    if(x.note) L.push(esc(x.note));
+    return '<div class="tnrow"><div class="tnhead"><div>'+L.join("<br>")+'<div class="muted" style="font-size:12px">'+esc(x.changed_by?"Changed by "+x.changed_by+" · "+fmtD(ymd(x.changed_at)):"Added by "+(x.by_name||"")+" · "+fmtD(ymd(x.at)))+'</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+
+      (x.off?'<button class="btn sm ghost" data-act="tnout" data-code="'+esc(c)+'" data-id="'+x.id+'" data-v="0">Back in</button>':'<button class="btn sm ghost" data-act="tnedit" data-code="'+esc(c)+'" data-id="'+x.id+'">Edit</button><button class="btn sm ghost" data-act="tnout" data-code="'+esc(c)+'" data-id="'+x.id+'" data-v="1">Moved out</button>')+'</div></div></div>'; };
+  return css+'<div class="qv tenant"><div class="tnhead"><div class="qvh">Tenant</div><div style="display:flex;gap:6px">'+
+    (is2&&!cur.length?'<button class="btn sm ghost" data-act="tnnone" data-code="'+esc(c)+'" data-v="1">No tenant</button>':'')+
+    (ed.code===c&&ed.id==="new"?'':'<button class="btn sm" data-act="tnedit" data-code="'+esc(c)+'" data-id="new">+ Add tenant</button>')+'</div></div>'+
+    (n.err?'<div class="hint">'+esc(n.err)+'</div>':'')+
+    (ed.code===c&&ed.id==="new"?tnForm(c,{}):'')+
+    (cur.length?cur.map(row).join(""):(n.loading||(ed.code===c&&ed.id==="new")?'':'<div class="muted">No tenant on file yet.</div>'))+
+    (past.length?'<details style="margin-top:6px"><summary class="muted">Past tenants ('+past.length+')</summary>'+past.map(row).join("")+'</details>':'')+'</div>'; }
+function tnSave(c,id){ var sb=window.MM_SB; if(!sb) return; var v={}, bad="";
+  TN_F.forEach(function(f){ var el=document.getElementById("tn_"+f[0]); v[f[0]]=el?el.value.trim():""; });
+  v.visits=v.visits.split(/\n|;/).map(function(x){ return x.trim(); }).filter(Boolean).map(function(x){ var t=/^\d{4}-\d\d-\d\d$/.test(x)?Date.parse(x+"T12:00:00"):Date.parse(x); if(isNaN(t)){ bad=x; return ""; } return ymd(t); });
+  if(bad){ alert('Couldn\'t read the date "'+bad+'". Try 2026-12-23 or Dec 23, 2026.'); return; }
+  if(!v.name){ alert("Type the tenant's name."); return; }
+  sb.rpc("home_tenant_save",{p_home:c,p_id:id?Number(id):null,p:v}).then(function(r){ if(r.error){ alert((r.error.message||"Couldn't save").replace(/^.*?:\s*/,"")); return; }
+    S.ui.tnEd=null; tnLoad(c,true); D._tnAsk=0; D._tnt=null; tnBoot(); }); }
+function tnOut(c,id,out){ if(out&&!confirm("Mark this tenant as moved out? They stay under Past tenants.")) return; var sb=window.MM_SB; if(!sb) return;
+  sb.rpc("home_tenant_out",{p_id:Number(id),p_out:!!out,p_day:out?today():null}).then(function(r){ if(r.error){ alert("Couldn't change it."); return; } tnLoad(c,true); D._tnAsk=0; D._tnt=null; tnBoot(); }); }
+function tnNone(c,on){ var sb=window.MM_SB; if(!sb) return;
+  sb.rpc("home_tenant_none_set",{p_home:c,p_none:!!on}).then(function(r){ if(r.error){ alert("Couldn't change it."); return; } tnLoad(c,true); D._tnAsk=0; D._tnt=null; tnBoot(); }); }
 function hnLoad(code,force){ var sb=window.MM_SB; D._hn=D._hn||{}; if(!sb||(D._hn[code]&&!force)) return; if(!D._hn[code]) D._hn[code]={loading:1,rows:[]};
   sb.rpc("home_notes",{p_home:code}).then(function(r){ D._hn[code]={rows:r.error?[]:(r.data||[]),err:r.error?"Couldn't load notes.":""}; render(); }); }
 function hnCard(code){ hnLoad(code); var n=(D._hn||{})[code]||{rows:[]};
@@ -4638,6 +4700,11 @@ document.addEventListener("click",function(ev){
     case "editquick": return mQuick(d.code);
     case "ownerview": return ownerView(d.code);
     case "hnadd": return hnAdd(d.code);
+    case "tnedit": S.ui.tnEd={code:d.code,id:d.id}; return render();
+    case "tncancel": S.ui.tnEd=null; return render();
+    case "tnsave": return tnSave(d.code,d.id);
+    case "tnout": return tnOut(d.code,d.id,d.v==="1");
+    case "tnnone": return tnNone(d.code,d.v==="1");
     case "hnoff": return hnOff(d.code,d.id);
     case "hoaedit": return mHoa(d.id?+d.id:null,d.c||"");
     case "savehoa": var hc=d.code, hk=sid(hc); return put("propedits",hk,{hoaName:fv("hoa_name"),hoaMgmt:fv("hoa_mgmt"),hoaContact:fv("hoa_contact"),hoaPhone:fv("hoa_phone"),hoaEmail:fv("hoa_email"),hoaPortal:fv("hoa_portal"),hoaRules:fv("hoa_rules")},S.propedits[hk]).then(function(){ toast("HOA saved"); });
