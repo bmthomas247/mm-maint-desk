@@ -1870,10 +1870,14 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
     (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+emergHtml(p)+'</div>';
   return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
-    qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+(function(){ var gc=codeLines(garage.v,3); return qCard("Garage / parking",gc.length?gc.join("\n"):garage.v,garage.s,"codes","parking|garage",gc.length>0&&String(garage.v).replace(/\s+/g," ").trim()!==gc.join(" ").trim()); })()+
+    qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+(function(){ var out=[], seen={}, txt=String(garage.v||"").replace(/<[^>]+>/g," ");
+      txt.split("\n").forEach(function(l){ var pm=/assigned parking spot\s*#?\s*([A-Za-z]?\d{1,5}[A-Za-z]?)/i.exec(l), l2=l.replace(/assigned parking spot\s*#?\s*[A-Za-z]?\d{1,5}[A-Za-z]?/ig," ");
+        if(/garage|gate|door|code/i.test(l2)) (kbc(l2).match(/•{3,}|[0-9][0-9#*]{2,}/g)||[]).forEach(function(c){ if(!seen[c]){ seen[c]=1; out.push((/gate/i.test(l2)&&!/garage/i.test(l2)?"Gate code: ":"Garage code: ")+c); } });
+        if(pm && !seen["p"+pm[1]]){ seen["p"+pm[1]]=1; out.push("Assigned parking spot: "+pm[1]); } });
+      return qCard("Garage / parking",out.length?out.join("\n"):garage.v,garage.s,"codes","parking|garage",out.length>0); })()+
     (window.MM_CODES===false?'':qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
     (hi.water?qCard("Water shut-off",hi.water,"","water",""):'<div class="qv water"><div class="qvh">Water shut-off</div><div class="muted">Not on file yet \u2014 add it with \u270e Edit on The home.</div></div>')+
-    qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+'</div>'+
+    (function(h){ var ph=kbPhotos(code); if(!ph) return h; return h?h.replace(/<\/div>$/,ph+'</div>'):'<div class="qv"><div class="qvh">Key box</div>'+ph+'</div>'; })(qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"",""))+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+'</div>'+
     hnCard(code)+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
 function hnLoad(code,force){ var sb=window.MM_SB; D._hn=D._hn||{}; if(!sb||(D._hn[code]&&!force)) return; if(!D._hn[code]) D._hn[code]={loading:1,rows:[]};
@@ -3652,6 +3656,9 @@ function guestBlock(){ var g=guestIssues(), bad=g.filter(function(x){ return !x.
     (bad.length?'<br>'+bad.map(function(x){ return propLink(x.j.prop)+' <a href="'+esc(x.j.srcUrl)+'" target="_blank" rel="noopener">'+esc(x.j.title.slice(0,70))+'</a> <span class="muted">'+esc(x.why)+'</span> <button class="btn sm pri" data-blsch="'+esc(x.j.id)+'">Schedule</button>'; }).join("<br>"):'')+'</span>'; }
 
 /* ================= DETAILED NEW PROPERTY INSPECTION — what we learned about each home ================= */
+function kbPhotos(code){ var n=npiOf(code), ph=[]; if(!n||!n.items) return "";
+  n.items.forEach(function(it){ if(/key ?box|lock ?box/i.test((it.el||"")+" "+(it.q||""))) (it.ph||[]).forEach(function(u){ if(/^https:\/\//.test(u) && ph.indexOf(u)<0) ph.push(u); }); });
+  return ph.length?'<button type="button" class="btn sm" style="margin-top:8px" data-imgzoom="'+esc(ph.join("|"))+'|0">📷 Key box photos ('+ph.length+')</button>':""; }
 function npiOf(code){ if(!D.npi){ D.npi={}; Object.keys(S.feeds).forEach(function(k){ if(/^bw-npi-\d+$/.test(k)){ var hs=S.feeds[k].homes||{}; Object.keys(hs).forEach(function(c){ D.npi[canon(c)]=hs[c]; }); } }); }
   return fromFeed(D.npi,code)||null; }
 /* Inspections (Brandon 2026-10-29: "search and add the property details inspection … an uploadable inspection"): reports uploaded per home
