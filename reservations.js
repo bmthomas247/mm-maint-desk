@@ -273,6 +273,8 @@ function autoOk(s, a){
       return s.unitPets === true && (s.occ && s.occ.pets || 0) <= cap && !tag(s, /^no pets$/i); }
     case "bw_clean": return bwClean(s);
     // Extend the stay (2026-11-06): a quote was saved; Track now has the new dates the quote was for
+    // Door code (2026-11-06): Track's access code OR the Locks system already holds a guest code for this stay (res_board lockCode)
+    case "td_door": return !!s.lockCode || !!(s.td && s.td.door === true);
     case "ext_quoted": return !!(s.list && s.list.extQuote);
     case "ext_dates": return !!(s.list && s.list.extTo && s.depart === s.list.extTo && (!s.list.extFrom || s.arrive === s.list.extFrom));
     // #housekeeping @Cheree messages naming this home (slack_hk.py) — after the cancel / after it was marked extending / any
@@ -458,7 +460,8 @@ function prep(s){
       return { ...t, autoKey:t.auto, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : gf ? "Earlier rule" : null, done:k ? k.d : !!(au || gf) }; });
   const req = s.steps.filter(t => !t.opt);
   s.need = req.length; s.got = req.filter(t => t.done).length;
-  s.blockers = [...new Set(req.filter(t => !t.done && t.blocker).map(t => t.blocker))];
+  // a stay the Track details job hasn't read yet (120+ days out) isn't held up by "Door code": nobody has looked yet
+  s.blockers = [...new Set(req.filter(t => !t.done && t.blocker && !(t.key === "dc_set" && !s.td)).map(t => t.blocker))];
   // "Managers needed" in Held up by (Brandon 2026-11-06): a manager-only step still open, or someone asked a manager and it isn't answered
   if(req.some(t => t.mgr && !t.done) || (B.asks || []).some(a => a.res === s.res && a.status === "open")) s.blockers.push("Managers needed");
   const today = B.today;
@@ -687,7 +690,7 @@ async function card(v, res){
       <div style="margin-top:4px"><span class="muted" id="rx_msg"></span></div>
       <details class="acc2" id="rx_h"><summary><b>History</b></summary><div id="rx_hl" class="muted">Loading…</div></details></div>
     <div class="card">
-      <div class="rfacts"><span>Res <a href="${folioUrl(s.res)}" target="_blank" rel="noopener"><b>#${esc(s.res)}</b></a></span><span><b>${esc(day(s.arrive))}</b> → <b>${esc(day(s.depart))}</b> · ${esc(s.nights)} nights</span>
+      <div class="rfacts"><span>Res <a href="${esc(LINKS.track.replace("{res}", encodeURIComponent(s.res)))}" target="_blank" rel="noopener" title="Open the reservation in Track"><b>#${esc(s.res)}</b></a> · <a href="${folioUrl(s.res)}" target="_blank" rel="noopener" class="muted">folio</a></span><span><b>${esc(day(s.arrive))}</b> → <b>${esc(day(s.depart))}</b> · ${esc(s.nights)} nights</span>
         <span>${esc(s.type || "")} <span class="muted">(${esc(CH[s.chan])})</span></span><span>Track: <b>${esc(s.status || "")}</b></span>
         <span>${occ.adults || 0} adults${occ.children ? ", " + occ.children + " kids" : ""}${occ.pets ? `, <b>${occ.pets} pet${occ.pets > 1 ? "s" : ""}</b>` : ""}</span>
         ${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">Do not rent</span>` : ""}${s.list && s.list.asana ? `<a href="${esc(s.list.asana)}" target="_blank" rel="noopener" class="muted">Asana checklist (ends Nov 9)</a>` : ""}</div>
