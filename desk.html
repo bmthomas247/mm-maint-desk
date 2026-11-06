@@ -1466,37 +1466,58 @@ var CO_MOVED={storage:{storage:"office"},social:{web:"general",social:"general"}
    No gate/unit codes, account numbers or costs here (crew read this page). Per-unit edits save to propedits/Moose_company co_storage_units. */
 var CO_PS=CO_D+"13-Vendors & Chanel Partners/Storage-Protection Storage/";
 CO_FACTS.storePlaces={
-  ps:{name:"Protection Self Storage of Park City",addr:"1240 W Richardson Rd, Park City, UT 84036",phone:"435-465-2900",src:CO_PS+"Invoices/2026 (invoices Oct 17, 18 + 30, 2026)"},
+  ps:{name:"Protection Self Storage of Park City",addr:"1240 W Richardson Rd, Park City, UT 84036",phone:"435-465-2900",email:"parkcity@protectionselfstorage.com",web:"https://protectionselfstorage.com",hours:"Building open 5am\u201311pm every day",code:"ps_gate",codeLabel:"Gate code",people:[["Stacey","Front desk",""],["Wendy Schroeder","Manager",""],["Ben Brady","General manager, cell","385-434-4628"],["Jeff","Part-time office, cell","435-671-8900"]],src:CO_PS+"Invoices/2026 (invoices Oct 17, 18 + 30, 2026)"},
+  bhv:{name:"Bear Hollow Village storage",addr:"5519 Lillehammer Ln, Park City, UT 84098 \u00b7 unit 1101",how:"Enter the garage with the garage code, then open the storage unit with your Brivo user code.",code:"bhv_garage",codeLabel:"Garage code",src:"Brandon, 2026-11-05"},
   se:{name:"Storage Elevated",addr:"4006 N. Forestdale Dr, Park City, UT 84098",phone:"435-333-4400",note:"Newest receipts in Dropbox are from 2023, so we may not rent here any more. Brandon or Kim to confirm.",src:CO_D+"13-Vendors & Chanel Partners/Storage Elevated (newest receipt 2023)"}};
 CO_FACTS.storeUnits=[
   {u:"B216",at:"ps",bill:"Billed the 17th with B259 + B262",since:"",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026)"},
-  {u:"B229",at:"ps",bill:"Billed the 30th on its own account (\"Moose\")",since:"Jan 2025",src:CO_PS+"Invoices/2026 (invoice Oct 30, 2026; welcome letter Jan 10, 2025)"},
-  {u:"B258",at:"ps",bill:"Billed the 18th with B263",since:"Apr 2021",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; welcome letter Apr 28, 2021)"},
+  {u:"B229",at:"ps",use:"Housekeeping manager",bill:"Billed the 30th on its own account (\"Moose\")",since:"Jan 2025",src:CO_PS+"Invoices/2026 (invoice Oct 30, 2026; welcome letter Jan 10, 2025)"},
+  {u:"B258",at:"ps",use:"Linens & supplies \u2014 all cleaners",bill:"Billed the 18th with B263",since:"Apr 2021",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; welcome letter Apr 28, 2021)"},
   {u:"B259",at:"ps",bill:"Billed the 17th with B216 + B262",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
-  {u:"B262",at:"ps",bill:"Billed the 17th with B216 + B259",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
-  {u:"B263",at:"ps",bill:"Billed the 18th with B258",since:"Aug 2022 or earlier",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; hazardous materials form Aug 25, 2022)"},
+  {u:"B262",at:"ps",use:"Maintenance only",bill:"Billed the 17th with B216 + B259",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
+  {u:"B263",at:"ps",use:"Linens & supplies \u2014 all cleaners",bill:"Billed the 18th with B258",since:"Aug 2022 or earlier",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; hazardous materials form Aug 25, 2022)"},
   {u:"B346",at:"ps",size:"10x10",gone:"Not on any 2026 invoice",since:"Dec 2022",src:CO_PS+"Contract for 10x10 Storage Unit.pdf (Dec 7, 2022)"},
   {u:"B071",at:"ps",gone:"Not on any 2026 invoice",since:"Jun 2024",src:CO_PS+"Invoices/2024 (welcome letter + invoice Jun 2024)"}];
 function coUnits(){ var ed=coEdits().co_storage_units||{}, seen={}, out=[];
   CO_FACTS.storeUnits.forEach(function(f){ seen[f.u]=1; var e=ed[f.u]||{}, m=Object.assign({},f); Object.keys(e).forEach(function(k){ if(e[k]!=="" && e[k]!=null) m[k]=e[k]; }); m.edited=!!Object.keys(e).length; out.push(m); });
   Object.keys(ed).forEach(function(k){ if(!seen[k]) out.push(Object.assign({u:k,at:"ps",added:1,edited:true},ed[k])); });
   return out; }
+/* Office + storage codes (Brandon 2026-11-05): only in table hub_office_codes, read via office_codes() = the slots your teams
+   may see (admins: all + who sees each). Never put a code in this file. Admins type codes + pick teams in "Codes". */
+var CO_TEAMS=[["office_manager","Office managers"],["front_desk","Front desk"],["owner_relations","Owner relations"],["maint_manager","Maintenance manager"],["maint_crew","Maintenance crew"],["hk_manager","Housekeeping manager"],["hk_crew","Housekeeping crew"],["licensing","Licensing"],["leasing","Leasing"]];
+function coCodes(){ if(D._ocodes || D._ocAsk) return D._ocodes||[]; D._ocAsk=1; var sb=window.MM_SB; if(!sb) return [];
+  sb.rpc("office_codes").then(function(r){ D._ocodes=(r&&r.data)||[]; D._ocAsk=0; if(r&&r.error) D._ocodes=[]; schedule(); }); return []; }
+function coCodeAdmin(){ return coCodes().some(function(c){ return c.teams; }); }
+function coCode(key,label){ var c=coCodes().filter(function(x){ return x.key===key; })[0]; if(!c) return "";
+  if(!c.code && !c.teams) return "";
+  return '<div class="cocode"><span>\ud83d\udd12 '+esc(label||c.label)+'</span>'+(c.code?'<b class="mono">'+esc(c.code)+'</b>':'<i class="muted">not set yet</i>')+'</div>'; }
+function mCoCodes(place){ var cs=coCodes().filter(function(c){ return place==="all"||c.place===place; });
+  openModal("Codes",'<div class="note">Only the teams you tick (and admins) see each code. Leave a code blank to keep it; type a dash ( - ) to clear it.</div>'+cs.map(function(c,i){
+      return '<div class="cocset"><div class="fields">'+fld("occ_"+i,c.label+(c.code?" (set)":" (not set)"),"","text",'autocomplete="off" placeholder="'+(c.code?"leave blank to keep":"type the code")+'"')+'</div>'+
+        '<div class="coteams">'+CO_TEAMS.map(function(t){ return '<label class="toggle"><input type="checkbox" id="oct_'+i+'_'+t[0]+'"'+((c.teams||[]).indexOf(t[0])>-1?' checked':'')+'> '+esc(t[1])+'</label>'; }).join("")+'</div></div>'; }).join(""),
+    function(){ var sb=window.MM_SB, jobs=[];
+      cs.forEach(function(c,i){ var v=fv("occ_"+i).trim(), tm=CO_TEAMS.filter(function(t){ return $("oct_"+i+"_"+t[0]).checked; }).map(function(t){ return t[0]; });
+        var same=JSON.stringify(tm.slice().sort())===JSON.stringify((c.teams||[]).slice().sort());
+        if(!v && same) return;
+        jobs.push(sb.rpc("office_code_set",{p_key:c.key,p_code:v===""?null:(v==="-"?"":v),p_teams:same?null:tm,p_note:null}).then(function(r){ if(r.error) throw r.error; })); });
+      return Promise.all(jobs).then(function(){ D._ocodes=null; D._ocAsk=0; coCodes(); toast(jobs.length?"Saved":"Nothing changed"); closeModal(); })
+        .catch(function(e){ toast((window.top&&top.niceErr?top.niceErr(e):(e.message||"Couldn't save"))); throw e; }); },"Save"); }
 function coUnitOn(x){ return x.off!=null&&x.off!==""?!x.off:!x.gone; }
 function coStorage(){ var us=coUnits(), on=us.filter(coUnitOn), old=us.filter(function(x){ return !coUnitOn(x); }), pl=CO_FACTS.storePlaces, by=coEdits().co_storage_units_by;
-  var place=function(k){ var p=pl[k]; return '<div class="coplace"><b>'+esc(p.name)+'</b><div>'+esc(p.addr)+' · <a href="https://maps.google.com/?q='+encodeURIComponent(p.addr)+'" target="_blank" rel="noopener">Map ↗</a></div><div><a href="tel:'+esc(p.phone.replace(/\D/g,""))+'">'+esc(p.phone)+'</a></div>'+(p.note?'<div class="note" style="margin-top:6px">'+esc(p.note)+'</div>':'')+'<div class="hint">'+coSrc(p.src)+'</div></div>'; };
+  var place=function(k){ var p=pl[k]; return '<div class="coplace"><b>'+esc(p.name)+'</b><div>'+esc(p.addr)+' · <a href="https://maps.google.com/?q='+encodeURIComponent(p.addr)+'" target="_blank" rel="noopener">Map ↗</a></div>'+(p.phone?'<div><a href="tel:'+esc(p.phone.replace(/\D/g,""))+'">'+esc(p.phone)+'</a></div>':'')+(p.people?'<div class="copeople">'+p.people.map(function(x){ return '<div><b>'+esc(x[0])+'</b> <span class="muted">'+esc(x[1])+'</span>'+(x[2]?' · <a href="tel:'+esc(x[2].replace(/\D/g,""))+'">'+esc(x[2])+'</a>':'')+'</div>'; }).join("")+'</div>':'')+(p.email?'<div><a href="mailto:'+esc(p.email)+'">'+esc(p.email)+'</a>'+(p.web?' \u00b7 <a href="'+esc(p.web)+'" target="_blank" rel="noopener">'+esc(p.web.replace(/^https?:\/\//,""))+' \u2197</a>':'')+'</div>':'')+(p.hours?'<div>'+esc(p.hours)+'</div>':'')+(p.how?'<div>'+esc(p.how)+'</div>':'')+(p.code?coCode(p.code,p.codeLabel):'')+(p.note?'<div class="note" style="margin-top:6px">'+esc(p.note)+'</div>':'')+'<div class="hint">'+coSrc(p.src)+'</div></div>'; };
   var card=function(x){ return '<div class="counit'+(coUnitOn(x)?'':' off')+'"><div class="cuhd"><b>'+esc(x.u)+'</b><button class="btn sm ghost" data-cou="'+esc(x.u)+'">Edit</button></div>'+
-      [["Size",x.size],["What\u2019s in it",x.holds],["Key / how to get in",x.access],["Rented since",x.since],["Billing",x.bill],["Status",coUnitOn(x)?"":(x.gone||"We gave it up")],["Notes",x.notes]].map(function(r){
-        return '<div class="cul"><span>'+esc(r[0])+'</span>'+(r[1]?'<b>'+esc(r[1])+'</b>':'<i class="muted">not filled in</i>')+'</div>'; }).filter(function(s,i){ return i<2||s.indexOf("not filled in")<0; }).join("")+
+      [["Used for",x.use],["Size",x.size],["What\u2019s in it",x.holds],["Key / how to get in",x.access],["Rented since",x.since],["Status",coUnitOn(x)?"":(x.gone||"We gave it up")],["Notes",x.notes]].map(function(r){
+        return '<div class="cul"><span>'+esc(r[0])+'</span>'+(r[1]?'<b>'+esc(r[1])+'</b>':'<i class="muted">not filled in</i>')+'</div>'; }).filter(function(s,i){ return (i>0&&i<3)||s.indexOf("not filled in")<0; }).join("")+coCode("unit_"+x.u,"Lock box")+
       '<div class="hint">'+(x.edited&&by?'Edited in the hub by '+esc(nameFor(by)):'')+'</div></div>'; };
   var nt=coVal("storage","notes"), tx=coVal("storage","storage");
-  return '<div class="coact"><button class="btn sm ghost" data-cou="">+ Add a unit</button><button class="btn sm ghost" data-co="storage">Edit notes</button></div>'+
+  return '<div class="coact">'+(coCodeAdmin()?'<button class="btn sm ghost" data-cocodes="storage">\ud83d\udd12 Codes</button>':'')+'<button class="btn sm ghost" data-cou="">+ Add a unit</button><button class="btn sm ghost" data-co="storage">Edit notes</button></div>'+
     place("ps")+'<div class="lbl" style="margin:12px 0 6px">'+on.length+' units we rent now</div><div class="counits">'+on.map(card).join("")+'</div>'+
     '<div class="hint" style="margin-top:6px">Tap Edit on a unit to add its size and what\u2019s in it.</div>'+
-    (old.length?'<details class="infocat" style="margin-top:10px"><summary>'+old.length+' older units (no longer billed)</summary><div class="counits">'+old.map(card).join("")+'</div></details>':'')+
-    '<div class="lbl" style="margin:14px 0 6px">Other storage place</div>'+place("se")+
+    
+    '<div class="lbl" style="margin:14px 0 6px">Bear Hollow storage (office building)</div>'+place("bhv")+
     (tx.s.indexOf("Edited in the hub")===0?coRow("Storage (typed earlier)",tx.v,tx.s):'')+(nt.v?coRow("Storage notes",nt.v,nt.s):''); }
 function mCoUnit(u){ var pe=coEdits(), ed=pe.co_storage_units||{}, x=u?(coUnits().filter(function(y){ return y.u===u; })[0]||{u:u}):{}, e=u?(ed[u]||{}):{};
-  var F=[["size","Size","e.g. 10x10"],["holds","What\u2019s in it","e.g. portable ACs, spare linens, holiday decor"],["access","Key / how to get in","Where the key is, who has one. No codes."],["since","Rented since",""],["bill","Billing",""],["notes","Notes",""]];
+  var F=[["size","Size","e.g. 10x10"],["holds","What\u2019s in it","e.g. portable ACs, spare linens, holiday decor"],["access","Key / how to get in","Where the key is, who has one. No codes."],["since","Rented since",""],["notes","Notes",""]];
   openModal(u?"Storage unit "+u:"Add a storage unit",'<div class="note">Blank = use the file it came from. No gate codes, lock codes or account numbers.</div><div class="fields" style="margin-top:8px">'+
     (u?'':fld("cou_u","Unit number","","text",'placeholder="e.g. B270"'))+F.map(function(f){ return area("cou_"+f[0],f[1],e[f[0]]||"",(x[f[0]]&&!e[f[0]]?x[f[0]]:f[2])); }).join("")+'</div>'+
     '<label class="toggle" style="margin-top:8px"><input type="checkbox" id="cou_off"'+(!coUnitOn(x)&&u?' checked':'')+'> We don\u2019t rent this unit any more</label>',
@@ -1622,8 +1643,9 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     '.counits{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}.counit{border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--surface)}.counit.off{opacity:.65}'+
     '.cuhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}.cuhd b{font-size:20px;letter-spacing:.5px}.cul{display:grid;grid-template-columns:96px 1fr;gap:6px;font-size:13px;padding:3px 0;border-top:1px solid var(--line-2)}.cul span{color:var(--muted)}'+
     '.cooffice{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:14px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}'+
-    '.cooh{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cooh i{font-style:normal;font-size:22px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2)}.cooh b{font-size:16px}.cooh button{margin-left:auto}'+
+    '.cooh{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cooh i{font-style:normal;font-size:22px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2)}.cooh b{font-size:16px}.cooh button{margin-left:auto}.cooh button+button{margin-left:6px}'+
     '.cofs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 22px}.cof.w{grid-column:span 2}.cof span{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}.cof b{font-size:14px;line-height:1.45;font-weight:600}.cof .hint{font-size:11.5px}'+
+    '.copeople{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2);font-size:13.5px}.cocode{display:flex;gap:8px;align-items:baseline;margin-top:6px;font-size:13.5px}.cocode span{color:var(--muted)}.cocode b{font-size:15px;letter-spacing:1px}.cocodes{display:flex;flex-wrap:wrap;gap:6px 28px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line-2)}.cocset{border-top:1px solid var(--line-2);padding:10px 0}.coteams{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:13px}'+
     '.dbody .hint:empty{display:none}.cooh small{display:block;color:var(--muted);font-size:12.5px}.costore .coact{margin-top:-46px;margin-bottom:10px}.costore .counits{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}'+
     '@media (max-width:560px){.cotiles{grid-template-columns:1fr}.cotile{min-height:0}.cof.w{grid-column:auto}}</style>';
   var veh='<div class="coact"><button class="btn sm ghost" data-cov="">+ Add vehicle</button></div>'+
@@ -1658,7 +1680,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var ofc=CO_FIELDS.office.map(function(f){ var x=coVal("office",f[0]); if(!x.v) return ""; var tel=f[0]==="phone", em=f[0]==="email";
       var v=esc(x.v).replace(/\n/g,"<br>"); if(em) v=v.replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g,'<a href="mailto:$1">$1</a>'); if(tel) v=v.replace(/(\d{3}[-. ]\d{3}[-. ]\d{4})/g,function(m){ return '<a href="tel:'+m.replace(/\D/g,"")+'">'+m+'</a>'; });
       return '<div class="cof'+(f[0]==="addr"||f[0]==="notes"?' w':'')+'"><span>'+esc(f[1])+'</span><b>'+v+'</b><div class="hint">'+coSrc(x.s)+'</div></div>'; }).join("");
-  h+='<section class="cooffice"><div class="cooh"><i>\ud83c\udfe2</i><b>'+esc(CO_TITLES.office)+'</b><button class="btn sm ghost" data-co="office">Edit</button></div><div class="cofs">'+(ofc||'<div class="note">Nothing recorded yet.</div>')+'</div></section>';
+  h+='<section class="cooffice"><div class="cooh"><i>\ud83c\udfe2</i><b>'+esc(CO_TITLES.office)+'</b>'+(coCodeAdmin()?'<button class="btn sm ghost" data-cocodes="office">\ud83d\udd12 Codes</button>':'')+'<button class="btn sm ghost" data-co="office">Edit</button></div><div class="cofs">'+(ofc||'<div class="note">Nothing recorded yet.</div>')+'</div>'+((coCode("office_keybox")+coCode("office_alarm"))?'<div class="cocodes">'+coCode("office_keybox")+coCode("office_alarm")+'</div>':'')+'</section>';
   h+='<section class="cooffice costore"><div class="cooh"><i>\ud83d\udce6</i><div><b>'+esc(CO_TITLES.storage)+'</b><small>Protection Storage - '+su.length+' total</small></div></div>'+coStorage()+'</section>';
   h+='<div class="cotiles">'+T.map(function(t){ var o=t[0]===op2;
       return '<button class="cotile" data-cotile="'+t[0]+'" aria-pressed="'+o+'"><div class="cti"><i>'+t[1]+'</i><div><b>'+esc(t[2])+'</b><small>'+esc(t[3])+'</small></div></div>'+
@@ -4482,6 +4504,7 @@ document.addEventListener("click",function(ev){
   if(d.aedit){ var q=d.aedit.split("|"); return mAppl(q[0],q[1]); }
   if(d.co){ if(!need()) return; return mCo(d.co); }
   if(d.cov!=null){ if(!need()) return; return mCoVehicle(d.cov); }
+  if(d.cocodes) return mCoCodes(d.cocodes);
   if(d.cou!=null){ if(!need()) return; return mCoUnit(d.cou); }
   if(d.cotile){ S.ui.coTile=S.ui.coTile===d.cotile?"":d.cotile; if(S.ui.coTile!=="veh") S.ui.vopen=""; render();
     if(S.ui.coTile) setTimeout(function(){ var p=document.getElementById("copanel"); if(p&&p.scrollIntoView) p.scrollIntoView({behavior:"smooth",block:"start"}); },60); return; }
