@@ -1286,8 +1286,10 @@ function codeLines(t,max){ var out=[]; String(t||"").replace(/<[^>]+>/g," ").spl
 function tLine(l,plain){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l), v=function(x){ return plain?'<b>'+esc(x)+'</b>':qBold(x); };
   return '<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+v(m[2]):v(l))+'</div>'; }
 function kbc(v){ return String(v||"").replace(/\s*\(\s*private\s*\)/ig,"").trim(); }   /* Track key box codes carry "(PRIVATE)" (Brandon 2026-11-03) */
-function tCell(label,src,lines,plain,cls){ lines=(lines||[]).filter(Boolean); if(!lines.length) return "";
-  return '<div class="hql'+(cls?' '+cls:'')+'"><div class="qvh">'+esc(label)+(src?'<span class="hsrc">· '+esc(src)+'</span>':'')+'</div>'+lines.map(function(l){ return typeof l==="string"?tLine(l,plain):l.html; }).join("")+'</div>'; }
+/* .hentry = Entry notes, 2 columns wide */
+function tCell(label,src,lines,plain,cls){ if(cls==='hentry' && !document.getElementById('hentrycss')){ var st=document.createElement('style'); st.id='hentrycss'; st.textContent='.hql.hentry{grid-column:span 2}.hql.hentry .tl{display:inline-block;margin-right:18px}@media (max-width:640px){.hql.hentry{grid-column:auto}}'; document.head.appendChild(st); }
+ lines=(lines||[]).filter(Boolean); if(!lines.length) return "";
+  return '<div class="hql'+(cls?' '+cls:'')+'"><div class="qvh">'+esc(label)+(src&&/^Contract/.test(src)?'<span class="hsrc">· '+esc(src)+'</span>':'')+'</div>'+lines.map(function(l){ return typeof l==="string"?tLine(l,plain):l.html; }).join("")+'</div>'; }
 /* the 4 code sections on a tile (Brandon 2026-11-03: "lock system … master code and owner code / garage/gate … garage and gate code /
    keybox with the keybox code and location / the owner lockout information if applicable"). Track codes first, then the lockout note's
    labeled lines sorted by their label; a number already shown isn't shown twice. Lines the database masked (•••) stay masked. */
@@ -1322,7 +1324,9 @@ function lockSecs(c,t,q,p){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},g
   if(loc.keybox && !S.kb.some(function(l){ return /^Location:/.test(l); })) add("kb","Location",loc.keybox,(loc.src&&loc.src.keybox)||"Hub edit");
   if(t.owner_hidden) S.own.push({html:'<div class="tl muted">Open Home details to view</div>'});
   var sv=function(k){ return Object.keys(src[k]).join(" + "); };
-  return [tCell("Lock system",S.lock.length?"Brivo":"",S.lock),tCell("Garage / gate",sv("gate"),S.gate),tCell("Key box",sv("kb"),S.kb),tCell("Owner lockout",sv("own")||(t.owner_hidden?"Locks":""),S.own)]; }
+  var rl=function(arr,map){ return arr.map(function(l){ if(typeof l!=="string") return l; var m=/^([^:]+):\s*(.*)$/.exec(l); return m&&map[m[1]]?map[m[1]]+": "+m[2]:l; }); };
+  var all=S.lock.concat(S.gate,rl(S.kb,{"Code":"Key box","Location":"Key box location"}),rl(S.own,{"Location":"Owner closet location"}));
+  return [tCell("Entry notes","",all,false,"hentry")]; }
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
   var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+t.wifi_name:"",t.wifi_pass?"Password: "+t.wifi_pass:""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+pe.wifiName:"",pe.wifiPass?"Password: "+pe.wifiPass:""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
   cells.push(tCell("Wi-Fi",q.src.wifi,wifi,true));
