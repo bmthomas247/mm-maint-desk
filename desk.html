@@ -1471,11 +1471,11 @@ CO_FACTS.storePlaces={
   se:{name:"Storage Elevated",addr:"4006 N. Forestdale Dr, Park City, UT 84098",phone:"435-333-4400",note:"Newest receipts in Dropbox are from 2023, so we may not rent here any more. Brandon or Kim to confirm.",src:CO_D+"13-Vendors & Chanel Partners/Storage Elevated (newest receipt 2023)"}};
 CO_FACTS.storeUnits=[
   {u:"B216",at:"ps",bill:"Billed the 17th with B259 + B262",since:"",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026)"},
-  {u:"B229",at:"ps",use:"Housekeeping manager",bill:"Billed the 30th on its own account (\"Moose\")",since:"Jan 2025",src:CO_PS+"Invoices/2026 (invoice Oct 30, 2026; welcome letter Jan 10, 2025)"},
-  {u:"B258",at:"ps",use:"Linens & supplies \u2014 all cleaners",bill:"Billed the 18th with B263",since:"Apr 2021",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; welcome letter Apr 28, 2021)"},
+  {u:"B229",at:"ps",grp:"hk",use:"Housekeeping manager",bill:"Billed the 30th on its own account (\"Moose\")",since:"Jan 2025",src:CO_PS+"Invoices/2026 (invoice Oct 30, 2026; welcome letter Jan 10, 2025)"},
+  {u:"B258",at:"ps",grp:"hk",use:"Linens & supplies \u2014 all cleaners",bill:"Billed the 18th with B263",since:"Apr 2021",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; welcome letter Apr 28, 2021)"},
   {u:"B259",at:"ps",bill:"Billed the 17th with B216 + B262",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
-  {u:"B262",at:"ps",use:"Maintenance only",bill:"Billed the 17th with B216 + B259",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
-  {u:"B263",at:"ps",use:"Linens & supplies \u2014 all cleaners",bill:"Billed the 18th with B258",since:"Aug 2022 or earlier",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; hazardous materials form Aug 25, 2022)"},
+  {u:"B262",at:"ps",grp:"maint",use:"Maintenance only",bill:"Billed the 17th with B216 + B259",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
+  {u:"B263",at:"ps",grp:"hk",use:"Linens & supplies \u2014 all cleaners",bill:"Billed the 18th with B258",since:"Aug 2022 or earlier",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; hazardous materials form Aug 25, 2022)"},
   {u:"B346",at:"ps",size:"10x10",gone:"Not on any 2026 invoice",since:"Dec 2022",src:CO_PS+"Contract for 10x10 Storage Unit.pdf (Dec 7, 2022)"},
   {u:"B071",at:"ps",gone:"Not on any 2026 invoice",since:"Jun 2024",src:CO_PS+"Invoices/2024 (welcome letter + invoice Jun 2024)"}];
 function coUnits(){ var ed=coEdits().co_storage_units||{}, seen={}, out=[];
@@ -1502,28 +1502,30 @@ function mCoCodes(place){ var cs=coCodes().filter(function(c){ return place==="a
         jobs.push(sb.rpc("office_code_set",{p_key:c.key,p_code:v===""?null:(v==="-"?"":v),p_teams:same?null:tm,p_note:null}).then(function(r){ if(r.error) throw r.error; })); });
       return Promise.all(jobs).then(function(){ D._ocodes=null; D._ocAsk=0; coCodes(); toast(jobs.length?"Saved":"Nothing changed"); closeModal(); })
         .catch(function(e){ toast((window.top&&top.niceErr?top.niceErr(e):(e.message||"Couldn't save"))); throw e; }); },"Save"); }
+function coGrp(x){ return x.grp==="none"?"":x.grp; }
 function coUnitOn(x){ return x.off!=null&&x.off!==""?!x.off:!x.gone; }
 function coStorage(){ var us=coUnits(), on=us.filter(coUnitOn), old=us.filter(function(x){ return !coUnitOn(x); }), pl=CO_FACTS.storePlaces, by=coEdits().co_storage_units_by;
-  var place=function(k){ var p=pl[k]; return '<div class="coplace"><b>'+esc(p.name)+'</b><div>'+esc(p.addr)+' · <a href="https://maps.google.com/?q='+encodeURIComponent(p.addr)+'" target="_blank" rel="noopener">Map ↗</a></div>'+(p.phone?'<div><a href="tel:'+esc(p.phone.replace(/\D/g,""))+'">'+esc(p.phone)+'</a></div>':'')+(p.people?'<div class="copeople">'+p.people.map(function(x){ return '<div><b>'+esc(x[0])+'</b> <span class="muted">'+esc(x[1])+'</span>'+(x[2]?' · <a href="tel:'+esc(x[2].replace(/\D/g,""))+'">'+esc(x[2])+'</a>':'')+'</div>'; }).join("")+'</div>':'')+(p.email?'<div><a href="mailto:'+esc(p.email)+'">'+esc(p.email)+'</a>'+(p.web?' \u00b7 <a href="'+esc(p.web)+'" target="_blank" rel="noopener">'+esc(p.web.replace(/^https?:\/\//,""))+' \u2197</a>':'')+'</div>':'')+(p.hours?'<div>'+esc(p.hours)+'</div>':'')+(p.how?'<div>'+esc(p.how)+'</div>':'')+(p.code?coCode(p.code,p.codeLabel):'')+(p.note?'<div class="note" style="margin-top:6px">'+esc(p.note)+'</div>':'')+'<div class="hint">'+coSrc(p.src)+'</div></div>'; };
-  var card=function(x){ return '<div class="counit'+(coUnitOn(x)?'':' off')+'"><div class="cuhd"><b>'+esc(x.u)+'</b><button class="btn sm ghost" data-cou="'+esc(x.u)+'">Edit</button></div>'+
-      [["Used for",x.use],["Size",x.size],["What\u2019s in it",x.holds],["Key / how to get in",x.access],["Rented since",x.since],["Status",coUnitOn(x)?"":(x.gone||"We gave it up")],["Notes",x.notes]].map(function(r){
-        return '<div class="cul"><span>'+esc(r[0])+'</span>'+(r[1]?'<b>'+esc(r[1])+'</b>':'<i class="muted">not filled in</i>')+'</div>'; }).filter(function(s,i){ return (i>0&&i<3)||s.indexOf("not filled in")<0; }).join("")+coCode("unit_"+x.u,"Lock box")+
+  var place=function(k){ var p=pl[k]; return '<div class="coplace"><b>'+esc(p.name)+'</b><div>'+esc(p.addr)+' · <a href="https://maps.google.com/?q='+encodeURIComponent(p.addr)+'" target="_blank" rel="noopener">Map ↗</a></div>'+(p.phone?'<div><a href="tel:'+esc(p.phone.replace(/\D/g,""))+'">'+esc(p.phone)+'</a></div>':'')+((p.people||p.email||p.hours)?'<details class="copeople"><summary>Staff, email + hours</summary>'+(p.people?'<div>'+p.people.map(function(x){ return '<div><b>'+esc(x[0])+'</b> <span class="muted">'+esc(x[1])+'</span>'+(x[2]?' · <a href="tel:'+esc(x[2].replace(/\D/g,""))+'">'+esc(x[2])+'</a>':'')+'</div>'; }).join("")+'</div>':'')+(p.email?'<div><a href="mailto:'+esc(p.email)+'">'+esc(p.email)+'</a>'+(p.web?' \u00b7 <a href="'+esc(p.web)+'" target="_blank" rel="noopener">'+esc(p.web.replace(/^https?:\/\//,""))+' \u2197</a>':'')+'</div>':'')+(p.hours?'<div>'+esc(p.hours)+'</div>':'')+'</details>':'')+(p.how?'<div>'+esc(p.how)+'</div>':'')+(p.code?coCode(p.code,p.codeLabel):'')+(p.note?'<div class="note" style="margin-top:6px">'+esc(p.note)+'</div>':'')+'<div class="hint">'+coSrc(p.src)+'</div></div>'; };
+  var card=function(x){ return '<div class="counit'+(coUnitOn(x)?'':' off')+'"><div class="cuhd"><b>'+esc(x.u)+'</b><button class="btn sm ghost" data-cou="'+esc(x.u)+'">Edit</button></div>'+(x.use?'<div class="cuse">'+esc(x.use)+'</div>':'')+
+      [["Size",x.size],["What\u2019s in it",x.holds],["Key / how to get in",x.access],["Status",coUnitOn(x)?"":(x.gone||"We gave it up")],["Notes",x.notes]].map(function(r){
+        return '<div class="cul"><span>'+esc(r[0])+'</span>'+(r[1]?'<b>'+esc(r[1])+'</b>':'<i class="muted">not filled in</i>')+'</div>'; }).filter(function(s,i){ return i<2||s.indexOf("not filled in")<0; }).join("")+coCode("unit_"+x.u,"Lock box")+
       '<div class="hint">'+(x.edited&&by?'Edited in the hub by '+esc(nameFor(by)):'')+'</div></div>'; };
   var nt=coVal("storage","notes"), tx=coVal("storage","storage");
   return '<div class="coact">'+(coCodeAdmin()?'<button class="btn sm ghost" data-cocodes="storage">\ud83d\udd12 Codes</button>':'')+'<button class="btn sm ghost" data-cou="">+ Add a unit</button><button class="btn sm ghost" data-co="storage">Edit notes</button></div>'+
-    place("ps")+'<div class="lbl" style="margin:12px 0 6px">'+on.length+' units we rent now</div><div class="counits">'+on.map(card).join("")+'</div>'+
-    '<div class="hint" style="margin-top:6px">Tap Edit on a unit to add its size and what\u2019s in it.</div>'+
-    
-    '<div class="lbl" style="margin:14px 0 6px">Bear Hollow storage (office building)</div>'+place("bhv")+
+    place("ps")+'<div class="lbl" style="margin:14px 0 6px">Housekeeping</div><div class="counits">'+on.filter(function(x){ return x.grp==="hk"; }).map(card).join("")+'</div>'+
+    '<div class="lbl" style="margin:14px 0 6px">Maintenance</div><div class="counits">'+on.filter(function(x){ return x.grp==="maint"; }).map(card).join("")+'</div><div style="margin-top:10px">'+place("bhv")+'</div>'+
+    (on.some(function(x){ return x.grp!=="hk"&&x.grp!=="maint"; })?'<div class="lbl" style="margin:14px 0 6px">Not sorted yet</div><div class="counits">'+on.filter(function(x){ return x.grp!=="hk"&&x.grp!=="maint"; }).map(card).join("")+'</div>':'')+
+    '<div class="hint" style="margin-top:8px">Tap Edit on a unit to add its size, what\u2019s in it, or which team uses it.</div>'+
     (tx.s.indexOf("Edited in the hub")===0?coRow("Storage (typed earlier)",tx.v,tx.s):'')+(nt.v?coRow("Storage notes",nt.v,nt.s):''); }
 function mCoUnit(u){ var pe=coEdits(), ed=pe.co_storage_units||{}, x=u?(coUnits().filter(function(y){ return y.u===u; })[0]||{u:u}):{}, e=u?(ed[u]||{}):{};
-  var F=[["size","Size","e.g. 10x10"],["holds","What\u2019s in it","e.g. portable ACs, spare linens, holiday decor"],["access","Key / how to get in","Where the key is, who has one. No codes."],["since","Rented since",""],["notes","Notes",""]];
+  var F=[["size","Size","e.g. 10x10"],["holds","What\u2019s in it","e.g. portable ACs, spare linens, holiday decor"],["use","Used for","e.g. Linens & supplies"],["access","Key / how to get in","Where the key is, who has one."],["notes","Notes",""]];
   openModal(u?"Storage unit "+u:"Add a storage unit",'<div class="note">Blank = use the file it came from. No gate codes, lock codes or account numbers.</div><div class="fields" style="margin-top:8px">'+
     (u?'':fld("cou_u","Unit number","","text",'placeholder="e.g. B270"'))+F.map(function(f){ return area("cou_"+f[0],f[1],e[f[0]]||"",(x[f[0]]&&!e[f[0]]?x[f[0]]:f[2])); }).join("")+'</div>'+
+    '<label class="f" style="margin-top:8px"><span>Used by</span><select id="cou_grp"><option value="">Not sorted</option><option value="hk"'+(x.grp==="hk"?' selected':'')+'>Housekeeping</option><option value="maint"'+(x.grp==="maint"?' selected':'')+'>Maintenance</option></select></label>'+
     '<label class="toggle" style="margin-top:8px"><input type="checkbox" id="cou_off"'+(!coUnitOn(x)&&u?' checked':'')+'> We don\u2019t rent this unit any more</label>',
     function(){ var id=u||fv("cou_u").trim().toUpperCase(); if(!id){ toast("Type the unit number"); return Promise.reject(); }
       var bad=F.some(function(f){ return /\b(code|password|pin)\b\s*[:=#-]?\s*\d{3,}/i.test(fv("cou_"+f[0])); }); if(bad){ toast("Please leave codes out"); return Promise.reject(); }
-      var o={}; F.forEach(function(f){ o[f[0]]=fv("cou_"+f[0]); }); var fo=!!(CO_FACTS.storeUnits.filter(function(y){ return y.u===id; })[0]||{}).gone, ck=$("cou_off").checked;
+      var o={}; F.forEach(function(f){ o[f[0]]=fv("cou_"+f[0]); }); var fg=(CO_FACTS.storeUnits.filter(function(y){ return y.u===id; })[0]||{}).grp||"", gv=$("cou_grp").value; o.grp=gv===fg?"":(gv||"none"); var fo=!!(CO_FACTS.storeUnits.filter(function(y){ return y.u===id; })[0]||{}).gone, ck=$("cou_off").checked;
       o.off=(ck===fo)?"":ck; var all=Object.assign({},ed); all[id]=o; return coPut({co_storage_units:all,co_storage_units_by:S.me}); },"Save"); }
 var CO_FIELDS={
   office:[["addr","Office & mailing address"],["phone","Main phone"],["email","Main email"],["hours","Office hours"],["notes","Other office notes"]],
@@ -1646,7 +1648,9 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     '.cooh{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cooh i{font-style:normal;font-size:22px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2)}.cooh b{font-size:16px}.cooh button{margin-left:auto}.cooh button+button{margin-left:6px}'+
     '.cofs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 22px}.cof.w{grid-column:span 2}.cof span{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}.cof b{font-size:14px;line-height:1.45;font-weight:600}.cof .hint{font-size:11.5px}'+
     '.copeople{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2);font-size:13.5px}.cocode{display:flex;gap:8px;align-items:baseline;margin-top:6px;font-size:13.5px}.cocode span{color:var(--muted)}.cocode b{font-size:15px;letter-spacing:1px}.cocodes{display:flex;flex-wrap:wrap;gap:6px 28px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line-2)}.cocset{border-top:1px solid var(--line-2);padding:10px 0}.coteams{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:13px}'+
-    '.dbody .hint:empty{display:none}.cooh small{display:block;color:var(--muted);font-size:12.5px}.costore .coact{margin-top:-46px;margin-bottom:10px}.costore .counits{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}'+
+    '.cuse{display:inline-block;margin:0 0 6px;padding:2px 9px;border-radius:999px;background:var(--surface-2);color:var(--accent);font-size:12.5px;font-weight:600}.cul{grid-template-columns:88px 1fr}'+
+    '.coacc{width:100%;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0;margin:0}.costore:not(.open) .cooh{margin-bottom:0}.coacc .ctgo{margin-left:auto;font-size:12.5px;color:var(--accent);font-weight:600}.costore .coact{margin-top:6px}'+
+    '.dbody .hint:empty{display:none}.cooh small{display:block;color:var(--muted);font-size:12.5px}.costore .coact{margin:10px 0}.costore .counits{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}'+
     '@media (max-width:560px){.cotiles{grid-template-columns:1fr}.cotile{min-height:0}.cof.w{grid-column:auto}}</style>';
   var veh='<div class="coact"><button class="btn sm ghost" data-cov="">+ Add vehicle</button></div>'+
     (on.length?'<div class="vtiles">'+on.map(tile).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
@@ -1662,7 +1666,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   // logos & colors
   var cols=(pe.co_colors||"").split("\n").map(function(l){ var m=/(#[0-9a-f]{6}|#[0-9a-f]{3})\b\s*[-–:]?\s*(.*)/i.exec(l); return m?{hex:m[1],name:m[2],src:"Edited in the hub"}:null; }).filter(Boolean);
   if(!cols.length) cols=CO_FACTS.colors;
-  var brand='<div class="coact"><button class="btn sm ghost" data-co="brand">Edit</button></div>'+
+  var brand='<div class="coact"><a class="btn sm" href="https://www.dropbox.com/home/VRPC%20Photos-Videos/Patrick%20C%20Moose%20Cartoon" target="_blank" rel="noopener">\ud83e\udece Mascot photos (Patrick &amp; Penny) \u2197</a><button class="btn sm ghost" data-co="brand">Edit</button></div>'+
     (cols.length?'<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">'+cols.map(function(c){ return '<div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:6px;border:1px solid var(--line);background:'+esc(c.hex)+'"></span><span><b class="mono">'+esc(c.hex.toUpperCase())+'</b>'+(c.name?' <span class="muted">'+esc(c.name)+'</span>':'')+(c.src?'<div class="hint">'+coSrc(c.src)+'</div>':'')+'</span></div>'; }).join("")+'</div>':'<div class="note">No brand colors recorded yet.</div>')+
     (CO_FACTS.logos.length?'<div class="lbl">Logo files</div>'+CO_FACTS.logos.map(function(l){ return '<div class="qrow"><span class="qa plain">'+esc(l.v)+'</span></div><div class="hint" style="margin:0 0 6px">'+coSrc(l.src)+'</div>'; }).join(""):'')+
     (pe.co_logos?'<div class="lbl" style="margin-top:6px">Notes</div><div class="prose">'+esc(pe.co_logos)+'</div>':'');
@@ -1681,7 +1685,8 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
       var v=esc(x.v).replace(/\n/g,"<br>"); if(em) v=v.replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g,'<a href="mailto:$1">$1</a>'); if(tel) v=v.replace(/(\d{3}[-. ]\d{3}[-. ]\d{4})/g,function(m){ return '<a href="tel:'+m.replace(/\D/g,"")+'">'+m+'</a>'; });
       return '<div class="cof'+(f[0]==="addr"||f[0]==="notes"?' w':'')+'"><span>'+esc(f[1])+'</span><b>'+v+'</b><div class="hint">'+coSrc(x.s)+'</div></div>'; }).join("");
   h+='<section class="cooffice"><div class="cooh"><i>\ud83c\udfe2</i><b>'+esc(CO_TITLES.office)+'</b>'+(coCodeAdmin()?'<button class="btn sm ghost" data-cocodes="office">\ud83d\udd12 Codes</button>':'')+'<button class="btn sm ghost" data-co="office">Edit</button></div><div class="cofs">'+(ofc||'<div class="note">Nothing recorded yet.</div>')+'</div>'+((coCode("office_keybox")+coCode("office_alarm"))?'<div class="cocodes">'+coCode("office_keybox")+coCode("office_alarm")+'</div>':'')+'</section>';
-  h+='<section class="cooffice costore"><div class="cooh"><i>\ud83d\udce6</i><div><b>'+esc(CO_TITLES.storage)+'</b><small>Protection Storage - '+su.length+' total</small></div></div>'+coStorage()+'</section>';
+  var so=!!S.ui.coStore;
+  h+='<section class="cooffice costore'+(so?' open':'')+'"><button class="cooh coacc" data-costore="1" aria-expanded="'+so+'"><i>\ud83d\udce6</i><div><b>'+esc(CO_TITLES.storage)+'</b><small>Protection Storage - '+su.length+' total + Bear Hollow storage</small></div><span class="ctgo">'+(so?'Close \u25b4':'Open \u25be')+'</span></button>'+(so?coStorage():'')+'</section>';
   h+='<div class="cotiles">'+T.map(function(t){ var o=t[0]===op2;
       return '<button class="cotile" data-cotile="'+t[0]+'" aria-pressed="'+o+'"><div class="cti"><i>'+t[1]+'</i><div><b>'+esc(t[2])+'</b><small>'+esc(t[3])+'</small></div></div>'+
         t[4].filter(Boolean).map(function(l,i){ return l.charAt(0)==="<"?l:'<div class="ctl'+(i?' m':'')+'">'+esc(l)+'</div>'; }).join("")+'<span class="ctgo">'+(o?'Close \u25b4':'Open \u25be')+'</span></button>'; }).join("")+'</div>'+
@@ -4504,6 +4509,7 @@ document.addEventListener("click",function(ev){
   if(d.aedit){ var q=d.aedit.split("|"); return mAppl(q[0],q[1]); }
   if(d.co){ if(!need()) return; return mCo(d.co); }
   if(d.cov!=null){ if(!need()) return; return mCoVehicle(d.cov); }
+  if(d.costore){ S.ui.coStore=!S.ui.coStore; return render(); }
   if(d.cocodes) return mCoCodes(d.cocodes);
   if(d.cou!=null){ if(!need()) return; return mCoUnit(d.cou); }
   if(d.cotile){ S.ui.coTile=S.ui.coTile===d.cotile?"":d.cotile; if(S.ui.coTile!=="veh") S.ui.vopen=""; render();
