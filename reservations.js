@@ -484,7 +484,7 @@ function css(){ if(!document.getElementById("rescss")){ const st = document.crea
 const fresh = () => `<p class="muted" style="margin:4px 0 10px">Source: Track reservations, updated ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost, updated ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway, updated ${esc(when(B.bwUpdated))}` : ""}</p>`;
 
 /* ---------- queue */
-const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"arrive", from:"", to:"", group:"date", kind:"" };
+const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"bookedAt", from:"", to:"", group:"date", kind:"" };
 const RSHUT = new Set();
 // how they booked (Brandon 2026-10-30: a color each); chan "vrbo" = VRBO + direct, split by the Track type
 const KIND = { airbnb:"Airbnb", vrbo:"VRBO", direct:"Direct", ota:"Other sites", oguest:"Owner guest", owner:"Owner stay" };
@@ -501,7 +501,7 @@ const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1
   held:RSV('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'),
   sync:RSV('<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>') };
 // Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
-const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Newest booking first" };   // 2026-11-06 Brandon: "sort by most recent reservation made" (same day = higher res # first; Track numbers go up as bookings are made)
+const BY = { bookedAt:"Newest booking first", res:"Reservation # (highest first)", arrive:"Check-in", depart:"Check-out" };   // default = newest booking (Brandon 2026-11-06)   // 2026-11-06 Brandon: "sort by most recent reservation made" (same day = higher res # first; Track numbers go up as bookings are made)
 // "Held up by" groups (Brandon 2026-10-30): pick the group, then filter down to one of its members
 const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management", "Payment declined":"Payment", "No card on file for the next payment":"Payment",
   "Day 7: act today":"Day 4 / day 7", "Day 4: missing documents":"Day 4 / day 7" };
@@ -516,8 +516,8 @@ async function queue(v){
   // groups (like the Locks office neighborhoods): day of the sort date (month for the past lists) or neighborhood
   // Brandon 2026-11-03: Find searches every tab (a stay on Waiting on payment couldn't be found from In progress); results grouped by tab
   let ALLQ = false;
-  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ) return "@" + s.stage; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" ? d : d.slice(0, 7); };
-  const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k; if(k[0] === "@") return STAGE[k.slice(1)] || k.slice(1);
+  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ) return "@" + s.stage; if(F.by === "res") return "#"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" ? d : d.slice(0, 7); };
+  const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k; if(k[0] === "@") return STAGE[k.slice(1)] || k.slice(1); if(k === "#") return "By reservation #, highest first";
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
   const tile = s => { const why = [...new Set([...s.waiting, ...s.blockers].map(b => HELD_GROUP[b] ? HELD_GROUP[b] + " · " + b : b))], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
@@ -532,10 +532,10 @@ async function queue(v){
       ${s.next.length && (s.stage === "in_progress" || s.stage === "waiting_pay") ? `<div class="rnext"><b>Next:</b> ${esc(s.next[0])}</div>` : ""}
       <div class="progress"><i style="width:${pct}%"></i></div></a>`; };
   const draw = () => {
-    const dk = s => String(s[F.by] || "").slice(0, 10);
+    const dk = s => String(s[F.by === "res" ? "bookedAt" : F.by] || "").slice(0, 10);   // res # sort: From/To = booking date
     const base = B.stays.filter(s => (!F.kind || kindOf(s) === F.kind) && (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
       && (!F.from || dk(s) >= F.from) && (!F.to || (dk(s) && dk(s) <= F.to)))
-      .sort((x, y) => F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : (Number(y.res) || 0) - (Number(x.res) || 0)) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first, then highest res #
+      .sort((x, y) => F.by === "res" ? (Number(y.res) || 0) - (Number(x.res) || 0) : F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : (Number(y.res) || 0) - (Number(x.res) || 0)) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first, then highest res #
     ALLQ = !!String(F.q || "").trim();
     const inStage = ALLQ ? base : base.filter(s => s.stage === F.stage);
     const rows = inStage.filter(s => !F.held || heldHas(s, F.held));
