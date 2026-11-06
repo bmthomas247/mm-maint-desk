@@ -1768,6 +1768,33 @@ async function loadBirthdays(){
     ${month.length ? `<details class="acc2" ${today.length || week.length ? "" : "open"}><summary><b>🎉 ${MONTHS[mo - 1]} birthdays</b><span class="pill green">${month.length}</span></summary>${month.map(b => `<div class="bdrow"><b>${esc(b.name)}</b><span class="muted" style="margin-left:auto">${when(b)}</span></div>`).join("")}</details>` : ""}
   </div>`;
 }
+// 2026-11-06 (Brandon): "a clock in button on the home hub page ... quick and easy". Same clock_punch as Staffing ▸ Clock In / Clock Out.
+// Shows only for people on the hub time clock (clock_people is_me). One location pin per tap, like the Staffing page.
+async function homeClock(el){
+  if(!el || !DESKS.some(d => d.key === "staffing")) return;
+  try{
+    const pp = await sb.rpc("clock_people"); const me = (pp.data || []).find(p => p.is_me);
+    if(!me){ el.innerHTML = ""; return; }
+    const lr = await sb.from("hub_clock").select("kind,at").eq("user_id", me.user_id).eq("status", "ok").order("at", { ascending:false }).limit(1);
+    const last = (lr.data || [])[0], isIn = !!(last && last.kind === "in");
+    const t = s => new Date(s).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" });
+    const sameDay = s => new Date(s).toDateString() === new Date().toDateString();
+    const dur = s => { const m = Math.max(0, Math.round((Date.now() - Date.parse(s)) / 6e4)); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
+    const sub = isIn ? `since ${t(last.at)}${sameDay(last.at) ? "" : " " + new Date(last.at).toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" })} · ${dur(last.at)}`
+      : last ? `Last clocked out ${sameDay(last.at) ? "today" : new Date(last.at).toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" })} at ${t(last.at)}` : "Tap Clock in when you start work.";
+    el.innerHTML = `<div class="card hclk" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-left:6px solid ${isIn ? "#3c5f12" : "#c9ccc4"}">
+      <div style="flex:1;min-width:170px"><b style="font-size:17px">🕒 ${isIn ? "You're clocked in" : "You're clocked out"}</b><div class="muted">${sub}</div></div>
+      <button class="btn primary" id="hpunch" data-k="${isIn ? "out" : "in"}" style="font-size:17px;padding:12px 26px;min-width:150px">${isIn ? "Clock out" : "Clock in"}</button>
+      <a href="#/staffing" class="muted" style="font-size:13px;width:100%">My hours, missed punches → Staffing</a></div>`;
+    const b = el.querySelector("#hpunch");
+    b.onclick = () => { b.disabled = true; b.textContent = "Getting your location…";
+      const go = (lat, lng, acc) => sb.rpc("clock_punch", { p_kind:b.dataset.k, p_lat:lat, p_lng:lng, p_acc:acc }).then(r => {
+        if(r.error) alert(/failed to fetch|networkerror|load failed/i.test(r.error.message || "") ? "No signal right now. Try again when you have service (a missed clock-in can be added on Staffing)." : (window.niceErr ? niceErr(r.error) : r.error.message));
+        homeClock(el); }, () => { alert("No signal right now. Try again when you have service."); homeClock(el); });
+      if(!navigator.geolocation) return go(null, null, null);
+      navigator.geolocation.getCurrentPosition(p => go(p.coords.latitude, p.coords.longitude, Math.round(p.coords.accuracy)), () => go(null, null, null), { enableHighAccuracy:true, timeout:10000, maximumAge:60000 }); };
+  }catch(e){ el.innerHTML = ""; }
+}
 async function homeView(v){
   const first = (ME.name||"").split(" ")[0];
   // 2026-10-28 (Brandon): weather sits next to the greeting; click it for the full forecast + snow report
@@ -1776,6 +1803,7 @@ async function homeView(v){
     <div class="modal" id="wxm"><div class="card" style="width:min(720px,100%);max-height:90vh;overflow:auto">
       <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="wxback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Park City weather + snow</h2><button class="btn small" id="wxx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
       <div id="wxbody"><p class="muted">Loading…</p></div></div></div>
+    <div id="hclk"></div>
     <div id="bdays"></div>
     <div id="chk"></div>
     <div id="ptips"></div>
@@ -1794,6 +1822,7 @@ async function homeView(v){
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
   if(window.calHomeCard && $("#mywk")) calHomeCard($("#mywk"));   // calendar.js (2026-10-29)
+  homeClock($("#hclk"));   // 2026-11-06 (Brandon): clock in/out right on Home
   loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello(); pennyTips($("#ptips")); homeQuick($("#hq"));
   if(window.checksHome) checksHome($("#chk"));   // checks.js: my checks + issues warning (Brandon 2026-10-29)
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
