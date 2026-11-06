@@ -300,7 +300,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="reservations.js"></script>
 <script src="analytics.js"></script>
 <script src="meetings.js"></script>
-<script src="calendar.js"></script>
+<script src="calendar.js?v=20261106e2e"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
 <script src="staffing.js?v=20261106ot"></script>
@@ -789,6 +789,17 @@ async function bellLoad(force){
   const sq = sqr.data || [], sqAsk = sq.filter(r => r.role === "asked_me" && r.status === "asked"), sqDec = sq.filter(r => r.can_decide);
   if(sqAsk.length) it.push({ ic:"🤝", t:`${sqAsk.map(r => r.who.split(" ")[0]).slice(0, 2).join(" and ")} asked you to ${sqAsk.length === 1 ? (sqAsk[0].kind === "cover" ? "cover a shift" : "trade shifts") : "trade or cover shifts"}`, s:"Say yes or no", href:"#/cal_off" });
   if(sqDec.length) it.push({ ic:"🗓", t:`${sqDec.length} shift change${sqDec.length === 1 ? "" : "s"} waiting for you`, s:"Approve or say no", href:"#/cal_off", k:"bell_timeoff" });
+  { const mb = await q(sb.rpc("meet_bell")), x = mb.data || {}, f1 = n => (n || "Someone").split(" ")[0];   // coworker meetings (hub_meet_e2e.sql, 2026-11-06)
+    const when = (d, t) => new Date(d + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }) + (t ? " · " + ((+t.slice(0, 2)) % 12 || 12) + (t.slice(3, 5) !== "00" ? ":" + t.slice(3, 5) : "") + (+t.slice(0, 2) < 12 ? " am" : " pm") : "");
+    const ask = x.ask || [];
+    ask.slice(0, 3).forEach(m => it.push({ ic:"📅", t:`${f1(m.host)} invited you: ${m.title}`, s:when(m.day, m.start) + " · say yes, no or suggest a time", href:`#/cal_me/m${m.id}`, k:"bell_meet" }));
+    if(ask.length > 3) it.push({ ic:"📅", t:`${ask.length - 3} more meeting invite${ask.length === 4 ? "" : "s"}`, s:"Waiting for your answer", href:"#/cal_me", k:"bell_meet" });
+    let seenM = []; try { seenM = JSON.parse(localStorage.getItem("mm_seen_meet_answers") || "[]"); } catch(e){}
+    const na = (x.answers || []).filter(a => !seenM.includes(a.rid));
+    na.slice(0, 3).forEach(a => it.push({ ic:a.answer === "yes" ? "✅" : a.answer === "no" ? "🙅" : "🕑",
+      t:`${f1(a.who)} ${a.answer === "yes" ? "is coming to" : a.answer === "no" ? "can't make" : "suggested another time for"} ${a.title}`,
+      s:a.answer === "suggest" ? when(a.sug_day, a.sug_start) + " instead of " + when(a.day, a.start) : when(a.day, a.start), href:`#/cal_me/m${a.id}`, k:"bell_meet", mr:[a.rid] }));
+    if(na.length > 3) it.push({ ic:"📅", t:`${na.length - 3} more answer${na.length === 4 ? "" : "s"} on your meetings`, s:"Tap to mark read", k:"bell_meet", mr:na.slice(3).map(a => a.rid), quiet:true }); }
   if(window.otBellItems){ const ot = await window.otBellItems().catch(() => []); it.push(...ot); }   // staffing.js: close to 40 h (was a banner until 2026-11-06)
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
@@ -812,6 +823,9 @@ function bellDraw(){
     : `<div class="bnone">You're all caught up. 🎉</div>`);
   p.querySelectorAll("[data-bn]").forEach(a => a.onclick = e => { const x = BELL.items[+a.dataset.bn]; p.classList.remove("on");
     if(x.penny){ e.preventDefault(); pennyOpen(true); if($("#pennyLog").children.length) pennyAnswers(); setTimeout(() => bellLoad(true), 1500); }
+    if(x.mr){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_meet_answers") || "[]"); } catch(er){}
+      s = s.concat(x.mr).slice(-300); try { localStorage.setItem("mm_seen_meet_answers", JSON.stringify(s)); } catch(er){}
+      if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); }
     if(x.hn){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_home_notes") || "[]"); } catch(er){}
       s = s.concat(x.hn).slice(-300); try { localStorage.setItem("mm_seen_home_notes", JSON.stringify(s)); } catch(er){}
       if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); } });
