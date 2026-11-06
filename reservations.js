@@ -501,7 +501,7 @@ const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1
   held:RSV('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'),
   sync:RSV('<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>') };
 // Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
-const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Booking date" };
+const BY = { arrive:"Check-in", depart:"Check-out", bookedAt:"Newest booking first" };   // 2026-11-06 Brandon: "sort by most recent reservation made" (same day = higher res # first; Track numbers go up as bookings are made)
 // "Held up by" groups (Brandon 2026-10-30): pick the group, then filter down to one of its members
 const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management", "Payment declined":"Payment", "No card on file for the next payment":"Payment",
   "Day 7: act today":"Day 4 / day 7", "Day 4: missing documents":"Day 4 / day 7" };
@@ -535,7 +535,7 @@ async function queue(v){
     const dk = s => String(s[F.by] || "").slice(0, 10);
     const base = B.stays.filter(s => (!F.kind || kindOf(s) === F.kind) && (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
       && (!F.from || dk(s) >= F.from) && (!F.to || (dk(s) && dk(s) <= F.to)))
-      .sort((x, y) => F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : 0) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first
+      .sort((x, y) => F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : (Number(y.res) || 0) - (Number(x.res) || 0)) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first, then highest res #
     ALLQ = !!String(F.q || "").trim();
     const inStage = ALLQ ? base : base.filter(s => s.stage === F.stage);
     const rows = inStage.filter(s => !F.held || heldHas(s, F.held));
