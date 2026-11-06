@@ -582,8 +582,9 @@ async function queue(v){
       if(!by[n] || by[n] < k.at) by[n] = k.at; });
     const L = s.list || {}; if(L.by && L.by !== "Asana import" && L.at){ const n = String(L.by).split(" ")[0]; if(!by[n] || by[n] < L.at) by[n] = L.at; }
     const last = Object.entries(by).sort((a, b) => a[1] < b[1] ? 1 : -1)[0];
+    const first = Object.values(s.ticks || {}).map(k => k && k.at).filter(Boolean).sort()[0];   // started = first edit (hub or Asana)
     // Brandon 2026-11-06: the office res agent (Track's Res agent) + the last person to edit the check list
-    return `<div class="rwho"><span>👤 Res agent: <b>${esc(s.agent ? String(s.agent).split(" ")[0] : "—")}</b></span><span>✎ Last: ${last ? `<b>${esc(last[0])}</b> <span class="muted">${esc(when(last[1]))}</span>` : `<span class="muted">nobody yet</span>`}</span></div>`; };
+    return `<div class="rwho"><span>👤 Res agent: <b>${esc(s.agent ? String(s.agent).split(" ")[0] : "—")}</b>${first ? ` <span class="muted">· started ${esc(when(first))}</span>` : ""}</span><span>✎ Last: ${last ? `<b>${esc(last[0])}</b> <span class="muted">${esc(when(last[1]))}</span>` : `<span class="muted">nobody yet</span>`}</span></div>`; };
   const tile = s => { const why = [...new Set([...s.waiting, ...s.blockers].map(b => HELD_GROUP[b] ? HELD_GROUP[b] + " · " + b : b))], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
     return `<a class="card rhome k-${kindOf(s)}" href="#/reservations/${encodeURIComponent(s.res)}">
       <div class="rtop"><div style="min-width:0"><div class="rcode">${esc(s.guest || "#" + s.res)}</div>
