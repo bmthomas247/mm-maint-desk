@@ -1503,6 +1503,22 @@ function mCoCodes(place){ var cs=coCodes().filter(function(c){ return place==="a
       return Promise.all(jobs).then(function(){ D._ocodes=null; D._ocAsk=0; coCodes(); toast(jobs.length?"Saved":"Nothing changed"); closeModal(); })
         .catch(function(e){ toast((window.top&&top.niceErr?top.niceErr(e):(e.message||"Couldn't save"))); throw e; }); },"Save"); }
 function coGrp(x){ return x.grp==="none"?"":x.grp; }
+/* Vehicles = a quick look at the Vehicles desk (Brandon 2026-11-05): vehicles_quick() (hub_vehicles_quick.sql) gives every
+   Property Details person the list; odometer / last seen / oil only to people with vehicle tracking; can_open = has the Vehicles desk. */
+function coVQ(){ if(D._vq || D._vqAsk) return D._vq||null; D._vqAsk=1; var sb=window.MM_SB; if(!sb) return null;
+  sb.rpc("vehicles_quick").then(function(r){ D._vq=(r&&!r.error&&r.data)||[]; schedule(); }); return null; }
+function coVBody(v){ var m=(v.model||"")+" "+(v.name||""); return /seltos|suv/i.test(m)?"suv":/pacifica|van/i.test(m)?"van":/colorado|f-?150|maverick|truck|pickup/i.test(m)?"pickup":"car"; }
+function coAgo(t){ if(!t) return ""; var m=Math.round((Date.now()-new Date(t).getTime())/60000); return m<2?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" days ago"; }
+function coVehQuick(){ var vq=coVQ();
+  if(!vq) return '<div class="note">Loading…</div>';
+  if(!vq.length) return '<div class="note">No vehicles yet.</div>';
+  var open=vq.some(function(v){ return v.can_open; });
+  return (open?'<div class="coact"><a class="btn sm" href="hub.html#/vehicles" target="_top">Open Vehicles →</a></div>':'')+'<div class="vtiles">'+vq.map(function(v){
+      var ymm=[v.year,v.make&&v.make.charAt(0)+v.make.slice(1).toLowerCase(),v.model].filter(Boolean).join(" "), lines=[];
+      if(v.odometer!=null) lines.push(Number(v.odometer).toLocaleString()+" mi");
+      if(v.is_running) lines.push('<b style="color:var(--accent)">Running now</b>'); else if(v.last_seen) lines.push("Last seen "+coAgo(v.last_seen));
+      if(v.odometer!=null) lines.push(v.oil_at!=null?"Oil: "+Math.max(0,Math.round(v.odometer-v.oil_at)).toLocaleString()+" mi since last change":"Oil: no change entered yet");
+      return '<div class="vtile" style="cursor:default">'+carSvg(coVBody(v))+'<b>'+esc(v.name)+'</b>'+(ymm&&ymm!==v.name?'<span class="muted">'+esc(ymm)+'</span>':'')+lines.map(function(l){ return '<span class="vnext" style="color:var(--text)">'+l+'</span>'; }).join("")+'</div>'; }).join("")+'</div>'; }
 function coUnitOn(x){ return x.off!=null&&x.off!==""?!x.off:!x.gone; }
 function coStorage(){ var us=coUnits(), on=us.filter(coUnitOn), old=us.filter(function(x){ return !coUnitOn(x); }), pl=CO_FACTS.storePlaces, by=coEdits().co_storage_units_by;
   var place=function(k){ var p=pl[k]; return '<div class="coplace"><b>'+esc(p.name)+'</b><div>'+esc(p.addr)+' · <a href="https://maps.google.com/?q='+encodeURIComponent(p.addr)+'" target="_blank" rel="noopener">Map ↗</a></div>'+(p.phone?'<div><a href="tel:'+esc(p.phone.replace(/\D/g,""))+'">'+esc(p.phone)+'</a></div>':'')+((p.people||p.email||p.hours)?'<details class="copeople"><summary>Staff, email + hours</summary>'+(p.people?'<div>'+p.people.map(function(x){ return '<div><b>'+esc(x[0])+'</b> <span class="muted">'+esc(x[1])+'</span>'+(x[2]?' · <a href="tel:'+esc(x[2].replace(/\D/g,""))+'">'+esc(x[2])+'</a>':'')+'</div>'; }).join("")+'</div>':'')+(p.email?'<div><a href="mailto:'+esc(p.email)+'">'+esc(p.email)+'</a>'+(p.web?' \u00b7 <a href="'+esc(p.web)+'" target="_blank" rel="noopener">'+esc(p.web.replace(/^https?:\/\//,""))+' \u2197</a>':'')+'</div>':'')+(p.hours?'<div>'+esc(p.hours)+'</div>':'')+'</details>':'')+(p.how?'<div>'+esc(p.how)+'</div>':'')+(p.code?coCode(p.code,p.codeLabel):'')+(p.note?'<div class="note" style="margin-top:6px">'+esc(p.note)+'</div>':'')+'<div class="hint">'+coSrc(p.src)+'</div></div>'; };
@@ -1673,7 +1689,8 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var n=function(x,one,many){ return x+" "+(x===1?one:many); };
   var ov=coVal("office","addr").v.split("\n")[0], op=coVal("office","phone").v.split("\n")[0], oh=coVal("office","hours").v.split("\n")[0];
   var ws=coVal("social","web").v.split("\n")[0], lg=coVal("general","legal").v.split("\n")[0], su=coUnits().filter(coUnitOn);
-  var T=[["veh","\ud83d\ude97","Vehicles",n(on.length,"vehicle","vehicles"),[on.slice(0,3).map(function(v){ return v.name||v.ymm; }).join(" · ")+(on.length>3?" +"+(on.length-3)+" more":"")],veh],
+  var vq=coVQ()||[];
+  var T=[["veh","\ud83d\ude97","Vehicles",vq.length?n(vq.length,"vehicle","vehicles"):"",[vq.map(function(v){ return v.name; }).join(" \u00b7 ")],coVehQuick()],
 
     ["emp","\ud83d\udc65","Employees",D._staff?n(st.length,"person","people"):"the team",["Names, titles, phone extensions and who handles what"],emp],
     ["brand","\ud83c\udfa8","Logos & colors",n(cols.length,"color","colors")+" \u00b7 "+n(CO_FACTS.logos.length-1,"logo file","logo files"),['<div class="cosw">'+cols.slice(0,8).map(function(c){ return '<span style="background:'+esc(c.hex)+'"></span>'; }).join("")+'</div>'],brand],
