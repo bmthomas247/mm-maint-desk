@@ -236,6 +236,7 @@ body.only-trash header.top{position:static}
 .ocon:focus-visible{outline:2px solid var(--accent,#3c5f12);outline-offset:2px;border-radius:3px}
 .hql.hown,.hql.hhoa{grid-column:span 2}
 .hoagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin-bottom:6px}
+.hoaclick{cursor:pointer}.hoaclick:hover{border-color:var(--accent)}.hoamore{margin-top:8px;font-size:12.5px;font-weight:600;color:var(--accent)}.hoapop .tl{margin:4px 0}
 .hoacomms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 16px;align-items:start}.hoacomms .hoagrid{grid-template-columns:1fr;margin-bottom:0}.hoacomm .hhood{margin-top:0}
 @media (max-width:1100px){.hoacomms{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:700px){.hoacomms{grid-template-columns:1fr}}
 .hoacard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -1392,9 +1393,7 @@ function homeDetail(code){
   // recent
   h+=inspBlock(code);
   h+=npiBlock(code);
-  h+='<div class="block"><h4>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">all sources, newest first</span></h4>'+
-    (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
-    (jobs.length>8?'<button class="btn sm ghost" data-go="jobs" data-ui=\''+esc(JSON.stringify({q:code,st:{},hideOld:true,hideInfo:false,kind:{}}))+'\'>All '+jobs.length+' for this home →</button>':'')+'</div>';
+
   // appliances
   loadApplImg(code); var aps=homeAppl(code,p).map(function(a){ return applianceView(code,a); });
   var missL=aps.filter(function(x){ return !/^(TV|Sound bar|Fireplace|BBQ)$/.test(x.type) && (!x.model||x.conf==="wrong-photo"||x.conf==="low") && !S.bwq[sid("lbl_"+code+"_"+x.key)]; });
@@ -1420,6 +1419,10 @@ function homeDetail(code){
     (cats.length?cats.map(function(i){ var codes=/^\[codes\]/.test(i.notes);
       return '<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+'</summary>'+
         '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+(i.url?'\n<a href="'+esc(i.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>'; }).join(""):'<div class="note">No property info in Asana.</div>')+'</div>';
+  h+='<details class="block recacc"'+(S.ui.recOpen?' open':'')+'><summary><button type="button" class="recbtn" data-recacc="1"><h4><span class="recchev">'+(S.ui.recOpen?'\u25be':'\u25b8')+'</span>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">'+(jobs.length||recent.length)+' \u00b7 newest first</span></h4></button></summary>'+
+    '<style>.recacc>summary{list-style:none}.recacc>summary::-webkit-details-marker{display:none}.recbtn{all:unset;cursor:pointer;display:block;width:100%}.recbtn h4{display:flex;align-items:center;gap:8px;margin:0}.recchev{color:var(--accent);font-size:12px}.recacc[open]>summary{margin-bottom:8px}</style>'+
+    (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
+    (jobs.length>8?'<button class="btn sm ghost" data-go="jobs" data-ui=\''+esc(JSON.stringify({q:code,st:{},hideOld:true,hideInfo:false,kind:{}}))+'\'>All '+jobs.length+' for this home →</button>':'')+'</details>';
   return h+'</div>';
 }
 
@@ -1737,7 +1740,8 @@ function infoNote(p,rx){ var hit=(p.info||[]).filter(function(i){ return i.notes
 /* Track owner names are "BHL 1206 | Mason (Prime)": the home code is only for sorting in Track and the brackets hold the program
    (Brandon 2026-11-02), so show "Mason" and the contract type on its own line */
 /* phone / email: tap opens Call · Text · Copy or Email · Copy (Brandon 2026-11-02) */
-function ocon(kind,v){ return '<button type="button" class="ocon'+(kind==="mail"?' oem':'')+'" data-ocon="'+kind+'" data-v="'+esc(v)+'" title="'+esc(v)+'">'+esc(v)+'</button>'; }
+function prettyTel(v){ var d=String(v||"").replace(/\D/g,""); if(d.length===11&&d.charAt(0)==="1") d=d.slice(1); return d.length===10?"("+d.slice(0,3)+") "+d.slice(3,6)+"-"+d.slice(6):v; }
+function ocon(kind,v){ return '<button type="button" class="ocon'+(kind==="mail"?' oem':'')+'" data-ocon="'+kind+'" data-v="'+esc(v)+'" title="'+esc(v)+'">'+esc(kind==="tel"?prettyTel(v):v)+'</button>'; }
 function oconCopy(v,done){ var ok=function(){ done("Copied"); }, old=function(){ var ta=document.createElement("textarea"); ta.value=v; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select();
   try{ document.execCommand("copy"); ok(); }catch(e){ done("Couldn't copy"); } ta.remove(); };
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(ok,old); else old(); }
@@ -1779,19 +1783,19 @@ function qShort(val){ var lines=String(val||"").replace(/\r/g,"").split("\n").ma
   return {html:pick.map(function(l){ var m=l.match(/^([^:]{2,40}?):\s*(.+)$/);
     return m?'<div class="qrow"><span class="ql">'+esc(m[1])+'</span><span class="qa">'+qBold(m[2])+'</span></div>':'<div class="qrow"><span class="qa plain">'+qBold(l)+'</span></div>'; }).join(""),
     more:cut||lines.length>pick.length}; }
-function qCard(title,val,src,cls,cat){ if(!val) return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div><div class="muted">Not recorded</div></div>';
+function qCard(title,val,src,cls,cat){ if(!val) return '';
   var q=qShort(val);
-  return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+q.html+(q.more&&cat?'<a href="#" class="qinfo" data-qinfo="'+esc(cat)+'">More in Home information ↓</a>':'')+(src?'<div class="hint">'+src+'</div>':'')+'</div>'; }
+  return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+q.html+(q.more&&cat?'<a href="#" class="qinfo" data-qinfo="'+esc(cat)+'">More in Home information ↓</a>':'')+(src&&/<button /.test(src)?'<div class="hint">'+src+'</div>':'')+'</div>'; }
 function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(code);
   var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
   var q=homeQuick(code,p), qs=function(k,rx){ var s0=q.src[k]; return {v:q[k],s:s0==="Asana"?asana(rx).s:s0==="Hub edit"?"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):""):s0?"From "+esc(s0):""}; };
   var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=qs("garage",/^parking\/? ?garage info$|^parking$/i), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
-    (o.list.length?o.list.map(function(x){ return '<div class="qvt"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<br><span class="muted">Contract:</span> '+esc(x.plan):'')+(x.phone?'<br>'+ocon("tel",x.phone):'')+(x.email?'<br>'+ocon("mail",x.email):'')+(x.notes?'<br><span class="muted">'+esc(x.notes)+'</span>':'')+'</div><div class="hint">'+esc(x.src)+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
-  return '<div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
+    (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
+  return '<style>.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
-    qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),entry.s+ownerViewHtml(code,q),"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
+    qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
     (window.MM_CODES===false?'':qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
     qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+'</div>'+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
@@ -1845,15 +1849,21 @@ function hoaFlag(h){ return h.flag?' <span class="hoaflag">'+esc(h.flag)+'</span
 function hoaPill(h){ return h.status==="verified"?'<span class="pill ok" title="'+esc("Contacted "+(h.verified_on||"")+(h.verified_by?" by "+h.verified_by:""))+'">Verified'+(h.verified_on?' '+esc(h.verified_on):'')+'</span>'
   :h.status==="to_verify"?'<span class="pill waiting">To verify</span>':''; }
 function hoaCard(h,extra){
-  return '<div class="hoacard'+(h.status==="to_verify"?' tov':'')+'"><div class="hoah"><b>'+esc(h.name)+'</b>'+hoaFlag(h)+hoaPill(h)+
+  return '<div class="hoacard hoaclick'+(h.status==="to_verify"?' tov':'')+'" data-hoapop="'+h.id+'" role="button" tabindex="0"><div class="hoah"><b>'+esc(h.name)+'</b>'+hoaFlag(h)+
       (D._hoaEdit?'<button class="btn sm ghost" data-act="hoaedit" data-id="'+h.id+'">Edit</button>':'')+'</div>'+
-    [["Management",h.mgmt],["Contact",h.contact],["Phone",h.phone],["Email",h.email]].filter(function(x){ return x[1]; }).map(function(x){ return hoaLine(x[0]+": "+x[1]).html; }).join("")+
+    [["Management",h.mgmt],["Contact",h.contact],["Phone",h.phone]].filter(function(x){ return x[1]; }).map(function(x){ return hoaLine(x[0]+": "+x[1]).html; }).join("")+
+    (extra||'')+'<div class="hoamore">More details →</div></div>'; }
+function hoaPop(id){ var h=(D._hoas||[]).filter(function(x){ return String(x.id)===String(id); })[0]; if(!h) return;
+  var body=[["Management",h.mgmt],["Contact",h.contact],["Phone",h.phone],["Email",h.email]].filter(function(x){ return x[1]; }).map(function(x){ return hoaLine(x[0]+": "+x[1]).html; }).join("")+
     (/^https:\/\//i.test(h.portal||"")?'<div class="tl"><a href="'+esc(h.portal)+'" target="_blank" rel="noopener">HOA website ↗</a></div>':'')+
-    (h.info?'<details class="infocat"><summary>Community information</summary><div class="prose">'+esc(h.info)+'</div></details>':'')+
+    ((h.communities||[]).length?'<div class="tl"><span class="ql">Communities</span>'+esc(h.communities.join(", "))+'</div>':'')+
+    ((h.homes||[]).length?'<div class="tl"><span class="ql">Only these homes</span>'+esc(h.homes.join(", "))+'</div>':'')+
     ((h.manages||[]).length?'<div class="tl"><span class="ql">Manages</span>'+esc(h.manages.join(", "))+'</div>':'')+
-    (h.note?'<div class="tl"><span class="ql">Hub note</span>'+esc(h.note)+'</div>':'')+(extra||'')+
-    '<div class="hsrc">'+esc(h.source||"")+(h.left_out?' · '+h.left_out+' code line'+(h.left_out>1?'s':'')+' left out (open the Asana task)':'')+
-      (h.asana_url?' · <a href="'+esc(h.asana_url)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'</div></div>'; }
+    (h.note?'<div class="tl"><span class="ql">Hub note</span>'+esc(h.note)+'</div>':'')+
+    (h.info?'<div class="lbl" style="margin-top:12px">Community information</div><div class="prose">'+esc(h.info)+'</div>':'')+
+    (h.left_out?'<div class="hint" style="margin-top:8px">'+h.left_out+' code line'+(h.left_out>1?'s':'')+' left out — open the Asana task for those.</div>':'')+
+    (h.asana_url?'<div style="margin-top:12px"><a class="btn sm" href="'+esc(h.asana_url)+'" target="_blank" rel="noopener">Open in Asana ↗</a></div>':'');
+  openModal(h.name,'<div class="hoapop">'+body+'</div>',null); }
 function norm2(s){ return String(s||"").toLowerCase().replace(/\b(management|properties|property|llc|inc|hoa|the)\b/g,"").replace(/[^a-z0-9]/g,""); }
 function hoaView(){ hoaLoad(); var u=S.ui, q=(u.hq||"").trim().toLowerCase(), st=u.hoast||"";
   if(!D._hoas) return '<div class="empty">Loading HOAs…</div>';
@@ -1876,7 +1886,7 @@ function hoaView(){ hoaLoad(); var u=S.ui, q=(u.hq||"").trim().toLowerCase(), st
       (g.H.length?g.H.map(function(x){ var only=(x.homes||[]).length?'<div class="tl muted">Only: '+esc(x.homes.join(", "))+'</div>':(x.neighborhoods||[]).length?'<div class="tl muted">Covers all of '+esc(x.neighborhoods.join(", "))+'</div>':'';
           return hoaCard(x,only); }).join(""):
         '<div class="hoacard tov none"><b>No HOA on file</b><div class="muted">Not in Porsha\'s HOA project yet.</div>'+(D._hoaEdit?'<div><button class="btn sm" data-act="hoaedit" data-id="" data-c="'+esc(g.c)+'">+ Add HOA</button></div>':'')+'</div>')+
-      '</div><div class="note" style="margin:8px 0 0">Homes: '+esc(codes.join(", "))+'</div></div>'; }).join("")+(L.length?'</div>':'')||'<div class="empty">Nothing matches.</div>';
+      '</div></div>'; }).join("")+(L.length?'</div>':'')||'<div class="empty">Nothing matches.</div>';
   var rest=C.filter(function(x){ return !used[x.id]; }), co=D._hoas.filter(function(x){ return x.kind==="company"; });
   if(!st && !q && rest.length) h+='<details class="infocat" style="margin-top:12px"><summary>HOAs with none of our active homes ('+rest.length+')</summary><div class="hoagrid" style="margin-top:8px">'+rest.map(function(x){ return hoaCard(x); }).join("")+'</div></details>';
   if(!st && !q && co.length) h+='<details class="infocat" style="margin-top:8px"><summary>HOA management companies ('+co.length+')</summary><div class="hoagrid" style="margin-top:8px">'+co.map(function(x){
@@ -1920,7 +1930,7 @@ function hoaCell(code,p){ var H=hoasFor(code,p), L=[], src=[];
   return tCell("HOA",src.join(" + "),L,false,"hhoa"); }
 function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i), hb=n?null:hoaOf(code,p); if(hb&&hb.from) n={text:hb.text,url:hb.url};
   var H=hoasFor(code,p), mine=!!(pe.hoaName||pe.hoaMgmt||pe.hoaContact||pe.hoaPhone||pe.hoaEmail||pe.hoaPortal||pe.hoaRules);
-  return '<div class="block"><h4>HOA</h4>'+(H.length?'<div class="hoagrid">'+H.map(function(x){ return hoaCard(x); }).join("")+'</div>':D._hoas?'<div class="note">No HOA on file for '+esc(hoaComm(p)||code)+' yet (Property Details ▸ HOA).</div>':'')+
+  return '<div class="block"><h4>HOA</h4>'+(H.length?'<div style="display:flex;flex-wrap:wrap;gap:8px">'+H.map(function(x){ return '<button type="button" class="btn sm" data-hoapop="'+x.id+'">\ud83c\udfd8 HOA info \u00b7 '+esc(x.name)+'</button>'; }).join("")+'</div>':D._hoas?'<div class="note">No HOA on file for '+esc(hoaComm(p)||code)+' yet (Property Details ▸ HOA).</div>':'')+
     '<details class="infocat" style="margin-top:8px"'+(mine||!H.length?' open':'')+'><summary>'+(H.length?'Only for this home (when it differs from the HOA above)':'HOA for this home')+'</summary><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+
     fld("hoa_name","HOA name",pe.hoaName||"")+fld("hoa_mgmt","Management company",pe.hoaMgmt||"")+fld("hoa_contact","Contact person",pe.hoaContact||"")+
     fld("hoa_phone","Phone",pe.hoaPhone||"","tel")+fld("hoa_email","Email",pe.hoaEmail||"","email")+fld("hoa_portal","Website / portal",pe.hoaPortal||"","url")+'</div>'+
@@ -4297,7 +4307,7 @@ function bwqDoc(j){ return {kind:"job",jobId:j.id,title:j.title,detail:(j.detail
   due:j.due||"",dept:j.kind==="inspection"?"inspection":"maintenance",src:j.src,srcUrl:j.srcUrl||"",links:j.links||[],status:"queued",by:S.me,at:Date.now()}; }
 /* ================= events ================= */
 document.addEventListener("click",function(ev){
-  var t=ev.target.closest("[data-qinfo],[data-licf],button,a,select,input,textarea,[data-job],[data-home],[data-vuopen],[data-tswho],[data-careopen],[data-doneopen],[data-copen],[data-rczoom],[data-mopen],[data-pzoom],[data-imgzoom],[data-xo],[data-bwsort],tr.xtr"); if(!t || /^(SELECT|INPUT|TEXTAREA)$/.test(t.tagName)) return;
+  var t=ev.target.closest("[data-hoapop],[data-qinfo],[data-licf],button,a,select,input,textarea,[data-job],[data-home],[data-vuopen],[data-tswho],[data-careopen],[data-doneopen],[data-copen],[data-rczoom],[data-mopen],[data-pzoom],[data-imgzoom],[data-xo],[data-bwsort],tr.xtr"); if(!t || /^(SELECT|INPUT|TEXTAREA)$/.test(t.tagName)) return;
   var d=t.dataset;
   if(t.id==="backbtn") return navBack();
   if(t.id==="helpbtn") return mHelp();
@@ -4525,6 +4535,8 @@ document.addEventListener("click",function(ev){
   if(d.aedit){ var q=d.aedit.split("|"); return mAppl(q[0],q[1]); }
   if(d.co){ if(!need()) return; return mCo(d.co); }
   if(d.cov!=null){ if(!need()) return; return mCoVehicle(d.cov); }
+  if(d.hoapop) return hoaPop(d.hoapop);
+  if(d.recacc){ ev.preventDefault(); S.ui.recOpen=!S.ui.recOpen; return render(); }
   if(d.costore){ S.ui.coStore=!S.ui.coStore; return render(); }
   if(d.cocodes) return mCoCodes(d.cocodes);
   if(d.cou!=null){ if(!need()) return; return mCoUnit(d.cou); }
