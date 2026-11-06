@@ -454,7 +454,7 @@ async function tsSetupView(){
   }catch(e){ $("#tsbox").innerHTML = `<p class="muted">Couldn't start 2-step setup (${esc(e.message || e)}). Ask Brandon or Kim.</p>`; }
 }
 /* new password: when an admin asked for it (allowed_users.must_change_pw) or the old one doesn't meet today's rules */
-function pwMissing(p){ return [[p.length >= 12, "12+ characters"], [/[a-z]/.test(p), "a small letter"], [/[A-Z]/.test(p), "a capital letter"],
+function pwMissing(p){ return [[p.length >= 8, "8+ characters"], [/[a-z]/.test(p), "a small letter"], [/[A-Z]/.test(p), "a capital letter"],
   [/\d/.test(p), "a number"], [PW_SYM.test(p), "a symbol like ! # ? @"]]; }
 function pwView(){
   tsShell("Pick a new password", `<p class="muted">Moose passwords got stronger. Choose a new one now - only you will know it. It works for the Hub and Moose Locks.</p>
