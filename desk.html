@@ -1214,6 +1214,7 @@ function applianceView(code,a){
 function lifeBar(x){ if(x.age==null) return '<span class="muted">age unknown</span>';
   var p=Math.min(100,Math.round(x.age/x.life*100)), c=p>=100?"end":p>=70?"mid":"";
   return '<span class="life"><span class="lbar '+c+'"><i style="width:'+p+'%"></i></span><span class="mono">'+x.age+'/'+x.life+'y</span></span>'; }
+function ownSearch(code){ var o=ownerOf(code); if(!o||!o.can) return ""; return (o.list||[]).map(function(x){ return (x.name||"")+" "+(x.raw||""); }).join(" "); }
 function vHomes(){
   var u=S.ui, q=u.hq.trim().toLowerCase();
   var ht=u.htype||"str", cnt={str:0,lease:0,"2h":0,co:0};
@@ -1230,11 +1231,11 @@ function vHomes(){
   var nbs={}, cms={}; typed.forEach(function(p){ var h=hoodOf(p)||"Other"; nbs[h]=(nbs[h]||0)+1; if(!nb||h===nb){ var c=commOf(p)||"Other"; cms[c]=(cms[c]||0)+1; } });
   if(cm && !cms[cm]) cm=u.hcm="";
   var list=typed.filter(function(p){ return (!nb || (hoodOf(p)||"Other")===nb) && (!cm || (commOf(p)||"Other")===cm) &&
-    (!q || (coName(p.code)+" "+p.code+" "+commOf(p)+" "+hoodOf(p)).toLowerCase().indexOf(q)>-1); });
+    (!q || (coName(p.code)+" "+p.code+" "+commOf(p)+" "+hoodOf(p)+" "+ownSearch(p.code)).toLowerCase().indexOf(q)>-1); });
   if(u.home && D.homes.length && !D.homes.some(function(p){ return p.code===u.home; })) u.home="";
   var h='<div class="toolbar">'+(HT_FIXED?'':'<div class="chiprow" role="tablist" aria-label="Home type">'+HTYPES.map(function(t){
       return '<button class="chip" data-htype="'+t[0]+'" aria-pressed="'+(ht===t[0])+'">'+esc(t[1])+'<span class="n">'+cnt[t[0]]+'</span></button>'; }).join("")+'</div>')+
-    '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="Search any home or community…" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
+    '<div class="qsearch"><span class="mag">⌕</span><input id="hq" type="search" placeholder="'+(D.homes.length&&(ownerOf(D.homes[0].code)||{}).can?'Search any home, community or owner…':'Search any home or community…')+'" value="'+esc(u.hq)+'" autocomplete="off"></div>'+
     (ht==="co"?'':'<div class="hfil"><select id="hnb" aria-label="Neighborhood"><option value="">All neighborhoods</option>'+Object.keys(nbs).sort().map(function(k){ return '<option value="'+esc(k)+'"'+(k===nb?' selected':'')+'>'+esc(k)+' ('+nbs[k]+')</option>'; }).join("")+'</select>'+
       '<select id="hcm" aria-label="Community"><option value="">All communities</option>'+Object.keys(cms).sort().map(function(k){ return '<option value="'+esc(k)+'"'+(k===cm?' selected':'')+'>'+esc(k)+' ('+cms[k]+')</option>'; }).join("")+'</select></div>')+
     '<span class="qcount">'+list.length+' shown</span><button class="btn sm" data-inssearch="1">🔎 Inspections</button><button class="btn sm pri" data-act="newhome">+ Add property</button></div>';
