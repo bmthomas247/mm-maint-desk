@@ -1355,6 +1355,17 @@ function homeHeads(code){ var sb=window.MM_SB; if(!sb) return "";
   if(!L.length) return "";
   var warn=L.some(function(a){ return a.level==="warn"; });
   return '<div class="'+(warn?"warnbox":"infobox")+'" style="margin-bottom:10px"><b>⚠️ Heads-up for this home</b>'+L.map(function(a){ return '<div style="margin-top:3px'+(a.level==="warn"?';font-weight:600':'')+'">• '+esc(a.text)+' <span style="opacity:.75;font-weight:400">· '+esc(a.source)+'</span></div>'; }).join("")+'</div>'; }
+/* read-only copy of "The home" form: every input / select becomes its value, an Edit button opens the real form (S.ui.homeEd) */
+function homeRO(html,code){ if(!document.getElementById('homerocss')){ var st=document.createElement('style'); st.id='homerocss'; st.textContent='.homero .hv{font-weight:600;font-size:14px;padding:4px 0 2px;min-height:22px}.homero .hv.muted{font-weight:400}.homero label.f{cursor:default}'; document.head.appendChild(st); }
+  var val=function(v){ v=String(v||"").trim(); if(/^\d{4}-\d\d-\d\d$/.test(v)) v=fmtD(v); return v?'<div class="hv">'+v+'</div>':'<div class="hv muted">—</div>'; };
+  html=html.replace(/<input\b[^>]*>/g,function(t){ var m=/\svalue="([^"]*)"/.exec(t); return val(m?m[1]:""); })
+    .replace(/<select\b[^>]*>([\s\S]*?)<\/select>/g,function(t,o){ var m=/<option[^>]*\sselected[^>]*>([\s\S]*?)<\/option>/.exec(o)||/<option[^>]*>([\s\S]*?)<\/option>/.exec(o);
+      var v=m?m[1].replace(/<[^>]+>/g,""):""; return val(/^not sure$/i.test(v)?"":v); })
+    .replace(/<textarea\b[^>]*>([\s\S]*?)<\/textarea>/g,function(t,v){ return val(v); })
+    .replace(/<span class="hint">From [^<]*<\/span>/g,"")
+    .replace(/<button class="btn sm pri" data-act="savehome"[^>]*>Save<\/button><button class="btn sm ghost" data-act="cancelhome">Cancel<\/button>/,
+      '<button class="btn sm" data-act="edithome" data-code="'+esc(code)+'">✎ Edit</button>');
+  return '<div class="homero">'+html+'</div>'; }
 function homeDetail(code){
   var p=profile(code); if(!p) return '<div class="empty">No profile for '+esc(code)+'.</div>';
   if(p.company) return companyDetail(code);
@@ -1377,7 +1388,7 @@ function homeDetail(code){
   h+=ownerRelBlock(jobs);
   // basics
   var hi=homeInfo(code), src=function(k){ return hi.src[k]?'<span class="hint">From '+hi.src[k]+'</span>':''; };
-  h+='<div class="block"><h4>The home</h4><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+
+  var hb='<div class="block"><h4>The home</h4><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">'+
     '<label class="f"><span>Key box location</span><input id="h_kb" value="'+esc(hi.keybox)+'" placeholder="e.g. Left of front door">'+src("keybox")+'</label>'+
     '<label class="f"><span>Fuse box location</span><input id="h_fb" value="'+esc(hi.fuse)+'" placeholder="e.g. Utility room">'+src("fuse")+'</label>'+
     '<label class="f"><span>Water shut off</span><input id="h_ws" value="'+esc(hi.water)+'" placeholder="e.g. Mechanical room, above water heater">'+src("water")+'</label></div>'+
@@ -1388,8 +1399,9 @@ function homeDetail(code){
     '<label class="f"><span>Maintenance plan</span><select id="h_plan">'+Object.keys(PLANS).map(function(k){ return '<option value="'+k+'"'+(planOf(code)===k?' selected':'')+'>'+esc(PLANS[k].name)+' — $'+PLANS[k].rate+'/h</option>'; }).join("")+'</select></label>'+
     '<label class="f"><span>Heat tape</span><select id="h_ht"><option value="yes"'+(hi.heatTape===true?' selected':'')+'>Yes</option><option value="no"'+(hi.heatTape===false?' selected':'')+'>No</option>'+(hi.heatTape==null?'<option value="" selected>Not sure</option>':'')+'</select>'+
       (/^(2H-|L-)?BHL\b/.test(code)?'<span class="hint">Bear Hollow Lodges — HOA handles it</span>':src("heatTape"))+'</label>'+(function(){ var bq=hasBBQ(code); var ht2=hasHotTub(code); return '<label class="f"><span>Private hot tub</span><select id="h_hk"><option value="yes"'+(ht2.v===true?' selected':'')+'>Yes</option><option value="no"'+(ht2.v===false?' selected':'')+'>No</option>'+(ht2.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(ht2.why)+'</span></label><label class="f"><span>Private BBQ</span><select id="h_bq"><option value="yes"'+(bq.v===true?' selected':'')+'>Yes</option><option value="no"'+(bq.v===false?' selected':'')+'>No</option>'+(bq.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(bq.why)+'</span></label>'; })()+'</div>'+fireFields(code)+
-    '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehome" data-code="'+esc(code)+'">Save</button>'+
+    '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehome" data-code="'+esc(code)+'">Save</button><button class="btn sm ghost" data-act="cancelhome">Cancel</button>'+
     (pe.by?'<span class="note" style="align-self:center">Last changed by '+esc(nameFor(pe.by))+' '+esc(ago(ymd(pe.at)))+'</span>':'')+'</div></div>';
+  h+=S.ui.homeEd===code?hb:homeRO(hb,code);
   // breezeway
   var bw=bwRecent(code);
   h+='<div class="block"><h4>Last 3 done in Breezeway'+(bh.bwId?' <a class="golink" href="https://app.breezeway.io/property/'+esc(bh.bwId)+'" target="_blank" rel="noopener">Breezeway ↗</a>':'')+'</h4>'+(bw&&bw.length?'<div class="bwlist">'+bw.slice(0,3).map(function(b){ return '<div class="bwrow"><span>'+(b.url?'<a href="'+esc(b.url)+'" target="_blank" rel="noopener">'+esc(b.title)+'</a>':esc(b.title))+(b.by?' <span class="muted">· '+esc(b.by)+'</span>':'')+'</span><span class="when">'+esc(fmtD(b.on))+'</span></div>'; }).join("")+'</div>':
@@ -4514,7 +4526,9 @@ document.addEventListener("click",function(ev){
     case "mdelexp": return put("expenses",d.id,{deleted:true},S.expenses[d.id]).then(function(){ closeModal(); toast("Deleted"); });
     case "mdeltime": return put("time",d.id,{deleted:true},S.time[d.id]).then(function(){ closeModal(); toast("Deleted"); });
     case "mrouteoff": return put("recurring",d.id,{active:false},S.recurring[d.id]).then(function(){ closeModal(); toast("Routine turned off"); });
-    case "savehome": var c=d.code, k=sid(c); return put("propedits",k,{yearBuilt:fv("h_yb"),sqft:fv("h_sq"),beds:fv("h_bd"),plan:fv("h_plan"),heatTapeYN:fv("h_ht"),bbqYN:fv("h_bq"),hotTubYN:fv("h_hk"),keybox:fv("h_kb"),fuse:fv("h_fb"),water:fv("h_ws"),fire:fv("h_fs"),fireLast:fv("h_fl"),fireExp:(fv("h_fe")&&fv("h_fe")!==addYear(fv("h_fl"))?fv("h_fe"):""),licNo:fv("h_ln"),licExp:fv("h_le")},S.propedits[k]).then(function(){ toast("Saved"); });
+    case "edithome": S.ui.homeEd=d.code; return render();
+    case "cancelhome": S.ui.homeEd=""; return render();
+    case "savehome": var c=d.code, k=sid(c); S.ui.homeEd=""; return put("propedits",k,{yearBuilt:fv("h_yb"),sqft:fv("h_sq"),beds:fv("h_bd"),plan:fv("h_plan"),heatTapeYN:fv("h_ht"),bbqYN:fv("h_bq"),hotTubYN:fv("h_hk"),keybox:fv("h_kb"),fuse:fv("h_fb"),water:fv("h_ws"),fire:fv("h_fs"),fireLast:fv("h_fl"),fireExp:(fv("h_fe")&&fv("h_fe")!==addYear(fv("h_fl"))?fv("h_fe"):""),licNo:fv("h_ln"),licExp:fv("h_le")},S.propedits[k]).then(function(){ toast("Saved"); });
     case "addappl": return mAppl(d.code,"");
   }
   if(d.rconfirm) return put("recurring",d.rconfirm,{draft:false},S.recurring[d.rconfirm]).then(function(){ toast("Confirmed"); });
