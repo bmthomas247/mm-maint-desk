@@ -6,7 +6,7 @@
    Staffing drop-down (Brandon 2026-10-29): Clock In / Clock Out (#/staffing) · Schedule (#/stf_sched, staffSched) · Request Time Off (#/cal_off, calendar.js) · My performance (#/stf_perf, myPerf).
    Hours: each "in" pairs with the next "out" and counts on the day of the "in" (Park City time). No pay rates here.
    2026-10-30 (Brandon): ✎ on every punch → clock_edit (hub_clock_edit.sql; own or anyone you look after, reason required) · managers get
-   "Who's clocked in now" (donut + list) and week-hours rings at the top · "Approve overtime / set clock-out" per person · banners close (✕). */
+   "Who's clocked in now" (donut + list) and week-hours rings at the top · "Approve overtime / set clock-out" per person · banners close (✕). Overtime = 🔔 bell items since 2026-11-06 (no banner). */
 (function(){
 const TZ = "America/Denver", DAY = 864e5;
 const dkey = t => new Date(t).toLocaleDateString("en-CA", { timeZone:TZ });
@@ -188,7 +188,7 @@ window.staffingView = async function(v){
   const nowRows = nr.data || [], curW = w === wk(today), sg = (sgr && sgr.data) || { shifts:[], cov:[] };
   const scOf = u => { const fl = schedCheck(u, (cr.data || []).filter(x => x.user_id === u), sg, w, addK(w, 6));
     return (sg.cov || []).some(c => c.startsWith(u + "|") && c.slice(-10) >= w && c.slice(-10) <= addK(w, 6)) ? { u, sg, fl } : null; };
-  if(!OT.at) await otBanner(true).catch(() => {});
+  await otBanner(!OT.at || Date.now() - OT.at > 60e3).catch(() => {});
   const hsH = u => ((hw && hw.data) || []).filter(x => x.user_id === u).reduce((a, x) => a + (+x.tracked_h || 0), 0), hsOn = u => ((hw && hw.data) || []).some(x => x.user_id === u);
   const ppl = pp.data || [], all = cr.data || [], weeks = wr.data || [];
   const meP = ppl.find(p => p.is_me), myId = meP && meP.user_id, meOn = !!meP, team = ppl.filter(p => !p.is_me);
@@ -205,7 +205,7 @@ window.staffingView = async function(v){
     const myH = weekHours(s, wk(today)) + (s.open ? (Date.now() - Date.parse(s.open.at)) / 36e5 : 0);
     h += `<div class="card clk"><div class="row" style="gap:14px">${ring(myH, 88)}<div><div style="font-size:18px"><b>${isIn ? "You're clocked in" : "You're clocked out"}</b></div>
         <div class="muted">${isIn ? `since ${tm(last.at)}${dkey(last.at) !== today ? " " + dnm(dkey(last.at)) : ""} · ${hm((Date.now() - Date.parse(last.at)) / 36e5)}` : last ? `last clocked out ${dnm(dkey(last.at))} ${tm(last.at)}` : "Tap Clock in when you start work."}</div>
-        <div class="muted sm">This week: ${hm(myH)}${myH > 40 ? " · over 40" : myH >= 36 ? " · close to 40" : ""}</div></div></div>
+        <div class="muted sm">This week: ${hm(myH)}${myH > 40 ? " · over 40" : myH >= 36 ? " · close to 40" : ""}</div>${otMeHtml()}</div></div>
       <button class="btn primary big" id="punch" data-k="${isIn ? "out" : "in"}">${isIn ? "Clock out" : "Clock in"}</button></div>
       <p class="muted sm" style="margin:-4px 0 10px">Your phone's location is saved once when you clock in or out (only you, your manager and Brandon/Kim see it). Not during the day.</p>
       <div class="card">${nav}${weekTable(mine, w, pl, false, scOf(myId))}${ok ? `<p class="sm" style="margin:6px 0 0">✅ Approved by ${esc(ok.approved_by)} (${hm(+ok.hours)})</p>` : ""}</div>
@@ -459,39 +459,35 @@ function otPlanBox(x, b, done){
     if(r.error) return alert(r.error.message); f.remove(); await otBanner(true); if(done) done(); };
   b.after(f);
 }
-function otDraw(){
-  css(); document.querySelectorAll(".otbanner,.otplan").forEach(x => x.remove());
-  const v = document.getElementById("view"); if(!v || !v.parentNode) return;
-  const m = OT.me && OT.me[0];
-  const meSig = m && [m.week, m.needs || "", m.plan_kind || "", m.plan_up_to || "", m.plan_out_at || "", m.asked_at || ""].join("|");
-  const okd = x => x && x.plan_kind === "approved" && !x.needs;   // Brandon 2026-11-01: approved overtime = no banner
-  if(m && !okd(m) && !bxHidden("ot_me", meSig)){   // your own hours, from 38 h
-    const b = document.createElement("div"), t = at40(m);
-    b.className = "hxbanner otbanner"; b.setAttribute("role", "status");
-    b.style.background = m.needs === "over" ? "#9b1c1c" : m.needs ? "#7a4b00" : "#1f5f3f";
-    b.innerHTML = `⏱ You're at <b>${hm(+m.hours)}</b> this week. ${m.plan_kind ? `Your manager's plan: ${planTxt(m)}.`
-      : m.needs === "over" ? "You're over 40 hours without overtime approval: please clock out, or ask your manager now."
-      : `To stay under 40, ${t ? `clock out by <b>${tm(t)}</b>` : "keep the rest of the week under " + hm(Math.max(0, 40 - +m.hours))}, or ask your manager to OK overtime.`}
-      ${m.asked_at ? `<span style="margin-left:8px">· Asked for overtime ${tm(m.asked_at)}, waiting for your manager.</span>` : m.plan_kind !== "approved" ? `<a href="#" data-ask>Ask for overtime</a>` : ""}<a href="#/staffing">Staffing →</a>`;
-    b.title = "Hours since Sunday: the larger of the hub clock and Hubstaff.";
-    const a = b.querySelector("[data-ask]"); if(a) a.onclick = async e => { e.preventDefault();
-      const n = prompt("Why do you need overtime this week? (your manager sees this)"); if(n === null) return;
-      const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert(r.error.message); otBanner(true); };
-    bxAdd(b, "ot_me", meSig); v.parentNode.insertBefore(b, v);
-  }
-  const l = (OT.l || []).filter(x => !okd(x)); if(!l.length) return;
-  const sig = l.map(x => [x.user_id, x.week, x.needs || "", x.plan_kind || "", x.asked_at || "", +x.hours >= 38 ? 38 : +x.hours >= 36 ? 36 : 32].join(",")).join("|");
-  if(bxHidden("ot", sig)) return;
-  const need = l.filter(x => x.needs), b = document.createElement("div");
-  b.className = "hxbanner otbanner"; b.setAttribute("role", "status");
-  b.style.background = need.some(x => x.needs === "over") ? "#9b1c1c" : need.length || +l[0].hours >= 38 ? "#9b1c1c" : "#7a4b00";
-  b.innerHTML = `⏱ Close to 40 hours this week (no overtime without approval): ${l.map(x => `<b>${fn(x.name)} ${hm(+x.hours)}</b>${x.open_since ? " (clocked in now)" : ""}${
-      x.needs === "over" ? " ⚠ over 40, not approved" : x.needs === "plan" ? " · needs a plan" : x.plan_kind ? " · " + planTxt(x) : ""}${x.asked_at ? " · asked for overtime" : ""}${
-      ` <a href="#" data-ot="${x.user_id}" style="margin-left:4px">${x.plan_kind ? "Change" : "Approve overtime / plan"}</a>`}`).join(" · ")}<a href="#/staffing">Staffing →</a>`;
-  b.title = "Hours since Sunday: the larger of the hub clock and Hubstaff. From 38 h each person needs a clock-out time or an overtime OK. Salaried people aren't counted.";
-  b.querySelectorAll("[data-ot]").forEach(a => a.onclick = e => { e.preventDefault(); otPlanBox(l.find(x => x.user_id === a.dataset.ot), b); });
-  bxAdd(b, "ot", sig); v.parentNode.insertBefore(b, v);
+// Brandon 2026-11-06: "we can turn overtime banners into just bell notifications". otDraw no longer puts a banner on the page; it builds
+// OT.items, which hub.html bellLoad() shows in the 🔔 (work alert, no switch). The plan / approve box lives on Staffing ▸ Clock In / Clock Out.
+const otOkd = x => x && x.plan_kind === "approved" && !x.needs;   // Brandon 2026-11-01: approved overtime = no notice
+function otMeHtml(){
+  const m = OT.me && OT.me[0]; if(!m || otOkd(m)) return "";
+  const t = at40(m), red = m.needs === "over";
+  return `<div class="sm" style="margin-top:6px;padding:8px 10px;border-radius:10px;background:${red ? "#fde8e8;color:#7f1d1d" : "#fff4e0;color:#6b4100"}">⏱ ${m.plan_kind ? `Your manager's plan: ${planTxt(m)}.`
+    : red ? "You're over 40 hours without overtime approval: please clock out, or ask your manager now."
+    : `To stay under 40, ${t ? `clock out by <b>${tm(t)}</b>` : "keep the rest of the week under " + hm(Math.max(0, 40 - +m.hours))}, or ask your manager to OK overtime.`}
+    ${m.asked_at ? ` · Asked for overtime ${tm(m.asked_at)}, waiting for your manager.` : m.plan_kind !== "approved" ? ` <a href="#" data-otask>Ask for overtime</a>` : ""}</div>`;
 }
+document.addEventListener("click", async e => { const a = e.target.closest && e.target.closest("[data-otask]"); if(!a) return; e.preventDefault();
+  const n = prompt("Why do you need overtime this week? (your manager sees this)"); if(n === null) return;
+  const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert(r.error.message); await otBanner(true);
+  if(location.hash.startsWith("#/staffing") && window.staffingView) staffingView(document.getElementById("view")); });
+function otDraw(){
+  document.querySelectorAll(".otbanner").forEach(x => x.remove());   // old banners from a cached page
+  const it = [], m = OT.me && OT.me[0];
+  if(m && !otOkd(m)){ const t = at40(m);
+    it.push({ ic:"⏱", t:`You're at ${hm(+m.hours)} this week`, href:"#/staffing",
+      s: m.plan_kind ? `Your manager's plan: ${planTxt(m)}` : m.needs === "over" ? "Over 40 without overtime approval: clock out or ask your manager"
+        : `${t ? `Clock out by ${tm(t)}` : "Stay under " + hm(Math.max(0, 40 - +m.hours)) + " more"} to stay under 40, or ask for overtime${m.asked_at ? " (asked, waiting)" : ""}` }); }
+  (OT.l || []).filter(x => !otOkd(x)).forEach(x => it.push({ ic:"⏱", href:"#/staffing",
+    t:`${String(x.name || "").split(" ")[0]} is at ${hm(+x.hours)} this week${x.needs === "over" ? " ⚠ over 40, not approved" : ""}`,
+    s:`${x.open_since ? "Clocked in now · " : ""}${x.needs === "plan" ? "Needs a clock-out time or an overtime OK" : x.needs === "over" ? "Approve overtime or have them clock out" : x.plan_kind ? planTxt(x) : "Close to 40 hours (no overtime without approval)"}${x.asked_at ? " · asked for overtime" : ""}` }));
+  const sig = JSON.stringify(it), was = OT.sig; OT.items = it; OT.sig = sig;
+  if(was !== undefined && was !== sig && window.bellLoad) window.bellLoad(true);   // count on the bell updates when hours change
+}
+window.otBellItems = async function(){ if(typeof ME === "undefined" || !ME) return []; await otBanner(false).catch(() => {}); return OT.items || []; };
 window.otBanner = async function(force){
   if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
   if(document.querySelector(".otplan") && !force) return;   // don't redraw under an open plan box
