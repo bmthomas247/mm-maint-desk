@@ -1326,6 +1326,8 @@ function lockSecs(c,t,q,p){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},g
   var sv=function(k){ return Object.keys(src[k]).join(" + "); };
   var rl=function(arr,map){ return arr.map(function(l){ if(typeof l!=="string") return l; var m=/^([^:]+):\s*(.*)$/.exec(l); return m&&map[m[1]]?map[m[1]]+": "+m[2]:l; }); };
   var all=S.lock.concat(S.gate,rl(S.kb,{"Code":"Key box","Location":"Key box location"}),rl(S.own,{"Location":"Owner closet location"}));
+  /* locations live in Home details only, not on the tile (Brandon 2026-11-05) */
+  all=all.filter(function(l){ return typeof l!=="string" || !/^(Key box location|Owner closet location):/.test(l); });
   return [tCell("Entry notes","",all,false,"hentry")]; }
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
   var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+t.wifi_name:"",t.wifi_pass?"Password: "+t.wifi_pass:""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+pe.wifiName:"",pe.wifiPass?"Password: "+pe.wifiPass:""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
