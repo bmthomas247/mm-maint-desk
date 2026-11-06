@@ -40,6 +40,7 @@ function css(){
 .bl .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 12px}
 .bl .tile{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--bl-shadow);padding:12px 14px} .bl .tile b{display:block;font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.1} .bl .tile b small{font-size:15px;color:var(--muted);font-weight:700}
 .bl .tile span{font-size:13px;color:var(--ink-2);font-weight:600}
+.bl button.tile{font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%;transition:border-color .15s,box-shadow .15s} .bl button.tile:hover{border-color:#3c5f12} .bl button.tile.on{border-color:#3c5f12;box-shadow:0 0 0 2px #3c5f12 inset,var(--bl-shadow)} .bl button.tile:focus-visible{outline:2px solid #3c5f12;outline-offset:2px}
 .bl .bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin:8px 0 0} .bl .bar i{display:block;height:100%;background:var(--bl-moose)}
 .bl .filt{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--bl-shadow);padding:12px 16px;display:grid;gap:10px;margin:0 0 6px}
 .bl .fr{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:center} .bl .fr > select{max-width:260px}
@@ -119,7 +120,7 @@ function shownRows(){
   const q = BL.q.toLowerCase();
   return BL.rows.filter(i => (BL.fS === "all" || (BL.fS === "open" ? i.status !== "done" : i.status === BL.fS))
     && (BL.fP === "all" || i.pri === BL.fP) && (BL.fA === "all" || i.desk === BL.fA) 
-    && (BL.fW === "all" || (BL.fW === "free" ? !(i.worker_names || []).length : (i.worker_names || []).includes(BL.fW)))
+    && (BL.fW === "all" || (BL.fW === "free" ? !(i.worker_names || []).length : BL.fW === "busy" ? (i.worker_names || []).length > 0 : (i.worker_names || []).includes(BL.fW)))
     && (!q || [i.title, i.detail, i.source, i.waits, i.note, i.id, (i.worker_names || []).join(" ")].join(" ").toLowerCase().includes(q)));
 }
 function whoLine(i){ const w = i.worker_names || [], isMe = w.includes(meName());
@@ -202,6 +203,15 @@ const tabsHtml = () => `<div class="tabs"><button class="${BL.tab === "list" ? "
   <button class="${BL.tab === "done" ? "on" : ""}" data-tab="done">${ico("check")} Completed (${BL.rows.filter(i => i.status === "done").length})</button></div>`;
 function wireTabs(v){ v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { BL.tab = b.dataset.tab; BL.q = ""; show(v); }); }
 const show = v => BL.tab === "done" ? drawDone(v) : draw(v);
+// stat tiles filter the list (Brandon 2026-11-05: "filter by clicking on these"); tap the lit one again = back to everything not done
+const TILE = { open:{ fS:"open" }, now:{ fS:"open", fP:"now" }, busy:{ fS:"open", fW:"busy" }, waiting:{ fS:"waiting" }, finishing:{ fS:"finishing" } };
+function tileKey(){ if(BL.tab === "done") return "done"; if(BL.tab !== "list" || BL.fA !== "all" || BL.q) return "";
+  return Object.keys(TILE).find(k => { const t = TILE[k]; return BL.fS === t.fS && BL.fP === (t.fP || "all") && BL.fW === (t.fW || "all"); }) || ""; }
+const tileBtn = (k, n, label, extra = "") => `<button type="button" class="tile${tileKey() === k ? " on" : ""}" data-tile="${k}" aria-pressed="${tileKey() === k}" title="Show ${esc(label.toLowerCase())}"><b>${n}</b><span>${label}</span>${extra}</button>`;
+function wireTiles(v){ v.querySelectorAll("[data-tile]").forEach(b => b.onclick = () => { const k = b.dataset.tile, was = tileKey() === k;
+  BL.q = ""; BL.fA = "all";
+  if(k === "done"){ BL.tab = was ? "list" : "done"; if(was) Object.assign(BL, { fS:"open", fP:"all", fW:"all" }); show(v); return; }
+  const t = was ? TILE.open : TILE[k]; Object.assign(BL, { tab:"list", fS:t.fS, fP:t.fP || "all", fW:t.fW || "all" }); show(v); }); }
 function draw(v){
   const R = BL.rows, c = { todo:0, doing:0, waiting:0, finishing:0, done:0 }; R.forEach(i => c[i.status] = (c[i.status] || 0) + 1);
   const openN = R.length - (c.done || 0), inNow = R.filter(i => (i.worker_names || []).length && i.status !== "done").length;
@@ -218,10 +228,10 @@ function draw(v){
   }
   const opt = (cur, pairs) => pairs.map(([k, l]) => `<option value="${esc(k)}"${cur === k ? " selected" : ""}>${esc(l)}</option>`).join("");
   v.innerHTML = `<div class="page bl">${tabsHtml()}
-    <div class="tiles"><div class="tile"><b>${openN}<small>/${R.length}</small></b><span>Still to do</span><div class="bar"><i style="width:${R.length ? (c.done || 0) / R.length * 100 : 0}%"></i></div></div>
-      <div class="tile"><b>${R.filter(i => i.pri === "now" && i.status !== "done").length}</b><span>Now (high priority)</span></div>
-      <div class="tile"><b>${inNow}</b><span>Being worked on</span></div><div class="tile"><b>${c.waiting || 0}</b><span>Paused</span></div><div class="tile"><b>${c.finishing || 0}</b><span>Finishing touches</span></div>
-      <div class="tile"><b>${c.done || 0}</b><span>Done</span></div></div>
+    <div class="tiles">${tileBtn("open", `${openN}<small>/${R.length}</small>`, "Still to do", `<div class="bar"><i style="width:${R.length ? (c.done || 0) / R.length * 100 : 0}%"></i></div>`)}
+      ${tileBtn("now", R.filter(i => i.pri === "now" && i.status !== "done").length, "Now (high priority)")}
+      ${tileBtn("busy", inNow, "Being worked on")}${tileBtn("waiting", c.waiting || 0, "Paused")}${tileBtn("finishing", c.finishing || 0, "Finishing touches")}
+      ${tileBtn("done", c.done || 0, "Done")}</div>
     ${BL.tab === "mine" ? "" : `<div class="filt">
       <div class="fr"><span class="lab">Find</span><input id="blq" type="search" placeholder="Search (e.g. Track, Penny, Chris)" value="${esc(BL.q)}"></div>
       <div class="fr"><span class="lab">Status</span><div class="seg">${[["open", "Not done"], ["all", "All"], ...Object.entries(ST)].map(([k, l]) => `<button type="button" class="${BL.fS === k ? "on" : ""}" data-fs="${k}">${l}</button>`).join("")}</div></div>
@@ -286,7 +296,7 @@ function wireItem(v, el, it, after){
   if(b("[data-copy]")) b("[data-copy]").onclick = () => copyGo(it);
 }
 function wire(v){
-  wireTabs(v); wireFind(v, draw);
+  wireTabs(v); wireTiles(v); wireFind(v, draw);
   const sel = (id, k) => { const e = v.querySelector(id); if(e) e.onchange = () => { BL[k] = e.value; if(k === "order") try { localStorage.setItem("bl_order", BL.order); } catch(x) {} draw(v); }; };
   sel("#bl_o", "order");
   v.querySelectorAll("[data-fs]").forEach(b => b.onclick = () => { BL.fS = b.dataset.fs; draw(v); });
