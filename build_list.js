@@ -60,7 +60,7 @@ function css(){
 .bl .it.p-now{border-left-color:#c8382b} .bl .it.p-next{border-left-color:#b5770a} .bl .it.p-later{border-left-color:var(--bl-moose)}
 .bl .it.open{grid-column:1/-1}
 .bl .it[data-s="done"]{opacity:.7} .bl .it[data-s="done"] .t{text-decoration:line-through}
-.bl .it.taken{background:color-mix(in srgb,#1f6fb2 7%,var(--card));border:2px solid #1f6fb2;border-left-width:6px} .bl .it.me{background:color-mix(in srgb,#5b8a1e 9%,var(--card));border:2px solid var(--bl-green);border-left-width:6px}
+.bl .it.taken{background:color-mix(in srgb,#1f6fb2 7%,var(--card));border:2px solid #1f6fb2;border-left-width:6px} .bl .it.mine{background:color-mix(in srgb,#5b8a1e 9%,var(--card));border:2px solid var(--bl-green);border-left-width:6px}
 .bl .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .bl .t{font-weight:800;font-size:17px;letter-spacing:-.01em;line-height:1.25}
 .bl .sub{font-size:13.5px;color:var(--ink-2)}
@@ -68,7 +68,7 @@ function css(){
 .bl .st{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-weight:800;font-size:12.5px;white-space:nowrap}
 .bl .st:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .bl .st.todo{background:#eef1ea;color:#5d6b55} .bl .st.doing{background:#e2eef9;color:#1f6fb2} .bl .st.waiting{background:#fbf0d9;color:#b5770a} .bl .st.done{background:#e2f2e3;color:#2e7d32} .bl .st.finishing{background:#efe6fa;color:#6a3fb5}
-.bl .st.who{background:#1f6fb2;color:#fff} .bl .st.who.me{background:var(--bl-green)}
+.bl .st.who{background:#1f6fb2;color:#fff} .bl .st.who.mine{background:var(--bl-green)}
 .bl .chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .bl .chip{border:1px solid var(--line);border-radius:10px;padding:2px 9px;font-size:12.5px;font-weight:700;background:var(--card)}
 .bl .chip.now{border-color:#f0c4bf;color:#c8382b} .bl .chip.wait{border-color:#f0d9a8;color:#b5770a} .bl .chip.jeff{border-color:#cfe2b0;color:var(--bl-forest)}
@@ -135,7 +135,7 @@ function shownRows(){
 function whoLine(i){ const w = i.worker_names || [], isMe = w.includes(meName());
   return w.length && i.status !== "done" ? (isMe ? "you're on it" : esc(w.map(first).join(" + ")) + (w.length > 1 ? " are" : " is") + " on it") + (i.claimed_at ? " since " + esc(fday(i.claimed_at)) : "") : ""; }
 function badgeHtml(i){ const w = i.worker_names || [], isMe = w.includes(meName()), others = w.filter(n => n !== meName());
-  return w.length && i.status !== "done" ? `<span class="st who${isMe ? " me" : ""}">🔨 ${isMe ? "You" + (others.length ? " + " + esc(others.map(first).join(", ")) : "") : esc(w.map(first).join(" + "))}</span>` : `<span class="st ${i.status}">${ST[i.status] || i.status}</span>`; }
+  return w.length && i.status !== "done" ? `<span class="st who${isMe ? " mine" : ""}">🔨 ${isMe ? "You" + (others.length ? " + " + esc(others.map(first).join(", ")) : "") : esc(w.map(first).join(" + "))}</span>` : `<span class="st ${i.status}">${ST[i.status] || i.status}</span>`; }
 function claimBtns(i){ const w = i.worker_names || [], isMe = w.includes(meName()), s = i.status;
   return (s !== "done" ? (!w.length ? `<button class="btn small primary" data-claim>🔨 I'm on it</button>` : isMe ? `<button class="btn small" data-rel>Step off</button>` : `<button class="btn small" data-join>Work on it together</button>`) : "")
     + (s !== "done" && !isMe && w.length && ME && ME.admin ? `<button class="btn small" data-free>Free it</button>` : "")
@@ -144,7 +144,7 @@ function claimBtns(i){ const w = i.worker_names || [], isMe = w.includes(meName(
 // card in the grid: tap anywhere on it (not a button) to open the full explanation
 function itemHtml(i){
   const w = i.worker_names || [], isMe = w.includes(meName()), wl = whoLine(i);
-  return `<div class="it p-${esc(i.pri || "next")}${isMe ? " me" : w.length && i.status !== "done" ? " taken" : ""}" data-s="${i.status}" data-id="${esc(i.id)}" tabindex="0" role="button" aria-label="Open ${esc(i.title)}">
+  return `<div class="it p-${esc(i.pri || "next")}${isMe ? " mine" : w.length && i.status !== "done" ? " taken" : ""}" data-s="${i.status}" data-id="${esc(i.id)}" tabindex="0" role="button" aria-label="Open ${esc(i.title)}">
     <div class="top"><div style="min-width:0"><div class="t">${esc(i.title)}</div><div class="sub">${esc(AL[i.desk] || i.desk)}${wl ? ` · <b>${wl}</b>` : ""}</div></div>${badgeHtml(i)}</div>
     ${i.detail ? `<div class="d">${esc(i.detail)}</div>` : ""}
     <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.plan ? `<span class="chip">📋 Has steps</span>` : ""}</div>
