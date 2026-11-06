@@ -88,6 +88,18 @@ a.mgear{flex:none;display:grid;place-items:center;width:32px;height:32px;border-
 /* 🔍 search the whole hub from the green banner (Brandon 2026-11-06: "search the whole hub there if they dont want to use penny") */
 .me button.mfind{padding:0;min-height:0;width:32px;height:32px;display:grid;place-items:center;cursor:pointer} .mfind svg{width:17px;height:17px;display:block}
 #findpop{width:min(520px,calc(100vw - 24px));max-height:min(78vh,640px);padding:10px}
+.me button.mhud{padding:0;min-height:0;width:32px;height:32px;display:grid;place-items:center;cursor:pointer} .mhud svg{width:17px;height:17px;display:block}
+#hudpop{width:min(400px,calc(100vw - 24px));padding:12px}
+#hudpop label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:8px 2px 4px}
+#hudpop input{width:100%;min-height:40px;border-radius:10px}
+#hudpop .hchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+#hudpop .hchip{background:var(--forest,#2f4a10);color:#fff;border-radius:999px;padding:4px 10px;font-size:13px;display:inline-flex;gap:6px;align-items:center}
+#hudpop .hchip button{background:none;border:0;color:#fff;cursor:pointer;padding:0;min-height:0;font-size:14px}
+#hudpop .hlist{max-height:200px;overflow:auto;margin-top:4px}
+#hudpop .hlist button{display:block;width:100%;text-align:left;background:none;border:0;padding:7px 8px;border-radius:8px;cursor:pointer;color:inherit;min-height:0}
+#hudpop .hlist button:hover{background:var(--moose-soft)}
+#hudpop .hgo{width:100%;margin-top:10px}
+#hudpop .hmsg{font-size:13px;margin-top:8px;color:var(--muted)}
 #findpop .fq{display:flex;gap:8px;align-items:center;margin:0 0 6px}
 #findpop .fq input{flex:1;min-height:42px;font-size:15px;border-radius:12px}
 #findpop .fsh{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--muted);margin:10px 8px 2px}
@@ -349,6 +361,7 @@ const ICON = {
   trash: I('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/>'),
   truck: I('<path d="M1 4h13v12H1zM14 8h4l4 4v4h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>'),
   search: I('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>'),
+  headset: I('<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/>'),
   chev: I('<path d="m9 6 6 6-6 6"/>'),
   menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
   bell: I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
@@ -839,13 +852,13 @@ function bellSetup(){
     window.addEventListener("hashchange", () => bellLoad());
     setInterval(() => bellLoad(true), 5 * 60000); }
   const place = (b, p) => { const r = b.getBoundingClientRect(); p.style.top = (r.bottom + 8) + "px"; const pw = Math.min(360, window.innerWidth - 24); p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px"; };
-  document.querySelectorAll(".mbell").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#bellpop"); $("#boardpop").classList.remove("on"); if($("#findpop")) $("#findpop").classList.remove("on");
+  document.querySelectorAll(".mbell").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#bellpop"); $("#boardpop").classList.remove("on"); if($("#findpop")) $("#findpop").classList.remove("on"); if($("#hudpop")) $("#hudpop").classList.remove("on");
     if(p.classList.contains("on")) return p.classList.remove("on");
     place(b, p); bellDraw(); p.classList.add("on"); bellLoad(true); });
   document.querySelectorAll(".mboard").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const q = $("#boardpop"); $("#bellpop").classList.remove("on"); if($("#findpop")) $("#findpop").classList.remove("on");
     if(q.classList.contains("on")) return q.classList.remove("on");
     place(b, q); boardDraw(); q.classList.add("on"); });
-  findSetup(); BELL.at = 0; bellLoad(true);
+  findSetup(); hudSetup(); BELL.at = 0; bellLoad(true);
 }
 /* 💬 Message board: the button opens a preview of the newest messages first (Brandon 2026-11-02); the board itself is built later.
    boardPreview() returns the newest posts [{who, text, at}] once the board exists. */
@@ -873,7 +886,7 @@ function shell(){
   const SN = sideNav(DESKS, PREFS.desk_order || []);
   const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
   // 2026-10-28 (Brandon): profile, settings and sign out sit top right (were at the bottom of the sidebar)
-  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button class="mgear mfind" title="Search the hub (Ctrl+K)" aria-label="Search the hub">${ICON.search}</button><button class="mgear mbell" title="Notifications" aria-label="Notifications">${ICON.bell}<span class="bdot"></span></button>${ME && ME.admin ? `<a class="mgear mboard" href="#/board" title="Message board" aria-label="Message board">${ICON.chat}</a>` : ""}<a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
+  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button class="mgear mfind" title="Search the hub (Ctrl+K)" aria-label="Search the hub">${ICON.search}</button><button class="mgear mhud" title="Start a Slack huddle" aria-label="Start a Slack huddle">${ICON.headset}</button><button class="mgear mbell" title="Notifications" aria-label="Notifications">${ICON.bell}<span class="bdot"></span></button>${ME && ME.admin ? `<a class="mgear mboard" href="#/board" title="Message board" aria-label="Message board">${ICON.chat}</a>` : ""}<a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b>${meHtml}</div>
   <div class="scrim" id="scrim"></div>
   <div class="shell">
@@ -1111,6 +1124,52 @@ async function findLoad(){
   if(!FIND.addr && can("homes")) jobs.push(sb.from("hub_homes").select("code,address,name").eq("active", true).limit(5000).then(r => { FIND.addr = {}; (r.data || []).forEach(x => FIND.addr[x.code] = x); }));
   await Promise.all(jobs.map(p => Promise.resolve(p).catch(() => null)));
 }
+/* 🎧 Start a Slack huddle (Brandon 2026-11-06). Edge Function `huddle`: opens a private group DM (you + who you pick + the Moose Hub bot),
+   posts "🎧 <name> wants a huddle…", then Slack opens on that DM and you tap the headphones. Slack has no API to start the huddle itself. */
+const HUD = { ppl: null, pick: [], busy: false };
+async function hudCall(body){ try { const r = await sb.functions.invoke("huddle", { body }); return r.data || { ok:false, error: niceErr(r.error) }; } catch(e){ return { ok:false, error: niceErr(e) }; } }
+function hudSetup(){
+  if(!$("#hudpop")){ const p = document.createElement("div"); p.className = "bellpop"; p.id = "hudpop"; document.body.appendChild(p);
+    document.addEventListener("click", e => { if(!p.contains(e.target) && !e.target.closest(".mhud")) p.classList.remove("on"); });
+    document.addEventListener("keydown", e => { if(e.key === "Escape") p.classList.remove("on"); }); }
+  document.querySelectorAll(".mhud").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#hudpop");
+    ["#bellpop","#boardpop","#findpop"].forEach(s => { if($(s)) $(s).classList.remove("on"); });
+    if(p.classList.contains("on")) return p.classList.remove("on");
+    const r = b.getBoundingClientRect(), pw = Math.min(400, window.innerWidth - 24);
+    p.style.top = (r.bottom + 8) + "px"; p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px";
+    p.classList.add("on"); hudDraw(); });
+}
+async function hudDraw(done){
+  const p = $("#hudpop");
+  if(done){ const web = `https://app.slack.com/client/${done.team}/${done.channel}`, app = `slack://channel?team=${done.team}&id=${done.channel}`;
+    p.innerHTML = `<h4>🎧 Huddle with ${esc(done.names.join(", "))}</h4><div class="hmsg" style="color:inherit">Slack is opening your group DM. <b>Tap the headphones at the top of the DM</b> to start. They got a message to join.</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><a class="btn primary" style="flex:1;text-align:center" href="${app}">Open the Slack app</a><a class="btn" style="flex:1;text-align:center" href="${web}" target="_blank" rel="noopener">Slack on the web</a></div>
+      <button class="btn hgo" id="hudnew">Start another</button>`;
+    $("#hudnew").onclick = e => { e.stopPropagation(); HUD.pick = []; hudDraw(); };
+    location.href = app; return; }
+  if(!HUD.ppl){ p.innerHTML = `<h4>🎧 Start a huddle</h4><div class="hmsg">Loading people…</div>`;
+    const r = await hudCall({ action:"people" }); if(!r.ok){ p.innerHTML = `<h4>🎧 Start a huddle</h4><div class="hmsg">${esc(r.error || "Couldn't load.")}</div>`; return; }
+    if(r.noslack){ p.innerHTML = `<h4>🎧 Start a huddle</h4><div class="hmsg">Your Slack account isn't linked to the hub yet. Ask Brandon or Kim.</div>`; return; }
+    HUD.ppl = r.people || []; }
+  const name = id => (HUD.ppl.find(x => x.id === id) || {}).name || "";
+  p.innerHTML = `<h4>🎧 Start a huddle</h4>
+    <label for="hudq">Who?</label><div class="hchips">${HUD.pick.map(id => `<span class="hchip">${esc(name(id))}<button data-hx="${id}" aria-label="Remove">✕</button></span>`).join("")}</div>
+    <input id="hudq" type="search" placeholder="Type a name…" autocomplete="off"><div class="hlist" id="hudl"></div>
+    <label for="hudt">What about? (optional)</label><input id="hudt" maxlength="150" placeholder="e.g. PL 406 listing photos" value="${esc(HUD.topic || "")}">
+    <button class="btn primary hgo" id="hudgo"${HUD.pick.length ? "" : " disabled"}>Start the huddle</button><div class="hmsg" id="hudm">A private Slack group DM opens with just you, them and the Moose Hub bot.</div>`;
+  const list = () => { const q = $("#hudq").value.trim().toLowerCase();
+    const xs = HUD.ppl.filter(x => !HUD.pick.includes(x.id) && (!q || x.name.toLowerCase().includes(q))).slice(0, q ? 20 : 8);
+    $("#hudl").innerHTML = xs.map(x => `<button data-hp="${x.id}">${esc(x.name)}</button>`).join("") || `<div class="hmsg">No one by that name.</div>`;
+    $("#hudl").querySelectorAll("[data-hp]").forEach(b => b.onclick = e => { e.stopPropagation(); if(HUD.pick.length >= 8) return; HUD.pick.push(b.dataset.hp); HUD.topic = $("#hudt").value; hudDraw().then(() => $("#hudq").focus()); }); };
+  $("#hudq").oninput = list; list();
+  $("#hudt").oninput = () => HUD.topic = $("#hudt").value;
+  p.querySelectorAll("[data-hx]").forEach(b => b.onclick = e => { e.stopPropagation(); HUD.pick = HUD.pick.filter(x => x !== b.dataset.hx); HUD.topic = $("#hudt").value; hudDraw(); });
+  $("#hudgo").onclick = async e => { e.stopPropagation(); if(HUD.busy || !HUD.pick.length) return; HUD.busy = true; $("#hudgo").disabled = true; $("#hudm").textContent = "Opening the group DM…";
+    const r = await hudCall({ action:"start", people: HUD.pick, topic: $("#hudt").value }); HUD.busy = false;
+    if(!r.ok){ $("#hudgo").disabled = false; $("#hudm").textContent = r.error || "Couldn't start it."; return; }
+    HUD.pick = []; HUD.topic = ""; hudDraw(r); };
+  if(!HUD.pick.length) $("#hudq").focus();
+}
 function findSetup(){
   if(!$("#findpop")){ const p = document.createElement("div"); p.className = "bellpop"; p.id = "findpop"; document.body.appendChild(p);
     p.innerHTML = `<div class="fq"><input id="findq" type="search" placeholder="Search desks, reports, homes, vendors, people…" autocomplete="off" aria-label="Search the hub"></div><div id="findres"><div class="fhint">Type a home code, address, vendor, person, desk or report.</div></div>`;
@@ -1123,7 +1182,7 @@ function findSetup(){
     if(p.classList.contains("on")) return p.classList.remove("on"); findOpen(b); });
 }
 function findOpen(b){
-  const p = $("#findpop"); ["#bellpop","#boardpop"].forEach(s => { if($(s)) $(s).classList.remove("on"); });
+  const p = $("#findpop"); ["#bellpop","#boardpop","#hudpop"].forEach(s => { if($(s)) $(s).classList.remove("on"); });
   const r = b.getBoundingClientRect(), pw = Math.min(520, window.innerWidth - 24);
   p.style.top = (r.bottom + 8) + "px"; p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px";
   p.classList.add("on"); const i = $("#findq"); i.focus(); i.select(); findLoad();
