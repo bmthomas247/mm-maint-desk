@@ -67,7 +67,11 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px} .rgrid>.card{margin:0}
 .rhome{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px!important} .rhome:hover{border-color:var(--forest-2)}
 .rhome::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--kc,var(--line-2))}
-.k-airbnb{--kc:#e0565b;--ks:#fde8e8} .k-vrbo{--kc:#2463a0;--ks:#e3edf8} .k-direct{--kc:#4f7a18;--ks:#eaf3da} .k-ota{--kc:#7a6a55;--ks:#efebe5} .k-oguest{--kc:#0f8a84;--ks:#dff3f1} .k-owner{--kc:#7a4bb0;--ks:#efe7f8}
+.ractbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)} .ractbar .btn{font-weight:700}
+.rquote{border:1px solid var(--line);border-radius:12px;padding:8px 12px} .rqline{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:14px}
+.rqline.b{border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-weight:700} .rqline.tot{border-top:2px solid var(--line);margin-top:6px;padding-top:8px;font-size:18px;font-weight:800}
+.rqdisc{display:flex;gap:10px;flex-wrap:wrap} .rqdisc label{flex:1;min-width:180px}
+.k-airbnb{--kc:#e0565b;--ks:#fde8e8} .k-vrbo{--kc:#2463a0;--ks:#e3edf8} .k-direct{--kc:#4f7a18;--ks:#eaf3da} .k-ota{--kc:#7a6a55;--ks:#efebe5} .k-oguest{--kc:#0f8a84;--ks:#dff3f1} .k-owner{--kc:#7a4bb0;--ks:#efe7f8} .k-thirty{--kc:#b06a12;--ks:#fbeedd}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .kpill{--ks:color-mix(in srgb,var(--kc) 22%,transparent)} }
 :root[data-theme="dark"] .kpill{--ks:color-mix(in srgb,var(--kc) 22%,transparent)}
 .kpill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 9px;font:inherit;font-size:11.5px;font-weight:800;background:var(--ks);color:var(--kc);border:1px solid transparent;white-space:nowrap}
@@ -80,7 +84,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rhome .progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px} .rhome .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--moose),var(--moose-2));border-radius:99px}
 @media(max-width:1100px){ .rfg{grid-template-columns:repeat(3,minmax(0,1fr))} }
 @media(max-width:640px){ .rlk{max-width:none!important} .rlk .stats{grid-template-columns:repeat(2,1fr)} .rfg{grid-template-columns:1fr 1fr} .rgrid{grid-template-columns:1fr} .rhead .deskbtn span{display:none} .rhead{flex-wrap:wrap} .rhead .rhbtns{flex-basis:100%;justify-content:flex-start} .rhead .rsync{max-width:none;flex:1} .rtabs button{padding:7px 10px 7px 8px;font-size:13px} }`;
-const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / BDC / Hopper", oguest:"Owner guest", owner:"Owner stay" };
+const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / Hopper", oguest:"Owner guest", owner:"Owner stay" };
 // waiting_pay is never saved: a Checkout stay with a balance still due shows there (Kim 2026-11-02, see prep)
 const STAGE = { in_progress:"In progress", waiting_pay:"Waiting on payment", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
 // Neighborhoods: unit code prefix -> name (maintenance_desk/units.json "communities", from Track units)
@@ -109,7 +113,12 @@ const openFor = (key, s) => { const k = STEP_LINK[key]; if(!k) return "";
 // Office Received (Brandon 2026-11-06): Track's API can't change a campaign, so this opens the stay in Track to set it by hand
 const CAMP_HOW = "In Track: on the reservation, change Campaign to Office Received and save. The hub ticks this step on its next check (about 30 minutes).";
 const campBtn = s => `<a class="btn small primary" style="min-height:28px;padding:0 9px;font-size:12px" href="${esc(LINKS.track.replace("{res}", encodeURIComponent(s.res)))}" target="_blank" rel="noopener" title="${esc(CAMP_HOW)}" onclick="event.stopPropagation()">Set Office Received in Track ↗</a>`;
-const WAIT = ["Guest to reply", "Owner to reply"];
+// "CC Holder" (Brandon 2026-11-06): card holder isn't the guest -> credit card authorization is a hold. Staff turn it on; it clears by
+// itself once Track shows the Credit Card Authorization / Secondary Guest document signed (td.docs, completed).
+// Waiting on (Brandon 2026-11-06: "put the check list on hold for certain reasons"): set reasons + "Other reason" typed by the person.
+// Every reason shows in "Held up by" on the queue until someone taps it off.
+const WAIT = ["Guest to reply", "Owner to reply", "CC Holder", "Managers needed", "Payment", "The site (Airbnb / VRBO / Whimstay / Hopper)"];
+const WAIT_TIP = { "CC Holder":"The card holder isn't the guest: waiting on the signed credit card authorization. Clears by itself when it's signed in Track." };
 // 🙋 Ask a manager (Brandon 2026-10-30): Slack DM to the managers on shift; their reply comes back here (res_ask_notify.py)
 const askBtn = step => `<button class="btn small" data-ask="${step}" style="min-height:28px;padding:0 9px;font-size:12px">🙋 Ask a manager</button>`;
 const askLine = a => `<div style="padding:4px 0;border-top:1px solid var(--line)">🙋 <b>${esc(a.by_name || "")}</b> asked ${esc(when(a.at))}: “${esc(a.note)}”`
@@ -233,8 +242,14 @@ function conds(s){
   const rv = !!(s.ah && s.ah.verify === "review"), rl = (s.ah && s.ah.rules) || [], ahOk = autoOk(s, "ah_verified");
   const easy = rl.length > 0 && rl.every(r => UNDER25_OK.test(r)) && s.beds != null && s.beds <= 2;   // same rule as res_tick()
   return { pets:(occ.pets || 0) > 0, pl:u.startsWith("PL "), wg:u.startsWith("WG "), pv:u.startsWith("PV "), wp:u.startsWith("WP "),
-    thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "UM 3013" || u === "BHV 5604", gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
+    // combo homes (Brandon 2026-11-06): only UM 3013 (301 + 303) and ST 14 (ST 1 + ST 4); BHV 5604 is no longer a parent/child
+    thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "UM 3013", gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
     extend:!!(s.list && s.list.extending), cancel:cx, cxlate:cx && !!s.cancelledAt && s.cancelledAt.slice(0, 10) >= s.arrive,
+    // Cancel the stay button (2026-11-06): who is cancelling. Cancelled in Track with nobody picking = the guest path
+    cxus:cx && !!(s.list && s.list.cancelBy === "us"), cxguest:cx && !(s.list && s.list.cancelBy === "us"),
+    // Extend the stay: in house now / before arrival; Whimstay + Hopper before check-in = the guest goes to the site (we do nothing in Track)
+    inhouse:s.arrive <= B.today && s.depart >= B.today, wspre:s.chan === "ws" && s.arrive > B.today,
+    extdo:!(s.chan === "ws" && s.arrive > B.today), extfull:s.arrive <= B.today || daysTo(B.today, s.arrive) <= 14, extlater:s.arrive > B.today && daysTo(B.today, s.arrive) > 14,
     // round 4 (Kim + Janae 2026-10-30): Safely only on insured types; door code by home; Autohost review: who may approve; reminder when half done
     safely:s.chan !== "owner" && !SAFELY_NO.test(s.type || ""), keycard:u.startsWith("PL ") || u.startsWith("WG "), wp129:u === "WP 129",
     codehome:!(u.startsWith("PL ") || u.startsWith("WG ") || u === "WP 129"),
@@ -257,6 +272,9 @@ function autoOk(s, a){
     case "pets_ok": { const cap = Math.min(2, ...s.rules.map(r => +((/pet cap:\s*(\d+)/i.exec(r.text) || [])[1] || 9)));
       return s.unitPets === true && (s.occ && s.occ.pets || 0) <= cap && !tag(s, /^no pets$/i); }
     case "bw_clean": return bwClean(s);
+    // Extend the stay (2026-11-06): a quote was saved; Track now has the new dates the quote was for
+    case "ext_quoted": return !!(s.list && s.list.extQuote);
+    case "ext_dates": return !!(s.list && s.list.extTo && s.depart === s.list.extTo && (!s.list.extFrom || s.arrive === s.list.extFrom));
     // #housekeeping @Cheree messages naming this home (slack_hk.py) — after the cancel / after it was marked extending / any
     case "hk_after_cancel": return !!(s.cancelledAt && (s.hk || []).some(m => m.at.slice(0, 10) >= s.cancelledAt));
     case "hk_after_extend": return !!(s.list && s.list.extAt && (s.hk || []).some(m => m.at >= s.list.extAt));
@@ -300,7 +318,15 @@ function petFee(s){
   if(!kn.length) return { ok:true, pets };   // amount not read yet (older copy): name only, as before
   const v = kn.reduce((a, f) => a + f.v, 0), q = kn.reduce((a, f) => a + (f.q || 0), 0), ph = v <= Math.max(q, pets, 1) + 0.005;
   const per = Math.max(100, Math.min(350, (s.nights || 0) * 25)), want = (s.nights || 0) >= 30 || !pets ? null : pets * per;
-  return { ok:!ph, ph, v, per, want, pets, off:!ph && want != null && Math.abs(v - want) > 0.5 && !(pets > 1 && (s.nights || 0) * 25 > 300) };
+  // 2 pets cap at $700 = $350 each (Brandon + team 2026-11-06: Track's $700 is right, Asana's $600 is old)
+  return { ok:!ph, ph, v, per, want, pets, off:!ph && want != null && Math.abs(v - want) > 0.5 };
+}
+// Pet cleaning by home size (Janae, Pyper 2026-11-06): $50 studio / 1 / 2 BR, $100 3 BR and up; $150 was never used
+function petClean(s){
+  const f = ((s.td && s.td.fees) || []).filter(x => /pet cleaning/i.test(x.n) && x.v != null);
+  if(!f.length || s.beds == null) return null;
+  const v = f.reduce((a, x) => a + x.v, 0), want = s.beds <= 2 ? 50 : 100;
+  return Math.abs(v - want) > 0.5 ? { v, want } : null;
 }
 const TD_RULES = {
   td_pet_tag:    s => tag(s, PETS),
@@ -314,7 +340,8 @@ const TD_RULES = {
   td_og_tag:     s => tag(s, /^owner guest$/i),
   td_door:       s => s.td.door === true,
   td_card:       s => s.td.card === true,
-  td_fees:       s => fee(s, /clean/i, false) && fee(s, /damage waiver/i) && fee(s, /admin|guest services/i),   // Admin fee renamed "Guest Services Fee" (Kim 2026-10-30)
+  td_fees:       s => fee(s, /clean/i, false) && fee(s, /damage waiver/i) && fee(s, /admin|guest services/i)   // Admin fee renamed "Guest Services Fee" (Kim 2026-10-30)
+                   && (s.chan !== "ws" || fee(s, /commission recovery/i)),   // Whimstay 8.7% / Hopper 14+2+1 ("<Site> Commission Recovery Fee" in Track, 2026-11-06)
   td_gp_cl:      s => fee(s, /clean\/laundry\)?\s*gp|owner guest.*clean/i, false),   // "Owner Guest (Clean/Laundry) GP" (Track 2026-11-02)
   td_dw:         s => hasDW(s),
   td_nofee_ok:   s => OG_DI.test(s.type || "") ? hasDW(s) : !hasDW(s),
@@ -432,6 +459,8 @@ function prep(s){
   const req = s.steps.filter(t => !t.opt);
   s.need = req.length; s.got = req.filter(t => t.done).length;
   s.blockers = [...new Set(req.filter(t => !t.done && t.blocker).map(t => t.blocker))];
+  // "Managers needed" in Held up by (Brandon 2026-11-06): a manager-only step still open, or someone asked a manager and it isn't answered
+  if(req.some(t => t.mgr && !t.done) || (B.asks || []).some(a => a.res === s.res && a.status === "open")) s.blockers.push("Managers needed");
   const today = B.today;
   s.next = req.filter(t => !t.done).slice(0, 2).map(t => t.label);   // hand-off "next up" (Q8: what needs to be done next)
   s.alerts2 = []; s.dayFlag = 0;
@@ -455,6 +484,13 @@ function prep(s){
       s.alerts2.push({ lvl:"stop", t:`Pet fee is still Track's $1 placeholder (${money(pf.v)}). ${pf.want != null ? `Set it to ${money(pf.want)}: ${pf.pets} pet${pf.pets > 1 ? "s" : ""} × ${money(pf.per)} ($25 a night per pet, $100–$350 per pet).` : "Monthly stay: $450 a month for the first pet + $200 a month for a second."} Then add the pet cleaning fee.` }); }
     else if(pf && pf.off) s.alerts2.push({ lvl:"warn", t:`Pet fee is ${money(pf.v)}; the rule gives ${money(pf.want)} (${pf.pets} pet${pf.pets > 1 ? "s" : ""} × ${money(pf.per)}: $25 a night per pet, $100–$350 per pet). Check it.` });
   }
+  if(live && ["abnb", "vrbo", "ws"].includes(s.chan) && (s.occ && s.occ.pets)){
+    const pc = petClean(s);
+    if(pc) s.alerts2.push({ lvl:"warn", t:`Pet cleaning fee is ${money(pc.v)}; for a ${s.beds}-bedroom home it's ${money(pc.want)} ($50 studio–2 BR, $100 for 3 BR and up).` });
+    if(s.occ.pets >= 2) s.alerts2.push({ lvl:"info", t:"2 pets: one pet is standard at every home; a second pet needs permission. The cap for 2 pets is $700." });
+  }
+  // Whimstay / Hopper pay us through the reservation, so Track shows $0 owed (Janae 2026-11-06): a balance means something's off
+  if(s.chan === "ws" && s.status !== "Cancelled" && Math.abs(s.balance || 0) > 1) s.alerts2.push({ lvl:"warn", t:`Whimstay / Hopper stays should show $0 in Track (the site pays us after check-in). This one shows ${money(s.balance)}: check the folio.` });
   // Owner guests: agreement + payment due now; 35-day reminder (Track sends it); 30 days = change it to an Owner Stay (Kim 2026-11-02, OG 23)
   if(live && s.chan === "oguest"){
     const d = daysTo(today, s.arrive), ty = s.type || "", miss = [s.agreement !== "received" && "signed agreement", !autoOk(s, "pay_due") && `payment (${money(payDue(s))} due now)`,
@@ -473,6 +509,7 @@ function prep(s){
   // (Track takes the later payments from the card); declined payment or no card for it = back to In progress.
   s.stageSet = s.stage; s.payWhy = ""; s.payFlag = "";
   s.waiting = (s.list && s.list.waiting) || [];
+  if(s.waiting.includes("CC Holder") && doc(s, /credit card authorization|secondary guest/i, true)) s.waiting = s.waiting.filter(w => w !== "CC Holder");
   // Janae, Pyper, Kim 2026-11-03: tabs move by themselves. Steps done + nothing held = Waiting on payment while anything is owed, else Checkout
   // (Checkout = paid in full, the next step; stays there after the guest leaves). A declined payment / no card stays in Waiting on payment with an alert.
   // A stage a PERSON picked (not the Asana import) sticks until a step is ticked after they picked it. Cancelled stays leave In progress / Checkout.
@@ -503,8 +540,8 @@ const fresh = () => `<p class="muted" style="margin:4px 0 10px">Source: Track re
 const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"bookedAt", from:"", to:"", group:"date", kind:"" };
 const RSHUT = new Set();
 // how they booked (Brandon 2026-10-30: a color each); chan "vrbo" = VRBO + direct, split by the Track type
-const KIND = { airbnb:"Airbnb", vrbo:"VRBO", direct:"Direct", ota:"Other sites", oguest:"Owner guest", owner:"Owner stay" };
-const kindOf = s => s.chan === "abnb" ? "airbnb" : s.chan === "owner" ? "owner" : s.chan === "oguest" ? "oguest" : s.chan === "ws" ? "ota" : /vrbo|homeaway/i.test(s.type || "") ? "vrbo" : "direct";   // folded groups on the queue
+const KIND = { airbnb:"Airbnb", vrbo:"VRBO", direct:"Direct", thirty:"30+ nights", ota:"Whimstay / Hopper", oguest:"Owner guest", owner:"Owner stay" };
+const kindOf = s => s.chan === "abnb" ? "airbnb" : s.chan === "owner" ? "owner" : s.chan === "oguest" ? "oguest" : s.chan === "ws" ? "ota" : /vrbo|homeaway/i.test(s.type || "") ? "vrbo" : (s.nights || 0) >= 30 ? "thirty" : "direct";   // 30+ nights direct (Furnished Finder etc.) = its own list (2026-11-06)   // folded groups on the queue
 // icons (same stroke style as the Locks office tabs)
 const RSV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2"/><circle cx="5" cy="19" r="1"/>'),
@@ -642,6 +679,13 @@ async function card(v, res){
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a class="btn small" href="#/reservations">← Back</a>
       <h2 style="margin:0;flex:1">${esc(s.unit || "")} · ${esc(s.guest || "")}</h2><span class="pill">${esc(s.state)}</span></div>
     ${fresh()}
+    <div class="card"><b>Notes</b> <span class="muted" style="font-size:12.5px">· the stay's reservation notes in Track. What you type saves to Track by itself.</span>
+      <div id="rx_nt">Loading the Track notes…</div>
+      ${s.list && s.list.hold ? `<details class="acc2" style="margin-top:6px"><summary><b>Older hub note</b> <span class="muted" style="font-size:12.5px">(only in the hub, not in Track)</span></summary>
+        <textarea id="rx_hold" style="min-height:60px;margin-top:6px">${esc(s.list.hold)}</textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap"><button class="btn small" id="rx_hold_s">Save</button><button class="btn small" id="rx_hold_t">Copy into a Track note</button></div></details>` : ""}
+      <div style="margin-top:4px"><span class="muted" id="rx_msg"></span></div>
+      <details class="acc2" id="rx_h"><summary><b>History</b></summary><div id="rx_hl" class="muted">Loading…</div></details></div>
     <div class="card">
       <div class="rfacts"><span>Res <a href="${folioUrl(s.res)}" target="_blank" rel="noopener"><b>#${esc(s.res)}</b></a></span><span><b>${esc(day(s.arrive))}</b> → <b>${esc(day(s.depart))}</b> · ${esc(s.nights)} nights</span>
         <span>${esc(s.type || "")} <span class="muted">(${esc(CH[s.chan])})</span></span><span>Track: <b>${esc(s.status || "")}</b></span>
@@ -668,16 +712,16 @@ async function card(v, res){
       ${s.rules.map(r => `<div class="rrule ${r.kind}">${esc(r.text)} <span style="font-weight:400;opacity:.8">· ${esc(r.source)}</span></div>`).join("")}
       ${s.alerts2.map(a => `<div class="rrule ${a.lvl}">${esc(a.t)}</div>`).join("")}
       ${s.status === "Cancelled" && ["vrbo", "ws"].includes(s.chan) ? `<div class="rrule info">Cancelled. Our policy (VRBO + direct, Kim 2026-11-03): every payment is non-refundable once it's made, so when the guest cancels, ${money(s.paid)} paid → <b>$0 back</b>. Reason in Track: always “Canceled by guest”. A refund only when we cancel or the home has a problem (write why on the check list; Refund Transaction, never Void).${s.td && s.td.tx && s.td.tx.credit ? " A refund is already on the folio." : ""}</div>` : ""}
+      ${s.status === "Cancelled" && s.chan === "ws" ? `<div class="rrule info">${/hopper/i.test(s.type || "") ? "Hopper (Strict): full refund only within 48 hours of booking when check-in is 14+ days away; 50% back if cancelled 7+ days before check-in; nothing inside 7 days." : "Whimstay (Moderate, 30-day): full refund minus Whimstay's fee 30+ days before check-in, nothing under 30 days; full refund within 24 hours of booking (bookings made 72+ hours before check-in)."} The site refunds the guest, not us; check what the site still pays under the Primary Folio.</div>` : ""}
       ${s.chan === "oguest" && s.status !== "Cancelled" ? `<div class="rmoney"><span class="muted">Owner guest payment</span><span>Due now <b>${money(payDue(s))}</b> <span class="muted">(${daysTo(B.today, s.arrive) > 30 ? "10% down, 30+ days out" : "full payment, inside 30 days"})</span></span><span>Paid <b>${money(s.paid)}</b></span>${autoOk(s, "pay_due") ? `<span class="pill green">OK</span>` : `<span class="pill amber">Not yet: send the guest portal link ("Make A Payment Email Guest Portal")</span>`}</div>` : ""}
     </div>
     <div class="card">
       ${s.next.length && s.stage !== "closed" ? `<div class="rnext big"><b>Next up:</b> ${s.next.map(esc).join(" · then ")}${s.waiting.length ? ` <span class="muted">· waiting on ${esc(s.waiting.join(", "))}</span>` : ""}</div>` : ""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="flex:1">${s.got} of ${s.need} steps done</b>
-        <label class="muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rx_ext" style="width:20px;height:20px;min-height:0" ${s.list && s.list.extending ? "checked" : ""}> Extending</label>
         <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay").map(([k, l]) => `<option value="${k}" ${(s.stage === "waiting_pay" ? "checkout" : s.stage) === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       ${s.stage === "waiting_pay" && !s.payFlag ? `<div class="rrule info">Waiting on payment: ${money(s.balance)} is still due. Track takes the next payments from the card on file, so nothing to do unless one fails. It moves to Checkout by itself once the balance is $0.</div>`
         : s.payWhy ? `<div class="rrule stop">${s.stage === "waiting_pay" ? "Waiting on payment: " : ""}${esc(s.payWhy)} ${s.balance > 0 ? money(s.balance) + " still due. " : ""}${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : /No card/.test(s.payWhy) ? "Ask the guest to add a card in the guest portal, or pay the balance." : "Fix it on the folio in Track; it moves to Checkout by itself once the balance is $0."}</div>` : ""}
-      <div class="rchips"><span class="muted" style="align-self:center">Waiting on</span>${WAIT.map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}">${esc(w)}</button>`).join("")}</div>
+      <div class="rchips"><span class="muted" style="align-self:center">⏸ Waiting on</span>${[...WAIT, ...s.waiting.filter(w => !WAIT.includes(w))].map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}" title="${esc(WAIT_TIP[w] || (s.waiting.includes(w) ? "Tap to take it off hold" : "Put the check list on hold for this"))}">${esc(w)}${s.waiting.includes(w) && !WAIT.includes(w) ? " ✕" : ""}</button>`).join("")}<button class="rchip" data-waitother="1">+ Other reason</button></div>
       ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
       ${trkSection(s, og)}
       <div style="margin-top:8px"><button class="rgall" id="rx_gall">${og === "*" ? "Close all" : "Open all"}</button></div>
@@ -686,15 +730,9 @@ async function card(v, res){
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
           <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.help ? `<button type="button" class="rwhy" data-why="${t.key}" title="Why? / how">i</button>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}${t.help ? `<div class="rwhyt" data-whyt="${t.key}" hidden>${esc(t.help)}</div>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${t.key === "i_campaign" && !t.done ? campBtn(s) : openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : trkWait(t)}</span></label>`; }).join("")}</details>`; }).join("")}
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${t.key === "x_rule" || t.key === "x_rent" ? extBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${t.key === "i_campaign" && !t.done ? campBtn(s) : openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : trkWait(t)}</span></label>`; }).join("")}</details>`; }).join("")}
+      ${actBar(s)}
     </div>
-    <div class="card"><b>Notes</b> <span class="muted" style="font-size:12.5px">· the stay's reservation notes in Track. What you type saves to Track by itself.</span>
-      <div id="rx_nt">Loading the Track notes…</div>
-      ${s.list && s.list.hold ? `<details class="acc2" style="margin-top:6px"><summary><b>Older hub note</b> <span class="muted" style="font-size:12.5px">(only in the hub, not in Track)</span></summary>
-        <textarea id="rx_hold" style="min-height:60px;margin-top:6px">${esc(s.list.hold)}</textarea>
-        <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap"><button class="btn small" id="rx_hold_s">Save</button><button class="btn small" id="rx_hold_t">Copy into a Track note</button></div></details>` : ""}
-      <div style="margin-top:4px"><span class="muted" id="rx_msg"></span></div>
-      <details class="acc2" id="rx_h"><summary><b>History</b></summary><div id="rx_hl" class="muted">Loading…</div></details></div>
   </div>`;
   const msg = t => $("#rx_msg").textContent = t;
   const set = async args => { const r = await sb.rpc("res_set", { p_res:s.res, ...args }); if(r.error){ msg("Couldn't save: " + r.error.message); return false; } await load(true); card(v, res); return true; };
@@ -726,8 +764,12 @@ async function card(v, res){
     try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
   v.querySelectorAll("[data-charge]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); charge(s, v, res); });
   $("#rx_stage").onchange = e => set({ p_stage:e.target.value });
-  $("#rx_ext").onchange = e => set({ p_extending:e.target.checked });
+  // Extend / Cancel the stay buttons (2026-11-06): the extension + cancellation steps only show once someone taps one
+  v.querySelectorAll("[data-ext]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); return b.dataset.ext === "off" ? (confirm("Stop extending this stay? The extension steps go away (ticks are kept).") && set({ p_extending:false })) : extendBox(s, v, res); });
+  v.querySelectorAll("[data-cxl]").forEach(b => b.onclick = () => cancelBox(s, v, res, set));
   v.querySelectorAll("[data-wait]").forEach(b => b.onclick = () => { const w = b.dataset.wait, now = s.waiting.includes(w) ? s.waiting.filter(x => x !== w) : [...s.waiting, w]; set({ p_waiting:now }); });
+  v.querySelectorAll("[data-waitother]").forEach(b => b.onclick = () => { const w = (prompt("What is this check list waiting on? (short, e.g. \"Owner's OK on the pet\")") || "").trim().slice(0, 60);
+    if(w && !s.waiting.includes(w)){ set({ p_waiting:[...s.waiting, w] }); ntPush(s.res, `Check list on hold, waiting on: ${w}`); } });
   if($("#rx_hold_s")) $("#rx_hold_s").onclick = async () => { if(await set({ p_hold:$("#rx_hold").value })) msg("Saved ✓"); };
   if($("#rx_hold_t")) $("#rx_hold_t").onclick = () => { const n = ntState(s.res); n.nw = { id:null, text:$("#rx_hold").value, expect:null, st:"" }; ntSave(s.res, "nw"); ntDraw(s.res); };
   ntDraw(s.res); if(!ntState(s.res).loaded) ntLoad(s.res);
@@ -827,6 +869,121 @@ function autoWho(s, t){
     return `<span style="display:inline-flex;gap:6px;align-items:center">${trkLogo(true, w && w.exact ? "Track did this" : "Track shows it done (first seen by the hub)")}${w ? `<span>${w.exact ? "" : "by "}${esc(whenAny(w.at))}</span>` : ""}</span>`;
   return `<span class="pill green">${esc(t.auto)} ✓</span>${w ? ` <span title="${w.exact ? "When it happened" : "First time the hub saw it done"}">· ${w.exact ? "" : "by "}${esc(whenAny(w.at))}</span>` : ""}`;
 }
+/* ---------- Extend the stay / Cancel the stay (Brandon, Janae, Pyper, Kim 2026-11-06; walkthrough "Final questions" F1-F6, L6, L10).
+   The extension + cancellation steps only show once someone taps a button (or Track shows the stay cancelled). Anyone can do either.
+   Extend = an all-in quote first (res-extend: live Track rates, fees, taxes; read only), adjustable with a small discount (budget 5% of the
+   rent, never shown to the guest as a %), then copy the text / email, save it to the Track notes, or "Guest said yes" = the steps. */
+const isCx = s => s.status === "Cancelled" || (s.list && s.list.stage === "cancelling");
+const actBar = s => { const ex = !!(s.list && s.list.extending), cx = isCx(s), by = s.list && s.list.cancelBy;
+  return `<div class="ractbar"><button class="btn" data-ext="go">➕ ${ex ? "Extension quote" : "Extend the stay"}</button>${ex && !s.list.extQuote ? "" : ""}
+    ${ex ? `<button class="btn small" data-ext="off">Stop extending</button>` : ""}
+    <button class="btn" data-cxl="1">✖ ${cx ? `Cancellation: ${by === "us" ? "we're cancelling" : "guest cancelled"} · change` : "Cancel the stay"}</button></div>`; };
+const extBtn = s => `<button class="btn small" data-ext="go" style="min-height:28px;padding:0 9px;font-size:12px">${s.list && s.list.extQuote ? "See the quote" : "Get the price"}</button>`;
+const isHopper = s => /hopper/i.test(s.type || "");
+const CXL_WHAT = {
+  abnb:{ guest:"The guest cancels in Airbnb; Airbnb's policy decides the refund. We follow up: Track shows it cancelled, pet fees, folio $0, Cheree + Breezeway.",
+         us:"Call Airbnb for permission first; a manager approves (write who / when). Then the follow-up steps." },
+  vrbo:{ guest:"Ask the guest to cancel through VRBO (or cancel it in Track as \"Canceled by guest\"). Every payment is non-refundable once made: $0 back.",
+         us:"Home problem or double booking: offer a relocation first. Then refund what we owe (Refund Transaction, never Void) and write why." },
+  ws:  { guest:s => `The guest cancels with ${isHopper(s) ? "Hopper" : "Whimstay"}, never with us. ${isHopper(s) ? "Hopper (Strict): full refund within 48 h of booking when check-in is 14+ days away, 50% back 7+ days out, nothing inside 7 days." : "Whimstay (Moderate): full refund minus their fee 30+ days out, nothing under 30 days."} The site refunds the guest.`,
+         us:s => `Offer a relocation first. Then ${isHopper(s) ? "cancel it yourself in the Hopper Host Portal (guest refunded in full, our payout adjusts; urgent: 1-800-328-7100)" : "email hostsupport@whimstay.com (or call)"} and write why.` },
+  oguest:{ guest:"Cancel in Track. Owner guest money: check the agreement (damage insurance is kept if it's cancelled on/after check-in).", us:"Write why, refund what we owe." },
+  owner:{ guest:"Cancel in Track; tell Cheree and remove the Breezeway cleans.", us:"Cancel in Track; tell Cheree and remove the Breezeway cleans." } };
+function cancelBox(s, v, res, set){
+  document.getElementById("rcxm")?.remove();
+  const w = CXL_WHAT[s.chan] || CXL_WHAT.vrbo, txt = k => typeof w[k] === "function" ? w[k](s) : w[k], by = s.list && s.list.cancelBy;
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="rcxm" style="z-index:60"><div class="card" style="text-align:left;max-width:520px">
+    <h3 style="margin:0 0 4px">✖ Cancel the stay</h3><p class="muted" style="margin:0 0 10px">${esc(s.unit || "")} · ${esc(s.guest || "")} · #${esc(s.res)} · ${esc(CH[s.chan] || "")}</p>
+    <button class="btn" data-by="guest" style="width:100%;text-align:left;margin-bottom:8px;white-space:normal;height:auto;padding:10px 12px"><b>The guest is cancelling</b><div class="muted" style="font-weight:400;font-size:13px">${esc(txt("guest"))}</div></button>
+    <button class="btn" data-by="us" style="width:100%;text-align:left;white-space:normal;height:auto;padding:10px 12px"><b>We're cancelling</b> (home problem, double booking)<div class="muted" style="font-weight:400;font-size:13px">${esc(txt("us"))}</div></button>
+    <p class="muted" style="font-size:12.5px;margin:10px 0 0">This opens the cancellation steps on the check list. It doesn't cancel anything in Track${s.status === "Cancelled" ? " (Track already shows it cancelled)" : ""}.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">${isCx(s) && s.status !== "Cancelled" ? `<button class="btn small" data-by="none">Not cancelling after all</button>` : ""}<button class="btn small" id="rcx_x">Close</button></div></div></div>`);
+  const m = document.getElementById("rcxm"), close = () => m.remove();
+  m.querySelector("#rcx_x").onclick = close; m.onclick = e => { if(e.target === m) close(); };
+  m.querySelectorAll("[data-by]").forEach(b => b.onclick = async () => { const k = b.dataset.by; close();
+    GOPEN[s.res] = "Cancellation";
+    if(k === "none") return set({ p_stage:"in_progress", p_cancel_by:"" });
+    await set({ p_stage:"cancelling", p_cancel_by:k });
+    ntPush(s.res, k === "us" ? "Cancellation started on the check list: WE are cancelling (home problem / double booking)." : "Cancellation started on the check list: the guest is cancelling."); });
+  if(by) m.querySelector(`[data-by="${by}"]`)?.classList.add("primary");
+}
+const firstName = g => String(g || "").trim().split(/\s+/)[0] || "there";
+const usd = n => "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 });
+async function extFn(body){ const r = await sb.functions.invoke("res-extend", { body }); if(!r.error) return r.data || {};
+  try { return await r.error.context.json(); } catch(_){ return { ok:false, error:"Couldn't reach the hub. Check your signal and try again." }; } }
+function extendBox(s, v, res){
+  document.getElementById("rexm")?.remove();
+  const L = s.list || {}, saved = L.extQuote || null, ws = s.chan === "ws", ab = s.chan === "abnb";
+  const intro = ab ? "Airbnb guests extend in Airbnb (before or during the stay) and Airbnb collects. We send the change addendum and get it back; if it goes past 29 nights, check the damage insurance + monthly cleaning. You can still look up the price below."
+    : ws && s.arrive > B.today ? `Before check-in, Whimstay / Hopper guests change their stay with ${isHopper(s) ? "Hopper" : "Whimstay"}, not with us. You can still look up the price below.`
+    : ws ? "The guest is in house: Kim, Janae or Pyper handles a Whimstay / Hopper extension." : "Anybody can extend a VRBO / direct stay. Get the all-in price, adjust it if you need to, then send it to the guest.";
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="rexm" style="z-index:60"><div class="card" style="text-align:left;max-width:620px;max-height:90vh;overflow:auto">
+    <h3 style="margin:0 0 4px">➕ Extend the stay</h3><p class="muted" style="margin:0 0 8px">${esc(s.unit || "")} · ${esc(s.guest || "")} · #${esc(s.res)} · now ${esc(day(s.arrive))} → ${esc(day(s.depart))} (${esc(s.nights)} nights)</p>
+    <div class="rrule info" style="margin:0 0 10px">${esc(intro)}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+      <label style="flex:1;min-width:150px">New check-out<input type="date" id="rex_to" value="${esc(saved && saved.to || L.extTo || addDay(s.depart, 1))}" min="${esc(s.depart)}"></label>
+      <label style="flex:1;min-width:150px">New check-in <span class="muted">(only if earlier)</span><input type="date" id="rex_from" value="${esc(saved && saved.from || L.extFrom || s.arrive)}" max="${esc(s.arrive)}"></label>
+      <button class="btn primary" id="rex_go">Get the price</button></div>
+    <div id="rex_out" style="margin-top:12px">${saved ? `<p class="muted">Saved quote from ${esc(when(saved.at))} by ${esc(saved.by || "")}: <b>${usd(saved.total)}</b> for ${esc(saved.added)} more night${saved.added > 1 ? "s" : ""} to ${esc(day(saved.to))}. Get the price again for today's numbers.</p>` : ""}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn small" id="rex_x">Close</button></div></div></div>`);
+  const m = document.getElementById("rexm"), out = m.querySelector("#rex_out"), close = () => m.remove();
+  m.querySelector("#rex_x").onclick = close; m.onclick = e => { if(e.target === m) close(); };
+  let Q = null;
+  m.querySelector("#rex_go").onclick = async () => {
+    out.innerHTML = `<p class="muted">Asking Track for the price…</p>`;
+    const q = await extFn({ res:s.res, from:m.querySelector("#rex_from").value, to:m.querySelector("#rex_to").value });
+    if(!q.ok){ out.innerHTML = `<div class="rrule warn">${esc(q.error || "Couldn't get a price.")}</div>`; return; }
+    Q = q; draw();
+  };
+  const draw = () => {
+    const q = Q, dv = Math.max(0, Number((m.querySelector("#rex_disc") || {}).value || 0)), as = (m.querySelector("#rex_as") || {}).value || "small";
+    const over = dv > q.discountBudget + 0.005, total = Math.max(0, q.total - dv);
+    const lines = q.nights.map(n => `<div class="rqline"><span>${esc(day(n.d))}</span><span>${n.rate == null ? "no price in Track" : usd(n.rate)}${n.high ? ` <span class="pill amber" title="Well above this stay's usual ${usd(q.typicalRate)} a night">holiday / prime rate</span>` : ""}${n.open ? "" : ` <span class="pill red">taken</span>`}</span></div>`).join("");
+    const disc = dv > 0 ? (as === "cleaning" ? ` That includes ${usd(dv)} off your cleaning fee.` : as === "nightly" ? ` We took ${usd(dv)} off the nightly rate for you.` : " We gave you a small discount.") : "";
+    const text = `Hi ${firstName(s.guest)}, your price to extend your stay to ${new Date(q.to + "T12:00").toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric" })}${q.from < q.arrive ? ` (arriving ${new Date(q.from + "T12:00").toLocaleDateString("en-US", { month:"long", day:"numeric" })})` : ""} is ${usd(total)}, all in (taxes and fees included).${disc} Reply YES and we'll set it up. - Moose Management`;
+    const mail = `Subject: Extending your stay at ${s.unit}\n\n${text.replace(" - Moose Management", "")}\n\nOnce you say yes we'll send a short change addendum to sign${q.chargeNow ? ", then charge the card on file" : ""}.\n\nThank you,\nMoose Management\n435-714-6544 · hello@moosemanagement.com`;
+    out.innerHTML = `${q.available ? "" : `<div class="rrule stop">Not open for all of those nights${q.blocked.length ? ": " + esc(q.blocked.map(day).join(", ")) : ""}. Don't quote it; pick other dates.</div>`}
+      ${q.noPrice.length ? `<div class="rrule warn">Track has no price for ${esc(q.noPrice.map(day).join(", "))}.</div>` : ""}
+      <div class="rquote">${lines}
+        <div class="rqline b"><span>Rent, ${q.addedNights} more night${q.addedNights > 1 ? "s" : ""}</span><span>${usd(q.rentNew)}</span></div>
+        ${q.fees.map(f => `<div class="rqline"><span>${esc(f.name)}</span><span>${usd(f.amount)}</span></div>`).join("")}
+        ${q.taxes.map(t => `<div class="rqline"><span>${esc(t.name)}</span><span>${usd(t.amount)}</span></div>`).join("")}${q.taxNote ? `<div class="rqline"><span class="muted">${esc(q.taxNote)}</span><span></span></div>` : ""}
+        ${dv > 0 ? `<div class="rqline"><span>Discount</span><span>−${usd(dv)}</span></div>` : ""}
+        <div class="rqline tot"><span>All in for the guest</span><span>${usd(total)}</span></div></div>
+      <p class="muted" style="font-size:12.5px;margin:4px 0 10px">${q.chargeNow ? "In house or 14 days or less to arrival: once the addendum is signed, charge this in full. In Track the admin fee becomes " + usd(q.adminNew) + " (11.1% of the whole rent)." : "More than 14 days out: update the charges in Track; it follows the 10/40/50 schedule."} Track may be off by a few cents.</p>
+      <div class="rqdisc"><label>Discount <span class="muted">(up to ${usd(q.discountBudget)} without a manager)</span><input type="number" id="rex_disc" min="0" step="1" value="${dv || ""}" placeholder="0"></label>
+        <label>Tell the guest it's<select id="rex_as"><option value="small" ${as === "small" ? "selected" : ""}>a small discount</option><option value="cleaning" ${as === "cleaning" ? "selected" : ""}>$ off the cleaning fee</option><option value="nightly" ${as === "nightly" ? "selected" : ""}>$ off the nightly rate</option></select></label></div>
+      ${over ? `<div class="rrule stop">That's over the discount budget (${usd(q.discountBudget)}). Ask a manager first (Janae / Pyper weekdays, Charmayne weekends). ${!B.canMgr ? askBtn("x_rule") : ""}</div>` : ""}
+      <label style="display:block;margin-top:8px">Text for the guest (send it from the office text line, 435-714-7760)<textarea id="rex_txt" style="min-height:74px">${esc(text)}</textarea></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn small" id="rex_ct" ${over && !B.canMgr ? "disabled" : ""}>📋 Copy text</button>
+        <button class="btn small" id="rex_ce" ${over && !B.canMgr ? "disabled" : ""}>✉ Copy email</button>
+        <button class="btn small" id="rex_sv" ${over && !B.canMgr ? "disabled" : ""}>📝 Save to the Track notes</button>
+        <button class="btn small primary" id="rex_yes" ${!q.available || (over && !B.canMgr) ? "disabled" : ""}>✅ Guest said yes: start the steps</button></div>
+      <p class="muted" id="rex_m" style="font-size:12.5px;margin:6px 0 0"></p>`;
+    const msg = t => m.querySelector("#rex_m").textContent = t;
+    m.querySelector("#rex_disc").oninput = () => { clearTimeout(draw.t); draw.t = setTimeout(() => { const el = m.querySelector("#rex_disc"), pos = el.selectionStart; draw(); const n = m.querySelector("#rex_disc"); n.focus(); try { n.setSelectionRange(pos, pos); } catch(_){ } }, 400); };
+    m.querySelector("#rex_as").onchange = draw;
+    m.querySelectorAll("[data-ask]").forEach(b => b.onclick = async () => { const note = prompt("What do you need from the manager?", `Extension discount of ${usd(dv)} on ${usd(q.total)} (budget ${usd(q.discountBudget)})`); if(!note) return;
+      const r = await sb.rpc("res_ask", { p_res:s.res, p_step:"x_rule", p_note:note }); msg(r.error ? "Couldn't ask: " + r.error.message : "Asked ✓ (the manager on shift gets a Slack message)"); });
+    const cp = async (t, b) => { try { await navigator.clipboard.writeText(t); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", t); } };
+    const quote = () => ({ at:new Date().toISOString(), from:q.from, to:q.to, added:q.addedNights, rent:q.rentNew, fees:q.feesTotal, taxes:q.taxTotal,
+      discount:dv, discountAs:dv ? as : null, total, adminNew:q.adminNew, chargeNow:q.chargeNow,
+      summary:`Extension quote: ${q.addedNights} more night${q.addedNights > 1 ? "s" : ""} to ${q.to}${q.from < q.arrive ? " (from " + q.from + ")" : ""}, ${usd(total)} all in${dv ? " incl. " + usd(dv) + " discount" : ""}` });
+    const note = qq => `Extension quote (Moose Hub): ${qq.added} more night${qq.added > 1 ? "s" : ""}, ${q.from < q.arrive ? "check-in " + q.from + ", " : ""}new check-out ${q.to}. Rent ${usd(q.rentNew)} + fees ${usd(q.feesTotal)} + taxes ${usd(q.taxTotal)}${dv ? " − discount " + usd(dv) : ""} = ${usd(total)} all in. Admin fee in Track = ${usd(q.adminNew)} (11.1% of the whole rent). ${q.chargeNow ? "Charge in full once the addendum is signed." : "Before arrival: update the charges; it follows 10/40/50."}`;
+    m.querySelector("#rex_ct").onclick = e => cp(m.querySelector("#rex_txt").value, e.target);
+    m.querySelector("#rex_ce").onclick = e => cp(mail.replace(text.replace(" - Moose Management", ""), m.querySelector("#rex_txt").value.replace(/ - Moose Management$/, "")), e.target);
+    m.querySelector("#rex_sv").onclick = async e => { e.target.disabled = true; const qq = quote();
+      const r = await sb.rpc("res_set", { p_res:s.res, p_ext_quote:qq, p_ext_from:q.from < q.arrive ? q.from : null, p_ext_to:q.to });
+      if(r.error){ e.target.disabled = false; return msg("Couldn't save: " + r.error.message); }
+      ntPush(s.res, note(qq)); msg("Saved to the check list and the Track notes ✓"); };
+    m.querySelector("#rex_yes").onclick = async e => { e.target.disabled = true; const qq = quote();
+      const r = await sb.rpc("res_set", { p_res:s.res, p_extending:true, p_ext_quote:qq, p_ext_from:q.from < q.arrive ? q.from : null, p_ext_to:q.to });
+      if(r.error){ e.target.disabled = false; return msg("Couldn't save: " + r.error.message); }
+      ntPush(s.res, "Guest said yes. " + note(qq)); close(); GOPEN[s.res] = "Extending"; await load(true); card(v, res); };
+  };
+}
+
 /* ---------- Charge the balance to the card on file (Brandon 2026-10-29; res-charge function + hub_res_charge.sql).
    Amount only, never the breakdown; Track is re-read live and the person confirms the exact amount first. */
 const chargeBtn = s => B.canCharge && s.status !== "Cancelled" && (s.balance || 0) > 0
@@ -838,7 +995,7 @@ async function fnCall(body){
 }
 async function charge(s, v, res){
   document.getElementById("rchm")?.remove();
-  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="rchm"><div class="card" style="text-align:left">
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="rchm" style="z-index:60"><div class="card" style="text-align:left">
     <h3 style="margin:0 0 8px">💳 Charge the balance</h3><div id="rch_b"><p class="muted">Checking the balance in Track…</p></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn small" id="rch_x">Cancel</button><button class="btn small primary" id="rch_go" style="display:none"></button></div></div></div>`);
   const m = document.getElementById("rchm"), body = m.querySelector("#rch_b"), go = m.querySelector("#rch_go"), close = () => m.remove();
