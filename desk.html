@@ -1376,6 +1376,7 @@ document.addEventListener("toggle",function(e){ var dt=e.target; if(!dt||dt.tagN
 function canLic(){ if(D._canLic!==undefined) return D._canLic; D._canLic=false; var sb=window.MM_SB;
   if(sb) sb.rpc("hub_can",{p_desk:"licensing"}).then(function(r){ D._canLic=!!(r&&r.data); if(D._canLic) schedule(); }); return false; }
 if(!document.getElementById('hfoldcss')){ var _st=document.createElement('style'); _st.id='hfoldcss'; _st.textContent='details.hfold>summary{font-weight:600;cursor:pointer;padding:4px 0}details.hfold[open]>summary{margin-bottom:8px}'; document.head.appendChild(_st); }
+document.addEventListener("toggle",function(e){ var dt=e.target; if(dt&&dt.tagName==="DETAILS"&&dt.hasAttribute&&dt.hasAttribute("data-appl")) S.ui.applOpen=dt.open; },true);
 function homeAddr(p){ var t=(p&&p.track)||{}; if(!t.address) return "";
   var a=[t.address,[t.city,t.postal?"UT "+t.postal:""].filter(Boolean).join(", ")].filter(Boolean).join(", ");
   return '<div class="dsub haddr">\ud83d\udccd '+esc(a)+' \u00b7 <a class="golink" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a)+'" target="_blank" rel="noopener">Map \u2197</a></div>'; }
@@ -1396,7 +1397,7 @@ function homeDetail(code){
   else if(os && daysBetween(t,os.in)<=30) h+='<div class="infobox">Owner stay '+esc(fmtD(os.in))+' → '+esc(fmtD(os.out))+'.</div>';
   h+=homeHeads(code);
   h+=quickView(code,p);
-  var pb=paintBlock(code); if(pb) h+='<details class="block infocat hfold"><summary>Paint colors</summary>'+pb.replace(/^<div class="block">/,'<div>')+'</details>';
+  var pb=paintBlock(code), xh='';
   h+=hoaBlock(code,p);
   h+=ownerRelBlock(jobs);
   // basics
@@ -1416,7 +1417,7 @@ function homeDetail(code){
     (pe.by?'<span class="note" style="align-self:center">Last changed by '+esc(nameFor(pe.by))+' '+esc(ago(ymd(pe.at)))+'</span>':'')+'</div></div>';
   h+=S.ui.homeEd===code?hb:homeRO(hb,code);
   if(S.ui.homeEd!==code){ var fl=homeRO(fireFields(code),code), lk=canLic();
-    h+='<details class="block infocat hfold"><summary>Fire suppression &amp; license</summary>'+fl+
+    xh+='<details class="infocat"><summary>Fire suppression &amp; license</summary>'+fl+
       (lk?'<div class="links" style="margin-top:8px"><a class="btn sm" href="hub.html#/licensing" target="_top">Open Licensing \u2192</a><a class="btn sm" href="hub.html#/lic_fire" target="_top">Open Fire suppression \u2192</a></div>':'')+
       '<div class="hint" style="margin-top:6px">Change these with \u270e Edit on The home.</div></details>'; }
   // breezeway
@@ -1430,9 +1431,9 @@ function homeDetail(code){
   // appliances
   loadApplImg(code); var aps=homeAppl(code,p).map(function(a){ return applianceView(code,a); });
   var missL=aps.filter(function(x){ return !/^(TV|Sound bar|Fireplace|BBQ)$/.test(x.type) && (!x.model||x.conf==="wrong-photo"||x.conf==="low") && !S.bwq[sid("lbl_"+code+"_"+x.key)]; });
-  var aO=!!S.ui.applOpen; h+='<details class="block recacc"'+(aO?' open':'')+'><summary><button type="button" class="recbtn" data-applacc="1"><h4><span class="recchev">'+(aO?'\u25be':'\u25b8')+'</span>Appliances <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">'+aps.length+'</span></h4></button></summary><div class="links" style="margin-bottom:8px"><button class="btn sm ghost" data-act="addappl" data-code="'+esc(code)+'">+ Add</button>'+(missL.length>1?' <button class="btn sm" data-lblall="'+esc(code)+'">Get label photos for '+missL.length+' missing</button>':'')+'</div>';
-  if(!aps.length) h+='<div class="note">None recorded in Asana or the new-property inspection.</div>';
-  else h+='<div class="appl"><table class="t"><thead><tr><th>What</th><th>Brand · model</th><th>Serial</th><th>Age / life</th><th></th></tr></thead><tbody>'+
+  var ah=''; ah+='<details class="infocat" data-appl="1"'+(S.ui.applOpen?' open':'')+'><summary>Appliances <span class="muted">'+aps.length+'</span></summary><div class="links" style="margin-bottom:8px"><button class="btn sm ghost" data-act="addappl" data-code="'+esc(code)+'">+ Add</button>'+(missL.length>1?' <button class="btn sm" data-lblall="'+esc(code)+'">Get label photos for '+missL.length+' missing</button>':'')+'</div>';
+  if(!aps.length) ah+='<div class="note">None recorded in Asana or the new-property inspection.</div>';
+  else ah+='<div class="appl"><table class="t"><thead><tr><th>What</th><th>Brand · model</th><th>Serial</th><th>Age / life</th><th></th></tr></thead><tbody>'+
     aps.map(function(x){ var rc=x.recalls&&x.recalls.length;
       return '<tr><td>'+esc(x.type)+(x.location?'<div class="muted">'+esc(x.location)+'</div>':'')+(x.src==="inspection"?'<div class="muted">from the new-property inspection</div>'+(x.photos&&x.photos.length?'<div style="display:flex;gap:4px;margin-top:4px">'+x.photos.slice(0,4).map(function(u,i){ return aimgTag(u,x.photos,i); }).join("")+'</div>':''):'')+'</td>'+
         '<td>'+(x.brand||x.model?esc(x.brand)+(x.model?' <span class="mono">'+esc(x.model)+'</span>':''):'<span class="muted">'+(x.src==="inspection"&&x.photos&&x.photos.length&&!x.conf?'label not read yet':'—')+'</span>')+
@@ -1444,14 +1445,15 @@ function homeDetail(code){
         '<td style="white-space:nowrap"><button class="btn sm" data-rvr="'+esc(code)+'|'+esc(x.key)+'">Repair or replace?</button> '+
         '<button class="btn sm ghost" data-aedit="'+esc(code)+'|'+esc(x.key)+'">Edit</button>'+(!x.model||x.conf==="wrong-photo"||x.conf==="low"?(function(){ var q=S.bwq[sid("lbl_"+code+"_"+x.key)]; if(q&&q.kind==="covered") q=S.bwq[q.coveredBy]||q; return q?' <span class="pill '+(q.status==="created"?"done":"waiting")+'">'+(q.status==="created"?"Photo task in Breezeway":"Photo task going in")+'</span>':' <button class="btn sm" data-lblreq="'+esc(code)+'|'+esc(x.key)+'" title="Breezeway task: take a clear photo of the make/model label">Get label photo</button>'; })():'')+(x.url?' <a class="golink" href="'+esc(x.url)+'" target="_blank" rel="noopener">Label ↗</a>':'')+'</td></tr>'; }).join("")+
     '</tbody></table></div><div class="note" style="margin-top:6px">Life = typical years for that appliance (NAHB). Bar turns amber at 70% and red past its typical life.</div>';
-  if(S.ui.rvr && S.ui.rvr.code===code) h+='<div id="rvrbox" style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface-2)">'+rvrPanel()+'</div>';
-  h+='</details>';
+  if(S.ui.rvr && S.ui.rvr.code===code) ah+='<div id="rvrbox" style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface-2)">'+rvrPanel()+'</div>';
+  ah+='</details>';
   // info
   var cats=p.info.filter(function(i){ return i.notes; });
   h+='<div class="block"><h4>Home information <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">from Asana property info · staff only</span></h4>'+
+    ah+(pb?'<details class="infocat"><summary>Paint colors</summary>'+pb.replace(/^<div class="block">/,'<div>')+'</details>':'')+xh+
     (cats.length?cats.map(function(i){ var codes=/^\[codes\]/.test(i.notes);
       return '<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+'</summary>'+
-        '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+'</div></details>'; }).join(""):'<div class="note">No property info in Asana.</div>')+'</div>';
+        '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+'</div></details>'; }).join(""):'')+'</div>';
   h+='<details class="block recacc"'+(S.ui.recOpen?' open':'')+'><summary><button type="button" class="recbtn" data-recacc="1"><h4><span class="recchev">'+(S.ui.recOpen?'\u25be':'\u25b8')+'</span>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">'+(jobs.length||recent.length)+' \u00b7 newest first</span></h4></button></summary>'+
     '<style>.recacc>summary{list-style:none}.recacc>summary::-webkit-details-marker{display:none}.recbtn{all:unset;cursor:pointer;display:block;width:100%}.recbtn h4{display:flex;align-items:center;gap:8px;margin:0}.recchev{color:var(--accent);font-size:12px}.recacc[open]>summary{margin-bottom:8px}</style>'+
     (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
@@ -1830,9 +1832,23 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
     qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
     (window.MM_CODES===false?'':qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
-    (hi.water?qCard("Water shut-off",hi.water,"","water",""):'<div class="qv water"><div class="qvh">Water shut-off</div><div class="muted">Not on file yet \u2014 add it under Home information \u25b8 Edit.</div></div>')+
+    (hi.water?qCard("Water shut-off",hi.water,"","water",""):'<div class="qv water"><div class="qvh">Water shut-off</div><div class="muted">Not on file yet \u2014 add it with \u270e Edit on The home.</div></div>')+
     qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+'</div>'+
+    hnCard(code)+
     '<div class="note" style="margin-top:6px">Staff only — never text codes or Wi-Fi to anyone who isn\'t booked in the home.</div></div>'; }
+function hnLoad(code,force){ var sb=window.MM_SB; D._hn=D._hn||{}; if(!sb||(D._hn[code]&&!force)) return; if(!D._hn[code]) D._hn[code]={loading:1,rows:[]};
+  sb.rpc("home_notes",{p_home:code}).then(function(r){ D._hn[code]={rows:r.error?[]:(r.data||[]),err:r.error?"Couldn't load notes.":""}; render(); }); }
+function hnCard(code){ hnLoad(code); var n=(D._hn||{})[code]||{rows:[]};
+  return '<div class="qv hnotes" style="grid-column:1/-1;margin-top:10px"><div class="qvh">Notes</div>'+
+    (n.rows.length?n.rows.map(function(x){ return '<div class="hnrow"><div>'+esc(x.note)+'<div class="muted" style="font-size:12px">'+esc(x.by_name||"")+' \u00b7 '+esc(fmtD(ymd(x.at)))+'</div></div>'+
+      (x.can_off?'<button class="btn sm ghost" data-act="hnoff" data-id="'+x.id+'" data-code="'+esc(code)+'" title="Take this note off">\u2715</button>':'')+'</div>'; }).join(""):(n.loading?'':'<div class="muted">No notes yet.</div>'))+
+    (n.err?'<div class="hint">'+esc(n.err)+'</div>':'')+
+    '<div class="hnadd"><input id="hn_txt" maxlength="500" placeholder="Add a quick note for everyone (no codes)"><button class="btn sm pri" data-act="hnadd" data-code="'+esc(code)+'">Add</button></div>'+
+    '<style>.hnrow{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line-2)}.hnadd{display:flex;gap:8px;margin-top:8px}.hnadd input{flex:1;min-width:0}</style></div>'; }
+function hnAdd(code){ var el=document.getElementById("hn_txt"), v=el?el.value.trim():""; if(!v) return; var sb=window.MM_SB; if(!sb) return;
+  sb.rpc("home_note_add",{p_home:code,p_note:v}).then(function(r){ if(r.error){ alert((r.error.message||"Couldn't save").replace(/^.*?:\s*/,"")); return; } hnLoad(code,true); }); }
+function hnOff(code,id){ if(!confirm("Take this note off?")) return; var sb=window.MM_SB; if(!sb) return;
+  sb.rpc("home_note_off",{p_id:Number(id)}).then(function(r){ if(r.error){ alert("Couldn't take it off."); return; } hnLoad(code,true); }); }
 /* field crew: owner lockout lines are masked; "View" opens them and the database pings Chris + the admins (home_owner_reveal) */
 function ownerViewHtml(code,q){ if(!q.ownerView) return ""; var v=(D._ov||{})[code];
   if(!v) return '<div style="margin-top:6px"><button class="btn sm" data-act="ownerview" data-code="'+esc(code)+'">👁 View owner lockout &amp; closet</button>'+
@@ -4542,6 +4558,8 @@ document.addEventListener("click",function(ev){
     case "hhood": S.ui.hhOpen=(S.ui.hhOpen===d.c?"":d.c); render(); if(S.ui.hhOpen){ var hb=[].slice.call(document.querySelectorAll(".hhacc")).filter(function(x){ return x.dataset.c===S.ui.hhOpen; })[0]; if(hb) hb.scrollIntoView({block:"start"}); } return;
     case "editquick": return mQuick(d.code);
     case "ownerview": return ownerView(d.code);
+    case "hnadd": return hnAdd(d.code);
+    case "hnoff": return hnOff(d.code,d.id);
     case "hoaedit": return mHoa(d.id?+d.id:null,d.c||"");
     case "savehoa": var hc=d.code, hk=sid(hc); return put("propedits",hk,{hoaName:fv("hoa_name"),hoaMgmt:fv("hoa_mgmt"),hoaContact:fv("hoa_contact"),hoaPhone:fv("hoa_phone"),hoaEmail:fv("hoa_email"),hoaPortal:fv("hoa_portal"),hoaRules:fv("hoa_rules")},S.propedits[hk]).then(function(){ toast("HOA saved"); });
     case "newexp": return mExpense();
