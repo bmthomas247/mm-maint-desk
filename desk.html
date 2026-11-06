@@ -1270,7 +1270,7 @@ function homeQuick(code,p){ var pe=pedit(code), t=hqOf(code)||{}, a=function(rx)
   pick("wifi",[["Track",t.wifi_name||t.wifi_pass?wl(t.wifi_name,t.wifi_pass,t.wifi_note):""],["Hub edit",pe.wifiName||pe.wifiPass?wl(pe.wifiName,pe.wifiPass):""],["Asana",noStayfi(a(/^(wifi|wi-fi|stay[- ]?fi)/i))]]);
   pick("garage",[["Track",t.garage_code?["Garage code: "+t.garage_code,t.garage_note||""].filter(Boolean).join("\n"):(t.garage_note||"")],["Hub edit",pe.garageCode],["Asana",a(/^parking\/? ?garage info$|^parking$/i)]]);
   var loc=homeInfo(code); r.keybox=[t.keybox_code?"Key box code: "+kbc(t.keybox_code):"",loc.keybox||""].filter(Boolean).join("\n"); r.src.keybox=t.keybox_code?"Track":(loc.src&&loc.src.keybox)||"";
-  r.door=[t.door_code?"Front door: "+t.door_code:"",t.gate_code?"Gate / building: "+t.gate_code:""].filter(Boolean).join("\n"); r.src.door=r.door?"Track":"";
+  r.door=[t.door_code?"Front door: "+kbc(t.door_code):"",t.gate_code?"Gate / building: "+kbc(t.gate_code):""].filter(Boolean).join("\n"); r.src.door=r.door?"Track":"";
   pick("entry",[["Hub edit",pe.lockoutCode],["Asana",a(/^lockout info/i)]]);
   if(t.owner_garage_code){ r.entry=(r.entry?r.entry+"\n":"")+"Owner garage: "+t.owner_garage_code; r.src.entry=r.src.entry?r.src.entry+" + Track":"Track"; }
   r.ownerView=!!t.owner_hidden;
@@ -1295,7 +1295,13 @@ function tCell(label,src,lines,plain,cls){ if(cls==='hentry' && !document.getEle
    keybox with the keybox code and location / the owner lockout information if applicable"). Track codes first, then the lockout note's
    labeled lines sorted by their label; a number already shown isn't shown twice. Lines the database masked (•••) stay masked. */
 function lockSecs(c,t,q,p){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},gate:{},kb:{},own:{}}, seen={}, loc=homeInfo(c)||{};
-  var add=function(k,label,val,s){ val=String(val||"").replace(/\s+/g," ").trim(); if(!val) return; var d=val.replace(/\D/g,""); d=d.length>=3?d:val.toLowerCase();
+  var tLab=function(k,l){ l=String(l||"").toLowerCase();
+    if(/master/.test(l)) return "Master lock"; if(/owner/.test(l)) return /closet/.test(l)?"Owner closet":/garage/.test(l)?"Owner garage":"Owner lock";
+    if(/garage/.test(l)) return "Garage"; if(/key ?box|keybox|cage/.test(l)||k==="kb") return "Key box"; if(/gate|bldg|building/.test(l)) return "Gate";
+    if(/front door/.test(l)) return "Front door"; return k==="own"?"Owner lockout":k==="gate"?"Gate":"Door"; };
+  var tCodes=function(v){ return (String(v).match(/•{3,}|[0-9][0-9#*]{2,}/g)||[]).slice(0,2).join(" / "); };
+  var add=function(k,label,val,s){ val=kbc(String(val||"").replace(/\s+/g," ").trim());
+    if(/clubhouse|pool/i.test(label||"")) return; var cv=tCodes(val); if(!cv) return; val=cv; label=tLab(k,label); if(!val) return; var d=val.replace(/\D/g,""); d=d.length>=3?d:val.toLowerCase();
     if(seen[d]) return; seen[d]=1; if(S[k].length>=4) return; if(val.length>60) val=val.slice(0,58)+"…";
     S[k].push(label?label+": "+val:val); src[k][s||"Asana"]=1; };
   var kind=function(L){ return /padlock|lock ?box|locker|safe|attic|mechanical|thermostat/.test(L)?null
@@ -1338,7 +1344,7 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   if(false && t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   cells.push(hoaCell(c,p));
   if(o.can && o.list.length){ var w=o.list[0];
-    cells.push(tCell("Owner",w.plan?"Contract: "+w.plan:"",[{html:'<div class="tl" title="From '+(w.src==="Track"?"Track":"a hub edit")+'"><span class="ql qin">Name - </span><b>'+esc(w.name||"")+'</b>'+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
+    cells.push(tCell("Owner",w.plan?"Contract: "+w.plan:"",[{html:'<div class="tl" title="From '+(w.src==="Track"?"Track":"a hub edit")+'"><span class="ql">Name</span>'+esc(w.name||"")+''+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
       w.phone?{html:'<div class="tl"><span class="ql">Phone</span>'+ocon("tel",w.phone)+'</div>'}:"",
       w.email?{html:'<div class="tl"><span class="ql">Email</span>'+ocon("mail",w.email)+'</div>'}:""],false,"hown")); }
   return cells.join("")||'<div class="hql"><div class="muted">No codes on file yet.</div></div>'; }
