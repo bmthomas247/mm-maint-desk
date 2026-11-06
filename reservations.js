@@ -67,7 +67,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px} .rgrid>.card{margin:0}
 .rhome{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px!important} .rhome:hover{border-color:var(--forest-2)}
 .rhome::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--kc,var(--line-2))}
-.rtrk{color:var(--accent,#2463a0);text-decoration:underline;cursor:pointer} .rtrk:hover{opacity:.8} .rwho{margin-top:8px;font-size:12.5px;display:flex;gap:6px 14px;flex-wrap:wrap} .ractbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)} .ractbar .btn{font-weight:700}
+.rtrk{color:var(--accent,#2463a0);text-decoration:underline;cursor:pointer} .rtrk:hover{opacity:.8} .rwho{margin-top:8px;font-size:12.5px;display:flex;flex-direction:column;gap:3px} .ractbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)} .ractbar .btn{font-weight:700}
 .rquote{border:1px solid var(--line);border-radius:12px;padding:8px 12px} .rqline{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:14px}
 .rqline.b{border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-weight:700} .rqline.tot{border-top:2px solid var(--line);margin-top:6px;padding-top:8px;font-size:18px;font-weight:800}
 .rqdisc{display:flex;gap:10px;flex-wrap:wrap} .rqdisc label{flex:1;min-width:180px}
