@@ -768,7 +768,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
    read with their own sign-in (RLS decides): Penny's tips, their checks today, time-off requests waiting for their OK, and answers
    from an admin to "Ask an admin". Nothing new is stored; an item goes away when it's done where it lives. */
 let BELL = { items:[], at:0 }, NOTIFY = null;   // NOTIFY = hub_notify_mine() (My settings > Notifications, 2026-11-05)
-window.bellLoad = (f) => bellLoad(f);
+// bellLoad is a top-level function, so it is already window.bellLoad (staffing.js calls it). Never re-assign it: (f) => bellLoad(f) calls itself forever (2026-11-06).
 async function bellLoad(force){
   if(!ME || (!force && Date.now() - BELL.at < 60000)) return; BELL.at = Date.now();
   const has = k => DESKS.some(x => x.key === k), today = new Date().toLocaleDateString("en-CA"), it = [];
@@ -845,7 +845,7 @@ function bellSetup(){
   document.querySelectorAll(".mboard").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const q = $("#boardpop"); $("#bellpop").classList.remove("on"); if($("#findpop")) $("#findpop").classList.remove("on");
     if(q.classList.contains("on")) return q.classList.remove("on");
     place(b, q); boardDraw(); q.classList.add("on"); });
-  BELL.at = 0; bellLoad(true); findSetup();
+  findSetup(); BELL.at = 0; bellLoad(true);
 }
 /* 💬 Message board: the button opens a preview of the newest messages first (Brandon 2026-11-02); the board itself is built later.
    boardPreview() returns the newest posts [{who, text, at}] once the board exists. */
