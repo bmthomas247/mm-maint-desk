@@ -508,7 +508,7 @@ var S={db:null, me:ls("me")||"", tab:(location.hash||"").replace("#","")||"today
   feeds:{}, edits:{}, deskjobs:{}, profiles:{}, propedits:{}, ownercontacts:{}, paycost:{}, vendoredits:{}, deskvendors:{},
   recurring:{}, rlog:{}, expenses:{}, time:{}, config:{}, bwq:{}, taskbill:{}, projedits:{}, slackq:{}, deskprojects:{}, asanaq:{}, asks:{},
   ui:{q:"", st:{open:1,scheduled:1,waiting:1}, src:{}, kind:{}, who:"", vendor:"", hideOld:true, hideInfo:true,
-      sel:"", home:"", hq:"", vq:"", vtrade:"", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
+      sel:"", home:"", hq:"", vq:"", vtrade:"", vcat:"Home services", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
 /* Ask Penny (hub.html pennyCtx) reads which tab / home / job is open - nothing else */
 window.deskCtx=function(){ return {tab:S.tab, home:S.ui.home||"", sel:String(S.ui.sel||"")}; };
 var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["money","Expenses & Time"],["care","Home care"],["projects","Projects"],["routines","Seasonal & yearly"],["trash","Trash"],["homes","Homes"],
@@ -701,13 +701,13 @@ function renderNav(){
 }
 /* ---- Back: every change of place (tab, job, home, project, open panel) is remembered ---- */
 var NAV=[], NAV_LAST=null, NAV_BACK=false, NAV_Y=0;
-function navSig(){ var u=S.ui||{}; return {tab:S.tab, sel:u.sel||"", home:u.home||"", proj:u.proj||"", careOpen:u.careOpen||"", meeting:!!u.meeting, vmode:u.vmode||"", month:u.month||"", htype:u.htype||"", vtrade:u.vtrade||""}; }
+function navSig(){ var u=S.ui||{}; return {tab:S.tab, sel:u.sel||"", home:u.home||"", proj:u.proj||"", careOpen:u.careOpen||"", meeting:!!u.meeting, vmode:u.vmode||"", month:u.month||"", htype:u.htype||"", vtrade:u.vtrade||"", vcat:u.vcat||""}; }
 function navTrack(){ var now=navSig(), k=JSON.stringify(now);
   if(NAV_LAST && NAV_LAST.k!==k && !NAV_BACK){ NAV.push({s:NAV_LAST.s, y:NAV_Y}); if(NAV.length>60) NAV.shift(); }
   if(!NAV_LAST || NAV_LAST.k!==k) NAV_LAST={k:k,s:now};
   NAV_BACK=false; var bb=$("backbtn"); if(bb) bb.style.display=NAV.length?"":"none"; }
 function navBack(){ var p=NAV.pop(); if(!p) return; NAV_BACK=true; S.tab=p.s.tab;
-  ["sel","home","proj","careOpen","vmode","month","htype","vtrade"].forEach(function(k){ S.ui[k]=p.s[k]; }); S.ui.meeting=p.s.meeting;
+  ["sel","home","proj","careOpen","vmode","month","htype","vtrade","vcat"].forEach(function(k){ S.ui[k]=p.s[k]; }); if(!S.ui.vcat) S.ui.vcat="Home services"; S.ui.meeting=p.s.meeting;
   try{ history.replaceState(null,"","#"+S.tab); }catch(e){} render(); setTimeout(function(){ window.scrollTo(0,p.y||0); },30); }
 try{ window.addEventListener("scroll",function(){ NAV_Y=window.scrollY; },{passive:true}); }catch(e){}
 function render(){ render0(); navTrack(); try{ if(typeof autoPaintNote==="function") autoPaintNote(); if(typeof autoBusyNote==="function") autoBusyNote(); if(typeof autoSync==="function") autoSync(); if(typeof flushQueued==="function") flushQueued(); if(typeof feedLoad==="function") feedLoad(false); }catch(e){} }
@@ -2019,6 +2019,11 @@ var NEED=[
 ];
 function tradesFor(text){ var out=[]; NEED.forEach(function(n){ if(n[0].test(text)) n[1].forEach(function(t){ if(out.indexOf(t)<0) out.push(t); }); }); return out; }
 function vTrades(v){ return (v.edit&&v.edit.trades)||v.trades||[v.trade||"Other"]; }
+/* vendor categories (Brandon 2026-11-05). Vendors with no category are Home services (the October Asana import). */
+var VCATS=["Home services","Software & online services","Booking sites","Business services","Guest services & partners","Marketing & memberships"];
+function vCat(v){ var c=(v.edit&&v.edit.cat)||v.cat||"Home services"; return VCATS.indexOf(c)>-1?c:"Home services"; }
+function vCatRow(cat,q){ var n={}; D.vendors.forEach(function(v){ var c=vCat(v); n[c]=(n[c]||0)+1; });
+  return '<div class="chiprow" style="margin-bottom:12px" role="group" aria-label="Vendor category">'+VCATS.map(function(c){ return '<button class="chip" data-vcat="'+esc(c)+'" aria-pressed="'+(!q&&c===cat)+'">'+esc(c)+'<span class="n">'+(n[c]||0)+'</span></button>'; }).join("")+'</div>'; }
 function isPref(v){ if(!(v.edit&&v.edit.preferred!=null) && /not responsive|do not use|don'?t use|no longer|retired|out of business|moved to/i.test(v.name+" "+(v.notes||"").slice(0,80))) return false;
   /* Brandon: only "USE FIRST" (company-wide) vendors are preferred — being listed in Asana isn't enough */
   return v.edit&&v.edit.preferred!=null?!!v.edit.preferred:(v.tier==="first"); }
@@ -2067,18 +2072,21 @@ function vVendChanges(){ var w=S.ui.vcm||"m0", t=today(), m0=t.slice(0,7), m1=mo
     ev.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(ymd(e.at)))+'</td><td><span class="badge '+(e.kind==="Removed"?"recall":"ok")+'">'+esc(e.kind)+'</span></td><td><b>'+esc(e.name||"")+'</b></td><td class="muted">'+esc(e.trade||"")+'</td><td>'+esc(nameFor(e.who)||e.who||"")+'</td><td class="note" style="white-space:normal">'+esc(e.why)+'</td></tr>'; }).join("")+'</tbody></table></div>':'<div class="empty">No vendors added or removed in this period.</div>')+'</section>'; }
 function vVendorsFind(){
   var u=S.ui, q=u.vq.trim(), ql=q.toLowerCase();
-  var all={}; D.vendors.forEach(function(v){ vTrades(v).forEach(function(t){ (all[t]=all[t]||[]).push(v); }); });
-  var tradeNames=Object.keys(all).sort();
+  var cat=u.vcat||"Home services", home=cat==="Home services";
+  var all={}, catT={}; D.vendors.forEach(function(v){ var inC=vCat(v)===cat; vTrades(v).forEach(function(t){ (all[t]=all[t]||[]).push(v); if(inC) catT[t]=1; }); });
+  var tradeNames=Object.keys(catT).sort();
   var hitTrades=[];
   if(q){ tradesFor(q).forEach(function(t){ if(all[t]) hitTrades.push(t); });
-    tradeNames.forEach(function(t){ if(t.toLowerCase().indexOf(ql)>-1 && hitTrades.indexOf(t)<0) hitTrades.push(t); }); }
+    Object.keys(all).sort().forEach(function(t){ if(t.toLowerCase().indexOf(ql)>-1 && hitTrades.indexOf(t)<0) hitTrades.push(t); }); }
   var shown=u.vtrade?[u.vtrade]:(q?hitTrades:tradeNames);
   var byName=q?D.vendors.filter(function(v){ return (v.name+" "+(v.contact||"")+" "+(v.myNotes||"")).toLowerCase().indexOf(ql)>-1; }):[];
-  var h=vendorsTop()+((u.vtrade||q)?'<div style="margin-bottom:10px"><button class="btn sm" data-act="vback">← All kinds of work</button></div>':'')+'<div class="toolbar"><div class="qsearch" style="flex:1 1 380px"><span class="mag">⌕</span><input id="vq" type="search" placeholder="What needs fixing? e.g. leaking sink, garage door, concrete steps…" value="'+esc(u.vq)+'" autocomplete="off"></div>'+
-    '<select id="vtrade" aria-label="Kind of work"><option value="">Every kind of work</option>'+tradeNames.map(function(t){ return '<option'+(t===u.vtrade?' selected':'')+' value="'+esc(t)+'">'+esc(t)+' ('+all[t].length+')</option>'; }).join("")+'</select>'+
+  var h=vendorsTop()+vCatRow(cat,q)+((u.vtrade||q)?'<div style="margin-bottom:10px"><button class="btn sm" data-act="vback">← All kinds of work</button></div>':'')+'<div class="toolbar"><div class="qsearch" style="flex:1 1 380px"><span class="mag">⌕</span><input id="vq" type="search" placeholder="'+(home?"What needs fixing? e.g. leaking sink, garage door, concrete steps…":"Search every vendor, e.g. Track, insurance, concierge…")+'" value="'+esc(u.vq)+'" autocomplete="off"></div>'+
+    '<select id="vtrade" aria-label="Kind of work"><option value="">Every kind of work</option>'+tradeNames.concat(u.vtrade&&tradeNames.indexOf(u.vtrade)<0?[u.vtrade]:[]).map(function(t){ return '<option'+(t===u.vtrade?' selected':'')+' value="'+esc(t)+'">'+esc(t)+' ('+(all[t]||[]).length+')</option>'; }).join("")+'</select>'+
     '<label class="toggle"><input type="checkbox" id="vpref"'+(u.prefOnly?' checked':'')+'> Preferred only</label>'+
     '<button class="btn sm pri" data-act="newvendor">+ Vendor</button></div>';
-  if(!q && !u.vtrade) h+='<div class="sechead"><h2>Vendors</h2><p>Type what\'s broken and you get the kind of work and the vendors for it. Only "USE FIRST" vendors are preferred (company-wide). Click a vendor for their full profile: contact, how to reach them, and every job they\'ve done for us.</p></div>'+
+  if(!q && !u.vtrade && !home) h+='<div class="sechead"><h2>'+esc(cat)+'</h2><p>Pick a kind below or search by name. Sign-ins and passwords stay in LastPass, never here.</p></div>'+
+    '<div class="chiprow" style="margin-bottom:14px">'+tradeNames.map(function(t){ return '<button class="chip" data-vtradepick="'+esc(t)+'">'+esc(t)+'<span class="n">'+all[t].filter(function(v){ return vCat(v)===cat; }).length+'</span></button>'; }).join("")+'</div>';
+  else if(!q && !u.vtrade) h+='<div class="sechead"><h2>Vendors</h2><p>Type what\'s broken and you get the kind of work and the vendors for it. Only "USE FIRST" vendors are preferred (company-wide). Click a vendor for their full profile: contact, how to reach them, and every job they\'ve done for us.</p></div>'+
     '<div class="chiprow" style="margin-bottom:14px">'+tradeNames.map(function(t){ return '<button class="chip" data-vtradepick="'+esc(t)+'">'+esc(t)+'<span class="n">'+all[t].filter(isPref).length+'</span></button>'; }).join("")+'</div>';
   if(q && !shown.length && !byName.length) h+='<div class="panel empty">No kind of work matches "'+esc(q)+'". Try a simpler word — "leak", "oven", "garage" — or pick from the list.</div>';
   if(q && shown.length) h+='<div class="note" style="margin-bottom:10px">For "'+esc(q)+'": '+shown.map(function(t){ return '<b>'+esc(t)+'</b>'; }).join(" · ")+'</div>';
@@ -2088,7 +2096,7 @@ function vVendorsFind(){
     h+='<section style="margin-bottom:18px"><h3 style="font-size:15px;margin:0 0 8px;display:flex;gap:8px;align-items:baseline">'+esc(t)+
       '<span class="muted" style="font-size:12px;font-weight:400">'+vs.filter(isPref).length+' preferred</span></h3><div class="vgrid">'+vs.map(vcard).join("")+resourcesFor([t]).map(resRow).join("")+'</div></section>'; });
   var extra=byName.filter(function(v){ return !vTrades(v).some(function(t){ return shown.indexOf(t)>-1; }); });
-  if(!q && !u.vtrade){ var rs=resourcesFor(null); if(rs.length) h+='<section style="margin-top:6px"><h3 style="font-size:15px;margin:0 0 8px">Useful websites & how-tos <span class="muted" style="font-size:12px;font-weight:400">not vendors</span></h3><div class="vgrid">'+rs.map(resRow).join("")+'</div></section>'; }
+  if(!q && !u.vtrade && home){ var rs=resourcesFor(null); if(rs.length) h+='<section style="margin-top:6px"><h3 style="font-size:15px;margin:0 0 8px">Useful websites & how-tos <span class="muted" style="font-size:12px;font-weight:400">not vendors</span></h3><div class="vgrid">'+rs.map(resRow).join("")+'</div></section>'; }
   h+=vRemovedList();
   if(extra.length) h+='<section><h3 class="lbl" style="margin:6px 0 8px">Vendors named "'+esc(q)+'"</h3><div class="vgrid">'+extra.map(vcard).join("")+'</div></section>';
   return h;
@@ -2098,7 +2106,7 @@ function vcard(v){
   return '<article class="vcard'+(pf?' pref':'')+'"><div class="vtop"><h3><a href="#" data-vprof="'+esc(v.id)+'">'+esc(v.name)+'</a>'+
     (tr==="first"?' <span class="badge ok" style="background:var(--accent);color:#fff">Use first · company-wide</span>':tr==="second"?' <span class="badge">Use 2nd</span>':tr==="untried"?' <span class="badge draft">Not tried yet</span>':'')+'</h3>'+
     '<button class="star" data-vpref="'+esc(v.id)+'" aria-pressed="'+pf+'" title="'+(pf?"Click to stop listing as preferred":"Make preferred")+'">'+(pf?"★ Preferred":"☆ Prefer")+'</button></div>'+
-    '<div class="chiprow">'+vTrades(v).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join("")+
+    '<div class="chiprow">'+(vCat(v)!=="Home services"?'<span class="tag">'+esc(vCat(v))+'</span>':'')+vTrades(v).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join("")+
     '<span class="rate" aria-label="Rating">'+[1,2,3,4,5].map(function(n){ return '<button class="'+(n<=r?'on':'')+'" data-vrate="'+esc(v.id)+'|'+n+'" aria-label="'+n+' stars">★</button>'; }).join("")+'</span></div>'+
     /* contact info bold, one per line, so it's fast to read (Brandon 2026-10-28) */
     '<div class="vmeta vcontact">'+(ci.person?'<div class="vperson">'+esc(ci.person)+'</div>':'')+ci.phones.slice(0,2).map(function(p){ return '<a class="vc" href="tel:'+esc(p.replace(/[^\d+]/g,""))+'">📞 '+esc(p)+'</a>'; }).join("")+
@@ -2106,13 +2114,13 @@ function vcard(v){
     (ci.how?'<div class="vmeta"><span class="lbl">How to reach</span> '+esc(ci.how)+'</div>':'')+
     '<div class="vmeta"><b>'+done.length+'</b> job'+(done.length===1?'':'s')+' done for us'+(vj.length>done.length?' · '+(vj.length-done.length)+' open':'')+(done[0]?' · last '+esc(fmtD(done[0].finished||done[0].updated||done[0].when)):'')+'</div>'+
     (vAsanaNotes(v)?'<div class="vmeta note" style="white-space:normal">'+esc(vAsanaNotes(v).replace(/ \/ /g," · ").slice(0,170))+(vAsanaNotes(v).length>170?'… <a href="#" data-vprof="'+esc(v.id)+'">more</a>':'')+'</div>':'')+
-    '<div class="links"><button class="btn sm" data-vprof="'+esc(v.id)+'">Profile</button><button class="btn sm ghost" data-vedit="'+esc(v.id)+'">Edit</button>'+(v.asanaTask||v.asanaProject?'<a class="golink" href="'+esc(v.asanaTask||v.asanaProject)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'<button class="btn sm ghost" data-vremove="'+esc(v.id)+'" style="margin-left:auto">Remove</button></div></article>';
+    '<div class="links"><button class="btn sm" data-vprof="'+esc(v.id)+'">Profile</button><button class="btn sm ghost" data-vedit="'+esc(v.id)+'">Edit</button>'+(ci.webs[0]?'<a class="golink" href="'+esc(/^http/.test(ci.webs[0])?ci.webs[0]:"https://"+ci.webs[0])+'" target="_blank" rel="noopener">'+esc(ci.webs[0].replace(/^https?:\/\/(www\.)?/i,"").slice(0,28))+' ↗</a>':'')+(v.asanaTask||v.asanaProject?'<a class="golink" href="'+esc(v.asanaTask||v.asanaProject)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'<button class="btn sm ghost" data-vremove="'+esc(v.id)+'" style="margin-left:auto">Remove</button></div></article>';
 }
 /* ---- vendor contact + history ---- */
 function vContact(v){ var e=v.edit||{}, txt=[v.contact||"",v.notes||"",v.myNotes||""].join(" / ");
   var phones=[]; (txt.match(/(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g)||[]).forEach(function(p){ p=p.trim(); if(phones.indexOf(p)<0) phones.push(p); });
   var emails=[]; (txt.match(/[\w.+-]+@[\w-]+\.[\w.]+/g)||[]).forEach(function(m){ m=m.replace(/\.$/,""); if(emails.indexOf(m)<0) emails.push(m); });
-  var webs=[]; (txt.match(/https?:\/\/[^\s\/,]+[^\s,]*|www\.[^\s,]+/g)||[]).forEach(function(w){ if(!/asana\.com|breezeway|freshdesk|slack\.com/.test(w) && webs.indexOf(w)<0) webs.push(w); });
+  var webs=(v.web||[]).slice(); (txt.match(/https?:\/\/[^\s\/,]+[^\s,]*|www\.[^\s,]+/g)||[]).forEach(function(w){ if(!/asana\.com|breezeway|freshdesk|slack\.com/.test(w) && webs.indexOf(w)<0) webs.push(w); });
   var pm=(v.contact||"").split(/\s*\/\s*/).filter(function(x){ return x && !/\d{3}.*\d{4}|@|http|www\./.test(x) && x.toLowerCase()!==v.name.toLowerCase(); })[0]||"";
   var how=e.how||"";
   if(!how){ var hs=[]; if(/\btext(s|ing)?\b|\bsms\b/i.test(txt)) hs.push("text"); if(/\bcall\b|\bphone\b/i.test(txt)) hs.push("call"); if(/\bemail\b|@/i.test(txt)) hs.push("email");
@@ -4287,13 +4295,13 @@ function mRoutine(id){ var r=id?S.recurring[id]:{cadence:"weekly"};
   id?'<button class="btn warn" data-act="mrouteoff" data-id="'+esc(id)+'" style="margin-right:auto">Turn off</button>':''); }
 
 function mVendor(id){ var v=id?(D.vendors.filter(function(x){return x.id===id;})[0]||{}):{};
-  openModal(id?"Edit vendor":"New vendor",'<div class="fields">'+fld("m_name","Name",v.name||"",null,id&&!v.desk?"readonly":"")+fld("m_trade","Kind of work (comma between several)",vTrades(v).join(", "),"text",'list="dl_trades"')+'<datalist id="dl_trades">'+Object.keys(D.vendors.reduce(function(m,x){ vTrades(x).forEach(function(t){m[t]=1;}); return m; },{})).sort().map(function(t){ return '<option value="'+esc(t)+'">'; }).join("")+'</datalist>'+
+  openModal(id?"Edit vendor":"New vendor",'<div class="fields">'+fld("m_name","Name",v.name||"",null,id&&!v.desk?"readonly":"")+sel("m_cat","Category",VCATS,id?vCat(v):(S.ui.vcat||"Home services"))+fld("m_trade","Kind of work (comma between several)",vTrades(v).join(", "),"text",'list="dl_trades"')+'<datalist id="dl_trades">'+Object.keys(D.vendors.reduce(function(m,x){ vTrades(x).forEach(function(t){m[t]=1;}); return m; },{})).sort().map(function(t){ return '<option value="'+esc(t)+'">'; }).join("")+'</datalist>'+
     area("m_contact","Contact",v.contact,"Person, phone, email")+fld("m_how","How to reach them",(v.edit&&v.edit.how)||"",null,'placeholder="e.g. Text Joel first, email quotes to office@…"')+area("m_mine","Our notes",v.myNotes,"Rates, who to ask for, how fast they show up")+'</div>'+
     '<label class="toggle"><input type="checkbox" id="m_pref"'+(id?(isPref(v)?' checked':''):'')+'> Preferred (use first, company-wide)</label>',
   function(){ var nm=fv("m_name"); if(!nm){ toast("Vendor name"); return; }
     var trs=fv("m_trade").split(",").map(function(x){return x.trim();}).filter(Boolean);
-    if(!id){ var k=uid("vd-"); return put("deskvendors",k,{createdAt:Date.now(),createdBy:S.me,name:nm,trade:trs[0]||"",trades:trs,contact:fv("m_contact"),how:fv("m_how"),myNotes:fv("m_mine"),preferred:$("m_pref").checked}).then(function(){ toast("Vendor added"); closeModal(); }); }
-    var k2=sid(id); return put("vendoredits",k2,{trade:trs[0]||"",trades:trs,contact:fv("m_contact"),how:fv("m_how"),myNotes:fv("m_mine"),preferred:$("m_pref").checked},S.vendoredits[k2]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
+    if(!id){ var k=uid("vd-"); return put("deskvendors",k,{createdAt:Date.now(),createdBy:S.me,name:nm,cat:fv("m_cat"),trade:trs[0]||"",trades:trs,contact:fv("m_contact"),how:fv("m_how"),myNotes:fv("m_mine"),preferred:$("m_pref").checked}).then(function(){ toast("Vendor added"); closeModal(); }); }
+    var k2=sid(id); return put("vendoredits",k2,{cat:fv("m_cat"),trade:trs[0]||"",trades:trs,contact:fv("m_contact"),how:fv("m_how"),myNotes:fv("m_mine"),preferred:$("m_pref").checked},S.vendoredits[k2]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
 
 function findAppl(code,key){ var p=profile(code); if(!p) return null; var pe=pedit(code);
   return homeAppl(p.code,p).filter(function(a){ return a.key===key; })[0]||null; }
@@ -4554,6 +4562,7 @@ document.addEventListener("click",function(ev){
     if(v.desk) return put("deskvendors",v.id,{preferred:!v.preferred},S.deskvendors[v.id]);
     return put("vendoredits",sid(v.id),{preferred:!isPref(v)},S.vendoredits[sid(v.id)]); }
   if(d.vcm){ S.ui.vcm=d.vcm; render(); return; }
+  if(d.vcat){ S.ui.vcat=d.vcat; S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return; }
   if(d.vtradepick){ S.ui.vtrade=d.vtradepick; S.ui.vq=""; render(); window.scrollTo(0,0); return; }
   if(d.vtradego){ S.ui.vtrade=d.vtradego; S.ui.vq=""; return go("vendors"); }
   if(d.vfind){ S.ui.vq=d.vfind; S.ui.vtrade=""; return go("vendors"); }
