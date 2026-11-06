@@ -236,6 +236,8 @@ body.only-trash header.top{position:static}
 .ocon:focus-visible{outline:2px solid var(--accent,#3c5f12);outline-offset:2px;border-radius:3px}
 .hql.hown,.hql.hhoa{grid-column:span 2}
 .hoagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin-bottom:6px}
+.hoacomms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 16px;align-items:start}.hoacomms .hoagrid{grid-template-columns:1fr;margin-bottom:0}.hoacomm .hhood{margin-top:0}
+@media (max-width:1100px){.hoacomms{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:700px){.hoacomms{grid-template-columns:1fr}}
 .hoacard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
 .hoacard.tov{border-style:dashed}.hoacard.none{opacity:.85}
 .hoah{display:flex;gap:8px;align-items:center}.hoah b{flex:1;min-width:0}.hoah .pill{flex:none}.hoah .btn{flex:none}
@@ -1485,7 +1487,7 @@ function coStorage(){ var us=coUnits(), on=us.filter(coUnitOn), old=us.filter(fu
   var card=function(x){ return '<div class="counit'+(coUnitOn(x)?'':' off')+'"><div class="cuhd"><b>'+esc(x.u)+'</b><button class="btn sm ghost" data-cou="'+esc(x.u)+'">Edit</button></div>'+
       [["Size",x.size],["What\u2019s in it",x.holds],["Key / how to get in",x.access],["Rented since",x.since],["Billing",x.bill],["Status",coUnitOn(x)?"":(x.gone||"We gave it up")],["Notes",x.notes]].map(function(r){
         return '<div class="cul"><span>'+esc(r[0])+'</span>'+(r[1]?'<b>'+esc(r[1])+'</b>':'<i class="muted">not filled in</i>')+'</div>'; }).filter(function(s,i){ return i<2||s.indexOf("not filled in")<0; }).join("")+
-      '<div class="hint">'+(x.added?'Added in the hub':coSrc(x.src))+(x.edited&&by?' · edited in the hub by '+esc(nameFor(by)):'')+'</div></div>'; };
+      '<div class="hint">'+(x.edited&&by?'Edited in the hub by '+esc(nameFor(by)):'')+'</div></div>'; };
   var nt=coVal("storage","notes"), tx=coVal("storage","storage");
   return '<div class="coact"><button class="btn sm ghost" data-cou="">+ Add a unit</button><button class="btn sm ghost" data-co="storage">Edit notes</button></div>'+
     place("ps")+'<div class="lbl" style="margin:12px 0 6px">'+on.length+' units we rent now</div><div class="counits">'+on.map(card).join("")+'</div>'+
@@ -1503,7 +1505,7 @@ function mCoUnit(u){ var pe=coEdits(), ed=pe.co_storage_units||{}, x=u?(coUnits(
       var o={}; F.forEach(function(f){ o[f[0]]=fv("cou_"+f[0]); }); var fo=!!(CO_FACTS.storeUnits.filter(function(y){ return y.u===id; })[0]||{}).gone, ck=$("cou_off").checked;
       o.off=(ck===fo)?"":ck; var all=Object.assign({},ed); all[id]=o; return coPut({co_storage_units:all,co_storage_units_by:S.me}); },"Save"); }
 var CO_FIELDS={
-  office:[["addr","Office address"],["mail","Mailing address"],["phone","Main phone"],["email","Main email"],["hours","Office hours"],["notes","Other office notes"]],
+  office:[["addr","Office & mailing address"],["phone","Main phone"],["email","Main email"],["hours","Office hours"],["notes","Other office notes"]],
   storage:[["storage","Storage units"],["notes","Storage notes"]],
   social:[["web","Website"],["social","Social media"],["notes","Other accounts"]],
   general:[["legal","Company name(s)"],["dba","Also known as"],["founded","Founded"],["area","Service area"],["license","Business licenses"],["notes","Other notes"]]};
@@ -1518,7 +1520,9 @@ function coVal(sec,k){ var e=(coEdits()["co_"+sec]||{})[k], f=(CO_FACTS[sec]||{}
   if(e!=null && e!=="") return {v:e,s:"Edited in the hub"+(coEdits()["co_"+es+"_by"]?" by "+nameFor(coEdits()["co_"+es+"_by"]):"")};
   return f?{v:f.v,s:f.src}:{v:"",s:""}; }
 function coRow(label,v,s){ return '<div style="display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:2px 12px;padding:5px 0;border-bottom:1px solid var(--line-2)"><span class="muted">'+esc(label)+'</span><span>'+(v?'<b>'+esc(v).replace(/\n/g,"<br>")+'</b>'+(s?'<div class="hint">'+coSrc(s)+'</div>':''):'<span class="muted">—</span>')+'</span></div>'; }
-function coSrc(s){ var m=/^Dropbox: (\/[^(]+?)(\s*\(.*\))?$/.exec(s||"");
+/* Brandon 2026-11-05: "we can drop our sources from the pages" - sources stay in CO_FACTS, just not shown */
+function coSrc(s){ return ""; }
+function coSrcShown(s){ var m=/^Dropbox: (\/[^(]+?)(\s*\(.*\))?$/.exec(s||"");
   return m?'From Dropbox · <a href="https://www.dropbox.com/home'+esc(encodeURI(m[1].trim()).replace(/#/g,"%23"))+'" target="_blank" rel="noopener" title="'+esc(m[1].trim())+'">'+esc(m[1].trim().split("/").pop())+' ↗</a>'+esc(m[2]||""):esc(s); }
 function coBlock(sec){ return '<div class="coact"><button class="btn sm ghost" data-co="'+sec+'">Edit</button></div>'+CO_FIELDS[sec].map(function(f){ var x=coVal(sec,f[0]); return coRow(f[1],x.v,x.s); }).join(""); }
 /* click-to-open sections (Brandon 2026-10-28); which ones are open is kept in S.ui.coOpen so a re-render doesn't close them */
@@ -1585,7 +1589,7 @@ function coVTSet(id,status){ var x=(D._vt||{})[id]; if(!x||!need()) return;
   return S.db.doc("vehtasks/"+id).set(Object.assign({},x,{status:status,note:status==="cancelled"?"Cancelled by "+((window.MM_ME&&MM_ME.name)||S.me):"",by:S.me,at:Date.now()})).then(function(){ toast(status==="cancelled"?"Cancelled":"Queued again"); coLoadVT(); }); }
 function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=today();
   var rec=allc.filter(function(j){ return /daily receipts/i.test(j.title) && j.status==="done" && (j.finished||"").slice(0,7)===t.slice(0,7); });
-  var h='<div class="dhead"><div class="dtitle"><h2>Moose Office</h2><span class="tag">Company</span></div><div class="dsub">Vehicles, the office, the team, our logos and the basics about Moose. Every fact shows where it came from; Edit to fill a blank or fix one.</div></div><div class="dbody">';
+  var h='<div class="dhead"><div class="dtitle"><h2>Moose Office</h2><span class="tag">Company</span></div><div class="dsub">Vehicles, the office, storage, the team, our logos and the basics about Moose. Edit to fill a blank or fix one.</div></div><div class="dbody">';
   if(!S.ui.coOpen) S.ui.coOpen={};
   if(S.ui.vopen) S.ui.coTile="veh";
   var bwo='<div class="note">General Moose jobs live on the Breezeway office property (1-Bear Hollow Office). '+rec.length+' "Maint. Daily Receipts" check-ins done this month — the receipts attached to those are read into Expenses on each Breezeway run. '+
@@ -1620,6 +1624,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     '.cooffice{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:14px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}'+
     '.cooh{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cooh i{font-style:normal;font-size:22px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2)}.cooh b{font-size:16px}.cooh button{margin-left:auto}'+
     '.cofs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 22px}.cof.w{grid-column:span 2}.cof span{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}.cof b{font-size:14px;line-height:1.45;font-weight:600}.cof .hint{font-size:11.5px}'+
+    '.dbody .hint:empty{display:none}'+
     '@media (max-width:560px){.cotiles{grid-template-columns:1fr}.cotile{min-height:0}.cof.w{grid-column:auto}}</style>';
   var veh='<div class="coact"><button class="btn sm ghost" data-cov="">+ Add vehicle</button></div>'+
     (on.length?'<div class="vtiles">'+on.map(tile).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
@@ -1822,12 +1827,12 @@ function hoaView(){ hoaLoad(); var u=S.ui, q=(u.hq||"").trim().toLowerCase(), st
     '<div class="hfil"><select id="hoast" aria-label="Show"><option value="">All communities ('+G.length+')</option><option value="verified"'+(st==="verified"?' selected':'')+'>Verified ('+nV+')</option><option value="to_verify"'+(st==="to_verify"?' selected':'')+'>To verify ('+nT+')</option><option value="missing"'+(st==="missing"?' selected':'')+'>No HOA on file ('+nM+')</option></select></div>'+
     '<span class="qcount">'+L.length+' shown</span>'+(D._hoaEdit?'<button class="btn sm pri" data-act="hoaedit" data-id="">+ Add HOA</button>':'')+'</div>'+
     '<div class="note">Each community our homes are in, with its HOA. The facts come from Porsha\'s Asana project "2026 HOA INFORMATION" (the most up to date, so change them there); the hub adds which homes each HOA covers and notes. Every home\'s tile shows its HOA too.</div>';
-  h+=L.map(function(g){ var codes=g.homes.slice().sort();
-    return '<div class="hhood">'+esc(g.c)+(g.hood?' · '+esc(g.hood):'')+' · '+codes.length+' home'+(codes.length===1?'':'s')+'</div><div class="hoagrid">'+
+  h+=(L.length?'<div class="hoacomms">':'')+L.map(function(g){ var codes=g.homes.slice().sort();
+    return '<div class="hoacomm"><div class="hhood">'+esc(g.c)+(g.hood?' · '+esc(g.hood):'')+' · '+codes.length+' home'+(codes.length===1?'':'s')+'</div><div class="hoagrid">'+
       (g.H.length?g.H.map(function(x){ var only=(x.homes||[]).length?'<div class="tl muted">Only: '+esc(x.homes.join(", "))+'</div>':(x.neighborhoods||[]).length?'<div class="tl muted">Covers all of '+esc(x.neighborhoods.join(", "))+'</div>':'';
           return hoaCard(x,only); }).join(""):
         '<div class="hoacard tov none"><b>No HOA on file</b><div class="muted">Not in Porsha\'s HOA project yet.</div>'+(D._hoaEdit?'<div><button class="btn sm" data-act="hoaedit" data-id="" data-c="'+esc(g.c)+'">+ Add HOA</button></div>':'')+'</div>')+
-      '</div><div class="note" style="margin:-2px 0 10px">Homes: '+esc(codes.join(", "))+'</div>'; }).join("")||'<div class="empty">Nothing matches.</div>';
+      '</div><div class="note" style="margin:8px 0 0">Homes: '+esc(codes.join(", "))+'</div></div>'; }).join("")+(L.length?'</div>':'')||'<div class="empty">Nothing matches.</div>';
   var rest=C.filter(function(x){ return !used[x.id]; }), co=D._hoas.filter(function(x){ return x.kind==="company"; });
   if(!st && !q && rest.length) h+='<details class="infocat" style="margin-top:12px"><summary>HOAs with none of our active homes ('+rest.length+')</summary><div class="hoagrid" style="margin-top:8px">'+rest.map(function(x){ return hoaCard(x); }).join("")+'</div></details>';
   if(!st && !q && co.length) h+='<details class="infocat" style="margin-top:8px"><summary>HOA management companies ('+co.length+')</summary><div class="hoagrid" style="margin-top:8px">'+co.map(function(x){
