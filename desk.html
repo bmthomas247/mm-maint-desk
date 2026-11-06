@@ -1460,6 +1460,48 @@ var CO_FACTS={
 /* Brandon 2026-10-28: storage units and social media got their own sections; their facts + older edits still come from office / general */
 CO_FACTS.storage={storage:CO_FACTS.office.storage}; CO_FACTS.social={web:CO_FACTS.general.web,social:CO_FACTS.general.social};
 var CO_MOVED={storage:{storage:"office"},social:{web:"general",social:"general"}};
+/* Storage units as cards (Brandon 2026-11-05). Facts read 2026-11-05 from the Protection Self Storage invoices + welcome letters.
+   No gate/unit codes, account numbers or costs here (crew read this page). Per-unit edits save to propedits/Moose_company co_storage_units. */
+var CO_PS=CO_D+"13-Vendors & Chanel Partners/Storage-Protection Storage/";
+CO_FACTS.storePlaces={
+  ps:{name:"Protection Self Storage of Park City",addr:"1240 W Richardson Rd, Park City, UT 84036",phone:"435-465-2900",src:CO_PS+"Invoices/2026 (invoices Oct 17, 18 + 30, 2026)"},
+  se:{name:"Storage Elevated",addr:"4006 N. Forestdale Dr, Park City, UT 84098",phone:"435-333-4400",note:"Newest receipts in Dropbox are from 2023, so we may not rent here any more. Brandon or Kim to confirm.",src:CO_D+"13-Vendors & Chanel Partners/Storage Elevated (newest receipt 2023)"}};
+CO_FACTS.storeUnits=[
+  {u:"B216",at:"ps",bill:"Billed the 17th with B259 + B262",since:"",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026)"},
+  {u:"B229",at:"ps",bill:"Billed the 30th on its own account (\"Moose\")",since:"Jan 2025",src:CO_PS+"Invoices/2026 (invoice Oct 30, 2026; welcome letter Jan 10, 2025)"},
+  {u:"B258",at:"ps",bill:"Billed the 18th with B263",since:"Apr 2021",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; welcome letter Apr 28, 2021)"},
+  {u:"B259",at:"ps",bill:"Billed the 17th with B216 + B262",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
+  {u:"B262",at:"ps",bill:"Billed the 17th with B216 + B259",since:"Oct 2023",src:CO_PS+"Invoices/2026 (invoice Oct 17, 2026; welcome letter Oct 24, 2023)"},
+  {u:"B263",at:"ps",bill:"Billed the 18th with B258",since:"Aug 2022 or earlier",src:CO_PS+"Invoices/2026 (invoice Oct 18, 2026; hazardous materials form Aug 25, 2022)"},
+  {u:"B346",at:"ps",size:"10x10",gone:"Not on any 2026 invoice",since:"Dec 2022",src:CO_PS+"Contract for 10x10 Storage Unit.pdf (Dec 7, 2022)"},
+  {u:"B071",at:"ps",gone:"Not on any 2026 invoice",since:"Jun 2024",src:CO_PS+"Invoices/2024 (welcome letter + invoice Jun 2024)"}];
+function coUnits(){ var ed=coEdits().co_storage_units||{}, seen={}, out=[];
+  CO_FACTS.storeUnits.forEach(function(f){ seen[f.u]=1; var e=ed[f.u]||{}, m=Object.assign({},f); Object.keys(e).forEach(function(k){ if(e[k]!=="" && e[k]!=null) m[k]=e[k]; }); m.edited=!!Object.keys(e).length; out.push(m); });
+  Object.keys(ed).forEach(function(k){ if(!seen[k]) out.push(Object.assign({u:k,at:"ps",added:1,edited:true},ed[k])); });
+  return out; }
+function coUnitOn(x){ return x.off!=null&&x.off!==""?!x.off:!x.gone; }
+function coStorage(){ var us=coUnits(), on=us.filter(coUnitOn), old=us.filter(function(x){ return !coUnitOn(x); }), pl=CO_FACTS.storePlaces, by=coEdits().co_storage_units_by;
+  var place=function(k){ var p=pl[k]; return '<div class="coplace"><b>'+esc(p.name)+'</b><div>'+esc(p.addr)+' · <a href="https://maps.google.com/?q='+encodeURIComponent(p.addr)+'" target="_blank" rel="noopener">Map ↗</a></div><div><a href="tel:'+esc(p.phone.replace(/\D/g,""))+'">'+esc(p.phone)+'</a></div>'+(p.note?'<div class="note" style="margin-top:6px">'+esc(p.note)+'</div>':'')+'<div class="hint">'+coSrc(p.src)+'</div></div>'; };
+  var card=function(x){ return '<div class="counit'+(coUnitOn(x)?'':' off')+'"><div class="cuhd"><b>'+esc(x.u)+'</b><button class="btn sm ghost" data-cou="'+esc(x.u)+'">Edit</button></div>'+
+      [["Size",x.size],["What\u2019s in it",x.holds],["Key / how to get in",x.access],["Rented since",x.since],["Billing",x.bill],["Status",coUnitOn(x)?"":(x.gone||"We gave it up")],["Notes",x.notes]].map(function(r){
+        return '<div class="cul"><span>'+esc(r[0])+'</span>'+(r[1]?'<b>'+esc(r[1])+'</b>':'<i class="muted">not filled in</i>')+'</div>'; }).filter(function(s,i){ return i<2||s.indexOf("not filled in")<0; }).join("")+
+      '<div class="hint">'+(x.added?'Added in the hub':coSrc(x.src))+(x.edited&&by?' · edited in the hub by '+esc(nameFor(by)):'')+'</div></div>'; };
+  var nt=coVal("storage","notes"), tx=coVal("storage","storage");
+  return '<div class="coact"><button class="btn sm ghost" data-cou="">+ Add a unit</button><button class="btn sm ghost" data-co="storage">Edit notes</button></div>'+
+    place("ps")+'<div class="lbl" style="margin:12px 0 6px">'+on.length+' units we rent now</div><div class="counits">'+on.map(card).join("")+'</div>'+
+    '<div class="hint" style="margin-top:6px">Sizes and what\u2019s in each unit aren\u2019t in any file yet: tap Edit on a unit to fill them in. Never type a gate or lock code here.</div>'+
+    (old.length?'<details class="infocat" style="margin-top:10px"><summary>'+old.length+' older units (no longer billed)</summary><div class="counits">'+old.map(card).join("")+'</div></details>':'')+
+    '<div class="lbl" style="margin:14px 0 6px">Other storage place</div>'+place("se")+
+    (tx.s.indexOf("Edited in the hub")===0?coRow("Storage (typed earlier)",tx.v,tx.s):'')+(nt.v?coRow("Storage notes",nt.v,nt.s):''); }
+function mCoUnit(u){ var pe=coEdits(), ed=pe.co_storage_units||{}, x=u?(coUnits().filter(function(y){ return y.u===u; })[0]||{u:u}):{}, e=u?(ed[u]||{}):{};
+  var F=[["size","Size","e.g. 10x10"],["holds","What\u2019s in it","e.g. portable ACs, spare linens, holiday decor"],["access","Key / how to get in","Where the key is, who has one. No codes."],["since","Rented since",""],["bill","Billing",""],["notes","Notes",""]];
+  openModal(u?"Storage unit "+u:"Add a storage unit",'<div class="note">Blank = use the file it came from. No gate codes, lock codes or account numbers.</div><div class="fields" style="margin-top:8px">'+
+    (u?'':fld("cou_u","Unit number","","text",'placeholder="e.g. B270"'))+F.map(function(f){ return area("cou_"+f[0],f[1],e[f[0]]||"",(x[f[0]]&&!e[f[0]]?x[f[0]]:f[2])); }).join("")+'</div>'+
+    '<label class="toggle" style="margin-top:8px"><input type="checkbox" id="cou_off"'+(!coUnitOn(x)&&u?' checked':'')+'> We don\u2019t rent this unit any more</label>',
+    function(){ var id=u||fv("cou_u").trim().toUpperCase(); if(!id){ toast("Type the unit number"); return Promise.reject(); }
+      var bad=F.some(function(f){ return /\b(code|password|pin)\b\s*[:=#-]?\s*\d{3,}/i.test(fv("cou_"+f[0])); }); if(bad){ toast("Please leave codes out"); return Promise.reject(); }
+      var o={}; F.forEach(function(f){ o[f[0]]=fv("cou_"+f[0]); }); var fo=!!(CO_FACTS.storeUnits.filter(function(y){ return y.u===id; })[0]||{}).gone, ck=$("cou_off").checked;
+      o.off=(ck===fo)?"":ck; var all=Object.assign({},ed); all[id]=o; return coPut({co_storage_units:all,co_storage_units_by:S.me}); },"Save"); }
 var CO_FIELDS={
   office:[["addr","Office address"],["mail","Mailing address"],["phone","Main phone"],["email","Main email"],["hours","Office hours"],["notes","Other office notes"]],
   storage:[["storage","Storage units"],["notes","Storage notes"]],
@@ -1545,7 +1587,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var rec=allc.filter(function(j){ return /daily receipts/i.test(j.title) && j.status==="done" && (j.finished||"").slice(0,7)===t.slice(0,7); });
   var h='<div class="dhead"><div class="dtitle"><h2>Moose Office</h2><span class="tag">Company</span></div><div class="dsub">Vehicles, the office, the team, our logos and the basics about Moose. Every fact shows where it came from; Edit to fill a blank or fix one.</div></div><div class="dbody">';
   if(!S.ui.coOpen) S.ui.coOpen={};
-  if(S.ui.vopen) S.ui.coOpen.veh=1;
+  if(S.ui.vopen) S.ui.coTile="veh";
   var bwo='<div class="note">General Moose jobs live on the Breezeway office property (1-Bear Hollow Office). '+rec.length+' "Maint. Daily Receipts" check-ins done this month — the receipts attached to those are read into Expenses on each Breezeway run. '+
     '<a class="golink" href="https://app.breezeway.io/property/337648" target="_blank" rel="noopener">Open the office in Breezeway ↗</a></div>';
   // vehicles
@@ -1563,7 +1605,19 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     '.cosec{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:8px;overflow:hidden}'+
     '.cosech{display:flex;align-items:baseline;gap:10px;width:100%;padding:12px 14px;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}'+
     '.cosech:hover{background:var(--surface-2)}.cosech b{font-size:15px}.cosech .chev{width:12px;color:var(--accent)}.cosech .muted{margin-left:auto;font-size:13px}'+
-    '.cosecb{padding:4px 14px 14px;border-top:1px solid var(--line-2)}.coact{display:flex;justify-content:flex-end;gap:6px;margin:6px 0}</style>';
+    '.cosecb{padding:4px 14px 14px;border-top:1px solid var(--line-2)}.coact{display:flex;justify-content:flex-end;gap:6px;margin:6px 0}'+
+    '.cotiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}'+
+    '.cotile{display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:18px;background:var(--surface);cursor:pointer;font:inherit;color:inherit;box-shadow:0 1px 3px rgba(0,0,0,.06);min-height:132px}'+
+    '.cotile:hover{border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.08)}.cotile[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}'+
+    '.cotile .cti{display:flex;align-items:center;gap:10px}.cotile .cti i{font-style:normal;font-size:22px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2)}'+
+    '.cotile .cti b{font-size:16px}.cotile .cti small{display:block;color:var(--muted);font-size:12.5px;font-weight:500}.cotile .ctl{font-size:13.5px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}'+
+    '.cotile .ctl.m{color:var(--muted)}.cotile .ctgo{margin-top:auto;font-size:12.5px;color:var(--accent);font-weight:600}.cosw{display:flex;gap:5px}.cosw span{width:22px;height:22px;border-radius:6px;border:1px solid var(--line)}'+
+    '.copanel{margin-top:14px;border:1px solid var(--accent);border-radius:18px;background:var(--surface);padding:6px 16px 16px;scroll-margin-top:12px}'+
+    '.copanel .cophd{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);margin-bottom:6px}.copanel .cophd b{font-size:17px}.copanel .cophd button{margin-left:auto}'+
+    '.coplace{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface-2);line-height:1.5}.coplace b{font-size:15px}'+
+    '.counits{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}.counit{border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--surface)}.counit.off{opacity:.65}'+
+    '.cuhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}.cuhd b{font-size:20px;letter-spacing:.5px}.cul{display:grid;grid-template-columns:96px 1fr;gap:6px;font-size:13px;padding:3px 0;border-top:1px solid var(--line-2)}.cul span{color:var(--muted)}'+
+    '@media (max-width:560px){.cotiles{grid-template-columns:1fr}.cotile{min-height:0}}</style>';
   var veh='<div class="coact"><button class="btn sm ghost" data-cov="">+ Add vehicle</button></div>'+
     (on.length?'<div class="vtiles">'+on.map(tile).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
     (off.length?'<details class="infocat" style="margin-top:8px"><summary>'+off.length+' retired</summary><div class="vtiles">'+off.map(tile).join("")+'</div></details>':'')+
@@ -1583,14 +1637,21 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     (CO_FACTS.logos.length?'<div class="lbl">Logo files</div>'+CO_FACTS.logos.map(function(l){ return '<div class="qrow"><span class="qa plain">'+esc(l.v)+'</span></div><div class="hint" style="margin:0 0 6px">'+coSrc(l.src)+'</div>'; }).join(""):'')+
     (pe.co_logos?'<div class="lbl" style="margin-top:6px">Notes</div><div class="prose">'+esc(pe.co_logos)+'</div>':'');
   var n=function(x,one,many){ return x+" "+(x===1?one:many); };
-  h+=coSec("veh","Vehicles",n(on.length,"vehicle","vehicles"),veh)+
-    coSec("office",CO_TITLES.office,"address, phone, email, hours",coBlock("office"))+
-    coSec("storage",CO_TITLES.storage,coFilled("storage")?"where our storage is":"nothing recorded",coBlock("storage"))+
-    coSec("emp","Employees",D._staff?n(st.length,"person","people"):"",emp)+
-    coSec("brand","Logos & colors",n(cols.length,"color","colors")+" · "+n(CO_FACTS.logos.length-1,"logo file","logo files"),brand)+
-    coSec("social",CO_TITLES.social,"website, Facebook, Instagram…",coBlock("social"))+
-    coSec("general",CO_TITLES.general,"legal names, licenses, service area",coBlock("general"))+
-    coSec("bw","Breezeway office",n(rec.length,"receipt check-in","receipt check-ins")+" this month",bwo);
+  var ov=coVal("office","addr").v.split("\n")[0], op=coVal("office","phone").v.split("\n")[0], oh=coVal("office","hours").v.split("\n")[0];
+  var ws=coVal("social","web").v.split("\n")[0], lg=coVal("general","legal").v.split("\n")[0], su=coUnits().filter(coUnitOn);
+  var T=[["veh","\ud83d\ude97","Vehicles",n(on.length,"vehicle","vehicles"),[on.slice(0,3).map(function(v){ return v.name||v.ymm; }).join(" · ")+(on.length>3?" +"+(on.length-3)+" more":"")],veh],
+    ["office","\ud83c\udfe2",CO_TITLES.office,"address, phone, email, hours",[ov,[op,oh].filter(Boolean).join(" · ")],coBlock("office")],
+    ["storage","\ud83d\udce6",CO_TITLES.storage,n(su.length,"unit","units")+" at Protection Self Storage",[su.map(function(x){ return x.u; }).join(" · "),CO_FACTS.storePlaces.ps.addr],coStorage()],
+    ["emp","\ud83d\udc65","Employees",D._staff?n(st.length,"person","people"):"the team",["Names, titles, phone extensions and who handles what"],emp],
+    ["brand","\ud83c\udfa8","Logos & colors",n(cols.length,"color","colors")+" \u00b7 "+n(CO_FACTS.logos.length-1,"logo file","logo files"),['<div class="cosw">'+cols.slice(0,8).map(function(c){ return '<span style="background:'+esc(c.hex)+'"></span>'; }).join("")+'</div>'],brand],
+    ["social","\ud83c\udf10",CO_TITLES.social,"website, Facebook, Instagram\u2026",[ws],coBlock("social")],
+    ["general","\ud83d\udccb",CO_TITLES.general,"legal names, licenses, service area",[lg],coBlock("general")],
+    ["bw","\ud83e\uddf0","Breezeway office",n(rec.length,"receipt check-in","receipt check-ins")+" this month",["General Moose jobs + daily receipts"],bwo]];
+  var op2=S.ui.coTile||"", cur=T.filter(function(t){ return t[0]===op2; })[0];
+  h+='<div class="cotiles">'+T.map(function(t){ var o=t[0]===op2;
+      return '<button class="cotile" data-cotile="'+t[0]+'" aria-pressed="'+o+'"><div class="cti"><i>'+t[1]+'</i><div><b>'+esc(t[2])+'</b><small>'+esc(t[3])+'</small></div></div>'+
+        t[4].filter(Boolean).map(function(l,i){ return l.charAt(0)==="<"?l:'<div class="ctl'+(i?' m':'')+'">'+esc(l)+'</div>'; }).join("")+'<span class="ctgo">'+(o?'Close \u25b4':'Open \u25be')+'</span></button>'; }).join("")+'</div>'+
+    (cur?'<section class="copanel" id="copanel"><div class="cophd"><span style="font-size:20px">'+cur[1]+'</span><b>'+esc(cur[2])+'</b><button class="btn sm ghost" data-cotile="'+cur[0]+'">\u2715 Close</button></div>'+cur[5]+'</section>':'');
   return h+'</div>'; }
 function mCo(sec){ var pe=coEdits();
   if(sec==="titles"){ var st=D._staff||[], ti=pe.co_titles||{}, hd=pe.co_handles||{}, ex=pe.co_ext||{};
@@ -4409,6 +4470,9 @@ document.addEventListener("click",function(ev){
   if(d.aedit){ var q=d.aedit.split("|"); return mAppl(q[0],q[1]); }
   if(d.co){ if(!need()) return; return mCo(d.co); }
   if(d.cov!=null){ if(!need()) return; return mCoVehicle(d.cov); }
+  if(d.cou!=null){ if(!need()) return; return mCoUnit(d.cou); }
+  if(d.cotile){ S.ui.coTile=S.ui.coTile===d.cotile?"":d.cotile; if(S.ui.coTile!=="veh") S.ui.vopen=""; render();
+    if(S.ui.coTile) setTimeout(function(){ var p=document.getElementById("copanel"); if(p&&p.scrollIntoView) p.scrollIntoView({behavior:"smooth",block:"start"}); },60); return; }
   if(d.cosec){ var co=S.ui.coOpen=S.ui.coOpen||{}; co[d.cosec]=!co[d.cosec]; if(d.cosec==="veh"&&!co.veh) S.ui.vopen=""; return render(); }
   if(d.vopen!=null){ S.ui.vopen=(d.vopen&&S.ui.vopen!==d.vopen)?d.vopen:""; return render(); }
   if(d.vtask) return coVTSave(d.vtask);
