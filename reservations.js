@@ -67,7 +67,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px} .rgrid>.card{margin:0}
 .rhome{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px!important} .rhome:hover{border-color:var(--forest-2)}
 .rhome::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--kc,var(--line-2))}
-.ractbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)} .ractbar .btn{font-weight:700}
+.rtrk{color:var(--accent,#2463a0);text-decoration:underline;cursor:pointer} .rtrk:hover{opacity:.8} .ractbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)} .ractbar .btn{font-weight:700}
 .rquote{border:1px solid var(--line);border-radius:12px;padding:8px 12px} .rqline{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:14px}
 .rqline.b{border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-weight:700} .rqline.tot{border-top:2px solid var(--line);margin-top:6px;padding-top:8px;font-size:18px;font-weight:800}
 .rqdisc{display:flex;gap:10px;flex-wrap:wrap} .rqdisc label{flex:1;min-width:180px}
@@ -576,7 +576,7 @@ async function queue(v){
   const tile = s => { const why = [...new Set([...s.waiting, ...s.blockers].map(b => HELD_GROUP[b] ? HELD_GROUP[b] + " · " + b : b))], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
     return `<a class="card rhome k-${kindOf(s)}" href="#/reservations/${encodeURIComponent(s.res)}">
       <div class="rtop"><div style="min-width:0"><div class="rcode">${esc(s.guest || "#" + s.res)}</div>
-        ${s.guest ? `<div class="rsub" style="font-weight:700">#${esc(s.res)}</div>` : ""}
+        ${s.guest ? `<div class="rsub" style="font-weight:700"><span class="rtrk" role="link" tabindex="0" title="Open this reservation in Track" onclick="event.preventDefault();event.stopPropagation();window.open(this.dataset.u,'_blank','noopener')" data-u="${esc(LINKS.track.replace("{res}", encodeURIComponent(s.res)))}">#${esc(s.res)} ↗</span></div>` : ""}
         <div class="rsub"><b>${esc(s.unit || "")}</b>${HOODS[s.area] ? " · " + esc(HOODS[s.area]) : ""}</div></div>
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))}</span></div>
