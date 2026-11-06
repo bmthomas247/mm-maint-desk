@@ -1359,7 +1359,7 @@ function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=h
   var jobs=(D.byProp[c]||[]).filter(function(j){ return j.status!=="done" && j.kind!=="info" && j.kind!=="seasonal" && !old(j); });
   var rc=homeAppl(p.code,p).some(function(a){ return a.recalls&&a.recalls.length; });
   var st=occ?"owner":jobs.length?"open":"ok", sub=(p.track&&p.track.name)||p.community||"";
-  return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'<span class="htpl">'+(homeType(c)!==(S.ui.htype||"str")?'<span class="pill">'+esc({str:"STR",lease:"Lease","2h":"2nd Home"}[homeType(c)]||"")+'</span>':'')+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'</span></div>'+
+  return '<div class="htile s-'+st+'" data-home="'+esc(c)+'" role="button" tabindex="0" aria-label="Open '+esc(coName(c))+'"><div class="hth"><div class="htt"><b class="htc">'+esc(coName(c))+'</b>'+(sub?'<span class="hts">'+esc(sub)+'</span>':'')+'<span class="htpl">'+(homeType(c)!==(S.ui.htype||"str")?'<span class="pill">'+esc({str:"STR",lease:"Lease","2h":"2nd Home"}[homeType(c)]||"")+'</span>':'')+(occ?'<span class="pill waiting">Owner in</span>':'')+(jobs.length?'<span class="pill open">'+jobs.length+' open job'+(jobs.length===1?'':'s')+'</span>':'')+(rc?'<span class="pill stop">Recall</span>':'')+'</span>'+tileAddr(p)+'</div>'+
     '<div class="htp"><span class="htmore">Home details →</span></div></div>'+
     '<div class="htq">'+tileCells(c,p,q)+'</div>'+
     '</div>'; }
@@ -1391,6 +1391,9 @@ function canLic(){ if(D._canLic!==undefined) return D._canLic; D._canLic=false; 
   if(sb) sb.rpc("hub_can",{p_desk:"licensing"}).then(function(r){ D._canLic=!!(r&&r.data); if(D._canLic) schedule(); }); return false; }
 if(!document.getElementById('hfoldcss')){ var _st=document.createElement('style'); _st.id='hfoldcss'; _st.textContent='details.hfold>summary{font-weight:600;cursor:pointer;padding:4px 0}details.hfold[open]>summary{margin-bottom:8px}'; document.head.appendChild(_st); }
 document.addEventListener("toggle",function(e){ var dt=e.target; if(dt&&dt.tagName==="DETAILS"&&dt.hasAttribute&&dt.hasAttribute("data-appl")) S.ui.applOpen=dt.open; },true);
+function tileAddr(p){ var t=(p&&p.track)||{}; if(!t.address) return "";
+  var a=[t.address,[t.city,t.postal?"UT "+t.postal:""].filter(Boolean).join(", ")].filter(Boolean).join(", ");
+  return '<span class="htaddr" style="flex-basis:100%;font-size:13px;color:var(--ink-2)">📍 '+esc(a)+'</span>'; }
 function homeAddr(p){ var t=(p&&p.track)||{}; if(!t.address) return "";
   var a=[t.address,[t.city,t.postal?"UT "+t.postal:""].filter(Boolean).join(", ")].filter(Boolean).join(", ");
   return '<div class="dsub haddr">\ud83d\udccd '+esc(a)+' \u00b7 <a class="golink" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a)+'" target="_blank" rel="noopener">Map \u2197</a></div>'; }
