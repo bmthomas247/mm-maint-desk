@@ -153,6 +153,7 @@ function navTitle(key){
 function calNav(key, title, extra){
   const v = viewOf(key), dv = defView(key), L = LAYERS[key] || [];
   return `<div class="chead"><button class="btn small" data-mv="0">Today</button><button class="btn small" data-mv="-1" aria-label="Previous">‹</button><button class="btn small" data-mv="1" aria-label="Next">›</button>
+      <label class="btn small" title="Pick a date" style="position:relative;overflow:hidden">📅 Go to date<input type="date" data-goto value="${esc(ST.sel[key] || today())}" aria-label="Go to date" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;margin:0;padding:0;border:0"></label>
       <h2>${esc(title)} · ${esc(navTitle(key))}</h2>${extra || ""}</div>
     <div class="ctool"><span class="vsw">${VIEWS.map(([k, l]) => `<button class="btn small${k === v ? " primary" : ""}" data-vw="${k}">${l}</button>`).join("")}</span>
       ${v !== dv ? `<button class="btn small" data-defv="${v}">★ Make ${esc(VIEWS.find(x => x[0] === v)[1])} my default</button>` : `<span class="muted">★ Your default view</span>`}
@@ -165,6 +166,9 @@ function wireNav(v, key, redraw, reload){
     else if(vw === "month"){ const d = D((ST.month[key] || (ST.sel[key] || today()).slice(0, 7)) + "-01"); d.setMonth(d.getMonth() + n); ST.month[key] = ymd(d).slice(0, 7); ST.sel[key] = ymd(d); }
     else { ST.sel[key] = addD(ST.sel[key] || today(), n * (vw === "day" ? 1 : 7)); ST.month[key] = ST.sel[key].slice(0, 7); }
     again(); });
+  v.querySelectorAll("[data-goto]").forEach(i => {   // 📅 Go to date (Brandon 2026-11-06): pick any day, the calendar jumps there
+    i.onclick = () => { try { if(i.showPicker) i.showPicker(); } catch(_){} };
+    i.onchange = () => { if(!/^\d{4}-\d{2}-\d{2}$/.test(i.value)) return; ST.sel[key] = i.value; ST.month[key] = i.value.slice(0, 7); again(); }; });
   v.querySelectorAll("[data-vw]").forEach(b => b.onclick = () => { ST.view[key] = b.dataset.vw; ST.month[key] = (ST.sel[key] || today()).slice(0, 7); again(); });
   v.querySelectorAll("[data-defv]").forEach(b => b.onclick = () => { ST.prefs.view[key] = b.dataset.defv; savePrefs(); redraw(); });
   v.querySelectorAll("[data-lyr]").forEach(c => c.onchange = () => { ST.prefs.layers[c.dataset.lyr] = c.checked; savePrefs(); reload(); });
