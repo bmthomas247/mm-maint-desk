@@ -121,7 +121,7 @@ const LIST_TAB = n => /owner/i.test(n) ? "owners" : /realtor|agent|broker/i.test
   : /return renter|rental guest|guest of guest|cart aband|stayfi|non-booked|tns opt-in from website guest/i.test(n) ? "guest" : "general";
 const STATUS = [["idea","Ideas"],["planned","Planned"],["doing","Doing"],["done","Done"],["parked","Parked"]];
 const KINDS = { idea:"💡 Idea", campaign:"📣 Campaign", task:"✅ Task", question:"❓ Question", list:"📋 List" };
-const S = { rr:[], run:null, ideas:[], camps:[], drafts:[], own:null, places:[], f:{ when:"30", brevo:"all", back:"all", eng:"all", q:"" } };
+const S = { pull:[], rr:[], run:null, ideas:[], camps:[], drafts:[], own:null, places:[], f:{ when:"30", brevo:"all", back:"all", eng:"all", q:"" } };
 
 async function load(){
   const jobs = [sb.from("mkt_ideas").select("*").eq("tab", TAB).eq("off", false).order("created_at"),
@@ -134,7 +134,9 @@ async function load(){
     return { data:all.sort((a, b) => String(a.send_on).localeCompare(String(b.send_on))) }; })());
   if(TAB === "owners") jobs.push(Promise.resolve(null), loadOwners());
   if(TAB === "general") jobs.push(Promise.resolve(null), loadPlaces());
+  const psP = sb.from("mkt_pull_status").select("key,label,pulled_at,ok,note");
   const [i, r, cp, dr, rr, pl] = await Promise.all(jobs);
+  try { const ps = await psP; S.pull = ps.data || []; } catch(e){ S.pull = []; }
   if(TAB === "general") S.places = pl.data;
   if(i.error) throw i.error;
   S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
@@ -142,7 +144,7 @@ async function load(){
 }
 
 function render(){
-  const h = [`<h1>${esc(TABS[TAB])}</h1>`, statsHtml()];
+  const h = [`<h1>${esc(TABS[TAB])}</h1>`, `<div id="mstats">${statsHtml()}${pullLine()}</div>`];
   if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(top, campsHtml(), "<h2>Guests</h2>" + list); }   // campaigns above the long guest list
   else if(TAB === "owners") h.push(ownersHtml(), campsHtml());
   else if(TAB === "general") h.push(placesHtml(), campsHtml());
@@ -279,6 +281,28 @@ function statsHtml(){
   </div>
   <p class="src">Emails sent to ${esc(TABS[TAB])} lists in Brevo. ▲▼ compare with the 90 days before. Apple Mail privacy makes opens look higher than they are; clicks are the surer sign.</p>`;
 }
+
+/* ---------- "Last pull" + refresh every minute (Brandon 2026-11-06: "a last pull so we can see it ... up to date by the minute") ----------
+   mkt_brevo_sync.py runs every minute (hub_sync) and stamps mkt_pull_status 'brevo'; this page re-reads the numbers every minute. */
+function pullLine(){
+  const p = (S.pull || []).find(x => x.key === "brevo");
+  if(!p) return `<p class="src">🔄 Brevo: no pull recorded yet. It checks every minute.</p>`;
+  const min = Math.max(0, Math.round((Date.now() - new Date(p.pulled_at)) / 60000)), late = !p.ok || min > 10;
+  const ago = min < 1 ? "just now" : min === 1 ? "1 min ago" : min < 120 ? min + " min ago" : Math.round(min / 60) + " hours ago";
+  return `<p class="src" id="mpull"${late ? ' style="color:#b42318"' : ""}>🔄 Brevo last pull: <b>${esc(fmtDT(p.pulled_at))}</b> (${ago})${p.ok ? "" : " · didn't work: " + esc(p.note || "")}${late && p.ok ? " · late, it should check every minute" : ""} · checks every minute; this page updates itself.</p>`;
+}
+async function tick(){
+  if(document.hidden || document.querySelector("dialog[open]") || !document.getElementById("mstats")) return;
+  try {
+    const [cp, ps] = await Promise.all([sb.from("mkt_campaigns").select("brevo_id,name,subject,status,list_ids,list_names,created_at,scheduled_at,sent_at,stats,draft_id,gone,synced_at").order("created_at", { ascending:false }).limit(500),
+                                        sb.from("mkt_pull_status").select("key,label,pulled_at,ok,note")]);
+    if(!cp.error) S.camps = (cp.data || []).filter(c => !c.gone);
+    if(!ps.error) S.pull = ps.data || [];
+  } catch(e){}
+  const m = document.getElementById("mstats"); if(m) m.innerHTML = statsHtml() + pullLine();
+}
+setInterval(tick, 60000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(); });
 
 /* ---------- Owners tab: list check (mkt_owner_check.py), owners in town (feeds/owner-stays), owner stay emails, owners coming and going (Property Set Up) ---------- */
 async function loadOwners(){
