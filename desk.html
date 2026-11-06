@@ -1575,6 +1575,13 @@ function coUnits(){ var ed=coEdits().co_storage_units||{}, seen={}, out=[];
 var CO_TEAMS=[["office_manager","Office managers"],["front_desk","Front desk"],["owner_relations","Owner relations"],["maint_manager","Maintenance manager"],["maint_crew","Maintenance crew"],["hk_manager","Housekeeping manager"],["hk_crew","Housekeeping crew"],["licensing","Licensing"],["leasing","Leasing"]];
 function coCodes(){ if(D._ocodes || D._ocAsk) return D._ocodes||[]; D._ocAsk=1; var sb=window.MM_SB; if(!sb) return [];
   sb.rpc("office_codes").then(function(r){ D._ocodes=(r&&r.data)||[]; D._ocAsk=0; if(r&&r.error) D._ocodes=[]; schedule(); }); return []; }
+function coCanAdd(){ if(D._ocAdd===undefined && !D._ocAddAsk){ D._ocAddAsk=1; var sb=window.MM_SB; if(sb) sb.rpc("office_code_can_add").then(function(r){ D._ocAdd=!r.error&&r.data===true; schedule(); }); } return !!D._ocAdd; }
+function mCoAdd(place){ openModal("Add a code",'<div class="note">Codes live here, not in notes. Managers and admins see a new code at first; admins can tick more teams in 🔒 Codes.</div><div class="fields" style="margin-top:8px">'+fld("oca_l","What it opens (e.g. Office garage side door)","")+fld("oca_c","Code","","text",'autocomplete="off"')+'</div>',
+    function(){ var l=fv("oca_l").trim(), c=fv("oca_c").trim(); if(!l||!c){ toast("Type what it opens and the code."); return Promise.reject(); }
+      return window.MM_SB.rpc("office_code_add",{p_label:l,p_code:c,p_place:place||"office"}).then(function(r){ if(r.error){ toast((r.error.message||"Couldn't save").replace(/^.*?:\s*/,"")); throw r.error; } D._ocodes=null; D._ocAsk=0; coCodes(); toast("Saved to Codes"); closeModal(); }); },"Save"); }
+/* a line like "Garage side door code: 41507#" typed into a Moose Office note -> {label, code}; anything else stays a note */
+var CO_CODE_RX=/^\s*(.{2,60}?)\s*(?:code|combo|combination|passcode|pin)\s*(?:is|#)?\s*[:=\-]?\s*([0-9][0-9#*]{2,}[0-9#*\s]*)\s*$/i;
+function coCodeLines(txt){ var found=[], keep=[]; String(txt||"").split("\n").forEach(function(l){ var m=CO_CODE_RX.exec(l); if(m){ found.push({label:m[1].replace(/[:\-\s]+$/,"").replace(/^./,function(x){ return x.toUpperCase(); }),code:m[2].trim()}); } else keep.push(l); }); return {found:found,text:keep.join("\n").trim()}; }
 function coCodeAdmin(){ return coCodes().some(function(c){ return c.teams; }); }
 function coCode(key,label){ var c=coCodes().filter(function(x){ return x.key===key; })[0]; if(!c) return "";
   if(!c.code && !c.teams) return "";
@@ -1788,7 +1795,9 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var ofc=CO_FIELDS.office.map(function(f){ var x=coVal("office",f[0]); if(!x.v) return ""; var tel=f[0]==="phone", em=f[0]==="email";
       var v=esc(x.v).replace(/\n/g,"<br>"); if(em) v=v.replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g,'<a href="mailto:$1">$1</a>'); if(tel) v=v.replace(/(\d{3}[-. ]\d{3}[-. ]\d{4})/g,function(m){ return '<a href="tel:'+m.replace(/\D/g,"")+'">'+m+'</a>'; });
       return '<div class="cof'+(f[0]==="addr"||f[0]==="notes"?' w':'')+'"><span>'+esc(f[1])+'</span><b>'+v+'</b><div class="hint">'+coSrc(x.s)+'</div></div>'; }).join("");
-  h+='<section class="cooffice"><div class="cooh"><i>\ud83c\udfe2</i><b>'+esc(CO_TITLES.office)+'</b>'+(coCodeAdmin()?'<button class="btn sm ghost" data-cocodes="office">\ud83d\udd12 Codes</button>':'')+'<button class="btn sm ghost" data-co="office">Edit</button></div><div class="cofs">'+(ofc||'<div class="note">Nothing recorded yet.</div>')+'</div>'+((coCode("office_keybox")+coCode("office_alarm"))?'<div class="cocodes">'+coCode("office_keybox")+coCode("office_alarm")+'</div>':'')+'</section>';
+  h+='<section class="cooffice"><div class="cooh"><i>\ud83c\udfe2</i><b>'+esc(CO_TITLES.office)+'</b>'+(coCodeAdmin()?'<button class="btn sm ghost" data-cocodes="office">\ud83d\udd12 Codes</button>':'')+'<button class="btn sm ghost" data-co="office">Edit</button></div><div class="cofs">'+(ofc||'<div class="note">Nothing recorded yet.</div>')+'</div>'+(function(){ var cc=coCodes().filter(function(c){ return c.place==="office" && c.key!=="bhv_garage"; }).map(function(c){ return coCode(c.key); }).join("");
+      var ad=coCanAdd()?'<button class="btn sm ghost" data-coadd="office" style="margin-left:auto">+ Add a code</button>':'';
+      return (cc||ad)?'<div class="cocodes" style="display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline">'+cc+ad+'</div>':''; })()+'</section>';
   var so=!!S.ui.coStore;
   h+='<section class="cooffice costore'+(so?' open':'')+'"><button class="cooh coacc" data-costore="1" aria-expanded="'+so+'"><i>\ud83d\udce6</i><div><b>'+esc(CO_TITLES.storage)+'</b><small>Protection Storage - '+su.length+' total + Bear Hollow storage</small></div><span class="ctgo">'+(so?'Close \u25b4':'Open \u25be')+'</span></button>'+(so?coStorage():'')+'</section>';
   h+='<div class="cotiles">'+T.map(function(t){ var o=t[0]===op2;
@@ -1809,8 +1818,14 @@ function mCo(sec){ var pe=coEdits();
       function(){ return coPut({co_colors:fv("co_colors"),co_logos:fv("co_logos"),co_brand_by:S.me}); },"Save");
   var cur=pe["co_"+sec]||{};
   openModal(CO_TITLES[sec]||"Moose Office",'<div class="note">Blank = use the file it came from.</div><div class="fields" style="margin-top:8px">'+CO_FIELDS[sec].map(function(f){ var x=(CO_FACTS[sec]||{})[f[0]], mv=(CO_MOVED[sec]||{})[f[0]]; return area("co_"+f[0],f[1],cur[f[0]]||(mv?(pe["co_"+mv]||{})[f[0]]:"")||"",x?x.v:""); }).join("")+'</div>',
-    function(){ var o={}; CO_FIELDS[sec].forEach(function(f){ o[f[0]]=fv("co_"+f[0]); }); var p2={}; p2["co_"+sec]=o; p2["co_"+sec+"_by"]=S.me;
-      return coPut(p2); },"Save"); }
+    function(){ var o={}, got=[]; CO_FIELDS[sec].forEach(function(f){ var v=fv("co_"+f[0]), x=coCodeLines(v); if(x.found.length){ got=got.concat(x.found); v=x.text; } o[f[0]]=v; }); var p2={}; p2["co_"+sec]=o; p2["co_"+sec+"_by"]=S.me;
+      if(!got.length) return coPut(p2);
+      if(!coCanAdd()){ toast("Codes can't go in notes - take the code out, or ask a manager to add it to Codes."); return Promise.reject(); }
+      if(!confirm("Codes don't go in notes. Save "+got.map(function(g){ return '"'+g.label+'"'; }).join(", ")+" to \ud83d\udd12 Codes instead?")) return Promise.reject();
+      var place=sec==="storage"?"storage":"office";
+      return got.reduce(function(pr,g){ return pr.then(function(){ return window.MM_SB.rpc("office_code_add",{p_label:g.label,p_code:g.code,p_place:place}).then(function(r){ if(r.error) throw r.error; }); }); },Promise.resolve())
+        .then(function(){ D._ocodes=null; D._ocAsk=0; coCodes(); return coPut(p2); })
+        .catch(function(e){ toast((e&&e.message||"Couldn't save").replace(/^.*?:\s*/,"")); throw e; }); },"Save"); }
 function mCoVehicle(id){ var pe=coEdits(), ed=pe.co_vehicles||{}, v=id?(coVehicles().filter(function(x){ return x.id===id; })[0]||{}):{}, nid=id||("v"+Date.now());
   openModal(id?"Vehicle · "+(v.name||v.ymm||""):"Add a vehicle",'<div class="note">No VINs, plate numbers or policy numbers here.</div><div class="fields" style="margin-top:8px">'+CO_VFIELDS.map(function(f){ return f[0]==="body"?'<label class="f"><span>Body</span><select id="cov_body">'+CO_BODY.map(function(b){ return '<option value="'+b[0]+'"'+((v.body||"car")===b[0]?' selected':'')+'>'+b[1]+'</option>'; }).join("")+'</select></label>':fld("cov_"+f[0],f[1]+(f[0]==="color"?" (e.g. white, #1f4e79)":""),v[f[0]]||""); }).join("")+'</div>'+
     (id?'<label class="toggle" style="margin-top:8px"><input type="checkbox" id="cov_off"'+(v.off?' checked':'')+'> Retired (sold or no longer ours)</label>':''),
@@ -4750,6 +4765,7 @@ document.addEventListener("click",function(ev){
   if(d.applacc){ ev.preventDefault(); S.ui.applOpen=!S.ui.applOpen; if(S.ui.applOpen) S.ui.recOpen=false; return render(); }
   if(d.costore){ S.ui.coStore=!S.ui.coStore; return render(); }
   if(d.cocodes) return mCoCodes(d.cocodes);
+  if(d.coadd) return mCoAdd(d.coadd);
   if(d.cou!=null){ if(!need()) return; return mCoUnit(d.cou); }
   if(d.cotile){ S.ui.coTile=S.ui.coTile===d.cotile?"":d.cotile; if(S.ui.coTile!=="veh") S.ui.vopen=""; render();
     if(S.ui.coTile) setTimeout(function(){ var p=document.getElementById("copanel"); if(p&&p.scrollIntoView) p.scrollIntoView({behavior:"smooth",block:"start"}); },60); return; }
