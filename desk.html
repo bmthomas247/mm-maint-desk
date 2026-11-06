@@ -1397,9 +1397,13 @@ function homeDetail(code){
   var h='<div class="dhead"><div class="dtitle"><h2 class="mono">'+esc(code)+'</h2><span class="tag">'+esc({str:"STR",lease:"Lease","2h":"Second home",co:"Company"}[homeType(code)])+'</span><span class="muted">'+esc(p.community)+'</span>'+
     dbxLink(code)+
     (ONLY==="homes" && canAddJob()?'<button class="btn sm pri" style="margin-left:auto" data-newjobfor="'+esc(code)+'|">+ Job</button>':'')+'</div>'+
-    '<div class="dsub">'+(yb?'<span>Built '+esc(yb)+' · '+(new Date().getFullYear()-(+yb))+' years old</span>':'<span>Year built not recorded</span>')+
-    (pe.sqft||p.sqft||bh.sqft?'<span>· '+esc(pe.sqft||p.sqft||bh.sqft)+' sq ft</span>':'')+(homeInfo(code).beds?'<span>· '+esc(homeInfo(code).beds)+' bd</span>':'')+
-    '<span>· '+open.length+' open job'+(open.length===1?'':'s')+'</span></div>'+homeAddr(p)+'</div><div class="dbody">';
+    '<div class="dsub">'+(function(){ var tk=p.track||{}, bd=tk.beds!=null?tk.beds:homeInfo(code).beds, ba=tk.baths, bits=[];
+      if(yb) bits.push('Built '+esc(yb)+' · '+(new Date().getFullYear()-(+yb))+' years old');
+      if(bd!=null&&bd!=="") bits.push(esc(bd)+' bedroom'+(+bd===1?'':'s'));
+      if(ba) bits.push(esc(+ba)+' bath'+(+ba===1?'':'s'));
+      if(pe.sqft||p.sqft||bh.sqft) bits.push(esc(pe.sqft||p.sqft||bh.sqft)+' sq ft');
+      bits.push(open.length+' open job'+(open.length===1?'':'s'));
+      return bits.map(function(x,i){ return '<span>'+(i?'· ':'')+x+'</span>'; }).join("")+(tk.bed_config?'<div class="dbeds" style="flex-basis:100%;margin-top:2px">🛏 '+esc(tk.bed_config)+'</div>':''); })()+'</div>'+homeAddr(p)+'</div><div class="dbody">';
   if(os && os.in<=t) h+='<div class="warnbox"><b>Owner in the home until '+esc(fmtD(os.out))+'.</b></div>';
   else if(os && daysBetween(t,os.in)<=30) h+='<div class="infobox">Owner stay '+esc(fmtD(os.in))+' → '+esc(fmtD(os.out))+'.</div>';
   h+=homeHeads(code);
@@ -1456,11 +1460,15 @@ function homeDetail(code){
   ah+='</details>';
   // info
   var cats=p.info.filter(function(i){ return i.notes; });
-  h+='<div class="block"><h4>Home information <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">from Asana property info · staff only</span></h4>'+
-    ah+(pb?'<details class="infocat"><summary>Paint colors</summary>'+pb.replace(/^<div class="block">/,'<div>')+'</details>':'')+xh+
-    (cats.length?cats.map(function(i){ var codes=/^\[codes\]/.test(i.notes);
-      return '<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+'</summary>'+
-        '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+'</div></details>'; }).join(""):'')+'</div>';
+  /* Brandon 2026-11-06: fold-outs in A-Z order; Track's garage/parking notes get their own fold-out (the Quick view card keeps only the codes) */
+  var fo=[]; if(ah) fo.push(["Appliances",ah]); if(pb) fo.push(["Paint colors",'<details class="infocat"><summary>Paint colors</summary>'+pb.replace(/^<div class="block">/,'<div>')+'</details>']);
+  if(xh) fo.push(["Fire suppression & license",xh]);
+  var gq=homeQuick(code,p); if(gq.garage && gq.src.garage && gq.src.garage!=="Asana") fo.push(["Garage & parking",'<details class="infocat"><summary>Garage &amp; parking</summary><div class="prose">'+esc(gq.garage)+'</div></details>']);
+  cats.forEach(function(i){ var codes=/^\[codes\]/.test(i.notes);
+    fo.push([i.cat||"Note",'<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+'</summary>'+
+        '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+'</div></details>']); });
+  fo.sort(function(a,b){ return String(a[0]).toLowerCase().localeCompare(String(b[0]).toLowerCase()); });
+  h+='<div class="block"><h4>Home information</h4>'+fo.map(function(x){ return x[1]; }).join("")+'</div>';
   h+='<details class="block recacc"'+(S.ui.recOpen?' open':'')+'><summary><button type="button" class="recbtn" data-recacc="1"><h4><span class="recchev">'+(S.ui.recOpen?'\u25be':'\u25b8')+'</span>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">'+(jobs.length||recent.length)+' \u00b7 newest first</span></h4></button></summary>'+
     '<style>.recacc>summary{list-style:none}.recacc>summary::-webkit-details-marker{display:none}.recbtn{all:unset;cursor:pointer;display:block;width:100%}.recbtn h4{display:flex;align-items:center;gap:8px;margin:0}.recchev{color:var(--accent);font-size:12px}.recacc[open]>summary{margin-bottom:8px}</style>'+
     (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
@@ -1825,19 +1833,29 @@ function qShort(val){ var lines=String(val||"").replace(/\r/g,"").split("\n").ma
   return {html:pick.map(function(l){ var m=l.match(/^([^:]{2,40}?):\s*(.+)$/);
     return m?'<div class="qrow"><span class="ql">'+esc(m[1])+'</span><span class="qa">'+qBold(m[2])+'</span></div>':'<div class="qrow"><span class="qa plain">'+qBold(l)+'</span></div>'; }).join(""),
     more:cut||lines.length>pick.length}; }
-function qCard(title,val,src,cls,cat){ if(!val) return '';
-  var q=qShort(val);
+function qCard(title,val,src,cls,cat,more){ if(!val) return '';
+  var q=qShort(val); if(more) q.more=true;
+  if(cls==="wifi") q.html=q.html.replace(/<b class="qcode">([^<]*)<\/b>/g,"$1");
   return '<div class="qv '+(cls||"")+'"><div class="qvh">'+esc(title)+'</div>'+q.html+(q.more&&cat?'<a href="#" class="qinfo" data-qinfo="'+esc(cat)+'">More in Home information ↓</a>':'')+(src&&/<button /.test(src)?'<div class="hint">'+src+'</div>':'')+'</div>'; }
+function emergOf(p){ var t=""; (p.info||[]).some(function(i){ if(/emergency contact\s*:/i.test(i.notes||"")){ t=i.notes; return true; } return false; });
+  if(!t) return null; var seg=String(t).replace(/<[^>]+>/g," ").split(/emergency contact\s*:/i)[1]||"", ls=seg.split("\n"), r={name:(ls[0]||"").trim()};
+  ls.slice(1,10).some(function(l){ l=l.trim(); if(!l) return false; if(/^(notes|owner|property|business)\b/i.test(l)) return true;
+    var m=/^(relationship|e-?mail|phone|cell phone|cell|home phone)\s*:\s*(.*)$/i.exec(l); if(m&&m[2].trim()){ var k=m[1].toLowerCase(), v=m[2].replace(/^["']|["']$/g,"").trim();
+      if(/rel/.test(k)) r.rel=r.rel||v; else if(/mail/.test(k)) r.email=r.email||v; else r.phone=r.phone||v; } return false; });
+  return r.name&&!/^(none|n\/?a|-)$/i.test(r.name)?r:null; }
+function emergHtml(p){ var e=emergOf(p); if(!e) return "";
+  return '<div class="qvt qown" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)"><span class="muted">Emergency contact</span><b>'+esc(e.name)+'</b>'+(e.rel?'<span class="muted">'+esc(e.rel)+'</span>':'')+
+    (e.phone?'<span>'+ocon("tel",e.phone)+'</span>':'')+(e.email?'<span>'+ocon("mail",e.email)+'</span>':'')+'</div>'; }
 function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(code);
   var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
   var q=homeQuick(code,p), qs=function(k,rx){ var s0=q.src[k]; return {v:q[k],s:s0==="Asana"?asana(rx).s:s0==="Hub edit"?"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):""):s0?"From "+esc(s0):""}; };
   var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=qs("garage",/^parking\/? ?garage info$|^parking$/i), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
-    (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+'</div>';
+    (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+emergHtml(p)+'</div>';
   return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
     qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
-    qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+qCard("Garage / parking",garage.v,garage.s,"codes","parking|garage")+
+    qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+(function(){ var gc=codeLines(garage.v,3); return qCard("Garage / parking",gc.length?gc.join("\n"):garage.v,garage.s,"codes","parking|garage",gc.length>0&&String(garage.v).replace(/\s+/g," ").trim()!==gc.join(" ").trim()); })()+
     (window.MM_CODES===false?'':qCard("Owner closet",closet.v,closet.s,"codes","closet"))+
     (hi.water?qCard("Water shut-off",hi.water,"","water",""):'<div class="qv water"><div class="qvh">Water shut-off</div><div class="muted">Not on file yet \u2014 add it with \u270e Edit on The home.</div></div>')+
     qCard("Key box",q.keybox,q.src.keybox?"From "+esc(q.src.keybox):"","")+(q.guest?qCard("Guest",q.guest,"From Locks",""):'')+'</div>'+
@@ -1920,7 +1938,9 @@ function hoaPop(id){ var h=(D._hoas||[]).filter(function(x){ return String(x.id)
     (h.info?'<div class="lbl" style="margin-top:12px">Community information</div><div class="prose">'+esc(h.info)+'</div>':'')+
     (h.left_out?'<div class="hint" style="margin-top:8px">'+h.left_out+' code line'+(h.left_out>1?'s':'')+' left out — open the Asana task for those.</div>':'')+
     (h.asana_url?'<div style="margin-top:12px"><a class="btn sm" href="'+esc(h.asana_url)+'" target="_blank" rel="noopener">Open in Asana ↗</a></div>':'');
-  openModal(h.name,'<div class="hoapop">'+body+'</div>',null); }
+  var hm=S.ui.home||"";
+  openModal(h.name,'<style>.hoapop .ql{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-top:6px}</style><div class="hoapop">'+body+
+    (hm?'<div style="margin-top:12px"><button type="button" class="btn sm" data-act="hoafix">Wrong HOA for '+esc(hm)+'?</button></div>':'')+'</div>',null); }
 function norm2(s){ return String(s||"").toLowerCase().replace(/\b(management|properties|property|llc|inc|hoa|the)\b/g,"").replace(/[^a-z0-9]/g,""); }
 function hoaView(){ hoaLoad(); var u=S.ui, q=(u.hq||"").trim().toLowerCase(), st=u.hoast||"";
   if(!D._hoas) return '<div class="empty">Loading HOAs…</div>';
@@ -1986,13 +2006,14 @@ function hoaCell(code,p){ var H=hoasFor(code,p), L=[], src=[];
   if(more) L.push({html:'<div class="tl muted">More in Home details</div>'});
   return tCell("HOA",src.join(" + "),L,false,"hhoa"); }
 function hoaBlock(code,p){ var pe=pedit(code), n=infoNote(p,/^hoa/i), hb=n?null:hoaOf(code,p); if(hb&&hb.from) n={text:hb.text,url:hb.url};
-  var H=hoasFor(code,p), mine=!!(pe.hoaName||pe.hoaMgmt||pe.hoaContact||pe.hoaPhone||pe.hoaEmail||pe.hoaPortal||pe.hoaRules);
+  var H=hoasFor(code,p), mine=!!(pe.hoaName||pe.hoaMgmt||pe.hoaContact||pe.hoaPhone||pe.hoaEmail||pe.hoaPortal||pe.hoaRules), fix=S.ui.hoaFix===code;
+  if(H.length && !mine && !fix) return '<div class="block"><h4>HOA</h4><div style="display:flex;flex-wrap:wrap;gap:8px">'+H.map(function(x){ return '<button type="button" class="btn sm" data-hoapop="'+x.id+'">🏘 HOA info · '+esc(x.name)+'</button>'; }).join("")+'</div></div>';
   return '<div class="block"><h4>HOA</h4>'+(H.length?'<div style="display:flex;flex-wrap:wrap;gap:8px">'+H.map(function(x){ return '<button type="button" class="btn sm" data-hoapop="'+x.id+'">\ud83c\udfd8 HOA info \u00b7 '+esc(x.name)+'</button>'; }).join("")+'</div>':D._hoas?'<div class="note">No HOA on file for '+esc(hoaComm(p)||code)+' yet (Property Details ▸ HOA).</div>':'')+
-    '<details class="infocat" style="margin-top:8px"'+(mine||!H.length?' open':'')+'><summary>'+(H.length?'Only for this home (when it differs from the HOA above)':'HOA for this home')+'</summary><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+
+    '<details class="infocat" style="margin-top:8px"'+(mine||fix||!H.length?' open':'')+' id="hoafixbox"><summary>'+(H.length?(fix&&!mine?'This home\'s real HOA (the one above is wrong)':'Only for this home (when it differs from the HOA above)'):'HOA for this home')+'</summary><div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+
     fld("hoa_name","HOA name",pe.hoaName||"")+fld("hoa_mgmt","Management company",pe.hoaMgmt||"")+fld("hoa_contact","Contact person",pe.hoaContact||"")+
     fld("hoa_phone","Phone",pe.hoaPhone||"","tel")+fld("hoa_email","Email",pe.hoaEmail||"","email")+fld("hoa_portal","Website / portal",pe.hoaPortal||"","url")+'</div>'+
     '<label class="f" style="margin-top:8px"><span>HOA rules &amp; notes (parking, trash, quiet hours, pool/clubhouse, who to call after hours)</span><textarea id="hoa_rules" style="min-height:70px">'+esc(pe.hoaRules||"")+'</textarea></label>'+
-    (n?'<details class="infocat" style="margin-top:8px"><summary>HOA Info from Asana'+(hb&&hb.from?' (on '+esc(hb.from)+', same community)':'')+'</summary><div class="prose">'+esc(n.text)+(n.url?'\n<a href="'+esc(n.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>':'')+
+    (n&&!H.length?'<details class="infocat" style="margin-top:8px"><summary>HOA Info from Asana'+(hb&&hb.from?' (on '+esc(hb.from)+', same community)':'')+'</summary><div class="prose">'+esc(n.text)+(n.url?'\n<a href="'+esc(n.url)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+'</div></details>':'')+
     '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehoa" data-code="'+esc(code)+'">Save HOA</button></div></details></div>'; }
 function mNewHome(){ if(!need()) return;
   openModal("Add a property",'<div class="note">Use the Track unit code (e.g. BHL 123, 2H-… for second homes, L-… for leases). Everyone sees it under Property Details right away.</div><div class="fields" style="margin-top:8px">'+
@@ -3798,7 +3819,7 @@ function fireInfo(code){ var pe=pedit(code), p=profile(code)||{}, o={has:null,la
     o.has=true; var d=usDate(n); if(d && d>o.last) o.last=d; o.why.push("Asana: "+n.slice(0,90)); });
   (D.byProp[code]||[]).forEach(function(j){ if(!/suppress|fire (sprinkler|inspect)|fire riser/i.test(j.title||"")) return; o.has=true; o.tasks.push(j);
     if(/inspect|tag|test/i.test(j.title) && j.status==="done"){ var d=(j.due||j.finished||"").slice(0,10); if(d>o.last) o.last=d; } });
-  if(pe.fire==="yes") o.has=true; else if(pe.fire==="no") o.has=false;
+  if(pe.fire==="yes") o.has=true; else if(pe.fire==="no"||pe.fire==="hoa") o.has=false; o.hoa=pe.fire==="hoa";
   if(pe.fireLast) o.last=pe.fireLast;
   o.exp=pe.fireExp||addYear(o.last);
   var bw=fromFeed(((S.feeds["bw-homeinfo"]||{}).homes)||{},code)||{}; o.bwListed=!!bw.fireSystem;
@@ -3859,7 +3880,7 @@ function dueState(exp){ if(!exp) return {k:"none",t:"No date"}; var d=daysBetwee
 function duePill(st){ return '<span class="pill '+({late:"stop",soon:"waiting",ok:"done",none:"mute"}[st.k])+'">'+esc(st.t)+'</span>'; }
 function fireFields(code){ var f=fireInfo(code), l=licInfo(code), pe=pedit(code);
   return '<div class="fields" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">'+
-    '<label class="f"><span>Fire suppression</span><select id="h_fs"><option value="yes"'+(f.has===true?' selected':'')+'>Yes</option><option value="no"'+(f.has===false?' selected':'')+'>No</option>'+(f.has==null?'<option value="" selected>Not sure</option>':'')+'</select>'+
+    '<label class="f"><span>Fire suppression</span><select id="h_fs"><option value="yes"'+(f.has===true?' selected':'')+'>Yes</option><option value="no"'+(f.has===false&&!f.hoa?' selected':'')+'>No</option><option value="hoa"'+(f.hoa?' selected':'')+'>Building / HOA handles it</option>'+(f.has==null?'<option value="" selected>Not sure</option>':'')+'</select>'+
       '<span class="hint">'+(pe.fire?'':f.tasks.length?'From Pye-Barker / Breezeway tasks':f.why.length?'From Asana':f.bwListed?'Listed on the Breezeway home page — check':'')+'</span></label>'+
     '<label class="f"><span>Last fire inspection</span><input id="h_fl" type="date" value="'+esc(f.last)+'"></label>'+
     '<label class="f"><span>Fire tag expires</span><input id="h_fe" type="date" value="'+esc(f.exp)+'"><span class="hint">'+(f.exp?dueState(f.exp).t:'a year after the inspection')+'</span></label>'+
@@ -4559,6 +4580,7 @@ document.addEventListener("click",function(ev){
     case "deljob": if(!j) return; return put("deskjobs",j.id,{deleted:true},S.deskjobs[j.id]).then(function(){ S.ui.sel=""; toast("Removed"); });
     case "newroutine": return mRoutine();
     case "newvendor": return mVendor();
+    case "hoafix": S.ui.hoaFix=S.ui.home; closeModal(); render(); setTimeout(function(){ var x=document.getElementById("hoafixbox"); if(x) x.scrollIntoView({block:"center"}); },80); return;
     case "vback": S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return;
     case "newhome": return mNewHome();
     case "hclose": S.ui.home=""; return render();
