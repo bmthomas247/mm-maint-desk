@@ -1434,7 +1434,7 @@ var CO_FACTS={
   office:{
     addr:{v:"Bear Hollow Lodge #1101\n5519 Lillehammer Ln #1101, Park City, UT 84098",src:CO_D+"4-Templates/Envelopes/Logo Envelope.docx (2026-09-25)"},
     mail:{v:"5519 Lillehammer Ln #1101, Park City, UT 84098 (same as the office). Use it for every Moose address.\nThe old PO Box 981671 is no longer valid.",src:"Kim, 2026-10-29 (Bugs & upgrades #3) and Brandon, 2026-11-02"},
-    phone:{v:"435-714-6544 (call or text)\nFax 435-214-2280",src:CO_D+"4-Templates/3-Invoice Templates/Sales Invoice Dollys.docx (2026-01-29)"},
+    phone:{v:"Office 435-714-6544\nFax 435-214-2280",src:CO_D+"4-Templates/3-Invoice Templates/Sales Invoice Dollys.docx (2026-01-29)"},
     email:{v:"Hello@MooseManagement.com",src:"Brandon, 2026-11-05"},
     hours:{v:"Phones 9am–6pm daily",src:CO_D+"4-Templates/Voicemail Messages/Voicemail for Nextiva.docx (2022-09-24)"},
     storage:{v:"Protection Self Storage of Park City, 1240 W Richardson Rd, Park City 84036 · 435-465-2900 — unit B258 on the Oct 2026 invoice; a 10x10 unit B346 from Dec 2022; a Dec 2023 invoice says \"ALL 4\" units, so the count needs checking\nStorage Elevated, 4006 N. Forestdale Dr, Park City 84098 · 435-333-4400 — newest receipts are 2023; may be closed",src:CO_D+"13-Vendors & Chanel Partners/Storage-Protection Storage/Invoices/2026 (2026-10-19); Storage Elevated: 13-Vendors & Chanel Partners/Storage Elevated (2023-03-29)"}},
@@ -1528,7 +1528,7 @@ function mCoUnit(u){ var pe=coEdits(), ed=pe.co_storage_units||{}, x=u?(coUnits(
       var o={}; F.forEach(function(f){ o[f[0]]=fv("cou_"+f[0]); }); var fg=(CO_FACTS.storeUnits.filter(function(y){ return y.u===id; })[0]||{}).grp||"", gv=$("cou_grp").value; o.grp=gv===fg?"":(gv||"none"); var fo=!!(CO_FACTS.storeUnits.filter(function(y){ return y.u===id; })[0]||{}).gone, ck=$("cou_off").checked;
       o.off=(ck===fo)?"":ck; var all=Object.assign({},ed); all[id]=o; return coPut({co_storage_units:all,co_storage_units_by:S.me}); },"Save"); }
 var CO_FIELDS={
-  office:[["addr","Office & mailing address"],["phone","Main phone"],["email","Main email"],["hours","Office hours"],["notes","Other office notes"]],
+  office:[["addr","Office & mailing address"],["phone","Phone"],["email","Main email"],["hours","Office hours"],["notes","Other office notes"]],
   storage:[["storage","Storage units"],["notes","Storage notes"]],
   social:[["web","Website"],["social","Social media"],["notes","Other accounts"]],
   general:[["legal","Company name(s)"],["dba","Also known as"],["founded","Founded"],["area","Service area"],["license","Business licenses"],["notes","Other notes"]]};
@@ -1678,8 +1678,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     ["emp","\ud83d\udc65","Employees",D._staff?n(st.length,"person","people"):"the team",["Names, titles, phone extensions and who handles what"],emp],
     ["brand","\ud83c\udfa8","Logos & colors",n(cols.length,"color","colors")+" \u00b7 "+n(CO_FACTS.logos.length-1,"logo file","logo files"),['<div class="cosw">'+cols.slice(0,8).map(function(c){ return '<span style="background:'+esc(c.hex)+'"></span>'; }).join("")+'</div>'],brand],
     ["social","\ud83c\udf10",CO_TITLES.social,"website, Facebook, Instagram\u2026",[ws],coBlock("social")],
-    ["general","\ud83d\udccb",CO_TITLES.general,"legal names, licenses, service area",[lg],coBlock("general")],
-    ["bw","\ud83e\uddf0","Breezeway office",n(rec.length,"receipt check-in","receipt check-ins")+" this month",["General Moose jobs + daily receipts"],bwo]];
+    ["general","\ud83d\udccb",CO_TITLES.general,"legal names, licenses, service area",[lg],coBlock("general")]];
   var op2=S.ui.coTile||"", cur=T.filter(function(t){ return t[0]===op2; })[0];
   var ofc=CO_FIELDS.office.map(function(f){ var x=coVal("office",f[0]); if(!x.v) return ""; var tel=f[0]==="phone", em=f[0]==="email";
       var v=esc(x.v).replace(/\n/g,"<br>"); if(em) v=v.replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g,'<a href="mailto:$1">$1</a>'); if(tel) v=v.replace(/(\d{3}[-. ]\d{3}[-. ]\d{4})/g,function(m){ return '<a href="tel:'+m.replace(/\D/g,"")+'">'+m+'</a>'; });
