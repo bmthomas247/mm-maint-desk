@@ -20,6 +20,7 @@ const CSS = `
 .rstep .who{font-size:12px;color:var(--muted);white-space:nowrap;min-width:200px;text-align:right}
 @media(max-width:640px){ .rstep{flex-wrap:wrap} .rstep .who{min-width:0;flex-basis:100%;text-align:left;padding-left:32px;white-space:normal} } .rstep.done .l{text-decoration:line-through;text-decoration-color:var(--line-2)}
 .rhist{font-size:13px;border-top:1px solid var(--line);padding:6px 0}
+.rnt{border-top:1px solid var(--line);padding:9px 0} .rnt:first-child{border-top:0} .rnt .tx{white-space:pre-wrap;font-size:14px;line-height:1.4;overflow-wrap:anywhere} .rnt .mt{font-size:12.5px;color:var(--ink-2);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center} .rnt textarea,.rntnew textarea{min-height:70px;margin-top:4px} .rntst{font-size:12.5px;color:var(--ink-2)} .rntst.err{color:var(--red);font-weight:700} .rntst.ok{color:var(--forest-2,#2f5d1f)} .rntnew{background:var(--ground);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:8px 0}
 /* Brandon 2026-11-03: check list groups are an accordion (one open at a time, the first one with steps left opens) */
 details.racc{margin-top:0;border-top:1px solid var(--line)} details.racc>summary{list-style:none;cursor:pointer;padding:10px 2px;border-radius:8px}
 details.racc>summary::-webkit-details-marker{display:none} details.racc>summary:hover{background:var(--ground)} details.racc>summary h3{margin:0}
@@ -330,6 +331,7 @@ const TD_RULES = {
   td_contact_ep:   s => !!(s.td.contact && s.td.contact.email && s.td.contact.phone),
   td_contact_addr: s => !!(s.td.contact && s.td.contact.address && s.td.contact.email),
   td_notes:        s => !!(s.td.notes && s.td.notes.n > 0),
+  td_dates:        s => !!(s.arrive && s.depart && s.nights > 0),   // owner stays: the dates come from Track itself (walkthrough OS 6; Brandon 2026-11-06 "this should be done automatically")
   td_no_beyond:    s => !fee(s, /beyond/i),
   td_ext_clean:    s => fee(s, /extended stay cleaning/i),
   td_adv:          s => s.td.advantage === true,
@@ -667,11 +669,15 @@ async function card(v, res){
         return `<details class="rgrp racc" data-g="${esc(g)}" ${og === "*" || og === g ? "open" : ""}><summary><h3>${esc(g)} <span class="muted" style="font-weight:600">${d}/${n}</span>${n && d >= n ? `<span class="pill green" style="font-size:11px;padding:1px 7px">done</span>` : ""}</h3></summary>
         ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
-          <span class="l">${TRK_STEP[t.key] && s.td && s.td.auto ? trkLogo(trkHit(s, TRK_STEP[t.key]), trkHit(s, TRK_STEP[t.key]) ? "Track's automation did this" : "Track's automation hasn't happened yet") + " " : ""}${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.help ? `<button type="button" class="rwhy" data-why="${t.key}" title="Why? / how">i</button>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}${t.help ? `<div class="rwhyt" data-whyt="${t.key}" hidden>${esc(t.help)}</div>` : ""}</span>
-          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${t.key === "i_campaign" && !t.done ? campBtn(s) : openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : ""}</span></label>`; }).join("")}</details>`; }).join("")}
+          <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.help ? `<button type="button" class="rwhy" data-why="${t.key}" title="Why? / how">i</button>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}${t.help ? `<div class="rwhyt" data-whyt="${t.key}" hidden>${esc(t.help)}</div>` : ""}</span>
+          ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${t.key === "i_campaign" && !t.done ? campBtn(s) : openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : trkWait(t)}</span></label>`; }).join("")}</details>`; }).join("")}
     </div>
-    <div class="card"><b>Hold / hand-off note</b><textarea id="rx_hold" style="min-height:60px;margin-top:6px" placeholder="What the next person needs to know">${esc((s.list && s.list.hold) || "")}</textarea>
-      <div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn small" id="rx_hold_s">Save note</button><span class="muted" id="rx_msg"></span></div>
+    <div class="card"><b>Notes</b> <span class="muted" style="font-size:12.5px">· the stay's reservation notes in Track. What you type saves to Track by itself.</span>
+      <div id="rx_nt">Loading the Track notes…</div>
+      ${s.list && s.list.hold ? `<details class="acc2" style="margin-top:6px"><summary><b>Older hub note</b> <span class="muted" style="font-size:12.5px">(only in the hub, not in Track)</span></summary>
+        <textarea id="rx_hold" style="min-height:60px;margin-top:6px">${esc(s.list.hold)}</textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap"><button class="btn small" id="rx_hold_s">Save</button><button class="btn small" id="rx_hold_t">Copy into a Track note</button></div></details>` : ""}
+      <div style="margin-top:4px"><span class="muted" id="rx_msg"></span></div>
       <details class="acc2" id="rx_h"><summary><b>History</b></summary><div id="rx_hl" class="muted">Loading…</div></details></div>
   </div>`;
   const msg = t => $("#rx_msg").textContent = t;
@@ -704,7 +710,9 @@ async function card(v, res){
   $("#rx_stage").onchange = e => set({ p_stage:e.target.value });
   $("#rx_ext").onchange = e => set({ p_extending:e.target.checked });
   v.querySelectorAll("[data-wait]").forEach(b => b.onclick = () => { const w = b.dataset.wait, now = s.waiting.includes(w) ? s.waiting.filter(x => x !== w) : [...s.waiting, w]; set({ p_waiting:now }); });
-  $("#rx_hold_s").onclick = async () => { if(await set({ p_hold:$("#rx_hold").value })) msg("Saved ✓"); };
+  if($("#rx_hold_s")) $("#rx_hold_s").onclick = async () => { if(await set({ p_hold:$("#rx_hold").value })) msg("Saved ✓"); };
+  if($("#rx_hold_t")) $("#rx_hold_t").onclick = () => { const n = ntState(s.res); n.nw = { id:null, text:$("#rx_hold").value, expect:null, st:"" }; ntSave(s.res, "nw"); ntDraw(s.res); };
+  ntDraw(s.res); if(!ntState(s.res).loaded) ntLoad(s.res);
   $("#rx_h").ontoggle = async () => { if(!$("#rx_h").open) return;
     const r = await sb.rpc("res_history", { p_res:s.res }); const h = r.data || { ticks:[], log:[] };
     const all = [...h.ticks.map(t => ({ at:t.at, t:`${t.d ? "Ticked" : "Unticked"} “${t.label || t.step}”`, by:t.by, src:t.src })),
@@ -713,8 +721,85 @@ async function card(v, res){
     $("#rx_hl").innerHTML = all.length ? all.map(x => `<div class="rhist">${esc(when(x.at))} · <b>${esc(x.by || "")}</b>${x.src && x.src !== "hub" ? " (" + esc(x.src) + ")" : ""} — ${esc(x.t)}</div>`).join("") : "Nothing yet."; };
 }
 
+/* ---------- Notes = the stay's Track reservation notes (Brandon 2026-11-06; res-notes function + hub_res_track_notes.sql).
+   Read live from Track each time the check list opens (nothing stored). Typing saves to Track by itself (2 s after you stop,
+   or when you leave the box): a new note is made once, then the same note is edited. Every hub note ends "- Name via Moose Hub".
+   State lives here (NT) so a redraw of the check list (ticks) never loses what someone is typing. A draft is also kept on the
+   device until Track has it. */
+const NT = {};
+const ntState = res => NT[res] || (NT[res] = { notes:[], who:[], loaded:false, err:"", nw:{ id:null, text:ntDraft(res, "nw"), expect:null, st:"" }, ed:{} });
+function ntDraft(res, k, v){ const key = `mm_resnote_${res}_${k}`;
+  try { if(v === undefined) return localStorage.getItem(key) || ""; if(v) localStorage.setItem(key, v); else localStorage.removeItem(key); } catch(_){ } return ""; }
+async function ntBody(r){ if(r.data) return r.data; try { if(r.error && r.error.context && r.error.context.json) return await r.error.context.json(); } catch(_){ } return {}; }
+const ntWho = u => String(u || "").replace(/^\d+-/, "");
+async function ntLoad(res){
+  const n = ntState(res);
+  const r = await sb.functions.invoke("res-notes", { body:{ action:"list", res } });
+  const d = await ntBody(r);
+  if(r.error || !d.ok){ n.err = d.error || "Couldn't read the Track notes. Check your signal and open the check list again."; }
+  else { n.err = ""; n.notes = d.notes || []; n.who = d.who || []; }
+  n.loaded = true; ntDraw(res);
+}
+function ntStatus(e){ return e.st === "saving" ? `<span class="rntst">Saving to Track…</span>` : e.st === "ok" ? `<span class="rntst ok">Saved to Track ✓ ${esc(when(e.at))}</span>`
+  : e.st === "wait" ? `<span class="rntst">Will save when you stop typing…</span>` : e.st ? `<span class="rntst err">${esc(e.st)} <button class="btn small" data-ntretry>Try again</button></span>` : ""; }
+function ntDraw(res){
+  const box = document.getElementById("rx_nt"); if(!box) return;
+  const n = ntState(res), act = document.activeElement, focusK = act && act.dataset ? act.dataset.ntk : null, pos = focusK ? [act.selectionStart, act.selectionEnd] : null;
+  const hubBy = {}; n.who.forEach(w => { hubBy[w.note_id] = w; });
+  const one = x => { const e = n.ed[x.id], w = hubBy[x.id];
+    return `<div class="rnt">${e ? `<textarea data-ntk="${esc(x.id)}">${esc(e.text)}</textarea><div class="mt">${ntStatus(e)}<button class="btn small" data-ntdone="${esc(x.id)}">Done</button></div>`
+      : `<div class="tx">${esc(x.text)}</div>`}
+      <div class="mt"><span>${x.hub ? "Moose Hub" : esc(ntWho(x.by) || "Track")} · ${esc(when(x.at))}</span>${x.updatedAt && x.updatedAt !== x.at ? `<span>edited ${esc(when(x.updatedAt))}${w ? " by " + esc(w.by_name || "") : ""}</span>` : ""}
+      ${x.isPublic ? `<span class="pill amber" style="font-size:11px;padding:1px 7px">Public</span>` : ""}${e ? "" : `<button class="btn small" data-nted="${esc(x.id)}">✎ Edit</button>`}</div></div>`; };
+  box.innerHTML = `<div class="rntnew"><textarea data-ntk="nw" placeholder="Add a note (what the next person needs to know). It saves to Track by itself.">${esc(n.nw.text)}</textarea>
+      <div class="mt" style="font-size:12.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${ntStatus(n.nw)}${n.nw.id ? `<button class="btn small" data-ntnext>Done, start another note</button>` : ""}</div></div>
+    ${n.err ? `<div class="rrule warn">${esc(n.err)}</div>` : !n.loaded ? `<div class="muted">Loading the Track notes…</div>`
+      : n.notes.filter(x => x.id !== n.nw.id).length ? n.notes.filter(x => x.id !== n.nw.id).map(one).join("") : `<div class="muted">No notes in Track yet.</div>`}`;
+  box.querySelectorAll("textarea[data-ntk]").forEach(t => {
+    const k = t.dataset.ntk;
+    t.oninput = () => { const e = k === "nw" ? n.nw : n.ed[k]; e.text = t.value; e.st = "wait"; ntDraft(res, k, t.value);
+      clearTimeout(e.tm); e.tm = setTimeout(() => ntSave(res, k), 2000); const s = t.parentElement.querySelector(".rntst"); if(s){ s.className = "rntst"; s.textContent = "Will save when you stop typing…"; } };
+    t.onblur = () => { const e = k === "nw" ? n.nw : n.ed[k]; if(e && e.st === "wait"){ clearTimeout(e.tm); ntSave(res, k); } };
+    if(k === focusK){ t.focus(); try { t.setSelectionRange(pos[0], pos[1]); } catch(_){ } } });
+  box.querySelectorAll("[data-nted]").forEach(b => b.onclick = () => { const x = n.notes.find(y => y.id === b.dataset.nted);
+    n.ed[x.id] = { id:x.id, text:x.body, expect:x.updatedAt, st:"" }; ntDraw(res); const t = box.querySelector(`textarea[data-ntk="${x.id}"]`); if(t) t.focus(); });
+  box.querySelectorAll("[data-ntdone]").forEach(b => b.onclick = () => { const e = n.ed[b.dataset.ntdone];
+    if(e && (e.st === "wait" || e.st === "saving")){ clearTimeout(e.tm); e.close = true; ntSave(res, b.dataset.ntdone); return; } delete n.ed[b.dataset.ntdone]; ntDraw(res); });
+  box.querySelectorAll("[data-ntnext]").forEach(b => b.onclick = () => { if(n.nw.st === "wait" || n.nw.st === "saving") return;
+    ntDraft(res, "nw", ""); n.nw = { id:null, text:"", expect:null, st:"" }; ntDraw(res); });
+  box.querySelectorAll("[data-ntretry]").forEach(b => b.onclick = () => { const k = b.closest(".rnt,.rntnew").querySelector("textarea").dataset.ntk; ntSave(res, k); });
+}
+async function ntSave(res, k){
+  const n = ntState(res), e = k === "nw" ? n.nw : n.ed[k]; if(!e) return;
+  if(e.busy){ e.again = true; return; }
+  const text = e.text.trim();
+  if(text.length < 2){ e.st = ""; ntDraw(res); return; }
+  e.busy = true; e.again = false; e.st = "saving"; ntDraw(res);
+  const r = await sb.functions.invoke("res-notes", { body:{ action:"save", res, id:e.id || null, text, expect:e.expect || null } });
+  const d = await ntBody(r); e.busy = false;
+  if(d.ok && d.note){
+    const x = d.note, i = n.notes.findIndex(y => y.id === x.id); if(i >= 0) n.notes[i] = x; else n.notes.unshift(x);
+    e.id = x.id; e.expect = x.updatedAt; e.at = new Date().toISOString(); e.st = "ok";
+    if(e.text.trim() === text) ntDraft(res, k, "");
+    if(e.again){ ntSave(res, k); return; }
+    if(e.close){ delete n.ed[k]; }
+  } else {
+    let msg = d.error || (r.error && r.error.message) || "Not saved.";
+    if(d.changed) msg = "Someone changed this note in Track while you were typing. Try again saves your words over theirs, or tap Done to keep theirs.";
+    if(d.changed && d.note){ const i = n.notes.findIndex(y => y.id === d.note.id); if(i >= 0) n.notes[i] = d.note; e.expect = d.note.updatedAt; }
+    if(/non-2xx|Failed to fetch|network/i.test(msg)) msg = "Not saved yet (no signal or Track didn't answer). Your words are kept on this device.";
+    e.st = msg.slice(0, 200); e.close = false;
+  }
+  ntDraw(res);
+}
+
+const isTrk = t => t.autoKey && /^Track/.test(AUTO_SRC[t.autoKey] || "Track");
+// a Track step not done yet: grey Track logo = Track hasn't done it, a person does it
+const trkWait = t => isTrk(t) || TRK_STEP[t.key] ? `${trkLogo(false, "Not done in Track yet - a person does it (it ticks itself once Track shows it)")}` : "";
 function autoWho(s, t){
   const w = autoWhen(s, t);
+  if(t.auto !== "Earlier rule" && isTrk(t))
+    return `<span style="display:inline-flex;gap:6px;align-items:center">${trkLogo(true, w && w.exact ? "Track did this" : "Track shows it done (first seen by the hub)")}${w ? `<span>${w.exact ? "" : "by "}${esc(whenAny(w.at))}</span>` : ""}</span>`;
   return `<span class="pill green">${esc(t.auto)} ✓</span>${w ? ` <span title="${w.exact ? "When it happened" : "First time the hub saw it done"}">· ${w.exact ? "" : "by "}${esc(whenAny(w.at))}</span>` : ""}`;
 }
 /* ---------- Charge the balance to the card on file (Brandon 2026-10-29; res-charge function + hub_res_charge.sql).
