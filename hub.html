@@ -303,7 +303,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="calendar.js"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
-<script src="staffing.js"></script>
+<script src="staffing.js?v=20261106ot"></script>
 <script src="perks.js"></script>
 <script src="calls.js"></script>
 <script src="market_watch.js"></script>
@@ -768,6 +768,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
    read with their own sign-in (RLS decides): Penny's tips, their checks today, time-off requests waiting for their OK, and answers
    from an admin to "Ask an admin". Nothing new is stored; an item goes away when it's done where it lives. */
 let BELL = { items:[], at:0 }, NOTIFY = null;   // NOTIFY = hub_notify_mine() (My settings > Notifications, 2026-11-05)
+window.bellLoad = (f) => bellLoad(f);
 async function bellLoad(force){
   if(!ME || (!force && Date.now() - BELL.at < 60000)) return; BELL.at = Date.now();
   const has = k => DESKS.some(x => x.key === k), today = new Date().toLocaleDateString("en-CA"), it = [];
@@ -788,6 +789,7 @@ async function bellLoad(force){
   const sq = sqr.data || [], sqAsk = sq.filter(r => r.role === "asked_me" && r.status === "asked"), sqDec = sq.filter(r => r.can_decide);
   if(sqAsk.length) it.push({ ic:"🤝", t:`${sqAsk.map(r => r.who.split(" ")[0]).slice(0, 2).join(" and ")} asked you to ${sqAsk.length === 1 ? (sqAsk[0].kind === "cover" ? "cover a shift" : "trade shifts") : "trade or cover shifts"}`, s:"Say yes or no", href:"#/cal_off" });
   if(sqDec.length) it.push({ ic:"🗓", t:`${sqDec.length} shift change${sqDec.length === 1 ? "" : "s"} waiting for you`, s:"Approve or say no", href:"#/cal_off", k:"bell_timeoff" });
+  if(window.otBellItems){ const ot = await window.otBellItems().catch(() => []); it.push(...ot); }   // staffing.js: close to 40 h (was a banner until 2026-11-06)
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
   if(ans.length) it.push({ ic:"📬", t:`An admin answered ${ans.length === 1 ? "your question" : ans.length + " of your questions"}`, s:"Open Penny to read it", penny:true, k:"bell_answers" });
