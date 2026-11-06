@@ -877,6 +877,20 @@ function vJobs(){
   return h;
 }
 function chip(group,key,label,n){ var on=!!S.ui[group][key]; return '<button class="chip" data-chip="'+group+'" data-k="'+key+'" aria-pressed="'+on+'">'+esc(label)+'<span class="n">'+n+'</span></button>'; }
+/* Brivo alerts (2026-11-06, Brandon): the feed folds a home's Brivo emails into ONE job a day; "Got it - scheduled" folds
+   later alerts at that home into this job until the date picked (no new jobs, no new Breezeway task or Slack DM). */
+var BQK={temperature:"temperature",gateway:"gateway offline","low-battery":"low battery"};
+function brivoBox(j){ if(!j.brivo||!j.prop||!BQK[j.brivo]) return "";
+  var e=S.edits[sid(j.id)]||{}, q=e.brivoQuiet, t=today(), h="";
+  var tm=(j.alertTimes||[]).map(function(x){ var d=new Date(x); return isNaN(d)?"":d.toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); }).filter(Boolean);
+  if((j.alerts||1)>1) h+='<div class="infobox"><b>Brivo sent '+j.alerts+' alerts</b> for this — they\'re all on this one job'+(tm.length?': '+esc(tm.join(" · ")):'')+'.</div>';
+  if(q && q.until>=t) return h+'<div class="okbox"><b>✓ Got it — scheduled</b> by '+esc(nameFor(q.by)||q.by||"")+' '+esc(fmtD(new Date(q.at||Date.now()).toISOString()))+(q.note?': '+esc(q.note):'')+
+    '<br>To be done '+(q.start&&q.start!==q.until?esc(fmtD(q.start))+' – ':'by ')+esc(fmtD(q.until))+'. More Brivo '+esc(BQK[j.brivo])+' alerts at '+esc(j.prop)+' stay on this job until then — no new jobs or reminders. <button class="btn sm ghost" data-act="bqundo" style="margin-left:6px">Undo</button></div>';
+  if(S.ui.bqOpen===j.id) return h+'<div class="warnbox"><b>Got it — scheduled.</b> Say what was done or scheduled:<textarea id="bq_note" rows="2" style="width:100%;margin:6px 0" placeholder="e.g. Chris checking the thermostat today at 2"></textarea>'+
+    'Getting it done between <input type="date" id="bq_from" value="'+t+'" min="'+t+'"> and <input type="date" id="bq_until" value="'+addDays(t,1)+'" min="'+t+'">'+
+    '<div class="note" style="color:inherit;margin-top:4px">More '+esc(BQK[j.brivo])+' alerts at '+esc(j.prop)+' stay on this job (no new jobs or reminders) through the end date.</div>'+
+    '<div style="margin-top:8px"><button class="btn sm pri" data-act="bqsave">Save</button> <button class="btn sm ghost" data-act="bqcancel">Cancel</button></div></div>';
+  return h+'<div style="margin:6px 0 10px"><button class="btn sm pri" data-act="bqopen">✓ Got it — scheduled</button> <span class="muted">stops more alerts and reminders for this home</span></div>'; }
 function jobDetail(j){
   if(!j) return '<div class="empty">Pick a job.</div>';
   var os=j.prop?ownerStay(j.prop):null, t=today();
@@ -890,6 +904,7 @@ function jobDetail(j){
   else if(os && daysBetween(t,os.in)<=14) h+='<div class="infobox">Owner arrives '+esc(fmtD(os.in))+' (until '+esc(fmtD(os.out))+'). Finish before then if you can.</div>';
   if(photosFor(j).length) h+='<div class="block"><h4>Photos from Breezeway</h4>'+thumbs(j,4,true,120)+'</div>';
   var bp=(S.edits[sid(j.id)]||{}).bwPush; if(bp) h+='<div class="'+(bp.ok?'okbox':'stopbox')+'"><b>Breezeway:</b> '+esc(bp.msg||'')+' <span class="muted">· '+esc(new Date(bp.at).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))+'</span>'+(bp.ok?'':' — fix it in Breezeway or try again')+'</div>';
+  h+=brivoBox(j);
   var bs=bwState(j);
   if(bs==="on"||bs==="done"){ var b=j.bw?j.bw.t:null;
     h+='<div class="'+(bs==="done"?"okbox":"infobox")+'"><b>'+(bs==="done"?"Done in Breezeway":"In Breezeway")+'</b>'+(b?': <a href="'+esc(b.srcUrl)+'" target="_blank" rel="noopener">'+esc(b.title)+'</a> · '+esc(b.status==="done"?("finished "+fmtD(b.finished)+(b.doneByName?" by "+b.doneByName:"")):("due "+fmtD(b.due)+(b.who?" · "+b.who:"")))+
@@ -4572,6 +4587,15 @@ document.addEventListener("click",function(ev){
       return editJob(j,{status:fv("e_status"),who:fv("e_who"),vendor:fv("e_vendor"),due:fv("e_due"),prop:fv("e_prop"),cost:fv("e_cost"),estimate:fv("e_est"),
         doneBy:fv("e_status")==="done"&&j.status!=="done"?S.me:(S.edits[sid(j.id)]||{}).doneBy||"",
         doneAt:fv("e_status")==="done"&&j.status!=="done"?Date.now():(S.edits[sid(j.id)]||{}).doneAt||0}).then(function(){ toast("Saved"); });
+    case "bqopen": if(!j) return; S.ui.bqOpen=j.id; return render();
+    case "bqcancel": S.ui.bqOpen=""; return render();
+    case "bqsave": { if(!j||!need()) return; var bn=fv("bq_note"), bs0=fv("bq_from")||today(), bu=fv("bq_until")||bs0; if(!bn){ toast("Say what was scheduled first"); return; }
+      if(bu<bs0){ toast("The end date is before the start date"); return; } if(bu>addDays(today(),30)){ toast("Pick an end date within 30 days"); return; }
+      var bc=S.edits[sid(j.id)]||{}, bnow=Date.now();
+      return editJob(j,{status:j.status==="done"?"done":"scheduled",brivoQuiet:{home:j.prop,kind:j.brivo,from:(j.created||today()),start:bs0,until:bu,note:bn,by:S.me,at:bnow,job:j.id},
+        notes:(bc.notes||[]).concat([{by:S.me,at:bnow,text:"Got it — scheduled: "+bn+" (to be done "+(bs0!==bu?fmtD(bs0)+" – ":"by ")+fmtD(bu)+"; Brivo alerts at "+j.prop+" quiet until then)"}])}).then(function(){ S.ui.bqOpen=""; toast("Saved — more Brivo alerts at "+j.prop+" stay on this job until "+fmtD(bu)); }); }
+    case "bqundo": { if(!j||!need()) return; var bc2=S.edits[sid(j.id)]||{};
+      return editJob(j,{brivoQuiet:null,notes:(bc2.notes||[]).concat([{by:S.me,at:Date.now(),text:"Brivo alerts back on (the 'got it' was undone)"}])}).then(function(){ toast("Alerts back on — new ones make a job again"); }); }
     case "donejob": if(!j) return; return editJob(j,{status:"done",doneBy:S.me,doneAt:Date.now()}).then(function(){ toast(j.src==="breezeway"||(S.bwq[sid(j.id)]||{}).status==="created"?"Marked done — the hub closes it in Breezeway within a minute":"Marked done — close it in "+(SRCNAME[j.src]||"its app")+" too"); });
     case "notejob": if(!j) return; var tx=fv("e_note"); if(!tx) return; var cur=S.edits[sid(j.id)]||{};
       return editJob(j,{notes:(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:tx}])}).then(function(){ toast("Note added"); });
