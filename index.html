@@ -764,18 +764,22 @@ async function bellLoad(force){
   if(!ME || (!force && Date.now() - BELL.at < 60000)) return; BELL.at = Date.now();
   const has = k => DESKS.some(x => x.key === k), today = new Date().toLocaleDateString("en-CA"), it = [];
   const q = (p) => Promise.resolve(p).then(r => r, () => ({}));
-  const [tips, chk, off, ppl, fb] = await Promise.all([
+  const [tips, chk, off, ppl, fb, sqr] = await Promise.all([
     q(sb.from("penny_tips").select("id, title, rule", { count:"exact" }).eq("active", true).eq("status", "new").order("due", { ascending:true, nullsFirst:false }).limit(3)),
     q(sb.rpc("hub_checks_mine")),
     has("cal_off") ? q(sb.from("hub_timeoff_requests").select("user_id").eq("status", "pending")) : {},
     has("cal_off") ? q(sb.rpc("cal_people")) : {},
-    q(sb.rpc("hub_feedback_board"))]);
+    q(sb.rpc("hub_feedback_board")),
+    has("cal_off") ? q(sb.rpc("sched_req_list")) : {}]);   // hub_sched_adjust.sql (2026-11-06)
   if(!NOTIFY){ const n = await q(sb.rpc("hub_notify_mine")); NOTIFY = n.data || { items:[] }; }
   if(tips.count) it.push({ ic:"💡", t:`Penny has ${tips.count} tip${tips.count === 1 ? "" : "s"} for you`, s:(tips.data || []).map(x => x.title).slice(0, 2).join(" · "), href:"#/home", k:"bell_tips" });
   const open = (chk.data || []).filter(c => !c.run || !["ok","done"].includes(c.run.status));
   if(open.length) it.push({ ic:"☑️", t:`${open.length} check${open.length === 1 ? "" : "s"} to do${open.some(c => c.overdue) ? " (overdue)" : " today"}`, s:open.map(c => c.title).slice(0, 2).join(" · "), href:"#/home", k:"bell_checks" });
   const myId = ((ppl.data || []).find(p => p.name === ME.name) || {}).id, nWait = (off.data || []).filter(r => r.user_id !== myId).length;
   if(nWait) it.push({ ic:"🌴", t:`${nWait} time-off request${nWait === 1 ? "" : "s"} waiting for you`, s:"Approve or say no", href:"#/cal_off", k:"bell_timeoff" });
+  const sq = sqr.data || [], sqAsk = sq.filter(r => r.role === "asked_me" && r.status === "asked"), sqDec = sq.filter(r => r.can_decide);
+  if(sqAsk.length) it.push({ ic:"🤝", t:`${sqAsk.map(r => r.who.split(" ")[0]).slice(0, 2).join(" and ")} asked you to ${sqAsk.length === 1 ? (sqAsk[0].kind === "cover" ? "cover a shift" : "trade shifts") : "trade or cover shifts"}`, s:"Say yes or no", href:"#/cal_off" });
+  if(sqDec.length) it.push({ ic:"🗓", t:`${sqDec.length} shift change${sqDec.length === 1 ? "" : "s"} waiting for you`, s:"Approve or say no", href:"#/cal_off", k:"bell_timeoff" });
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
   if(ans.length) it.push({ ic:"📬", t:`An admin answered ${ans.length === 1 ? "your question" : ans.length + " of your questions"}`, s:"Open Penny to read it", penny:true, k:"bell_answers" });
