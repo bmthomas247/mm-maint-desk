@@ -580,6 +580,7 @@ async function queue(v){
     <div class="rhead"><div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${RI.list}</span></div>
       <div class="grow"><h1>Moose Check lists</h1><div class="sub" id="rq_sub"></div></div>
       <div class="rhbtns"><div class="rsync" title="Steps tick themselves as these update">${RI.sync}<div><b>Data sync</b><small>Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""}</small></div></div>
+      <button class="deskbtn" id="rq_new" type="button" style="cursor:pointer;font-family:inherit" title="Open the check list for a Track reservation, even one booked a minute ago">${RSV('<path d="M12 5v14M5 12h14"/>')}<span>Start a check list</span></button>
       <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a></div></div>
     ${B.canMgr && (B.asks || []).some(a => a.status === "open") ? `<div class="card" style="border-color:var(--amber)"><b>🙋 Waiting on a manager</b> <span class="muted">· reply in Slack or open the check list</span>
       ${B.asks.filter(a => a.status === "open").map(a => { const st = B.stays.find(x => x.res === a.res) || {};
@@ -597,6 +598,7 @@ async function queue(v){
       <div class="rchips" id="rq_held" style="margin:8px 0 0"></div></div>
     <div id="rqbody"></div></div>`;
   $("#rq_q").oninput = e => { F.q = e.target.value; draw(); };
+  $("#rq_new").onclick = () => startList();
   F.chan = "";   // Brandon 2026-11-03: Type drop-down removed (the colored booking buttons do the same)
   $("#rq_a").onchange = e => { F.area = e.target.value; draw(); };
   $("#rq_by").onchange = e => { F.by = e.target.value; draw(); };
@@ -747,6 +749,48 @@ async function charge(s, v, res){
     body.innerHTML = c.ok ? `<p>✅ Charged <b>$${esc(Number(c.charged).toLocaleString("en-US", { minimumFractionDigits:2 }))}</b> to the card on file.${c.payment ? ` Track payment #${esc(c.payment)}.` : ""}</p><p class="muted" style="margin:0">It shows in Track now; the check list catches up on the next pull.</p>`
       : `<p>${c.unknown ? "⚠️" : "❌"} ${esc(c.error || "Not charged.")}</p>`;
     m.querySelector("#rch_x").onclick = async () => { close(); await load(true); card(v, res); };
+  };
+}
+
+/* ---------- + Start a check list (Brandon 2026-11-06): type a Track res #. Already in the hub = open it; otherwise res_pull.py on the office PC
+   reads that one stay from Track (hub_res_pull.sql, about a minute) and then it opens. Track can't be booked from here: book in Track first. */
+function startList(){
+  document.getElementById("rnewm")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal on" id="rnewm"><div class="card" style="text-align:left;max-width:440px">
+    <h3 style="margin:0 0 6px">Start a check list</h3>
+    <p class="muted" style="margin:0 0 10px">Book it in Track first, then type its reservation number. If the hub doesn't have it yet, it gets it from Track now (about a minute).</p>
+    <label class="field"><span>Track reservation #</span><input id="rnew_q" inputmode="numeric" autocomplete="off" placeholder="e.g. 321439"></label>
+    <div id="rnew_b" style="margin-top:8px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn small" id="rnew_x" type="button">Cancel</button><button class="btn small primary" id="rnew_go" type="button">Start</button></div></div></div>`);
+  const m = document.getElementById("rnewm"), q = m.querySelector("#rnew_q"), body = m.querySelector("#rnew_b"), go = m.querySelector("#rnew_go");
+  let stop = false; const close = () => { stop = true; m.remove(); };
+  m.querySelector("#rnew_x").onclick = close; m.onclick = e => { if(e.target === m) close(); };
+  const say = (h, bad) => body.innerHTML = `<p style="margin:0;${bad ? "color:var(--red,#c0392b)" : ""}">${h}</p>`;
+  const open = res => { close(); location.hash = "#/reservations/" + encodeURIComponent(res); };
+  const has = res => B && B.stays.some(s => String(s.res) === res);
+  q.onkeydown = e => { if(e.key === "Enter") go.click(); }; setTimeout(() => q.focus(), 30);
+  go.onclick = async () => {
+    const res = (q.value || "").replace(/\D/g, "");
+    if(!/^\d{3,9}$/.test(res)) return say("Type the Track reservation number (numbers only).", true);
+    go.disabled = true; q.disabled = true; say("Looking for #" + esc(res) + "…");
+    const again = () => { go.disabled = false; q.disabled = false; };
+    try {
+      if(has(res) || (await load(true), has(res))) return open(res);
+      const r = await sb.rpc("res_pull_request", { p_res:res });
+      if(r.error){ again(); return say(esc(window.niceErr ? niceErr(r.error) : r.error.message), true); }
+      say("Getting #" + esc(res) + " from Track… This usually takes under a minute. You can leave this open.");
+      const t0 = Date.now();
+      while(!stop && Date.now() - t0 < 4 * 60000){
+        await new Promise(ok => setTimeout(ok, 4000)); if(stop) return;
+        const st = await sb.rpc("res_pull_status", { p_id:r.data });
+        const d = st.data || {};
+        if(d.status === "done"){ await load(true);
+          if(has(res)) return open(res);
+          again(); return say("Got #" + esc(res) + " from Track, but it doesn't get a check list here (for example a lease or a stay the hub leaves out).", true); }
+        if(d.status === "not_found" || d.status === "failed"){ again(); return say(esc(d.note || "Couldn't get it from Track."), true); }
+      }
+      if(!stop){ again(); say("Still waiting on the office computer. It will show on Check lists as soon as it's in. Try again in a few minutes.", true); }
+    } catch(e){ again(); say(esc(window.niceErr ? niceErr(e) : e.message), true); }
   };
 }
 
