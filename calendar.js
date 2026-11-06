@@ -330,7 +330,7 @@ async function evCal(v, key){
   const draw = () => {
     const sel = ST.sel[key], day = items(sel).sort((x, y) => (x.start || "").localeCompare(y.start || ""));
     const addBtns = isMe ? `<button class="btn small primary" data-add="event">+ Event</button><button class="btn small" data-sched>📅 Schedule a meeting</button><button class="btn small" data-blinks>🔗 Booking links</button>`
-      : isOff ? (boss ? `<button class="btn small primary" data-add="event">+ Work event</button>` : "") + `<a class="btn small" href="#/cal_off" data-askoff>🗓 Schedule adjustment</a><button class="btn small" data-add="out">I'm out</button><button class="btn small" data-add="working">I'm working</button>` : "";
+      : isOff ? (boss ? `<button class="btn small primary" data-add="event">+ Work event</button>` : "") + `<a class="btn small" href="#/cal_off" data-askoff>🌴 Ask for time off</a><button class="btn small" data-add="out">I'm out</button><button class="btn small" data-add="working">I'm working</button>` : "";
     const detail = isRes ? resDetail(stays, sel) : `<div class="card list"><b style="font-size:16px">${esc(fday(sel))}</b>${day.length ? day.map(x => `<div class="it"><span class="d">${x.start ? ftime(x.start.slice(0, 5)) + (x.end ? "–" + ftime(x.end.slice(0, 5)) : "") : "All day"}</span><span style="flex:1"><a ${attrs(Object.assign({}, x, { drag:false }))}><b>${esc(x.title)}</b></a>${x.sub ? ` <span class="muted">· ${esc(x.sub)}</span>` : ""}</span>${x.join ? `<a class="btn small primary" href="${esc(x.join)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}</div>`).join("") : `<p class="muted" style="margin:6px 0 0">Nothing on this day.</p>`}</div>`;
     const main = body(key, items, canAdd, !isRes) + (isRes ? `<p class="muted" style="font-size:12px">Source: ${esc((sr && sr.data && sr.data.source) || "Track reservations")}. Guest names only; contact info stays on Home for the teams that have it.</p>` : "");
     v.innerHTML = `<div class="page cal wide">${tabs(key)}${calNav(key, isRes ? "Reservations" : isOff ? "Office" : "My calendar", addBtns)}
@@ -614,89 +614,12 @@ function whoPanel(ppl, evs, sel, ox, fn){
       <p class="muted" style="font-size:11.5px;margin:6px 0 0">Working = on the schedule, clocked in today in Hubstaff ("On the clock"), or marked working here. Out = approved Hubstaff time off or marked out here.</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px;flex:1">How to reach someone</b></div>
       <input id="ppq" type="search" placeholder="Search name, title or team" style="margin:6px 0">
-      ${ppl.filter(p => p.mgr || inn.includes(p)).map(person).join("") || `<p class="muted" style="margin:4px 0">Nobody working.</p>`}
-      <p class="muted" style="font-size:11.5px;margin:6px 0 0">Managers and the people working that day. Titles and extensions: Moose Office page (Property Details ▸ Moose Office). Work email from the hub sign-in list.</p></div>`;
-}
-
-/* ---------- Schedule adjustment (hub_sched_adjust.sql, Brandon 2026-11-06): change my shift / trade a shift. Time off stays timeoff_request.
-   change -> manager; swap/cover -> the coworker says yes, then the manager. Approved = written onto the hub schedule. ---------- */
-const shTxt = a => (a || []).map(x => ftime(x.start) + "–" + ftime(x.end)).join(", ") || "off";
-const sqWhat = r => r.kind === "change" ? `<b>${esc(r.who)}</b>: ${esc(fday(r.day))} from ${esc(shTxt(r.my_shifts))} to <b>${esc(shTxt(r.want_shifts))}</b>`
-  : r.kind === "cover" ? `<b>${esc(r.other)}</b> covers <b>${esc(r.who)}</b>'s ${esc(fday(r.day))} shift (${esc(shTxt(r.my_shifts))})`
-  : r.day === r.other_day ? `<b>${esc(r.who)}</b> and <b>${esc(r.other)}</b> swap shifts on ${esc(fday(r.day))}: ${esc(r.who)} works ${esc(shTxt(r.other_shifts))}, ${esc(r.other)} works ${esc(shTxt(r.my_shifts))}`
-  : `<b>${esc(r.who)}</b> works ${esc(r.other)}'s ${esc(fday(r.other_day))} (${esc(shTxt(r.other_shifts))}); <b>${esc(r.other)}</b> works ${esc(r.who)}'s ${esc(fday(r.day))} (${esc(shTxt(r.my_shifts))})`;
-const sqPill = r => ({ asked:`<span class="pill amber">Waiting on ${esc((r.other || "").split(" ")[0])}</span>`, pending:`<span class="pill amber">Waiting on a manager</span>`,
-  approved:`<span class="pill green">Approved</span>`, denied:`<span class="pill red">Not approved</span>`, declined:`<span class="pill red">${esc((r.other || "").split(" ")[0])} said no</span>`,
-  cancelled:`<span class="pill">Cancelled</span>` })[r.status] || "";
-function sqRow(r, acts){
-  return `<div style="padding:8px 0;border-top:1px solid var(--line)"><div>${sqWhat(r)} ${sqPill(r)}</div>
-    ${r.note ? `<div class="muted" style="font-size:12.5px">“${esc(r.note)}”</div>` : ""}${r.other_note ? `<div class="muted" style="font-size:12.5px">${esc((r.other || "").split(" ")[0])}: “${esc(r.other_note)}”</div>` : ""}
-    ${r.decided_by && ["approved","denied"].includes(r.status) ? `<div class="muted" style="font-size:12.5px">by ${esc(r.decided_by)}${r.response ? ": " + esc(r.response) : ""}</div>` : ""}
-    ${acts ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${acts}</div>` : ""}</div>`;
-}
-function sqCards(rs){
-  const ask = rs.filter(r => r.role === "asked_me" && r.status === "asked"), dec = rs.filter(r => r.can_decide);
-  const mine = rs.filter(r => r.role === "mine" && (["asked","pending"].includes(r.status) || r.day >= today()));
-  const done = rs.filter(r => r.role === "team" && !r.can_decide && ["approved","denied"].includes(r.status)).slice(-15);
-  return (ask.length ? `<div class="card" style="border-left:4px solid var(--amber,#8a5a00)"><b style="font-size:16px">A coworker asked you (${ask.length})</b>
-      ${ask.map(r => sqRow(r, `<button class="btn small primary" data-sqyes="${r.id}">Yes, I'll do it</button><button class="btn small" data-sqno="${r.id}">No</button>`)).join("")}
-      <p class="muted" style="font-size:12px;margin:6px 0 0">If you say yes, it goes to your manager to approve.</p></div>` : "")
-    + (dec.length ? `<div class="card" style="border-left:4px solid var(--amber,#8a5a00)"><b style="font-size:16px">Shift changes waiting for you (${dec.length})</b>
-      ${dec.map(r => sqRow(r, `<button class="btn small primary" data-sqok="${r.id}">Approve</button><button class="btn small" data-sqden="${r.id}">Say no</button>`)).join("")}
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Approve puts it straight onto the schedule.</p></div>` : "")
-    + (mine.length ? `<div class="card"><b style="font-size:16px">Your shift changes and trades</b>
-      ${mine.map(r => sqRow(r, ["asked","pending"].includes(r.status) ? `<button class="btn small" data-sqx="${r.id}">Cancel</button>` : "")).join("")}</div>` : "")
-    + (done.length ? `<details class="card"><summary><b style="font-size:16px">Shift changes decided lately</b></summary>${done.map(r => sqRow(r)).join("")}</details>` : "");
-}
-function sqWire(v, reload){
-  const go = async (fn, args) => { const r = await sb.rpc(fn, args); if(r.error) alert(window.niceErr ? niceErr(r.error) : r.error.message); else reload(); };
-  v.querySelectorAll("[data-sqyes]").forEach(b => b.onclick = () => go("sched_req_answer", { p_id:+b.dataset.sqyes, p_yes:true, p_note:null }));
-  v.querySelectorAll("[data-sqno]").forEach(b => b.onclick = () => { const n = prompt("Want to say why? (optional)"); if(n !== null) go("sched_req_answer", { p_id:+b.dataset.sqno, p_yes:false, p_note:n }); });
-  v.querySelectorAll("[data-sqok]").forEach(b => b.onclick = () => go("sched_req_decide", { p_id:+b.dataset.sqok, p_ok:true, p_response:null }));
-  v.querySelectorAll("[data-sqden]").forEach(b => b.onclick = () => { const n = prompt("Short reason for saying no (they'll see it):"); if(n && n.trim()) go("sched_req_decide", { p_id:+b.dataset.sqden, p_ok:false, p_response:n.trim() }); });
-  v.querySelectorAll("[data-sqx]").forEach(b => b.onclick = () => confirm("Cancel this request?") && go("sched_req_cancel", { p_id:+b.dataset.sqx }));
-}
-async function sqForm(kind, reload){
-  const tr = kind === "trade", myId = ((await people()).find(p => p.name === ME.name) || {}).id;
-  const mates = tr ? ((await sb.rpc("sched_req_people")).data || []) : [];
-  const shiftsOn = async (uid, d) => { if(!uid || !d) return []; const r = await sb.rpc("sched_get", { p_from:d, p_to:d });
-    return ((r.data || {}).shifts || []).filter(x => x.user_id === uid && x.day === d); };
-  const card = $("#tocard"), d0 = addD(today(), 1);
-  card.innerHTML = `<div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${tr ? "🤝 Trade a shift" : "🕑 Change my shift"}</h2><button class="btn small" id="tox" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
-    ${tr ? `<label class="field"><span>What kind of trade</span><select id="sq_k"><option value="swap">Swap: I work their shift, they work mine</option><option value="cover">Cover: they work my shift, I'm off</option></select></label>` : ""}
-    <label class="field"><span>${tr ? "My day" : "Day"}</span><input type="date" id="sq_d" value="${esc(d0)}" min="${esc(today())}"></label>
-    <p class="muted" id="sq_my" style="font-size:13px;margin:-4px 0 8px"></p>
-    ${tr ? `<label class="field"><span>Coworker</span><select id="sq_o"><option value="">Pick someone…</option>${mates.map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("")}</select></label>
-      <div id="sq_od"><label class="field"><span>Their day (the shift I'd work)</span><input type="date" id="sq_d2" value="${esc(d0)}" min="${esc(today())}"></label>
-      <p class="muted" id="sq_their" style="font-size:13px;margin:-4px 0 8px"></p></div>`
-    : `<div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1"><span>New start</span><input type="time" id="sq_s" value="09:00"></label><label class="field" style="flex:1"><span>New end</span><input type="time" id="sq_e" value="17:00"></label></div>
-      <p class="muted" style="font-size:12px;margin:-4px 0 8px">For a day off, ask for time off instead. A shift that ends after midnight counts on the day it starts.</p>`}
-    <label class="field"><span>Note (optional)</span><textarea id="sq_n" style="min-height:56px" maxlength="500"></textarea></label>
-    <button class="btn primary wide" id="sq_go">${tr ? "Ask my coworker" : "Send to my manager"}</button><p class="muted" id="sq_m"></p>`;
-  const show = async () => {
-    $("#sq_my").textContent = "Your shift that day: " + shTxt(await shiftsOn(myId, $("#sq_d").value));
-    if(tr){ const sw = $("#sq_k").value === "swap", o = $("#sq_o").value; $("#sq_od").style.display = sw ? "" : "none";
-      const nm = (mates.find(m => m.id === o) || {}).name;
-      $("#sq_their").textContent = o ? `${nm}'s shift that day: ` + shTxt(await shiftsOn(o, $("#sq_d2").value)) : ""; } };
-  ["#sq_d", "#sq_k", "#sq_o", "#sq_d2"].forEach(sel => { const e = $(sel); if(e) e.addEventListener("change", show); }); show();
-  $("#tom").classList.add("on"); $("#tox").onclick = () => $("#tom").classList.remove("on");
-  $("#sq_go").onclick = async () => {
-    const k = tr ? $("#sq_k").value : "change", d = $("#sq_d").value;
-    if(!d) return $("#sq_m").textContent = "Pick the day.";
-    if(tr && !$("#sq_o").value) return $("#sq_m").textContent = "Pick a coworker.";
-    $("#sq_go").disabled = true;
-    const r = await sb.rpc("sched_req_add", { p_kind:k, p_day:d, p_shifts:tr ? null : [{ start:$("#sq_s").value, end:$("#sq_e").value }],
-      p_other:tr ? $("#sq_o").value : null, p_other_day:k === "swap" ? $("#sq_d2").value || d : null, p_note:$("#sq_n").value });
-    $("#sq_go").disabled = false;
-    if(r.error) return $("#sq_m").textContent = window.niceErr ? niceErr(r.error) : r.error.message;
-    $("#tom").classList.remove("on"); reload(); };
+      ${ppl.map(person).join("")}
+      <p class="muted" style="font-size:11.5px;margin:6px 0 0">Titles and extensions: Moose Office page (Property Details ▸ Moose Office). Work email from the hub sign-in list.</p></div>`;
 }
 
 /* ---------- Time off (hub_timeoff.sql). Balances + requests are RLS-limited to you, the people you approve, and admins. ---------- */
 const TK = { pto:"Paid time off", unpaid:"Unpaid time off", sick:"Sick" };
-(() => { if(document.getElementById("sqcss")) return; const st = document.createElement("style"); st.id = "sqcss";
-  st.textContent = ".sqpick{display:flex!important;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;margin:0 0 8px;padding:12px 14px;height:auto;white-space:normal}.sqpick b{font-size:15px}.sqpick span{font-size:12.5px;color:var(--muted,#667);font-weight:400}";
-  document.head.appendChild(st); })();
 const isSal = p => /salaried/i.test((p && p.name) || "");
 /* which balances a person sees: salaried -> only the salaried policy; others -> paid + unpaid (never sick) */
 const shownBals = (bs, pol) => { const sal = bs.some(b => isSal(pol(b.policy_id))); return bs.filter(b => sal ? isSal(pol(b.policy_id)) : pol(b.policy_id).kind !== "sick"); };
@@ -719,9 +642,7 @@ async function timeOff(v){
   v.innerHTML = `<div class="page cal"><p class="muted">Loading…</p></div>`;
   const [ppl, br, pr, rr, ar] = await Promise.all([people(), sb.from("hub_pto_balances").select("*"), sb.from("hub_pto_policies").select("*"),
     sb.from("hub_timeoff_requests").select("*").order("day", { ascending:false }).limit(300), sb.from("hub_timeoff_approvers").select("*").eq("off", false)]);
-  const [bor, sqr] = await Promise.all([sb.from("hub_pto_blackouts").select("*").eq("off", false).gte("to_day", today()).order("from_day"),   // hub_pto_rules.sql (2026-11-06)
-    sb.rpc("sched_req_list")]);   // hub_sched_adjust.sql (2026-11-06): shift changes + trades
-  const sreq = sqr.data || [];
+  const bor = await sb.from("hub_pto_blackouts").select("*").eq("off", false).gte("to_day", today()).order("from_day");   // hub_pto_rules.sql (2026-11-06)
   if(current() !== "cal_off") return;
   const blk = bor.data || [], boDays = b => b.from_day === b.to_day ? fday(b.from_day) : fday(b.from_day) + " – " + fday(b.to_day);
   const myId = (ppl.find(p => p.name === ME.name) || {}).id, who = id => (ppl.find(p => p.id === id) || {}).name || "Someone";
@@ -749,8 +670,7 @@ async function timeOff(v){
   const teamRow = id => teamB.filter(b => b.user_id === id).sort((x, y) => (pol(y.policy_id).paid ? 1 : 0) - (pol(x.policy_id).paid ? 1 : 0)).map((b, i) =>
     `<tr><td>${i ? "" : `<b>${esc(who(id))}</b>`}</td><td>${esc(pol(b.policy_id).name || "")}</td><td>${hrs(b.hours)}${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}</td><td>${pol(b.policy_id).policy_type === "hours_worked" ? hrs(b.worked_ytd) : ""}</td><td>${b.earned_ytd != null ? hrs(b.earned_ytd) : ""}</td><td>${hrs(b.used_ytd)}</td></tr>`).join("");
   v.innerHTML = `<div class="page cal">
-    <div class="chead"><h2>Request time off</h2><button class="btn primary" id="askoff">🗓 Schedule adjustment</button></div>
-    ${sqCards(sreq)}
+    <div class="chead"><h2>Request time off</h2><button class="btn primary" id="askoff">🌴 Ask for time off</button></div>
     ${approver && wait.length ? `<div class="card" style="border-left:4px solid var(--amber,#8a5a00)"><b style="font-size:16px">Waiting for you (${wait.length})</b>${table(wait, "wait")}</div>` : ""}
     <div class="card"><b style="font-size:16px">Your balances</b>
       ${myB.length ? `<div style="margin:8px 0;font-size:13px">See what you'll have by <input type="date" id="ptoby" value="${esc(by)}" style="width:auto;display:inline-block;min-height:32px"></div>
@@ -815,17 +735,8 @@ async function timeOff(v){
   v.querySelectorAll("[data-boed]").forEach(x => x.onclick = () => boEd(blk.find(b => b.id === +x.dataset.boed)));
   v.querySelectorAll("[data-booff]").forEach(x => x.onclick = () => { const b = blk.find(y => y.id === +x.dataset.booff);
     if(confirm(`Turn off the blackout "${b.name}"? (It's kept, not deleted.)`)) act("pto_blackout_set", { p_id:b.id, p_name:null, p_from:null, p_to:null, p_blocks:null, p_note:null, p_off:true }); });
-  const pick = () => {
-    $("#tocard").innerHTML = `<div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">Schedule adjustment</h2><button class="btn small" id="tox" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
-      <p class="muted" style="margin:4px 0 10px;font-size:13px">What do you need?</p>
-      <button class="btn wide sqpick" data-sq="off"><b>🌴 Time off</b><span>Paid or unpaid time off. Goes to your manager.</span></button>
-      <button class="btn wide sqpick" data-sq="change"><b>🕑 Change my shift</b><span>Different times on one of your days. Goes to your manager.</span></button>
-      <button class="btn wide sqpick" data-sq="trade"><b>🤝 Trade a shift</b><span>Swap days with a coworker, or ask them to cover your shift. They say yes first, then your manager.</span></button>`;
-    $("#tom").classList.add("on"); $("#tox").onclick = () => $("#tom").classList.remove("on");
-    $("#tocard").querySelectorAll("[data-sq]").forEach(b => b.onclick = () => b.dataset.sq === "off" ? ask() : sqForm(b.dataset.sq, reload)); };
-  v.querySelector("#askoff").onclick = pick;
-  sqWire(v, reload);
-  if(ST.askOff){ ST.askOff = false; pick(); }
+  v.querySelector("#askoff").onclick = ask;
+  if(ST.askOff){ ST.askOff = false; ask(); }
 }
 
 /* ---------- Reports ▸ Team ▸ PTO (hub_pto_reports.sql): balances + requests (#/pto) and the math check (#/pto/check).
