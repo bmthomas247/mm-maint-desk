@@ -1617,7 +1617,10 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     '.coplace{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface-2);line-height:1.5}.coplace b{font-size:15px}'+
     '.counits{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}.counit{border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--surface)}.counit.off{opacity:.65}'+
     '.cuhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}.cuhd b{font-size:20px;letter-spacing:.5px}.cul{display:grid;grid-template-columns:96px 1fr;gap:6px;font-size:13px;padding:3px 0;border-top:1px solid var(--line-2)}.cul span{color:var(--muted)}'+
-    '@media (max-width:560px){.cotiles{grid-template-columns:1fr}.cotile{min-height:0}}</style>';
+    '.cooffice{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:14px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}'+
+    '.cooh{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cooh i{font-style:normal;font-size:22px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--surface-2)}.cooh b{font-size:16px}.cooh button{margin-left:auto}'+
+    '.cofs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 22px}.cof.w{grid-column:span 2}.cof span{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}.cof b{font-size:14px;line-height:1.45;font-weight:600}.cof .hint{font-size:11.5px}'+
+    '@media (max-width:560px){.cotiles{grid-template-columns:1fr}.cotile{min-height:0}.cof.w{grid-column:auto}}</style>';
   var veh='<div class="coact"><button class="btn sm ghost" data-cov="">+ Add vehicle</button></div>'+
     (on.length?'<div class="vtiles">'+on.map(tile).join("")+'</div>':'<div class="note">No vehicles recorded yet.</div>')+
     (off.length?'<details class="infocat" style="margin-top:8px"><summary>'+off.length+' retired</summary><div class="vtiles">'+off.map(tile).join("")+'</div></details>':'')+
@@ -1640,7 +1643,6 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var ov=coVal("office","addr").v.split("\n")[0], op=coVal("office","phone").v.split("\n")[0], oh=coVal("office","hours").v.split("\n")[0];
   var ws=coVal("social","web").v.split("\n")[0], lg=coVal("general","legal").v.split("\n")[0], su=coUnits().filter(coUnitOn);
   var T=[["veh","\ud83d\ude97","Vehicles",n(on.length,"vehicle","vehicles"),[on.slice(0,3).map(function(v){ return v.name||v.ymm; }).join(" · ")+(on.length>3?" +"+(on.length-3)+" more":"")],veh],
-    ["office","\ud83c\udfe2",CO_TITLES.office,"address, phone, email, hours",[ov,[op,oh].filter(Boolean).join(" · ")],coBlock("office")],
     ["storage","\ud83d\udce6",CO_TITLES.storage,n(su.length,"unit","units")+" at Protection Self Storage",[su.map(function(x){ return x.u; }).join(" · "),CO_FACTS.storePlaces.ps.addr],coStorage()],
     ["emp","\ud83d\udc65","Employees",D._staff?n(st.length,"person","people"):"the team",["Names, titles, phone extensions and who handles what"],emp],
     ["brand","\ud83c\udfa8","Logos & colors",n(cols.length,"color","colors")+" \u00b7 "+n(CO_FACTS.logos.length-1,"logo file","logo files"),['<div class="cosw">'+cols.slice(0,8).map(function(c){ return '<span style="background:'+esc(c.hex)+'"></span>'; }).join("")+'</div>'],brand],
@@ -1648,6 +1650,10 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
     ["general","\ud83d\udccb",CO_TITLES.general,"legal names, licenses, service area",[lg],coBlock("general")],
     ["bw","\ud83e\uddf0","Breezeway office",n(rec.length,"receipt check-in","receipt check-ins")+" this month",["General Moose jobs + daily receipts"],bwo]];
   var op2=S.ui.coTile||"", cur=T.filter(function(t){ return t[0]===op2; })[0];
+  var ofc=CO_FIELDS.office.map(function(f){ var x=coVal("office",f[0]); if(!x.v) return ""; var tel=f[0]==="phone", em=f[0]==="email";
+      var v=esc(x.v).replace(/\n/g,"<br>"); if(em) v=v.replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g,'<a href="mailto:$1">$1</a>'); if(tel) v=v.replace(/(\d{3}[-. ]\d{3}[-. ]\d{4})/g,function(m){ return '<a href="tel:'+m.replace(/\D/g,"")+'">'+m+'</a>'; });
+      return '<div class="cof'+(f[0]==="addr"||f[0]==="notes"?' w':'')+'"><span>'+esc(f[1])+'</span><b>'+v+'</b><div class="hint">'+coSrc(x.s)+'</div></div>'; }).join("");
+  h+='<section class="cooffice"><div class="cooh"><i>\ud83c\udfe2</i><b>'+esc(CO_TITLES.office)+'</b><button class="btn sm ghost" data-co="office">Edit</button></div><div class="cofs">'+(ofc||'<div class="note">Nothing recorded yet.</div>')+'</div></section>';
   h+='<div class="cotiles">'+T.map(function(t){ var o=t[0]===op2;
       return '<button class="cotile" data-cotile="'+t[0]+'" aria-pressed="'+o+'"><div class="cti"><i>'+t[1]+'</i><div><b>'+esc(t[2])+'</b><small>'+esc(t[3])+'</small></div></div>'+
         t[4].filter(Boolean).map(function(l,i){ return l.charAt(0)==="<"?l:'<div class="ctl'+(i?' m':'')+'">'+esc(l)+'</div>'; }).join("")+'<span class="ctgo">'+(o?'Close \u25b4':'Open \u25be')+'</span></button>'; }).join("")+'</div>'+
