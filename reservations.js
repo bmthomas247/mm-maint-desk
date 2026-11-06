@@ -716,7 +716,8 @@ async function card(v, res){
       ${(B.bwMissing || []).includes(s.unit) ? `<div class="rmoney"><span class="muted">Breezeway</span><span>This home has no Breezeway id in the hub's home list, so its tasks can't be checked here.</span></div>`
         : s.bw && s.bw.length ? `<div class="rmoney" style="display:block"><span class="muted">Breezeway, ${esc(day(addDay(s.arrive, -5)))} to ${esc(day(addDay(s.depart, 1)))}</span>
           ${s.bw.map(t => `<div style="display:flex;gap:8px;flex-wrap:wrap;padding:3px 0"><b style="min-width:92px">${esc(day(t.sd))}</b><span style="flex:1;min-width:140px">${esc(t.n)} <span class="muted">· ${esc(t.dp)}</span></span>
-            <span class="pill ${t.st === "done" ? "green" : t.st === "started" ? "blue" : ""}">${esc(t.st)}</span><span class="muted">${esc((t.who || []).join(", "))}</span></div>`).join("")}</div>`
+            <span class="pill ${t.st === "done" ? "green" : t.st === "started" ? "blue" : ""}">${esc(t.st)}</span><span class="muted">${esc((t.who || []).join(", "))}</span>${t.id && (t.dp === "housekeeping" || t.dp === "inspection") ? `<button class="btn small" data-bwnote="${esc(t.id)}" data-bwn="${esc(t.n)}" style="min-height:26px;padding:0 8px;font-size:12px" title="Add a note to this task in Breezeway">📝 Note</button>` : ""}</div>
+            <div class="rbwn" data-bwnotes="${esc(t.id)}"></div>`).join("")}</div>`
         : bwKnown(s) ? `<div class="rmoney"><span class="muted">Breezeway</span><span>No tasks at this home from 5 days before arrival to the day after checkout.</span></div>` : ""}
       ${s.brevo && s.brevo.extra ? `<div class="rmoney"><span class="muted">Extra guests</span><span>${s.brevo.extra} with an email in Autohost · <b>${s.brevo.inBrevo}</b> in Brevo "AH Guest of Guest"</span></div>` : ""}
       ${s.hk && s.hk.length ? `<div class="rmoney"><span class="muted">#housekeeping @Cheree</span>${s.hk.slice(-4).map(m => `<a href="${esc(m.link)}" target="_blank" rel="noopener">${esc(when(m.at))}${m.by ? " · " + esc(m.by) : ""} ↗</a>`).join("")}</div>` : ""}
@@ -774,6 +775,15 @@ async function card(v, res){
   v.querySelectorAll("[data-uaa]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); uaaPanel(s); });
   v.querySelectorAll("[data-copyform]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
     try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
+  // Note on a Breezeway cleaning / inspection task (Brandon 2026-11-06: checkout clean, owner pre-clean): res_bw_note -> Breezeway comment within a minute
+  const bwNotes = async () => { const r = await sb.rpc("res_bw_notes", { p_res:s.res }); (r.data || []).forEach(n => { const box = v.querySelector(`[data-bwnotes="${n.task}"]`); if(!box) return;
+    box.insertAdjacentHTML("beforeend", `<div class="muted" style="font-size:12.5px;padding:0 0 3px 100px">📝 “${esc(n.text)}” · ${esc(n.by || "")} · ${esc(when(n.at))} · ${n.status === "done" ? "in Breezeway ✓" : n.status === "failed" ? `<span style="color:var(--red,#c33)">not sent: ${esc(n.result || "")}</span>` : "on its way to Breezeway…"}</div>`); }); };
+  bwNotes();
+  v.querySelectorAll("[data-bwnote]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
+    const txt = prompt(`Note for the Breezeway task "${b.dataset.bwn}" (the cleaners see it in Breezeway):`); if(!txt || !txt.trim()) return;
+    b.disabled = true; const r = await sb.rpc("res_bw_note", { p_res:s.res, p_task:Number(b.dataset.bwnote), p_text:txt.trim() }); b.disabled = false;
+    if(r.error) return msg("Couldn't send the note: " + (window.niceErr ? niceErr(r.error) : r.error.message));
+    msg("Note sent to Breezeway ✓ (it shows on the task within a minute)"); v.querySelectorAll("[data-bwnotes]").forEach(x => x.innerHTML = ""); bwNotes(); });
   v.querySelectorAll("[data-charge]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); charge(s, v, res); });
   $("#rx_stage").onchange = e => set({ p_stage:e.target.value });
   // Extend / Cancel the stay buttons (2026-11-06): the extension + cancellation steps only show once someone taps one
