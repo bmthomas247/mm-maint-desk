@@ -44,6 +44,14 @@ const CCSS = `
 .cal .dn{font-weight:800;font-size:12.5px;display:inline-block;margin-bottom:2px} .cal .more{font-size:11px;color:var(--muted)}
 .cal .ev{display:block;font-size:11.5px;line-height:1.25;padding:1px 5px;border-radius:6px;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--moose-soft,#e5efe6);color:var(--moose-ink,#24452c);text-decoration:none}
 .cal .ev.mt,.cal .bk.mt{background:var(--blue-soft,#e6eef9);color:var(--blue,#1f4e8c);border-left-color:var(--blue,#1f4e8c)}
+.cal .ev.dec,.cal .bk.dec{opacity:.55;text-decoration:line-through}
+.cal .fb{padding:10px 12px;margin:8px 0} .cal .fbd{padding:6px 0;border-bottom:1px solid var(--line);font-size:13px} .cal .fbd:last-child{border-bottom:0}
+.cal .fbd>b{display:inline-block;min-width:96px} .cal .fbc{border:1px solid var(--forest,#1d3b2a);background:var(--card);color:var(--forest,#1d3b2a);border-radius:999px;padding:2px 9px;margin:2px 3px 2px 0;font-size:12.5px;min-height:0;cursor:pointer}
+.cal .fbc.sel{background:var(--forest,#1d3b2a);color:#fff} .cal .fbc.part{border-style:dashed;color:var(--muted);border-color:var(--muted)}
+.cal .fbr{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12.5px} .cal .fbr>span{flex:0 0 86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal .fbt{position:relative;flex:1;height:16px;border-radius:5px;background:var(--line)} .cal .fbt i{position:absolute;top:0;bottom:0;border-radius:4px}
+.cal .fbt i.w{background:var(--moose-soft,#cfe3d2)} .cal .fbt i.b{background:var(--muted,#7a857c);opacity:.75} .cal .fbt i.pk{border:2px solid var(--blue,#1f4e8c);background:transparent}
+.cal .fbh{display:flex;justify-content:space-between;margin-left:94px;font-size:10.5px;color:var(--muted)}
 .cal .ev.of,.cal .bk.of{background:var(--amber-soft,#fbf0dc);color:var(--amber,#8a5a00);border-left-color:var(--amber,#8a5a00)}
 .cal .ev.outp,.cal .bk.outp{background:var(--red-soft,#fbe7e5);color:var(--red,#b3261e);border-left-color:var(--red,#b3261e)}
 .cal .ev.work,.cal .bk.work{background:var(--moose-soft,#e5efe6);color:var(--moose-ink,#24452c)}
@@ -279,6 +287,8 @@ async function meetTiles(v){
 /* ---------- Reservations · Office · Personal ---------- */
 async function evCal(v, key){
   if(!ST.sel[key]) ST.sel[key] = today();
+  if(key === "cal_me"){ const ma = (location.hash.split("/")[2] || "").match(/^m(\d+)$/);   // #/cal_me/m<id> (bell + Slack DM links, hub_meet_e2e.sql)
+    if(ma){ history.replaceState(null, "", "#/cal_me"); const g = await sb.rpc("meet_get", { p_id:+ma[1] }); if(g && g.data){ ST.sel[key] = g.data.day; ST.openMeet = g.data.id; } } }
   const isRes = key === "cal_res", isOff = key === "cal_office", isMe = key === "cal_me";
   v.innerHTML = `<div class="page cal wide">${tabs(key)}<p class="muted">Loading…</p></div>`;
   const [a, b] = curRange(key);
@@ -310,8 +320,11 @@ async function evCal(v, key){
     const out = [];
     if(isRes || (isMe && layerOn("checkins"))){ stays.filter(x => x.in === s).forEach(x => out.push({ title:(x.owner ? "OWNER " : "") + "CHECK-IN " + x.unit + (x.guest ? " · " + x.guest : ""), cls:"ar", href:"#/cal_res" }));
       if(isRes) stays.filter(x => x.out === s).forEach(x => out.push({ title:"CHECK-OUT " + x.unit, cls:"dp", href:"#/cal_res" })); }
-    if(isMe) hubMeets.filter(m => m.day === s).forEach(m => out.push({ start:m.start, end:endTime(m.start, m.minutes), title:"📹 " + m.title,
-      sub:[m.guest_name ? "booked by " + m.guest_name : "", m.host_id !== myId ? "host " + (m.host || "").split(" ")[0] : ""].filter(Boolean).join(" · "), cls:"mt", mt:m.id, join:m.zoom_join, drag:!!(m.mine || ME.admin) }));
+    if(isMe) hubMeets.filter(m => m.day === s).forEach(m => { const inv = (m.staff || []).includes(myId) && !m.mine, a = inv ? (m.my_answer || {}).answer : null;
+      out.push({ start:m.start, end:endTime(m.start, m.minutes), title:(inv && !a ? "❔ " : a === "no" ? "Declined · " : "") + (m.virtual === false ? "👥 " : "📹 ") + m.title,
+      sub:[m.guest_name ? "booked by " + m.guest_name : "", m.host_id !== myId ? "host " + (m.host || "").split(" ")[0] : "", m.virtual === false && m.location ? m.location : "",
+        inv && !a ? "waiting for your answer" : a === "suggest" ? "you suggested another time" : ""].filter(Boolean).join(" · "),
+      cls:"mt" + (a === "no" ? " dec" : ""), mt:m.id, join:m.zoom_join, drag:!!(m.mine || ME.admin) }); });
     if(isMe){ mt.filter(x => x.day === s).forEach(x => out.push({ start:x.start, end:x.start && x.minutes ? endTime(x.start, x.minutes) : null, title:NAMES[x.meet] + " meeting", cls:"mt", sm:x.meet, smd:s }));
       const att = e => (e.attendees || []).includes(myId);   // office events you're going to show with your own events
       if(layerOn("personal")) mine.concat(evs.filter(e => e.cal === "office" && att(e))).filter(e => evOn(e, s)).forEach(e => out.push(e.cal === "office" ? Object.assign(evItem(e), { cls:"of" }) : evItem(e)));
@@ -353,6 +366,7 @@ async function evCal(v, key){
     v.querySelectorAll("[data-add]").forEach(bt => bt.onclick = () => form(null, { kind:bt.dataset.add }));
     v.querySelectorAll("[data-sched]").forEach(bt => bt.onclick = () => schedForm());
     if(ST.justMade){ const m = hubMeets.find(y => y.id === ST.justMade); ST.justMade = null; if(m) meetBox(m, true); }
+    if(ST.openMeet){ const m = hubMeets.find(y => y.id === ST.openMeet); ST.openMeet = null; if(m) meetBox(m); }
     v.querySelectorAll("[data-blinks]").forEach(bt => bt.onclick = () => linksBox());
     v.querySelectorAll("[data-mt]").forEach(el => el.addEventListener("click", x => x.preventDefault()));
     v.querySelectorAll("[data-askoff]").forEach(bt => bt.onclick = () => { ST.askOff = true; });
@@ -373,22 +387,79 @@ async function evCal(v, key){
   const lenOpts = (sel, list) => list.map(m => `<option value="${m}" ${m === sel ? "selected" : ""}>${m < 60 ? m + " min" : (m / 60) + (m === 60 ? " hour" : " hours")}</option>`).join("");
   const staffPick = (sel, id) => `<div class="field"><span>Also invite from Moose (optional; shows on their calendar)</span><div class="attp" id="${id}">${ppl.filter(p => p.id !== myId).map(p => `<label class="lyr"><input type="checkbox" data-st="${p.id}" ${(sel || []).includes(p.id) ? "checked" : ""}>${esc(p.name)}</label>`).join("")}</div></div>`;
   const picked = id => [...$("#" + id).querySelectorAll("[data-st]:checked")].map(x => x.dataset.st);
-  const zoomTxt = m => m.zoom_status === "made" ? `<a class="btn small primary" href="${esc(m.zoom_join)}" target="_blank" rel="noopener noreferrer">💻 Join on Zoom</a>`
-    : `<span class="pill amber">Zoom link ${m.zoom_status === "failed" ? "not made" : "coming"}</span> <span class="muted" style="font-size:12.5px">${esc(m.zoom_error || "")}</span> <button class="btn small" id="mz">Try again</button>`;
+  const zoomTxt = (m, can = true) => m.zoom_status === "made" ? `<a class="btn small primary" href="${esc(m.zoom_join)}" target="_blank" rel="noopener noreferrer">💻 Join on Zoom</a>`
+    : `<span class="pill amber">Zoom link ${m.zoom_status === "failed" ? "not made" : "coming"}</span> <span class="muted" style="font-size:12.5px">${esc(m.zoom_error || "")}</span> ${can ? `<button class="btn small" id="mz">Try again</button>` : ""}`;
   function schedForm(){
-    modal({ h:"Schedule a meeting", b:`<p class="muted" style="margin:4px 0 0">The hub makes the Zoom meeting and a link you can send to guests, vendors or anyone at Moose. It goes on your calendar.</p>
-      <label class="field"><span>What</span><input id="sm_t" maxlength="120" placeholder="e.g. Owner walk-through call"></label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Day</span><input type="date" id="sm_d" value="${esc(ST.sel[key] >= today() ? ST.sel[key] : today())}"></label>
+    // Build list cal-e2e (2026-11-06): pick coworkers, see when everyone's free (meet_free: busy times + shifts, never what), in person or virtual
+    const co = ppl.filter(p => p.id !== myId), F = { virt:false, from:null, free:null, tm:null, seq:0 };
+    modal({ h:"Schedule a meeting", b:`<p class="muted" style="margin:4px 0 0">Pick who's coming and the hub shows when you're all free. Everyone you pick gets it on their calendar and can say yes, no or suggest another time. Virtual meetings get a Zoom link and a page you can also send to guests or vendors.</p>
+      <label class="field"><span>What</span><input id="sm_t" maxlength="120" placeholder="e.g. Plan the Thanksgiving turnovers"></label>
+      <div class="field"><span>Who from Moose</span><input id="sm_q" placeholder="Find a coworker…" autocomplete="off" style="margin-bottom:4px"><div class="attp" id="sm_st">${co.map(p => `<label class="lyr" data-n="${esc(p.name.toLowerCase())}"><input type="checkbox" data-st="${p.id}">${esc(p.name)}</label>`).join("")}</div></div>
+      <div class="field"><span>How</span><div class="vsw" id="sm_how"><button type="button" class="btn small primary" data-how="0">👥 In person</button><button type="button" class="btn small" data-how="1">💻 Virtual (Zoom)</button></div></div>
+      <label class="field" id="sm_wf"><span>Where</span><input id="sm_w" maxlength="200" placeholder="e.g. Moose office, BHL 4205…"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Day</span><input type="date" id="sm_d" min="${today()}" value="${esc(ST.sel[key] >= today() ? ST.sel[key] : today())}"></label>
         <label class="field" style="flex:1;min-width:120px"><span>Starts</span><select id="sm_s">${topts("10:00")}</select></label>
         <label class="field" style="flex:1;min-width:110px"><span>How long</span><select id="sm_l">${lenOpts(30, [15, 30, 45, 60, 90, 120, 180])}</select></label></div>
-      <label class="field"><span>Note for the people you send it to (optional)</span><textarea id="sm_n" maxlength="1000" style="min-height:60px" placeholder="Agenda, what to bring… Don't type codes or passwords."></textarea></label>
-      ${staffPick([], "sm_st")}
+      <div class="card fb" id="sm_fb"><b>When is everyone free?</b> <span class="muted" style="font-size:12.5px">Pick people above to see.</span></div>
+      <label class="field"><span>Note (optional)</span><textarea id="sm_n" maxlength="1000" style="min-height:60px" placeholder="Agenda, what to bring… Don't type codes or passwords."></textarea></label>
       <div class="evft"><button class="btn primary" style="width:100%" id="sm_go">Make the meeting</button><p class="muted" id="sm_m" style="margin:6px 0 0"></p></div>` });
+    const first = n => (n || "").split(" ")[0];
+    const wins = (p, d) => {   // when this person works that day: their hub schedule, else weekdays 8 am - 6 pm
+      if((p.sched_days || []).includes(d)) return (p.shifts || []).filter(x => x.day === d).map(x => [toMin(x.s), toMin(x.e) > toMin(x.s) ? toMin(x.e) : 24 * 60]);
+      if(p.scheduled) return [];
+      const w = D(d).getDay(); return w === 0 || w === 6 ? [] : [[8 * 60, 18 * 60]]; };
+    const busyAt = (p, d, s, len) => (p.busy || []).some(x => x.day === d && toMin(x.s) < s + len && toMin(x.e) > s);
+    const freeAt = (p, d, s, len) => wins(p, d).some(([a, b]) => a <= s && s + len <= b) && !busyAt(p, d, s, len);
+    const nowMin = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
+    const H0 = 7 * 60, H1 = 19 * 60, pct = m => Math.max(0, Math.min(100, (m - H0) / (H1 - H0) * 100));
+    function drawFree(){
+      const el = $("#sm_fb"); if(!F.free) return;
+      const ps = F.free.people, len = +$("#sm_l").value, dsel = $("#sm_d").value, ssel = toMin($("#sm_s").value);
+      const days = []; for(let i = 0; i < 7; i++) days.push(addD(F.from, i));
+      const rows = days.map(d => { const sl = [];
+        for(let s = H0; s + len <= H1; s += 30){ if(d === today() && s < nowMin()) continue; sl.push({ s, n:ps.filter(p => freeAt(p, d, s, len)).length }); }
+        const all = sl.filter(x => x.n === ps.length), chip = (x, part) => `<button type="button" class="fbc${part ? " part" : ""}${d === dsel && x.s === ssel ? " sel" : ""}" data-fd="${d}" data-fs="${hhmm(x.s)}">${ftime(hhmm(x.s))}${part ? ` · ${x.n} of ${ps.length}` : ""}</button>`;
+        const best = sl.filter(x => x.n > 0).sort((a, b) => b.n - a.n || a.s - b.s).slice(0, 3).sort((a, b) => a.s - b.s);
+        return `<div class="fbd"><b>${esc(fday(d))}</b> ${all.length ? all.slice(0, 10).map(x => chip(x)).join("") + (all.length > 10 ? `<span class="muted">+${all.length - 10} more</span>` : "")
+          : best.length && ps.length > 1 ? `<span class="muted">No time everyone's free. Closest:</span> ` + best.map(x => chip(x, true)).join("") : `<span class="muted">No open time</span>`}</div>`; }).join("");
+      const tl = ps.map(p => `<div class="fbr"><span title="${esc(p.name)}">${esc(p.me ? "You" : first(p.name))}</span><div class="fbt">${wins(p, dsel).map(([a, b]) => `<i class="w" style="left:${pct(a)}%;width:${pct(b) - pct(a)}%"></i>`).join("")}${(p.busy || []).filter(x => x.day === dsel).map(x => `<i class="b" style="left:${pct(toMin(x.s))}%;width:${pct(toMin(x.e)) - pct(toMin(x.s))}%" title="Busy ${esc(ftime(x.s))}–${esc(ftime(x.e))}"></i>`).join("")}<i class="pk" style="left:${pct(ssel)}%;width:${pct(ssel + len) - pct(ssel)}%"></i></div></div>`).join("");
+      el.innerHTML = `<b>When is everyone free?</b> <span class="muted" style="font-size:12.5px">${esc(fday(F.from))} – ${esc(fday(days[6]))} · tap a time to pick it</span>${rows}
+        <div style="margin-top:10px"><b style="font-size:13px">${esc(fday(dsel))}</b> <span class="muted" style="font-size:12px">green = working, grey = busy, blue = the time you picked</span>
+        ${dsel >= F.from && dsel <= days[6] ? tl + `<div class="fbh">${[7, 9, 11, 13, 15, 17, 19].map(h => `<span>${h % 12 || 12}${h < 12 ? "a" : "p"}</span>`).join("")}</div>` : `<p class="muted">Loading that day…</p>`}</div>
+        <p class="muted" style="font-size:12px;margin:6px 0 0">Busy = their hub calendar (events, meetings, staff meetings, time off). Working = their hub schedule, or weekdays 8–6 for people without one. The hub never shows what anyone is busy with.</p>`;
+      el.querySelectorAll("[data-fd]").forEach(bt => bt.onclick = () => { $("#sm_d").value = bt.dataset.fd; $("#sm_s").value = bt.dataset.fs; drawFree(); });
+    }
+    async function loadFree(){
+      const ids = picked("sm_st"), el = $("#sm_fb");
+      if(!ids.length){ F.free = null; el.innerHTML = `<b>When is everyone free?</b> <span class="muted" style="font-size:12.5px">Pick people above to see.</span>`; return; }
+      const d = $("#sm_d").value || today(); F.from = d; const n = ++F.seq;
+      el.innerHTML = `<b>When is everyone free?</b> <span class="muted">Checking…</span>`;
+      const r = await sb.rpc("meet_free", { p_users:ids, p_from:d, p_to:addD(d, 6) });
+      if(n !== F.seq) return;
+      if(r.error){ el.innerHTML = `<b>When is everyone free?</b> <span class="muted">Couldn't check: ${esc(niceE(r.error))}</span>`; return; }
+      F.free = r.data; drawFree();
+    }
+    const niceE = e => window.niceErr ? niceErr(e) : (e.message || String(e));
+    const later = () => { clearTimeout(F.tm); F.tm = setTimeout(loadFree, 400); };
+    $("#sm_q").oninput = () => { const s = $("#sm_q").value.trim().toLowerCase(); $("#sm_st").querySelectorAll("[data-n]").forEach(l => l.style.display = !s || l.dataset.n.includes(s) || l.querySelector("input").checked ? "" : "none"); };
+    $("#sm_st").onchange = later;
+    $("#sm_how").querySelectorAll("[data-how]").forEach(bt => bt.onclick = () => { F.virt = bt.dataset.how === "1";
+      $("#sm_how").querySelectorAll("[data-how]").forEach(x => x.classList.toggle("primary", x === bt)); $("#sm_wf").style.display = F.virt ? "none" : ""; });
+    $("#sm_d").onchange = () => { const d = $("#sm_d").value; if(F.free && d >= F.from && d <= addD(F.from, 6)) drawFree(); else if(F.free || picked("sm_st").length) loadFree(); };
+    $("#sm_s").onchange = $("#sm_l").onchange = () => drawFree();
     $("#sm_go").onclick = async () => { const t = $("#sm_t").value.trim(); if(!t) return $("#sm_m").textContent = "Add what the meeting is.";
-      $("#sm_go").disabled = true; $("#sm_m").textContent = "Making the meeting and the Zoom link…";
-      const r = await fnCall({ action:"create", title:t, day:$("#sm_d").value, start:$("#sm_s").value, minutes:+$("#sm_l").value, note:$("#sm_n").value, staff:picked("sm_st") });
-      if(!r.ok){ $("#sm_go").disabled = false; return $("#sm_m").textContent = "Couldn't make it: " + r.error; }
-      const dy = $("#sm_d").value || today(); ST.sel[key] = dy; ST.justMade = r.id; evCal(v, key); };   // the redrawn calendar opens it (ST.justMade)
+      const staff = picked("sm_st"), d = $("#sm_d").value, st = $("#sm_s").value, len = +$("#sm_l").value;
+      if(!d) return $("#sm_m").textContent = "Pick a day.";
+      if(F.free && d >= F.from && d <= addD(F.from, 6)){ const bz = F.free.people.filter(p => !freeAt(p, d, toMin(st), len)).map(p => p.me ? "you" : first(p.name));
+        if(bz.length && !confirm(bz.join(", ") + (bz.length === 1 && bz[0] !== "you" ? " looks" : " look") + " busy or off then. Make it anyway?")) return; }
+      if(!staff.length && !confirm("No coworkers picked. Make it just for you?")) return;
+      $("#sm_go").disabled = true; $("#sm_m").textContent = F.virt ? "Making the meeting and the Zoom link…" : "Making the meeting…";
+      let id = null;
+      if(F.virt){ const r = await fnCall({ action:"create", title:t, day:d, start:st, minutes:len, note:$("#sm_n").value, staff });
+        if(!r.ok){ $("#sm_go").disabled = false; return $("#sm_m").textContent = "Couldn't make it: " + r.error; } id = r.id; }
+      else { const r = await sb.rpc("meet_invite_save2", { p_title:t, p_day:d, p_start:st, p_minutes:len, p_staff:staff, p_note:$("#sm_n").value, p_virtual:false, p_location:$("#sm_w").value });
+        if(r.error){ $("#sm_go").disabled = false; return $("#sm_m").textContent = "Couldn't make it: " + niceE(r.error); } id = r.data.id; }
+      ST.sel[key] = d; ST.justMade = id; evCal(v, key); };   // the redrawn calendar opens it (ST.justMade)
   }
   // click on an event = this summary first; Edit opens the full form
   function evPeek(e){
@@ -436,24 +507,55 @@ async function evCal(v, key){
     $("#evcard").querySelectorAll(".evft a").forEach(a => a.addEventListener("click", () => $("#evm").classList.remove("on")));
   }
   function meetBox(m, fresh){
-    const url = pageUrl("meet.html", "t=" + m.token), canCx = m.mine || ME.admin;
-    modal({ h:esc(m.title), b:`${fresh ? `<p class="pill green" style="display:inline-block">Made ✓ Send the link below</p>` : ""}
-      <p style="margin:6px 0"><b>${esc(fday(m.day))}</b> · ${esc(ftime(m.start))}–${esc(ftime(endTime(m.start, m.minutes)))} · ${m.minutes} min<br><span class="muted">Host: ${esc(m.host || "")}${m.booking ? " · booked on “" + esc(m.booking) + "”" : ""}</span></p>
-      <div class="field"><span>Link to send (meeting page with the Zoom button and Add to calendar)</span><div style="display:flex;gap:6px"><input readonly value="${esc(url)}" style="flex:1"><button class="btn small primary" id="mc">Copy</button></div></div>
-      <div style="margin:8px 0">${zoomTxt(m)}</div>
+    const url = pageUrl("meet.html", "t=" + m.token), canCx = m.mine || ME.admin, inv = (m.staff || []).includes(myId) && !m.mine;
+    const coworker = m.kind === "invite", showLink = m.virtual !== false && (canCx || !coworker), my = m.my_answer || null;
+    const nm = id => (ppl.find(p => p.id === id) || {}).name || "";
+    const ansTxt = my ? (my.answer === "yes" ? "✅ You said you're coming" : my.answer === "no" ? "🙅 You said you can't make it"
+      : "🕑 You suggested " + fday(my.sug_day) + " " + ftime(String(my.sug_start).slice(0, 5))) : "Can you make it?";
+    modal({ h:esc(m.title), b:`${fresh ? `<p class="pill green" style="display:inline-block">Made ✓ ${(m.staff || []).length ? "It's on everyone's calendar; they answer here" : "Send the link below"}</p>` : ""}
+      <p style="margin:6px 0"><b>${esc(fday(m.day))}</b> · ${esc(ftime(m.start))}–${esc(ftime(endTime(m.start, m.minutes)))} · ${m.minutes} min<br><span class="muted">Host: ${esc(m.host || "")}${m.booking ? " · booked on “" + esc(m.booking) + "”" : ""} · ${m.virtual === false ? "👥 In person" + (m.location ? " at " + esc(m.location) : "") : "💻 Virtual"}</span></p>
+      ${inv ? `<div class="card" style="padding:10px 12px;margin:8px 0"><b>${esc(ansTxt)}</b>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn small${my && my.answer === "yes" ? " primary" : ""}" data-ma="yes">✅ Yes</button><button class="btn small${my && my.answer === "no" ? " primary" : ""}" data-ma="no">🙅 Can't make it</button><button class="btn small${my && my.answer === "suggest" ? " primary" : ""}" data-ma="suggest">🕑 Suggest another time</button></div>
+        <div id="ma_sug" style="display:none;gap:8px;flex-wrap:wrap;margin-top:6px"><label class="field" style="flex:1;min-width:140px"><span>Day</span><input type="date" id="ma_d" min="${today()}" value="${esc(m.day)}"></label><label class="field" style="flex:1;min-width:120px"><span>Starts</span><select id="ma_s">${topts(m.start)}</select></label></div>
+        <input id="ma_n" maxlength="300" placeholder="Note for ${esc((m.host || "the host").split(" ")[0])} (optional)" value="${esc((my && my.note) || "")}" style="margin-top:6px">
+        <div id="ma_go" style="display:none;margin-top:6px"><button class="btn small primary" id="ma_send">Send the suggestion</button></div><p class="muted" id="ma_m" style="margin:4px 0 0"></p></div>` : ""}
+      ${showLink ? `<div class="field"><span>Link to send (meeting page with the Zoom button and Add to calendar)</span><div style="display:flex;gap:6px"><input readonly value="${esc(url)}" style="flex:1"><button class="btn small primary" id="mc">Copy</button></div></div>` : ""}
+      ${m.virtual !== false ? `<div style="margin:8px 0">${zoomTxt(m, canCx)}</div>` : ""}
       ${m.guest_name ? `<div class="card" style="padding:10px 12px;margin:8px 0"><b>Booked by ${esc(m.guest_name)}</b><br>${m.guest_email ? `<a href="mailto:${esc(m.guest_email)}">${esc(m.guest_email)}</a>` : ""}${m.guest_phone ? " · " + esc(m.guest_phone) : ""}${m.guest_note ? `<div class="muted" style="white-space:pre-wrap;margin-top:4px">${esc(m.guest_note)}</div>` : ""}</div>` : ""}
       ${m.note ? `<p class="muted" style="white-space:pre-wrap">${esc(m.note)}</p>` : ""}
-      ${(m.staff || []).length ? `<p class="muted">Also from Moose: ${esc(m.staff.map(id => (ppl.find(p => p.id === id) || {}).name || "").filter(Boolean).join(", "))}</p>` : ""}
-      <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" style="flex:1" href="${esc(url)}" target="_blank" rel="noopener">Open the page</a>${canCx ? `<button class="btn" id="mmv">Move</button><button class="btn" id="mx">Cancel meeting</button>` : ""}</div>
+      ${(m.staff || []).length ? `<div class="card" id="mrep" style="padding:10px 12px;margin:8px 0"><b>Who's coming</b> <span class="muted">Loading…</span></div>` : ""}
+      <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap">${showLink ? `<a class="btn" style="flex:1" href="${esc(url)}" target="_blank" rel="noopener">Open the page</a>` : ""}${canCx ? `<button class="btn" id="mmv" style="${showLink ? "" : "flex:1"}">Move</button><button class="btn" id="mx">Cancel meeting</button>` : ""}</div>
       <p class="muted" id="mm" style="margin:0 0 10px"></p>` });
-    $("#mc").onclick = () => copy(url, $("#mc"));
+    const again = () => { $("#evm").classList.remove("on"); ST.openMeet = m.id; evCal(v, key); };
+    if($("#mc")) $("#mc").onclick = () => copy(url, $("#mc"));
     if($("#mz")) $("#mz").onclick = async () => { $("#mz").disabled = true; const r = await fnCall({ action:"zoom", id:m.id }); if(!r.ok) $("#mm").textContent = r.error;
       const l = await sb.rpc("meet_mine", { p_from:m.day, p_to:m.day }); const n = ((l && l.data) || []).find(x => x.id === m.id); if(n) meetBox(n); };
-    if($("#mmv")) $("#mmv").onclick = () => moveBox({ day:m.day, start:m.start, minutes:m.minutes, title:m.title, note:"The link you sent stays the same and shows the new time." },
+    if($("#mmv")) $("#mmv").onclick = () => moveBox({ day:m.day, start:m.start, minutes:m.minutes, title:m.title, note:(m.staff || []).length ? "Everyone on it is asked to answer again for the new time." + (showLink ? " The link you sent stays the same." : "") : "The link you sent stays the same and shows the new time." },
       async (d, st, mins) => sb.rpc("meet_move", { p_id:m.id, p_day:d, p_start:st, p_minutes:mins }));
-    if($("#mx")) $("#mx").onclick = async () => { const why = prompt("Cancel this meeting? The link will say it's cancelled. Add a note (optional):", ""); if(why === null) return;
+    if($("#mx")) $("#mx").onclick = async () => { const why = prompt("Cancel this meeting? It comes off everyone's calendar. Add a note (optional):", ""); if(why === null) return;
       const r = await sb.rpc("meet_cancel", { p_id:m.id, p_note:why }); if(r.error) return $("#mm").textContent = "Couldn't cancel: " + r.error.message;
       $("#evm").classList.remove("on"); evCal(v, key); };
+    // answer (only the coworkers on it)
+    const reply = async (ans, d, st) => { $("#ma_m").textContent = "Saving…";
+      const r = await sb.rpc("meet_reply", { p_id:m.id, p_answer:ans, p_note:$("#ma_n").value, p_sug_day:d || null, p_sug_start:st || null });
+      if(r.error) return $("#ma_m").textContent = "Couldn't save: " + r.error.message; again(); };
+    $("#evcard").querySelectorAll("[data-ma]").forEach(bt => bt.onclick = () => { if(bt.dataset.ma !== "suggest") return reply(bt.dataset.ma);
+      $("#ma_sug").style.display = "flex"; $("#ma_go").style.display = ""; $("#ma_m").textContent = "Pick the day and time that works, then Send."; });
+    if($("#ma_send")) $("#ma_send").onclick = () => reply("suggest", $("#ma_d").value, $("#ma_s").value);
+    // who's coming
+    if($("#mrep")) sb.rpc("meet_replies", { p_ids:[m.id] }).then(r => { const el = $("#mrep"); if(!el) return;
+      if(r.error) return el.innerHTML = `<b>Who's coming</b> <span class="muted">Couldn't load: ${esc(r.error.message)}</span>`;
+      const L = r.data || [], c = k => L.filter(x => (x.answer || "") === k).length;
+      el.innerHTML = `<b>Who's coming</b> <span class="muted" style="font-size:12.5px">${c("yes")} yes · ${c("no")} can't · ${c("suggest")} suggested a time · ${c("")} waiting</span>
+        <div style="font-size:13.5px;margin:4px 0">👑 ${esc(m.host || "")} <span class="muted">· host</span></div>
+        ${L.sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(x => `<div style="font-size:13.5px;margin:4px 0">${x.answer === "yes" ? "✅" : x.answer === "no" ? "🙅" : x.answer === "suggest" ? "🕑" : "❔"} ${esc(x.name || nm(x.user_id))}
+          <span class="muted">· ${x.answer === "yes" ? "coming" : x.answer === "no" ? "can't make it" : x.answer === "suggest" ? "suggests " + esc(fday(x.sug_day)) + " " + esc(ftime(x.sug_start)) : "hasn't answered"}</span>
+          ${x.answer === "suggest" && canCx ? ` <button class="btn small" data-mvto="${esc(x.sug_day)}|${esc(x.sug_start)}">Move to this time</button>` : ""}
+          ${x.note ? `<div class="muted" style="font-size:12.5px;margin-left:24px">“${esc(x.note)}”</div>` : ""}</div>`).join("")}`;
+      el.querySelectorAll("[data-mvto]").forEach(bt => bt.onclick = async () => { const [d, st] = bt.dataset.mvto.split("|");
+        if(!confirm("Move it to " + fday(d) + " " + ftime(st) + "? Everyone is asked to answer again.")) return;
+        const x = await sb.rpc("meet_move", { p_id:m.id, p_day:d, p_start:st, p_minutes:m.minutes }); if(x.error) return $("#mm").textContent = "Couldn't move it: " + x.error.message;
+        ST.sel[key] = d; again(); }); });
   }
   async function linksBox(){
     const r = await sb.rpc("book_links_mine"); const L = (r && r.data) || [];
@@ -912,12 +1014,14 @@ window.workCheck = async function(v){
 window.calHomeCard = async function(el){
   if(!el) return; css();
   const t = today(), b = addD(t, 6);
-  const [ms, evs, ppl, tw] = await Promise.all([meetings(true), events(t, b), people(), sb.from("hub_timeoff_requests").select("user_id").eq("status", "pending")]);
+  const [ms, evs, ppl, tw, hm] = await Promise.all([meetings(true), events(t, b), people(), sb.from("hub_timeoff_requests").select("user_id").eq("status", "pending"), sb.rpc("meet_mine", { p_from:t, p_to:b })]);
   const myId = (ppl.find(p => p.name === ME.name) || {}).id, nWait = ((tw && tw.data) || []).filter(r => r.user_id !== myId).length;
   const rows = [];
   ms.forEach(m => occurs(m, t, b).forEach(s => rows.push({ d:s, t:m.start || "", h:`<a href="#/${m.meet}"><b>${esc(NAMES[m.meet])} meeting</b></a>${m.start ? " · " + ftime(m.start) : ""}${m.open_tasks ? ` <span class="muted">· ${m.open_tasks} open task${m.open_tasks === 1 ? "" : "s"}</span>` : ""}` })));
   evs.filter(e => (e.kind || "event") === "event").forEach(e => { for(let s = e.day < t ? t : e.day; s <= (e.end_day || e.day) && s <= b; s = addD(s, 1))
     rows.push({ d:s, t:(e.start_time || "").slice(0, 5), h:`${e.cal === "office" ? `<span class="pill amber">Office</span> ` : ""}${esc(e.title)}${e.start_time ? " · " + ftime(e.start_time.slice(0, 5)) : ""}` }); });
+  ((hm && hm.data) || []).filter(m => m.status === "on").forEach(m => { const inv = (m.staff || []).includes(myId) && !m.mine, a = inv ? (m.my_answer || {}).answer : null;
+    rows.push({ d:m.day, t:m.start, h:`<a href="#/cal_me/m${m.id}"><b${a === "no" ? ' style="text-decoration:line-through"' : ""}>${m.virtual === false ? "👥" : "📹"} ${esc(m.title)}</b></a> · ${ftime(m.start)}${inv && !a ? ` <span class="pill amber">Answer</span>` : ""}` }); });
   rows.sort((x, y) => (x.d + x.t).localeCompare(y.d + y.t));
   el.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">🗓️ Your week</b><a class="btn small" style="margin-left:auto" href="#/cal_me">Calendar</a></div>
     ${nWait ? `<a href="#/cal_off" class="pill amber" style="display:inline-block;margin:6px 0;text-decoration:none">🌴 ${nWait} time-off request${nWait === 1 ? "" : "s"} waiting for you</a>` : ""}
