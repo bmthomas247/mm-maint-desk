@@ -14,7 +14,9 @@ const AREAS = [
 const AL = Object.fromEntries(AREAS), AO = Object.fromEntries(AREAS.map(([k], n) => [k, n]));
 // statuses (Brandon 2026-11-04): Queued, Started, Paused, Finishing touches (+ Done); keys stay todo / doing / waiting / finishing / done
 const ST = { todo:"Queued", doing:"Started", waiting:"Paused", finishing:"Finishing touches", done:"Done" }, PRI = { now:"Now", next:"Next", later:"Later" }, PO = { now:0, next:1, later:2 };
-const ORD = [["area", "By desk"], ["pri", "High → low priority"], ["abc", "A → Z"]];
+const ORD = [["area", "By desk"], ["pri", "High → low priority"], ["likes", "Most liked"], ["abc", "A → Z"]];
+// 2026-11-05 (Brandon): everyone sees the items on their own desks and can 👍 them; only admins change anything (hub_build_list_open.sql).
+const ADM = () => !!(typeof ME !== "undefined" && ME && ME.admin);
 // Who's on it (Brandon 2026-11-04: "Anyone, Nobody, Brandon, Jeff"): value = the worker name to match
 const WHO = [["all","Anyone"], ["free","Nobody"], ["Brandon Thomas","Brandon"], ["Jeff","Jeff"]];
 const BL = { tab:"list", rows:null, fS:"open", fP:"all", fA:"all", fW:"all", fJ:false, q:"", order:"area", open:null, hist:{}, fold:{}, timer:null };
@@ -74,6 +76,8 @@ function css(){
 .bl .note{font-size:13px;background:var(--moose-soft,#eef5e0);border-radius:10px;padding:6px 9px;white-space:pre-wrap}
 .bl .acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:auto;padding-top:6px}
 .bl .acts .btn{min-height:34px;font-size:13px;border-radius:11px} .bl .acts select{min-height:34px;border-radius:11px;font-size:13px;padding:0 8px}
+.bl .btn.like.on{background:#e2eef9;border-color:#1f6fb2;color:#1f6fb2;font-weight:800}
+.bl .intro{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 14px;margin:0 0 12px;font-size:14.5px}
 .bl .btn.primary{background:var(--bl-green);border-color:var(--bl-green);color:#fff;font-weight:800}
 .bl .ed{display:grid;gap:8px;margin-top:6px} .bl .ed .r{display:flex;gap:8px;flex-wrap:wrap} .bl .ed .r > *{flex:1;min-width:160px}
 .bl .ed input,.bl .ed select,.bl .ed textarea{border-radius:12px} .bl textarea{width:100%;min-height:80px}
@@ -99,9 +103,14 @@ function css(){
   document.head.appendChild(s);
 }
 async function load(){
+  const L = await sb.rpc("build_list_staff"); if(L.error) throw L.error;
+  const lk = Object.fromEntries((L.data || []).map(x => [x.id, x]));
+  if(!ADM()){ BL.rows = (L.data || []).map(x => ({ ...x, worker_names:x.workers || [], workers:[], note:"", plan:"", source:"", waits:"" })).sort((a, b) => a.sort - b.sort); return; }
   const r = await sb.from("hub_build_items").select("*").eq("off", false).order("sort");
-  if(r.error) throw r.error; BL.rows = r.data || [];
+  if(r.error) throw r.error; BL.rows = (r.data || []).map(i => ({ ...i, likes:(lk[i.id] || {}).likes || 0, mine:!!(lk[i.id] || {}).mine, likers:(lk[i.id] || {}).likers || [] }));
 }
+const likeBtn = i => i.status === "done" ? (i.likes ? `<span class="chip">👍 ${i.likes}</span>` : "")
+  : `<button class="btn small like${i.mine ? " on" : ""}" data-like aria-pressed="${i.mine ? "true" : "false"}" title="${i.mine ? "You like this. Tap to take it back." : "Tap if this matters to you"}">👍 ${i.mine ? "Liked" : "Like"}${i.likes ? " · " + i.likes : ""}</button>`;
 // What Claude Code gets. Admins work in the maintenance_desk folder (CLAUDE.md has everything). Everyone else (Jeff) gets the house rules
 // and how to hand the work to Brandon, because their Claude can't deploy (Brandon 2026-11-04: "teach jeffs claude code how to do certain things").
 const RULES = `House rules (Moose Hub):
@@ -140,7 +149,7 @@ function itemHtml(i){
     ${i.detail ? `<div class="d">${esc(i.detail)}</div>` : ""}
     <div class="chips"><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"}</span>${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}${i.plan ? `<span class="chip">📋 Has steps</span>` : ""}</div>
     ${i.note ? `<div class="note">${esc(i.note)}</div>` : ""}
-    <div class="acts">${claimBtns(i)}<button class="btn small" data-qnote>📝 Note</button><button class="btn small" data-edit>Open</button></div>
+    <div class="acts">${likeBtn(i)}${ADM() ? `${claimBtns(i)}<button class="btn small" data-qnote>📝 Note</button>` : ""}<button class="btn small" data-edit>Open</button></div>
     ${BL.qn === i.id ? `<div class="qnote"><textarea data-qtext rows="2" placeholder="Quick note (doesn't start the item)"></textarea><button class="btn small primary" data-qsave>Add</button><button class="btn small" data-qx>✕</button></div>` : ""}
   </div>`;
 }
@@ -155,13 +164,14 @@ async function openItem(v, id, edit){
   if(!i){ if(d) d.remove(); return; }
   if(!d){ d = document.createElement("div"); d.id = "blmod"; d.className = "blmod bl"; document.body.appendChild(d); }
   BL.modal = id;
-  if(!BL.hist[id]){ const r = await sb.from("hub_build_log").select("at,by_name,what").eq("item_id", id).order("at", { ascending:false }).limit(30); BL.hist[id] = r.data || []; }
+  if(ADM() && !BL.hist[id]){ const r = await sb.from("hub_build_log").select("at,by_name,what").eq("item_id", id).order("at", { ascending:false }).limit(30); BL.hist[id] = r.data || []; }
   const sec = (h, body) => `<section><h4>${h}</h4>${body}</section>`, wl = whoLine(i);
   d.innerHTML = `<div class="blbox p-${esc(i.pri || "next")}" role="dialog" aria-modal="true" aria-label="${esc(i.title)}">
     <div class="mh"><div style="min-width:0"><div class="mt">${esc(i.title)}</div>
       <div class="chips"><span class="chip">${esc(AL[i.desk] || i.desk)}</span><span class="chip${i.pri === "now" ? " now" : ""}">${PRI[i.pri] || "Next"} priority</span>${badgeHtml(i)}${i.waits ? `<span class="chip wait">Waiting on ${esc(i.waits)}</span>` : ""}</div>
       ${wl ? `<div class="sub" style="margin-top:4px"><b>${wl[0].toUpperCase() + wl.slice(1)}</b></div>` : ""}</div><button class="btn small" data-x aria-label="Close">✕</button></div>
-    ${edit ? `<div class="ed">
+    ${!ADM() ? `${sec("What we need to build", i.detail ? txt(i.detail) : `<p class="muted">No details yet.</p>`)}
+      <div class="acts mf">${likeBtn(i)}</div>` : edit ? `<div class="ed">
       <label>Title<input data-f="title" value="${esc(i.title)}" maxlength="200"></label>
       <label>What we need to build<textarea data-f="detail" rows="5">${esc(i.detail)}</textarea></label>
       <label>How to build it (steps, one per line)<textarea data-f="plan" rows="8" placeholder="1. ...&#10;2. ...">${esc(i.plan || "")}</textarea></label>
@@ -176,8 +186,10 @@ async function openItem(v, id, edit){
       ${sec("Notes", `${i.note ? txt(i.note) : `<p class="muted">No notes yet.</p>`}
         <div class="addnote"><textarea data-newnote rows="2" placeholder="Add a note (you don't have to start the item)"></textarea><button class="btn small primary" data-addnote>Add note</button></div>`)}
       ${sec("Where it came from", `<p>${esc(i.source || "Not recorded")}</p>`)}
+      ${sec("Likes", `<p>${i.likers && i.likers.length ? esc(i.likers.join(", ")) : `<span class="muted">Nobody yet.</span>`}</p>`)}
+      ${sec("Who sees it", `<select data-see aria-label="Who sees it"><option value=""${i.staff_see == null ? " selected" : ""}>Usual rule: people on the ${esc(AL[i.desk] || i.desk)} desk${["hub","penny","staffing"].includes(i.desk) ? " (this desk: admins only)" : ""}</option><option value="1"${i.staff_see === true ? " selected" : ""}>Everyone who can open its desk</option><option value="0"${i.staff_see === false ? " selected" : ""}>Admins only</option></select><p class="muted" style="margin-top:4px">Items that talk about pay, people, keys, sign-in or security stay admins only unless you pick "Everyone".</p>`)}
       ${sec("History", `<div class="hist">${(BL.hist[id] || []).map(h => `<div>${esc(new Date(h.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))} · ${esc(h.by_name || "")} · ${esc(h.what)}</div>`).join("") || "<div>No changes yet.</div>"}</div>`)}
-      <div class="acts mf">${claimBtns(i)}<button class="btn small" data-editm>Edit</button></div>`}
+      <div class="acts mf">${likeBtn(i)}${claimBtns(i)}<button class="btn small" data-editm>Edit</button></div>`}
   </div>`;
   const q = s => d.querySelector(s), close = () => { BL.modal = null; d.remove(); document.removeEventListener("keydown", esc_); };
   const esc_ = e => { if(e.key === "Escape") close(); };
@@ -194,12 +206,14 @@ async function openItem(v, id, edit){
   if(q("[data-addnote]")) q("[data-addnote]").onclick = async () => { const t = q("[data-newnote]").value.trim(); if(!t) return q("[data-newnote]").focus();
     const line = `${first(meName()) || "Someone"}, ${fday(new Date())}: ${t}`, cur = (BL.rows.find(x => x.id === id) || {}).note || "";
     const r = await sb.rpc("build_item_save", { p_id:id, p_note:(cur ? cur + "\n" : "") + line }); if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
+  if(q("[data-see]")) q("[data-see]").onchange = async e => { const val = e.target.value; const r = await sb.rpc("build_item_staff", { p_id:id, p_see:val === "" ? null : val === "1" });
+    if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
   if(q("[data-off]")) q("[data-off]").onclick = async () => { if(!confirm("Take this item off the list? (It's kept in the history, not deleted.)")) return;
     const r = await sb.rpc("build_item_save", { p_id:id, p_off:true }); if(r.error) return alert("Didn't save: " + err(r.error)); close(); await load(); show(v); };
   wireItem(v, d, i, again);
 }
 const tabsHtml = () => `<div class="tabs"><button class="${BL.tab === "list" ? "on" : ""}" data-tab="list">${ico("list")} Build list</button>
-  <button class="${BL.tab === "mine" ? "on" : ""}" data-tab="mine">${ico("me")} I'm on (${BL.rows.filter(i => mine(i) && i.status !== "done").length})</button>
+  ${ADM() ? `<button class="${BL.tab === "mine" ? "on" : ""}" data-tab="mine">${ico("me")} I'm on (${BL.rows.filter(i => mine(i) && i.status !== "done").length})</button>` : ""}
   <button class="${BL.tab === "done" ? "on" : ""}" data-tab="done">${ico("check")} Completed (${BL.rows.filter(i => i.status === "done").length})</button></div>`;
 function wireTabs(v){ v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { BL.tab = b.dataset.tab; BL.q = ""; show(v); }); }
 const show = v => BL.tab === "done" ? drawDone(v) : draw(v);
@@ -216,7 +230,8 @@ function draw(v){
   const R = BL.rows, c = { todo:0, doing:0, waiting:0, finishing:0, done:0 }; R.forEach(i => c[i.status] = (c[i.status] || 0) + 1);
   const openN = R.length - (c.done || 0), inNow = R.filter(i => (i.worker_names || []).length && i.status !== "done").length;
   const rows = BL.tab === "mine" ? R.filter(i => mine(i) && i.status !== "done") : shownRows();
-  const groups = BL.order === "abc" ? [["abc", "A → Z", () => true, (a, b) => String(a.title).localeCompare(String(b.title))]]
+  const groups = BL.order === "likes" ? [["likes", "Most liked", () => true, (a, b) => (b.likes || 0) - (a.likes || 0) || (PO[a.pri] ?? 1) - (PO[b.pri] ?? 1) || a.sort - b.sort]]
+    : BL.order === "abc" ? [["abc", "A → Z", () => true, (a, b) => String(a.title).localeCompare(String(b.title))]]
     : BL.order === "pri"
     ? Object.keys(PRI).map(p => [ "p:" + p, { now:"Now (high priority)", next:"Next", later:"Later (low priority)" }[p], i => i.pri === p, (a, b) => (AO[a.desk] ?? 99) - (AO[b.desk] ?? 99) || a.sort - b.sort])
     : AREAS.map(([k, l]) => [k, l, i => i.desk === k, (a, b) => (PO[a.pri] ?? 1) - (PO[b.pri] ?? 1) || a.sort - b.sort]);
@@ -228,6 +243,7 @@ function draw(v){
   }
   const opt = (cur, pairs) => pairs.map(([k, l]) => `<option value="${esc(k)}"${cur === k ? " selected" : ""}>${esc(l)}</option>`).join("");
   v.innerHTML = `<div class="page bl">${tabsHtml()}
+    ${ADM() ? "" : `<div class="intro">This is what we're building next for the hub. Tap <b>👍 Like</b> on the ones that matter most to you, so we know what to get to first.</div>`}
     <div class="tiles">${tileBtn("open", `${openN}<small>/${R.length}</small>`, "Still to do", `<div class="bar"><i style="width:${R.length ? (c.done || 0) / R.length * 100 : 0}%"></i></div>`)}
       ${tileBtn("now", R.filter(i => i.pri === "now" && i.status !== "done").length, "Now (high priority)")}
       ${tileBtn("busy", inNow, "Being worked on")}${tileBtn("waiting", c.waiting || 0, "Paused")}${tileBtn("finishing", c.finishing || 0, "Finishing touches")}
@@ -236,11 +252,11 @@ function draw(v){
       <div class="fr"><span class="lab">Find</span><input id="blq" type="search" placeholder="Search (e.g. Track, Penny, Chris)" value="${esc(BL.q)}"></div>
       <div class="fr"><span class="lab">Status</span><div class="seg">${[["open", "Not done"], ["all", "All"], ...Object.entries(ST)].map(([k, l]) => `<button type="button" class="${BL.fS === k ? "on" : ""}" data-fs="${k}">${l}</button>`).join("")}</div></div>
       <div class="fr"><span class="lab">Priority</span><div class="seg">${[["all", "Any"], ...Object.entries(PRI)].map(([k, l]) => `<button type="button" class="${BL.fP === k ? "on" : ""}" data-fp="${k}">${l}</button>`).join("")}</div></div>
-      <div class="fr"><span class="lab">Who's on it</span><div class="seg">${WHO.map(([k, l]) => `<button type="button" class="${BL.fW === k ? "on" : ""}" data-fw="${esc(k)}">${l}</button>`).join("")}</div></div>
+      ${ADM() ? "" : "<!--"}<div class="fr"><span class="lab">Who's on it</span><div class="seg">${WHO.map(([k, l]) => `<button type="button" class="${BL.fW === k ? "on" : ""}" data-fw="${esc(k)}">${l}</button>`).join("")}</div></div>${ADM() ? "" : "-->"}
       <div class="fr"><span class="lab">Desk</span><div class="seg">${[["all", "All desks"], ...AREAS].map(([k, l]) => { const n = k === "all" ? 0 : R.filter(i => i.desk === k && i.status !== "done").length; return k !== "all" && !n ? "" : `<button type="button" class="${BL.fA === k ? "on" : ""}" data-fa="${k}">${esc(l)}${k === "all" ? "" : ` (${n})`}</button>`; }).join("")}</div></div>
       <div class="fr"><span class="lab">Order</span><select id="bl_o">${opt(BL.order, ORD)}</select><button type="button" class="chip" id="blref" title="Refresh">↻</button></div></div>`}
     ${list || `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${BL.tab === "mine" ? "You're not on anything right now. Pick an item on Build list and tap \"I'm on it\"." : "Nothing matches these filters."}</p></div>`}
-    ${BL.tab === "list" ? `<form class="add" id="bladd"><b>Add an item</b>
+    ${BL.tab === "list" && ADM() ? `<form class="add" id="bladd"><b>Add an item</b>
       <div class="r"><input id="bla_t" placeholder="What needs doing" maxlength="200" required><select id="bla_a" aria-label="Desk">${AREAS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select>
         <select id="bla_p" aria-label="Priority"><option value="now">Now</option><option value="next" selected>Next</option><option value="later">Later</option></select></div>
       <div class="r"><input id="bla_d" placeholder="Details (optional)" maxlength="2000"><input id="bla_s" placeholder="Where it came from (source)" maxlength="300"><button class="btn primary" type="submit" style="flex:0">Add</button></div></form>` : ""}
@@ -294,6 +310,7 @@ function wireItem(v, el, it, after){
   if(b("[data-free]")) b("[data-free]").onclick = async () => { if(!confirm(`Take ${it.worker_names.join(" + ")} off this item?`)) return;
     for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error){ alert("Didn't save: " + err(r.error)); break; } } after(); };
   if(b("[data-copy]")) b("[data-copy]").onclick = () => copyGo(it);
+  if(b("[data-like]")) b("[data-like]").onclick = async () => { const r = await sb.rpc("build_like", { p_id:id, p_on:!it.mine }); if(r.error) return alert("Didn't save: " + err(r.error)); after(); };
 }
 function wire(v){
   wireTabs(v); wireTiles(v); wireFind(v, draw);
@@ -311,7 +328,7 @@ function wire(v){
     el.onkeydown = e => { if((e.key === "Enter" || e.key === " ") && e.target === el){ e.preventDefault(); openItem(v, id); } };
     el.querySelector("[data-edit]").onclick = () => openItem(v, id);
     // quick note on the tile (Brandon 2026-11-04): same "Name, date: text" line as the pop-up, item not started
-    el.querySelector("[data-qnote]").onclick = () => { BL.qn = BL.qn === id ? null : id; const y = window.scrollY; draw(v); window.scrollTo(0, y); const t = v.querySelector(`.it[data-id="${CSS.escape(id)}"] [data-qtext]`); if(t) t.focus(); };
+    if(el.querySelector("[data-qnote]")) el.querySelector("[data-qnote]").onclick = () => { BL.qn = BL.qn === id ? null : id; const y = window.scrollY; draw(v); window.scrollTo(0, y); const t = v.querySelector(`.it[data-id="${CSS.escape(id)}"] [data-qtext]`); if(t) t.focus(); };
     const qx = el.querySelector("[data-qx]"); if(qx) qx.onclick = () => { BL.qn = null; const y = window.scrollY; draw(v); window.scrollTo(0, y); };
     const qs = el.querySelector("[data-qsave]"); if(qs) qs.onclick = async () => { const t = el.querySelector("[data-qtext]").value.trim(); if(!t) return el.querySelector("[data-qtext]").focus();
       const line = `${first(meName()) || "Someone"}, ${fday(new Date())}: ${t}`;
