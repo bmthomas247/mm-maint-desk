@@ -1266,7 +1266,7 @@ function noStayfi(t){ return String(t||"").split("\n").filter(function(l){ retur
 function canEntry(){ return window.MM_CODES!==false || !!window.MM_ENTRY; }
 function homeQuick(code,p){ var pe=pedit(code), t=hqOf(code)||{}, a=function(rx){ var n=infoNote(p,rx); return n?n.text:""; };
   var r={src:{}}, pick=function(k,list){ for(var i=0;i<list.length;i++){ if(list[i][1]){ r[k]=list[i][1]; r.src[k]=list[i][0]; return; } } r[k]=""; };
-  var wl=function(n,pw,x){ return [n?"Network: "+n:"",pw?"Password: "+pw:"",x||""].filter(Boolean).join("\n"); };
+  var wl=function(n,pw,x){ n=wfClean(n); pw=wfClean(pw); return [n?"Network: "+n:"",pw?"Password: "+pw:"",x||""].filter(Boolean).join("\n"); };
   pick("wifi",[["Track",t.wifi_name||t.wifi_pass?wl(t.wifi_name,t.wifi_pass,t.wifi_note):""],["Hub edit",pe.wifiName||pe.wifiPass?wl(pe.wifiName,pe.wifiPass):""],["Asana",noStayfi(a(/^(wifi|wi-fi|stay[- ]?fi)/i))]]);
   pick("garage",[["Track",t.garage_code?["Garage code: "+t.garage_code,t.garage_note||""].filter(Boolean).join("\n"):(t.garage_note||"")],["Hub edit",pe.garageCode],["Asana",a(/^parking\/? ?garage info$|^parking$/i)]]);
   var loc=homeInfo(code); r.keybox=[t.keybox_code?"Key box code: "+kbc(t.keybox_code):"",loc.keybox||""].filter(Boolean).join("\n"); r.src.keybox=t.keybox_code?"Track":(loc.src&&loc.src.keybox)||"";
@@ -1286,9 +1286,12 @@ function codeLines(t,max){ var out=[]; String(t||"").replace(/<[^>]+>/g," ").spl
 /* Brandon 2026-10-30: each label on its own line with the value under it; Wi-Fi isn't a code, so its numbers aren't highlighted */
 function tLine(l,plain){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l), v=function(x){ return plain?'<b>'+esc(x)+'</b>':qBold(x); };
   return '<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+v(m[2]):v(l))+'</div>'; }
+var PARK_RX=/\bpark(?:ing)?\s*(?:in\s*)?(?:assigned\s*)?(?:space|spot|stall)\s*#?\s*([A-Za-z]?\d{1,5}[A-Za-z]?)\b/i;
+function parkFix(s){ return String(s||"").replace(new RegExp(PARK_RX.source,"ig"),"Assigned parking spot $1"); }
+function wfClean(v){ return String(v||"").replace(/^\s*(?:wi-?fi\s*)?(?:network(?:\s*name)?|ssid|name|password|pass(?:word)?|pw|key)\s*[:=-]\s*/i,"").trim(); }
 function kbc(v){ return String(v||"").replace(/\s*\(\s*private\s*\)/ig,"").trim(); }   /* Track key box codes carry "(PRIVATE)" (Brandon 2026-11-03) */
 /* .hentry = Entry notes, 2 columns wide */
-function tCell(label,src,lines,plain,cls){ if(cls==='hentry' && !document.getElementById('hentrycss')){ var st=document.createElement('style'); st.id='hentrycss'; st.textContent='.hql.hentry{grid-column:span 2}.hql.hentry .tl{display:inline-block;margin-right:18px}@media (max-width:640px){.hql.hentry{grid-column:auto}}'; document.head.appendChild(st); }
+function tCell(label,src,lines,plain,cls){ if(cls==='hentry' && !document.getElementById('hentrycss')){ var st=document.createElement('style'); st.id='hentrycss'; st.textContent='.hql.hentry{grid-column:span 2}.hql.hentry .tl{display:block;margin:0 0 6px}@media (max-width:640px){.hql.hentry{grid-column:auto}}'; document.head.appendChild(st); }
  lines=(lines||[]).filter(Boolean); if(!lines.length) return "";
   return '<div class="hql'+(cls?' '+cls:'')+'"><div class="qvh">'+esc(label)+(src&&/^Contract/.test(src)?'<span class="hsrc">· '+esc(src)+'</span>':'')+'</div>'+lines.map(function(l){ return typeof l==="string"?tLine(l,plain):l.html; }).join("")+'</div>'; }
 /* the 4 code sections on a tile (Brandon 2026-11-03: "lock system … master code and owner code / garage/gate … garage and gate code /
@@ -1301,7 +1304,10 @@ function lockSecs(c,t,q,p){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},g
     if(/front door/.test(l)) return "Front door"; return k==="own"?"Owner lockout":k==="gate"?"Gate":"Door"; };
   var tCodes=function(v){ return (String(v).match(/•{3,}|[0-9][0-9#*]{2,}/g)||[]).slice(0,2).join(" / "); };
   var add=function(k,label,val,s){ val=kbc(String(val||"").replace(/\s+/g," ").trim());
-    if(/clubhouse|pool/i.test(label||"")) return; var cv=tCodes(val); if(!cv) return; val=cv; label=tLab(k,label); if(!val) return; var d=val.replace(/\D/g,""); d=d.length>=3?d:val.toLowerCase();
+    if(/clubhouse|pool/i.test(label||"")) return;
+    var pm=PARK_RX.exec(val); if(pm){ val=val.replace(new RegExp(PARK_RX.source,"ig")," "); if(!seen["park"+pm[1]]){ seen["park"+pm[1]]=1; seen[pm[1].replace(/\D/g,"")]=1;
+      S.gate.push({html:'<div class="tl"><span class="ql">Assigned parking spot</span>'+esc(pm[1])+'</div>'}); } }
+    var cv=tCodes(val); if(!cv) return; val=cv; label=tLab(k,label); if(!val) return; var d=val.replace(/\D/g,""); d=d.length>=3?d:val.toLowerCase();
     if(seen[d]) return; seen[d]=1; if(S[k].length>=4) return; if(val.length>60) val=val.slice(0,58)+"…";
     S[k].push(label?label+": "+val:val); src[k][s||"Asana"]=1; };
   var kind=function(L){ return /padlock|lock ?box|locker|safe|attic|mechanical|thermostat/.test(L)?null
@@ -1337,7 +1343,7 @@ function lockSecs(c,t,q,p){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},g
   all=all.filter(function(l){ return typeof l!=="string" || !/^(Key box location|Owner closet location):/.test(l); });
   return [tCell("Entry notes","",all,false,"hentry")]; }
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
-  var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+t.wifi_name:"",t.wifi_pass?"Password: "+t.wifi_pass:""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+pe.wifiName:"",pe.wifiPass?"Password: "+pe.wifiPass:""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
+  var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+wfClean(t.wifi_name):"",t.wifi_pass?"Password: "+wfClean(t.wifi_pass):""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+wfClean(pe.wifiName):"",pe.wifiPass?"Password: "+wfClean(pe.wifiPass):""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
   cells.push(tCell("Wi-Fi",q.src.wifi,wifi,true));
   cells=cells.concat(lockSecs(c,t,q,p));
   /* paint stays in Home details only (Brandon 2026-11-03) */
@@ -1371,12 +1377,12 @@ function homeRO(html,code){ if(!document.getElementById('homerocss')){ var st=do
     .replace(/<select\b[^>]*>([\s\S]*?)<\/select>/g,function(t,o){ var m=/<option[^>]*\sselected[^>]*>([\s\S]*?)<\/option>/.exec(o)||/<option[^>]*>([\s\S]*?)<\/option>/.exec(o);
       var v=m?m[1].replace(/<[^>]+>/g,""):""; return val(/^not sure$/i.test(v)?"":v); })
     .replace(/<textarea\b[^>]*>([\s\S]*?)<\/textarea>/g,function(t,v){ return val(v); })
-    .replace(/<span class="hint">From [^<]*<\/span>/g,"")
+    .replace(/<span class="hint">[^<]*<\/span>/g,"").replace(/<span class="note" style="align-self:center">Last changed by[^<]*<\/span>/g,"")
     .replace(/<button class="btn sm pri" data-act="savehome"[^>]*>Save<\/button><button class="btn sm ghost" data-act="cancelhome">Cancel<\/button>/,
       '').replace('<h4>The home</h4>','<h4 style="display:flex;align-items:center">The home<button class="btn sm" style="margin-left:auto" data-act="edithome" data-code="'+esc(code)+'">\u270e Edit</button></h4>');
   return '<div class="homero">'+html+'</div>'; }
 /* street address from the Track home list + a map link (Brandon 2026-11-05) */
-var SUMEL=null; document.addEventListener("click",function(e){ var sm=e.target.closest&&e.target.closest("summary"); SUMEL=sm&&!sm.querySelector("[data-recacc],[data-applacc]")?sm.parentNode:null; },true);
+var SUMEL=null; document.addEventListener("click",function(e){ var sm=e.target.closest&&e.target.closest("summary"); SUMEL=sm&&!sm.querySelector("[data-recacc],[data-applacc],[data-histacc]")?sm.parentNode:null; },true);
 document.addEventListener("toggle",function(e){ var dt=e.target; if(!dt||dt.tagName!=="DETAILS"||!dt.open||dt!==SUMEL) return; SUMEL=null; var root=dt.closest(".dbody"); if(!root) return;
   root.querySelectorAll("details[open]").forEach(function(o){ if(o===dt||o.contains(dt)||dt.contains(o)) return; o.open=false;
     if(o.classList.contains("recacc")){ if(o.querySelector("[data-recacc]")) S.ui.recOpen=false; if(o.querySelector("[data-applacc]")) S.ui.applOpen=false; } }); },true);
@@ -1429,7 +1435,7 @@ function homeDetail(code){
   h+=S.ui.homeEd===code?hb:homeRO(hb,code);
   if(S.ui.homeEd!==code){ var fl=homeRO(fireFields(code),code), lk=canLic();
     xh+='<details class="infocat"><summary>Fire suppression &amp; license</summary>'+fl+
-      (lk?'<div class="links" style="margin-top:8px"><a class="btn sm" href="hub.html#/licensing" target="_top">Open Licensing \u2192</a><a class="btn sm" href="hub.html#/lic_fire" target="_top">Open Fire suppression \u2192</a></div>':'')+
+      (lk?'<div class="links" style="margin-top:8px;gap:8px"><a class="btn sm pri" style="text-decoration:none" href="hub.html#/licensing" target="_top">Open Licensing \u2192</a><a class="btn sm pri" style="text-decoration:none" href="hub.html#/lic_fire" target="_top">Open Fire suppression \u2192</a></div>':'')+
       '<div class="hint" style="margin-top:6px">Change these with \u270e Edit on The home.</div></details>'; }
   // breezeway
   var bw=bwRecent(code);
@@ -1463,18 +1469,27 @@ function homeDetail(code){
   /* Brandon 2026-11-06: fold-outs in A-Z order; Track's garage/parking notes get their own fold-out (the Quick view card keeps only the codes) */
   var fo=[]; if(ah) fo.push(["Appliances",ah]); if(pb) fo.push(["Paint colors",'<details class="infocat"><summary>Paint colors</summary>'+pb.replace(/^<div class="block">/,'<div>')+'</details>']);
   if(xh) fo.push(["Fire suppression & license",xh]);
-  var gq=homeQuick(code,p); if(gq.garage && gq.src.garage && gq.src.garage!=="Asana") fo.push(["Garage & parking",'<details class="infocat"><summary>Garage &amp; parking</summary><div class="prose">'+esc(gq.garage)+'</div></details>']);
+  var gq=homeQuick(code,p); if(gq.garage && gq.src.garage && gq.src.garage!=="Asana") fo.push(["Garage & parking",'<details class="infocat"><summary>Garage &amp; parking</summary><div class="prose">'+esc(parkFix(gq.garage))+'</div></details>']);
   cats.forEach(function(i){ var codes=/^\[codes\]/.test(i.notes);
     fo.push([i.cat||"Note",'<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+'</summary>'+
         '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+'</div></details>']); });
-  fo.sort(function(a,b){ return String(a[0]).toLowerCase().localeCompare(String(b[0]).toLowerCase()); });
+  var ovf=function(x){ return /^overview$/i.test(String(x[0]).trim())?0:1; }; fo.sort(function(a,b){ return (ovf(a)-ovf(b))||String(a[0]).toLowerCase().localeCompare(String(b[0]).toLowerCase()); });
   h+='<div class="block"><h4>Home information</h4>'+fo.map(function(x){ return x[1]; }).join("")+'</div>';
   h+='<details class="block recacc"'+(S.ui.recOpen?' open':'')+'><summary><button type="button" class="recbtn" data-recacc="1"><h4><span class="recchev">'+(S.ui.recOpen?'\u25be':'\u25b8')+'</span>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">'+(jobs.length||recent.length)+' \u00b7 newest first</span></h4></button></summary>'+
     '<style>.recacc>summary{list-style:none}.recacc>summary::-webkit-details-marker{display:none}.recbtn{all:unset;cursor:pointer;display:block;width:100%}.recbtn h4{display:flex;align-items:center;gap:8px;margin:0}.recchev{color:var(--accent);font-size:12px}.recacc[open]>summary{margin-bottom:8px}</style>'+
     (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
     (jobs.length>8?'<button class="btn sm ghost" data-go="jobs" data-ui=\''+esc(JSON.stringify({q:code,st:{},hideOld:true,hideInfo:false,kind:{}}))+'\'>All '+jobs.length+' for this home →</button>':'')+'</details>';
+  h+=histBlock(code);
   return h+'</div>';
 }
+var HIST_LBL={yearBuilt:"Year built",sqft:"Sq ft",beds:"Bedrooms",plan:"Maintenance plan",heatTapeYN:"Heat tape",bbqYN:"BBQ",hotTubYN:"Hot tub",keybox:"Key box location",fuse:"Fuse box",water:"Water shut-off",fire:"Fire suppression",fireLast:"Last fire inspection",fireExp:"Fire tag expires",licNo:"License #",licExp:"License expires",ownerCloset:"Owner closet"};
+function histLbl(k){ return HIST_LBL[k]||(/^hoa/i.test(k)?"HOA":/^wifi/i.test(k)?"Wi-Fi":/^co_/.test(k)?"Moose Office":String(k).replace(/([a-z])([A-Z])/g,"$1 $2").replace(/^./,function(c){ return c.toUpperCase(); })); }
+function histBlock(code){ var H=(D._hist=D._hist||{}), on=S.ui.histOpen===code, st=H[code];
+  if(on && st===undefined){ H[code]=null; st=null; if(window.MM_SB) window.MM_SB.rpc("home_history",{p_home:code}).then(function(r){ H[code]=r.error?{err:1}:(r.data||[]); schedule(); }); else H[code]={err:1}; }
+  var body=!on?'':st==null?'<div class="note">Loading…</div>':st.err?'<div class="note">Couldn\'t load the history. Check your signal and open it again.</div>':!st.length?'<div class="note">No changes recorded yet.</div>':
+    '<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+st.map(function(e){ var f=[]; (e.fields||[]).forEach(function(k){ var l=histLbl(k); if(f.indexOf(l)<0) f.push(l); });
+      return '<div style="padding:7px 10px;border-top:1px solid var(--line-2);font-size:13px"><span class="mono muted">'+esc(fmtD(String(e.at).slice(0,10)))+'</span> · <b>'+esc(e.who||"Someone")+'</b> · '+esc(e.what)+(f.length?': '+esc(f.join(", ")):'')+'</div>'; }).join("")+'</div>';
+  return '<details class="block recacc"'+(on?' open':'')+'><summary><button type="button" class="recbtn" data-histacc="'+esc(code)+'"><h4><span class="recchev">'+(on?'▾':'▸')+'</span>History <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">who changed what</span></h4></button></summary>'+body+'</details>'; }
 
 /* ===== Moose company page (Brandon 2026-10-28): jobs list gone (those were reminders); Vehicles, Moose office info, Employees,
    Logos & colors, General Moose info. CO_FACTS were read from Dropbox / Track and each keeps its source; anything typed on the
@@ -1850,7 +1865,7 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var asana=function(rx){ var n=infoNote(p,rx); return n?{v:n.text,s:'From Asana'+(n.url?' · <a href="'+esc(n.url)+'" target="_blank" rel="noopener">open ↗</a>':'')}:{v:"",s:""}; };
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
   var q=homeQuick(code,p), qs=function(k,rx){ var s0=q.src[k]; return {v:q[k],s:s0==="Asana"?asana(rx).s:s0==="Hub edit"?"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):""):s0?"From "+esc(s0):""}; };
-  var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=qs("garage",/^parking\/? ?garage info$|^parking$/i), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
+  var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=(function(g){ g.v=parkFix(g.v); return g; })(qs("garage",/^parking\/? ?garage info$|^parking$/i)), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+emergHtml(p)+'</div>';
   return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+
@@ -4628,7 +4643,8 @@ document.addEventListener("click",function(ev){
   if(d.co){ if(!need()) return; return mCo(d.co); }
   if(d.cov!=null){ if(!need()) return; return mCoVehicle(d.cov); }
   if(d.hoapop) return hoaPop(d.hoapop);
-  if(d.recacc){ ev.preventDefault(); S.ui.recOpen=!S.ui.recOpen; if(S.ui.recOpen) S.ui.applOpen=false; return render(); }
+  if(d.recacc){ ev.preventDefault(); S.ui.recOpen=!S.ui.recOpen; if(S.ui.recOpen){ S.ui.applOpen=false; S.ui.histOpen=""; } return render(); }
+  if(d.histacc){ ev.preventDefault(); var hc=d.histacc; S.ui.histOpen=S.ui.histOpen===hc?"":hc; if(S.ui.histOpen){ S.ui.recOpen=false; S.ui.applOpen=false; if(D._hist) delete D._hist[hc]; } return render(); }
   if(d.applacc){ ev.preventDefault(); S.ui.applOpen=!S.ui.applOpen; if(S.ui.applOpen) S.ui.recOpen=false; return render(); }
   if(d.costore){ S.ui.coStore=!S.ui.coStore; return render(); }
   if(d.cocodes) return mCoCodes(d.cocodes);
