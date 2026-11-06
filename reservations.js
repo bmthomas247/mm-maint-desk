@@ -490,6 +490,7 @@ function prep(s){
     ready = s.got >= s.need && !s.blockers.length && !s.waiting.length;
   if(s.status === "Cancelled" && (s.stage === "in_progress" || s.stage === "checkout")) s.stage = "cancelling";
   else if(s.stage === "in_progress" && ready && s.chan !== "owner" && (!byPerson || tickedSince)) s.stage = "checkout";
+  else if(s.stage === "in_progress" && ready && s.chan === "owner" && (!byPerson || tickedSince)) s.stage = "owner_done";   // Brandon 2026-11-06
   if(s.stage === "checkout" && owed) s.stage = "waiting_pay";
   if(s.stage === "waiting_pay" && s.payFlag) s.blockers.push(fp ? "Payment declined" : /No card/.test(s.payFlag) ? "No card on file for the next payment" : "Balance off");
   s.state = s.stage === "closed" ? "Complete" : s.status === "Cancelled" && s.stage !== "closed" ? "Cancelling" : s.got === 0 ? "Not started"
@@ -516,7 +517,7 @@ const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1
   held:RSV('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'),
   sync:RSV('<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>') };
 // Sort + date range (Brandon 2026-10-28): by check-in, check-out or booking date; the from/to range applies to the same date
-const BY = { bookedAt:"Newest booking first", res:"Reservation # (highest first)", arrive:"Check-in", depart:"Check-out" };   // default = newest booking (Brandon 2026-11-06)   // 2026-11-06 Brandon: "sort by most recent reservation made" (same day = higher res # first; Track numbers go up as bookings are made)
+const BY = { bookedAt:"Newest booking first", res:"Reservation # (highest first)", res_asc:"Reservation # (lowest first)", arrive:"Check-in", depart:"Check-out" };   // default = newest booking (Brandon 2026-11-06)   // 2026-11-06 Brandon: "sort by most recent reservation made" (same day = higher res # first; Track numbers go up as bookings are made)
 // "Held up by" groups (Brandon 2026-10-30): pick the group, then filter down to one of its members
 const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site management", "Payment declined":"Payment", "No card on file for the next payment":"Payment",
   "Day 7: act today":"Day 4 / day 7", "Day 4: missing documents":"Day 4 / day 7" };
@@ -531,8 +532,8 @@ async function queue(v){
   // groups (like the Locks office neighborhoods): day of the sort date (month for the past lists) or neighborhood
   // Brandon 2026-11-03: Find searches every tab (a stay on Waiting on payment couldn't be found from In progress); results grouped by tab
   let ALLQ = false;
-  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ) return "@" + s.stage; if(F.by === "res") return "#"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" ? d : d.slice(0, 7); };
-  const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k; if(k[0] === "@") return STAGE[k.slice(1)] || k.slice(1); if(k === "#") return "By reservation #, highest first";
+  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ) return "@" + s.stage; if(F.by === "res") return "#"; if(F.by === "res_asc") return "#a"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" ? d : d.slice(0, 7); };
+  const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k; if(k[0] === "@") return STAGE[k.slice(1)] || k.slice(1); if(k === "#") return "By reservation #, highest first"; if(k === "#a") return "By reservation #, lowest first";
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
   const tile = s => { const why = [...new Set([...s.waiting, ...s.blockers].map(b => HELD_GROUP[b] ? HELD_GROUP[b] + " · " + b : b))], pct = s.need ? Math.round(100 * s.got / s.need) : 0;
@@ -547,10 +548,10 @@ async function queue(v){
       ${s.next.length && (s.stage === "in_progress" || s.stage === "waiting_pay") ? `<div class="rnext"><b>Next:</b> ${esc(s.next[0])}</div>` : ""}
       <div class="progress"><i style="width:${pct}%"></i></div></a>`; };
   const draw = () => {
-    const dk = s => String(s[F.by === "res" ? "bookedAt" : F.by] || "").slice(0, 10);   // res # sort: From/To = booking date
+    const dk = s => String(s[/^res/.test(F.by) ? "bookedAt" : F.by] || "").slice(0, 10);   // res # sort: From/To = booking date
     const base = B.stays.filter(s => (!F.kind || kindOf(s) === F.kind) && (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
       && (!F.from || dk(s) >= F.from) && (!F.to || (dk(s) && dk(s) <= F.to)))
-      .sort((x, y) => F.by === "res" ? (Number(y.res) || 0) - (Number(x.res) || 0) : F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : (Number(y.res) || 0) - (Number(x.res) || 0)) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first, then highest res #
+      .sort((x, y) => F.by === "res" ? (Number(y.res) || 0) - (Number(x.res) || 0) : F.by === "res_asc" ? (Number(x.res) || 0) - (Number(y.res) || 0) : F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : (Number(y.res) || 0) - (Number(x.res) || 0)) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first, then highest res #
     ALLQ = !!String(F.q || "").trim();
     const inStage = ALLQ ? base : base.filter(s => s.stage === F.stage);
     const rows = inStage.filter(s => !F.held || heldHas(s, F.held));
@@ -699,10 +700,11 @@ async function card(v, res){
   v.querySelectorAll("[data-step]").forEach(cb => cb.onchange = async () => {
     cb.disabled = true;
     let note = null;
-    if(cb.checked && cb.dataset.note){ note = prompt("Write the reason (it's saved on this check list):"); if(!note || !note.trim()){ cb.checked = false; cb.disabled = false; return; } }
+    if(cb.checked && cb.dataset.note){ note = prompt("Write the reason (it's saved on this check list and in the Track notes):"); if(!note || !note.trim()){ cb.checked = false; cb.disabled = false; return; } }
     const r = await sb.rpc("res_tick", { p_res:s.res, p_step:cb.dataset.step, p_done:cb.checked, p_note:note });
     if(r.error){ cb.checked = !cb.checked; cb.disabled = false; return msg("Couldn't save: " + r.error.message); }
     s.ticks = { ...(s.ticks || {}), [cb.dataset.step]:r.data }; prep(s); card(v, res);
+    if(note) ntPush(s.res, `Check list: "${stepLabel(cb.dataset.step)}" done. ${note.trim()}`);
   });
   v.querySelectorAll("[data-ask]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
     const note = prompt("What do you need from the manager? (sent to the managers on shift in Slack)");
@@ -710,6 +712,7 @@ async function card(v, res){
     b.disabled = true;
     const r = await sb.rpc("res_ask", { p_res:s.res, p_step:b.dataset.ask, p_note:note });
     if(r.error){ b.disabled = false; return msg("Couldn't ask: " + r.error.message); }
+    ntPush(s.res, `Asked a manager about "${stepLabel(b.dataset.ask)}": ${note.trim()}`);
     await load(true); card(v, res); });
   v.querySelectorAll("details.racc").forEach(d => d.ontoggle = () => {
     if(GOPEN[s.res] === "*") return;
@@ -782,6 +785,13 @@ function ntDraw(res){
   box.querySelectorAll("[data-ntnext]").forEach(b => b.onclick = () => { if(n.nw.st === "wait" || n.nw.st === "saving") return;
     ntDraft(res, "nw", ""); n.nw = { id:null, text:"", expect:null, st:"" }; ntDraw(res); });
   box.querySelectorAll("[data-ntretry]").forEach(b => b.onclick = () => { const k = b.closest(".rnt,.rntnew").querySelector("textarea").dataset.ntk; ntSave(res, k); });
+}
+const stepLabel = k => ((B && B.steps || []).find(t => t.key === k) || {}).label || k;
+// a note written somewhere else on the check list (a tick's reason, an ask) -> its own Track note, shown in the Notes list
+async function ntPush(res, text){
+  const n = ntState(res), r = await sb.functions.invoke("res-notes", { body:{ action:"save", res, text } }), d = await ntBody(r);
+  if(d.ok && d.note){ n.notes.unshift(d.note); ntDraw(res); }
+  else { n.err = "That note is saved in the hub but didn't reach Track: " + (d.error || "no answer") + ". Add it in the Notes box to try again."; ntDraw(res); }
 }
 async function ntSave(res, k){
   const n = ntState(res), e = k === "nw" ? n.nw : n.ed[k]; if(!e) return;
