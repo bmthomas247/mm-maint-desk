@@ -266,7 +266,14 @@ body.pennyonly #pennyBox .ph{cursor:default}
 .ord .oi{width:32px;height:32px;border-radius:9px;background:var(--moose-soft);color:var(--moose-ink);display:grid;place-items:center;flex:none} .ord .oi svg{width:17px;height:17px}
 .ord b{flex:1;min-width:0} .ord .btn.small{min-width:40px;padding:0 10px}
 #savedtip{position:fixed;right:18px;bottom:18px;z-index:60;background:var(--forest);color:#fff;font-weight:700;font-size:14px;padding:9px 14px;border-radius:999px;box-shadow:0 6px 18px rgba(10,30,20,.25);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none}
-#savedtip.on{opacity:1;transform:none} #savedtip.bad{background:var(--red)}
+#savedtip.on{opacity:1;transform:none}
+.ntfh{margin:14px 0 6px;font-size:14px}
+.ntf{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}
+.ntf input{width:20px;height:20px;margin-top:2px;flex:none}
+.ntf small{display:block;color:var(--muted);font-weight:500}
+.ntfal{margin:0 0 4px;padding-left:20px}
+.ntfreq{border-top:1px solid var(--line);padding:6px 0}
+#ntfreq{width:100%;box-sizing:border-box} #savedtip.bad{background:var(--red)}
 /* drag to reorder (Brandon 2026-11-03): handle on phones, whole row with a mouse */
 .ord .ograb{cursor:grab;touch-action:none;user-select:none;color:var(--muted);font-size:20px;line-height:1;padding:6px 2px;flex:none}
 .ord{cursor:default} @media (pointer:fine){ .ord{cursor:grab} .ord .btn{cursor:pointer} }
@@ -752,7 +759,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
 /* 🔔 Notifications (Brandon 2026-11-02: "let people see their notifications quickly"). Only things this person already gets,
    read with their own sign-in (RLS decides): Penny's tips, their checks today, time-off requests waiting for their OK, and answers
    from an admin to "Ask an admin". Nothing new is stored; an item goes away when it's done where it lives. */
-let BELL = { items:[], at:0 };
+let BELL = { items:[], at:0 }, NOTIFY = null;   // NOTIFY = hub_notify_mine() (My settings > Notifications, 2026-11-05)
 async function bellLoad(force){
   if(!ME || (!force && Date.now() - BELL.at < 60000)) return; BELL.at = Date.now();
   const has = k => DESKS.some(x => x.key === k), today = new Date().toLocaleDateString("en-CA"), it = [];
@@ -763,20 +770,22 @@ async function bellLoad(force){
     has("cal_off") ? q(sb.from("hub_timeoff_requests").select("user_id").eq("status", "pending")) : {},
     has("cal_off") ? q(sb.rpc("cal_people")) : {},
     q(sb.rpc("hub_feedback_board"))]);
-  if(tips.count) it.push({ ic:"💡", t:`Penny has ${tips.count} tip${tips.count === 1 ? "" : "s"} for you`, s:(tips.data || []).map(x => x.title).slice(0, 2).join(" · "), href:"#/home" });
+  if(!NOTIFY){ const n = await q(sb.rpc("hub_notify_mine")); NOTIFY = n.data || { items:[] }; }
+  if(tips.count) it.push({ ic:"💡", t:`Penny has ${tips.count} tip${tips.count === 1 ? "" : "s"} for you`, s:(tips.data || []).map(x => x.title).slice(0, 2).join(" · "), href:"#/home", k:"bell_tips" });
   const open = (chk.data || []).filter(c => !c.run || !["ok","done"].includes(c.run.status));
-  if(open.length) it.push({ ic:"☑️", t:`${open.length} check${open.length === 1 ? "" : "s"} to do${open.some(c => c.overdue) ? " (overdue)" : " today"}`, s:open.map(c => c.title).slice(0, 2).join(" · "), href:"#/home" });
+  if(open.length) it.push({ ic:"☑️", t:`${open.length} check${open.length === 1 ? "" : "s"} to do${open.some(c => c.overdue) ? " (overdue)" : " today"}`, s:open.map(c => c.title).slice(0, 2).join(" · "), href:"#/home", k:"bell_checks" });
   const myId = ((ppl.data || []).find(p => p.name === ME.name) || {}).id, nWait = (off.data || []).filter(r => r.user_id !== myId).length;
-  if(nWait) it.push({ ic:"🌴", t:`${nWait} time-off request${nWait === 1 ? "" : "s"} waiting for you`, s:"Approve or say no", href:"#/cal_off" });
+  if(nWait) it.push({ ic:"🌴", t:`${nWait} time-off request${nWait === 1 ? "" : "s"} waiting for you`, s:"Approve or say no", href:"#/cal_off", k:"bell_timeoff" });
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
-  if(ans.length) it.push({ ic:"📬", t:`An admin answered ${ans.length === 1 ? "your question" : ans.length + " of your questions"}`, s:"Open Penny to read it", penny:true });
+  if(ans.length) it.push({ ic:"📬", t:`An admin answered ${ans.length === 1 ? "your question" : ans.length + " of your questions"}`, s:"Open Penny to read it", penny:true, k:"bell_answers" });
   // Folio reports waiting (2026-11-02): only reviewers read other people's rows (RLS), so this is 0 for everyone else
   if(DESKS.some(x => x.key === "res_report" || x.key === "tools_report")){ const fr = await q(sb.from("res_folio_reports").select("id", { count:"exact", head:true }).eq("status", "new").neq("reporter_name", ME.name || ""));
-    if(fr.count) it.push({ ic:"🚩", t:`${fr.count} new folio report${fr.count === 1 ? "" : "s"}`, s:"Someone flagged a folio for a manager", href:"#/res_report" }); }
-  BELL.items = it;
-  document.querySelectorAll(".mbell").forEach(b => { b.classList.toggle("has", it.length > 0); b.querySelector(".bdot").textContent = it.length > 9 ? "9+" : it.length;
-    b.title = it.length ? `Notifications (${it.length})` : "Notifications"; });
+    if(fr.count) it.push({ ic:"🚩", t:`${fr.count} new folio report${fr.count === 1 ? "" : "s"}`, s:"Someone flagged a folio for a manager", href:"#/res_report", k:"bell_folio" }); }
+  const offK = new Set((NOTIFY.items || []).filter(x => x.on === false).map(x => x.key));
+  BELL.items = it.filter(x => !offK.has(x.k));
+  const n = BELL.items.length; document.querySelectorAll(".mbell").forEach(b => { b.classList.toggle("has", n > 0); b.querySelector(".bdot").textContent = n > 9 ? "9+" : n;
+    b.title = n ? `Notifications (${n})` : "Notifications"; });
   if($("#bellpop") && $("#bellpop").classList.contains("on")) bellDraw();
 }
 function bellDraw(){
@@ -1478,6 +1487,41 @@ async function pennyBriefCard(box){
     $("#pbmsg").textContent = x.data.enabled ? `Next one at ${t12(x.data.send_at)}${x.data.weekends ? "" : " on a weekday"}.` : "You won't get the briefing."; savedTip(); };
   ["pbon", "pbat", "pbwk"].forEach(id => $("#" + id).onchange = save);
 }
+/* My settings: 🔔 Notifications (Brandon 2026-11-05). Optional Slack messages + bell items per kind (hub_notify_set); the work alerts
+   this person gets are listed as always on; "Ask for another alert" goes to the admins as a private ask (hub-feedback, alert:true). */
+async function notifyCard(box){
+  if(!box) return;
+  const [r, fb, pb] = await Promise.all([sb.rpc("hub_notify_mine"), sb.rpc("hub_feedback_board"), sb.rpc("penny_brief_mine")]);
+  if(r.error) return box.innerHTML = `<div class="card"><b style="font-size:17px">🔔 Notifications</b><p class="muted">Couldn't load: ${esc(niceErr(r.error))}</p></div>`;
+  NOTIFY = r.data; const N = NOTIFY, slack = N.items.filter(x => x.kind === "slack"), bell = N.items.filter(x => x.kind === "bell");
+  const asks = (fb.data || []).filter(x => x.kind === "ask" && x.mine && /^Alert request: /.test(x.body || "")).slice(0, 8);
+  const row = x => `<label class="ntf"><input type="checkbox" data-ntf="${esc(x.key)}"${x.on ? " checked" : ""}><span><b>${esc(x.label)}</b><small>${esc(x.about)}</small></span></label>`;
+  box.innerHTML = `<div class="card"><b style="font-size:17px">🔔 Notifications</b>
+    <p class="muted" style="margin:4px 0 8px">Pick what reaches you. Changes save on their own.</p>
+    ${bell.length ? `<h4 class="ntfh">In the 🔔 bell</h4>${bell.map(row).join("")}` : ""}
+    <h4 class="ntfh">Slack messages from the Moose Hub</h4>
+    ${N.slack ? (slack.length ? slack.map(row).join("") : `<p class="muted" style="margin:0">No optional Slack messages for you right now.</p>`)
+      : `<p class="muted" style="margin:0">Your Slack isn't linked to the hub yet, so the hub doesn't message you. Ask Brandon or Kim to link it.</p>`}
+    ${pb.data ? `<p class="muted" style="margin:8px 0 0">☀️ Morning briefing: ${pb.data.enabled ? "on" : "off"}. Change it in <a href="#" id="ntfpb">Morning briefing from Penny</a>.</p>` : ""}
+    ${(N.always || []).length ? `<h4 class="ntfh">Always on for your job</h4><ul class="ntfal">${N.always.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
+      <p class="muted" style="margin:0;font-size:13px">These are work alerts, so they always come through.</p>` : ""}
+    <h4 class="ntfh">Want an alert about something else?</h4>
+    <p class="muted" style="margin:0 0 6px">Tell us what you'd like to hear about and how (Slack or the bell). Brandon or Kim will look at it.</p>
+    <textarea id="ntfreq" rows="2" maxlength="600" placeholder="Example: Slack me when a guest at a home I clean leaves a bad review"></textarea>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn small" id="ntfsend">Send request</button><span class="muted" id="ntfmsg"></span></div>
+    ${asks.length ? `<div style="margin-top:10px">${asks.map(x => `<div class="ntfreq"><div>${esc(x.body.replace(/^Alert request: /, ""))}</div><small class="muted">${x.admin_note ? "Answer: " + esc(x.admin_note) : "Waiting for Brandon or Kim"}</small></div>`).join("")}</div>` : ""}
+  </div>`;
+  box.querySelectorAll("[data-ntf]").forEach(c => c.onchange = async () => { const k = c.dataset.ntf, x = await sb.rpc("hub_notify_set", { p_key:k, p_on:c.checked });
+    if(x.error){ c.checked = !c.checked; return savedTip("Couldn't save: " + niceErr(x.error), true); }
+    const it = NOTIFY.items.find(i => i.key === k); if(it) it.on = c.checked; savedTip(); if(k.startsWith("bell_")){ BELL.at = 0; bellLoad(true); } });
+  const pl = box.querySelector("#ntfpb"); if(pl) pl.onclick = e => { e.preventDefault(); const d = document.querySelector("#pbrief details"); if(d){ d.open = true; d.scrollIntoView({ behavior:"smooth", block:"start" }); } };
+  box.querySelector("#ntfsend").onclick = async () => { const t = box.querySelector("#ntfreq").value.trim(), m = box.querySelector("#ntfmsg");
+    if(t.length < 5) return m.textContent = "Tell us a little more first.";
+    const b = box.querySelector("#ntfsend"); b.disabled = true; m.textContent = "Sending…";
+    const x = await sb.functions.invoke("hub-feedback", { body:{ kind:"ask", alert:true, body:"Alert request: " + t, desk:"", deskLabel:"My settings ▸ Notifications", page:"My settings ▸ Notifications" } });
+    b.disabled = false; if(x.error) return m.textContent = "Couldn't send: " + niceErr(x.error);
+    m.textContent = "Sent ✓ Brandon and Kim will see it."; box.querySelector("#ntfreq").value = ""; setTimeout(() => notifyCard(box), 1200); };
+}
 async function settingsView(v){
   const [a, b, c, d] = await Promise.all([sb.rpc("hub_birthdays_all"), ME.admin ? sb.rpc("hub_birthday_people") : Promise.resolve({ data:[] }),
     ME.admin ? sb.rpc("hub_admin_people") : Promise.resolve({ data:[] }), ME.admin ? Promise.resolve({ data:[] }) : sb.rpc("hub_pw_people")]);
@@ -1555,6 +1599,7 @@ function settingsView2(v){
       <p class="muted" style="margin:4px 0 8px">Set a password for someone on your team. Saving signs them out of every phone and computer. Every change is logged.</p>
       ${PWP.map(x => `<div class="ord"><b style="flex:1">${esc(x.name)}<div class="muted" style="font-weight:600;font-size:13px">${esc(x.teams || "")}</div></b><button class="btn small" data-pwp="${x.id}">Set password</button></div>`).join("")}</details>` : ""}
     ${BD.mine ? "" : bdCard()}
+    <div id="ntfbox"></div>
     <div id="pbrief"></div>
     <details class="card acc" id="ordcard"${ORDO.card ? " open" : ""}><summary><b style="font-size:17px">☰ Arrange my sidebar</b><span class="muted">${desksFirst ? "Desks first" : "Moose Info first"}${ORD.length ? " · your order" : ""}</span></summary><p class="muted" style="margin:4px 0 8px">Home always stays on top. Pick what comes next, then put things in the order you like.</p>
       <div class="seg" id="ordfirst" style="margin:0 0 10px"><span class="muted" style="align-self:center;margin-right:6px">Show first:</span><button class="btn small ${desksFirst ? "" : "on"}" data-first="info">Moose Info</button><button class="btn small ${desksFirst ? "on" : ""}" data-first="desks">Desks</button></div>
@@ -1622,7 +1667,7 @@ function settingsView2(v){
     $("#intown").onblur = () => { $("#intown").onchange(); autoSave(); };
     $("#mypw").onclick = myPwBox;
     v.querySelectorAll("[data-pwp]").forEach(b => b.onclick = () => accPw(PWP.find(p => p.id === b.dataset.pwp), msg => { $("#prefmsg").textContent = msg; }));
-    pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
+    notifyCard($("#ntfbox")); pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
     setOneOpen(v);
   };
   draw();
