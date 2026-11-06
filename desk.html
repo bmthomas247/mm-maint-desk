@@ -1436,7 +1436,7 @@ var CO_FACTS={
     mail:{v:"5519 Lillehammer Ln #1101, Park City, UT 84098 (same as the office). Use it for every Moose address.\nThe old PO Box 981671 is no longer valid.",src:"Kim, 2026-10-29 (Bugs & upgrades #3) and Brandon, 2026-11-02"},
     phone:{v:"435-714-6544 (call or text)\nFax 435-214-2280",src:CO_D+"4-Templates/3-Invoice Templates/Sales Invoice Dollys.docx (2026-01-29)"},
     email:{v:"Hello@MooseManagement.com",src:"Brandon, 2026-11-05"},
-    hours:{v:"Phones 9am–6pm daily (2022 voicemail script)",src:CO_D+"4-Templates/Voicemail Messages/Voicemail for Nextiva.docx (2022-09-24)"},
+    hours:{v:"Phones 9am–6pm daily",src:CO_D+"4-Templates/Voicemail Messages/Voicemail for Nextiva.docx (2022-09-24)"},
     storage:{v:"Protection Self Storage of Park City, 1240 W Richardson Rd, Park City 84036 · 435-465-2900 — unit B258 on the Oct 2026 invoice; a 10x10 unit B346 from Dec 2022; a Dec 2023 invoice says \"ALL 4\" units, so the count needs checking\nStorage Elevated, 4006 N. Forestdale Dr, Park City 84098 · 435-333-4400 — newest receipts are 2023; may be closed",src:CO_D+"13-Vendors & Chanel Partners/Storage-Protection Storage/Invoices/2026 (2026-10-19); Storage Elevated: 13-Vendors & Chanel Partners/Storage Elevated (2023-03-29)"}},
   general:{
     legal:{v:"Vacation Rentals Park City, LLC (Utah, entity no. 6424785-0160)\nRelated: Moose Property Management LLC (on the E&O policy from 9-11-2026) · Moose 1101, LLC (office unit)",src:CO_LIC+"Business Licenses & Insurance/Division of Corporations -Business Renewal 2023-2024.pdf (2023-11-06)"},
@@ -1491,7 +1491,7 @@ function coStorage(){ var us=coUnits(), on=us.filter(coUnitOn), old=us.filter(fu
   var nt=coVal("storage","notes"), tx=coVal("storage","storage");
   return '<div class="coact"><button class="btn sm ghost" data-cou="">+ Add a unit</button><button class="btn sm ghost" data-co="storage">Edit notes</button></div>'+
     place("ps")+'<div class="lbl" style="margin:12px 0 6px">'+on.length+' units we rent now</div><div class="counits">'+on.map(card).join("")+'</div>'+
-    '<div class="hint" style="margin-top:6px">Sizes and what\u2019s in each unit aren\u2019t in any file yet: tap Edit on a unit to fill them in. Never type a gate or lock code here.</div>'+
+    '<div class="hint" style="margin-top:6px">Tap Edit on a unit to add its size and what\u2019s in it.</div>'+
     (old.length?'<details class="infocat" style="margin-top:10px"><summary>'+old.length+' older units (no longer billed)</summary><div class="counits">'+old.map(card).join("")+'</div></details>':'')+
     '<div class="lbl" style="margin:14px 0 6px">Other storage place</div>'+place("se")+
     (tx.s.indexOf("Edited in the hub")===0?coRow("Storage (typed earlier)",tx.v,tx.s):'')+(nt.v?coRow("Storage notes",nt.v,nt.s):''); }
@@ -1635,7 +1635,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var emp='<div class="coact"><button class="btn sm ghost" data-co="titles">Edit titles &amp; roles</button></div>'+
     (!D._staff?'<div class="note">'+(window.MM_SB?'Loading…':'Sign in to see the team.')+'</div>':
     '<table class="t"><thead><tr><th>Name</th><th>Ext.</th><th>Title</th><th>What they handle</th><th>Hub teams</th></tr></thead><tbody>'+st.map(function(p){ var hd=(pe.co_handles||{})[p.name]; var ex=(pe.co_ext||{})[p.name]; return '<tr><td>'+esc(p.name)+'</td><td class="mono">'+(ex?esc(ex):'<span class="muted">—</span>')+'</td><td>'+(ti[p.name]?esc(ti[p.name]):'<span class="muted">—</span>')+'</td><td>'+(hd?esc(hd):'<span class="muted">—</span>')+'</td><td>'+esc((p.teams||[]).join(", "))+'</td></tr>'; }).join("")+'</tbody></table>'+
-    '<div class="hint" style="margin-top:6px">Names and teams from the Moose Hub team list'+(pe.co_titles_by?' · titles edited in the hub by '+esc(nameFor(pe.co_titles_by)):'')+(pe.co_titles_src && !pe.co_titles_by?' · titles from '+esc(pe.co_titles_src):'')+(pe.co_ext_src?' · phone extensions: '+esc(pe.co_ext_src):'')+'</div>'+
+    
     (Object.keys(pe.co_ext_lines||{}).length?'<div class="lbl" style="margin-top:10px">Other phone lines</div>'+Object.keys(pe.co_ext_lines).sort().map(function(k){ return '<div class="qrow"><span class="mono" style="min-width:44px;display:inline-block">'+esc(k)+'</span> '+esc(pe.co_ext_lines[k])+'</div>'; }).join(""):''));
   // logos & colors
   var cols=(pe.co_colors||"").split("\n").map(function(l){ var m=/(#[0-9a-f]{6}|#[0-9a-f]{3})\b\s*[-–:]?\s*(.*)/i.exec(l); return m?{hex:m[1],name:m[2],src:"Edited in the hub"}:null; }).filter(Boolean);
@@ -1648,7 +1648,7 @@ function companyDetail(code){ var allc=(D.byProp[code]||[]), pe=coEdits(), t=tod
   var ov=coVal("office","addr").v.split("\n")[0], op=coVal("office","phone").v.split("\n")[0], oh=coVal("office","hours").v.split("\n")[0];
   var ws=coVal("social","web").v.split("\n")[0], lg=coVal("general","legal").v.split("\n")[0], su=coUnits().filter(coUnitOn);
   var T=[["veh","\ud83d\ude97","Vehicles",n(on.length,"vehicle","vehicles"),[on.slice(0,3).map(function(v){ return v.name||v.ymm; }).join(" · ")+(on.length>3?" +"+(on.length-3)+" more":"")],veh],
-    ["storage","\ud83d\udce6",CO_TITLES.storage,n(su.length,"unit","units")+" at Protection Self Storage",[su.map(function(x){ return x.u; }).join(" · "),CO_FACTS.storePlaces.ps.addr],coStorage()],
+    ["storage","\ud83d\udce6",CO_TITLES.storage,"Protection Storage - "+su.length+" total",[],coStorage()],
     ["emp","\ud83d\udc65","Employees",D._staff?n(st.length,"person","people"):"the team",["Names, titles, phone extensions and who handles what"],emp],
     ["brand","\ud83c\udfa8","Logos & colors",n(cols.length,"color","colors")+" \u00b7 "+n(CO_FACTS.logos.length-1,"logo file","logo files"),['<div class="cosw">'+cols.slice(0,8).map(function(c){ return '<span style="background:'+esc(c.hex)+'"></span>'; }).join("")+'</div>'],brand],
     ["social","\ud83c\udf10",CO_TITLES.social,"website, Facebook, Instagram\u2026",[ws],coBlock("social")],
