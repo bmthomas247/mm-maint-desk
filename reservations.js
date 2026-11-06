@@ -407,7 +407,20 @@ const bwInOut = s => bwHas(s, "inspection", /check-?in/i, s.arrive, s.arrive) &&
 // Only trust "no clean left" when this home was in the Breezeway pull (it has a Breezeway id and the stay is in the window)
 const bwKnown = s => !!B.bwUpdated && !(B.bwMissing || []).includes(s.unit) && s.depart >= addDay(B.today, -7) && s.arrive <= addDay(B.today, 75);
 const AUTO_SRC = { brevo_ok:"Brevo", hk_after_cancel:"Slack", hk_after_extend:"Slack", hk_any:"Slack", ah_verified:"Autohost", ah_portal:"Autohost", bw_pre_out:"Breezeway", bw_owner_next_chris:"Breezeway", bw_in_out:"Breezeway", bw_wp_lindsay:"Breezeway", td_msgs_ok:"Track messages", trk_35:"Track automation", trk_adv:"Track automation", td_pl_conf:"Freshdesk", td_pl_noted:"Freshdesk", td_wg_sent:"Freshdesk", td_wg_pet:"Freshdesk", bw_og:"Breezeway", bw_wg:"Breezeway", bw_no_clean:"Breezeway" };
+const PEEK = {};
+async function peekTrack(v, s){
+  const need = (s.steps || []).some(t => (t.key === "i_campaign" || t.key === "i_agent") && !t.done), p = PEEK[s.res];
+  if(!need || (p && Date.now() - p.at < 300000)) return;
+  PEEK[s.res] = Object.assign({}, p || {}, { at:Date.now() });
+  try {
+    const r = await sb.functions.invoke("res-peek", { body:{ res:s.res } }), d = r.data || {};
+    if(r.error || !d.ok) return;
+    PEEK[s.res] = { at:Date.now(), campaign:d.campaign || "", agent:d.agent || "" };
+    if((d.campaign && d.campaign !== s.campaign) || (d.agent && d.agent !== s.agent)){ prep(s); if(document.body.contains(v)) card(v, s.res); }
+  } catch(_){ }
+}
 function prep(s){
+  { const pk = PEEK[s.res]; if(pk){ if(pk.campaign) s.campaign = pk.campaign; if(pk.agent) s.agent = pk.agent; } }
   const c = conds(s), ticks = s.ticks || {};
   s.rules = B.rules.filter(r => { const p = r.unit.toUpperCase(), u = (s.unit || "").toUpperCase(); return p.endsWith(" %") ? u.startsWith(p.slice(0, -1)) : u === p; });
   s.area = area(s.unit);
@@ -618,6 +631,7 @@ async function card(v, res){
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load: ${esc(e.message)}</p></div></div>`; return; }
   const s = B && B.stays.find(x => x.res === res);
   if(!s){ v.innerHTML = `<div class="page"><div class="card"><a class="btn small" href="#/reservations">← Back</a><p>No check list for #${esc(res)} (only stays from 60 days back are here).</p></div></div>`; return; }
+  peekTrack(v, s);
   const occ = s.occ || {}, grp = {};
   s.steps.forEach(t => (grp[t.grp] = grp[t.grp] || []).push(t));
   const og = s.res in GOPEN ? GOPEN[s.res] : ((Object.entries(grp).find(([g, ts]) => ts.some(t => !t.opt && !t.done)) || [])[0] || "");
