@@ -85,6 +85,14 @@ a.mgear{flex:none;display:grid;place-items:center;width:32px;height:32px;border-
 .mbell.has .bdot{display:block}
 .bellpop{position:fixed;z-index:45;width:min(360px,calc(100vw - 24px));max-height:min(70vh,520px);overflow:auto;background:var(--card,#fff);color:var(--ink,#16220a);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(10,30,20,.25);padding:8px;display:none}
 .bellpop.on{display:block}
+/* 🔍 search the whole hub from the green banner (Brandon 2026-11-06: "search the whole hub there if they dont want to use penny") */
+.me button.mfind{padding:0;min-height:0;width:32px;height:32px;display:grid;place-items:center;cursor:pointer} .mfind svg{width:17px;height:17px;display:block}
+#findpop{width:min(520px,calc(100vw - 24px));max-height:min(78vh,640px);padding:10px}
+#findpop .fq{display:flex;gap:8px;align-items:center;margin:0 0 6px}
+#findpop .fq input{flex:1;min-height:42px;font-size:15px;border-radius:12px}
+#findpop .fsh{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--muted);margin:10px 8px 2px}
+#findpop a.bn.hi{background:var(--moose-soft)}
+#findpop .fhint{padding:8px;color:var(--muted);font-size:13px}
 .bellpop h4{margin:4px 8px 6px;font-size:15px}
 .bellpop a.bn{display:flex;gap:10px;align-items:flex-start;padding:9px 8px;border-radius:10px;color:inherit;text-decoration:none}
 .bellpop a.bn:hover{background:var(--moose-soft)}
@@ -815,13 +823,13 @@ function bellSetup(){
     window.addEventListener("hashchange", () => bellLoad());
     setInterval(() => bellLoad(true), 5 * 60000); }
   const place = (b, p) => { const r = b.getBoundingClientRect(); p.style.top = (r.bottom + 8) + "px"; const pw = Math.min(360, window.innerWidth - 24); p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px"; };
-  document.querySelectorAll(".mbell").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#bellpop"); $("#boardpop").classList.remove("on");
+  document.querySelectorAll(".mbell").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#bellpop"); $("#boardpop").classList.remove("on"); if($("#findpop")) $("#findpop").classList.remove("on");
     if(p.classList.contains("on")) return p.classList.remove("on");
     place(b, p); bellDraw(); p.classList.add("on"); bellLoad(true); });
-  document.querySelectorAll(".mboard").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const q = $("#boardpop"); $("#bellpop").classList.remove("on");
+  document.querySelectorAll(".mboard").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const q = $("#boardpop"); $("#bellpop").classList.remove("on"); if($("#findpop")) $("#findpop").classList.remove("on");
     if(q.classList.contains("on")) return q.classList.remove("on");
     place(b, q); boardDraw(); q.classList.add("on"); });
-  BELL.at = 0; bellLoad(true);
+  BELL.at = 0; bellLoad(true); findSetup();
 }
 /* 💬 Message board: the button opens a preview of the newest messages first (Brandon 2026-11-02); the board itself is built later.
    boardPreview() returns the newest posts [{who, text, at}] once the board exists. */
@@ -849,7 +857,7 @@ function shell(){
   const SN = sideNav(DESKS, PREFS.desk_order || []);
   const teams = (ME.teams||[]).map(t => t.replace(/_/g," ")).join(" · ");
   // 2026-10-28 (Brandon): profile, settings and sign out sit top right (were at the bottom of the sidebar)
-  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button class="mgear mbell" title="Notifications" aria-label="Notifications">${ICON.bell}<span class="bdot"></span></button>${ME && ME.admin ? `<a class="mgear mboard" href="#/board" title="Message board" aria-label="Message board">${ICON.chat}</a>` : ""}<a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
+  const meHtml = `<div class="me"><a class="mlink" href="#/settings" title="My settings and picture">${avatarHtml()}<span class="nm">${esc(ME.name)}<small>${esc(teams)}</small></span></a><button class="mgear mfind" title="Search the hub (Ctrl+K)" aria-label="Search the hub">${ICON.search}</button><button class="mgear mbell" title="Notifications" aria-label="Notifications">${ICON.bell}<span class="bdot"></span></button>${ME && ME.admin ? `<a class="mgear mboard" href="#/board" title="Message board" aria-label="Message board">${ICON.chat}</a>` : ""}<a class="mgear" href="#/settings" title="My settings" aria-label="My settings">${ICON.gear}</a><button class="uout">Sign out</button></div>`;
   app.innerHTML = `<div class="topbar"><button id="menu" aria-label="Desks">${ICON.menu}</button><b id="ttl">Moose Hub</b>${meHtml}</div>
   <div class="scrim" id="scrim"></div>
   <div class="shell">
@@ -1075,6 +1083,71 @@ function hubSearchSetup(){
     if(e.key === "ArrowDown" || e.key === "ArrowUp"){ e.preventDefault(); as[hi].classList.remove("hi"); hi = (hi + (e.key === "ArrowDown" ? 1 : -1) + as.length) % as.length; as[hi].classList.add("hi"); as[hi].scrollIntoView({ block:"nearest" }); }
     if(e.key === "Enter"){ e.preventDefault(); go(as[hi].getAttribute("href")); }
     if(e.key === "Escape"){ inp.value = ""; box.classList.remove("on"); } });
+}
+/* ---------- 🔍 Search the whole hub (green banner, Brandon 2026-11-06). Desks, reports, Property Details (code, community, address),
+   vendors, people and how-to notes. Only what this person can already open: desks from hub_my_desks, reports + notes through RLS,
+   homes/vendors/people only with those desks. Nothing new is stored. Ctrl+K or "/" opens it. */
+const FIND = { rep:null, ppl:null, addr:null, t:0, n:0 };
+async function findLoad(){
+  const can = k => DESKS.some(x => x.key === k), jobs = [hubSearchLoad()];
+  if(!FIND.rep) jobs.push(sb.from("hub_reports").select("key,desk_key,label,note,url,status,hidden").order("sort").then(r => FIND.rep = (r.data || []).filter(x => !x.hidden && (ME.admin || x.status === "live"))));
+  if(!FIND.ppl && can("homes")) jobs.push(sb.rpc("hub_staff_directory").then(r => FIND.ppl = r.data || []));
+  if(!FIND.addr && can("homes")) jobs.push(sb.from("hub_homes").select("code,address,name").eq("active", true).limit(5000).then(r => { FIND.addr = {}; (r.data || []).forEach(x => FIND.addr[x.code] = x); }));
+  await Promise.all(jobs.map(p => Promise.resolve(p).catch(() => null)));
+}
+function findSetup(){
+  if(!$("#findpop")){ const p = document.createElement("div"); p.className = "bellpop"; p.id = "findpop"; document.body.appendChild(p);
+    p.innerHTML = `<div class="fq"><input id="findq" type="search" placeholder="Search desks, reports, homes, vendors, people…" autocomplete="off" aria-label="Search the hub"></div><div id="findres"><div class="fhint">Type a home code, address, vendor, person, desk or report.</div></div>`;
+    document.addEventListener("click", e => { if(!p.contains(e.target) && !e.target.closest(".mfind")) p.classList.remove("on"); });
+    document.addEventListener("keydown", e => { if(e.key === "Escape") p.classList.remove("on");
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || "")) || e.target.isContentEditable;
+      if(((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) || (e.key === "/" && !typing)){ const b = [...document.querySelectorAll(".mfind")].find(x => x.offsetParent); if(b){ e.preventDefault(); findOpen(b); } } });
+    findWire(); }
+  document.querySelectorAll(".mfind").forEach(b => b.onclick = e => { e.stopPropagation(); const p = $("#findpop");
+    if(p.classList.contains("on")) return p.classList.remove("on"); findOpen(b); });
+}
+function findOpen(b){
+  const p = $("#findpop"); ["#bellpop","#boardpop"].forEach(s => { if($(s)) $(s).classList.remove("on"); });
+  const r = b.getBoundingClientRect(), pw = Math.min(520, window.innerWidth - 24);
+  p.style.top = (r.bottom + 8) + "px"; p.style.right = Math.max(12, Math.min(window.innerWidth - r.right - 8, window.innerWidth - pw - 12)) + "px";
+  p.classList.add("on"); const i = $("#findq"); i.focus(); i.select(); findLoad();
+}
+function findWire(){
+  const inp = $("#findq"), box = $("#findres"); let hi = 0, run = 0;
+  const go = a => { $("#findpop").classList.remove("on"); const h = a.getAttribute("href");
+    if(a.dataset.rp){ window.RPRUN = a.dataset.rp; if(location.hash === "#/reports") route(); else location.hash = "#/reports"; return; }
+    if(a.dataset.ask){ pennyOpen(true); $("#pennyQ").value = a.dataset.ask; $("#pennyQ").focus(); return; }
+    location.hash = h; };
+  const draw = async () => {
+    const raw = inp.value.trim(), q = raw.toLowerCase(), me = ++run;
+    if(!q){ box.innerHTML = `<div class="fhint">Type a home code, address, vendor, person, desk or report.</div>`; return; }
+    await findLoad(); if(me !== run) return;
+    const words = q.split(/\s+/).filter(Boolean), has = (...f) => { const t = f.map(x => String(x || "")).join(" ").toLowerCase(); return words.every(w => t.includes(w)); };
+    const ix = SIDX || { homes:[], vendors:[] }, can = k => DESKS.some(x => x.key === k);
+    const desks = DESKS.filter(x => (ME.admin || x.status === "live") && has(x.label)).slice(0, 6).map(x => ({ ic:"🗂️", h:"#/" + x.key, t:x.label, s:x.status === "live" ? "Desk" : "Coming soon" }));
+    const reps = (FIND.rep || []).filter(x => has(x.label, x.note)).slice(0, 6).map(x => ({ ic:"📊", h:x.url && x.url.startsWith("#") ? x.url : "#/reports", rp:x.url && !x.url.startsWith("#") ? x.url : "", t:x.label, s:x.status === "live" ? (x.note || "Report").slice(0, 110) : "Coming soon" }));
+    const homes = ix.homes.filter(x => { const a = (FIND.addr || {})[x.code] || {}; return has(x.code, x.sub, a.address, a.name); }).slice(0, 8)
+      .map(x => { const a = (FIND.addr || {})[x.code] || {}; return { ic:"🏠", h:"#/homes/" + encodeURIComponent(x.code), t:x.code, s:[x.sub, a.address].filter(Boolean).join(" · ") }; });
+    const vend = ix.vendors.filter(x => has(x.name, x.sub)).slice(0, 6).map(x => ({ ic:"🧰", h:"#/vendors/" + encodeURIComponent(x.name), t:x.name, s:x.sub }));
+    const ppl = (FIND.ppl || []).filter(x => has(x.name, (x.teams || []).join(" "))).slice(0, 6).map(x => ({ ic:"👤", h:"#/homes_co", t:x.name, s:(x.teams || []).join(" · ") + " · Moose Office ▸ Employees" }));
+    const sec = (n, a) => a.length ? `<div class="fsh">${n}</div>` + a.map(x => `<a class="bn" href="${esc(x.h)}"${x.rp ? ` data-rp="${esc(x.rp)}"` : ""}${x.ask ? ` data-ask="${esc(x.ask)}"` : ""}><span class="bi">${x.ic}</span><span><b>${esc(x.t)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ""}</span></a>`).join("") : "";
+    const pen = [{ ic:"🦌", h:"#", ask:raw, t:`Ask Penny: "${raw.slice(0, 80)}"`, s:"Not finding it? Penny can look it up" }];
+    if(can("vendors") && !vend.length && !homes.length && !desks.length && !reps.length && !ppl.length) vend.push({ ic:"🔎", h:"#/vendors/" + encodeURIComponent(raw), t:`Find a vendor for "${raw.slice(0, 60)}"`, s:"Vendors desk search" });
+    const paint = help => { box.innerHTML = (sec("Property Details", homes) + sec("Desks", desks) + sec("Reports", reps) + sec("Vendors", vend) + sec("People", ppl) + sec("How-to & notes", help)) || `<div class="fhint">Nothing found in the hub.</div>`;
+      box.insertAdjacentHTML("beforeend", sec("Penny", pen));
+      hi = 0; const f = box.querySelector("a"); if(f) f.classList.add("hi");
+      box.querySelectorAll("a").forEach(a => a.onclick = e => { e.preventDefault(); go(a); }); };
+    paint([]);
+    if(raw.length < 3) return;
+    clearTimeout(FIND.t); FIND.t = setTimeout(async () => {   // how-to notes: penny_docs_search (RLS decides which notes this person reads)
+      let r = null; try { r = await sb.rpc("penny_docs_search", { p_q:raw, p_limit:5 }); } catch(e){} if(me !== run || !r || !r.data) return;
+      const help = r.data.filter(x => x.title).map(x => ({ ic:"📘", h:"#", ask:`Tell me about: ${x.title}`, t:x.title, s:[x.folder, "tap to ask Penny"].filter(Boolean).join(" · ") }));
+      const keep = inp.value; if(keep.trim() === raw) paint(help); }, 350);
+  };
+  inp.addEventListener("input", draw);
+  inp.addEventListener("keydown", e => { const as = [...box.querySelectorAll("a")]; if(!as.length) return;
+    if(e.key === "ArrowDown" || e.key === "ArrowUp"){ e.preventDefault(); as[hi].classList.remove("hi"); hi = (hi + (e.key === "ArrowDown" ? 1 : -1) + as.length) % as.length; as[hi].classList.add("hi"); as[hi].scrollIntoView({ block:"nearest" }); }
+    if(e.key === "Enter"){ e.preventDefault(); go(as[hi]); } });
 }
 async function feedbackView(v){
   v.innerHTML = `<div class="page"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Bugs & Upgrades</h2><p class="muted">${ME.admin ? "Everything the crew has sent. Change the status as you work them." : "What everyone has reported or asked for, and where it stands. See something you'd like too? Send your own with Report a Bug / Upgrade."}</p>
@@ -1883,6 +1956,7 @@ async function hubReportsView(v){
     const f = $("#deskframe"); f.addEventListener("load", () => { try { const st = f.contentDocument.createElement("style");
       st.textContent = `header.top .deskbtn{display:none!important}`; f.contentDocument.head.appendChild(st); } catch(e){} });
   });
+  if(window.RPRUN){ const u = RPRUN; window.RPRUN = null; const b = [...$("#rplist").querySelectorAll("[data-run]")].find(x => x.dataset.run === u); if(b) b.click(); }
 }
 /* Reports > Sync (Brandon 2026-10-28): Manual sync (#/sync), Recent sync report (#/sync/recent), Error report (#/sync/errors) */
 async function syncReport(v, kind){
