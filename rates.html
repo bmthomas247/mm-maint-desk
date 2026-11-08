@@ -310,6 +310,10 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .dydow input{width:100%!important;flex:none!important;text-align:center!important;padding:5px 0}
 .dydow{grid-template-columns:repeat(7,minmax(0,1fr))!important}.dydow label{min-width:0;min-height:0}.dyng .dydow label input[type=number]{width:100%!important;flex:none;min-width:0;box-sizing:border-box;text-align:center}
 .dyng.dyapply label{min-height:0}
+.dyseas{flex:0 0 100%;display:flex;flex-direction:column;gap:6px}.dyseas:empty{display:none}
+.dyseasrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--ink2)}
+.dyseasrow input[type=date],.dyseasrow input[type=text]{border:1px solid var(--line);border-radius:9px;padding:6px 8px;font:inherit;font-size:13px;min-height:34px;background:var(--ovcard)}
+.dyseasrow input[type=text]{flex:1;min-width:160px}.dyseasrow label{display:flex;gap:6px;align-items:center}
 #srDiff{position:fixed;inset:0;z-index:90;background:rgba(20,30,10,.45);display:grid;place-items:center;padding:16px}
 #srDiff .sdbox{background:var(--ovcard);color:var(--ink);border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,.3);width:min(980px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
 #srDiff .sdhead{display:flex;gap:12px;align-items:flex-start;padding:16px 18px 8px}#srDiff .sdhead>div{flex:1}#srDiff h3{margin:0 0 2px}
@@ -1317,15 +1321,22 @@ function srDraw() {
             "Never under what the cheaper comps charge (step 5)."].filter(Boolean).join(" "); })()}</div>
         <label>Never over $${num("dyCeil", Y.ceil, 80, "blank = none")}</label>
         <label title="Not on holidays">Max jump night to night %${num("dyJump", Y.jump)}</label>
-        <label>Min nights Fri/Sat${num("dyMinWk", Y.minWk, 60, "blank = keep")}</label><label>Min nights holidays${num("dyMinHol", Y.minHol, 60, "blank = keep")}</label></div>
-      <div class="dyng dylos"><b>7 · Longer stays</b>${SR_LOS.map(L => `<label>${L}+ nights: down %<input type="number" id="dyLos${L}" value="${Y["los" + L] ?? ""}" step="1"></label>`).join("")}
+        </div>
+      <div class="dyng dylos dymin"><b>7 · Minimum stay (nights)</b>
+        <label title="Used when nothing below says otherwise">Every night${num("dyMinDef", Y.minDef ?? "", 60, "blank = keep what's there now")}</label>
+        ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((n, i) => `<label>${n}<input type="number" data-mdow="${i}" value="${(Y.minDow || [])[i] ?? (i >= 5 && Y.minWk ? Y.minWk : "")}" min="2" step="1"></label>`).join("")}
+        <label title="Holiday and key-event nights (the ★ list)">Holidays + events${num("dyMinHol", Y.minHol ?? "", 60)}</label>
+        <div class="dyseas" id="dySeas">${(Y.minSeasons || []).map(srSeasRow).join("")}</div>
+        <button type="button" class="ovbtn" id="dySeasAdd">+ Add a season</button>
+        <div class="small muted dylosx">Blank = leave it. Which one wins: a gap between stays (so gaps can sell) → holidays → a season → the day of the week → every night. Never 1 night. A season is a date range, e.g. Christmas week 5 or summer 3.</div></div>
+      <div class="dyng dylos"><b>8 · Longer stays</b>${SR_LOS.map(L => `<label>${L}+ nights: down %<input type="number" id="dyLos${L}" value="${Y["los" + L] ?? ""}" step="1"></label>`).join("")}
         <div class="small muted dylosx">${(() => { const v = Object.values(SR.edits || {}).map(e => e.rate).filter(x => x != null), base = v.length ? v.reduce((a, b) => a + b, 0) / v.length : (() => { const t = Object.values(SR.track || {}).map(x => +x.rate).filter(x => x); return t.length ? t.reduce((a, b) => a + b, 0) / t.length : null; })();
           if (!base || !SR.fee?.Airbnb) return "Guest prices by stay length show once there are prices for these dates.";
           return `What an Airbnb guest pays a night at our average rate ($${Math.round(base)}), cleaning spread over the stay: ` + [2, 3, 4, 7, 14, 28].map(n => `<b>${n} nights ${fmt(srGuestN(base, "Airbnb", n, srLosOff(Y, n)))}</b>${srLosOff(Y, n) ? " (−" + srLosOff(Y, n) + "%)" : ""}`).join(" · ") +
             `. The walk-away rent per stay still holds.`; })()}</div>
         <div class="srwarn dylosx" style="margin-top:4px"><b>These go in Airbnb and Vrbo by hand</b> (the hub doesn't change listing settings). Airbnb: Calendar ▸ Discounts ▸ <b>Weekly ${Y.los7 || 0}%</b> (7+ nights), <b>Monthly ${Y.los28 || 0}%</b> (28+ nights)${(+Y.los4 || +Y.los14) ? `, and "Trip length" for ${[+Y.los4 ? "4+ nights " + Y.los4 + "%" : "", +Y.los14 ? "14+ nights " + Y.los14 + "%" : ""].filter(Boolean).join(", ")}` : ""}. Vrbo: same % in its weekly/monthly discount settings.
           Airbnb shows discounts of 10% or more in search, and only one host discount applies per booking (stay length, early-bird or last-minute), but our last-minute price is in the nightly rate, so a week booked last minute gets both. Airbnb adds its own monthly savings on 28+ nights (Airbnb pays it). Source: airbnb.com/help/article/1233 and /3421 (read 2026-11-08); Vrbo's help site didn't load for checking.</div></div>
-      <div class="dyng dyapply"><b>8 · Apply</b><label>Round to<select id="dyRd">${[["1", "$1"], ["5", "$5"], ["10", "$10"], ["9", "Ends in 9 ($149)"]].map(([v, t]) => `<option value="${v}"${String(Y.rd) === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+      <div class="dyng dyapply"><b>9 · Apply</b><label>Round to<select id="dyRd">${[["1", "$1"], ["5", "$5"], ["10", "$10"], ["9", "Ends in 9 ($149)"]].map(([v, t]) => `<option value="${v}"${String(Y.rd) === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Which nights<select id="dyWhich"><option value="all"${Y.which === "all" ? " selected" : ""}>Every night in the dates</option><option value="empty"${Y.which === "empty" ? " selected" : ""}>Only nights without a suggestion</option></select></label>
         <button class="ovbtn dygo" id="srFill">⚡ Build prices</button></div>
     </div><div class="small muted" id="dyMsg" style="margin-top:8px">${escH(SR.dynMsg || "")}</div>${srAutoBox(h)}</div>`;
@@ -1521,7 +1532,19 @@ function srDiffOpen() { const D = (SR.diff || []), ch = D.filter(d => d.before =
   el.addEventListener("click", e => { if (e.target === el || e.target.closest(".sdx") || e.target.dataset.sd === "close") return close();
     if (e.target.dataset.sd === "save") { close(); $("srSave")?.click(); }
     if (e.target.dataset.sd === "undo") { close(); SR.edits = {}; SR.diff = []; SR.dynMsg = "Build undone."; srDraw(); } }); }
+const srSeasRow = x => `<div class="dyseasrow" data-ms><input type="date" data-ms-from value="${x?.from || ""}"> to <input type="date" data-ms-to value="${x?.to || ""}"><label>min<input type="number" data-ms-min min="2" step="1" value="${x?.min ?? ""}"></label><input type="text" data-ms-name placeholder="Name (e.g. Christmas week)" value="${escH(x?.name || "")}"><button type="button" class="ovbtn" data-ms-del title="Remove this season">✕</button></div>`;
+const srReadSeasons = () => [...document.querySelectorAll("[data-ms]")].map(r => ({ from: r.querySelector("[data-ms-from]").value, to: r.querySelector("[data-ms-to]").value, min: r.querySelector("[data-ms-min]").value, name: r.querySelector("[data-ms-name]").value.trim() })).filter(x => x.from && x.to && x.min);
+// minimum stay for a night from the settings (null = no rule); gaps are handled by the caller
+function srMinFor(Y, k, dw, hol) { const nz = v => v !== "" && v != null && +v > 0 ? Math.max(2, +v) : null;
+  if (hol && nz(Y.minHol)) return { m: nz(Y.minHol), why: "holiday" };
+  const se = (Y.minSeasons || []).find(x => x.from <= k && k <= x.to && nz(x.min)); if (se) return { m: nz(se.min), why: se.name || "season" };
+  const d = nz((Y.minDow || [])[dw] ?? ((dw === 5 || dw === 6) ? Y.minWk : "")); if (d) return { m: d, why: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw] };
+  if (nz(Y.minDef)) return { m: nz(Y.minDef), why: "every night" };
+  return null; }
 function srWire(R) {
+  { const add = $("dySeasAdd"), box = $("dySeas");
+    if (add && box) { add.onclick = () => { box.insertAdjacentHTML("beforeend", srSeasRow({})); srSteppers(box); };
+      box.addEventListener("click", e => { if (e.target.closest("[data-ms-del]")) e.target.closest("[data-ms]").remove(); }); } }
   srSteppers($("srBody"));
   srWhyWire();
   { const b = $("auSave"); if (b) b.onclick = async () => {
@@ -1529,7 +1552,7 @@ function srWire(R) {
       if ($("dyBase")) Object.assign(SR.dyn ||= {}, { base: g("dyBase"), lvl: nz("dyLvl"), follow: +g("dyFollow"), hiD: nz("dyHi"), loD: nz("dyLo"), paceD: nz("dyPaceD"), paceU: nz("dyPaceU"),
         dow: [...document.querySelectorAll("[data-dow]")].map(i => +i.value || 0), hol: nz("dyHol"), gapMax: Math.max(2, nz("dyGapMax") || 3), gapD: nz("dyGapD"), adjD: nz("dyAdjD"),
         lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, los4: g("dyLos4"), los7: g("dyLos7"), los14: g("dyLos14"), los28: g("dyLos28"), snowU: nz("dySnowU"), jump: nz("dyJump"),
-        floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: g("dyMinWk"), minHol: g("dyMinHol"), rd: g("dyRd"), which: g("dyWhich"),
+        floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: "", minHol: g("dyMinHol"), minDef: g("dyMinDef"), minDow: [...document.querySelectorAll("[data-mdow]")].map(i => i.value), minSeasons: srReadSeasons(), rd: g("dyRd"), which: g("dyWhich"),
         under: nz("dyUnder"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
         learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin") });
       const on = $("auOn").checked, send = $("auSend").checked;
@@ -1557,7 +1580,7 @@ function srWire(R) {
     Object.assign(SR.dyn, { base: g("dyBase"), lvl: nz("dyLvl"), follow: +g("dyFollow"), hiD: nz("dyHi"), loD: nz("dyLo"), paceD: nz("dyPaceD"), paceU: nz("dyPaceU"),
       dow: [...document.querySelectorAll("[data-dow]")].map(i => +i.value || 0), hol: nz("dyHol"), gapMax: Math.max(2, nz("dyGapMax") || 3), gapD: nz("dyGapD"), adjD: nz("dyAdjD"),
       lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, los4: g("dyLos4"), los7: g("dyLos7"), los14: g("dyLos14"), los28: g("dyLos28"), snowU: nz("dySnowU"), jump: nz("dyJump"),
-      floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: g("dyMinWk"), minHol: g("dyMinHol"), rd: g("dyRd"), which: g("dyWhich"),
+      floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: "", minHol: g("dyMinHol"), minDef: g("dyMinDef"), minDow: [...document.querySelectorAll("[data-mdow]")].map(i => i.value), minSeasons: srReadSeasons(), rd: g("dyRd"), which: g("dyWhich"),
       under: nz("dyUnder"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
         learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin") });
     const Y = SR.dyn, today = iso(new Date(new Date().setHours(12, 0, 0, 0))), pc = v => (v > 0 ? "+" : "") + Math.round(v) + "%";
@@ -1602,7 +1625,8 @@ function srWire(R) {
       if (!A && out <= 3) step(1 - Y.lm3 / 100, `${out} days out`); else if (!A && out <= 7) step(1 - Y.lm7 / 100, `${out} days out`); else if (out >= 120) step(1 + Y.far / 100, `${out} days out`);
       const sn = out <= 7 && typeof mkFor === "function" && state.mk?.loaded ? mkFor(r.k).snow : null;
       if (sn && sn.in >= Y.snowIn) step(1 + Y.snowU / 100, `${sn.in}" snow forecast (NWS)`);
-      const min = gapMin ?? (hol && Y.minHol !== "" ? +Y.minHol : null) ?? ((dw === 5 || dw === 6) && Y.minWk !== "" ? +Y.minWk : null) ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
+      const mr = srMinFor(Y, r.k, dw, hol); if (gapMin == null && mr) why.push(`min stay ${mr.m} (${mr.why})`);
+      const min = gapMin ?? mr?.m ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
       built.push({ r, v, why, ct, clo, hol: !!hol, dw, min: Math.max(2, gapMin ?? min ?? 2) /* never 1-night stays (Brandon, engine v8b) */ }); n++; }
     // smoothing: no jump bigger than Y.jump% from the night before (holidays left alone)
     for (let i = 1; i < built.length; i++) { const p = built[i - 1], x = built[i]; if (!Y.jump || x.hol || p.hol || addD(p.r.k, 1) !== x.r.k) continue;
