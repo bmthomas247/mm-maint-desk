@@ -1037,7 +1037,7 @@ async function loadSetRates() {
   // Home review (2026-11-08): our pricing engine's suggestion, Home Rater, guest reviews, booking-site listings. All read with the person's sign-in.
   const none = Promise.resolve({ data: null }), cid = h.comp_id;
   const [sh, hq, ai, hr, kd, rv, lk] = await Promise.all([
-    cid ? sb.from("shadow_prices").select("run_date,start_date,price,rule,why,comp_median,min_stay,version").eq("comp_id", cid).order("run_date", { ascending: false }).limit(1) : none,
+    cid ? sb.from("shadow_prices").select("run_date,start_date,price,rule,why,comp_median,min_stay,version").eq("comp_id", cid).order("run_date", { ascending: false }).order("created_at", { ascending: false }).limit(1) : none,
     cid ? sb.from("home_quality").select("run_date,adj,inside_adj,listing_adj,parts").eq("comp_id", cid).order("run_date", { ascending: false }).limit(1) : none,
     cid ? sb.from("home_ai").select("inside,amenities,location,overall,rating,reviews,photos,scored_at,listing_url").eq("comp_id", cid).limit(1) : none,
     cid ? sb.from("home_ratings").select("overall,inside,clean,furniture,amenities,location,created_at").eq("comp_id", cid) : none,
@@ -1346,6 +1346,11 @@ function srWire(R) {
       const rate = Math.max(25, Math.round(v / Y.rd) * Y.rd);
       const min = (hol && Y.minHol !== "" ? +Y.minHol : null) ?? (we && Y.minWk !== "" ? +Y.minWk : null) ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
       SR.edits[r.k] = { rate, min }; n++; if (last != null && rate !== last) moved++; last = rate; }
+    // Fri + Sat are the weekend's highest nights, never Sunday (Brandon 2026-11-08), unless the Monday after is a holiday night.
+    for (const r of R) { if (new Date(r.k + "T12:00:00").getDay() !== 0 || !SR.edits[r.k]) continue;
+      if (typeof peakOf === "function" && peakOf(addD(r.k, 1))) continue;
+      const fs = [addD(r.k, -2), addD(r.k, -1)].map(k => SR.edits[k]?.rate ?? srVal(k).rate).filter(v => v != null);
+      if (fs.length && SR.edits[r.k].rate > 0.95 * Math.min(...fs)) SR.edits[r.k].rate = Math.max(25, Math.round(0.95 * Math.min(...fs) / Y.rd) * Y.rd); }
     SR.dynMsg = n ? `Built ${n} night${n > 1 ? "s" : ""}: the price changes on ${moved} of them. Not saved yet — check the chart and table, then Save.` : "No nights had a starting price. Try another \"Start from\".";
     srDraw();
   });
