@@ -1074,6 +1074,11 @@ async function loadSetRates() {
   SR.track = {}; for (const r of tr.data || []) SR.track[r.night] = r;
   SR.trackAt = (tr.data || []).map(r => r.captured_at).sort().pop();
   SR.pushes = ps.data || []; SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {};
+  { const pre = (h.comp_id || "").match(/^[a-z]+-/)?.[0], tests = (SR.homes || []).map(x => x.comp_id).filter(Boolean);
+    SR.grpPre = (h.code || "").split(" ")[0]; SR.grp = [];
+    SR.compName = {}; if (comp?.set_id) { const cn = await sb.from("comps").select("id,label:label_public").eq("set_id", comp.set_id); for (const c of cn.data || []) SR.compName[c.id] = c.label; }
+    if (pre) { const g = await sb.from("latest_beyond").select("comp_id,start_date,price").like("comp_id", pre + "%");
+      SR.grp = (g.data || []).filter(x => x.comp_id !== h.comp_id && !tests.includes(x.comp_id) && /\d/.test(x.comp_id)); } }
   if (SR.dynFor !== h.code) { SR.dyn = null; SR.dynSaved = h.dyn || null; } SR.dynFor = h.code;   // this home's saved settings (merged over the defaults)
   { const sc = await sb.rpc("rates_set_scoreboard", { p_code: h.code }); SR.score = sc.error ? { err: sc.error.message } : sc.data; }
   SR.bk = cid ? ((await sb.from("our_bookings").select("reservation_id,kind,status,booked_at,arrival,nights").eq("comp_id", cid).gte("booked_at", addD(today, -60))).data || []) : [];
@@ -1085,6 +1090,22 @@ async function loadSetRates() {
   try { SR.owner = h.comp_id ? ((await sb.from("owner_rules").select("min_price,min_price_peak,peak_start,peak_end,note").eq("comp_id", h.comp_id)).data || [])[0] || null : null; } catch (e) { SR.owner = null; }
   srDraw();
 }
+// Every comp that night: its own daily rate (Airbnb, else Vrbo) and its Airbnb checkout total per night when we have one.
+function srCompList(k) { const by = {};
+  for (const n of SR.nightly) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
+    const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5); if (off < 0 || off >= n.avail.length) continue;
+    (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] }; }
+  const tot = {}; for (const r of SR.ck || []) { if (r.tier !== "Primary" || r.channel !== "Airbnb" || !priced(r)) continue; const o = Math.round((new Date(k + "T12:00:00") - new Date(r.check_in + "T12:00:00")) / 864e5);
+    if (o >= 0 && o < r.nights) (tot[r.comp_id] ||= []).push((r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights); }
+  return Object.entries(by).map(([id, c]) => { const x = c.Airbnb || c.VRBO, t = tot[id];
+    return { name: SR.compName?.[id] || id, ch: c.Airbnb ? "Airbnb" : "Vrbo", open: !!x?.open, rate: x?.rate != null ? +x.rate : null, tot: t ? t.reduce((a, b) => a + b, 0) / t.length : null }; })
+    .sort((a, b) => (b.open - a.open) || ((a.rate ?? 1e9) - (b.rate ?? 1e9))); }
+function srCompTip(k) { const L = srCompList(k); if (!L.length) return "No comp calendars for this night.";
+  const op = L.filter(x => x.open && x.rate != null), bk = L.filter(x => !x.open);
+  return [`Comps open that night (${op.length}) · daily rate before cleaning + tax${op.some(x => x.tot) ? " · guest total per night on Airbnb" : ""}:`,
+    ...op.map(x => `${fmt(x.rate)}${x.tot ? "  (" + fmt(x.tot) + " total)" : ""}  ${x.name} · ${x.ch}`),
+    ...(bk.length ? [`Booked (${bk.length}): ${bk.map(x => x.name).join(", ")}`] : []),
+    "Source: Key Data Airbnb + Vrbo calendars (nightly); totals from Airbnb checkout quotes."].join("\n"); }
 function srComp(k) {   // comps' average daily rate that night (same as the Desk calendar's ADR): open comps only, Airbnb else VRBO
   const by = {};
   for (const n of SR.nightly) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
@@ -1184,6 +1205,11 @@ function srCompAir(k) { const v = []; let at = null;
   for (const n of Object.values(SR.air || {})) { const o = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5);
     if (o < 0 || o >= n.avail.length || n.avail[o] !== "1" || n.rates[o] == null) continue; v.push(+n.rates[o]); if (!at || n.captured_at > at) at = n.captured_at; }
   return v.length >= 2 ? { adr: v.reduce((a, b) => a + b, 0) / v.length, n: v.length, at } : null; }
+// Our other homes in the same building/area (same code prefix, test homes left out): average of the price each has in Track
+// tonight (Beyond's calendar price while Beyond prices them).
+const srGrp = k => { const v = (SR.grp || []).map(b => { const off = Math.round((new Date(k + "T12:00:00") - new Date(b.start_date + "T12:00:00")) / 864e5); const p = b.price?.[off]; return p == null ? null : +p; }).filter(v => v != null && v > 0).sort((x, y) => x - y);
+  return v.length ? { avg: v.reduce((x, y) => x + y, 0) / v.length, n: v.length, lo: v[0], hi: v[v.length - 1] } : null; };
+const srGrpName = () => `Our ${SR.grpPre || ""} homes`;
 const srBeyond = k => { const b = SR.beyond; if (!b) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(b.start_date + "T12:00:00")) / 864e5); const v = b.price?.[off]; return v == null ? null : +v; };
 // Our rate starts as Track's current rate (Brandon 2026-11-08); set = someone saved or typed a rate for that night.
 function srVal(k) { const e = SR.edits[k], s = SR.ours_n[k], t = SR.track?.[k];
@@ -1206,7 +1232,7 @@ function srDraw() {
        ` · <b>Beyond is still on for ${escH(h.code)}</b>${SR.beyond?.enabled ? " (Beyond listing enabled as of " + new Date(SR.beyond.captured_at).toLocaleDateString() + ")" : ""}: it writes the same Track rate, so turn it off in Beyond (or ask Kolleen) before sending.`}
      <label style="display:inline-flex;gap:6px;align-items:center;margin-left:8px"><input type="checkbox" id="srBoff"${h.beyond_off ? " checked" : ""} style="width:auto;min-height:0"> Beyond is off for this home</label></div>`;
   const days = []; for (let k = SR.from; k <= SR.to && days.length < 541; k = addD(k, 1)) days.push(k);
-  const R = days.map(k => ({ k, v: srVal(k), t: SR.track[k], b: srBeyond(k), c: srComp(k), s: srShadow(k) }));
+  const R = days.map(k => ({ k, v: srVal(k), t: SR.track[k], b: srGrp(k)?.avg ?? null, g: srGrp(k), c: srComp(k), s: srShadow(k) }));
   const avg = a => { a = a.filter(x => x != null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
   const oA = avg(R.map(r => r.v.set ? r.v.rate : null)), bA = avg(R.map(r => r.b)), tA = avg(R.map(r => r.t ? +r.t.rate : null)), cA = avg(R.map(r => r.c?.adr));
   const set = R.filter(r => r.v.set).length, sg = v => v == null ? "" : (v > 0 ? "+" : "") + Math.round(v) + "%";
@@ -1214,8 +1240,8 @@ function srDraw() {
   const sA = avg(R.map(r => r.s?.price));
   html += `<div class="ovtiles six">` + tl("o1", fmt(sA), "Engine / night", SR.x?.shadow ? "our pricing engine, " + new Date(SR.x.shadow.run_date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "no suggestion yet", "Our own pricing engine (shadow_price.py, nightly): comps, season, how far out, booking pace and the Home Rater score. Hover a night in the table for its reason.") +
     tl("o3", `${set} of ${days.length}`, "Nights with a suggestion", Object.keys(SR.edits).length ? Object.keys(SR.edits).length + " not saved yet" : "all saved", "Nights someone saved a suggested rate for (with their initials). Other nights show Track's current rate.") +
-    tl("o2", fmt(oA), "Our suggested / night", bA && oA ? sg((oA / bA - 1) * 100) + " vs Beyond" : "", "Average of the nights we've set.") +
-    tl("c1", fmt(bA), "Beyond / night", SR.beyond ? "pulled " + new Date(SR.beyond.captured_at).toLocaleDateString() : "no Beyond data", "Beyond Pricing calendar price (latest nightly pull, beyond.py).") +
+    tl("o2", fmt(oA), "Our suggested / night", bA && oA ? sg((oA / bA - 1) * 100) + " vs " + srGrpName() : "", "Average of the nights we've set.") +
+    tl("c1", fmt(bA), srGrpName() + " / night", (SR.grp || []).length ? `average of ${SR.grp.length} homes` : "no other homes found", `Average nightly rate in Track of our other ${SR.grpPre} homes (test homes left out). While Beyond still prices them this is Beyond's calendar price (nightly pull, beyond.py).`) +
     tl("o3", fmt(tA), "Track now / night", SR.trackAt ? "read " + new Date(SR.trackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "not read yet", "Track rack rate (rate type RR) for this home, read every 30 minutes.") +
     tl("c2", fmt(cA), "Comps' daily rate", (() => { const pr = R.map(r => { const a = srCompAir(r.k); return a && r.c ? a.adr / r.c.adr - 1 : null; }).filter(v => v != null).sort((x, y) => x - y);
         return pr.length >= 5 ? `AirROI ${pr[pr.length >> 1] >= 0 ? "+" : ""}${Math.round(pr[pr.length >> 1] * 100)}% (check)` : "before cleaning + tax"; })(),
@@ -1223,7 +1249,7 @@ function srDraw() {
   html += srGlance(h);
   // chart
   html += `<div class="ovc" style="margin-bottom:18px"><h3>Rate per night</h3><div class="cs">${R.length} nights · Track's rack rate basis (before cleaning, fees and tax)</div><div class="ovwrap" id="srChart">${srSvg(R)}<div class="ovtip"></div></div>
-    <div class="ovleg"><span><i class="ln" style="background:var(--ours)"></i>Our suggested rate</span><span><i class="ln" style="background:#1f3a0c;opacity:.7"></i>Engine</span><span><i class="ln" style="background:#5b6bd1"></i>Beyond</span><span><i class="ln" style="background:var(--ink2)"></i>Track now</span><span><i class="ln" style="background:var(--comp)"></i>Comps' daily rate</span></div></div>`;
+    <div class="ovleg"><span><i class="ln" style="background:var(--ours)"></i>Our suggested rate</span><span><i class="ln" style="background:#1f3a0c;opacity:.7"></i>Engine</span><span><i class="ln" style="background:#5b6bd1"></i>${srGrpName()}</span><span><i class="ln" style="background:var(--ink2)"></i>Track now</span><span><i class="ln" style="background:var(--comp)"></i>Comps' daily rate</span></div></div>`;
   // Dynamic pricing builder (Brandon 2026-11-08; round 2 same day: "we are missing some of the other cool dynamic pricing tools").
   // Every night gets its own price; each built night keeps its steps (ⓘ next to Our rate; saved as that night's note).
   const Y = SR.dyn ||= Object.assign({ base: SR.fee?.Airbnb ? "a" : SR.x?.shadow ? "s" : "c", under: 5, maxU: 10, momU: 3, momMax: 15, momDays: 14, lvl: 0, follow: 0.5, hiD: 10, loD: 5, dow: [0, 0, 0, 0, 0, 12, 12], hol: 15, lm7: 10, lm3: 15, far: 5,
@@ -1234,7 +1260,7 @@ function srDraw() {
   const DN = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
   html += `<div class="ovc" style="margin-bottom:18px"><h3>Dynamic pricing</h3><div class="cs">Every night gets its own price. Booking sites reward listings whose rates move with demand. Build, check the chart and table (ⓘ shows each night's steps), then Save.</div>
     <div class="dyn">
-      <div class="dyng"><b>1 · Start</b><label class="dystk">Start from<select id="dyBase">${[["a", "A few $ under the comps' total"], ["s", "Our engine's suggestion"], ["c", "Comps' daily rate"], ["b", "Beyond's price"], ["t", "Track now"], ["o", "Our saved rate"]].map(([v, t]) => `<option value="${v}"${Y.base === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+      <div class="dyng"><b>1 · Start</b><label class="dystk">Start from<select id="dyBase">${[["a", "A few $ under the comps' total"], ["s", "Our engine's suggestion"], ["c", "Comps' daily rate"], ["b", "Our other homes' average"], ["t", "Track now"], ["o", "Our saved rate"]].map(([v, t]) => `<option value="${v}"${Y.base === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label title="Per night, on the guest's Airbnb total (rent + fees + cleaning + tax)">Under the comps' total by $${num("dyUnder", Y.under ?? 5, 70)}</label>
         <label>Level vs that %${num("dyLvl", Y.lvl, 70, "e.g. -10 = 10% under the starting price")}</label>
         <label class="dysel">Follow the comps night to night<select id="dyFollow">${[[0, "Off"], [0.5, "Half"], [1, "Fully"]].map(([v, t]) => `<option value="${v}"${+Y.follow === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
@@ -1281,17 +1307,18 @@ function srDraw() {
   // every label for the night (Brandon 2026-11-08: Cottonwood openings were hidden behind "Opening weekend" / "Thanksgiving")
   const pk = k => typeof holOf === "function" ? [...new Set(holOf(k))].join(" · ") || null : null;
   html += `<div class="ovc" style="margin-bottom:18px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Nights</h3><span class="sp" style="flex:1"></span>
+      <button class="ovbtn" id="srReset" title="Throw away the changes not saved yet (typed rates and built prices) and the builder settings you changed; go back to what's saved">↺ Reset</button>
       <button class="ovbtn" id="srSave"${Object.keys(SR.edits).length ? "" : " disabled"}>💾 Save as suggested ${Object.keys(SR.edits).length || ""}</button>
       <button class="ovbtn" id="srPush" style="background:var(--forest-2,#5b8a1e);color:#fff;border-color:var(--forest-2,#5b8a1e)">⇪ Send these dates to Track</button></div>
     <div class="srwarn">⚠ Rates here are only <b>suggestions</b>. Nothing changes in Track until someone presses <b>Send these dates to Track</b> (top right). <b>Save</b> keeps your rates as suggested prices with your initials. Grey = Track's current rate.</div>
-    ${srFeeNote()}<div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th title="Our own pricing engine (hover ⓘ for its reason)">Engine</th><th>Beyond</th><th>Comps</th><th title="Starts at Track's current rate. Type a new one, then Save = a suggestion with your initials. It only reaches Track with Send these dates to Track.">Our rate</th><th>Min nights</th><th class="gp" title="What a guest pays per night at our rate (Track's markup + fees + cleaning over 3 nights + tax)">Guest pays · Airbnb</th><th class="gp">Vrbo</th><th class="gp">Our site</th><th title="The comps' Airbnb checkout total per night incl. cleaning, fees + 13.12% est. tax">Comps all-in</th><th>vs comps</th></tr>` +
+    ${srFeeNote()}<div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th title="Our own pricing engine (hover ⓘ for its reason)">Engine</th><th title="Average rate in Track of our other homes in this building (test homes left out)">${srGrpName()}</th><th>Comps</th><th title="Starts at Track's current rate. Type a new one, then Save = a suggestion with your initials. It only reaches Track with Send these dates to Track.">Our rate</th><th>Min nights</th><th class="gp" title="What a guest pays per night at our rate (Track's markup + fees + cleaning over 3 nights + tax)">Guest pays · Airbnb</th><th class="gp">Vrbo</th><th class="gp">Our site</th><th title="The comps' Airbnb checkout total per night incl. cleaning, fees + 13.12% est. tax">Comps all-in</th><th>vs comps</th></tr>` +
     R.map(r => { const d = new Date(r.k + "T12:00:00"), wk = d.getDay() === 5 || d.getDay() === 6, g = r.v.rate != null && r.b ? (r.v.rate / r.b - 1) * 100 : null;
       return `<tr class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}"><td><b>${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
         <td>${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy" tabindex="0" role="button" aria-label="Why this price" data-why="${escH(r.s.why || "")}" data-p="${r.s.price}" data-k="${r.k}">ⓘ</span>` : "—"}</td>
-        <td>${fmt(r.b)}</td><td title="${escH((() => { const a = srCompAir(r.k); return `Main: ${r.c ? fmt(r.c.adr) + " from " + r.c.n + " comps (Key Data Airbnb + Vrbo)" : "—"}` + (a ? ` · AirROI: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}` : " · no AirROI pull for these comps"); })())}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
+        <td title="${r.g ? escH(`${r.g.n} homes: ${fmt(r.g.lo)} to ${fmt(r.g.hi)}`) : ""}">${fmt(r.b)}${r.g ? `<div class="srair">${r.g.n} homes</div>` : ""}</td><td style="cursor:help" title="${escH(srCompTip(r.k) + (() => { const a = srCompAir(r.k); return a ? `\nAirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}` : ""; })())}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
         <td class="srrate"><input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin${r.v.set ? "" : " pre"}" title="${r.v.set ? "" : "Track's current rate"}">${r.v.changed ? srOurWhy(r) : ""}${r.v.saved && !r.v.changed ? `${srOurWhy(r)}<span class="srby" title="Suggested by ${escH(r.v.by || "")}${r.v.at ? ", " + escH(new Date(r.v.at).toLocaleString()) : ""}">${escH(srIni(r.v.by))}</span>` : ""}</td><td><input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm${r.v.set ? "" : " pre"}"></td>
         ${srGuestCells(r)}</tr>`; }).join("") + `</table></div>
-    <div class="src">Suggested = our own pricing engine (hover ⓘ for its reason). Track now = rack rate (RR) + minimum stay in Track, read every 30 min. Beyond = its calendar price from the nightly pull. Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
+    <div class="src">Suggested = our own pricing engine (hover ⓘ for its reason). Track now = rack rate (RR) + minimum stay in Track, read every 30 min. ${srGrpName()} = average rate in Track of our other homes there (test homes left out; Beyond's price while it prices them). Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
   html += srScore();
   // sends
   html += `<div class="ovc"><h3>Sends to Track</h3><div class="cs">Newest first. A waiting send can be cancelled.</div>${SR.pushes.length ? `<table class="srt"><tr><th>#</th><th>Asked</th><th>Nights</th><th>Status</th><th></th></tr>` +
@@ -1312,12 +1339,12 @@ function srCal() {
   document.addEventListener("keydown", esc);
   box.addEventListener("mousedown", e => { if (e.target === box) close(); });
   const cell = k => {
-    const v = srVal(k), t = SR.track[k], c = srComp(k), b = srBeyond(k), p = v.rate ?? (t ? +t.rate : null), g = p != null && c ? (p / c.adr - 1) * 100 : null;
+    const v = srVal(k), t = SR.track[k], c = srComp(k), b = srGrp(k)?.avg ?? null, p = v.rate ?? (t ? +t.rate : null), g = p != null && c ? (p / c.adr - 1) * 100 : null;
     const cls = g == null ? "" : g >= 25 ? "hi" : g <= -25 ? "lo" : "";
     const pk = typeof holOf === "function" ? [...new Set(holOf(k))].join(" · ") : "";
     const inR = SR.from <= k && k <= SR.to, past = k < today;
     return `<button type="button" class="scd ${cls}${inR ? " inr" : ""}${k === pick.a ? " sel" : ""}${past ? " past" : ""}" data-sck="${k}"${past ? " disabled" : ""}
-      title="${escH(new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}: ${v.set ? "our suggestion " + fmt(v.rate) + (v.by ? " (" + srIni(v.by) + ")" : "") : "Track now " + fmt(t ? +t.rate : null)} · Beyond ${fmt(b)} · comps ${c ? fmt(c.adr) + " (" + c.n + ")" : "—"}${g != null ? " · " + (g > 0 ? "+" : "") + Math.round(g) + "% vs comps" : ""}${pk ? " · " + escH(pk) : ""}">
+      title="${escH(new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}: ${v.set ? "our suggestion " + fmt(v.rate) + (v.by ? " (" + srIni(v.by) + ")" : "") : "Track now " + fmt(t ? +t.rate : null)} · ${srGrpName()} ${fmt(b)} · comps ${c ? fmt(c.adr) + " (" + c.n + ")" : "—"}${g != null ? " · " + (g > 0 ? "+" : "") + Math.round(g) + "% vs comps" : ""}${pk ? " · " + escH(pk) : ""}">
       <span class="d">${+k.slice(8)}${pk ? '<i class="pk">★</i>' : ""}${v.set ? '<i class="mine">●</i>' : ""}</span><span class="p">${p != null ? "$" + Math.round(p) : ""}</span><span class="c">${c ? "$" + Math.round(c.adr) : ""}</span></button>`;
   };
   const month = d => { const y = d.getFullYear(), m = d.getMonth(), first = new Date(y, m, 1, 12).getDay(), n = new Date(y, m + 1, 0).getDate();
@@ -1432,7 +1459,7 @@ function srHover(R) {
   const tip = wrap.querySelector(".ovtip"), vl = svg.querySelector(".ovvl"), hit = svg.querySelector(".ovhit"), W = 1000, L = 56, n = R.length;
   hit.addEventListener("pointermove", e => { const b = svg.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round(((e.clientX - b.left) / b.width * W - L) / (W - L - 10) * (n - 1)))), r = R[i], X = L + (W - L - 10) * (n > 1 ? i / (n - 1) : .5);
     vl.setAttribute("x1", X); vl.setAttribute("x2", X); vl.setAttribute("visibility", "visible");
-    tip.innerHTML = `<b>${new Date(r.k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b><span style="color:var(--ours)">${r.v.set ? "Our suggested" : "Track now"} ${fmt(r.v.rate)}${r.v.min ? " · " + r.v.min + "n" : ""}</span><span style="color:#1f3a0c">Engine ${fmt(r.s?.price)}</span><span style="color:#5b6bd1">Beyond ${fmt(r.b)}</span><span>Track now ${r.t ? fmt(+r.t.rate) : "—"}</span><span style="color:var(--comp)">Comps ${r.c ? fmt(r.c.adr) : "—"}</span>`;
+    tip.innerHTML = `<b>${new Date(r.k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b><span style="color:var(--ours)">${r.v.set ? "Our suggested" : "Track now"} ${fmt(r.v.rate)}${r.v.min ? " · " + r.v.min + "n" : ""}</span><span style="color:#1f3a0c">Engine ${fmt(r.s?.price)}</span><span style="color:#5b6bd1">${srGrpName()} ${fmt(r.b)}</span><span>Track now ${r.t ? fmt(+r.t.rate) : "—"}</span><span style="color:var(--comp)">Comps ${r.c ? fmt(r.c.adr) : "—"}</span>`;
     tip.style.display = "block"; tip.style.left = Math.min(b.width - tip.offsetWidth, Math.max(0, X / W * b.width + 12)) + "px"; tip.style.top = "6px"; });
   hit.addEventListener("pointerleave", () => { tip.style.display = "none"; vl.setAttribute("visibility", "hidden"); });
 }
@@ -1501,7 +1528,7 @@ function srWire(R) {
       if (b0 == null) continue;
       const why = A ? [`comps' average total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `$${U} under${L ? `, learned ${L > 0 ? "+" : ""}${L.toFixed(1)}%` : ""} = ${fmt(std)}`,
           ...(mix && low != null && low < std ? [`${out0} days out: ${Math.round(mix * 100)}% toward the cheaper comps (${fmt(clo)}) = ${fmt(tgt)}`] : []), `guest total ${fmt(tgt)} → our rate ${fmt(b0)}`]
-        : [`start: ${{ s: "engine", c: "comps' daily rate", b: "Beyond", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = b0;
+        : [`start: ${{ s: "engine", c: "comps' daily rate", b: "our other homes' average", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = b0;
       const step = (f, t) => { if (!f || f === 1) return; v *= f; why.push(`${t} ${pc((f - 1) * 100)} → ${fmt(v)}`); };
       step(1 + Y.lvl / 100, "level");
       const cMed = cMedK(r.k); if (Y.base !== "c" && !A && Y.follow && r.c?.adr && cMed) step(1 + Y.follow * (r.c.adr / cMed - 1), `comps that night ${fmt(r.c.adr)} vs nearby 2 weeks ${fmt(cMed)}`);
@@ -1541,6 +1568,9 @@ function srWire(R) {
     SR.dynMsg = n ? `Built ${n} night${n > 1 ? "s" : ""}: the price changes on ${moved} of them.${pace != null ? ` Our home is ${Math.abs(Math.round(pace))} pts ${pace < 0 ? "behind" : "ahead of"} the comps' booking over the next 30 nights.` : ""} Not saved yet — check the chart and table (ⓘ = the steps), then Save.` : "No nights had a starting price. Try another \"Start from\".";
     srDraw();
   });
+  on("srReset", "onclick", () => { const n = Object.keys(SR.edits).length;
+    if (n && !confirm(`Throw away ${n} unsaved night${n > 1 ? "s" : ""} and go back to the saved prices and settings?`)) return;
+    SR.edits = {}; SR.dyn = null; SR.dynMsg = ""; srDraw(); });
   on("srSave", "onclick", async () => { const rows = Object.entries(SR.edits).filter(([, e]) => e.rate != null).map(([k, e]) => ({ date: k, rate: e.rate, min: e.min, note: e.why ? e.why.join(" → ").slice(0, 300) : null }));
     if (rows.some(r => r.rate < 25 || r.rate > 20000)) return alert("A rate is outside $25 – $20,000.");
     if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return alert("Minimum nights must be 1 – 60.");
@@ -1551,7 +1581,7 @@ function srWire(R) {
     const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!confirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   on("srCsv", "onclick", () => { if (!R) return; const q = v => v == null ? "" : String(v);
-    const lines = [["Night", "Track now", "Track min", "Beyond", "Comps daily rate", "Our rate", "Our min"].join(",")].concat(R.map(r => [r.k, q(r.t?.rate), q(r.t?.min_nights), q(r.b), r.c ? Math.round(r.c.adr) : "", q(r.v.rate), q(r.v.min)].join(",")));
+    const lines = [["Night", "Track now", "Track min", srGrpName() + " avg", "Comps daily rate", "Our rate", "Our min"].join(",")].concat(R.map(r => [r.k, q(r.t?.rate), q(r.t?.min_nights), q(r.b), r.c ? Math.round(r.c.adr) : "", q(r.v.rate), q(r.v.min)].join(",")));
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" })); a.download = `set_rates_${SR.code.replace(/\s+/g, "_")}_${SR.from}_${SR.to}.csv`; a.click(); });
 }
 const niceE = e => /JWT|expired/i.test(e?.message || "") ? "Your sign-in ran out. Reload the page." : /fetch|network/i.test(e?.message || "") ? "No signal right now. Try again." : (e?.message || "Something went wrong");
