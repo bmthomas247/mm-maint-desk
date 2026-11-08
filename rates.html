@@ -269,6 +269,13 @@ main>#search{display:none!important}.ovcalin #search{display:block!important}
 main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bottom:18px}
 .card .wide{width:auto;left:auto;transform:none;max-width:100%}
 #grid tr td:first-child{border-radius:10px 0 0 10px}
+.ovtiles.six{grid-template-columns:repeat(6,1fr)}@media (max-width:1100px){.ovtiles.six{grid-template-columns:repeat(3,1fr)}}@media (max-width:700px){.ovtiles.six{grid-template-columns:repeat(2,1fr)}}
+.srg .srbig{font-size:30px;font-weight:700;letter-spacing:-.02em;margin:2px 0 10px;display:flex;flex-direction:column}.srg .srbig span{font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:0}
+.srkv{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-top:1px solid var(--ovgrid)}.srkv span{color:var(--ink2)}
+.srbar{display:grid;grid-template-columns:110px 1fr 34px;gap:8px;align-items:center;font-size:12.5px;margin:4px 0}.srbar span{color:var(--ink2);text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srbar i{display:block;height:8px;border-radius:99px;background:linear-gradient(90deg,var(--ours) var(--w),var(--ovgrid) var(--w))}.srbar b{text-align:right}
+.srq{font-size:12.5px;margin-top:8px;line-height:1.4;color:var(--ink2)}.srq b{color:var(--comp)}.srlink{display:inline-block;margin-top:10px;font-weight:700;font-size:13px;color:var(--forest-2,#5b8a1e)}
+.srsite{padding:8px 0;border-top:1px solid var(--ovgrid);font-size:13px}.srsite a{font-size:12px}.srwhy{color:var(--muted);cursor:help;font-size:11px}
 .ovnote{background:var(--amberbg,#fbf0d9);border-radius:12px;padding:8px 12px;font-size:13px;margin:0 0 14px}
 @media (max-width:700px){.ovfil label{flex:1 1 140px}.ovfil select{min-width:0;max-width:none;width:100%}}
 .ovtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:18px}
@@ -329,7 +336,7 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
     <button class="tab" id="landBtn" title="Compares Track's current rates and minimums with the last sheet we sent">Did it land?</button>
     <button class="tab" id="matchBtn" title="Possible same-home matches across Airbnb / VRBO for you to confirm">Review matches</button>
     <span id="weeklyMsg" class="small muted"></span></div><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">✅ Pricing check · what to bring up with Kolleen this week</h3><div id="kolOut"></div></section><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">🧮 Our price vs Beyond <span class="small muted">(shadow pricing: what our own tool would charge, never sent anywhere)</span></h3><div id="ovbOut"></div></section><section style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><h3 style="margin:0 0 4px;font-size:16px">📊 Backtest · last season vs comps <span class="small muted">(Sep 2025 – Aug 2026, how each home actually did)</span></h3><div id="btOut"></div></section><div id="landOut"></div></div>
-  <div class="card" id="viewnav" style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="tab on" data-v="desk" title="Desk: comps, rates and calendars"><span class="ic">🏠</span><span>Desk</span></button><button class="tab" data-v="findings" title="Nightly checks with Accept / Reject (PriceLabs-style findings queue)"><span class="ic">🔎</span><span>Findings</span></button><button class="tab" data-v="beyond" title="Weekly Kolleen sheet, Did it land?, matches to review"><span class="ic">🤝</span><span>Beyond Pricing</span></button><button class="tab" data-v="setrates" title="Set our own rates on a few test homes and send them to Track"><span class="ic">✏️</span><span>Set rates</span></button><span class="small muted navnote">Market pulse = searches, stock markets, currencies, flights, news and events.</span></div>
+  <div class="card" id="viewnav" style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="tab on" data-v="desk" title="Desk: comps, rates and calendars"><span class="ic">🏠</span><span>Desk</span></button><button class="tab" data-v="findings" title="Nightly checks with Accept / Reject (PriceLabs-style findings queue)"><span class="ic">🔎</span><span>Findings</span></button><button class="tab" data-v="beyond" title="Weekly Kolleen sheet, Did it land?, matches to review"><span class="ic">🤝</span><span>Beyond Pricing</span></button><span class="small muted navnote">Market pulse = searches, stock markets, currencies, flights, news and events.</span></div>
   <div class="rstats" id="rstats"></div>
   <div class="card" id="reports"><h2 style="margin:0 0 8px">📋 Reports</h2><p class="small muted" style="margin:0 0 8px">Reports to share with owners or between ourselves. Kolleen-facing downloads carry rates only (no comp data).</p><div id="reportsBody"></div></div>
   <div class="card" id="rater"><h2 style="margin:0 0 8px">⭐ Home Rater</h2><p class="small muted" style="margin:0 0 8px">Score our homes 1–5 and pick which of two homes is nicer. Everyone's scores are combined in Rankings, next to Claude's AI score from the listing photos (ESTIMATE). The pricing engine will use these to price nicer homes higher within the same area.</p><div id="raterBody"></div></div>
@@ -487,7 +494,7 @@ async function boot() {
   document.querySelectorAll("#viewnav .tab").forEach(btn => btn.onclick = () => setView(btn.dataset.v));
   try { const p = new URLSearchParams(location.search), sv = localStorage.getItem("mmView"), pv = p.get("view");
     // Hotels + Reports left the top menu (Brandon 2026-10-30): Hotels = sidebar Rates ▸ Hotels; reports open from the hub's Reports & Analytics.
-    if (pv === "hotels" || pv === "reports" || pv === "rater" || pv === "pulse") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
+    if (pv === "hotels" || pv === "reports" || pv === "rater" || pv === "pulse" || pv === "setrates") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
     if (pv === "reports" && p.get("rp")) { RP.open = p.get("rp"); RP.openName = rpName(RP.open); }
     const hv = location.hash.slice(1), v = pv || (["findings", "beyond"].includes(hv) ? hv : null) || (sv && document.querySelector(`#viewnav .tab[data-v="${sv}"]`) ? sv : null); if (v && v !== "desk") setView(v); } catch (e) {}
   $("colleenBtn").onclick = buildColleenSheet; $("landBtn").onclick = didItLand; $("matchBtn").onclick = reviewMatches;
@@ -986,6 +993,17 @@ async function loadSetRates() {
     sb.from("rates_set_pushes").select("id,status,nights,error,requested_by,requested_at,sent_at,cancelled_by").eq("code", SR.code).order("id", { ascending: false }).limit(12),
     h.comp_id ? sb.from("latest_beyond").select("start_date,price,min_stay,enabled,captured_at,base_price,min_price").eq("comp_id", h.comp_id).limit(1) : Promise.resolve({ data: [] }),
     comp ? setNightly(comp.set_id) : Promise.resolve({ data: [] })]);
+  // Home review (2026-11-08): our pricing engine's suggestion, Home Rater, guest reviews, booking-site listings. All read with the person's sign-in.
+  const none = Promise.resolve({ data: null }), cid = h.comp_id;
+  const [sh, hq, ai, hr, kd, rv, lk] = await Promise.all([
+    cid ? sb.from("shadow_prices").select("run_date,start_date,price,rule,why,comp_median,min_stay,version").eq("comp_id", cid).order("run_date", { ascending: false }).limit(1) : none,
+    cid ? sb.from("home_quality").select("run_date,adj,inside_adj,listing_adj,parts").eq("comp_id", cid).order("run_date", { ascending: false }).limit(1) : none,
+    cid ? sb.from("home_ai").select("inside,amenities,location,overall,rating,reviews,photos,scored_at,listing_url").eq("comp_id", cid).limit(1) : none,
+    cid ? sb.from("home_ratings").select("overall,inside,clean,furniture,amenities,location,created_at").eq("comp_id", cid) : none,
+    cid ? sb.from("kd_listing_details").select("captured_at,listing_id,raw").eq("comp_id", cid).order("captured_at", { ascending: false }).limit(12) : none,
+    cid ? sb.rpc("analytics_reviews", { p_home: cid }) : none,
+    cid ? sb.from("comp_links").select("channel,kind,url,active").eq("comp_id", cid) : none]);
+  SR.x = { shadow: sh.data?.[0] || null, quality: hq.data?.[0] || null, ai: ai.data?.[0] || null, ratings: hr.data || [], kd: kd.data || [], reviews: rv.data || null, links: lk.data || [] };
   SR.ours_n = {}; for (const r of ns.data || []) SR.ours_n[r.night] = r;    // id order: the latest row for a night wins
   SR.track = {}; for (const r of tr.data || []) SR.track[r.night] = r;
   SR.trackAt = (tr.data || []).map(r => r.captured_at).sort().pop();
@@ -999,6 +1017,43 @@ function srComp(k) {   // comps' average daily rate that night (same as the Desk
     (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] }; }
   const v = []; for (const c of Object.values(by)) { const x = c.Airbnb || c.VRBO; if (x && x.open && x.rate != null) v.push(+x.rate); }
   return v.length >= 2 ? { adr: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+}
+const srShadow = k => { const x = SR.x?.shadow; if (!x) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(x.start_date + "T12:00:00")) / 864e5);
+  const p = x.price?.[off]; return p == null ? null : { price: +p, why: x.why?.[off] || "", rule: x.rule?.[off] || "", min: x.min_stay?.[off] ?? null, med: x.comp_median?.[off] ?? null }; };
+// "Home at a glance" (Brandon 2026-11-08): Home Rater, what guests say, how long it's been on each booking site.
+function srGlance(h) {
+  const X = SR.x || {}, av = a => { a = a.filter(v => v != null && !isNaN(v)); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
+  const card = (t, sub, body, src) => `<div class="ovc w2 srg"><h3>${t}</h3><div class="cs">${sub}</div>${body}<div class="src">${src}</div></div>`;
+  const row = (k, v) => `<div class="srkv"><span>${k}</span><b>${v}</b></div>`;
+  // Home Rater
+  const q = X.quality, m = q?.parts?.matchups, ins = q?.parts?.inside, ai = X.ai, rt = X.ratings, z = ins?.z ?? m?.z;
+  const lvl = z == null ? "Not rated yet" : z >= 0.5 ? "Nicer than most of our homes" : z <= -0.5 ? "Below most of our homes" : "About average for our homes";
+  const rater = `<div class="srbig">${m?.elo ? Math.round(m.elo) : "—"}<span>${escH(lvl)}</span></div>` +
+    row("Staff head-to-head picks", m ? `${m.games} matchup${m.games === 1 ? "" : "s"}` : "none yet") +
+    row("Staff 1–5 scores", rt.length ? `${av(rt.map(r => +r.overall)).toFixed(1)} from ${rt.length}` : "none yet") +
+    row("Claude photo score (ESTIMATE)", ai?.overall != null ? `${(+ai.overall).toFixed(1)} / 5` : "—") +
+    row("Effect on the suggested price", q?.adj != null ? `${(+q.adj * 100 >= 0 ? "+" : "") + (+q.adj * 100).toFixed(1)}%` : "—");
+  // Guests
+  const rv = X.reviews, cats = rv?.cats ? Object.entries(rv.cats).sort((a, b) => a[1] - b[1]).slice(0, 4) : [];
+  const recent = (rv?.reviews || []).filter(r => r.text).slice(0, 3);
+  const guests = rv && rv.count ? `<div class="srbig">${(+rv.avg).toFixed(2)}★<span>${rv.count} rated stays (Airbnb + Vrbo + website)</span></div>` +
+      cats.map(([k, v]) => `<div class="srbar"><span>${escH(k)}</span><i style="--w:${Math.max(0, Math.min(100, (v / 5) * 100))}%"></i><b>${(+v).toFixed(1)}</b></div>`).join("") +
+      recent.map(r => `<div class="srq">${r.overall ? `<b>${"★".repeat(Math.round(r.overall))}</b> ` : ""}“${escH(String(r.text).slice(0, 170))}${String(r.text).length > 170 ? "…" : ""}” <span class="muted">· ${escH(r.channel || "")} ${escH((r.submitted || r.check_in || "").slice(0, 10))}</span></div>`).join("") +
+      `<a class="srlink" href="hub.html#/reviews/${encodeURIComponent(h.code)}" target="_top">All reviews for ${escH(h.code)} →</a>`
+    : rv === null ? `<p class="small muted">Reviews need the Reports & Analytics desk.</p>` : `<p class="small muted">No guest reviews for this home yet${h.code ? " (new homes take a few stays)" : ""}.</p>`;
+  // Booking sites: Key Data listing details (listed on, reviews, last booking) + the links we track
+  const seen = new Set(), kd = (X.kd || []).map(r => r.raw?.listing).filter(L => L && !seen.has(L.ota + L.id) && seen.add(L.ota + L.id));
+  const since = d => { if (!d) return "—"; const mo = Math.round((Date.now() - new Date(d + "T12:00:00")) / 2629800000); return `${new Date(d + "T12:00:00").toLocaleDateString(undefined, { month: "short", year: "numeric" })} · ${mo < 1 ? "under a month" : mo < 24 ? mo + " months" : (mo / 12).toFixed(1) + " years"}`; };
+  const otaName = o => /airbnb/i.test(o) ? "Airbnb" : /vrbo|homeaway/i.test(o) ? "Vrbo" : o;
+  const sites = (kd.length ? kd.map(L => `<div class="srsite"><b>${escH(otaName(L.ota || ""))}</b>${L.url ? ` <a href="${escH(L.url)}" target="_blank" rel="noopener">open ↗</a>` : ""}
+        <div>Live since <b>${escH(since(L.listed_on))}</b></div><div class="small muted">${L.reviews?.review_count != null ? `${L.reviews.review_count} reviews · ${L.reviews.review_overall ?? "—"}★ · ` : ""}last booking ${escH(L.last_booking_on || "—")}${L.is_instant_book_enabled ? " · Instant Book on" : ""}</div></div>`).join("") : "") +
+    (X.links || []).filter(l => l.active && !kd.some(L => otaName(L.ota || "") === (l.channel === "VRBO" ? "Vrbo" : l.channel))).map(l => `<div class="srsite"><b>${escH(l.channel === "Direct" ? "Our website" : l.channel)}</b> <a href="${escH(l.url)}" target="_blank" rel="noopener">open ↗</a><div class="small muted">${l.channel === "Direct" ? "Booking engine page" : "No Key Data details yet"}</div></div>`).join("");
+  const otas = sites || `<p class="small muted">No booking-site listings linked yet.</p>` ;
+  const missing = ["Airbnb", "Vrbo"].filter(o => !kd.some(L => otaName(L.ota || "") === o) && !(X.links || []).some(l => l.active && (l.channel === o || (o === "Vrbo" && l.channel === "VRBO"))));
+  return `<div class="ovgrid" style="margin-bottom:18px">` +
+    card("Home Rater", "How this home stacks up against our other homes", rater, `Source: Home Rater (head-to-head picks + 1–5 scores), quality.py run ${escH(q?.run_date || "—")}; photo score = Claude reading the listing photos.`) +
+    card("What guests say", "Last 2 years, worst categories first", guests, `Source: Track guest reviews ${rv?.synced ? "(synced " + new Date(rv.synced).toLocaleDateString() + ")" : ""}; staff-named complaints hidden.`) +
+    card("On the booking sites", "How long it's been listed, and how it's doing there", otas + (missing.length ? `<div class="srq muted">Not found on ${missing.join(" or ")} yet.</div>` : ""), `Source: Key Data listing details${X.kd?.[0] ? " (" + new Date(X.kd[0].captured_at).toLocaleDateString() + ")" : ""} + the listing links on the Desk.`) + `</div>`;
 }
 const srBeyond = k => { const b = SR.beyond; if (!b) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(b.start_date + "T12:00:00")) / 864e5); const v = b.price?.[off]; return v == null ? null : +v; };
 function srVal(k) { const e = SR.edits[k], s = SR.ours_n[k]; return { rate: e?.rate !== undefined ? e.rate : s ? +s.rate : null, min: e?.min !== undefined ? e.min : s?.min_nights ?? null, changed: !!e }; }
@@ -1018,22 +1073,25 @@ function srDraw() {
        ` · <b>Beyond is still on for ${escH(h.code)}</b>${SR.beyond?.enabled ? " (Beyond listing enabled as of " + new Date(SR.beyond.captured_at).toLocaleDateString() + ")" : ""}: it writes the same Track rate, so turn it off in Beyond (or ask Kolleen) before sending.`}
      <label style="display:inline-flex;gap:6px;align-items:center;margin-left:8px"><input type="checkbox" id="srBoff"${h.beyond_off ? " checked" : ""} style="width:auto;min-height:0"> Beyond is off for this home</label></div>`;
   const days = []; for (let k = SR.from; k <= SR.to && days.length < 541; k = addD(k, 1)) days.push(k);
-  const R = days.map(k => ({ k, v: srVal(k), t: SR.track[k], b: srBeyond(k), c: srComp(k) }));
+  const R = days.map(k => ({ k, v: srVal(k), t: SR.track[k], b: srBeyond(k), c: srComp(k), s: srShadow(k) }));
   const avg = a => { a = a.filter(x => x != null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
   const oA = avg(R.map(r => r.v.rate)), bA = avg(R.map(r => r.b)), tA = avg(R.map(r => r.t ? +r.t.rate : null)), cA = avg(R.map(r => r.c?.adr));
   const set = R.filter(r => r.v.rate != null).length, sg = v => v == null ? "" : (v > 0 ? "+" : "") + Math.round(v) + "%";
   const tl = (cl, v, l, d, s) => `<div class="ovt ${cl}" title="${escH(s)}"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ""}</div>`;
-  html += `<div class="ovtiles">` + tl("o1", `${set} of ${days.length}`, "Nights we've set", Object.keys(SR.edits).length ? Object.keys(SR.edits).length + " not saved yet" : "all saved", "Our rates saved in the hub for these dates.") +
+  const sA = avg(R.map(r => r.s?.price));
+  html += `<div class="ovtiles six">` + tl("o1", fmt(sA), "Suggested / night", SR.x?.shadow ? "our pricing engine, " + new Date(SR.x.shadow.run_date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "no suggestion yet", "Our own pricing engine (shadow_price.py, nightly): comps, season, how far out, booking pace and the Home Rater score. Hover a night in the table for its reason.") +
+    tl("o3", `${set} of ${days.length}`, "Nights we've set", Object.keys(SR.edits).length ? Object.keys(SR.edits).length + " not saved yet" : "all saved", "Our rates saved in the hub for these dates.") +
     tl("o2", fmt(oA), "Our rate / night", bA && oA ? sg((oA / bA - 1) * 100) + " vs Beyond" : "", "Average of the nights we've set.") +
     tl("c1", fmt(bA), "Beyond / night", SR.beyond ? "pulled " + new Date(SR.beyond.captured_at).toLocaleDateString() : "no Beyond data", "Beyond Pricing calendar price (latest nightly pull, beyond.py).") +
     tl("o3", fmt(tA), "Track now / night", SR.trackAt ? "read " + new Date(SR.trackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "not read yet", "Track rack rate (rate type RR) for this home, read every 30 minutes.") +
     tl("c2", fmt(cA), "Comps' daily rate", "before cleaning + tax", "Average nightly rate of the open comps that night (Airbnb from AirROI, else VRBO from KeyData; ESTIMATE). Same basis as Track's rack rate.") + `</div>`;
+  html += srGlance(h);
   // chart
   html += `<div class="ovc" style="margin-bottom:18px"><h3>Rate per night</h3><div class="cs">${R.length} nights · Track's rack rate basis (before cleaning, fees and tax)</div><div class="ovwrap" id="srChart">${srSvg(R)}<div class="ovtip"></div></div>
-    <div class="ovleg"><span><i class="ln" style="background:var(--ours)"></i>Ours (set here)</span><span><i class="ln" style="background:#5b6bd1"></i>Beyond</span><span><i class="ln" style="background:var(--ink2)"></i>Track now</span><span><i class="ln" style="background:var(--comp)"></i>Comps' daily rate</span></div></div>`;
+    <div class="ovleg"><span><i class="ln" style="background:var(--ours)"></i>Ours (set here)</span><span><i class="ln" style="background:#1f3a0c;opacity:.7"></i>Suggested</span><span><i class="ln" style="background:#5b6bd1"></i>Beyond</span><span><i class="ln" style="background:var(--ink2)"></i>Track now</span><span><i class="ln" style="background:var(--comp)"></i>Comps' daily rate</span></div></div>`;
   // tools
   html += `<div class="ovc" style="margin-bottom:18px"><h3>Fill nights quickly</h3><div class="cs">Starts from a number you trust, then adjusts. Nothing is saved until you press Save.</div>
-    <div class="ovfil" style="box-shadow:none;padding:0;margin:0"><label>Start from<select id="srBase"><option value="b">Beyond's price</option><option value="t">Track now</option><option value="c">Comps' daily rate</option><option value="o">Our saved rate</option></select></label>
+    <div class="ovfil" style="box-shadow:none;padding:0;margin:0"><label>Start from<select id="srBase"><option value="s">Our engine's suggestion</option><option value="b">Beyond's price</option><option value="t">Track now</option><option value="c">Comps' daily rate</option><option value="o">Our saved rate</option></select></label>
       <label>Adjust %<input type="number" id="srPct" value="0" step="1" style="width:90px"></label><label>Fri + Sat extra %<input type="number" id="srWk" value="0" step="1" style="width:90px"></label>
       <label>Min nights<input type="number" id="srMin" min="1" max="60" placeholder="keep" style="width:90px"></label>
       <label>Round to<select id="srRnd"><option value="1">$1</option><option value="5" selected>$5</option><option value="10">$10</option></select></label>
@@ -1044,13 +1102,14 @@ function srDraw() {
   html += `<div class="ovc" style="margin-bottom:18px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Nights</h3><span class="sp" style="flex:1"></span>
       <button class="ovbtn" id="srSave"${Object.keys(SR.edits).length ? "" : " disabled"}>💾 Save ${Object.keys(SR.edits).length || ""}</button>
       <button class="ovbtn" id="srPush" style="background:var(--forest-2,#5b8a1e);color:#fff;border-color:var(--forest-2,#5b8a1e)">⇪ Send these dates to Track</button></div>
-    <div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th>Track now</th><th>Beyond</th><th>Comps</th><th>Our rate</th><th>Min nights</th><th>vs Beyond</th></tr>` +
+    <div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th>Suggested</th><th>Track now</th><th>Beyond</th><th>Comps</th><th>Our rate</th><th>Min nights</th><th>vs Beyond</th></tr>` +
     R.map(r => { const d = new Date(r.k + "T12:00:00"), wk = d.getDay() === 5 || d.getDay() === 6, g = r.v.rate != null && r.b ? (r.v.rate / r.b - 1) * 100 : null;
       return `<tr class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}"><td><b>${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
+        <td title="${escH(r.s?.why || "")}">${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy">ⓘ</span>` : "—"}</td>
         <td>${r.t ? fmt(+r.t.rate) + `<span class="muted small"> · ${r.t.min_nights ?? "—"}n</span>` : "—"}</td><td>${fmt(r.b)}</td><td>${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}</td>
         <td><input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin"></td><td><input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm"></td>
         <td>${g == null ? "" : `<span class="ovpill ${Math.abs(g) < 10 ? "g" : "y"}">${sg(g)}</span>`}</td></tr>`; }).join("") + `</table></div>
-    <div class="src">Track now = rack rate (RR) + minimum stay in Track, read every 30 min. Beyond = its calendar price from the nightly pull. Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
+    <div class="src">Suggested = our own pricing engine (hover ⓘ for its reason). Track now = rack rate (RR) + minimum stay in Track, read every 30 min. Beyond = its calendar price from the nightly pull. Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
   // sends
   html += `<div class="ovc"><h3>Sends to Track</h3><div class="cs">Newest first. A waiting send can be cancelled.</div>${SR.pushes.length ? `<table class="srt"><tr><th>#</th><th>Asked</th><th>Nights</th><th>Status</th><th></th></tr>` +
     SR.pushes.map(p => `<tr><td>${p.id}</td><td>${escH(p.requested_by || "")}<br><span class="small muted">${new Date(p.requested_at).toLocaleString()}</span></td><td>${p.nights.length} (${escH(p.nights[0]?.date || "")} → ${escH(p.nights[p.nights.length - 1]?.date || "")})</td>
@@ -1098,7 +1157,7 @@ function srCal() {
   draw();
 }
 function srSvg(R) {
-  const vals = R.flatMap(r => [r.v.rate, r.b, r.t ? +r.t.rate : null, r.c?.adr]).filter(v => v != null);
+  const vals = R.flatMap(r => [r.v.rate, r.b, r.t ? +r.t.rate : null, r.c?.adr, r.s?.price]).filter(v => v != null);
   if (!vals.length) return `<div class="ovempty">No prices for these dates yet.</div>`;
   const W = 1000, H = 260, L = 56, Rr = 10, T = 14, B = 30, n = R.length, hi = Math.max(...vals) * 1.1;
   const x = i => L + (W - L - Rr) * (n > 1 ? i / (n - 1) : .5), y = v => T + (H - T - B) * (1 - v / hi);
@@ -1106,7 +1165,7 @@ function srSvg(R) {
   for (let g = 0; g <= 4; g++) { const v = hi * g / 4; s += `<line x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--ovgrid)"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="12" fill="var(--ovax)">$${Math.round(v)}</text>`; }
   const st = Math.ceil(n / 9); R.forEach((r, i) => { if (i % st === 0) s += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="var(--ovax)">${new Date(r.k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>`; });
   const ln = (f, col, w, dash) => `<path d="${ovPath(R.map((r, i) => { const v = f(r); return v == null ? null : [x(i), y(v)]; }))}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : ""}/>`;
-  s += ln(r => r.c?.adr, "var(--comp)", 2.5) + ln(r => r.t ? +r.t.rate : null, "var(--ink2)", 2, "5 4") + ln(r => r.b, "#5b6bd1", 2.5) + ln(r => r.v.rate, "var(--ours)", 3.5);
+  s += ln(r => r.c?.adr, "var(--comp)", 2.5) + ln(r => r.t ? +r.t.rate : null, "var(--ink2)", 2, "5 4") + ln(r => r.b, "#5b6bd1", 2.5) + ln(r => r.s?.price, "#1f3a0c", 2.2, "2 5") + ln(r => r.v.rate, "var(--ours)", 3.5);
   s += `<line class="ovvl" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--ours)" stroke-dasharray="4 4" visibility="hidden"/>`;
   return s + `<rect x="${L}" y="${T}" width="${W - L - Rr}" height="${H - T - B}" fill="transparent" class="ovhit"/></svg>`;
 }
@@ -1115,7 +1174,7 @@ function srHover(R) {
   const tip = wrap.querySelector(".ovtip"), vl = svg.querySelector(".ovvl"), hit = svg.querySelector(".ovhit"), W = 1000, L = 56, n = R.length;
   hit.addEventListener("pointermove", e => { const b = svg.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round(((e.clientX - b.left) / b.width * W - L) / (W - L - 10) * (n - 1)))), r = R[i], X = L + (W - L - 10) * (n > 1 ? i / (n - 1) : .5);
     vl.setAttribute("x1", X); vl.setAttribute("x2", X); vl.setAttribute("visibility", "visible");
-    tip.innerHTML = `<b>${new Date(r.k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b><span style="color:var(--ours)">Ours ${fmt(r.v.rate)}${r.v.min ? " · " + r.v.min + "n" : ""}</span><span style="color:#5b6bd1">Beyond ${fmt(r.b)}</span><span>Track now ${r.t ? fmt(+r.t.rate) : "—"}</span><span style="color:var(--comp)">Comps ${r.c ? fmt(r.c.adr) : "—"}</span>`;
+    tip.innerHTML = `<b>${new Date(r.k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b><span style="color:var(--ours)">Ours ${fmt(r.v.rate)}${r.v.min ? " · " + r.v.min + "n" : ""}</span><span style="color:#1f3a0c">Suggested ${fmt(r.s?.price)}</span><span style="color:#5b6bd1">Beyond ${fmt(r.b)}</span><span>Track now ${r.t ? fmt(+r.t.rate) : "—"}</span><span style="color:var(--comp)">Comps ${r.c ? fmt(r.c.adr) : "—"}</span>`;
     tip.style.display = "block"; tip.style.left = Math.min(b.width - tip.offsetWidth, Math.max(0, X / W * b.width + 12)) + "px"; tip.style.top = "6px"; });
   hit.addEventListener("pointerleave", () => { tip.style.display = "none"; vl.setAttribute("visibility", "hidden"); });
 }
@@ -1135,9 +1194,9 @@ function srWire(R) {
     i.closest("tr").classList.add("chg"); const sv = $("srSave"); sv.disabled = false; sv.textContent = "💾 Save " + Object.keys(SR.edits).length; });
   on("srFill", "onclick", () => { const base = $("srBase").value, p = +$("srPct").value || 0, wk = +$("srWk").value || 0, mn = $("srMin").value ? +$("srMin").value : null, rd = +$("srRnd").value, all = $("srWhich").value === "all";
     let n = 0; for (const r of R) { if (!all && r.v.rate != null) continue;
-      const b0 = base === "b" ? r.b : base === "t" ? (r.t ? +r.t.rate : null) : base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null); if (b0 == null) continue;
+      const b0 = base === "s" ? r.s?.price : base === "b" ? r.b : base === "t" ? (r.t ? +r.t.rate : null) : base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null); if (b0 == null) continue;
       const d = new Date(r.k + "T12:00:00").getDay(), v = b0 * (1 + p / 100) * (d === 5 || d === 6 ? 1 + wk / 100 : 1);
-      SR.edits[r.k] = { rate: Math.max(25, Math.round(v / rd) * rd), min: mn ?? r.v.min ?? (r.t?.min_nights ?? null) }; n++; }
+      SR.edits[r.k] = { rate: Math.max(25, Math.round(v / rd) * rd), min: mn ?? r.v.min ?? (base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null) }; n++; }
     srDraw(); if (!n) alert("No nights to fill: none had a starting price" + (all ? "." : ", or they're already set (pick \"Every night\")."));
   });
   on("srSave", "onclick", async () => { const rows = Object.entries(SR.edits).filter(([, e]) => e.rate != null).map(([k, e]) => ({ date: k, rate: e.rate, min: e.min }));
@@ -3622,7 +3681,8 @@ async function loadMarket() {
 function mkFor(k) {
   const o = { ev: [], notes: [], snow: null, hol: MK.hol ? holOf(k) : [], hotel: [] };
   if (!state.mk.loaded) return o;
-  if (MK.hotel) o.hotel = (state.mk.hotels || []).filter(h => h.check_in === k);
+  // Hotels only matter for studios, 1BR and 2BR sets (Brandon 2026-11-08: "homes larger than 2 bedrooms dont need to have hotel stuff").
+  if (MK.hotel && !(setBeds() > 2)) o.hotel = (state.mk.hotels || []).filter(h => h.check_in === k);
   for (const e of state.mk.events) {
     if (k < e.start_date || k > (e.end_date || e.start_date)) continue;
     if (e.source === "manual") { if (MK.notes) o.notes.push(e); }
@@ -3637,6 +3697,7 @@ const mkIcons = k => { const o = mkFor(k); return (o.hol.length ? "★" : "") + 
 const mkTitle = k => { const o = mkFor(k), t = [];
   o.hol.forEach(h => t.push(h)); o.hotel.forEach(h => t.push(`Hotels ${h.area} $${Math.round(h.median)} median (${h.hotels})`)); if (o.snow) t.push(`Snow ${o.snow.in}" (${o.snow.loc})`); o.notes.forEach(e => t.push("Note: " + e.title)); o.ev.slice(0, 4).forEach(e => t.push(e.title + (e.venue ? " @ " + e.venue : "")));
   if (o.ev.length > 4) t.push(`+${o.ev.length - 4} more events`); return t.length ? " · " + t.join(" · ") : ""; };
+function setBeds() { const n = state.set?.name || "", m = n.match(/(\d+)\s*(?:BR|Bed)/i); return m ? +m[1] : /studio/i.test(n) ? 0 : null; }
 function mkTip(k) { const o = mkFor(k), t = [];
   o.hol.forEach(h => t.push(`<span class="mkho">★</span> ${escH(h)}`));
   o.hotel.forEach(h => t.push(`<span class="mkht">🏨</span> ${escH(h.area)} hotels $${Math.round(h.median)} <span class="muted">(${h.hotels})</span>`));
