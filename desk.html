@@ -508,7 +508,7 @@ var S={db:null, me:ls("me")||"", tab:(location.hash||"").replace("#","")||"today
   feeds:{}, edits:{}, deskjobs:{}, profiles:{}, propedits:{}, ownercontacts:{}, paycost:{}, vendoredits:{}, deskvendors:{},
   recurring:{}, rlog:{}, expenses:{}, time:{}, config:{}, bwq:{}, taskbill:{}, projedits:{}, slackq:{}, deskprojects:{}, asanaq:{}, asks:{},
   ui:{q:"", st:{open:1,scheduled:1,waiting:1}, src:{}, kind:{}, who:"", vendor:"", hideOld:true, hideInfo:true,
-      sel:"", home:"", hq:"", vq:"", vtrade:"", vcat:"Home services", prefOnly:false, month:today().slice(0,7), rwin:90, rvr:{}}};
+      sel:"", home:"", hq:"", vq:"", vtrade:"", vcat:"Home services", prefOnly:true, month:today().slice(0,7), rwin:90, rvr:{}}};
 /* Ask Penny (hub.html pennyCtx) reads which tab / home / job is open - nothing else */
 window.deskCtx=function(){ return {tab:S.tab, home:S.ui.home||"", sel:String(S.ui.sel||"")}; };
 var TABS=[["today","Today"],["check","Breezeway check"],["jobs","All jobs"],["money","Expenses & Time"],["care","Home care"],["projects","Projects"],["routines","Seasonal & yearly"],["trash","Trash"],["homes","Homes"],
@@ -2249,7 +2249,8 @@ function vVendorsFind(){
     '<div class="chiprow" style="margin-bottom:14px">'+tradeNames.map(function(t){ return '<button class="chip" data-vtradepick="'+esc(t)+'">'+esc(t)+'<span class="n">'+all[t].filter(isPref).length+'</span></button>'; }).join("")+'</div>';
   if(q && !shown.length && !byName.length) h+='<div class="panel empty">No kind of work matches "'+esc(q)+'". Try a simpler word — "leak", "oven", "garage" — or pick from the list.</div>';
   if(q && shown.length) h+='<div class="note" style="margin-bottom:10px">For "'+esc(q)+'": '+shown.map(function(t){ return '<b>'+esc(t)+'</b>'; }).join(" · ")+'</div>';
-  shown.forEach(function(t){ var vs=(all[t]||[]).filter(function(v){ return !u.prefOnly||isPref(v); })
+  /* Brandon 2026-11-04 (Slack note): Preferred only is ticked by default; a kind of work with no preferred vendor still shows all of them */
+  shown.forEach(function(t){ var allT=all[t]||[], vs=(u.prefOnly&&allT.some(isPref)?allT.filter(isPref):allT.slice())
       .sort(function(a,b){ return (tierRank(b)-tierRank(a))||(vendUse(b).length-vendUse(a).length)||((b.rating||0)-(a.rating||0))||a.name.localeCompare(b.name); });
     if(!vs.length) return;
     h+='<section style="margin-bottom:18px"><h3 style="font-size:15px;margin:0 0 8px;display:flex;gap:8px;align-items:baseline">'+esc(t)+
