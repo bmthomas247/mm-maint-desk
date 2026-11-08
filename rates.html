@@ -245,7 +245,7 @@ main .card h2{font-weight:700}
 #setrates{display:none;background:transparent!important;box-shadow:none!important;border:0!important;padding:0!important}main.v-setrates #setrates{display:block}
 main.v-setrates>*:not(#viewnav):not(#setrates){display:none!important}
 .srt{width:100%;border-collapse:collapse;font-size:13px}.srt th{text-align:left;color:var(--muted);font-weight:600;font-size:12px;padding:6px;position:sticky;top:0;background:var(--ovcard);z-index:1}
-.srt td{padding:5px 6px;border-top:1px solid var(--ovgrid);white-space:nowrap}.srt tr.wk td{background:rgba(136,181,53,.06)}.srt tr.chg td{background:var(--amberbg)}
+.srt td{padding:5px 6px;border-top:1px solid var(--ovgrid);white-space:nowrap}.srt td.small.muted{white-space:normal;min-width:150px;max-width:260px;line-height:1.3}.srt tr.wk td{background:rgba(136,181,53,.06)}.srt tr.chg td{background:var(--amberbg)}
 .srin{width:92px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);font:inherit;font-size:13px;min-height:34px}.srin.sm{width:64px}
 #srSave:disabled{opacity:.5;cursor:default}
 #srcal{position:fixed;inset:0;z-index:60;background:rgba(15,25,12,.45);display:grid;place-items:center;padding:16px}
@@ -1199,7 +1199,8 @@ function srDraw() {
         <button class="ovbtn dygo" id="srFill">⚡ Build prices</button></div>
     </div><div class="small muted" id="dyMsg" style="margin-top:8px">${escH(SR.dynMsg || "")}</div></div>`;
   // grid
-  const pk = k => typeof peakOf === "function" ? (peakOf(k) || (typeof holOf === "function" ? holOf(k)[0] : null)) : null;
+  // every label for the night (Brandon 2026-11-08: Cottonwood openings were hidden behind "Opening weekend" / "Thanksgiving")
+  const pk = k => typeof holOf === "function" ? [...new Set(holOf(k))].join(" · ") || null : null;
   html += `<div class="ovc" style="margin-bottom:18px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Nights</h3><span class="sp" style="flex:1"></span>
       <button class="ovbtn" id="srSave"${Object.keys(SR.edits).length ? "" : " disabled"}>💾 Save as suggested ${Object.keys(SR.edits).length || ""}</button>
       <button class="ovbtn" id="srPush" style="background:var(--forest-2,#5b8a1e);color:#fff;border-color:var(--forest-2,#5b8a1e)">⇪ Send these dates to Track</button></div>
@@ -1233,7 +1234,7 @@ function srCal() {
   const cell = k => {
     const v = srVal(k), t = SR.track[k], c = srComp(k), b = srBeyond(k), p = v.rate ?? (t ? +t.rate : null), g = p != null && c ? (p / c.adr - 1) * 100 : null;
     const cls = g == null ? "" : g >= 25 ? "hi" : g <= -25 ? "lo" : "";
-    const pk = (typeof peakOf === "function" && peakOf(k)) || (typeof holOf === "function" && holOf(k)[0]) || "";
+    const pk = typeof holOf === "function" ? [...new Set(holOf(k))].join(" · ") : "";
     const inR = SR.from <= k && k <= SR.to, past = k < today;
     return `<button type="button" class="scd ${cls}${inR ? " inr" : ""}${k === pick.a ? " sel" : ""}${past ? " past" : ""}" data-sck="${k}"${past ? " disabled" : ""}
       title="${escH(new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}: ${v.set ? "our suggestion " + fmt(v.rate) + (v.by ? " (" + srIni(v.by) + ")" : "") : "Track now " + fmt(t ? +t.rate : null)} · Beyond ${fmt(b)} · comps ${c ? fmt(c.adr) + " (" + c.n + ")" : "—"}${g != null ? " · " + (g > 0 ? "+" : "") + Math.round(g) + "% vs comps" : ""}${pk ? " · " + escH(pk) : ""}">
@@ -1378,7 +1379,7 @@ function srWire(R) {
       const sn = out <= 7 && typeof mkFor === "function" && state.mk?.loaded ? mkFor(r.k).snow : null;
       if (sn && sn.in >= Y.snowIn) step(1 + Y.snowU / 100, `${sn.in}" snow forecast (NWS)`);
       const min = gapMin ?? (hol && Y.minHol !== "" ? +Y.minHol : null) ?? ((dw === 5 || dw === 6) && Y.minWk !== "" ? +Y.minWk : null) ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
-      built.push({ r, v, why, hol: !!hol, dw, min: Math.max(2, gapMin ?? min ?? 2) });   // never 1-night stays (Brandon, engine v8b) n++; }
+      built.push({ r, v, why, hol: !!hol, dw, min: Math.max(2, gapMin ?? min ?? 2) /* never 1-night stays (Brandon, engine v8b) */ }); n++; }
     // smoothing: no jump bigger than Y.jump% from the night before (holidays left alone)
     for (let i = 1; i < built.length; i++) { const p = built[i - 1], x = built[i]; if (!Y.jump || x.hol || p.hol || addD(p.r.k, 1) !== x.r.k) continue;
       const hi = p.v * (1 + Y.jump / 100), lo = p.v * (1 - Y.jump / 100); if (x.v > hi || x.v < lo) { x.v = Math.min(hi, Math.max(lo, x.v)); x.why.push(`smoothed (max ${Y.jump}% jump) → ${fmt(x.v)}`); } }
