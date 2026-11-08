@@ -261,6 +261,11 @@ main.v-setrates>*:not(#viewnav):not(#setrates){display:none!important}
 .scd.past{opacity:.35;cursor:default}
 @media (prefers-color-scheme:dark){.scd.hi,.sw.hi{background:#3a1714}.scd.lo,.sw.lo{background:#1b2440}}
 @media (max-width:760px){.scms{grid-template-columns:1fr}.scd{min-height:52px}.scd .p{font-size:12px}}
+main>#search{display:none!important}.ovcalin #search{display:block!important}
+#rangeOut:not(:has(#results>*)):not(:has(#rangeMk>*)){display:none}
+.calkey{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;background:var(--ovbg);border-radius:12px;padding:9px 12px;margin:0 0 10px;font-size:12.5px;color:var(--ink2)}
+.calkey>b{color:var(--ink);margin-right:2px}.ck-red{color:var(--red)}.ck-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.ck-dot.r{background:var(--red)}.ck-dot.y{background:#d4a017}.ck-sel{display:inline-block;width:16px;height:12px;border-radius:4px;background:var(--tealbg);box-shadow:inset 0 0 0 2px var(--teal);margin-right:5px;vertical-align:-1px}
 .ovnote{background:var(--amberbg,#fbf0d9);border-radius:12px;padding:8px 12px;font-size:13px;margin:0 0 14px}
 @media (max-width:700px){.ovfil label{flex:1 1 140px}.ovfil select{min-width:0;max-width:none;width:100%}}
 .ovtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:18px}
@@ -334,10 +339,16 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
     <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h2 style="margin:0">2 · Pick dates</h2><span id="rangeLbl" class="small muted"></span><span class="sp"></span><span class="small muted">Under each day:</span><button class="tab" id="calAdr" title="Average nightly rate of the comps open that day, before cleaning and tax">Daily rate (ADR)</button><button class="tab" id="calAllin" title="Average all-in price per night (cleaning, fees and tax spread over the stay)">All-in</button> <button class="tab" id="todayBtn">Today</button> <button class="tab" id="clearRange">Clear dates</button></div>
     <p class="small muted" id="calHelp">Pick check-in, then check-out. The number under each day is the average all-in rate per night across all our comps that are priced for that night (Airbnb incl. estimated tax, and Direct). Red = 60%+ of comps already blocked. Hover a day for the count.</p>
     <p class="small" id="flagLegend"></p>
+    <div class="calkey" aria-label="What the calendar shows"><b>How to read it</b>
+      <span><b>$ under a day</b> = the comps' price that night (button above picks daily rate or all-in)</span>
+      <span><b class="ck-red">$ in red</b> = 60%+ of comps already booked: demand is high, look at raising ours</span>
+      <span><i class="ck-dot r"></i>= a stay where we're priced too high vs the comps</span>
+      <span><i class="ck-dot y"></i>= a stay where we're priced too low</span>
+      <span>★ holiday · ⚑ event · ❄ 1"+ snow forecast · ✎ our note (hover a day for details)</span>
+      <span><i class="ck-sel"></i>= your dates</span></div>
     <div class="cal2" id="cal2"></div>
-    <div id="rangeMk"></div>
-    <div id="results"></div>
   </div>
+  <div class="card" id="rangeOut"><div id="rangeMk"></div><div id="results"></div></div>
   <div class="card" id="ours"></div>
   <div id="flags" class="hidden"></div>
   <div class="card" id="secAirbnb"><h2>Airbnb <span class="pill">ESTIMATE</span></h2>
