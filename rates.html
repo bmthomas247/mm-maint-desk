@@ -310,6 +310,11 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .dydow input{width:100%!important;flex:none!important;text-align:center!important;padding:5px 0}
 .dydow{grid-template-columns:repeat(7,minmax(0,1fr))!important}.dydow label{min-width:0;min-height:0}.dyng .dydow label input[type=number]{width:100%!important;flex:none;min-width:0;box-sizing:border-box;text-align:center}
 .dyng.dyapply label{min-height:0}
+.dystep{display:inline-flex;align-items:stretch;flex:0 0 auto;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--ovcard)}
+.dyng .dystep input[type=number]{width:52px!important;flex:0 0 52px!important;border:0!important;border-radius:0!important;min-height:32px;padding:5px 6px;text-align:right;background:transparent}
+.dyarr{display:flex;flex-direction:column;border-left:1px solid var(--line)}
+.dyarr button{flex:1;width:22px;border:0;background:var(--ovbg);color:var(--forest,#3c5f12);font-size:8px;line-height:1;padding:0;cursor:pointer}
+.dyarr button+button{border-top:1px solid var(--line)}.dyarr button:hover{background:var(--pine-soft,#eaf3da)}
 .dylearn{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:var(--ovcard);border-radius:10px;padding:8px 10px;font-size:12.5px;color:var(--ink2)}.dylearn b{font-size:20px;color:var(--forest,#3c5f12)}
 .dyold{margin-top:4px;font-size:12.5px;color:var(--ink2)}.dyold summary{cursor:pointer;color:var(--muted)}.dyold[open]{display:flex;flex-direction:column;gap:8px}
 .ovnote{background:var(--amberbg,#fbf0d9);border-radius:12px;padding:8px 12px;font-size:13px;margin:0 0 14px}
@@ -1280,7 +1285,7 @@ function srDraw() {
         <label title="Compares how booked our home is over the next 30 nights with the comps">We're 15+ pts behind the comps: down %${num("dyPaceD", Y.paceD)}</label><label>We're 15+ pts ahead: up %${num("dyPaceU", Y.paceU)}</label>
         <label>Within 7 days down %${num("dyLm7", Y.lm7)}</label><label>Within 3 days down %${num("dyLm3", Y.lm3)}</label>
         <label>Never more than % under the comps' total${num("dyMaxU", Y.maxU ?? 10)}</label></details></div>
-      <div class="dyng"><b>3 · Day of week %</b><div class="dydow">${DN.map((n, i) => `<label>${n}<input type="number" data-dow="${i}" value="${Y.dow[i]}" step="1"></label>`).join("")}</div>
+      <div class="dyng"><b>3 · Day of week %</b>${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((n, i) => `<label>${n}: up %<input type="number" data-dow="${i}" value="${Y.dow[i]}" step="1"></label>`).join("")}
         <label>Holidays + events up %${num("dyHol", Y.hol)}</label><div class="small muted">Sunday stays under that weekend's Fri/Sat unless Monday is a holiday.</div></div>
       <div class="dyng"><b>4 · Our calendar</b><label title="Open nights boxed in by bookings on both sides">Gap between stays: down %${num("dyGapD", Y.gapD)}</label>
         <label title="Gaps of 2 up to this many nights count">Counts as a gap up to (nights)${num("dyGapMax", Y.gapMax)}</label>
@@ -1463,7 +1468,18 @@ function srHover(R) {
     tip.style.display = "block"; tip.style.left = Math.min(b.width - tip.offsetWidth, Math.max(0, X / W * b.width + 12)) + "px"; tip.style.top = "6px"; });
   hit.addEventListener("pointerleave", () => { tip.style.display = "none"; vl.setAttribute("visibility", "hidden"); });
 }
+// ▲▼ arrows beside every number box in the price builder (the browser's own spinners are hidden)
+function srSteppers(root) { (root || document).querySelectorAll(".dyng input[type=number]").forEach(i => {
+  if (i.parentElement.classList.contains("dystep")) return;
+  const w = document.createElement("span"); w.className = "dystep"; i.replaceWith(w); w.appendChild(i);
+  const a = document.createElement("span"); a.className = "dyarr";
+  a.innerHTML = `<button type="button" tabindex="-1" data-d="1" aria-label="Up">▲</button><button type="button" tabindex="-1" data-d="-1" aria-label="Down">▼</button>`;
+  w.appendChild(a);
+  a.addEventListener("click", e => { const d = +(e.target.closest("button")?.dataset.d || 0); if (!d) return; e.preventDefault(); e.stopPropagation();
+    if (i.value === "") i.value = "0"; d > 0 ? i.stepUp() : i.stepDown();
+    i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); }); }); }
 function srWire(R) {
+  srSteppers($("srBody"));
   srWhyWire();
   { const b = $("auSave"); if (b) b.onclick = async () => {
       const g = id => $(id) ? $(id).value : "", nz = id => +g(id) || 0;
