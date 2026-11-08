@@ -310,6 +310,15 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .dydow input{width:100%!important;flex:none!important;text-align:center!important;padding:5px 0}
 .dydow{grid-template-columns:repeat(7,minmax(0,1fr))!important}.dydow label{min-width:0;min-height:0}.dyng .dydow label input[type=number]{width:100%!important;flex:none;min-width:0;box-sizing:border-box;text-align:center}
 .dyng.dyapply label{min-height:0}
+#srDiff{position:fixed;inset:0;z-index:90;background:rgba(20,30,10,.45);display:grid;place-items:center;padding:16px}
+#srDiff .sdbox{background:var(--ovcard);color:var(--ink);border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,.3);width:min(980px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+#srDiff .sdhead{display:flex;gap:12px;align-items:flex-start;padding:16px 18px 8px}#srDiff .sdhead>div{flex:1}#srDiff h3{margin:0 0 2px}
+#srDiff .sdx{border:0;background:var(--ovbg);border-radius:10px;width:34px;height:34px;cursor:pointer;font-size:15px}
+#srDiff .sdtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:6px 18px 10px}#srDiff .sdtiles div{background:var(--ovbg);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column}
+#srDiff .sdtiles b{font-size:18px}#srDiff .sdtiles span{font-size:11.5px;color:var(--muted)}#srDiff .up{color:var(--forest,#3c5f12)}#srDiff .dn{color:#b42318}
+#srDiff .sdwrap{overflow:auto;padding:0 18px;flex:1}#srDiff .sdwhy{font-size:12px;color:var(--ink2);max-width:380px}
+#srDiff .sdfoot{display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--ovgrid)}#srDiff .sp{flex:1}
+@media(max-width:640px){#srDiff .sdtiles{grid-template-columns:repeat(2,1fr)}}
 .dyng.dylos{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px 22px}.dyng.dylos>b{flex:0 0 100%}
 .dyng.dylos label{flex:0 1 auto;gap:10px}.dyng.dylos .dylosx{flex:0 0 100%;line-height:1.5}
 .dystep{display:inline-flex;align-items:stretch;flex:0 0 auto;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--ovcard)}
@@ -1490,6 +1499,28 @@ function srSteppers(root) { (root || document).querySelectorAll(".dyng input[typ
   a.addEventListener("click", e => { const d = +(e.target.closest("button")?.dataset.d || 0); if (!d) return; e.preventDefault(); e.stopPropagation();
     if (i.value === "") i.value = "0"; d > 0 ? i.stepUp() : i.stepDown();
     i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); }); }); }
+// Pop-up after Build prices: every night whose price or minimum stay changed vs what's saved (or Track now)
+function srDiffOpen() { const D = (SR.diff || []), ch = D.filter(d => d.before == null || Math.abs(d.after - d.before) >= 1 || (d.amin ?? null) !== (d.bmin ?? null));
+  document.getElementById("srDiff")?.remove();
+  const up = ch.filter(d => d.before != null && d.after > d.before), dn = ch.filter(d => d.before != null && d.after < d.before), avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const bA = avg(D.map(d => d.before).filter(v => v != null)), aA = avg(D.map(d => d.after)), sum = ch.reduce((t, d) => t + (d.before != null ? d.after - d.before : 0), 0);
+  const why = d => d.why.slice(1).filter(w => !/^(guest total|= \$|\$\d+ under)/.test(w)).map(w => w.replace(/ → \$[\d,]+$/, "")).slice(0, 3).join(" · ");
+  const el = document.createElement("div"); el.id = "srDiff";
+  el.innerHTML = `<div class="sdbox" role="dialog" aria-label="Price changes"><div class="sdhead"><div><h3>What changed for ${escH(SR.code)}</h3>
+      <div class="cs">${D.length} nights built · compared with the saved suggestion, or Track's price when nothing is saved. Not saved yet.</div></div><button class="sdx" aria-label="Close">✕</button></div>
+    <div class="sdtiles"><div><b>${ch.length}</b><span>nights change</span></div><div><b class="up">${up.length}</b><span>go up</span></div><div><b class="dn">${dn.length}</b><span>go down</span></div>
+      <div><b>${fmt(bA)} → ${fmt(aA)}</b><span>average night</span></div><div><b class="${sum >= 0 ? "up" : "dn"}">${sum >= 0 ? "+" : "−"}${fmt(Math.abs(sum))}</b><span>all nights added up</span></div></div>
+    <div class="sdwrap">${ch.length ? `<table class="srt"><tr><th>Night</th><th>Before</th><th>After</th><th>Change</th><th>Min nights</th><th>Why</th></tr>${ch.map(d => { const dd = d.before != null ? d.after - d.before : null, pc = d.before ? dd / d.before * 100 : null;
+      return `<tr><td>${new Date(d.k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</td><td>${fmt(d.before)}<div class="srair">${d.src}</div></td><td><b>${fmt(d.after)}</b></td>
+        <td class="${dd > 0 ? "up" : dd < 0 ? "dn" : ""}">${dd == null ? "new" : (dd > 0 ? "+" : "−") + fmt(Math.abs(dd)) + (pc != null ? ` (${pc > 0 ? "+" : ""}${Math.round(pc)}%)` : "")}</td>
+        <td>${(d.amin ?? null) !== (d.bmin ?? null) ? `${d.bmin ?? "—"} → <b>${d.amin}</b>` : d.amin ?? "—"}</td><td class="sdwhy" title="${escH(d.why.join(" → "))}">${escH(why(d))}</td></tr>`; }).join("")}</table>` : `<p class="small muted">No price or minimum-stay changes: the new settings give the same prices.</p>`}</div>
+    <div class="sdfoot"><button class="ovbtn" data-sd="undo">↺ Undo this build</button><span class="sp"></span><button class="ovbtn" data-sd="close">Keep looking</button><button class="ovbtn dygo" data-sd="save">💾 Save as suggested</button></div></div>`;
+  document.body.appendChild(el);
+  const close = () => { el.remove(); document.removeEventListener("keydown", esc); }, esc = e => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", esc);
+  el.addEventListener("click", e => { if (e.target === el || e.target.closest(".sdx") || e.target.dataset.sd === "close") return close();
+    if (e.target.dataset.sd === "save") { close(); $("srSave")?.click(); }
+    if (e.target.dataset.sd === "undo") { close(); SR.edits = {}; SR.diff = []; SR.dynMsg = "Build undone."; srDraw(); } }); }
 function srWire(R) {
   srSteppers($("srBody"));
   srWhyWire();
@@ -1581,7 +1612,7 @@ function srWire(R) {
     for (const x of built) { if (x.dw !== 0 || holOfK(addD(x.r.k, 1))) continue;
       const fs = [addD(x.r.k, -2), addD(x.r.k, -1)].map(k => byK[k]?.v ?? srVal(k).rate).filter(v => v != null);
       if (fs.length && x.v > 0.95 * Math.min(...fs)) { x.v = 0.95 * Math.min(...fs); x.why.push(`Sunday kept under Fri/Sat → ${fmt(x.v)}`); } }
-    let moved = 0, last = null;
+    let moved = 0, last = null; SR.diff = [];
     const own = SR.owner, ownMin = k => own ? (own.min_price_peak != null && own.peak_start && own.peak_end && k >= own.peak_start && k <= own.peak_end ? +own.min_price_peak : own.min_price != null ? +own.min_price : null) : null;
     for (const x of built) { let v = x.v; const wa = Y.floor !== "" ? +Y.floor : null, om = ownMin(x.r.k);
       // never give it away: never under the cheaper comps (A), or not more than maxU% under the comps' total (other starts)
@@ -1592,7 +1623,10 @@ function srWire(R) {
       if (ws != null) { const fn = Math.max(25, ws / (x.min || 2)); if (v < fn) { v = fn; x.why.push(`walk-away ${fmt(ws)} rent per stay / ${x.min || 2} nights = ${fmt(fn)}`); } }
       else { const fl = wa ?? 25; if (v < fl) { v = fl; x.why.push(wa != null ? `walk-away price ${fmt(fl)}` : `floor ${fmt(fl)}`); } } if (Y.ceil !== "" && v > +Y.ceil) { v = +Y.ceil; x.why.push(`ceiling ${fmt(+Y.ceil)}`); }
       const rate = Math.max(25, rnd(v)); x.why.push(`= ${fmt(rate)}${x.min ? ` · min ${x.min} nights` : ""}`);
+      { const sv = SR.ours_n[x.r.k], tk = SR.track?.[x.r.k], bef = sv ? +sv.rate : tk ? +tk.rate : null, bmin = sv ? sv.min_nights ?? null : tk?.min_nights ?? null;
+        (SR.diff ||= []).push({ k: x.r.k, before: bef, after: rate, bmin, amin: x.min, src: sv ? "saved" : tk ? "Track" : "", why: x.why }); }
       SR.edits[x.r.k] = { rate, min: x.min, why: x.why }; if (last != null && rate !== last) moved++; last = rate; }
+    setTimeout(srDiffOpen, 0);
     SR.dynMsg = n ? `Built ${n} night${n > 1 ? "s" : ""}: the price changes on ${moved} of them.${pace != null ? ` Our home is ${Math.abs(Math.round(pace))} pts ${pace < 0 ? "behind" : "ahead of"} the comps' booking over the next 30 nights.` : ""} Not saved yet — check the chart and table (ⓘ = the steps), then Save.` : "No nights had a starting price. Try another \"Start from\".";
     srDraw();
   });
