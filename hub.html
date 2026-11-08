@@ -2274,7 +2274,8 @@ async function pennyAct(a, btn, box){
     msg = r.error ? "Couldn't tick it: " + niceErr(r.error) : "✅ Ticked on the check list."; }
   else if(a.kind === "fd_note" || a.kind === "slack_post" || a.kind === "track_update"){ r = await sb.functions.invoke("penny", { body:{ act:{ kind:a.kind, data:a.data } } }); let d = r.data || {};
     if(r.error && r.error.context && r.error.context.json){ try { d = await r.error.context.json(); } catch(e){} }   // show the function's own reason, not "non-2xx"
-    msg = d.ok ? "✅ " + d.done : (a.kind === "slack_post" ? "Couldn't send it: " : a.kind === "track_update" ? "Couldn't update Track: " : "Couldn't add it: ") + (d.error || (r.error && niceErr(r.error)) || "error"); }
+    // 2026-11-08: Kim couldn't find Penny's Slack to Brandon - it comes from the hub's bot (Slack name "Maintenance Desk"), not from her
+    msg = d.ok ? "✅ " + d.done + (a.kind === "slack_post" ? " It shows in Slack from the hub's bot (Maintenance Desk) with your name at the top, not from your own Slack." : "") : (a.kind === "slack_post" ? "Couldn't send it: " : a.kind === "track_update" ? "Couldn't update Track: " : "Couldn't add it: ") + (d.error || (r.error && niceErr(r.error)) || "error"); }
   box.innerHTML = `<span>${esc(msg)}</span>`;
 }
 async function pennyAsk(q){
