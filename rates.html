@@ -206,6 +206,60 @@ main.v-pulse>#rstats,main.v-hotels>#rstats,main.v-rater>#rstats,main.v-reports>#
 body.inhub>header{display:none!important}
 @media (max-width:700px){.rstats{grid-template-columns:repeat(2,1fr)}main{max-width:none}#viewnav{margin:-16px -16px 12px!important}}
 </style>
+<style id="dashLook">
+/* ===== Dashboard look (Brandon 2026-11-08, from two sample designs he liked): airy page, soft rounded cards, gradient KPI row,
+   smooth charts. Moose greens for OURS, warm gold for COMPS. Remove this block + #ov + renderOv() to undo. ===== */
+:root{--ovbg:#f2f5ee;--ovcard:#fff;--ovsh:0 2px 6px rgba(30,50,20,.04),0 10px 30px rgba(30,50,20,.07);--ours:#4f8a1c;--ours2:#88B535;--comp:#E2B23A;--comp2:#f3dc9c;--ovgrid:#eef1ea;--ovax:#9aa59c}
+@media (prefers-color-scheme:dark){:root{--ovbg:#0d1410;--ovcard:#151f19;--ovsh:0 1px 2px rgba(0,0,0,.35);--ours:#9cc94a;--ours2:#6f9a2c;--comp:#e8bf55;--comp2:#5a4a1c;--ovgrid:#22302a;--ovax:#7f8d84}}
+body{background:var(--ovbg)}
+main .card{border:0;border-radius:20px;box-shadow:var(--ovsh)}
+main .card h2{font-weight:700}
+#ov{margin:0 0 18px}
+.ovhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 2px 14px}
+.ovhead h2{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}.ovhead .sub{color:var(--muted);font-size:13px}
+.ovhead .sp{flex:1}.ovhead label{color:var(--muted);font-size:13px}
+.ovbtn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--ovcard);color:var(--ink);border-radius:12px;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--ovsh);min-height:38px}
+.ovbtn:hover{border-color:var(--moose)}
+.ovtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:18px}
+.ovt{border-radius:16px;padding:18px 18px 16px;color:#fff;box-shadow:0 8px 22px rgba(40,70,15,.22);min-height:112px;display:flex;flex-direction:column;justify-content:center;text-align:center}
+.ovt.o1{background:linear-gradient(135deg,#2f4710,#5b8a1e)}.ovt.o2{background:linear-gradient(135deg,#4f7a18,#88B535)}.ovt.o3{background:linear-gradient(135deg,#3c5f12,#6f9a2c)}
+.ovt.c1{background:linear-gradient(135deg,#b07f14,#E2B23A)}.ovt.c2{background:linear-gradient(135deg,#c69a2a,#ecc764)}
+.ovt .v{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.05}.ovt .l{font-size:12.5px;opacity:.9;margin-top:4px}
+.ovt .d{font-size:11.5px;opacity:.92;margin-top:6px}
+.ovgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:18px}
+.ovc{background:var(--ovcard);border-radius:20px;box-shadow:var(--ovsh);padding:22px 24px 18px;min-width:0}
+.ovc.w6{grid-column:span 6}.ovc.w4{grid-column:span 4}.ovc.w3{grid-column:span 3}.ovc.w2{grid-column:span 2}
+.ovc h3{margin:0;font-size:16px;font-weight:700}.ovc .cs{color:var(--muted);font-size:12.5px;margin:2px 0 10px}
+.ovc .src{color:var(--muted);font-size:11.5px;margin-top:10px;line-height:1.4}
+.ovc .rec{margin-top:12px;font-size:13px}.ovc .rec b{display:block;color:var(--ink);font-size:13px;margin-bottom:2px}.ovc .rec i{color:var(--ink2)}
+.ovrow{display:flex;gap:18px;align-items:center}
+.ovrow svg{display:block}
+.ovleg{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;font-size:12.5px;color:var(--ink2);margin-top:8px}
+.ovleg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}.ovleg i.ln{height:3px;border-radius:2px;vertical-align:3px}
+.ovside{flex:0 0 190px;text-align:center}.ovside .big{font-size:24px;font-weight:700}.ovside .sm{color:var(--muted);font-size:12px;margin-top:2px}
+.ovchips{display:flex;gap:26px;flex-wrap:wrap;margin-top:12px}.ovchip .k{color:var(--muted);font-size:12px}.ovchip .n{font-size:20px;font-weight:700;margin-top:2px}
+.ovpill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:700;margin-left:6px;vertical-align:3px}
+.ovpill.g{background:#e3f1cf;color:#3c6510}.ovpill.r{background:#fbe2df;color:#b2382c}.ovpill.y{background:#fbefcf;color:#8a6510}
+@media (prefers-color-scheme:dark){.ovpill.g{background:#1f3312;color:#b5da72}.ovpill.r{background:#3a1714;color:#f19b90}.ovpill.y{background:#33270c;color:#f2c14e}}
+.ovwrap{position:relative}.ovtip{position:absolute;pointer-events:none;background:var(--ovcard);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px 11px;font-size:12px;white-space:nowrap;display:none;z-index:3}
+.ovtip b{display:block;margin-bottom:3px}.ovtip span{display:block}
+.ovgo{display:block;width:100%;margin-top:14px;text-align:center;background:var(--pine-soft,#eaf3da);color:var(--forest,#3c5f12);border:0;border-radius:12px;padding:11px;font:inherit;font-weight:700;cursor:pointer}
+.ovgo:hover{filter:brightness(.97)}
+.ovrank{width:100%;border-collapse:collapse;font-size:13px}.ovrank th{text-align:left;color:var(--muted);font-weight:600;font-size:12px;padding:0 6px 8px}
+.ovrank td{text-align:left;padding:8px 6px;border-top:1px solid var(--ovgrid)}.ovrank td:last-child,.ovrank th:last-child{text-align:right;white-space:nowrap}
+.ovrank tr.me td{background:var(--pine-soft,#eaf3da)}.ovrank tr.me td:first-child{border-radius:10px 0 0 10px}.ovrank tr.me td:last-child{border-radius:0 10px 10px 0}
+.ovrk{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:700;background:var(--ovgrid);color:var(--ink2)}
+.ovrank tr.me .ovrk{background:var(--ours);color:#fff}.ovrank .nm{text-align:left;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.ovhl{color:var(--muted);font-size:12.5px;margin-top:-4px}.ovmini{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.ovmini div{border:1px solid var(--ovgrid);border-radius:14px;padding:9px 11px;font-size:12px;color:var(--muted)}
+.ovmini b{display:block;color:var(--ink);font-size:13px;margin-top:2px}
+.ovempty{color:var(--muted);font-size:13px;padding:24px 0;text-align:center}
+main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-beyond>#ov,main.v-findings>#ov{display:none!important}
+@media (max-width:1100px){.ovtiles{grid-template-columns:repeat(3,1fr)}.ovc.w4,.ovc.w3,.ovc.w2{grid-column:span 6}}
+@media (max-width:700px){.ovtiles{grid-template-columns:repeat(2,1fr);gap:10px}.ovt{min-height:96px;padding:14px}.ovt .v{font-size:22px}
+  .ovrow{flex-direction:column}.ovside{flex:auto}.ovc{padding:18px 16px 14px}.ovgrid{gap:12px}}
+@media print{body.printov main>*:not(#ov){display:none!important}body.printov .ovhead button,body.printov .ovhead label,body.printov .totop{display:none!important}
+  body.printov{background:#fff}.ovc,.ovt{break-inside:avoid;box-shadow:none!important}.ovc{border:1px solid #e3e7df}.ovt{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
 </head>
 <body>
 <script>if (window.top !== window) document.body.classList.add("inhub");   // inside the hub: its green banner is the only header (Brandon 2026-10-30)</script>
@@ -231,6 +285,7 @@ body.inhub>header{display:none!important}
   <div class="card" id="findings"><h2 style="margin:0 0 8px">🔎 Findings</h2><p class="small muted" style="margin:0 0 8px">Every night our tool checks pace, bookings and prices and lists what looks off, with the numbers and sources. Accept, Reject or Later - nothing is changed anywhere; accepted changes go on a Kolleen list.</p><div id="fdBody"></div></div>
   <div class="card" id="pulse"><h2 style="margin:0 0 8px">📈 Market pulse</h2><div id="pulseBody"></div></div>
   <div class="setnav"><div class="pickhead"><h2 style="margin:0">1 · Pick a neighborhood or home</h2><span id="pickedLbl" class="pickedlbl hidden"></span><details id="homeSel" class="homesel hidden"><summary id="homeSelSum"></summary><div id="homeSelBox" class="homeselbox"></div></details></div><div class="pk"><input id="pkq" type="search" placeholder="Type a neighborhood, home or code (BHV, BHL 1403, EH A102…)" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="pklist"><button class="pkbtn" id="pkall" type="button" title="Show every neighborhood" aria-label="Show every neighborhood">▾</button><div class="pklist" id="pklist" role="listbox" hidden></div></div><div class="pkrecent" id="pkrecent"></div><div id="tabs" hidden></div></div>
+  <section id="ov" aria-label="Rates overview"></section>
   <div class="card" id="search">
     <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h2 style="margin:0">2 · Pick dates</h2><span id="rangeLbl" class="small muted"></span><span class="sp"></span><span class="small muted">Under each day:</span><button class="tab" id="calAdr" title="Average nightly rate of the comps open that day, before cleaning and tax">Daily rate (ADR)</button><button class="tab" id="calAllin" title="Average all-in price per night (cleaning, fees and tax spread over the stay)">All-in</button> <button class="tab" id="todayBtn">Today</button> <button class="tab" id="clearRange">Clear dates</button></div>
     <p class="small muted" id="calHelp">Pick check-in, then check-out. The number under each day is the average all-in rate per night across all our comps that are priced for that night (Airbnb incl. estimated tax, and Direct). Red = 60%+ of comps already blocked. Hover a day for the count.</p>
@@ -588,6 +643,188 @@ function addrCell(c) {
   return `${top}<br><span class="muted small">${c.label}</span>`;
 }
 function rangeNights() { const R = state.range; if (!R?.co) return null; const a = []; for (let k = R.ci; k < R.co; k = addD(k, 1)) a.push(k); return a; }
+// ===== Rates overview (Brandon 2026-11-08: "make our rates desk look like this … with our colors and data") =====
+// Built only from what the Desk already loaded for the picked set: Airbnb calendars (state.cal), Airbnb all-in prices
+// (state.checks, same math as the Airbnb chart below) and Track's year-to-date rent on our homes. Nothing new is read or saved.
+// Ours = Moose green, comps = gold. Window = the picked dates (up to 90 nights), else the next 30 nights (prices: next 60).
+function renderOv() {
+  const el = $("ov"); if (!el || !state.set) return;
+  const today = iso(new Date(new Date().setHours(12, 0, 0, 0)));
+  const RN = rangeNights(), days = n => Array.from({ length: n }, (_, i) => addD(today, i));
+  const W1 = RN ? RN.slice(0, 90) : days(30), W2 = RN ? RN.slice(0, 180) : days(60);
+  const ours = state.comps.filter(c => c.tier === "Ours"), comps = state.comps.filter(c => c.tier === "Primary");
+  const avOurs = ours.map(c => availOf(c.id)).filter(Boolean), avComps = comps.map(c => availOf(c.id)).filter(Boolean);
+  const share = (fs, k) => { const v = fs.map(f => f(k)).filter(x => x != null); return v.length ? v.filter(x => x === "0").length / v.length * 100 : null; };
+  const avg = a => { a = a.filter(x => x != null && !isNaN(x)); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
+  const bk = W1.map(k => ({ k, o: share(avOurs, k), c: share(avComps, k) }));
+  const oBk = avg(bk.map(x => x.o)), cBk = avg(bk.map(x => x.c));
+  // Airbnb all-in price per night (cleaning, fees and estimated tax spread over the stay), like renderDaily("Airbnb").
+  const per = {};
+  for (const r of state.checks) {
+    if (r.channel !== "Airbnb" || !priced(r) || (r.tier !== "Ours" && r.tier !== "Primary")) continue;
+    const pn = (r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights;
+    for (let i = 0; i < r.nights; i++) ((per[r.comp_id] ||= {})[addD(r.check_in, i)] ||= []).push(pn);
+  }
+  const at = (id, k) => avg(per[id]?.[k] || []);
+  const px = W2.map(k => { const cv = comps.map(c => at(c.id, k)).filter(v => v != null);
+    return { k, o: avg(ours.map(c => at(c.id, k))), c: cv.length >= 2 ? avg(cv) : null, n: cv.length }; });
+  const pxW1 = px.filter(p => W1.includes(p.k));
+  const oPx = avg(pxW1.map(p => p.o)), cPx = avg(pxW1.map(p => p.c));
+  const gapPx = oPx != null && cPx ? (oPx / cPx - 1) * 100 : null, gapBk = oBk != null && cBk != null ? oBk - cBk : null;
+  const rent = ours.reduce((s, c) => s + (+c.gross_rent_ytd || 0), 0), nts = ours.reduce((s, c) => s + (+c.booked_nights_ytd || 0), 0);
+  const pc = v => v == null ? "—" : Math.round(v) + "%", sg = v => (v > 0 ? "+" : "") + Math.round(v);
+  const arrow = (v, good) => v == null ? "" : (v >= 0) === good ? " ▲" : " ▼";
+  const md = k => new Date(k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const when = RN ? `${md(W1[0])} – ${md(addD(W1[W1.length - 1], 1))} (${W1.length} night${W1.length > 1 ? "s" : ""})` : "next 30 nights";
+  const capOf = rows => { const t = rows.map(r => r.captured_at).filter(Boolean).sort().pop(); return t ? new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"; };
+  const calCap = capOf(state.cal), pxCap = capOf(state.checks.filter(r => r.channel === "Airbnb")), trackCap = capOf(ours.map(c => ({ captured_at: c.stats_captured_at })));
+
+  const tile = (cl, v, l, d, src) => `<div class="ovt ${cl}" title="${escH(src)}"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ""}</div>`;
+  let h = `<div class="ovhead"><div><h2>Rates overview</h2><div class="sub">${escH(state.set.name)} · ${when}</div></div><span class="sp"></span>
+    <label>Filter by</label><button class="ovbtn" id="ovFilter" title="Pick another neighborhood or home">${escH(state.set.name)} ▾</button>
+    <button class="ovbtn" id="ovPdf" title="Print this overview or save it as a PDF">⤓ Export to PDF</button></div>`;
+  h += `<div class="ovtiles">` +
+    tile("o1", ours.length ? pc(oBk) : "—", "Our homes booked", ours.length ? (gapBk == null ? "" : `${sg(gapBk)} pts vs comps${arrow(gapBk, true)}`) : "None of our homes in this set",
+      `Share of our home-nights not open on Airbnb, ${when} (booked or owner-blocked; ESTIMATE). Source: Airbnb calendars, pulled ${calCap}.`) +
+    tile("c1", pc(cBk), "Comps booked", `${avComps.length} comp calendars`, `Share of comp nights not open on Airbnb, ${when} (ESTIMATE). Source: Airbnb calendars, pulled ${calCap}.`) +
+    tile("c2", fmt(cPx), "Comps · price / night", "Airbnb all-in, incl. est. tax", `Average all-in Airbnb price per night of the comps, ${when} (cleaning, fees and 13.12% estimated tax spread over the stay). Source: our nightly price checks, newest ${pxCap}.`) +
+    tile("o2", fmt(oPx), "Ours · price / night", gapPx == null ? (ours.length ? "No priced nights yet" : "—") : `${sg(gapPx)}% vs comps${arrow(gapPx, true)}`, `Our average all-in Airbnb price per night, ${when}. Source: Track pricing, read by our nightly checks, newest ${pxCap}.`) +
+    tile("o3", ours.length ? fmt(rent) : "—", `${new Date().getFullYear()} gross rent`, ours.length ? `${nts.toLocaleString()} booked nights` : "", `Gross rent and booked nights this year for our homes in this set. Source: Track (read only), refreshed ${trackCap}.`) + `</div>`;
+
+  h += `<div class="ovgrid">`;
+  // A · booked nights, bars + smoothed lines, side gauge (first sample's "Foot traffic" card)
+  h += `<div class="ovc w6"><h3>Booked nights</h3><div class="cs">Each night: share of our homes vs the comps not open on Airbnb · ${when}</div>
+    <div class="ovrow"><div style="flex:1;min-width:0">${barsSvg(bk, md)}</div>${gauge(oBk, gapBk, avComps.length)}</div>
+    <div class="ovleg"><span><i style="background:var(--ours)"></i>Our homes</span><span><i style="background:var(--comp2)"></i>Comps</span><span><i class="ln" style="background:var(--ours)"></i>Ours, 7-night average</span><span><i class="ln" style="background:var(--comp)"></i>Comps, 7-night average</span></div>
+    <div class="src">Blocked = booked or owner-blocked; Airbnb can't tell them apart (ESTIMATE). Source: Airbnb calendars, pulled ${calCap}.</div></div>`;
+  // B · daily price area chart with hover (second sample's line card) + D · day of week pairs (second sample's bar card)
+  const below = px.filter(p => p.o != null && p.c != null && p.o < p.c).length, above = px.filter(p => p.o != null && p.c != null && p.o >= p.c).length;
+  const dow = Array.from({ length: 7 }, (_, d) => { const s = px.filter(p => new Date(p.k + "T12:00:00").getDay() === d); return { d, o: avg(s.map(p => p.o)), c: avg(s.map(p => p.c)) }; });
+  const we = avg(dow.filter(x => x.d === 5 || x.d === 6).map(x => x.c)), wd = avg(dow.filter(x => x.d >= 0 && x.d <= 4).map(x => x.c));
+  h += `<div class="ovc w4"><h3>Price per night</h3><div class="cs">Airbnb all-in, ${RN ? when : "next 60 nights"} · hover a night</div>
+    <div class="ovwrap" id="ovArea">${areaSvg(px, md)}<div class="ovtip"></div></div>
+    <div class="ovleg"><span><i class="ln" style="background:var(--comp)"></i>Comps average</span><span><i class="ln" style="background:var(--ours)"></i>Ours</span></div>
+    <div class="ovchips"><div class="ovchip"><div class="k">Nights we're under the comps</div><div class="n">${ours.length ? below : "—"}</div></div>
+      <div class="ovchip"><div class="k">Nights we're at or over</div><div class="n">${ours.length ? above : "—"}</div></div>
+      <div class="ovchip"><div class="k">Comps' Fri–Sat premium</div><div class="n">${we && wd ? sg((we / wd - 1) * 100) + "%" : "—"}</div></div></div>
+    <div class="src">Each comp's own all-in price per night, then the average of the comps priced that night (2+ needed). Ours = Track pricing. Source: our nightly price checks, newest ${pxCap}.</div></div>`;
+  h += `<div class="ovc w2"><h3>By day of week</h3><div class="cs">Average price per night, ${RN ? "your dates" : "next 60 nights"}</div>${dowSvg(dow)}
+    <div class="ovleg"><span><i style="background:var(--ours)"></i>Ours</span><span><i style="background:var(--comp)"></i>Comps</span></div>
+    <button class="ovgo" id="ovGo">See daily prices →</button></div>`;
+  // C · donut of our home-nights
+  const oN = W1.length * avOurs.length, oB = avOurs.reduce((s, f) => s + W1.filter(k => f(k) === "0").length, 0), oO = avOurs.reduce((s, f) => s + W1.filter(k => f(k) === "1").length, 0);
+  const rec = !ours.length ? "None of our homes are in this set, so this shows the comps only." : gapBk == null ? "No Airbnb calendar yet for our homes here." :
+    gapBk <= -15 ? "Our homes are emptier than the comps. Look at the price on the open nights first." :
+    gapBk >= 15 ? "We're filling faster than the comps. There may be room to raise the price on the nights left." : "We're filling about like the comps.";
+  h += `<div class="ovc w2"><h3>Our home-nights</h3><div class="cs">${when}</div>
+    <div class="ovrow" style="justify-content:center">${donut([[oB, "var(--ours)"], [oO, "var(--comp2)"]], oN ? pc(oB / Math.max(1, oB + oO) * 100) : "—", "booked")}</div>
+    <div class="ovleg"><span><i style="background:var(--ours)"></i>Booked or blocked · ${oB}</span><span><i style="background:var(--comp2)"></i>Open · ${oO}</span></div>
+    <div class="rec"><b>What it means</b><i>${rec}</i></div><div class="src">Source: Airbnb calendars for ${avOurs.length} of our home${avOurs.length === 1 ? "" : "s"}, pulled ${calCap}.</div></div>`;
+  // E · where we rank on price (second sample's Rankings)
+  const rows = [...ours.map(c => ({ c, me: true })), ...comps.map(c => ({ c, me: false }))].map(x => ({ ...x, p: avg(W1.map(k => at(x.c.id, k))) })).filter(x => x.p != null).sort((a, b) => b.p - a.p);
+  rows.forEach((x, i) => x.r = i + 1);
+  const medC = median(rows.filter(x => !x.me).map(x => x.p));
+  const show = rows.filter((x, i) => i < 6 || x.me).slice(0, 9);
+  h += `<div class="ovc w2"><h3>Price ranking</h3><div class="cs">Highest average price per night first · ${when}</div>${rows.length ? `<table class="ovrank"><tr><th>Rank</th><th>Home</th><th>Per night</th></tr>` +
+    show.map(x => `<tr class="${x.me ? "me" : ""}"><td><span class="ovrk">${x.r}</span></td><td><span class="nm" title="${escH(x.c.address || x.c.label)}">${escH(x.me ? houseName(x.c.label, state.set.name) : x.c.label)}</span></td><td><b>${fmt(x.p)}</b>${medC ? `<span class="ovpill ${x.p >= medC ? "g" : "y"}">${sg((x.p / medC - 1) * 100)}%</span>` : ""}</td></tr>`).join("") +
+    `</table>` : `<div class="ovempty">No priced nights yet.</div>`}<div class="src">${rows.length} homes with prices · % = vs the comps' median. Source: our nightly price checks, newest ${pxCap}.</div></div>`;
+  // F · price position half gauge (second sample's "Last assignment")
+  const oAvg = avg(rows.filter(x => x.me).map(x => x.p)), cs = rows.filter(x => !x.me), more = oAvg != null && cs.length ? cs.filter(x => x.p > oAvg).length / cs.length * 100 : null;
+  h += `<div class="ovc w2"><h3>Price position</h3><div class="cs">Our average vs each comp · ${when}</div>
+    <div style="text-align:center">${half(more)}<div class="ovhl">of the comps charge more than us</div></div>
+    <div class="ovmini"><div>Ours<b>${fmt(oAvg)}</b></div><div>Comps median<b>${fmt(medC)}</b></div><div>Lowest comp<b>${fmt(cs.length ? cs[cs.length - 1].p : null)}</b></div><div>Highest comp<b>${fmt(cs.length ? cs[0].p : null)}</b></div></div>
+    <div class="src">Brandon's rule: middle of the pack most of the year, low end off-season, top on holidays. Source: our nightly price checks, newest ${pxCap}.</div></div>`;
+  h += `</div>`;
+  el.innerHTML = h;
+
+  $("ovFilter").onclick = () => { document.querySelector(".setnav")?.scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("pkq").focus(), 250); };
+  $("ovPdf").onclick = () => { document.body.classList.add("printov"); const off = () => { document.body.classList.remove("printov"); removeEventListener("afterprint", off); }; addEventListener("afterprint", off); window.print(); };
+  $("ovGo").onclick = () => $("secAirbnb").scrollIntoView({ behavior: "smooth", block: "start" });
+  ovHover(px, md);
+}
+// smooth line through points (Catmull-Rom to Bezier); breaks where a value is missing
+function ovPath(P) {
+  let d = "", seg = [];
+  const flush = () => { if (seg.length === 1) d += `M${seg[0][0]},${seg[0][1]}h.1`; else if (seg.length > 1) { d += `M${seg[0][0]},${seg[0][1]}`;
+      for (let i = 0; i < seg.length - 1; i++) { const p0 = seg[i - 1] || seg[i], p1 = seg[i], p2 = seg[i + 1], p3 = seg[i + 2] || p2;
+        d += `C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`; } } seg = []; };
+  for (const p of P) { if (p == null) flush(); else seg.push(p); } flush(); return d;
+}
+function barsSvg(bk, md) {
+  if (!bk.some(x => x.o != null || x.c != null)) return `<div class="ovempty">No calendar data yet.</div>`;
+  const W = 1000, H = 250, L = 44, R = 8, T = 10, B = 30, n = bk.length, cw = (W - L - R) / n, y = v => T + (H - T - B) * (1 - v / 100);
+  const roll = f => bk.map((_, i) => { const s = bk.slice(Math.max(0, i - 3), i + 4).map(f).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; });
+  const ro = roll(x => x.o), rc = roll(x => x.c), bw = Math.max(2, Math.min(16, cw * .32)), step = Math.ceil(n / 10);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Booked nights chart">`;
+  for (const g of [0, 25, 50, 75, 100]) s += `<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" stroke="var(--ovgrid)"/><text x="${L - 8}" y="${y(g) + 4}" text-anchor="end" font-size="12" fill="var(--ovax)">${g}%</text>`;
+  bk.forEach((x, i) => { const cx = L + cw * i + cw / 2;
+    if (x.o != null) s += `<rect x="${cx - bw - 1}" y="${y(x.o)}" width="${bw}" height="${Math.max(1, y(0) - y(x.o))}" rx="3" fill="var(--ours)"><title>${md(x.k)}: our homes ${Math.round(x.o)}% booked</title></rect>`;
+    if (x.c != null) s += `<rect x="${cx + 1}" y="${y(x.c)}" width="${bw}" height="${Math.max(1, y(0) - y(x.c))}" rx="3" fill="var(--comp2)"><title>${md(x.k)}: comps ${Math.round(x.c)}% booked</title></rect>`;
+    if (i % step === 0) s += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="12" fill="var(--ovax)">${md(x.k)}</text>`; });
+  const line = (r, col) => `<path d="${ovPath(r.map((v, i) => v == null ? null : [L + cw * i + cw / 2, y(v)]))}" fill="none" stroke="${col}" stroke-width="3" stroke-linecap="round"/>`;
+  return s + line(rc, "var(--comp)") + line(ro, "var(--ours)") + `</svg>`;
+}
+function gauge(v, gap, n) {
+  const r = 52, C = Math.PI * r, f = v == null ? 0 : Math.max(0, Math.min(1, v / 100));
+  return `<div class="ovside"><svg viewBox="0 0 130 74" width="150" aria-hidden="true"><path d="M13,66 A52,52 0 0 1 117,66" fill="none" stroke="var(--ovgrid)" stroke-width="10" stroke-linecap="round"/>
+    ${f > 0 ? `<path d="M13,66 A52,52 0 0 1 117,66" fill="none" stroke="var(--ours)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}"/>` : ""}</svg>
+    <div class="big">${v == null ? "—" : Math.round(v) + "%"}</div><div class="sm">Our homes booked</div>
+    <div class="sm" style="margin-top:8px">${gap == null ? "" : `<b style="color:var(--ink)">${(gap > 0 ? "+" : "") + Math.round(gap)} pts</b> vs comps`}</div><div class="sm">Based on ${n} comp calendars</div></div>`;
+}
+function areaSvg(px, md) {
+  const ok = px.filter(p => p.o != null || p.c != null); if (!ok.length) return `<div class="ovempty">No priced nights yet.</div>`;
+  const W = 1000, H = 260, L = 56, R = 10, T = 14, B = 30, n = px.length, vals = ok.flatMap(p => [p.o, p.c]).filter(v => v != null);
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * .12 || 50; lo = Math.max(0, lo - pad); hi += pad;
+  const x = i => L + (W - L - R) * (n > 1 ? i / (n - 1) : .5), y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Price per night chart"><defs><linearGradient id="ovgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--comp)" stop-opacity=".35"/><stop offset="1" stop-color="var(--comp)" stop-opacity="0"/></linearGradient></defs>`;
+  for (let g = 0; g <= 4; g++) { const v = lo + (hi - lo) * g / 4; s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--ovgrid)"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="12" fill="var(--ovax)">$${Math.round(v).toLocaleString()}</text>`; }
+  const step = Math.ceil(n / 8); px.forEach((p, i) => { if (i % step === 0) s += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="var(--ovax)">${md(p.k)}</text>`; });
+  const cP = px.map((p, i) => p.c == null ? null : [x(i), y(p.c)]), cd = ovPath(cP);
+  // area under each unbroken comp segment
+  let seg = [], area = ""; const fl = () => { if (seg.length > 1) area += ovPath(seg) + `L${seg[seg.length - 1][0]},${H - B}L${seg[0][0]},${H - B}Z`; seg = []; };
+  for (const p of cP) { if (p) seg.push(p); else fl(); } fl();
+  s += `<path d="${area}" fill="url(#ovgr)"/><path d="${cd}" fill="none" stroke="var(--comp)" stroke-width="3" stroke-linecap="round"/>`;
+  s += `<path d="${ovPath(px.map((p, i) => p.o == null ? null : [x(i), y(p.o)]))}" fill="none" stroke="var(--ours)" stroke-width="3" stroke-linecap="round"/>`;
+  s += `<line class="ovvl" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--ours)" stroke-dasharray="4 4" visibility="hidden"/><circle class="ovdot" r="6" fill="var(--ovcard)" stroke="var(--ours)" stroke-width="3" visibility="hidden"/>`;
+  return s + `<rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" class="ovhit"/></svg>`;
+}
+function ovHover(px, md) {
+  const wrap = $("ovArea"); const svg = wrap?.querySelector("svg"); if (!svg) return;
+  const tip = wrap.querySelector(".ovtip"), vl = svg.querySelector(".ovvl"), dot = svg.querySelector(".ovdot"), hit = svg.querySelector(".ovhit");
+  const W = 1000, L = 56, R = 10, n = px.length, vals = px.flatMap(p => [p.o, p.c]).filter(v => v != null);
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * .12 || 50; lo = Math.max(0, lo - pad); hi += pad;
+  const y = v => 14 + (260 - 14 - 30) * (1 - (v - lo) / (hi - lo));
+  const move = e => { const b = svg.getBoundingClientRect(), sx = (e.clientX - b.left) / b.width * W, i = Math.max(0, Math.min(n - 1, Math.round((sx - L) / (W - L - R) * (n - 1)))), p = px[i], X = L + (W - L - R) * (n > 1 ? i / (n - 1) : .5);
+    vl.setAttribute("x1", X); vl.setAttribute("x2", X); vl.setAttribute("visibility", "visible");
+    const yv = p.o ?? p.c; if (yv != null) { dot.setAttribute("cx", X); dot.setAttribute("cy", y(yv)); dot.setAttribute("stroke", p.o != null ? "var(--ours)" : "var(--comp)"); dot.setAttribute("visibility", "visible"); } else dot.setAttribute("visibility", "hidden");
+    tip.innerHTML = `<b>${new Date(p.k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b><span style="color:var(--comp)">Comps ${fmt(p.c)}${p.n ? ` · ${p.n} priced` : ""}</span><span style="color:var(--ours)">Ours ${fmt(p.o)}</span>`;
+    tip.style.display = "block"; const px2 = X / W * b.width; tip.style.left = Math.min(b.width - tip.offsetWidth, Math.max(0, px2 + 12)) + "px"; tip.style.top = "6px"; };
+  hit.addEventListener("pointermove", move); hit.addEventListener("pointerleave", () => { tip.style.display = "none"; vl.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+}
+function dowSvg(dow) {
+  const vals = dow.flatMap(d => [d.o, d.c]).filter(v => v != null); if (!vals.length) return `<div class="ovempty">No priced nights yet.</div>`;
+  const W = 340, H = 220, L = 44, B = 26, T = 8, hi = Math.max(...vals) * 1.1, cw = (W - L - 4) / 7, bw = Math.min(13, cw * .3), y = v => T + (H - T - B) * (1 - v / hi), N = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Price by day of week">`;
+  for (let g = 0; g <= 2; g++) { const v = hi * g / 2; s += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--ovgrid)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--ovax)">$${Math.round(v)}</text>`; }
+  dow.forEach((d, i) => { const cx = L + cw * i + cw / 2;
+    if (d.o != null) s += `<rect x="${cx - bw - 1.5}" y="${y(d.o)}" width="${bw}" height="${y(0) - y(d.o)}" rx="${bw / 2}" fill="var(--ours)"><title>${N[d.d]}: ours ${fmt(d.o)}</title></rect>`;
+    if (d.c != null) s += `<rect x="${cx + 1.5}" y="${y(d.c)}" width="${bw}" height="${y(0) - y(d.c)}" rx="${bw / 2}" fill="var(--comp)"><title>${N[d.d]}: comps ${fmt(d.c)}</title></rect>`;
+    s += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--ovax)">${N[d.d]}</text>`; });
+  return s + `</svg>`;
+}
+function donut(parts, mid, lbl) {
+  const tot = parts.reduce((s, p) => s + p[0], 0), r = 62, C = 2 * Math.PI * r; let off = 0, s = "";
+  if (tot) for (const [v, col] of parts) { const len = C * v / tot; s += `<circle r="${r}" cx="80" cy="80" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${len.toFixed(1)} ${(C - len).toFixed(1)}" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 80 80)"/>`; off += len; }
+  return `<svg viewBox="0 0 160 160" width="170" aria-hidden="true"><circle r="${r}" cx="80" cy="80" fill="none" stroke="var(--ovgrid)" stroke-width="16"/>${s}
+    <text x="80" y="82" text-anchor="middle" font-size="26" font-weight="700" fill="var(--ink)">${mid}</text><text x="80" y="102" text-anchor="middle" font-size="12" fill="var(--ovax)">${lbl}</text></svg>`;
+}
+function half(v) {
+  const r = 80, C = Math.PI * r, f = v == null ? 0 : v / 100;
+  return `<svg viewBox="0 0 200 108" width="230" aria-hidden="true"><path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="var(--ovgrid)" stroke-width="16" stroke-linecap="round"/>
+    ${f > 0 ? `<path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="var(--ours)" stroke-width="16" stroke-linecap="round" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}"/>` : ""}
+    <text x="100" y="94" text-anchor="middle" font-size="30" font-weight="700" fill="var(--ink)">${v == null ? "—" : Math.round(v) + "%"}</text>
+</svg>`;
+}
 function renderOurs(S) {
   const ours = state.comps.filter(c => c.tier === "Ours").sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   const nComps = state.comps.filter(c => c.tier === "Primary");
@@ -1205,7 +1442,7 @@ function render() {
   if (RN0) state.checks = state.allChecks.filter(r => r.check_in < state.range.co && r.check_out > state.range.ci);
   document.querySelectorAll(".scopeLbl").forEach(e => e.textContent = RN0 ? `${RN0[0]} → ${state.range.co} (${RN0.length} night${RN0.length > 1 ? "s" : ""})` : "next 180 nights");
   const S = stays().filter(st => !state.range?.co || (st.ci < state.range.co && st.co > state.range.ci));
-  renderOurs(S); if (state.mk?.loaded) renderHotels();
+  renderOurs(S); try { renderOv(); } catch (e) { console.error("overview", e); } if (state.mk?.loaded) renderHotels();
   renderDaily("Airbnb"); renderDaily("Direct"); renderDaily("VRBO"); renderDirectFees(); renderSiteFees();
 
   // Fill chart
