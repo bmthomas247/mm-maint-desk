@@ -713,8 +713,24 @@ function rangeNights() { const R = state.range; if (!R?.co) return null; const a
 // Built only from what the Desk already loaded for the picked set: Airbnb calendars (state.cal), Airbnb all-in prices
 // (state.checks, same math as the Airbnb chart below) and Track's year-to-date rent on our homes. Nothing new is read or saved.
 // Ours = Moose green, comps = gold. Window = the picked dates (up to 90 nights), else the next 30 nights (prices: next 60).
+// Same-bedroom comps (Brandon 2026-11-08, BHV 5534: "we gotta fix the data coming in and make sure that its good"). Checked that day:
+// Track's price for our home matched Airbnb's own checkout total (Dec 2-4 $2,078 vs $2,071; Dec 6-9 $2,770 vs $2,759), but the
+// "Bear Hollow Village 5BR" set holds 42 four-bedroom comps, 13 five and 3 six, so the comp average sat ~25% low. When 4+ comps
+// have our home's bedroom count, the overview, the price charts and the averages use only those. state.allBeds = true shows all.
+function compBeds() {
+  if (state.allBeds) return null;
+  const ours = state.comps.filter(c => c.tier === "Ours" && c.bedrooms != null);
+  if (!ours.length) return null;
+  const cnt = {}; ours.forEach(c => cnt[+c.bedrooms] = (cnt[+c.bedrooms] || 0) + 1);
+  const b = +Object.entries(cnt).sort((x, y) => y[1] - x[1])[0][0];
+  const prim = state.comps.filter(c => c.tier === "Primary"), same = prim.filter(c => +c.bedrooms === b);
+  if (same.length < 4 || same.length === prim.length) return null;
+  return { ids: new Set(same.map(c => c.id)), beds: b, n: same.length, all: prim.length };
+}
+function bedsCanSplit() { const s0 = state.allBeds; state.allBeds = false; const r = compBeds(); state.allBeds = s0; return r; }
 function renderOv() {
   const el = $("ov"); if (!el || !state.set) return;
+  const CB = state.ovAgg ? null : compBeds(), CBs = state.ovAgg ? null : bedsCanSplit();
   const A = state.ovAgg, DC = A ? A.comps : state.comps, DK = A ? A.checks : state.checks, DL = A ? A.cal : state.cal;
   const avl = id => { const c = DL.find(x => x.comp_id === id); if (!c) return null;
     return k => { const off = Math.round((new Date(k + "T12:00:00") - new Date(c.start_date + "T12:00:00")) / 864e5); return c.avail[off] ?? null; }; };
@@ -722,7 +738,7 @@ function renderOv() {
   const today = iso(new Date(new Date().setHours(12, 0, 0, 0)));
   const RN = rangeNights(), days = n => Array.from({ length: n }, (_, i) => addD(today, i));
   const W1 = RN ? RN.slice(0, 90) : days(30), W2 = RN ? RN.slice(0, 180) : days(60);
-  const ours = DC.filter(c => c.tier === "Ours" && (!A || !state.ovSel.home || c.id === state.ovSel.home)), comps = DC.filter(c => c.tier === "Primary");
+  const ours = DC.filter(c => c.tier === "Ours" && (!A || !state.ovSel.home || c.id === state.ovSel.home)), comps = DC.filter(c => c.tier === "Primary" && (A || !CB || CB.ids.has(c.id)));
   const avOurs = ours.map(c => avl(c.id)).filter(Boolean), avComps = comps.map(c => avl(c.id)).filter(Boolean);
   const share = (fs, k) => { const v = fs.map(f => f(k)).filter(x => x != null); return v.length ? v.filter(x => x === "0").length / v.length * 100 : null; };
   const avg = a => { a = a.filter(x => x != null && !isNaN(x)); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
@@ -752,7 +768,7 @@ function renderOv() {
   const tile = (cl, v, l, d, src) => `<div class="ovt ${cl}" title="${escH(src)}"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ""}</div>`;
   const scope = A ? A.label + (state.ovSel.home ? " · " + houseName(DC.find(c => c.id === state.ovSel.home)?.label || "", setNm(DC.find(c => c.id === state.ovSel.home)?.set_id)) : "")
     : state.set.name + (state.homeSel?.size === 1 ? " · " + houseName(state.comps.find(c => state.homeSel.has(c.id))?.label || "", state.set.name) : "");
-  let h = `<div class="ovhead"><div><h2>Rates overview</h2><div class="sub">${escH(scope)} · ${when}${A ? ` · ${A.n} sets added up` : ""}</div></div><span class="sp"></span>
+  let h = `<div class="ovhead"><div><h2>Rates overview</h2><div class="sub">${escH(scope)} · ${when}${A ? ` · ${A.n} sets added up` : ""}</div></div><span class="sp"></span>${CBs ? `<button class="ovbtn" id="ovBeds" title="Compare with comps that have the same number of bedrooms as our home, or with every comp in the set">${CB ? `Comps: ${CB.beds} bedrooms only (${CB.n} of ${CB.all}) ▾` : `Comps: all ${CBs.all} in the set ▾`}</button>` : ""}
     <button class="ovbtn" id="ovPdf" title="Print this overview or save it as a PDF">⤓ Export to PDF</button></div>${ovFilters()}
     ${A ? `<div class="ovnote">The overview adds up every set in ${escH(A.label)}. The calendar and charts below still show <b>${escH(state.set.name)}</b>: pick one neighborhood size to move them too.</div>` : ""}`;
   h += `<div class="ovtiles">` +
@@ -810,6 +826,7 @@ function renderOv() {
   el.innerHTML = h;
 
   ovWire();
+  if ($("ovBeds")) $("ovBeds").onclick = () => { state.allBeds = !state.allBeds; render(); };
   $("ovPdf").onclick = () => { document.body.classList.add("printov"); const off = () => { document.body.classList.remove("printov"); removeEventListener("afterprint", off); }; addEventListener("afterprint", off); window.print(); };
   $("ovGo").onclick = () => $("secAirbnb").scrollIntoView({ behavior: "smooth", block: "start" });
   ovHover(px, md);
@@ -1267,11 +1284,12 @@ function quant(a, q) { a = a.slice().sort((x, y) => x - y); if (!a.length) retur
 const priced = r => (r.status === "available" || r.status === "min_stay") && r.total;
 const AIRBNB_TAX = 0.1312; // Summit County taxes on Airbnb checkout pages, captured 2026-10-08 (rate-log.csv)
 function renderDaily(ch) {
-  const el = $("daily" + ch);
+  const el = $("daily" + ch), CBd = compBeds();
   const nights = {};
   for (const r of state.checks) {
     if (r.channel !== ch || !priced(r)) continue;
     if (r.tier !== "Ours" && r.tier !== "Primary") continue;
+    if (r.tier === "Primary" && CBd && !CBd.ids.has(r.comp_id)) continue;   // same-bedroom comps (2026-11-08)
     const allIn = r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total;
     const pn = allIn / r.nights;
     for (let i = 0; i < r.nights; i++) {
@@ -1804,7 +1822,7 @@ function renderSiteFees() {
     const ok = state.checks.filter(r => r.channel === ch && r.status === "available" && r.total);
     const allIn = r => r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total;
     const pick = t => ok.filter(r => r.tier === t);
-    const o = pick("Ours"), c = pick("Primary");
+    const CBa = compBeds(), o = pick("Ours"), c = pick("Primary").filter(r => !CBa || CBa.ids.has(r.comp_id));
     const feeShown = a => avg(a.filter(r => r.rent != null).map(r => (+r.cleaning || 0) + (+r.fees || 0)));
     return { ch, o: avg(o.map(r => allIn(r) / r.nights)), c: avg(c.map(r => allIn(r) / r.nights)), oFee: feeShown(o), cFee: feeShown(c), no: o.length, nc: c.length };
   });
@@ -1813,7 +1831,7 @@ function renderSiteFees() {
   for (const x of sites) {
     const g = x.o && x.c ? (x.o / x.c - 1) * 100 : null;
     const fee = v => x.ch === "Airbnb" ? '<span class="muted small">in the total</span>' : v != null ? fmt(v) : "—";
-    $("siteFees" + x.ch).innerHTML = `<h3 class="chh">${x.ch} averages <span class="small muted">all-in price per night · ${x.no} of our stays · ${x.nc} comp stays</span></h3>
+    $("siteFees" + x.ch).innerHTML = `<h3 class="chh">${x.ch} averages <span class="small muted">all-in price per night · ${x.no} of our stays · ${x.nc} comp stays${compBeds() ? ` · comps with ${compBeds().beds} bedrooms only` : ""}</span></h3>
       <div class="sbar"><div class="sbl">Ours</div>${bar(x.o, "var(--ours)")}<div class="sbv">${fmt(x.o)}</div></div>
       <div class="sbar"><div class="sbl">Comps</div>${bar(x.c, "var(--comp)")}<div class="sbv">${fmt(x.c)}</div></div>
       <div class="wrap"><table><tr><th>Ours / night</th><th>Comps / night</th><th>Difference</th><th>Fees shown at checkout (ours)</th><th>Fees shown at checkout (comps)</th></tr>
@@ -3280,7 +3298,8 @@ function hfDraw() {
   const N = days.length, W = 900, Ht = 250, L = 50, R = 12, T = 14, Bm = 26;
   const vals = []; areas.forEach(a => days.forEach(k => { const v = nm(a, k); if (v != null) vals.push(v); }));
   const ymax = Math.max(100, ...vals) * 1.1, x = i => L + (N > 1 ? i * (W - L - R) / (N - 1) : (W - L - R) / 2), y = v => T + (Ht - T - Bm) * (1 - v / ymax);
-  const path = a => { const d = ovPath(days.map((k, i) => { const v = nm(a, k); return v == null ? null : [x(i), y(v)]; }));
+  // gaps bridged (nights with no hotel price used to break the line into dashes; Brandon 2026-11-08), each priced night gets a dot
+  const path = a => { const d = ovPath(days.map((k, i) => { const v = nm(a, k); return v == null ? null : [x(i), y(v)]; }).filter(Boolean));
     return d ? `<path d="${d}" fill="none" stroke="${hfCol(a)}" stroke-width="3" stroke-linecap="round"/>` : ""; };
   const dots = a => days.map((k, i) => { const v = nm(a, k); return v != null ? `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${N > 120 ? 1.5 : 2.5}" fill="${hfCol(a)}"/>` : ""; }).join("");
   const grid0 = [0, .25, .5, .75, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${y(ymax * f)}" y2="${y(ymax * f)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(ymax * f) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">$${Math.round(ymax * f)}</text>`).join("");
@@ -3290,7 +3309,7 @@ function hfDraw() {
   const bw = Math.max(4, (W - L - R) / Math.max(1, N));
   const hit = days.map((k, i) => `<rect data-hk="${k}" x="${(x(i) - bw / 2).toFixed(1)}" y="${T}" width="${bw.toFixed(1)}" height="${Ht - T - Bm}" fill="${k === HF.day ? "var(--line)" : "transparent"}" opacity=".6" style="cursor:pointer"><title>${hfDay(k)}${areas.map(a => nm(a, k) != null ? ` · ${a} ${fmt(nm(a, k))} (${night[a][k].length} with rooms)` : "").join("")}${(() => { const e = typeof mkTitle === "function" ? mkTitle(k).slice(3) : ""; return e ? " · " + escH(e.slice(0, 90)) : ""; })()}</title></rect>`).join("");
   const chart = `<div class="legend">${areas.map(a => `<span><i style="background:${hfCol(a)};height:3px"></i>${escH(a)}, median before tax</span>`).join("")}</div>
-    <svg id="hfChart" viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto">${grid}${hit}${areas.map(path).join("")}${N <= 60 ? areas.map(dots).join("") : ""}${ticks}</svg>
+    <svg id="hfChart" viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto">${grid}${hit}${areas.map(path).join("")}${areas.map(dots).join("")}${ticks}</svg>
     <p class="small" style="color:var(--teal2);margin:2px 0 8px">Tap a night on the chart to see every hotel and its price that night.</p>`;
   // One row per hotel
   const H = new Map();
