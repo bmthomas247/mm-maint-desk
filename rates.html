@@ -1064,11 +1064,12 @@ async function loadSetRates() {
   SR.pushes = ps.data || []; SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {};
   if (SR.dynFor !== h.code) { SR.dyn = null; SR.dynSaved = h.dyn || null; } SR.dynFor = h.code;   // this home's saved settings (merged over the defaults)
   { const sc = await sb.rpc("rates_set_scoreboard", { p_code: h.code }); SR.score = sc.error ? { err: sc.error.message } : sc.data; }
+  SR.bk = cid ? ((await sb.from("our_bookings").select("reservation_id,kind,status,booked_at,arrival,nights").eq("comp_id", cid).gte("booked_at", addD(today, -60))).data || []) : [];
   // second source for Airbnb daily rates: the newest AirROI pull per comp (Key Data feeds the main number from 2026-11-09)
   { const ids = [...new Set(SR.nightly.filter(n => n.tier !== "Ours" && n.tier !== "Secondary").map(n => n.comp_id))]; SR.air = {};
     if (ids.length) { const ar = await sb.from("nightly_snapshots").select("comp_id,start_date,rates,avail,captured_at").eq("channel", "Airbnb").like("source", "AirROI%").in("comp_id", ids).order("captured_at", { ascending: false }).limit(ids.length * 4);
       for (const n of ar.data || []) if (!SR.air[n.comp_id]) SR.air[n.comp_id] = n; } }
-  SR.fee = srFeeModel(SR.ck || [], h.comp_id); SR.compAll = srCompAllIn(SR.ck || []);
+  SR.fee = srFeeModel(SR.ck || [], h.comp_id); SR.compAll = srCompAllIn(SR.ck || []); SR.totRatio = null;
   srDraw();
 }
 function srComp(k) {   // comps' average daily rate that night (same as the Desk calendar's ADR): open comps only, Airbnb else VRBO
@@ -1143,9 +1144,21 @@ function srGuest(rate, ch) { const f = SR.fee?.[ch]; if (rate == null || !f) ret
 function srCompAllIn(rows) { const by = {};
   for (const r of rows) { if (r.tier !== "Primary" || r.channel !== "Airbnb" || !priced(r)) continue;
     const pn = (r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights;
-    for (let i = 0; i < r.nights; i++) { const k = addD(r.check_in, i); ((by[k] ||= {})[r.comp_id] ||= []).push(pn); } }
-  const out = {}; for (const [k, m] of Object.entries(by)) { const v = Object.values(m).map(a => a.reduce((x, y) => x + y, 0) / a.length); if (v.length >= 2) out[k] = { v: v.reduce((x, y) => x + y, 0) / v.length, n: v.length }; }
+    for (let i = 0; i < r.nights; i++) { const k = addD(r.check_in, i); ((by[k] ||= {})[r.comp_id] ||= []).push([pn, r.nights]); } }
+  const out = {}; for (const [k, m] of Object.entries(by)) { const v = Object.values(m).map(a => [a.reduce((x, y) => x + y[0], 0) / a.length, a.reduce((x, y) => x + y[1], 0) / a.length]);
+    if (v.length >= 2) out[k] = { v: v.reduce((x, y) => x + y[0], 0) / v.length, n: v.length, nt: v.reduce((x, y) => x + y[1], 0) / v.length }; }
   return out; }
+// Comps' total per night for a night: the Airbnb checkout quotes when 2+ comps were priced, else ESTIMATED from the comps' daily rate
+// × the usual total-to-daily-rate ratio for this set (median over the nights that have both).
+function srCompTot(k) { const a = SR.compAll?.[k]; if (a) return { v: a.v, nt: a.nt, n: a.n, est: false };
+  if (SR.totRatio == null) { const rs = Object.keys(SR.compAll || {}).map(x => { const c = srComp(x); return c ? SR.compAll[x].v / c.adr : null; }).filter(v => v).sort((x, y) => x - y);
+    SR.totRatio = rs.length >= 5 ? rs[rs.length >> 1] : 0; }
+  const c = srComp(k); return c && SR.totRatio ? { v: c.adr * SR.totRatio, nt: SR_STAY, n: c.n, est: true } : null; }
+// The rack rate (what we type in Track) that makes OUR Airbnb guest pay `tot` per night on a stay of `nt` nights (reverse of srGuest)
+function srRackFor(tot, nt) { const f = SR.fee?.Airbnb; if (!f || tot == null) return null;
+  return (tot / (1 + f.taxR) - f.clean / (nt || SR_STAY)) / (f.mult * (1 + f.feeR)); }
+// Guest bookings made in the last `days` days at this home (not owner stays, not cancelled)
+const srRecentBk = days => (SR.bk || []).filter(b => b.kind === "guest" && !/cancel/i.test(b.status || "") && b.booked_at && Date.now() - new Date(b.booked_at) <= days * 864e5);
 // AirROI's comp average for a night (open comps, 2+), shown next to the main (Key Data / Vrbo) number
 function srCompAir(k) { const v = []; let at = null;
   for (const n of Object.values(SR.air || {})) { const o = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5);
@@ -1193,25 +1206,31 @@ function srDraw() {
     <div class="ovleg"><span><i class="ln" style="background:var(--ours)"></i>Our suggested rate</span><span><i class="ln" style="background:#1f3a0c;opacity:.7"></i>Engine</span><span><i class="ln" style="background:#5b6bd1"></i>Beyond</span><span><i class="ln" style="background:var(--ink2)"></i>Track now</span><span><i class="ln" style="background:var(--comp)"></i>Comps' daily rate</span></div></div>`;
   // Dynamic pricing builder (Brandon 2026-11-08; round 2 same day: "we are missing some of the other cool dynamic pricing tools").
   // Every night gets its own price; each built night keeps its steps (ⓘ next to Our rate; saved as that night's note).
-  const Y = SR.dyn ||= Object.assign({ base: SR.x?.shadow ? "s" : "c", lvl: 0, follow: 0.5, hiD: 10, loD: 5, dow: [0, 0, 0, 0, 0, 12, 12], hol: 15, lm7: 10, lm3: 15, far: 5,
+  const Y = SR.dyn ||= Object.assign({ base: SR.fee?.Airbnb ? "a" : SR.x?.shadow ? "s" : "c", under: 5, maxU: 10, momU: 3, momMax: 15, momDays: 14, lvl: 0, follow: 0.5, hiD: 10, loD: 5, dow: [0, 0, 0, 0, 0, 12, 12], hol: 15, lm7: 10, lm3: 15, far: 5,
     gapD: 15, gapMax: 3, adjD: 5, paceD: 5, paceU: 5, snowU: 8, snowIn: 4, jump: 35,
     floor: SR.beyond?.min_price != null ? Math.round(+SR.beyond.min_price) : "", ceil: "", minWk: "", minHol: "", rd: "1", which: "all" }, SR.dynSaved || {});
   const num = (id, v, w, title, step) => `<input type="number" id="${id}" value="${v}" step="${step || 1}" style="width:${w || 70}px"${title ? ` title="${escH(title)}"` : ""}>`;
   const DN = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
   html += `<div class="ovc" style="margin-bottom:18px"><h3>Dynamic pricing</h3><div class="cs">Every night gets its own price. Booking sites reward listings whose rates move with demand. Build, check the chart and table (ⓘ shows each night's steps), then Save.</div>
     <div class="dyn">
-      <div class="dyng"><b>1 · Start</b><label>Start from<select id="dyBase">${[["s", "Our engine's suggestion"], ["c", "Comps' daily rate"], ["b", "Beyond's price"], ["t", "Track now"], ["o", "Our saved rate"]].map(([v, t]) => `<option value="${v}"${Y.base === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+      <div class="dyng"><b>1 · Start</b><label>Start from<select id="dyBase">${[["a", "A few $ under the comps' total (what guests pay)"], ["s", "Our engine's suggestion"], ["c", "Comps' daily rate"], ["b", "Beyond's price"], ["t", "Track now"], ["o", "Our saved rate"]].map(([v, t]) => `<option value="${v}"${Y.base === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label title="Per night, on the guest's Airbnb total (rent + fees + cleaning + tax)">Under the comps' total by $${num("dyUnder", Y.under ?? 5, 70)}</label>
         <label>Level vs that %${num("dyLvl", Y.lvl, 70, "e.g. -10 = 10% under the starting price")}</label>
+        <div class="small muted">With "under the comps' total", weekends, holidays and busy nights already show in the comps' prices, so steps 2's comps-booked line and 3 are skipped.</div>
         <label>Follow the comps night to night<select id="dyFollow">${[[0, "Off"], [0.5, "Half"], [1, "Fully"]].map(([v, t]) => `<option value="${v}"${+Y.follow === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div>
       <div class="dyng"><b>2 · Market demand</b><label>Comps 60%+ booked: up %${num("dyHi", Y.hiD)}</label><label>Comps 20% or less booked: down %${num("dyLo", Y.loD)}</label>
-        <label title="Compares how booked our home is over the next 30 nights with the comps">We're 15+ pts behind the comps: down %${num("dyPaceD", Y.paceD)}</label><label>We're 15+ pts ahead: up %${num("dyPaceU", Y.paceU)}</label></div>
+        <label title="Compares how booked our home is over the next 30 nights with the comps">We're 15+ pts behind the comps: down %${num("dyPaceD", Y.paceD)}</label><label>We're 15+ pts ahead: up %${num("dyPaceU", Y.paceU)}</label>
+        <label title="People want what other people want: each guest booking made recently raises every open night">Each booking in the last ${num("dyMomDays", Y.momDays ?? 14, 52)} days: up %${num("dyMomU", Y.momU ?? 3)}</label>
+        <label>…up to %${num("dyMomMax", Y.momMax ?? 15)}</label><div class="small muted">${(() => { const b = srRecentBk(+(Y.momDays ?? 14)); return `${b.length} guest booking${b.length === 1 ? "" : "s"} in the last ${Y.momDays ?? 14} days (Track).`; })()}</div></div>
       <div class="dyng"><b>3 · Day of week %</b><div class="dydow">${DN.map((n, i) => `<label>${n}<input type="number" data-dow="${i}" value="${Y.dow[i]}" step="1"></label>`).join("")}</div>
         <label>Holidays + events up %${num("dyHol", Y.hol)}</label><div class="small muted">Sunday stays under that weekend's Fri/Sat unless Monday is a holiday.</div></div>
       <div class="dyng"><b>4 · Our calendar</b><label title="Open nights boxed in by bookings on both sides">Gap of 2–${num("dyGapMax", Y.gapMax, 52)} nights: down %${num("dyGapD", Y.gapD)}</label>
         <label title="Open night right before or after a booked stay (half on Fri/Sat)">Next to a booked stay: down %${num("dyAdjD", Y.adjD)}</label><div class="small muted">Gaps get a min stay that fits (never 1 night).</div></div>
       <div class="dyng"><b>5 · Lead time + weather</b><label>Within 7 days down %${num("dyLm7", Y.lm7)}</label><label>Within 3 days down %${num("dyLm3", Y.lm3)}</label><label>120+ days out up %${num("dyFar", Y.far)}</label>
         <label title="NWS snow forecast for Park City, next 7 days">Snow ${num("dySnowIn", Y.snowIn, 48)}"+ forecast: up %${num("dySnowU", Y.snowU)}</label></div>
-      <div class="dyng"><b>6 · Limits</b><label>Never under $${num("dyFloor", Y.floor, 80, "Starts at Beyond's minimum price for this home; blank = $25")}</label><label>Never over $${num("dyCeil", Y.ceil, 80, "blank = none")}</label>
+      <div class="dyng"><b>6 · Never give it away</b><label title="Walk-away price: we'd rather leave the home empty than go lower. Starts at Beyond's minimum price for this home; blank = $25">Our rate never under $${num("dyFloor", Y.floor, 80)}</label>
+        <label title="Discounts (last minute, gaps, behind on bookings) can't take the guest's total further than this under the comps' total">Never more than % under the comps' total${num("dyMaxU", Y.maxU ?? 10, 60)}</label>
+        <div class="small muted">${(() => { const fl = Y.floor !== "" ? +Y.floor : 25, g = srGuest(fl, "Airbnb"); return g ? `At $${fl} a guest pays about ${fmt(g)} a night on Airbnb.` : ""; })()}</div><label>Never over $${num("dyCeil", Y.ceil, 80, "blank = none")}</label>
         <label title="Not on holidays">Max jump night to night %${num("dyJump", Y.jump)}</label>
         <label>Min nights Fri/Sat${num("dyMinWk", Y.minWk, 60, "blank = keep")}</label><label>Min nights holidays${num("dyMinHol", Y.minHol, 60, "blank = keep")}</label></div>
       <div class="dyng dyapply"><b>7 · Apply</b><label>Round to<select id="dyRd">${[["1", "$1"], ["5", "$5"], ["10", "$10"], ["9", "Ends in 9 ($149)"]].map(([v, t]) => `<option value="${v}"${String(Y.rd) === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
@@ -1384,7 +1403,8 @@ function srWire(R) {
       if ($("dyBase")) Object.assign(SR.dyn ||= {}, { base: g("dyBase"), lvl: nz("dyLvl"), follow: +g("dyFollow"), hiD: nz("dyHi"), loD: nz("dyLo"), paceD: nz("dyPaceD"), paceU: nz("dyPaceU"),
         dow: [...document.querySelectorAll("[data-dow]")].map(i => +i.value || 0), hol: nz("dyHol"), gapMax: Math.max(2, nz("dyGapMax") || 3), gapD: nz("dyGapD"), adjD: nz("dyAdjD"),
         lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, snowU: nz("dySnowU"), jump: nz("dyJump"),
-        floor: g("dyFloor"), ceil: g("dyCeil"), minWk: g("dyMinWk"), minHol: g("dyMinHol"), rd: g("dyRd"), which: g("dyWhich") });
+        floor: g("dyFloor"), ceil: g("dyCeil"), minWk: g("dyMinWk"), minHol: g("dyMinHol"), rd: g("dyRd"), which: g("dyWhich"),
+        under: nz("dyUnder"), maxU: nz("dyMaxU"), momU: nz("dyMomU"), momMax: nz("dyMomMax"), momDays: nz("dyMomDays") || 14 });
       const on = $("auOn").checked, send = $("auSend").checked;
       if (send && !confirm(`Send ${SR.code}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
       const r = await sb.rpc("rates_set_auto", { p_code: SR.code, p_dyn: SR.dyn, p_on: on, p_days: +$("auDays").value, p_send: send });
@@ -1410,7 +1430,8 @@ function srWire(R) {
     Object.assign(SR.dyn, { base: g("dyBase"), lvl: nz("dyLvl"), follow: +g("dyFollow"), hiD: nz("dyHi"), loD: nz("dyLo"), paceD: nz("dyPaceD"), paceU: nz("dyPaceU"),
       dow: [...document.querySelectorAll("[data-dow]")].map(i => +i.value || 0), hol: nz("dyHol"), gapMax: Math.max(2, nz("dyGapMax") || 3), gapD: nz("dyGapD"), adjD: nz("dyAdjD"),
       lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, snowU: nz("dySnowU"), jump: nz("dyJump"),
-      floor: g("dyFloor"), ceil: g("dyCeil"), minWk: g("dyMinWk"), minHol: g("dyMinHol"), rd: g("dyRd"), which: g("dyWhich") });
+      floor: g("dyFloor"), ceil: g("dyCeil"), minWk: g("dyMinWk"), minHol: g("dyMinHol"), rd: g("dyRd"), which: g("dyWhich"),
+      under: nz("dyUnder"), maxU: nz("dyMaxU"), momU: nz("dyMomU"), momMax: nz("dyMomMax"), momDays: nz("dyMomDays") || 14 });
     const Y = SR.dyn, today = iso(new Date(new Date().setHours(12, 0, 0, 0))), pc = v => (v > 0 ? "+" : "") + Math.round(v) + "%";
     // "usual" = comps over the nearby two weeks, so following the comps only reacts to night-to-night moves (same as rates_set_auto.py)
     const cMedK = k => { const v = []; for (let i = -7; i <= 7; i++) { const c = srComp(addD(k, i)); if (c) v.push(c.adr); } v.sort((x, y) => x - y); return v.length >= 5 ? v[v.length >> 1] : null; };
@@ -1427,18 +1448,22 @@ function srWire(R) {
     const pace = ob.length >= 20 && cf.length >= 20 ? (ob.filter(v => v === "0").length / ob.length - cf.reduce((x, y) => x + y, 0) / cf.length) * 100 : null;
     const rnd = v => Y.rd === "9" ? Math.max(29, Math.round((v + 1) / 10) * 10 - 1) : Math.round(v / +Y.rd) * +Y.rd;
     let n = 0; const built = [];
+    const nBk = srRecentBk(Y.momDays || 14).length, mom = Math.min(+Y.momMax || 0, nBk * (+Y.momU || 0)), A = Y.base === "a";
     for (const r of R) { if (Y.which === "empty" && r.v.set) continue;
-      const b0 = Y.base === "s" ? r.s?.price : Y.base === "b" ? r.b : Y.base === "t" ? (r.t ? +r.t.rate : null) : Y.base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null);
+      const ct = srCompTot(r.k), tgt = ct ? ct.v - (+Y.under || 0) : null;
+      const b0 = A ? srRackFor(tgt, ct?.nt) : Y.base === "s" ? r.s?.price : Y.base === "b" ? r.b : Y.base === "t" ? (r.t ? +r.t.rate : null) : Y.base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null);
       if (b0 == null) continue;
-      const why = [`start: ${{ s: "engine", c: "comps' daily rate", b: "Beyond", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = b0;
+      const why = A ? [`comps' total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `ours $${+Y.under || 0} under = ${fmt(tgt)} → our rate ${fmt(b0)}`]
+        : [`start: ${{ s: "engine", c: "comps' daily rate", b: "Beyond", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = b0;
       const step = (f, t) => { if (!f || f === 1) return; v *= f; why.push(`${t} ${pc((f - 1) * 100)} → ${fmt(v)}`); };
       step(1 + Y.lvl / 100, "level");
-      const cMed = cMedK(r.k); if (Y.base !== "c" && Y.follow && r.c?.adr && cMed) step(1 + Y.follow * (r.c.adr / cMed - 1), `comps that night ${fmt(r.c.adr)} vs nearby 2 weeks ${fmt(cMed)}`);
-      const f = srFill(r.k); if (f != null) step(f >= 0.6 ? 1 + Y.hiD / 100 : f <= 0.2 ? 1 - Y.loD / 100 : 1, `comps ${Math.round(f * 100)}% booked`);
+      const cMed = cMedK(r.k); if (Y.base !== "c" && !A && Y.follow && r.c?.adr && cMed) step(1 + Y.follow * (r.c.adr / cMed - 1), `comps that night ${fmt(r.c.adr)} vs nearby 2 weeks ${fmt(cMed)}`);
+      const f = A ? null : srFill(r.k); if (f != null) step(f >= 0.6 ? 1 + Y.hiD / 100 : f <= 0.2 ? 1 - Y.loD / 100 : 1, `comps ${Math.round(f * 100)}% booked`);
       const out = Math.round((new Date(r.k + "T12:00:00") - new Date(today + "T12:00:00")) / 864e5), dw = new Date(r.k + "T12:00:00").getDay(), hol = holOfK(r.k);
       if (pace != null && out <= 30 && ourAv(r.k) === "1") step(pace <= -15 ? 1 - Y.paceD / 100 : pace >= 15 ? 1 + Y.paceU / 100 : 1, `we're ${Math.abs(Math.round(pace))} pts ${pace < 0 ? "behind" : "ahead of"} the comps (30 nights)`);
-      step(1 + (Y.dow[dw] || 0) / 100, ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dw]);
-      if (hol) step(1 + Y.hol / 100, String(hol).slice(0, 40));
+      if (!A) { step(1 + (Y.dow[dw] || 0) / 100, ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dw]);
+        if (hol) step(1 + Y.hol / 100, String(hol).slice(0, 40)); }
+      if (mom && ourAv(r.k) !== "0") step(1 + mom / 100, `${nBk} booking${nBk > 1 ? "s" : ""} in the last ${Y.momDays || 14} days`);
       const gl = gapLen(r.k); let gapMin = null;
       if (gl && gl >= 2 && gl <= Y.gapMax) { step(1 - Y.gapD / 100, `${gl}-night gap between bookings`); gapMin = gl; }
       else if (!gl && ourAv(r.k) === "1" && (ourAv(addD(r.k, -1)) === "0" || ourAv(addD(r.k, 1)) === "0")) step(1 - Y.adjD / 100 * (dw === 5 || dw === 6 ? 0.5 : 1), "next to a booked stay");
@@ -1446,7 +1471,7 @@ function srWire(R) {
       const sn = out <= 7 && typeof mkFor === "function" && state.mk?.loaded ? mkFor(r.k).snow : null;
       if (sn && sn.in >= Y.snowIn) step(1 + Y.snowU / 100, `${sn.in}" snow forecast (NWS)`);
       const min = gapMin ?? (hol && Y.minHol !== "" ? +Y.minHol : null) ?? ((dw === 5 || dw === 6) && Y.minWk !== "" ? +Y.minWk : null) ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
-      built.push({ r, v, why, hol: !!hol, dw, min: Math.max(2, gapMin ?? min ?? 2) /* never 1-night stays (Brandon, engine v8b) */ }); n++; }
+      built.push({ r, v, why, ct, hol: !!hol, dw, min: Math.max(2, gapMin ?? min ?? 2) /* never 1-night stays (Brandon, engine v8b) */ }); n++; }
     // smoothing: no jump bigger than Y.jump% from the night before (holidays left alone)
     for (let i = 1; i < built.length; i++) { const p = built[i - 1], x = built[i]; if (!Y.jump || x.hol || p.hol || addD(p.r.k, 1) !== x.r.k) continue;
       const hi = p.v * (1 + Y.jump / 100), lo = p.v * (1 - Y.jump / 100); if (x.v > hi || x.v < lo) { x.v = Math.min(hi, Math.max(lo, x.v)); x.why.push(`smoothed (max ${Y.jump}% jump) → ${fmt(x.v)}`); } }
@@ -1457,6 +1482,9 @@ function srWire(R) {
       if (fs.length && x.v > 0.95 * Math.min(...fs)) { x.v = 0.95 * Math.min(...fs); x.why.push(`Sunday kept under Fri/Sat → ${fmt(x.v)}`); } }
     let moved = 0, last = null;
     for (const x of built) { let v = x.v; const fl = Y.floor !== "" ? +Y.floor : 25;
+      // never give it away: discounts can't take the guest's total more than maxU% under the comps' total
+      const lo = x.ct && Y.maxU !== "" ? srRackFor(x.ct.v * (1 - (+Y.maxU || 0) / 100), x.ct.nt) : null;
+      if (lo != null && v < lo) { v = lo; x.why.push(`held at ${+Y.maxU || 0}% under the comps' total → ${fmt(v)}`); }
       if (v < fl) { v = fl; x.why.push(`floor ${fmt(fl)}`); } if (Y.ceil !== "" && v > +Y.ceil) { v = +Y.ceil; x.why.push(`ceiling ${fmt(+Y.ceil)}`); }
       const rate = Math.max(25, rnd(v)); x.why.push(`= ${fmt(rate)}${x.min ? ` · min ${x.min} nights` : ""}`);
       SR.edits[x.r.k] = { rate, min: x.min, why: x.why }; if (last != null && rate !== last) moved++; last = rate; }
