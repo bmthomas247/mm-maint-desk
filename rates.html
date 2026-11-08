@@ -1106,8 +1106,10 @@ async function loadSetRates() {
   { const pre = (h.comp_id || "").match(/^[a-z]+-/)?.[0], tests = (SR.homes || []).map(x => x.comp_id).filter(Boolean);
     SR.grpPre = (h.code || "").split(" ")[0]; SR.grp = [];
     SR.compName = {}; if (comp?.set_id) { const cn = await sb.from("comps").select("id,label:label_public").eq("set_id", comp.set_id); for (const c of cn.data || []) SR.compName[c.id] = c.label; }
-    if (pre) { const g = await sb.from("latest_beyond").select("comp_id,start_date,price").like("comp_id", pre + "%");
-      SR.grp = (g.data || []).filter(x => x.comp_id !== h.comp_id && !tests.includes(x.comp_id) && /\d/.test(x.comp_id)); } }
+    // Brandon 2026-11-08: only our homes in the SAME comp group (e.g. PL Studio - Original), test homes left out
+    const mates = comp?.set_id ? SR.ours.filter(c => c.set_id === comp.set_id && c.id !== h.comp_id && !tests.includes(c.id)).map(c => c.id) : [];
+    SR.grpTail = (state.sets.find(x => x.id === comp?.set_id)?.name || "").split(" - ").slice(1).join(" - ");
+    if (mates.length) { const g = await sb.from("latest_beyond").select("comp_id,start_date,price").in("comp_id", mates); SR.grp = g.data || []; } }
   if (SR.dynFor !== h.code) { SR.dyn = null; SR.dynSaved = h.dyn || null; } SR.dynFor = h.code;   // this home's saved settings (merged over the defaults)
   { const sc = await sb.rpc("rates_set_scoreboard", { p_code: h.code }); SR.score = sc.error ? { err: sc.error.message } : sc.data; }
   SR.bk = cid ? ((await sb.from("our_bookings").select("reservation_id,kind,status,booked_at,arrival,nights").eq("comp_id", cid).gte("booked_at", addD(today, -60))).data || []) : [];
@@ -1241,7 +1243,7 @@ function srCompAir(k) { const v = []; let at = null;
 // tonight (Beyond's calendar price while Beyond prices them).
 const srGrp = k => { const v = (SR.grp || []).map(b => { const off = Math.round((new Date(k + "T12:00:00") - new Date(b.start_date + "T12:00:00")) / 864e5); const p = b.price?.[off]; return p == null ? null : +p; }).filter(v => v != null && v > 0).sort((x, y) => x - y);
   return v.length ? { avg: v.reduce((x, y) => x + y, 0) / v.length, n: v.length, lo: v[0], hi: v[v.length - 1] } : null; };
-const srGrpName = () => `Our ${SR.grpPre || ""} homes`;
+const srGrpName = () => `Our ${SR.grpPre || ""}${SR.grpTail ? " " + SR.grpTail : ""} homes`;
 const srBeyond = k => { const b = SR.beyond; if (!b) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(b.start_date + "T12:00:00")) / 864e5); const v = b.price?.[off]; return v == null ? null : +v; };
 // Our rate starts as Track's current rate (Brandon 2026-11-08); set = someone saved or typed a rate for that night.
 function srVal(k) { const e = SR.edits[k], s = SR.ours_n[k], t = SR.track?.[k];
