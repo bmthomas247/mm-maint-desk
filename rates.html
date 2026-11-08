@@ -266,6 +266,9 @@ main>#search{display:none!important}.ovcalin #search{display:block!important}
 .calkey{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;background:var(--ovbg);border-radius:12px;padding:9px 12px;margin:0 0 10px;font-size:12.5px;color:var(--ink2)}
 .calkey>b{color:var(--ink);margin-right:2px}.ck-red{color:var(--red)}.ck-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
 .ck-dot.r{background:var(--red)}.ck-dot.y{background:#d4a017}.ck-sel{display:inline-block;width:16px;height:12px;border-radius:4px;background:var(--tealbg);box-shadow:inset 0 0 0 2px var(--teal);margin-right:5px;vertical-align:-1px}
+main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bottom:18px}
+.card .wide{width:auto;left:auto;transform:none;max-width:100%}
+#grid tr td:first-child{border-radius:10px 0 0 10px}
 .ovnote{background:var(--amberbg,#fbf0d9);border-radius:12px;padding:8px 12px;font-size:13px;margin:0 0 14px}
 @media (max-width:700px){.ovfil label{flex:1 1 140px}.ovfil select{min-width:0;max-width:none;width:100%}}
 .ovtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:18px}
@@ -1854,6 +1857,9 @@ state.mk = { events: [], weather: [], loaded: false };
 function setView(v) {
   const m = $("app"); m.classList.remove("v-pulse", "v-hotels", "v-rater", "v-reports", "v-beyond", "v-findings", "v-setrates"); if (v !== "desk") m.classList.add("v-" + v);
   document.querySelectorAll("#viewnav .tab").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  // Local market card on Market pulse too (Brandon 2026-11-08): the same card moves above the pulse and back for the Desk.
+  { const mk = $("market"); if (mk) { if (!window._mkHome) { window._mkHome = document.createComment("market-home"); mk.before(window._mkHome); }
+      if (v === "pulse") $("pulse").before(mk); else window._mkHome.after(mk); } }
   if (v === "pulse") loadPulse();
   if (v === "rater") loadRater();
   if (v === "findings") loadFindings();
