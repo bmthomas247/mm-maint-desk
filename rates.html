@@ -248,6 +248,19 @@ main.v-setrates>*:not(#viewnav):not(#setrates){display:none!important}
 .srt td{padding:5px 6px;border-top:1px solid var(--ovgrid);white-space:nowrap}.srt tr.wk td{background:rgba(136,181,53,.06)}.srt tr.chg td{background:var(--amberbg)}
 .srin{width:92px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);font:inherit;font-size:13px;min-height:34px}.srin.sm{width:64px}
 #srSave:disabled{opacity:.5;cursor:default}
+#srcal{position:fixed;inset:0;z-index:60;background:rgba(15,25,12,.45);display:grid;place-items:center;padding:16px}
+.srcalin{width:min(980px,100%)}.sclegend{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:12px;color:var(--ink2);padding:0 4px 10px}
+.sclegend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+.scms{display:grid;grid-template-columns:1fr 1fr;gap:18px}.scm{background:var(--ovcard);border-radius:16px;padding:12px;box-shadow:var(--ovsh)}
+.scmh{text-align:center;font-weight:700;margin-bottom:8px}.scg{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.scg .dw{text-align:center;font-size:11px;color:var(--muted);font-weight:700}
+.scd{display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid transparent;background:var(--ovbg);border-radius:10px;padding:5px 2px;font:inherit;cursor:pointer;min-height:58px;color:var(--ink)}
+.scd:hover{border-color:var(--moose)}.scd .d{font-size:12px;font-weight:700}.scd .p{font-size:13px;font-weight:700}.scd .c{font-size:10.5px;color:var(--muted)}
+.scd i{font-style:normal;font-size:9px;margin-left:2px}.scd .pk{color:#c69a2a}.mine{color:var(--ours)}
+.scd.hi,.sw.hi{background:#fbe2df}.scd.lo,.sw.lo{background:#dde6fb}.scd.inr{box-shadow:inset 0 0 0 2px var(--ours)}.scd.sel{background:var(--ours);color:#fff}.scd.sel .c{color:#fff}
+.scd.past{opacity:.35;cursor:default}
+@media (prefers-color-scheme:dark){.scd.hi,.sw.hi{background:#3a1714}.scd.lo,.sw.lo{background:#1b2440}}
+@media (max-width:760px){.scms{grid-template-columns:1fr}.scd{min-height:52px}.scd .p{font-size:12px}}
 .ovnote{background:var(--amberbg,#fbf0d9);border-radius:12px;padding:8px 12px;font-size:13px;margin:0 0 14px}
 @media (max-width:700px){.ovfil label{flex:1 1 140px}.ovfil select{min-width:0;max-width:none;width:100%}}
 .ovtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:18px}
@@ -982,7 +995,7 @@ function srDraw() {
     <button class="ovbtn" id="srCsv">⤓ Download CSV</button></div>
     <div class="ovfil"><label>Test home<select id="srHome">${SR.homes.map(x => `<option${x.code === SR.code ? " selected" : ""}>${escH(x.code)}</option>`).join("") || "<option value=''>No test homes yet</option>"}</select></label>
       <label>Add a home to the test<select id="srAdd"><option value="">Pick one of our homes…</option>${addOpts}</select></label>
-      <label>From<input type="date" id="srFrom" value="${SR.from}"></label><label>To<input type="date" id="srTo" value="${SR.to}"></label>
+      <label>Dates<button type="button" class="ovdate" id="srPick" title="Opens a two-month calendar: our price each night vs the comps, nights that look off in color">📅 ${new Date(SR.from + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })} → ${new Date(SR.to + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</button></label>
       <div class="ovdq">${[30, 60, 90, 180].map(n => `<button class="ovchipb" data-srd="${n}">Next ${n}</button>`).join("")}</div></div>`;
   if (!h) { el.innerHTML = html + `<div class="ovc"><p class="small muted">Add one of our homes above to start.</p></div>`; srWire(); return; }
   const live = SR.switch === "on";
@@ -1031,6 +1044,45 @@ function srDraw() {
       <td>${p.status === "queued" ? `<button class="ovchipb" data-srx="${p.id}">Cancel</button>` : ""}</td></tr>`).join("") + `</table>` : `<p class="small muted">Nothing sent yet.</p>`}</div>`;
   el.innerHTML = html; srWire(R); srHover(R);
 }
+// Two-month rate calendar (Brandon 2026-11-08: "load pick a dates calendar so we can see the rates and areas we need to adjust").
+// Each night: our price (ours if set, else Track now) big, comps' daily rate under it, colored by how far apart they are.
+function srCal() {
+  if ($("srcal")) return;
+  const today = iso(new Date(new Date().setHours(12, 0, 0, 0))), pick = { a: null };
+  let m0 = new Date(SR.from + "T12:00:00"); m0 = new Date(m0.getFullYear(), m0.getMonth(), 1, 12);
+  const box = document.createElement("div"); box.id = "srcal"; document.body.appendChild(box);
+  const close = () => { box.remove(); document.removeEventListener("keydown", esc); };
+  const esc = e => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", esc);
+  box.addEventListener("mousedown", e => { if (e.target === box) close(); });
+  const cell = k => {
+    const v = srVal(k), t = SR.track[k], c = srComp(k), b = srBeyond(k), p = v.rate ?? (t ? +t.rate : null), g = p != null && c ? (p / c.adr - 1) * 100 : null;
+    const cls = g == null ? "" : g >= 25 ? "hi" : g <= -25 ? "lo" : "";
+    const pk = (typeof peakOf === "function" && peakOf(k)) || (typeof holOf === "function" && holOf(k)[0]) || "";
+    const inR = SR.from <= k && k <= SR.to, past = k < today;
+    return `<button type="button" class="scd ${cls}${inR ? " inr" : ""}${k === pick.a ? " sel" : ""}${past ? " past" : ""}" data-sck="${k}"${past ? " disabled" : ""}
+      title="${escH(new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}: ${v.rate != null ? "ours " + fmt(v.rate) : "Track now " + fmt(t ? +t.rate : null)} · Beyond ${fmt(b)} · comps ${c ? fmt(c.adr) + " (" + c.n + ")" : "—"}${g != null ? " · " + (g > 0 ? "+" : "") + Math.round(g) + "% vs comps" : ""}${pk ? " · " + escH(pk) : ""}">
+      <span class="d">${+k.slice(8)}${pk ? '<i class="pk">★</i>' : ""}${v.rate != null ? '<i class="mine">●</i>' : ""}</span><span class="p">${p != null ? "$" + Math.round(p) : ""}</span><span class="c">${c ? "$" + Math.round(c.adr) : ""}</span></button>`;
+  };
+  const month = d => { const y = d.getFullYear(), m = d.getMonth(), first = new Date(y, m, 1, 12).getDay(), n = new Date(y, m + 1, 0).getDate();
+    let h = `<div class="scm"><div class="scmh">${d.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</div><div class="scg">${["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(x => `<span class="dw">${x}</span>`).join("")}`;
+    for (let i = 0; i < first; i++) h += `<span></span>`;
+    for (let dd = 1; dd <= n; dd++) h += cell(`${y}-${String(m + 1).padStart(2, "0")}-${String(dd).padStart(2, "0")}`);
+    return h + `</div></div>`; };
+  const draw = () => {
+    const m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 1, 12);
+    box.innerHTML = `<div class="ovcalin srcalin" role="dialog" aria-label="Pick dates"><div class="ovcalbar"><b>${pick.a ? "Now pick the last night" : "Pick the first night, then the last night"}</b><span class="sp" style="flex:1"></span>
+      <button class="ovchipb" data-scn="-1" aria-label="Earlier month">‹</button><button class="ovchipb" data-scn="1" aria-label="Later month">›</button><button class="ovbtn" id="scDone">Done</button></div>
+      <div class="sclegend"><span><b>$ big</b> = our price (set here, else Track now)</span><span><b class="muted">$ small</b> = comps' daily rate</span><span><i class="sw hi"></i>25%+ above comps</span><span><i class="sw lo"></i>25%+ below comps</span><span>★ holiday / event · <span class="mine">●</span> we set it</span></div>
+      <div class="scms">${month(m0)}${month(m1)}</div></div>`;
+    box.querySelectorAll("[data-scn]").forEach(b => b.onclick = () => { m0 = new Date(m0.getFullYear(), m0.getMonth() + +b.dataset.scn, 1, 12); draw(); });
+    $("scDone").onclick = close;
+    box.querySelectorAll("[data-sck]").forEach(b => b.onclick = () => { const k = b.dataset.sck;
+      if (!pick.a || k < pick.a) { pick.a = k; draw(); return; }
+      SR.from = pick.a; SR.to = k; close(); srDraw(); });
+  };
+  draw();
+}
 function srSvg(R) {
   const vals = R.flatMap(r => [r.v.rate, r.b, r.t ? +r.t.rate : null, r.c?.adr]).filter(v => v != null);
   if (!vals.length) return `<div class="ovempty">No prices for these dates yet.</div>`;
@@ -1059,8 +1111,7 @@ function srWire(R) {
   on("srAdd", "onchange", async e => { const c = e.target.value; if (!c) return;
     if (!confirm(`Add ${c} to the Set rates test? Nothing is sent to Track until someone presses Send and Beyond is marked off for it.`)) { e.target.value = ""; return; }
     const r = await sb.rpc("rates_set_home", { p_code: c, p_on: true }); if (r.error) return alert(niceE(r.error)); SR.code = c; loadSetRates(); });
-  const dates = () => { const a = $("srFrom").value, b = $("srTo").value; if (a && b && b >= a) { SR.from = a; SR.to = b; srDraw(); } };
-  on("srFrom", "onchange", dates); on("srTo", "onchange", dates);
+  on("srPick", "onclick", srCal);
   document.querySelectorAll("[data-srd]").forEach(b => b.onclick = () => { const t = iso(new Date(new Date().setHours(12, 0, 0, 0))); SR.from = t; SR.to = addD(t, +b.dataset.srd - 1); srDraw(); });
   on("srBoff", "onchange", async e => { const v = e.target.checked;
     if (v && !confirm(`Confirm Beyond Pricing is turned OFF for ${SR.code} (in Beyond, or Kolleen did it)? If it's still on, Beyond will write over our rates in Track.`)) { e.target.checked = false; return; }
