@@ -310,6 +310,9 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .dydow input{width:100%!important;flex:none!important;text-align:center!important;padding:5px 0}
 .dydow{grid-template-columns:repeat(7,minmax(0,1fr))!important}.dydow label{min-width:0;min-height:0}.dyng .dydow label input[type=number]{width:100%!important;flex:none;min-width:0;box-sizing:border-box;text-align:center}
 .dyng.dyapply label{min-height:0}
+details.dyacc>summary{list-style:none;cursor:pointer;position:relative;padding-right:40px}details.dyacc>summary::-webkit-details-marker{display:none}
+details.dyacc>summary::after{content:"▾";position:absolute;right:6px;top:2px;font-size:18px;color:var(--forest,#3c5f12);transition:transform .2s}
+details.dyacc:not([open])>summary::after{transform:rotate(-90deg)}details.dyacc:not([open])>summary .cs{margin-bottom:0}
 .srzoom{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 8px}.srzoom .ovbtn{padding:5px 10px;font-size:12.5px}
 .srpan{cursor:grab;touch-action:pan-y}.srpan.dragging{cursor:grabbing;user-select:none}
 table.srt tr[data-k] td:first-child{cursor:cell;user-select:none}table.srt tr.srsel td{background:rgba(136,181,53,.22)!important}
@@ -1287,7 +1290,7 @@ function srDraw() {
     floor: "", floorStay: "", ceil: "", minWk: "", minHol: "", rd: "1", which: "all" }, SR.dynSaved || {});
   const num = (id, v, w, title, step) => `<input type="number" id="${id}" value="${v}" step="${step || 1}" style="width:${w || 70}px"${title ? ` title="${escH(title)}"` : ""}>`;
   const DN = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-  html += `<div class="ovc" style="margin-bottom:18px"><h3>Dynamic pricing</h3><div class="cs">Every night gets its own price. Booking sites reward listings whose rates move with demand. Build, check the chart and table (ⓘ shows each night's steps), then Save.</div>
+  html += `<details class="ovc dyacc" style="margin-bottom:18px"${srDynOpen() ? " open" : ""}><summary><h3>Dynamic pricing</h3><div class="cs">Every night gets its own price. Booking sites reward listings whose rates move with demand. Build, check the chart and table (ⓘ shows each night's steps), then Save.</div></summary>
     <div class="dyn">
       <div class="dyng"><b>1 · Start</b><label class="dystk">Start from<select id="dyBase">${[["a", "A few $ under the comps' total"], ["s", "Our engine's suggestion"], ["c", "Comps' daily rate"], ["b", "Our other homes' average"], ["t", "Track now"], ["o", "Our saved rate"]].map(([v, t]) => `<option value="${v}"${Y.base === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label title="Per night, on the guest's Airbnb total (rent + fees + cleaning + tax)">Under the comps' total by $${num("dyUnder", Y.under ?? 5, 70)}</label>
@@ -1345,7 +1348,7 @@ function srDraw() {
       <div class="dyng dyapply"><b>9 · Apply</b><label>Round to<select id="dyRd">${[["1", "$1"], ["5", "$5"], ["10", "$10"], ["9", "Ends in 9 ($149)"]].map(([v, t]) => `<option value="${v}"${String(Y.rd) === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Which nights<select id="dyWhich"><option value="all"${Y.which === "all" ? " selected" : ""}>Every night in the dates</option><option value="empty"${Y.which === "empty" ? " selected" : ""}>Only nights without a suggestion</option></select></label>
         <button class="ovbtn dygo" id="srFill">⚡ Build prices</button></div>
-    </div><div class="small muted" id="dyMsg" style="margin-top:8px">${escH(SR.dynMsg || "")}</div>${srAutoBox(h)}</div>`;
+    </div><div class="small muted" id="dyMsg" style="margin-top:8px">${escH(SR.dynMsg || "")}</div>${srAutoBox(h)}</details>`;
   // grid
   // every label for the night (Brandon 2026-11-08: Cottonwood openings were hidden behind "Opening weekend" / "Thanksgiving")
   const pk = k => typeof holOf === "function" ? [...new Set(holOf(k))].join(" · ") || null : null;
@@ -1601,7 +1604,10 @@ function srBulkMove(op) { const sel = SR.sel; if (!sel) return;
 document.addEventListener("keydown", e => { if (!SR.sel?.size || e.target.closest?.("input,select,textarea")) return;
   if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); srBulkMove((e.altKey ? "m" : "p") + (e.key === "ArrowUp" ? "+" : "-")); }
   if (e.key === "Escape") srBulkMove("clear"); });
+// Dynamic pricing folds open/closed; each viewer's choice is kept on their device
+const srDynOpen = () => { try { return localStorage.getItem("mm_dyn_open") !== "0"; } catch (e) { return true; } };
 function srWire(R) {
+  document.querySelector("details.dyacc")?.addEventListener("toggle", e => { try { localStorage.setItem("mm_dyn_open", e.target.open ? "1" : "0"); } catch (x) {} });
   setTimeout(srBulk, 0);
   { const add = $("dySeasAdd"), box = $("dySeas");
     if (add && box) { add.onclick = () => { box.insertAdjacentHTML("beforeend", srSeasRow({})); srSteppers(box); };
