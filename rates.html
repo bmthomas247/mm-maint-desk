@@ -310,6 +310,10 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .dydow input{width:100%!important;flex:none!important;text-align:center!important;padding:5px 0}
 .dydow{grid-template-columns:repeat(7,minmax(0,1fr))!important}.dydow label{min-width:0;min-height:0}.dyng .dydow label input[type=number]{width:100%!important;flex:none;min-width:0;box-sizing:border-box;text-align:center}
 .dyng.dyapply label{min-height:0}
+table.srt tr[data-k] td:first-child{cursor:cell;user-select:none}table.srt tr.srsel td{background:rgba(136,181,53,.22)!important}
+#srBulkBar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;display:none;gap:14px;align-items:center;flex-wrap:wrap;background:var(--forest,#3c5f12);color:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 12px 30px rgba(0,0,0,.25);font-size:13px}
+#srBulkBar .sbg{display:inline-flex;gap:6px;align-items:center}#srBulkBar button[data-sb^="p"],#srBulkBar button[data-sb^="m"]{width:30px;height:30px;border:0;border-radius:8px;background:#fff;color:var(--forest,#3c5f12);cursor:pointer;font-size:12px}
+#srBulkBar input,#srBulkBar select{width:58px;border:0;border-radius:8px;padding:5px 6px;font:inherit}#srBulkBar select{width:auto}#srBulkBar .ovbtn{background:rgba(255,255,255,.15);color:#fff;border-color:transparent}
 .dyseas{flex:0 0 100%;display:flex;flex-direction:column;gap:6px}.dyseas:empty{display:none}
 .dyseasrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--ink2)}
 .dyseasrow input[type=date],.dyseasrow input[type=text]{border:1px solid var(--line);border-radius:9px;padding:6px 8px;font:inherit;font-size:13px;min-height:34px;background:var(--ovcard)}
@@ -1350,7 +1354,7 @@ function srDraw() {
     <div class="srwarn">⚠ Rates here are only <b>suggestions</b>. Nothing changes in Track until someone presses <b>Send these dates to Track</b> (top right). <b>Save</b> keeps your rates as suggested prices with your initials. Grey = Track's current rate.</div>
     ${srFeeNote()}<div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th title="Our own pricing engine (hover ⓘ for its reason)">Engine</th><th title="Average rate in Track of our other homes in this building (test homes left out)">${srGrpName()}</th><th>Comps</th><th title="Starts at Track's current rate. Type a new one, then Save = a suggestion with your initials. It only reaches Track with Send these dates to Track.">Our rate</th><th>Min nights</th><th class="gp" title="What a guest pays per night at our rate (Track's markup + fees + cleaning over 3 nights + tax)">Guest pays · Airbnb</th><th class="gp">Vrbo</th><th class="gp">Our site</th><th title="The comps' Airbnb checkout total per night incl. cleaning, fees + 13.12% est. tax">Comps all-in</th><th>vs comps</th></tr>` +
     R.map(r => { const d = new Date(r.k + "T12:00:00"), wk = d.getDay() === 5 || d.getDay() === 6, g = r.v.rate != null && r.b ? (r.v.rate / r.b - 1) * 100 : null;
-      return `<tr class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}"><td><b>${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
+      return `<tr data-k="${r.k}" class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}${SR.sel?.has(r.k) ? " srsel" : ""}"><td><b>${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
         <td>${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy" tabindex="0" role="button" aria-label="Why this price" data-why="${escH(r.s.why || "")}" data-p="${r.s.price}" data-k="${r.k}">ⓘ</span>` : "—"}</td>
         <td title="${r.g ? escH(`${r.g.n} homes: ${fmt(r.g.lo)} to ${fmt(r.g.hi)}`) : ""}">${fmt(r.b)}${r.g ? `<div class="srair">${r.g.n} homes</div>` : ""}</td><td style="cursor:help" title="${escH(srCompTip(r.k) + (() => { const a = srCompAir(r.k); return a ? `\nAirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}` : ""; })())}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
         <td class="srrate"><input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin${r.v.set ? "" : " pre"}" title="${r.v.set ? "" : "Track's current rate"}">${r.v.changed ? srOurWhy(r) : ""}${r.v.saved && !r.v.changed ? `${srOurWhy(r)}<span class="srby" title="Suggested by ${escH(r.v.by || "")}${r.v.at ? ", " + escH(new Date(r.v.at).toLocaleString()) : ""}">${escH(srIni(r.v.by))}</span>` : ""}</td><td><input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm${r.v.set ? "" : " pre"}"></td>
@@ -1541,7 +1545,45 @@ function srMinFor(Y, k, dw, hol) { const nz = v => v !== "" && v != null && +v >
   const d = nz((Y.minDow || [])[dw] ?? ((dw === 5 || dw === 6) ? Y.minWk : "")); if (d) return { m: d, why: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw] };
   if (nz(Y.minDef)) return { m: nz(Y.minDef), why: "every night" };
   return null; }
+// Highlight nights in the table (drag down the rows, Shift-click for a range, Ctrl/⌘-click one), then move them all at once.
+function srBulk() { const tbl = document.querySelector("[data-srr]")?.closest("table"); if (!tbl) return;
+  const sel = SR.sel ||= new Set(), rows = () => [...tbl.querySelectorAll("tr[data-k]")], keys = () => rows().map(t => t.dataset.k);
+  let bar = document.getElementById("srBulkBar");
+  if (!bar) { bar = document.createElement("div"); bar.id = "srBulkBar"; document.body.appendChild(bar);
+    bar.innerHTML = `<b id="sbN"></b><span class="sbg">Price <button type="button" data-sb="p-">▼</button><button type="button" data-sb="p+">▲</button> by <input type="number" id="sbAmt" value="5" min="1" step="1">
+      <select id="sbUnit"><option value="$">$</option><option value="%">%</option></select></span>
+      <span class="sbg">Min nights <button type="button" data-sb="m-">▼</button><button type="button" data-sb="m+">▲</button></span>
+      <button type="button" class="ovbtn" data-sb="clear">Clear</button>`;
+    bar.addEventListener("click", e => { const b = e.target.closest("[data-sb]"); if (!b) return; srBulkMove(b.dataset.sb); }); }
+  const paint = () => { rows().forEach(t => t.classList.toggle("srsel", sel.has(t.dataset.k))); bar.style.display = sel.size ? "flex" : "none";
+    const n = bar.querySelector("#sbN"); if (n) n.textContent = `${sel.size} night${sel.size === 1 ? "" : "s"} selected`; };
+  window.srBulkPaint = paint;
+  let drag = null, anchor = SR.selAnchor || null;
+  const range = (a, b) => { const K = keys(), i = K.indexOf(a), j = K.indexOf(b); return i < 0 || j < 0 ? [] : K.slice(Math.min(i, j), Math.max(i, j) + 1); };
+  tbl.addEventListener("mousedown", e => { const tr = e.target.closest("tr[data-k]"); if (!tr || e.button !== 0 || e.target.closest("input,button,select,a,.srwhy")) return;
+    const k = tr.dataset.k; e.preventDefault();
+    if (e.shiftKey && anchor) { range(anchor, k).forEach(x => sel.add(x)); }
+    else if (e.ctrlKey || e.metaKey) { sel.has(k) ? sel.delete(k) : sel.add(k); anchor = k; }
+    else { sel.clear(); sel.add(k); anchor = k; drag = { start: k, base: new Set() }; }
+    SR.selAnchor = anchor; paint(); });
+  tbl.addEventListener("mouseover", e => { if (!drag) return; const tr = e.target.closest("tr[data-k]"); if (!tr) return;
+    sel.clear(); range(drag.start, tr.dataset.k).forEach(x => sel.add(x)); paint(); });
+  document.addEventListener("mouseup", () => { drag = null; });
+  paint(); }
+function srBulkMove(op) { const sel = SR.sel; if (!sel) return;
+  if (op === "clear") { sel.clear(); return window.srBulkPaint?.(); }
+  const amt = Math.max(0, +(document.getElementById("sbAmt")?.value || 0)), pct = document.getElementById("sbUnit")?.value === "%";
+  for (const k of sel) {
+    if (op[0] === "p") { const i = document.querySelector(`[data-srr="${k}"]`); if (!i) continue; const cur = i.value !== "" ? +i.value : srVal(k).rate; if (cur == null) continue;
+      const d = op[1] === "+" ? 1 : -1, v = pct ? cur * (1 + d * amt / 100) : cur + d * amt; i.value = Math.min(20000, Math.max(25, Math.round(v))); i.classList.remove("pre"); i.onchange?.(); }
+    else { const i = document.querySelector(`[data-srm="${k}"]`); if (!i) continue; const cur = i.value !== "" ? +i.value : (srVal(k).min ?? 2);
+      i.value = Math.min(60, Math.max(2, cur + (op[1] === "+" ? 1 : -1))); i.classList.remove("pre"); i.onchange?.(); } }
+  window.srBulkPaint?.(); }
+document.addEventListener("keydown", e => { if (!SR.sel?.size || e.target.closest?.("input,select,textarea")) return;
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); srBulkMove((e.altKey ? "m" : "p") + (e.key === "ArrowUp" ? "+" : "-")); }
+  if (e.key === "Escape") srBulkMove("clear"); });
 function srWire(R) {
+  setTimeout(srBulk, 0);
   { const add = $("dySeasAdd"), box = $("dySeas");
     if (add && box) { add.onclick = () => { box.insertAdjacentHTML("beforeend", srSeasRow({})); srSteppers(box); };
       box.addEventListener("click", e => { if (e.target.closest("[data-ms-del]")) e.target.closest("[data-ms]").remove(); }); } }
