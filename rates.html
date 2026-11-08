@@ -296,6 +296,7 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .srauto{margin-top:14px;border-top:1px solid var(--ovgrid);padding-top:12px}.srautoh{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .srchk{flex-direction:row!important;align-items:center!important;gap:6px!important;text-transform:none!important;letter-spacing:0!important;font-size:13px!important;color:var(--ink)!important}
 .srchk input{width:auto!important;min-height:0!important}.sct td:first-child{color:var(--ink2)}
+.srair{font-size:10.5px;color:var(--muted);line-height:1.1}
 .ovnote{background:var(--amberbg,#fbf0d9);border-radius:12px;padding:8px 12px;font-size:13px;margin:0 0 14px}
 @media (max-width:700px){.ovfil label{flex:1 1 140px}.ovfil select{min-width:0;max-width:none;width:100%}}
 .ovtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:18px}
@@ -1060,6 +1061,10 @@ async function loadSetRates() {
   SR.pushes = ps.data || []; SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {};
   if (SR.dynFor !== h.code) { SR.dyn = null; SR.dynSaved = h.dyn || null; } SR.dynFor = h.code;   // this home's saved settings (merged over the defaults)
   { const sc = await sb.rpc("rates_set_scoreboard", { p_code: h.code }); SR.score = sc.error ? { err: sc.error.message } : sc.data; }
+  // second source for Airbnb daily rates: the newest AirROI pull per comp (Key Data feeds the main number from 2026-11-09)
+  { const ids = [...new Set(SR.nightly.filter(n => n.tier !== "Ours" && n.tier !== "Secondary").map(n => n.comp_id))]; SR.air = {};
+    if (ids.length) { const ar = await sb.from("nightly_snapshots").select("comp_id,start_date,rates,avail,captured_at").eq("channel", "Airbnb").like("source", "AirROI%").in("comp_id", ids).order("captured_at", { ascending: false }).limit(ids.length * 4);
+      for (const n of ar.data || []) if (!SR.air[n.comp_id]) SR.air[n.comp_id] = n; } }
   SR.fee = srFeeModel(SR.ck || [], h.comp_id); SR.compAll = srCompAllIn(SR.ck || []);
   srDraw();
 }
@@ -1138,6 +1143,11 @@ function srCompAllIn(rows) { const by = {};
     for (let i = 0; i < r.nights; i++) { const k = addD(r.check_in, i); ((by[k] ||= {})[r.comp_id] ||= []).push(pn); } }
   const out = {}; for (const [k, m] of Object.entries(by)) { const v = Object.values(m).map(a => a.reduce((x, y) => x + y, 0) / a.length); if (v.length >= 2) out[k] = { v: v.reduce((x, y) => x + y, 0) / v.length, n: v.length }; }
   return out; }
+// AirROI's comp average for a night (open comps, 2+), shown next to the main (Key Data / Vrbo) number
+function srCompAir(k) { const v = []; let at = null;
+  for (const n of Object.values(SR.air || {})) { const o = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5);
+    if (o < 0 || o >= n.avail.length || n.avail[o] !== "1" || n.rates[o] == null) continue; v.push(+n.rates[o]); if (!at || n.captured_at > at) at = n.captured_at; }
+  return v.length >= 2 ? { adr: v.reduce((a, b) => a + b, 0) / v.length, n: v.length, at } : null; }
 const srBeyond = k => { const b = SR.beyond; if (!b) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(b.start_date + "T12:00:00")) / 864e5); const v = b.price?.[off]; return v == null ? null : +v; };
 // Our rate starts as Track's current rate (Brandon 2026-11-08); set = someone saved or typed a rate for that night.
 function srVal(k) { const e = SR.edits[k], s = SR.ours_n[k], t = SR.track?.[k];
@@ -1171,7 +1181,9 @@ function srDraw() {
     tl("o2", fmt(oA), "Our suggested / night", bA && oA ? sg((oA / bA - 1) * 100) + " vs Beyond" : "", "Average of the nights we've set.") +
     tl("c1", fmt(bA), "Beyond / night", SR.beyond ? "pulled " + new Date(SR.beyond.captured_at).toLocaleDateString() : "no Beyond data", "Beyond Pricing calendar price (latest nightly pull, beyond.py).") +
     tl("o3", fmt(tA), "Track now / night", SR.trackAt ? "read " + new Date(SR.trackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "not read yet", "Track rack rate (rate type RR) for this home, read every 30 minutes.") +
-    tl("c2", fmt(cA), "Comps' daily rate", "before cleaning + tax", "Average nightly rate of the open comps that night (Airbnb from AirROI, else VRBO from KeyData; ESTIMATE). Same basis as Track's rack rate.") + `</div>`;
+    tl("c2", fmt(cA), "Comps' daily rate", (() => { const pr = R.map(r => { const a = srCompAir(r.k); return a && r.c ? a.adr / r.c.adr - 1 : null; }).filter(v => v != null).sort((x, y) => x - y);
+        return pr.length >= 5 ? `AirROI ${pr[pr.length >> 1] >= 0 ? "+" : ""}${Math.round(pr[pr.length >> 1] * 100)}% (check)` : "before cleaning + tax"; })(),
+      "Average nightly rate of the open comps that night, before cleaning and tax (ESTIMATE). Main source: Key Data's Airbnb calendars (cleaning ÷ 5.5 taken out) and Vrbo, nightly. AirROI (paid, pulled on a budget) is shown as a second check. Same basis as Track's rack rate.") + `</div>`;
   html += srGlance(h);
   // chart
   html += `<div class="ovc" style="margin-bottom:18px"><h3>Rate per night</h3><div class="cs">${R.length} nights · Track's rack rate basis (before cleaning, fees and tax)</div><div class="ovwrap" id="srChart">${srSvg(R)}<div class="ovtip"></div></div>
@@ -1214,7 +1226,7 @@ function srDraw() {
     R.map(r => { const d = new Date(r.k + "T12:00:00"), wk = d.getDay() === 5 || d.getDay() === 6, g = r.v.rate != null && r.b ? (r.v.rate / r.b - 1) * 100 : null;
       return `<tr class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}"><td><b>${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
         <td>${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy" tabindex="0" role="button" aria-label="Why this price" data-why="${escH(r.s.why || "")}" data-p="${r.s.price}" data-k="${r.k}">ⓘ</span>` : "—"}</td>
-        <td>${fmt(r.b)}</td><td>${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}</td>
+        <td>${fmt(r.b)}</td><td title="${escH((() => { const a = srCompAir(r.k); return `Main: ${r.c ? fmt(r.c.adr) + " from " + r.c.n + " comps (Key Data Airbnb + Vrbo)" : "—"}` + (a ? ` · AirROI: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}` : " · no AirROI pull for these comps"); })())}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
         <td class="srrate"><input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin${r.v.set ? "" : " pre"}" title="${r.v.set ? "" : "Track's current rate"}">${r.v.changed ? srOurWhy(r) : ""}${r.v.saved && !r.v.changed ? `${srOurWhy(r)}<span class="srby" title="Suggested by ${escH(r.v.by || "")}${r.v.at ? ", " + escH(new Date(r.v.at).toLocaleString()) : ""}">${escH(srIni(r.v.by))}</span>` : ""}</td><td><input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm${r.v.set ? "" : " pre"}"></td>
         ${srGuestCells(r)}</tr>`; }).join("") + `</table></div>
     <div class="src">Suggested = our own pricing engine (hover ⓘ for its reason). Track now = rack rate (RR) + minimum stay in Track, read every 30 min. Beyond = its calendar price from the nightly pull. Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
