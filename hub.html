@@ -1100,11 +1100,15 @@ function hubSearchSetup(){
     const ix = await hubSearchLoad(); if(inp.value.trim().toLowerCase() !== q) return;
     const has = s => String(s || "").toLowerCase().includes(q);
     const desks = DESKS.filter(x => has(x.label)).slice(0,5).map(x => ({ h:"#/" + x.key, t:x.label, s:x.status === "live" ? "Desk" : "Coming soon" }));
-    const homes = ix.homes.filter(x => has(x.code) || has(x.sub)).slice(0,6).map(x => ({ h:"#/homes/" + encodeURIComponent(x.code), t:x.code, s:x.sub }));
+    // Build list j07 (Jeff 2026-11-02): a home code wins, with or without the space ("bhl1403"); exact code first
+    const nos = s => String(s || "").toLowerCase().replace(/[\s-]+/g, ""), qn = nos(q);
+    const homes = ix.homes.filter(x => has(x.code) || has(x.sub) || (qn.length > 2 && nos(x.code).includes(qn)))
+      .sort((a, b) => (nos(b.code) === qn) - (nos(a.code) === qn)).slice(0,6).map(x => ({ h:"#/homes/" + encodeURIComponent(x.code), t:x.code, s:x.sub }));
     const vend = ix.vendors.filter(x => has(x.name) || has(x.sub)).slice(0,6).map(x => ({ h:"#/vendors/" + encodeURIComponent(x.name), t:x.name, s:x.sub }));
     if(DESKS.some(x => x.key === "vendors")) vend.push({ h:"#/vendors/" + encodeURIComponent(inp.value.trim()), t:`Find a vendor for "${inp.value.trim()}"`, s:"Vendors desk search" });
     const sec = (n, a) => a.length ? `<div class="sh">${n}</div>` + a.map(x => `<a href="${esc(x.h)}">${esc(x.t)}${x.s ? `<small>${esc(x.s)}</small>` : ""}</a>`).join("") : "";
-    box.innerHTML = (sec("Desks", desks) + sec("Property Details", homes) + sec("Vendors", vend)) || `<div class="none">Nothing found.</div>`;
+    const exact = homes.length && nos(homes[0].t) === qn;   // typed a home code: the home goes first, above desks
+    box.innerHTML = (exact ? sec("Property Details", homes) + sec("Desks", desks) : sec("Desks", desks) + sec("Property Details", homes)) + sec("Vendors", vend) || `<div class="none">Nothing found.</div>`;
     box.classList.add("on"); hi = 0; const f = box.querySelector("a"); if(f) f.classList.add("hi");
     box.querySelectorAll("a").forEach(a => a.onclick = e => { e.preventDefault(); go(a.getAttribute("href")); });
   });
