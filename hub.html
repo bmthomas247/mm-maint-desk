@@ -1065,7 +1065,10 @@ function route(){
     if(to && DESKS.some(x => x.key === to)){ location.replace("#/" + to); return; } }
   const url = k === "maintenance" ? d.url + sep + "split=1" : d.url;
   const src = !arg ? url : k === "maintenance" ? url + "#" + encodeURIComponent(arg) : /^homes(_|$)/.test(k) ? d.url + sep + "home=" + encodeURIComponent(arg) : k === "vendors" ? d.url + sep + "vq=" + encodeURIComponent(arg) : d.url + "#" + encodeURIComponent(arg);
-  v.innerHTML = `<iframe class="desk" id="deskframe" title="${esc(d.label)}" src="${esc(src)}"></iframe>`;
+  // 2026-11-08: always load a fresh copy of the desk page (the browser kept a framed page up to 10 min even after a hub refresh)
+  const fresh = u => { if (/^https?:/i.test(u)) return u; const i = u.indexOf("#"), a = i < 0 ? u : u.slice(0, i), h = i < 0 ? "" : u.slice(i);
+    return a + (a.includes("?") ? "&" : "?") + "_v=" + Math.floor(Date.now() / 60000) + h; };
+  v.innerHTML = `<iframe class="desk" id="deskframe" title="${esc(d.label)}" src="${esc(fresh(src))}"></iframe>`;
   const f = $("#deskframe");
   f.addEventListener("load", () => { try {   // same site: hide the old "jump to other desk" header buttons - the sidebar does that now
     const doc = f.contentDocument, st = doc.createElement("style");
