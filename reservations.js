@@ -247,6 +247,8 @@ function conds(s){
     extend:!!(s.list && s.list.extending), cancel:cx, cxlate:cx && !!s.cancelledAt && s.cancelledAt.slice(0, 10) >= s.arrive,
     // Cancel the stay button (2026-11-06): who is cancelling. Cancelled in Track with nobody picking = the guest path
     cxus:cx && !!(s.list && s.list.cancelBy === "us"), cxguest:cx && !(s.list && s.list.cancelBy === "us"),
+    // Pyper 2026-11-06 (Bugs & upgrades #30): tell Cheree only when the stay was cancelled less than 60 days before arrival
+    cx60:cx && daysTo((s.cancelledAt || B.today).slice(0, 10), s.arrive) < 60,
     // Extend the stay: in house now / before arrival; Whimstay + Hopper before check-in = the guest goes to the site (we do nothing in Track)
     inhouse:s.arrive <= B.today && s.depart >= B.today, wspre:s.chan === "ws" && s.arrive > B.today,
     extdo:!(s.chan === "ws" && s.arrive > B.today), extfull:s.arrive <= B.today || daysTo(B.today, s.arrive) <= 14, extlater:s.arrive > B.today && daysTo(B.today, s.arrive) > 14,
