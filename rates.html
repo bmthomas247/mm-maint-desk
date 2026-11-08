@@ -276,6 +276,7 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .srbar i{display:block;height:8px;border-radius:99px;background:linear-gradient(90deg,var(--ours) var(--w),var(--ovgrid) var(--w))}.srbar b{text-align:right}
 .srq{font-size:12.5px;margin-top:8px;line-height:1.4;color:var(--ink2)}.srq b{color:var(--comp)}.srlink{display:inline-block;margin-top:10px;font-weight:700;font-size:13px;color:var(--forest-2,#5b8a1e)}
 .srsite{padding:8px 0;border-top:1px solid var(--ovgrid);font-size:13px}.srsite a{font-size:12px}.srwhy{color:var(--muted);cursor:help;font-size:11px}
+#ov.ovload{opacity:.45;pointer-events:none;transition:opacity .15s}
 .ovnote{background:var(--amberbg,#fbf0d9);border-radius:12px;padding:8px 12px;font-size:13px;margin:0 0 14px}
 @media (max-width:700px){.ovfil label{flex:1 1 140px}.ovfil select{min-width:0;max-width:none;width:100%}}
 .ovtiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:18px}
@@ -518,10 +519,11 @@ async function boot() {
     $("pkrecent").innerHTML = R.length ? `<span class="small muted">Recent</span>` + R.map((o, i) => `<button class="tab" data-rc="${i}">${o.kind === "home" ? "🏠 " : ""}${escH(o.title)}</button>`).join("") : "";
     $("pkrecent").querySelectorAll("[data-rc]").forEach(b => b.onclick = () => pkPick(R[+b.dataset.rc])); };
   const pkClose = () => { $("pklist").hidden = true; $("pkq").setAttribute("aria-expanded", "false"); };
-  const pkPick = async o => { if (!o) return; pkClose(); $("pkq").value = ""; $("pkq").blur();
+  const pkPick = async o => { if (!o) return; pkClose(); $("pkq").value = ""; $("pkq").blur(); state.loadingLbl = o.title;
     try { localStorage.setItem("mmRecent", JSON.stringify([{ kind: o.kind, id: o.id, set: o.set, title: o.title }, ...recent().filter(x => !(x.kind === o.kind && (x.id || x.set) === (o.id || o.set)))].slice(0, 6))); } catch (e) {}
     pkRecent();
-    await load(o.set);
+    const t0 = await load(o.set).then(() => state.loadTok); state.loadingLbl = null;
+    if (t0 !== state.loadTok) return;
     if (o.kind === "home" && state._all?.comps.some(c => c.id === o.id)) { state.homeSel = new Set([o.id]); applyHomeSel(); renderHomeSel(); render(); } };
   const pkList = all => {
     const q = $("pkq").value.trim().toLowerCase(), ws = q.split(/\s+/).filter(Boolean);
@@ -638,6 +640,11 @@ async function setChecks(setId, today) {
   return r;
 }
 async function load(setId) {
+  // 2026-11-08 (Brandon: picking a home "doesnt automatically change the rates overview"): show the pick is loading right away,
+  // and only the newest pick may draw (a slower earlier load can't paint over it).
+  const tok = state.loadTok = (state.loadTok || 0) + 1;
+  { const ov = $("ov"); if (ov) { ov.classList.add("ovload"); const sub = ov.querySelector(".ovhead .sub");
+      if (sub) sub.textContent = `Loading ${state.loadingLbl || state.sets.find(s => s.id === setId)?.name || ""}…`; } }
   state.ovAgg = null; if (state.ovSel) state.ovSel = { county: "", nb: "", home: "" };
   state.set = state.sets.find(s => s.id === setId);
   try { localStorage.setItem("mmSet", setId); } catch (e) {}
@@ -648,6 +655,7 @@ async function load(setId) {
     setChecks(setId, today),
     sb.from("latest_calendar").select("*").eq("set_id", setId),
     setNightly(setId)]);
+  if (tok !== state.loadTok) return;
   state.nightly = nt.data || [];
   // One comp set: every comp that's been added counts the same (no Primary/Secondary split; Brandon 2026-10-09).
   // Exception (Brandon 2026-10-19): "Secondary" = nearby-building comps (e.g. Moose Lodge / Ski Team / Three Kings / Edelweiss):
@@ -656,6 +664,7 @@ async function load(setId) {
   state.comps = (c.data || []).map(one); state.allChecks = state.checks = (k.data || []).map(one); state.cal = (cal.data || []).map(one);
   const oursIds = state.comps.filter(x => x.tier === "Ours").map(x => x.id);
   const bk = oursIds.length ? await allRows(() => sb.from("our_bookings").select("*", { count: "exact" }).in("comp_id", oursIds).order("comp_id").order("reservation_id")) : { data: [] };
+  if (tok !== state.loadTok) return;
   state.bookings = bk.data || []; state.bookingsLoaded = !bk.error && state.bookings.length > 0;
   // Home picker (Brandon 2026-10-20): keep the full set, then show all of our homes or only the ones ticked.
   state._all = { comps: state.comps, checks: state.allChecks, cal: state.cal, bookings: state.bookings }; state.homeSel = null;
@@ -730,6 +739,7 @@ function compBeds() {
 function bedsCanSplit() { const s0 = state.allBeds; state.allBeds = false; const r = compBeds(); state.allBeds = s0; return r; }
 function renderOv() {
   const el = $("ov"); if (!el || !state.set) return;
+  el.classList.remove("ovload");
   const CB = state.ovAgg ? null : compBeds(), CBs = state.ovAgg ? null : bedsCanSplit();
   const A = state.ovAgg, DC = A ? A.comps : state.comps, DK = A ? A.checks : state.checks, DL = A ? A.cal : state.cal;
   const avl = id => { const c = DL.find(x => x.comp_id === id); if (!c) return null;
@@ -859,7 +869,7 @@ function ovWire() {
   if (!state.ovHomes) { state.ovHomes = []; sb.from("comps").select("id,set_id,label").eq("tier", "Ours").eq("active", true).then(({ data }) => { state.ovHomes = data || []; renderOv(); }); }
   const pickSet = async (id, home) => {
     state.ovAgg = null; state.ovSel = { county: "", nb: "", home: "" };
-    if (state.set?.id !== id) await load(id);
+    if (state.set?.id !== id) { const h0 = (state.ovHomes || []).find(x => x.id === home); state.loadingLbl = h0 ? houseName(h0.label || h0.id, state.sets.find(s => s.id === id)?.name) : state.sets.find(s => s.id === id)?.name; await load(id); state.loadingLbl = null; }
     state.homeSel = home && state._all?.comps.some(c => c.id === home) ? new Set([home]) : null; applyHomeSel(); renderHomeSel(); render(); };
   $("ovCo").onchange = e => { const v = e.target.value; if (!v) { state.ovSel = { county: "", nb: "", home: "" }; state.ovAgg = null; return renderOv(); }
     state.ovSel = { county: v, nb: "", home: "" }; ovAggLoad(state.sets.filter(s => countyOf(s.name, s) === v).map(s => s.id), v); };
