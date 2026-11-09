@@ -37,7 +37,7 @@ async function places(){ if(SS.places) return SS.places;
   SS.places = (r.data || []).filter(x => x.lat && x.lng && x.properties).map(x => ({ lat:+x.lat, lng:+x.lng, code:x.properties.code })); return SS.places; }
 const dist = (a, b, c, d) => { const R = 6371e3, r = Math.PI / 180, x = (c - a) * r, y = (d - b) * r * Math.cos((a + c) / 2 * r); return R * Math.sqrt(x * x + y * y); };
 function where(p, pl){
-  if(p.lat == null) return p.source === "added" ? "" : `<span class="muted sm">no location</span>`;
+  if(p.lat == null) return p.source === "added" ? "" : p.source === "work_app" ? `<span class="muted sm" title="Clocked from the Work check app on a computer">💻 computer</span>` : `<span class="muted sm">no location</span>`;
   let best = null; for(const h of pl){ const m = dist(p.lat, p.lng, h.lat, h.lng); if(!best || m < best.m) best = { m, code:h.code }; }
   const near = best && best.m < 250 ? `near ${esc(best.code)}` : "pin";
   return `<a class="sm" href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" rel="noopener">📍 ${near}</a>`;
@@ -193,8 +193,8 @@ async function wcAppCard(el){
     <a class="btn primary" href="${WC_EXE}" download>⬇ Download for Windows</a>
     <ol class="sm" style="margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li>Open the downloaded file <b>MooseHubWorkCheck.exe</b>. If Windows says <i>"Windows protected your PC"</i>, click <b>More info</b> ▸ <b>Run anyway</b>.</li>
-      <li>Sign in with your hub email and password (or "Email me a code instead"), then your 2-step code if you use one.</li>
-      <li>Look for the round <b>M</b> by the clock (bottom right; it may be under the ^ arrow). <b>Green</b> = recording (you're clocked in), <b>grey</b> = clocked out, nothing recorded.</li>
+      <li>Sign in with your hub email and password (or "Email me a code instead"), then your 2-step code if you use one. The hub then opens in your browser, signed in.</li>
+      <li>Look for the round <b>M</b> by the clock (bottom right; it may be under the ^ arrow). <b>Green</b> = recording (you're clocked in), <b>grey</b> = clocked out, nothing recorded. Click the M to <b>clock in or out</b>; right-click for "Open the hub".</li>
       <li>It starts by itself when Windows starts. You only do this once per computer. To update, download and open it again.</li></ol></details>`;
 }
 window.staffingView = async function(v){
