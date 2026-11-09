@@ -1110,16 +1110,24 @@ async function asanaCheck(v){
     (a.unmapped || []).forEach(x => gaps.push({ item:"item:" + x.name, what:"Ticked in Asana, no matching hub step", x }));
     if(gaps.length) rows.push({ a, s, gaps });
   });
-  let showLooked = false;
+  let showLooked = false, fWhen = "up", fKind = "";
+  const today = B.today || new Date().toISOString().slice(0, 10);
+  const kindOf = g => g.item.slice(0, g.item.indexOf(":") + 1 || 99);   // step: / part: / item: / stay
+  const isUp = r => !r.s || (r.s.depart || r.s.arrive || "") >= today;
   const draw = () => {
-    const list = rows.map(r => ({ ...r, g:r.gaps.filter(g => showLooked || !looked[r.a.res + "|" + g.item]) })).filter(r => r.g.length)
-      .sort((x, y) => ((x.s && x.s.arrive) || "9") < ((y.s && y.s.arrive) || "9") ? -1 : 1);
+    const all = rows.map(r => ({ ...r, g:r.gaps.filter(g => (showLooked || !looked[r.a.res + "|" + g.item]) && (!fKind || kindOf(g) === fKind)) })).filter(r => r.g.length);
+    const nUp = all.filter(isUp).length, nPast = all.length - nUp;
+    const list = all.filter(r => fWhen === "all" || (fWhen === "up") === isUp(r))
+      .sort((x, y) => { const ux = isUp(x), uy = isUp(y), ax = (x.s && x.s.arrive) || "9", ay = (y.s && y.s.arrive) || "9";
+        return ux !== uy ? (ux ? -1 : 1) : ux ? (ax < ay ? -1 : 1) : (ax > ay ? -1 : 1); });   // upcoming soonest first, then past newest first
     const nG = list.reduce((n, r) => n + r.g.length, 0), nL = Object.keys(looked).length;
     const run = (rn.data || [])[0];
     v.innerHTML = `<div class="page rpage"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a class="btn small" href="#/reservations">← Back</a><h2 style="margin:0">Asana check</h2></div>
       <p class="muted">Work the team ticked in Asana's Rental Checklists that the hub check list doesn't show as done. Auto ticks from Track, Breezeway and the rest already count.
       Fix each one on the check list (tick it, or leave it open if it really isn't done), then press <b>Looked at</b>. Asana read ${esc(run ? when(run.at) : "–")}${run && run.stats ? ` · ${run.stats.stays} Asana check lists` : ""}.</p>
       <div class="card" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><b>${list.length} stays · ${nG} items to look at</b>
+        <select id="raq_w" style="width:auto"><option value="up"${fWhen === "up" ? " selected" : ""}>Here now + upcoming (${nUp})</option><option value="past"${fWhen === "past" ? " selected" : ""}>Checked out (${nPast})</option><option value="all"${fWhen === "all" ? " selected" : ""}>All</option></select>
+        <select id="raq_k" style="width:auto"><option value="">Every kind</option><option value="step:"${fKind === "step:" ? " selected" : ""}>Done in Asana, not in hub</option><option value="part:"${fKind === "part:" ? " selected" : ""}>Started in Asana</option><option value="stay"${fKind === "stay" ? " selected" : ""}>No hub check list</option></select>
         <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="raq_l" ${showLooked ? "checked" : ""} style="width:auto"> Show ones already looked at (${nL})</label></div>
       ${list.map(r => { const s = r.s, a = r.a;
         return `<div class="card"><div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px">
@@ -1135,6 +1143,8 @@ async function asanaCheck(v){
               ${lo ? "" : `<button class="btn small" type="button" data-raq="${esc(a.res)}" data-it="${esc(g.item)}">Looked at</button>`}</div>`; }).join("")}</div>`; }).join("")
       || `<div class="card"><p class="muted">Everything done in Asana shows as done in the hub. 🎉</p></div>`}</div>`;
     v.querySelector("#raq_l").onchange = e => { showLooked = e.target.checked; draw(); };
+    v.querySelector("#raq_w").onchange = e => { fWhen = e.target.value; draw(); };
+    v.querySelector("#raq_k").onchange = e => { fKind = e.target.value; draw(); };
     v.querySelectorAll("[data-raq]").forEach(b => b.onclick = async () => {
       const note = prompt("Anything to note? (optional — e.g. \"ticked it\", \"not really done\")", "");
       if(note === null) return;
