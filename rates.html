@@ -1184,9 +1184,10 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
   const v = op.map(x => x.rate).sort((a, b) => a - b), tv0 = srTrim(v), mean = tv0.reduce((a, b) => a + b, 0) / tv0.length, mid = srPct(v, 0.5);
   const tv = srTrim(op.map(x => x.tot).filter(x => x)), tmean = tv.length ? tv.reduce((a, b) => a + b, 0) / tv.length : null;
   const vs = our != null ? Math.round((our / mean - 1) * 100) : null, rank = our != null ? v.filter(x => x < our).length : null;
+  const ogt = our != null ? srGuest(our, "Airbnb") : null, tall = op.map(x => x.tot).filter(x => x), vt = ogt && tmean ? Math.round((ogt / tmean - 1) * 100) : null, trank = ogt ? tall.filter(x => x < ogt).length : null;
   const tile = (n, l) => `<div class="ctt"><b>${n}</b><span>${l}</span></div>`;
   let rows = "", placed = our == null;
-  const me = () => `<tr class="ctme"><td>★ ${escH(SR.code || "This home")} (our rate)</td><td>${fmt(our)}</td><td></td></tr>`;
+  const me = () => `<tr class="ctme"><td>★ ${escH(SR.code || "This home")} (our rate)</td><td>${fmt(our)}</td><td>${ogt ? fmt(ogt) : ""}</td></tr>`;
   for (const x of op) { if (!placed && our <= x.rate) { rows += me(); placed = true; }
     const out = op.length >= 5 && (x === op[0] || x === op[op.length - 1]);
     rows += `<tr${out ? ' class="ctout" title="Left out of the average (lowest or highest)"' : ""}><td title="${escH(x.name)}">${escH(x.name)} <span class="muted">· ${x.ch}${out ? " · not in avg" : ""}</span></td><td>${fmt(x.rate)}</td><td class="muted">${x.tot ? fmt(x.tot) : ""}</td></tr>`; }
@@ -1194,9 +1195,10 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
   const a = srCompAir(k);
   return `<div class="cth"><b>Comps · ${escH(day)}</b><span class="muted">${op.length} open · ${bk.length} booked</span></div>
     <div class="ctts">${tile(fmt(mean), v.length >= 5 ? "Average (high + low left out)" : "Comps' average")}${tile(fmt(mid), "Middle comp")}${tile(`${fmt(v[0])}–${fmt(v[v.length - 1])}`, "Low – high")}
-      ${our != null ? tile(`${fmt(our)} <i class="${vs > 0 ? "up" : "dn"}">${vs > 0 ? "+" : ""}${vs}%</i>`, `Ours vs avg · under ${op.length - rank} of ${op.length}`) : ""}</div>
+      ${vt != null ? tile(`${fmt(ogt)} <i class="${vt > 0 ? "up" : "dn"}">${vt > 0 ? "+" : ""}${vt}%</i>`, `Our guest total vs avg ${fmt(tmean)} · under ${tall.length - trank} of ${tall.length}`)
+        : our != null ? tile(`${fmt(our)} <i class="${vs > 0 ? "up" : "dn"}">${vs > 0 ? "+" : ""}${vs}%</i>`, `Ours vs avg daily rate · under ${op.length - rank} of ${op.length}`) : ""}</div>
     <div class="ctlist"><table><thead><tr><th>Comp</th><th>Daily rate</th><th>Guest total / night</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax${tmean ? ` (average ${fmt(tmean)})` : ""}.${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
+    <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax${tmean ? ` (average ${fmt(tmean)}, high + low left out)` : ""}; ours = what an Airbnb guest pays at our rate (this home's own Track quotes, cleaning over 3 nights, ESTIMATE).${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
 function srCtipWire() { let pop = document.getElementById("srCtip");
   if (!pop) { pop = document.createElement("div"); pop.id = "srCtip"; document.body.appendChild(pop);
     pop.addEventListener("mouseleave", () => { pop.style.display = "none"; }); }
@@ -1593,8 +1595,11 @@ function srWhyHtml(why, price, k, src) {
   if (src === "ours") { const st = String(why || "").split(/\s*→\s*/).map(x => x.trim()).filter(Boolean);
     const d = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
     return `<b>How ${fmt(price)} was built for ${escH(d)}</b><ol>${st.map(t => `<li>${escH(t)}</li>`).join("")}</ol><div class="muted small">From the Dynamic pricing settings. Saved with the rate.</div>`; }
-  const steps = String(why || "").split(/\s*→\s*/).map(x => x.trim()).filter(Boolean);
-  const nice = t => t.replace(/^÷\s*([\d.]+)\s*our fees/i, "take off our fees and channel markup (÷$1)").replace(/^=\s*/, "rounded to ")
+  const steps = String(why || "").replace(/(÷\s*[\d.]+\s*our fees)\s*→\s*/i, "$1 = ").split(/\s*→\s*/).map(x => x.trim()).filter(Boolean);
+  const feeTxt = (b, p) => { b = +b; return `take off our fees and channel markup: −${Math.round((1 - 1 / b) * 100)}%${p ? ` = ${p}` : ""} (Airbnb + our fees add ${Math.round((b - 1) * 100)}% on top of our rate)`; };
+  const nice = t => t.replace(/^÷\s*([\d.]+)\s*our fees(?:\s*=\s*(\$[\d,]+))?/i, (_, b, p) => feeTxt(b, p))
+    .replace(/^capped at 1\.5x what our guests paid \((\$[\d,]+)\)/i, "capped at $1 = 1.5× the middle rate our own guests paid at this home on this kind of night (holiday / ski weekend / ski midweek) in past stays")
+    .replace(/^raised to 0\.85x what our guests paid \((\$[\d,]+)\)/i, "raised to $1 = 0.85× the middle rate our own guests paid at this home on this kind of night in past stays").replace(/^=\s*/, "rounded to ")
     .replace(/walk-away floor/i, "never below our walk-away floor").replace(/(\d+) days out, still open/i, "$1 days out and still open:");
   const d = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   return `<b>Why the engine says ${fmt(price)} for ${escH(d)}</b>` + (steps.length ? `<ol>${steps.map(t => `<li>${escH(nice(t))}</li>`).join("")}</ol>` : `<p>No reason saved for this night.</p>`) +
