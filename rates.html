@@ -1175,7 +1175,8 @@ function srCompList(k) { const by = {};
     const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5); if (off < 0 || off >= n.avail.length) continue;
     (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] }; }
   const tot = {}; for (const r of SR.ck || []) { if (r.tier !== "Primary" || r.channel !== "Airbnb" || !priced(r)) continue; const o = Math.round((new Date(k + "T12:00:00") - new Date(r.check_in + "T12:00:00")) / 864e5);
-    if (o >= 0 && o < r.nights) (tot[r.comp_id] ||= []).push((r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights); }
+    if (o >= 0 && o < r.nights) (tot[r.comp_id] ||= []).push([(r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights, r.nights]); }
+  for (const id in tot) { const s4 = tot[id].filter(x => x[1] <= 4); tot[id] = (s4.length ? s4 : tot[id]).map(x => x[0]); }
   return Object.entries(by).map(([id, c]) => { const x = c.Airbnb || c.VRBO, t = tot[id];
     return { name: SR.compName?.[id] || id, ch: c.Airbnb ? "Airbnb" : "Vrbo", open: !!x?.open, rate: x?.rate != null ? +x.rate : null, tot: t ? t.reduce((a, b) => a + b, 0) / t.length : null }; })
     .sort((a, b) => (b.open - a.open) || ((a.rate ?? 1e9) - (b.rate ?? 1e9))); }
@@ -1207,7 +1208,7 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
       ${vt != null ? tile(`${fmt(ogt)} <i class="${vt > 0 ? "up" : "dn"}">${vt > 0 ? "+" : ""}${vt}%</i>`, `Our guest total vs avg ${fmt(tmean)} · under ${tall.length - trank} of ${tall.length}`)
         : our != null ? tile(`${fmt(our)} <i class="${vs > 0 ? "up" : "dn"}">${vs > 0 ? "+" : ""}${vs}%</i>`, `Ours vs avg daily rate · under ${op.length - rank} of ${op.length}`) : ""}</div>
     <div class="ctlist"><table><thead><tr><th>Comp</th><th>Daily rate</th><th>Guest total / night</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax${tmean ? ` (average ${fmt(tmean)}, high + low left out)` : ""}; ours = what an Airbnb guest pays at our rate (this home's own Track quotes, cleaning over 3 nights, ESTIMATE)${ogtHow ? `; *${escH(ogtHow.trim())}` : ""}.${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
+    <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax (2–4 night quotes; a week-long quote only when that's all we have, and those run lower)${tmean ? ` (average ${fmt(tmean)}, high + low left out)` : ""}; ours = what an Airbnb guest pays at our rate (this home's own Track quotes, cleaning over 3 nights, ESTIMATE)${ogtHow ? `; *${escH(ogtHow.trim())}` : ""}.${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
 function srCtipWire() { let pop = document.getElementById("srCtip");
   if (!pop) { pop = document.createElement("div"); pop.id = "srCtip"; document.body.appendChild(pop);
     pop.addEventListener("mouseleave", () => { pop.style.display = "none"; }); }
@@ -1381,7 +1382,8 @@ function srCompAllIn(rows) { const by = {};
   for (const r of rows) { if (r.tier !== "Primary" || r.channel !== "Airbnb" || !priced(r)) continue;
     const pn = (r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights;
     for (let i = 0; i < r.nights; i++) { const k = addD(r.check_in, i); ((by[k] ||= {})[r.comp_id] ||= []).push([pn, r.nights]); } }
-  const out = {}; for (const [k, m] of Object.entries(by)) { const v = Object.values(m).map(a => [a.reduce((x, y) => x + y[0], 0) / a.length, a.reduce((x, y) => x + y[1], 0) / a.length]);
+  // 2026-11-08: a comp's 2-4 night quotes when it has one (week-long quotes carry weekly discounts + cleaning spread over 7 nights)
+  const out = {}; for (const [k, m] of Object.entries(by)) { const v = Object.values(m).map(a0 => { const s4 = a0.filter(x => x[1] <= 4), a = s4.length ? s4 : a0; return [a.reduce((x, y) => x + y[0], 0) / a.length, a.reduce((x, y) => x + y[1], 0) / a.length]; });
     const t = srTrim(v, x => x[0]); if (v.length >= 2) out[k] = { v: t.reduce((x, y) => x + y[0], 0) / t.length, n: v.length, nt: t.reduce((x, y) => x + y[1], 0) / t.length, all: v.map(x => x[0]).sort((x, y) => x - y) }; }
   return out; }
 // p-th percentile (0..1) of a sorted list, straight-line between values
