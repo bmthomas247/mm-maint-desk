@@ -1176,9 +1176,9 @@ function srCompList(k) { const by = {};
     (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] }; }
   const tot = {}; for (const r of SR.ck || []) { if (r.tier !== "Primary" || r.channel !== "Airbnb" || !priced(r)) continue; const o = Math.round((new Date(k + "T12:00:00") - new Date(r.check_in + "T12:00:00")) / 864e5);
     if (o >= 0 && o < r.nights) (tot[r.comp_id] ||= []).push([(r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights, r.nights]); }
-  for (const id in tot) { const s4 = tot[id].filter(x => x[1] <= 4); tot[id] = (s4.length ? s4 : tot[id]).map(x => x[0]); }
+  const wk = {}; for (const id in tot) { const s4 = tot[id].filter(x => x[1] <= 4); wk[id] = !s4.length; tot[id] = (s4.length ? s4 : tot[id]).map(x => x[0]); }
   return Object.entries(by).map(([id, c]) => { const x = c.Airbnb || c.VRBO, t = tot[id];
-    return { name: SR.compName?.[id] || id, ch: c.Airbnb ? "Airbnb" : "Vrbo", open: !!x?.open, rate: x?.rate != null ? +x.rate : null, tot: t ? t.reduce((a, b) => a + b, 0) / t.length : null }; })
+    return { name: SR.compName?.[id] || id, ch: c.Airbnb ? "Airbnb" : "Vrbo", open: !!x?.open, rate: x?.rate != null ? +x.rate : null, tot: t ? t.reduce((a, b) => a + b, 0) / t.length : null, wk: !!wk[id] }; })
     .sort((a, b) => (b.open - a.open) || ((a.rate ?? 1e9) - (b.rate ?? 1e9))); }
 // Comps pop-up: average + middle + range, where this home sits, then every open comp low to high with this home placed among them
 // Track calls some homes by a bare number; staff always say the full code (Brandon 2026-11-08: "1914 is CR 1914 always")
@@ -1194,13 +1194,14 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
   // our all-in: this home's own Airbnb quotes, else Vrbo, else our site; none = the comps' own all-in ÷ daily-rate ratio (ESTIMATE)
   const ochs = [["Airbnb", "Airbnb"], ["VRBO", "Vrbo"], ["Direct", "our site"]].find(([c]) => srGuest(1, c) != null);
   const crat = op.filter(x => x.tot && x.rate).map(x => x.tot / x.rate).sort((a, b) => a - b), cr = crat.length ? crat[Math.floor(crat.length / 2)] : null;
-  const ogt = our == null ? null : ochs ? srGuest(our, ochs[0]) : cr ? our * cr : null, ogtHow = ochs ? (ochs[0] === "Airbnb" ? "" : ` (from our ${ochs[1]} quotes)`) : ogt ? " (no quotes of ours: comps' markup, ESTIMATE)" : "", tall = op.map(x => x.tot).filter(x => x), vt = ogt && tmean ? Math.round((ogt / tmean - 1) * 100) : null, trank = ogt ? tall.filter(x => x < ogt).length : null;
+  const both = ochs?.[0] === "Airbnb" && srGuest(1, "Direct") != null;
+  const ogt = our == null ? null : both ? srGuestMid(our) : ochs ? srGuest(our, ochs[0]) : cr ? our * cr : null, ogtHow = both ? " (halfway between our Airbnb and our site)" : ochs ? (ochs[0] === "Airbnb" ? "" : ` (from our ${ochs[1]} quotes)`) : ogt ? " (no quotes of ours: comps' markup, ESTIMATE)" : "", tall = op.map(x => x.tot).filter(x => x), vt = ogt && tmean ? Math.round((ogt / tmean - 1) * 100) : null, trank = ogt ? tall.filter(x => x < ogt).length : null;
   const tile = (n, l) => `<div class="ctt"><b>${n}</b><span>${l}</span></div>`;
   let rows = "", placed = our == null;
   const me = () => `<tr class="ctme"><td>★ ${escH(srName(SR.code) || "This home")} (our rate)</td><td>${fmt(our)}</td><td title="${escH("What a guest pays a night at our rate" + ogtHow)}">${ogt ? fmt(ogt) + (ogtHow ? "*" : "") : ""}</td></tr>`;
   for (const x of op) { if (!placed && our <= x.rate) { rows += me(); placed = true; }
     const out = op.length >= 5 && (x === op[0] || x === op[op.length - 1]);
-    rows += `<tr${out ? ' class="ctout" title="Left out of the average (lowest or highest)"' : ""}><td title="${escH(x.name)}">${escH(x.name)} <span class="muted">· ${x.ch}${out ? " · not in avg" : ""}</span></td><td>${fmt(x.rate)}</td><td class="muted">${x.tot ? fmt(x.tot) : ""}</td></tr>`; }
+    rows += `<tr${out ? ' class="ctout" title="Left out of the average (lowest or highest)"' : ""}><td title="${escH(x.name)}">${escH(x.name)} <span class="muted">· ${x.ch}${out ? " · not in avg" : ""}</span></td><td>${fmt(x.rate)}</td><td class="muted"${x.wk ? ' title="Only a week-long Airbnb quote (weekly discount, cleaning over 7 nights), so it runs low. Left out of the comps’ total when 2+ comps have short quotes."' : ""}>${x.tot ? fmt(x.tot) + (x.wk ? " <small>7-night</small>" : "") : ""}</td></tr>`; }
   if (!placed) rows += me();
   const a = srCompAir(k);
   return `<div class="cth"><b>Comps · ${escH(day)}</b><span class="muted">${op.length} open · ${bk.length} booked</span></div>
@@ -1383,7 +1384,8 @@ function srCompAllIn(rows) { const by = {};
     const pn = (r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights;
     for (let i = 0; i < r.nights; i++) { const k = addD(r.check_in, i); ((by[k] ||= {})[r.comp_id] ||= []).push([pn, r.nights]); } }
   // 2026-11-08: a comp's 2-4 night quotes when it has one (week-long quotes carry weekly discounts + cleaning spread over 7 nights)
-  const out = {}; for (const [k, m] of Object.entries(by)) { const v = Object.values(m).map(a0 => { const s4 = a0.filter(x => x[1] <= 4), a = s4.length ? s4 : a0; return [a.reduce((x, y) => x + y[0], 0) / a.length, a.reduce((x, y) => x + y[1], 0) / a.length]; });
+  const out = {}; for (const [k, m] of Object.entries(by)) { let v = Object.values(m).map(a0 => { const s4 = a0.filter(x => x[1] <= 4), a = s4.length ? s4 : a0; return [a.reduce((x, y) => x + y[0], 0) / a.length, a.reduce((x, y) => x + y[1], 0) / a.length]; });
+    if (v.filter(x => x[1] <= 4).length >= 2) v = v.filter(x => x[1] <= 4);   // week-long quotes only when too few short ones
     const t = srTrim(v, x => x[0]); if (v.length >= 2) out[k] = { v: t.reduce((x, y) => x + y[0], 0) / t.length, n: v.length, nt: t.reduce((x, y) => x + y[1], 0) / t.length, all: v.map(x => x[0]).sort((x, y) => x - y) }; }
   return out; }
 // p-th percentile (0..1) of a sorted list, straight-line between values
@@ -1400,8 +1402,15 @@ function srCompTot(k) { const a = SR.compAll?.[k]; if (a) return { v: a.v, nt: a
     SR.totRatio = rs.length >= 5 ? rs[rs.length >> 1] : 0; }
   const c = srComp(k); return c && SR.totRatio ? { v: c.adr * SR.totRatio, nt: SR_STAY, n: c.n, est: true } : null; }
 // The rack rate (what we type in Track) that makes OUR Airbnb guest pay `tot` per night on a stay of `nt` nights (reverse of srGuest)
-function srRackFor(tot, nt) { const f = SR.fee?.Airbnb; if (!f || tot == null) return null;
-  return (tot / (1 + f.taxR) - f.clean / (nt || SR_STAY)) / (f.mult * (1 + f.feeR)); }
+// Brandon 2026-11-08: "somewhat split the rate on airbnb and our site" -> the comps' all-in sits halfway between our Airbnb all-in
+// and our own-site all-in (SR_SPLIT = our site's share). A home with no own-site quotes uses Airbnb only.
+const SR_SPLIT = 0.5;
+function srRackFor(tot, nt) { const A = SR.fee?.Airbnb; if (!A || tot == null) return null;
+  const D = SR.fee?.Direct, w = D ? SR_SPLIT : 0, n = nt || SR_STAY, lin = f => [f.mult * (1 + f.feeR) * (1 + f.taxR), f.clean / n * (1 + f.taxR)];
+  const [a1, b1] = lin(A), [a2, b2] = D ? lin(D) : [0, 0];
+  return (tot - ((1 - w) * b1 + w * b2)) / ((1 - w) * a1 + w * a2); }
+// What a guest pays a night at our rate, halfway between Airbnb and our site (Airbnb alone when we have no own-site quotes)
+function srGuestMid(rate) { const a = srGuest(rate, "Airbnb"), d = srGuest(rate, "Direct"); return a == null ? d : d == null ? a : (1 - SR_SPLIT) * a + SR_SPLIT * d; }
 // Guest bookings made in the last `days` days at this home (not owner stays, not cancelled)
 const srRecentBk = days => (SR.bk || []).filter(b => b.kind === "guest" && !/cancel/i.test(b.status || "") && b.booked_at && Date.now() - new Date(b.booked_at) <= days * 864e5);
 // AirROI's comp average for a night (open comps, 2+), shown next to the main (Key Data / Vrbo) number
@@ -1559,7 +1568,7 @@ function srDraw() {
       <button class="ovbtn" id="srSave"${Object.keys(SR.edits).length ? "" : " disabled"}>💾 Save as suggested ${Object.keys(SR.edits).length || ""}</button>
       <button class="ovbtn" id="srPush" style="background:var(--forest-2,#5b8a1e);color:#fff;border-color:var(--forest-2,#5b8a1e)">⇪ Send these dates to Track</button></div>
     <div class="srwarn">⚠ Rates here are only <b>suggestions</b>. Nothing changes in Track until someone presses <b>Send these dates to Track</b> (top right). <b>Save</b> keeps your rates as suggested prices with your initials. Grey = Track's current rate.</div>
-    ${srFeeNote()}<div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th title="Our own pricing engine (hover ⓘ for its reason)">Engine</th><th title="Average rate in Track of our other homes in this building (test homes left out)">${srGrpName()}</th><th>Comps</th><th title="Starts at Track's current rate. Type a new one, then Save = a suggestion with your initials. It only reaches Track with Send these dates to Track.">Our rate</th><th>Min nights</th><th class="gp" title="What a guest pays per night at our rate (Track's markup + fees + cleaning over 3 nights + tax)">Guest pays · Airbnb</th><th class="gp">Vrbo</th><th class="gp">Our site</th><th title="The comps' Airbnb checkout total per night incl. cleaning, fees + 13.12% est. tax">Comps all-in</th><th>vs comps</th></tr>` +
+    ${srFeeNote()}<div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th title="Our own pricing engine (hover ⓘ for its reason)">Engine</th><th title="Average rate in Track of our other homes in this building (test homes left out)">${srGrpName()}</th><th>Comps</th><th title="Starts at Track's current rate. Type a new one, then Save = a suggestion with your initials. It only reaches Track with Send these dates to Track.">Our rate</th><th>Min nights</th><th class="gp" title="What a guest pays per night at our rate (Track's markup + fees + cleaning over 3 nights + tax)">Guest pays · Airbnb</th><th class="gp">Vrbo</th><th class="gp">Our site</th><th title="The comps' Airbnb checkout total per night incl. cleaning, fees + 13.12% est. tax">Comps all-in</th><th title="Halfway between our Airbnb and our-site all-in, vs the comps' all-in">vs comps</th></tr>` +
     R.map(r => { const d = new Date(r.k + "T12:00:00"), wk = d.getDay() === 5 || d.getDay() === 6, g = r.v.rate != null && r.b ? (r.v.rate / r.b - 1) * 100 : null;
       return `<tr data-k="${r.k}" class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}${SR.sel?.has(r.k) ? " srsel" : ""}"><td><b class="srhk" data-hist="${r.k}" title="Price history for this night">${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
         <td>${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy" tabindex="0" role="button" aria-label="Why this price" data-why="${escH(r.s.why || "")}" data-p="${r.s.price}" data-k="${r.k}">ⓘ</span>` : "—"}</td>
@@ -1615,10 +1624,10 @@ function srCal() {
   draw();
 }
 function srGuestCells(r) {
-  const base = r.v.rate, set = r.v.set, ab = srGuest(base, "Airbnb"), ca = SR.compAll?.[r.k]?.v, g = ab != null && ca ? (ab / ca - 1) * 100 : null;
+  const base = r.v.rate, set = r.v.set, ab = srGuest(base, "Airbnb"), mid = srGuestMid(base), ca = SR.compAll?.[r.k]?.v, g = mid != null && ca ? (mid / ca - 1) * 100 : null;
   const c = (v, t) => `<td class="gp${set ? "" : " muted"}" title="${escH(t)}">${v == null ? "—" : fmt(v)}</td>`;
   return `<td data-gpk="${r.k}" class="gpw" style="display:none"></td>` + c(ab, set ? "At our rate" : "At Track's current rate (nothing set yet)") + c(srGuest(base, "VRBO"), "Vrbo") + c(srGuest(base, "Direct"), "Our website") +
-    `<td>${ca ? fmt(ca) + `<span class="muted small"> · ${SR.compAll[r.k].n}</span>` : "—"}</td><td>${g == null ? "" : `<span class="ovpill ${g > 15 ? "r" : g < -15 ? "y" : "g"}">${(g > 0 ? "+" : "") + Math.round(g)}%</span>`}</td>`;
+    `<td>${ca ? fmt(ca) + `<span class="muted small"> · ${SR.compAll[r.k].n}</span>` : "—"}</td><td title="${mid != null ? escH(`Halfway between our Airbnb and our-site all-in: ${fmt(mid)} vs the comps' ${ca ? fmt(ca) : "—"}`) : ""}">${g == null ? "" : `<span class="ovpill ${g > 15 ? "r" : g < -15 ? "y" : "g"}">${(g > 0 ? "+" : "") + Math.round(g)}%</span>`}</td>`;
 }
 function srFeeNote() {
   const f = SR.fee || {}, p = v => (v * 100).toFixed(1) + "%", one = (ch, nm) => f[ch] ? `<b>${nm}</b>: rate × ${f[ch].mult.toFixed(2)} + ${p(f[ch].feeR)} fees + $${Math.round(f[ch].clean)} cleaning${f[ch].pre ? ` + ${p(AIRBNB_TAX)} est. tax` : ` + ${p(f[ch].taxR)} tax`}` : "";
