@@ -315,7 +315,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="calendar.js?v=20261109wcapp"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
-<script src="staffing.js?v=20261109pto"></script>
+<script src="staffing.js?v=20261109mtstart"></script>
 <script src="perks.js"></script>
 <script src="calls.js"></script>
 <script src="market_watch.js"></script>
@@ -631,6 +631,7 @@ async function boot(){
   PREFS.desk_order = fixOrder(PREFS.desk_order);
   shell(); pennyMount(); route();
   if(new URLSearchParams(location.search).get("penny") === "1") pennySolo();   // Penny's own window (pennyPop)
+  else if(!OFFLINE) mtAuto();
 }
 const fixOrder = o => (o || []).map(k => k === "maintenance" ? "g:maint" : k === "licensing" ? "g:lic" : k === "property_setup" ? "g:own" : k === "g:psu" ? "g:own" : k === "g:competitor" ? "g:own" : k);   // Property Set Up moved into Owners 2026-11-02   // Maintenance + Licensing became drop-downs 2026-10-28; keep each person's order
 /* Desks made in the page from a parent desk (no DB rows). ex = { maint_money, perf } worked out for the person (View as passes another person's). */
@@ -1677,14 +1678,45 @@ async function pennyBriefCard(box){
    Moose Time = the Windows app (hub_work_app.sql, workcheck_app/): only for people who work on a computer (work_app_mine().needs).
    GPS = Traccar Client: only for people on the field GPS list (field_gps_me().on_list); set-up is on Staffing ▸ Phone GPS. */
 const MT_EXE = "https://ogugdhhiajebfdwpzofp.supabase.co/storage/v1/object/public/hub-apps/MooseHubWorkCheck.exe";
+/* ▶ Start Moose Time (Brandon 2026-11-09: "turn on the app automatically from the hub if youre logged in there first").
+   functions/work-app-handoff gives a one-time sign-in token for the person signed in here; moosetime://open?h=<token> starts the
+   app (v1.3.0+ registers moosetime:// for the Windows user) already signed in as them. The browser asks "Open Moose Time?" the
+   first time (tick "Always allow"). The app tells the hub it's running every minute (hub_work_app_seen, work_app_mine().seen_at). */
+const MT_WIN = /Windows NT/.test(navigator.userAgent) && !/Mobile|Android/.test(navigator.userAgent);
+async function mtStart(){
+  try{ const { data:{ session } } = await sb.auth.getSession(); if(!session) return false;
+    const r = await fetch(MM_CONFIG.url + "/functions/v1/work-app-handoff", { method:"POST", headers:{ Authorization:"Bearer " + session.access_token, apikey:MM_CONFIG.anonKey, "Content-Type":"application/json" }, body:"{}" });
+    const j = await r.json(); if(!j || !j.h) return false;
+    location.href = "moosetime://open?h=" + encodeURIComponent(j.h); return true; }catch(e){ return false; }
+}
+window.mtStart = mtStart;
+const mtRunning = m => !!(m && m.seen_at && Date.now() - Date.parse(m.seen_at) < 3 * 6e4);
+// On sign-in / opening the hub: only on Windows, only for people who use Moose Time, only once it's been installed in v1.3.0+
+// (seen_ver = the app has said hello), only when it hasn't checked in for 3+ minutes, once per browser tab.
+async function mtAuto(){
+  if(!MT_WIN || top !== self) return;
+  try{ if(sessionStorage.getItem("mm_mt_auto")) return; }catch(e){}
+  let m; try{ m = (await sb.rpc("work_app_mine")).data; }catch(e){ return; }
+  if(!m || !m.needs || !m.seen_ver || mtRunning(m)) return;
+  if(m.seen_ver.split(".").map(Number).reduce((a, x) => a * 100 + x, 0) < 10300) return;   // older app: no moosetime:// link yet
+  try{ sessionStorage.setItem("mm_mt_auto", "1"); }catch(e){}
+  mtStart();
+  // if the browser didn't open it (blocked, or "Cancel"), leave one tap-able reminder for a while
+  setTimeout(() => { if(document.getElementById("mtbar")) return;
+    const b = document.createElement("div"); b.id = "mtbar";
+    b.style.cssText = "position:fixed;left:16px;bottom:16px;z-index:60;background:#fff;border:1px solid #cfd8c4;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.15);padding:10px 12px;display:flex;gap:10px;align-items:center;max-width:calc(100vw - 32px);font-size:14px";
+    b.innerHTML = `<span>💻 Moose Time isn't running on this computer.</span><button class="btn small primary" type="button">▶ Start Moose Time</button><button class="btn small" type="button" aria-label="Close">✕</button>`;
+    const [go, x] = b.querySelectorAll("button"); go.onclick = () => { mtStart(); b.remove(); }; x.onclick = () => b.remove();
+    document.body.appendChild(b); setTimeout(() => b.remove(), 60000); }, 2500);
+}
 async function appsCard(){
   const a = document.getElementById("appsMt"), g = document.getElementById("appsGps"); if(!a || !g) return;
   try{ const m = (await sb.rpc("work_app_mine")).data;
-    if(m && m.needs){ const last = m.last_slot ? Date.parse(m.last_slot) : 0, mins = last ? Math.round((Date.now() - last) / 6e4) : null, old = m.last_ver && m.latest_ver && m.last_ver !== m.latest_ver;
-      a.innerHTML = `<div class="appblk"><b>💻 Moose Time (Windows computer)</b> ${!last ? `<span class="pill amber">Not set up yet</span>` : mins < 20 ? `<span class="pill green">Running on ${esc(m.last_device || "your computer")}</span>` : `<span class="pill">Last heard ${mins < 90 ? mins + " min ago" : esc(new Date(last).toLocaleDateString())}</span>`}${old ? ` <span class="pill amber">New version ${esc(m.latest_ver)}</span>` : ""}
+    if(m && m.needs){ const last = Math.max(m.last_slot ? Date.parse(m.last_slot) : 0, m.seen_at ? Date.parse(m.seen_at) : 0), mins = last ? Math.round((Date.now() - last) / 6e4) : null, ver = m.seen_ver || m.last_ver, old = ver && m.latest_ver && ver !== m.latest_ver;
+      a.innerHTML = `<div class="appblk"><b>💻 Moose Time (Windows computer)</b> ${!last ? `<span class="pill amber">Not set up yet</span>` : mtRunning(m) ? `<span class="pill green">Running on ${esc(m.seen_device || m.last_device || "your computer")}</span>` : `<span class="pill">Last heard ${mins < 90 ? mins + " min ago" : esc(new Date(last).toLocaleDateString())}</span>`}${old ? ` <span class="pill amber">New version ${esc(m.latest_ver)}</span>` : ""}
         <p class="muted" style="margin:2px 0 6px">Clock in and out from your computer, and it opens the hub for you already signed in. While you're clocked in it records how much the keyboard and mouse were used (never what you type) and one screenshot every 10 minutes. Only you, your manager and Brandon/Kim see it.</p>
-        <a class="btn small primary" href="${MT_EXE}" download>⬇ Download Moose Time</a>
-        <p class="muted" style="margin:6px 0 0;font-size:13px">Open the file. If Windows says "Windows protected your PC", click More info ▸ Run anyway. Sign in, then click the round M by the clock to clock in or out. It starts with Windows. To update, download and open it again.</p></div>`; } }catch(e){}
+        ${MT_WIN && last && !mtRunning(m) ? `<button class="btn small primary" type="button" onclick="mtStart()">▶ Start Moose Time</button> ` : ""}<a class="btn small${MT_WIN && last && !mtRunning(m) ? "" : " primary"}" href="${MT_EXE}" download>⬇ Download Moose Time</a>
+        <p class="muted" style="margin:6px 0 0;font-size:13px">Once it's on this computer the hub starts it for you, signed in (your browser asks "Open Moose Time?" the first time: tick Always allow). To install: open the file. If Windows says "Windows protected your PC", click More info ▸ Run anyway. Sign in, then click the round M by the clock to clock in or out. It starts with Windows. To update, download and open it again.</p></div>`; } }catch(e){}
   try{ const f = (await sb.rpc("field_gps_me")).data;
     if(f && f.on_list){ const mine = (f.devices || []).filter(d => d.user_id === f.me && !d.off), seen = mine.map(d => d.last_seen).filter(Boolean).sort().pop();
       g.innerHTML = `<div class="appblk"><b>📍 GPS (Traccar Client on your phone)</b> ${mine.length ? `<span class="pill green">Phone set up${seen ? " · last point " + esc(new Date(seen).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) : ""}</span>` : `<span class="pill amber">Not set up yet</span>`}
