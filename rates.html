@@ -302,6 +302,15 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .srauto{margin-top:14px;border-top:1px solid var(--ovgrid);padding-top:12px}.srautoh{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .srchk{flex-direction:row!important;align-items:center!important;gap:6px!important;text-transform:none!important;letter-spacing:0!important;font-size:13px!important;color:var(--ink)!important}
 .srchk input{width:auto!important;min-height:0!important}.sct td:first-child{color:var(--ink2)}
+.srlbts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:10px 0 14px}
+.srlbt{background:var(--ovsoft,#f3f6ee);border-radius:12px;padding:10px 12px}
+.srlbt b{display:block;font-size:20px;line-height:1.15}
+.srlbt span{font-size:11.5px;color:var(--muted)}
+.srlbh{margin:4px 0 6px;font-size:14px}
+.srlbtab{width:100%;border-collapse:collapse;font-size:13px}
+.srlbtab th,.srlbtab td{padding:7px 8px;text-align:left;border-top:1px solid var(--ovgrid);white-space:nowrap}
+.srlbtab th{font-size:11.5px;color:var(--muted);font-weight:600;border-top:0}
+.srpill{font-size:11px;padding:1px 6px;border-radius:9px}.srpill.up{background:#e5f2d8;color:#2f5a10}.srpill.dn{background:#fbe9d6;color:#8a4b10}
 .srair{font-size:10.5px;color:var(--muted);line-height:1.1}
 .dyng.dyapply{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px 18px}
 .dyng.dyapply>b{flex:0 0 auto}.dyng.dyapply label{flex:0 1 auto;gap:8px}.dyng.dyapply select{max-width:260px}.dyng.dyapply .dygo{margin-left:auto;min-width:200px}
@@ -1126,6 +1135,8 @@ async function loadSetRates() {
   if (SR.dynFor !== h.code) { SR.dyn = null; SR.dynSaved = h.dyn || null; } SR.dynFor = h.code;   // this home's saved settings (merged over the defaults)
   { const sc = await sb.rpc("rates_set_scoreboard", { p_code: h.code }); SR.score = sc.error ? { err: sc.error.message } : sc.data; }
   SR.bk = cid ? ((await sb.from("our_bookings").select("reservation_id,kind,status,booked_at,arrival,nights").eq("comp_id", cid).gte("booked_at", addD(today, -60))).data || []) : [];
+  SR.lb = cid ? ((await sb.from("our_bookings").select("reservation_id,arrival,departure,nights,channel,gross_rent,booked_at,status").eq("comp_id", cid).eq("kind", "guest").gte("booked_at", addD(today, -365)).order("booked_at", { ascending: false }).limit(400)).data || [])
+    .filter(b => !/owner|o-guest|comp\/charity|commission/i.test(b.channel || "")) : [];
   // second source for Airbnb daily rates: the newest AirROI pull per comp (Key Data feeds the main number from 2026-11-09)
   { const ids = [...new Set(SR.nightly.filter(n => n.tier !== "Ours" && n.tier !== "Secondary").map(n => n.comp_id))]; SR.air = {};
     if (ids.length) { const ar = await sb.from("nightly_snapshots").select("comp_id,start_date,rates,avail,captured_at").eq("channel", "Airbnb").like("source", "AirROI%").in("comp_id", ids).order("captured_at", { ascending: false }).limit(ids.length * 4);
@@ -1161,6 +1172,36 @@ function srComp(k) {   // comps' average daily rate that night (same as the Desk
 const srShadow = k => { const x = SR.x?.shadow; if (!x) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(x.start_date + "T12:00:00")) / 864e5);
   const p = x.price?.[off]; return p == null ? null : { price: +p, why: x.why?.[off] || "", rule: x.rule?.[off] || "", min: x.min_stay?.[off] ?? null, med: x.comp_median?.[off] ?? null }; };
 // "Home at a glance" (Brandon 2026-11-08): Home Rater, what guests say, how long it's been on each booking site.
+// Recent bookings: stats + the last 3 bookings' rates (Track our_bookings; rent before cleaning, fees and tax)
+function srLastBkCard() {
+  const L = SR.lb || [], now = Date.now(), dAgo = t => (now - new Date(t)) / 864e5;
+  const site = c => /ABB|bnb/i.test(c || "") ? "Airbnb" : /VRBO/i.test(c || "") ? "Vrbo" : /BDC/i.test(c || "") ? "Booking.com" : /^Guest( MM)?$/i.test(c || "") ? "Direct" : (c || "—");
+  const feeCh = c => ({ Airbnb: "Airbnb", Vrbo: "VRBO", Direct: "Direct" })[site(c)];
+  const live = L.filter(b => b.status !== "Cancelled"), in90 = live.filter(b => dAgo(b.booked_at) <= 90), in30 = live.filter(b => dAgo(b.booked_at) <= 30);
+  const pn = b => b.nights && +b.gross_rent ? +b.gross_rent / b.nights : null, ahead = b => Math.round((new Date(b.arrival + "T12:00:00") - new Date(b.booked_at)) / 864e5);
+  const avg = a => { a = a.filter(v => v != null && isFinite(v)); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
+  const nts = in90.reduce((x, b) => x + (b.nights || 0), 0), rent = in90.reduce((x, b) => x + (+b.gross_rent || 0), 0);
+  const last = live[0], dl = last ? Math.floor(dAgo(last.booked_at)) : null, cx90 = L.filter(b => b.status === "Cancelled" && dAgo(b.booked_at) <= 90).length;
+  const dt = d => new Date(String(d).length > 10 ? d : d + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" });
+  const tile = (v, k) => `<div class="srlbt"><b>${v}</b><span>${k}</span></div>`;
+  const tiles = `<div class="srlbts">` +
+    tile(last ? (dl < 1 ? "Today" : dl === 1 ? "1 day ago" : dl + " days ago") : "None", "Last booking made") +
+    tile(in30.length, "Bookings made, last 30 days") + tile(in90.length, "Bookings made, last 90 days") +
+    tile(nts ? fmt(rent / nts) : "—", "Rent / night, last 90 days") +
+    tile(in90.length ? Math.round(avg(in90.map(ahead))) + " days" : "—", "Booked ahead (average)") +
+    tile(in90.length ? avg(in90.map(b => b.nights)).toFixed(1) + " nights" : "—", "Stay length (average)") +
+    tile(cx90, "Cancelled, last 90 days") + `</div>`;
+  const rows = live.slice(0, 3).map(b => { const p = pn(b), f = SR.fee?.[feeCh(b.channel)], base = p != null && f?.mult ? p / f.mult : null;
+    const ks = Array.from({ length: b.nights || 0 }, (_, i) => addD(b.arrival, i)), cmp = avg(ks.map(k => srComp(k)?.adr)), trk = avg(ks.map(k => SR.track?.[k] ? +SR.track[k].rate : null));
+    const vs = base != null && cmp ? Math.round((base / cmp - 1) * 100) : null;
+    return `<tr><td>${dt(b.booked_at)}</td><td>${dt(b.arrival)} – ${dt(b.departure)}</td><td>${b.nights}</td><td>${escH(site(b.channel))}</td><td>${fmt(+b.gross_rent)}</td><td><b>${p != null ? fmt(p) : "—"}</b></td>
+      <td title="Rent per night ÷ this home's usual ${escH(site(b.channel))} markup over Track's base rate (from its own Track quotes). ESTIMATE.">${base != null ? fmt(base) : "—"}</td>
+      <td>${trk != null ? fmt(trk) : "—"}</td><td>${cmp ? fmt(cmp) + (vs != null ? ` <span class="srpill ${vs >= 0 ? "up" : "dn"}">${vs >= 0 ? "+" : ""}${vs}%</span>` : "") : "—"}</td><td>${ahead(b)} days</td></tr>`; }).join("");
+  const table = rows ? `<div class="wide"><table class="srlbtab"><thead><tr><th>Booked</th><th>Stay</th><th>Nights</th><th>Site</th><th>Rent</th><th>Rent / night</th><th>≈ Base rate</th><th>Track now</th><th>Comps' daily rate</th><th>Booked ahead</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : `<p class="small muted">No guest bookings for this home in the last year.</p>`;
+  return `<div class="ovgrid" style="margin-bottom:18px"><div class="ovc w6 srg"><h3>Recent bookings</h3><div class="cs">Guest bookings made in the last year (owner stays, owner guests and comps left out). The last 3 show what each one paid a night.</div>${tiles}<h4 class="srlbh">Last 3 bookings</h4>${table}
+    <div class="src">Source: Track reservations (our_bookings), rent before cleaning, fees and tax. "≈ Base rate" takes out the site's markup using this home's own Track quotes (ESTIMATE); "Track now" and "Comps' daily rate" are today's numbers for those same nights, so you can see if we're priced higher or lower now.</div></div></div>`;
+}
 function srGlance(h) {
   const X = SR.x || {}, av = a => { a = a.filter(v => v != null && !isNaN(v)); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
   const card = (t, sub, body, src) => `<div class="ovc w2 srg"><h3>${t}</h3><div class="cs">${sub}</div>${body}<div class="src">${src}</div></div>`;
@@ -1193,7 +1234,7 @@ function srGlance(h) {
   return `<div class="ovgrid" style="margin-bottom:18px">` +
     card("Home Rater", "How this home stacks up against our other homes", rater, `Source: Home Rater (head-to-head picks + 1–5 scores), quality.py run ${escH(q?.run_date || "—")}; photo score = Claude reading the listing photos.`) +
     card("What guests say", "Last 2 years, worst categories first", guests, `Source: Track guest reviews ${rv?.synced ? "(synced " + new Date(rv.synced).toLocaleDateString() + ")" : ""}; staff-named complaints hidden.`) +
-    card("On the booking sites", "How long it's been listed, and how it's doing there", otas + (missing.length ? `<div class="srq muted">Not found on ${missing.join(" or ")} yet.</div>` : ""), `Source: Key Data listing details${X.kd?.[0] ? " (" + new Date(X.kd[0].captured_at).toLocaleDateString() + ")" : ""} + the listing links on the Desk.`) + `</div>`;
+    card("On the booking sites", "How long it's been listed, and how it's doing there", otas + (missing.length ? `<div class="srq muted">Not found on ${missing.join(" or ")} yet.</div>` : ""), `Source: Key Data listing details${X.kd?.[0] ? " (" + new Date(X.kd[0].captured_at).toLocaleDateString() + ")" : ""} + the listing links on the Desk.`) + `</div>` + srLastBkCard();
 }
 // share of comps booked/blocked that night (Airbnb, else VRBO calendars) for the demand step
 function srFill(k) { const by = {};
