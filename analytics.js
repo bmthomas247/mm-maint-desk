@@ -875,7 +875,11 @@ async function revMore(el, tab, ctx){
   }
 
   // Listing ideas
-  const [I, RN] = await Promise.all([sb.from("review_listing_ideas").select("*").order("home"), sb.from("review_listing_runs").select("home,ran_at,error").order("ran_at", { ascending:false }).limit(1000)]);
+  const [I, RN, DR] = await Promise.all([sb.from("review_listing_ideas").select("*").order("home"), sb.from("review_listing_runs").select("home,ran_at,error").order("ran_at", { ascending:false }).limit(1000),
+    sb.from("review_listing_drafts").select("*").order("created_at", { ascending:false }).limit(500)]);
+  // "Write a new description" (Brandon 2026-11-08: "use the description and the reviews together"): newest draft per home
+  const DRAFT = {}, DRN = {}; (DR.data || []).forEach(d => { DRN[d.home] = (DRN[d.home] || 0) + 1; if(!DRAFT[d.home]) DRAFT[d.home] = d; });
+  const OPEN = window.__rlOpen = window.__rlOpen || {};
   if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(I.error) : I.error.message))}</p></div>`; return; }
   const L = I.data || [], runs = RN.data || [], homesRead = new Set(runs.filter(x => !x.error).map(x => x.home)).size, last = runs[0];
   const INL = { no:["Not in the listing", "red"], partly:["Listing undersells it", "amber"], yes:["Already in the listing", "green"] };
@@ -884,6 +888,26 @@ async function revMore(el, tab, ctx){
     <div class="anbar"><select id="rls"><option value="todo">To add (not in, or undersold)</option><option value="caution">With a caution</option><option value="done">Added to the listing</option><option value="">All</option></select>
       <input id="rlh" placeholder="Home (e.g. DS 12797)"><input id="rlq" placeholder="Words (fireplace, view…)"></div><div id="rll"></div>
     <p class="ansrc">Source: each home's public guest reviews from the last 2 years (Airbnb, Vrbo, Google, our website) and its listing text on our website (vacationrentalsparkcity.com, read by the hub), read by Claude (AI) and checked by the hub: quotes and the listing's words must match word for word. Airbnb and Vrbo listings can differ from the website. ${homesRead} homes read${last ? `, last ${esc(dt(last.ran_at))}` : ""}; a home is read again when it gets new reviews or its listing changes. Nothing here changes a listing — edit it in Track or the channel.</p>`;
+  const DST = { draft:"", used:["Put in the listing", "green"], not_used:["Not used", ""] };
+  const dHtml = (hm) => { const d = DRAFT[hm];
+    const btn = edit ? `<button class="btn small${d ? "" : " primary"}" data-draft="${esc(hm)}">✍ ${d ? "Write it again" : "Write a new description from the reviews"}</button><span class="muted" data-dmsg style="font-size:13px"></span>` : "";
+    if(!d) return btn ? `<div style="margin:0 0 8px">${btn}</div>` : "";
+    let body = esc(d.description || "");
+    (d.changes || []).forEach(c => { const t = esc(c.new_text || ""); if(t && body.includes(t)) body = body.replace(t, `<mark style="background:#e3f1d4;padding:0 2px;border-radius:3px">${t}</mark>`); });
+    const st = DST[d.status];
+    return `<details class="rldraft" data-dh="${esc(hm)}" style="margin:0 0 10px;border:1px solid #c7dcb3;background:#f6fbf1;border-radius:12px;padding:8px 12px"${OPEN[hm] ? " open" : ""}>
+      <summary style="cursor:pointer;font-weight:600">✍ New description from the reviews <span class="muted" style="font-weight:400;font-size:13px">· ${esc(d.by_name || "")}, ${esc(dt(d.created_at))}${DRN[hm] > 1 ? ` · ${DRN[hm] - 1} earlier` : ""}</span>${st ? ` <span class="pill ${st[1]}">${st[0]}</span>` : ""}</summary>
+      <div style="margin:8px 0 0">
+        <p style="margin:0 0 4px"><b>Headline:</b> <span data-cpt>${esc(d.headline || "")}</span> <small class="muted">(${(d.headline || "").length} characters)</small> <button class="btn small" data-cpd>Copy</button></p>
+        <p style="margin:0 0 4px"><b>Short summary (Airbnb):</b> <span data-cpt>${esc(d.summary || "")}</span> <small class="muted">(${(d.summary || "").length} characters)</small> <button class="btn small" data-cpd>Copy</button></p>
+        ${(d.favorites || []).length ? `<p style="margin:8px 0 2px"><b>What guests love</b> (their own words)</p>${d.favorites.map(f => `<div style="border-left:3px solid #9cc47a;padding:2px 0 2px 10px;margin:3px 0"><b>${esc(f.what)}:</b> “${esc(f.quote)}” <small class="muted">— ${esc(f.channel || "")} · ${esc(f.stay || "")}</small></div>`).join("")}` : ""}
+        ${(d.changes || []).length ? `<p style="margin:8px 0 2px"><b>What changed</b> (green in the description below)</p><ul style="margin:0 0 4px 18px;padding:0">${d.changes.map(c => `<li style="margin:2px 0"><b>${esc(c.what)}:</b> ${esc(c.new_text)}${(c.review_ids || []).length ? ` <a class="anlink" href="#" data-ids="${c.review_ids.join(",")}">reviews →</a>` : ""}</li>`).join("")}</ul>` : ""}
+        ${(d.left_out || []).length ? `<div style="margin:6px 0;padding:6px 10px;border-radius:8px;background:#fff4dc;color:#5a4300;font-size:13.5px"><b>⚠ Not pushed harder, because guests also complained:</b>${d.left_out.map(x => `<br>• <b>${esc(x.what)}:</b> ${esc(x.why)}`).join("")}</div>` : ""}
+        <p style="margin:8px 0 2px"><b>Full description</b> <button class="btn small" data-cpd>Copy the description</button></p>
+        <div data-cpt data-full style="white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;max-height:420px;overflow:auto">${body}</div>
+        <p class="muted" style="margin:6px 0 0;font-size:12.5px">Written by Claude (AI) from ${esc(d.listing_source || "our website listing")} + this home's public guest reviews (2 years); guest quotes checked word for word. Check it reads right, then paste it into Track / Airbnb / Vrbo yourself — the hub never changes a listing. Cost ${d.cost_usd != null ? "$" + (+d.cost_usd).toFixed(2) : "—"}.</p>
+        ${edit ? `<div class="anbar" style="margin:6px 0 0"><input data-dno placeholder="Note (where it went, when)"><button class="btn small primary" data-dst="used" data-did="${d.id}">✓ Put in the listing</button><button class="btn small" data-dst="not_used" data-did="${d.id}">Not using it</button>${btn}</div>` : ""}
+      </div></details>`; };
   const draw = () => { const s = el.querySelector("#rls").value, h = el.querySelector("#rlh").value.trim().toLowerCase(), q = el.querySelector("#rlq").value.trim().toLowerCase();
     const M = L.filter(x => !x.gone && (!s || (s === "todo" ? x.in_listing !== "yes" && !["done", "not_doing"].includes(x.status) : s === "caution" ? !!x.caution : x.status === s))
       && (!h || x.home.toLowerCase().includes(h)) && (!q || [x.theme, x.guests_say, x.suggestion, JSON.stringify(x.quotes)].join(" ").toLowerCase().includes(q)));
@@ -891,7 +915,7 @@ async function revMore(el, tab, ctx){
     const homes = Object.keys(by).sort();
     el.querySelector("#rll").innerHTML = homes.length ? homes.map(hm => `<div class="card" style="margin:0 0 12px;padding:12px 14px"><h3 style="margin:0 0 8px;font-size:16px">${esc(hm)}
         <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#" data-home="${esc(hm)}">all its reviews →</a></h3>
-      ${by[hm].sort((a, b) => (a.in_listing === "no" ? 0 : 1) - (b.in_listing === "no" ? 0 : 1) || b.review_ids.length - a.review_ids.length).map(x => `<div style="border-top:1px solid var(--line);padding:10px 0" data-li="${x.id}">
+      ${dHtml(hm)}${by[hm].sort((a, b) => (a.in_listing === "no" ? 0 : 1) - (b.in_listing === "no" ? 0 : 1) || b.review_ids.length - a.review_ids.length).map(x => `<div style="border-top:1px solid var(--line);padding:10px 0" data-li="${x.id}">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${esc(x.theme)}</b><span class="pill ${INL[x.in_listing][1]}">${INL[x.in_listing][0]}</span>
           <span class="pill">${x.review_ids.length} review${x.review_ids.length === 1 ? "" : "s"}</span>${x.status !== "new" ? `<span class="pill green">${esc(ST[x.status])}</span>` : ""}</div>
         ${x.guests_say ? `<p style="margin:6px 0 2px">${esc(x.guests_say)}</p>` : ""}
@@ -907,6 +931,18 @@ async function revMore(el, tab, ctx){
     el.querySelectorAll("[data-home]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showHome(a.dataset.home); });
     el.querySelectorAll("[data-cp]").forEach(b => b.onclick = async () => { const t = b.parentElement.querySelector("[data-sg]").textContent;
       try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch(e){ b.textContent = "Select + Ctrl+C"; } });
+    el.querySelectorAll("details.rldraft").forEach(x => x.ontoggle = () => { OPEN[x.dataset.dh] = x.open; });
+    el.querySelectorAll("[data-cpd]").forEach(b => b.onclick = async () => { const t = (b.closest("p").querySelector("[data-cpt]") || b.closest("details").querySelector("[data-full]")).textContent;
+      try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch(e){ b.textContent = "Select + Ctrl+C"; } });
+    el.querySelectorAll("[data-draft]").forEach(b => b.onclick = async () => { const hm = b.dataset.draft, m = b.parentElement.querySelector("[data-dmsg]");
+      b.disabled = true; if(m) m.textContent = " Reading the listing and the reviews… about a minute.";
+      const r = await sb.functions.invoke("review-listing", { body:{ action:"draft", home:hm } });
+      const err = r.error ? r.error.message : r.data && !r.data.ok ? r.data.error : "";
+      if(err){ b.disabled = false; if(m) m.textContent = " Couldn't write it: " + err; return; }
+      OPEN[hm] = true; revMore(el, tab, ctx); });
+    el.querySelectorAll("[data-dst]").forEach(b => b.onclick = async () => { const c = b.closest(".anbar");
+      const q2 = await sb.rpc("review_listing_draft_set", { p_id:+b.dataset.did, p_status:b.dataset.dst, p_note:c.querySelector("[data-dno]").value });
+      if(q2.error){ b.textContent = q2.error.message; return; } revMore(el, tab, ctx); });
     el.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => { const c = b.closest("[data-li]"), m = c.querySelector("[data-msg]");
       const q2 = await sb.rpc("review_listing_set", { p_id:+c.dataset.li, p_status:c.querySelector("[data-st]").value, p_owner:null, p_note:c.querySelector("[data-no]").value });
       if(q2.error){ m.textContent = (window.niceErr ? niceErr(q2.error) : q2.error.message); return; } revMore(el, tab, ctx); }); };
