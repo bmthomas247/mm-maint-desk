@@ -1177,6 +1177,9 @@ function srCompList(k) { const by = {};
     return { name: SR.compName?.[id] || id, ch: c.Airbnb ? "Airbnb" : "Vrbo", open: !!x?.open, rate: x?.rate != null ? +x.rate : null, tot: t ? t.reduce((a, b) => a + b, 0) / t.length : null }; })
     .sort((a, b) => (b.open - a.open) || ((a.rate ?? 1e9) - (b.rate ?? 1e9))); }
 // Comps pop-up: average + middle + range, where this home sits, then every open comp low to high with this home placed among them
+// Track calls some homes by a bare number; staff always say the full code (Brandon 2026-11-08: "1914 is CR 1914 always")
+const SR_NAMES = { "1914": "CR 1914" };
+const srName = c => SR_NAMES[c] || c;
 function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.rate != null), bk = L.filter(x => !x.open);
   const inp = document.querySelector(`[data-srr="${k}"]`), our = inp && inp.value !== "" ? +inp.value : srVal(k).rate;
   const day = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -1190,7 +1193,7 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
   const ogt = our == null ? null : ochs ? srGuest(our, ochs[0]) : cr ? our * cr : null, ogtHow = ochs ? (ochs[0] === "Airbnb" ? "" : ` (from our ${ochs[1]} quotes)`) : ogt ? " (no quotes of ours: comps' markup, ESTIMATE)" : "", tall = op.map(x => x.tot).filter(x => x), vt = ogt && tmean ? Math.round((ogt / tmean - 1) * 100) : null, trank = ogt ? tall.filter(x => x < ogt).length : null;
   const tile = (n, l) => `<div class="ctt"><b>${n}</b><span>${l}</span></div>`;
   let rows = "", placed = our == null;
-  const me = () => `<tr class="ctme"><td>★ ${escH(SR.code || "This home")} (our rate)</td><td>${fmt(our)}</td><td title="${escH("What a guest pays a night at our rate" + ogtHow)}">${ogt ? fmt(ogt) + (ogtHow ? "*" : "") : ""}</td></tr>`;
+  const me = () => `<tr class="ctme"><td>★ ${escH(srName(SR.code) || "This home")} (our rate)</td><td>${fmt(our)}</td><td title="${escH("What a guest pays a night at our rate" + ogtHow)}">${ogt ? fmt(ogt) + (ogtHow ? "*" : "") : ""}</td></tr>`;
   for (const x of op) { if (!placed && our <= x.rate) { rows += me(); placed = true; }
     const out = op.length >= 5 && (x === op[0] || x === op[op.length - 1]);
     rows += `<tr${out ? ' class="ctout" title="Left out of the average (lowest or highest)"' : ""}><td title="${escH(x.name)}">${escH(x.name)} <span class="muted">· ${x.ch}${out ? " · not in avg" : ""}</span></td><td>${fmt(x.rate)}</td><td class="muted">${x.tot ? fmt(x.tot) : ""}</td></tr>`; }
@@ -1407,7 +1410,7 @@ function srDraw() {
   const addOpts = SR.ours.filter(c => !SR.homes.some(x => x.code === c.code)).map(c => `<option>${escH(c.code)}</option>`).join("");
   let html = `<div class="ovhead"><div><h2>Set rates</h2><div class="sub">Test our own rates against Beyond's on a few homes. We set the nightly rate + minimum stay; the hub writes them into Track.</div></div><span class="sp"></span>
     <button class="ovbtn" id="srCopy" title="Copy pricing settings or nightly prices from another of our homes">⧉ Copy from another home</button><button class="ovbtn" id="srHistAll" title="Every price saved for this home, newest first">🕘 Price history</button><button class="ovbtn" id="srCsv">⤓ Download CSV</button></div>
-    <div class="ovfil"><label>Test home<select id="srHome">${SR.homes.map(x => `<option${x.code === SR.code ? " selected" : ""}>${escH(x.code)}</option>`).join("") || "<option value=''>No test homes yet</option>"}</select></label>
+    <div class="ovfil"><label>Test home<select id="srHome">${SR.homes.map(x => `<option value="${escH(x.code)}"${x.code === SR.code ? " selected" : ""}>${escH(srName(x.code))}</option>`).join("") || "<option value=''>No test homes yet</option>"}</select></label>
       <label>Add a home to the test<select id="srAdd"><option value="">Pick one of our homes…</option>${addOpts}</select></label>
       <label>Dates<button type="button" class="ovdate" id="srPick" title="Opens a two-month calendar: our price each night vs the comps, nights that look off in color">📅 ${new Date(SR.from + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })} → ${new Date(SR.to + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</button></label>
       <div class="ovdq">${[30, 60, 90, 180].map(n => `<button class="ovchipb" data-srd="${n}">Next ${n}</button>`).join("")}</div></div>`;
@@ -1468,10 +1471,10 @@ function srDraw() {
         <label class="srchk" style="grid-column:1/-1"><input type="checkbox" id="dyNewOn"${Y.newOn ? " checked" : ""}> This is a new home: start lower until the reviews come in</label>
         <label title="A home with fewer 4–5★ reviews than this (last 2 years) starts lower">Until it has this many good reviews${num("dyNewN", Y.newN ?? 5)}</label>
         <label title="With no reviews at all it starts this much lower; each good review takes part of it away">…start this much lower %${num("dyNewOff", Y.newOff ?? 10)}</label>
-        <div class="small muted">${(() => { const B = srRevBoost(); return B ? escH(SR.code) + ": " + escH(B.txt) + "." : ""; })()}</div>
+        <div class="small muted">${(() => { const B = srRevBoost(); return B ? escH(srName(SR.code)) + ": " + escH(B.txt) + "." : ""; })()}</div>
         <div class="small muted">${(() => { const lb = (SR.bk || []).filter(b => b.kind === "guest" && !/cancel/i.test(b.status || "") && b.booked_at).map(b => b.booked_at).sort().pop();
           const P = SR.homes.find(x => x.code === SR.code)?.auto_summary?.pace;
-          const pace = P ? `<br><b>Booked, next 60 nights:</b> ${escH(SR.code)} ${P.ours}% · our other ${P.others} homes in this group ${P.group_now ?? "—"}% now · the group this time last year ${P.group_ly ?? "—"}%${P.group_ly != null && P.ours <= P.group_ly - 15 ? " ⚠ behind last year" : ""}. ` : "";
+          const pace = P ? `<br><b>Booked, next 60 nights:</b> ${escH(srName(SR.code))} ${P.ours}% · our other ${P.others} homes in this group ${P.group_now ?? "—"}% now · the group this time last year ${P.group_ly ?? "—"}%${P.group_ly != null && P.ours <= P.group_ly - 15 ? " ⚠ behind last year" : ""}. ` : "";
           return pace + `Moves once each morning, slowly. Nothing booked in the next 60 days = back toward the comps' average; under the average only if it still isn't booking. Last guest booking: ${lb ? new Date(lb).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "none in 60 days"}.${Y.learn?.why ? " " + escH(Y.learn.why) : ""}`; })()}</div>
         <details class="dyold"><summary>Other starting points only</summary>
         <label>Comps 60%+ booked: up %${num("dyHi", Y.hiD)}</label><label>Comps 20% or less booked: down %${num("dyLo", Y.loD)}</label>
@@ -1647,15 +1650,15 @@ function srScore() {
   const row = (lbl, t, c, fmtF) => `<tr><td>${lbl}</td><td><b>${fmtF(t)}</b></td><td>${fmtF(c)}</td><td>${t > 0 && c > 0 ? `<span class="ovpill ${t >= c ? "g" : "y"}">${(t >= c ? "+" : "") + Math.round((t / c - 1) * 100)}%</span>` : ""}</td></tr>`;
   const started = !!S.started, w = started ? "since" : "before";
   const sT = m(w, "test"), sC = m(w, "control");
-  const tbl = `<table class="srt sct"><tr><th></th><th>${escH(SR.code)} (ours)</th><th>Beyond homes, per home</th><th></th></tr>` +
+  const tbl = `<table class="srt sct"><tr><th></th><th>${escH(srName(SR.code))} (ours)</th><th>Beyond homes, per home</th><th></th></tr>` +
     row("Bookings made", per(sT, "bookings"), per(sC, "bookings"), f1) + row("Nights booked", per(sT, "nights"), per(sC, "nights"), f1) +
     row("Rent booked", per(sT, "rent"), per(sC, "rent"), fmt) + row("Avg rent / night", sT.adr != null ? +sT.adr : null, sC.adr != null ? +sC.adr : null, fmt) +
     [30, 60, 90].map(d => row(`Booked, next ${d} nights`, a(d, "test").occ != null ? +a(d, "test").occ : null, a(d, "control").occ != null ? +a(d, "control").occ : null, v => v == null ? "—" : v + "%")).join("") + `</table>`;
   const wk = (S.weeks || []).slice(-10), ctlN = sC.homes || 1;
-  const weeks = wk.length ? `<table class="srt sct" style="margin-top:12px"><tr><th>Week of</th><th>${escH(SR.code)} bookings</th><th>Beyond homes, per home</th><th>${escH(SR.code)} rent</th><th>Beyond rent, per home</th></tr>` +
+  const weeks = wk.length ? `<table class="srt sct" style="margin-top:12px"><tr><th>Week of</th><th>${escH(srName(SR.code))} bookings</th><th>Beyond homes, per home</th><th>${escH(srName(SR.code))} rent</th><th>Beyond rent, per home</th></tr>` +
     wk.map(x => `<tr><td>${new Date(x.week + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</td><td>${x.test}</td><td>${f1(x.control / ctlN)}</td><td>${fmt(+x.test_rent)}</td><td>${fmt(+x.control_rent / ctlN)}</td></tr>`).join("") + `</table>` : "";
   return `<div class="ovc" style="margin-bottom:18px"><h3>Scoreboard vs Beyond</h3>
-    <div class="cs">${started ? `Test started ${new Date(S.started).toLocaleDateString()}: bookings made since then` : `Test not started yet (it starts with the first send to Track, or when Beyond is marked off). Showing the last ${S.span_days} days as the baseline`} · ${escH(SR.code)} vs our ${S.control_homes} other home${S.control_homes === 1 ? "" : "s"} in this comp set, still priced by Beyond</div>
+    <div class="cs">${started ? `Test started ${new Date(S.started).toLocaleDateString()}: bookings made since then` : `Test not started yet (it starts with the first send to Track, or when Beyond is marked off). Showing the last ${S.span_days} days as the baseline`} · ${escH(srName(SR.code))} vs our ${S.control_homes} other home${S.control_homes === 1 ? "" : "s"} in this comp set, still priced by Beyond</div>
     ${tbl}${weeks}<div class="src">Per home so one test home compares fairly with ${S.control_homes}. Guest stays only (owner stays + blocks left out of "booked"). Source: ${escH(S.source || "")}, synced ${S.synced ? new Date(S.synced).toLocaleString() : "—"}.</div></div>`;
 }
 function srSvg(R) {
@@ -1714,7 +1717,7 @@ function srDiffOpen() { const D = (SR.diff || []), ch = D.filter(d => d.before =
   const bA = avg(D.map(d => d.before).filter(v => v != null)), aA = avg(D.map(d => d.after)), sum = ch.reduce((t, d) => t + (d.before != null ? d.after - d.before : 0), 0);
   const why = d => d.why.slice(1).filter(w => !/^(guest total|= \$|\$\d+ under)/.test(w)).map(w => w.replace(/ → \$[\d,]+$/, "")).slice(0, 3).join(" · ");
   const el = document.createElement("div"); el.id = "srDiff";
-  el.innerHTML = `<div class="sdbox" role="dialog" aria-label="Price changes"><div class="sdhead"><div><h3>What changed for ${escH(SR.code)}</h3>
+  el.innerHTML = `<div class="sdbox" role="dialog" aria-label="Price changes"><div class="sdhead"><div><h3>What changed for ${escH(srName(SR.code))}</h3>
       <div class="cs">${D.length} nights built · compared with the saved suggestion, or Track's price when nothing is saved. Not saved yet.</div></div><button class="sdx" aria-label="Close">✕</button></div>
     <div class="sdtiles"><div><b>${ch.length}</b><span>nights change</span></div><div><b class="up">${up.length}</b><span>go up</span></div><div><b class="dn">${dn.length}</b><span>go down</span></div>
       <div><b>${fmt(bA)} → ${fmt(aA)}</b><span>average night</span></div><div><b class="${sum >= 0 ? "up" : "dn"}">${sum >= 0 ? "+" : "−"}${fmt(Math.abs(sum))}</b><span>all nights added up</span></div></div>
@@ -1809,14 +1812,14 @@ async function srHistory(k) { const q = sb.from("rates_set_nights").select("nigh
   const who = b => /^Auto re-price/.test(b || "") ? "Morning re-price" : (b || "");
   const body = rows.length ? `<table class="srt"><tr>${k ? "" : "<th>Night</th>"}<th>Saved</th><th>Price</th><th>Min</th><th>By</th><th>Why</th></tr>${rows.map(x => `<tr>${k ? "" : `<td>${d(x.night)}</td>`}<td>${new Date(x.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td><td><b>${fmt(+x.rate)}</b></td><td>${x.min_nights ?? "—"}</td><td>${escH(who(x.by))}</td><td class="sdwhy" title="${escH(x.note || "")}">${escH((x.note || "").slice(0, 110))}</td></tr>`).join("")}</table>`
     : `<p class="small muted">No saved prices ${k ? "for this night" : "in the last 30 days"} yet.</p>`;
-  srModal(k ? `Price history · ${escH(SR.code)} · ${d(k)}` : `Price history · ${escH(SR.code)} · last 30 days`,
+  srModal(k ? `Price history · ${escH(srName(SR.code))} · ${d(k)}` : `Price history · ${escH(srName(SR.code))} · last 30 days`,
     (t ? `<p class="small">Track now: <b>${fmt(+t.rate)}</b>${t.min_nights ? " · min " + t.min_nights : ""} (read ${new Date(SR.trackAt).toLocaleString()}).</p>` : "") + body + `<p class="small muted">Every saved price is kept (nothing is deleted). Source: rates_set_nights.</p>`,
     `<span class="sp"></span><button class="ovbtn" data-mclose>Close</button>`); }
 // ---- copy settings or nightly prices from another of our homes
 async function srCopyFrom(R) { const h = SR.homes.find(x => x.code === SR.code);
   const opts = SR.ours.filter(c => c.code !== SR.code).map(c => `<option value="${escH(c.id)}">${escH(c.code)}${SR.homes.some(x => x.comp_id === c.id && x.dyn) ? " (has settings)" : ""}</option>`).join("");
-  const m = srModal(`Copy into ${escH(SR.code)}`, `<label class="cpl">From home<select id="cpFrom">${opts}</select></label>
-      <label class="cpl"><input type="radio" name="cpw" value="set" checked> Its pricing settings (Dynamic pricing boxes) <span class="small muted">— only homes on the test have them. ${escH(SR.code)} keeps its own walk-away and what it has learned.</span></label>
+  const m = srModal(`Copy into ${escH(srName(SR.code))}`, `<label class="cpl">From home<select id="cpFrom">${opts}</select></label>
+      <label class="cpl"><input type="radio" name="cpw" value="set" checked> Its pricing settings (Dynamic pricing boxes) <span class="small muted">— only homes on the test have them. ${escH(srName(SR.code))} keeps its own walk-away and what it has learned.</span></label>
       <label class="cpl"><input type="radio" name="cpw" value="rate"> Its nightly prices for these dates (its Track price, or its saved suggestions if it's on the test), then adjust by <input type="number" id="cpPct" value="0" step="1" style="width:70px"> %</label>
       <p class="small muted">Nothing is saved until you press Save. Copied prices open the "What changed" list.</p>`,
     `<span class="sp"></span><button class="ovbtn" data-mclose>Cancel</button><button class="ovbtn dygo" id="cpGo">Copy</button>`);
@@ -1838,7 +1841,7 @@ async function srCopyFrom(R) { const h = SR.homes.find(x => x.code === SR.code);
     SR.dynMsg = `Copied ${SR.diff.length} nights from ${code}. Not saved yet.`; srDraw(); setTimeout(srDiffOpen, 0); }; }
 // Fill in Our rate for every night in the dates from one source; opens the What-changed list; nothing saved until Save
 function srFillIn(R) {
-  const m = srModal(`Fill in Our rate · ${escH(SR.code)}`, `<p class="small muted">Every night in these dates (${R.length}) gets a price from the source you pick. Nights a person saved by hand can be skipped.</p>
+  const m = srModal(`Fill in Our rate · ${escH(srName(SR.code))}`, `<p class="small muted">Every night in these dates (${R.length}) gets a price from the source you pick. Nights a person saved by hand can be skipped.</p>
       ${[["dyn", "⚡ Dynamic pricing (our rules in the Dynamic pricing boxes)"], ["t", "Track now (what's in Track today)"], ["s", "Our pricing engine's suggestion"], ["g", srGrpName() + " (average of their Track prices)"], ["c", "Comps' daily rate"]]
         .map(([v, t], i) => `<label class="cpl"><input type="radio" name="fsrc" value="${v}"${i === 0 ? " checked" : ""}> ${t}</label>`).join("")}
       <label class="cpl">Then adjust by <input type="number" id="fPct" value="0" step="1" style="width:70px"> %</label>
@@ -1878,7 +1881,7 @@ function srWire(R) {
         under: nz("dyUnder"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
         learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), newOn: !!document.getElementById("dyNewOn")?.checked, floorStayHol: g("dyFloorStayHol") });
       const on = $("auOn").checked, send = $("auSend").checked;
-      if (send && !confirm(`Send ${SR.code}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
+      if (send && !confirm(`Send ${srName(SR.code)}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
       const r = await sb.rpc("rates_set_auto", { p_code: SR.code, p_dyn: SR.dyn, p_on: on, p_days: +$("auDays").value, p_send: send });
       if (r.error) return alert(niceE(r.error)); SR.dynFor = null; loadSetRates(); }; }
   const on = (id, ev, f) => { const e = $(id); if (e) e[ev] = f; };
@@ -1889,7 +1892,7 @@ function srWire(R) {
   on("srPick", "onclick", srCal);
   document.querySelectorAll("[data-srd]").forEach(b => b.onclick = () => { const t = iso(new Date(new Date().setHours(12, 0, 0, 0))); SR.from = t; SR.to = addD(t, +b.dataset.srd - 1); srDraw(); });
   on("srBoff", "onchange", async e => { const v = e.target.checked;
-    if (v && !confirm(`Confirm Beyond Pricing is turned OFF for ${SR.code} (in Beyond, or Kolleen did it)? If it's still on, Beyond will write over our rates in Track.`)) { e.target.checked = false; return; }
+    if (v && !confirm(`Confirm Beyond Pricing is turned OFF for ${srName(SR.code)} (in Beyond, or Kolleen did it)? If it's still on, Beyond will write over our rates in Track.`)) { e.target.checked = false; return; }
     const r = await sb.rpc("rates_set_home", { p_code: SR.code, p_beyond_off: v }); if (r.error) { alert(niceE(r.error)); e.target.checked = !v; return; } loadSetRates(); });
   document.querySelectorAll("[data-srr],[data-srm]").forEach(i => i.onchange = () => { const k = i.dataset.srr || i.dataset.srm, cur = srVal(k), e = (SR.edits[k] ||= { rate: cur.rate, min: cur.min });   // starts from what's shown (saved, or Track's current rate)
     const v = i.value === "" ? null : Math.round(+i.value); if (i.dataset.srr) { e.rate = v; delete e.why; } else e.min = v;
@@ -1988,7 +1991,7 @@ function srWire(R) {
     const r = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   on("srPush", "onclick", async () => { if (Object.keys(SR.edits).length) return alert("Save first, then send.");
     const n = R.filter(r => r.v.saved).length; if (!n) return alert("No saved suggestions in these dates. Save first.");
-    if (!confirm(`Send our ${n} saved night${n > 1 ? "s" : ""} for ${SR.code} (${SR.from} → ${SR.to}) to Track's rack rate?${SR.switch === "on" ? " It goes within a minute." : " Sending is switched off until go-live, so it will wait in the queue."}`)) return;
+    if (!confirm(`Send our ${n} saved night${n > 1 ? "s" : ""} for ${srName(SR.code)} (${SR.from} → ${SR.to}) to Track's rack rate?${SR.switch === "on" ? " It goes within a minute." : " Sending is switched off until go-live, so it will wait in the queue."}`)) return;
     const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!confirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   on("srCsv", "onclick", () => { if (!R) return; const q = v => v == null ? "" : String(v);
