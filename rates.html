@@ -4214,8 +4214,8 @@ async function loadFindings(force) {
   FD.busy = false;
   if (f.error) { $("fdBody").innerHTML = `<p class="up small">Couldn't load findings: ${escH(f.error.message)}. (The v11 SQL may not have run yet.)</p>`; return; }
   FD.rows = f.data || []; FD.dec = d.data || [];
-  const [fu, pp] = await Promise.all([sb.rpc("finding_followups"), FD.people ? { data: FD.people } : sb.rpc("finding_people")]);
-  FD.fu = fu.data || []; FD.people = pp.data || []; renderFindings();
+  const [fu, pp, st] = await Promise.all([sb.rpc("finding_followups"), FD.people ? { data: FD.people } : sb.rpc("finding_people"), sb.from("rates_set_homes").select("code,comp_id,on_test")]);
+  FD.st = (st.data || []).filter(h => h.on_test && h.comp_id); FD.fu = fu.data || []; FD.people = pp.data || []; renderFindings();
 }
 function fdDecision(f) {
   const own = FD.dec.filter(x => x.finding_id === f.id).pop();
@@ -4279,7 +4279,7 @@ function fdCard(x) {
   const c = x.change, big = !c ? "" : c.kind === "min"
     ? `<div class="fdbig"><span>Min stay ${c.cur}</span><span>→</span><span class="fdnew">${c.new} nights</span></div>`
     : `<div class="fdbig"><span>${c.kind === "min_price" ? "Beyond minimum" : "Now"} ${fmt(c.cur)}</span><span>→</span><span class="fdnew">${fmt(c.new)}</span>${c.pct != null ? `<span class="fdpct ${c.pct < 0 ? "dn" : "upp"}">${c.pct > 0 ? "+" : ""}${c.pct}%</span>` : ""}${c.kind === "rate" || !c.kind ? `<span class="small muted">average a night</span>` : ""}</div>`;
-  const acts = fdActs(x), nMain = acts.length - FD_COMMON.length;
+  const acts = fdActs(x), nMain = acts.length - FD_COMMON.length, srH = (FD.st || []).find(h => h.comp_id === x.comp_id);
   return `<div class="fdcard sev${x.severity || 2}" data-fid="${x.id}">
     <div class="fdhead"><span class="fdhome">${escH(home)}</span>${kind ? `<span class="fdkind">${escH(kind)}</span>` : ""}${nice ? `<span class="fddates">${escH(nice)}</span>` : ""}</div>
     <div class="fdwhy">${escH(first)}</div>
@@ -4287,6 +4287,7 @@ function fdCard(x) {
     ${status}
     ${done ? `<div class="rrow" style="margin:6px 0 0"><button class="tab" data-again="1">Decide again</button></div>` : ""}
     <div class="fdacts"${done ? ' style="display:none"' : ""}>${acts.map(([l], i) => `<button class="tab${i < nMain ? " fdgo" : " fdx"}" data-act="${i}">${escH(l)}</button>`).join("")}<button class="fdtoggle" type="button">${nMain ? "More choices ▾" : "Choices ▾"}</button></div>
+    ${srH ? `<div class="rrow" style="margin:6px 0 0"><button class="tab on" data-srgo="${escH(srH.code)}" data-a="${escH(x.date_from || "")}" data-b="${escH(x.date_to || "")}" title="${escH(srH.code)} is on our Set rates test: open it there with these dates">📈 Open ${escH(srH.code)} in Set rates</button></div>` : ""}
     <div class="fdpanel"></div>
     <details class="fdmore"><summary>Details & sources</summary>
       ${rest ? `<div>${escH(rest)}</div>` : ""}
@@ -4295,6 +4296,9 @@ function fdCard(x) {
       <div>Sources: ${escH(x.sources || "")}</div></details></div>`;
 }
 function fdWire(el) {
+  el.querySelectorAll("[data-srgo]").forEach(b => b.onclick = () => { const t = iso(new Date(new Date().setHours(12, 0, 0, 0)));
+    let a = b.dataset.a || t, z = b.dataset.b || a; if (a < t) a = t; if (z < a) z = addD(a, 59); if (z < addD(a, 6)) z = addD(a, 6);
+    SR.code = b.dataset.srgo; SR.from = a; SR.to = z; SR.edits = {}; setView("setrates"); window.scrollTo(0, 0); });
   el.querySelectorAll(".fdtoggle").forEach(b => { const a = b.parentElement; if (!a.querySelector(".fdgo")) { a.classList.add("all"); b.remove(); return; }
     b.onclick = () => { a.classList.toggle("all"); b.textContent = a.classList.contains("all") ? "Fewer choices ▴" : "More choices ▾"; }; });
   el.querySelectorAll("[data-again]").forEach(b => b.onclick = () => { const c = b.closest(".fdcard"); c.querySelector(".fdacts").style.display = ""; b.parentElement.remove(); });
