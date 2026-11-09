@@ -2103,7 +2103,13 @@ function srWire(R) {
     if (rows.some(r => r.rate < 25 || r.rate > 20000)) return alert("A rate is outside $25 – $20,000.");
     if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return alert("Minimum nights must be 1 – 60.");
     const r = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
-  on("srPush", "onclick", async () => { if (Object.keys(SR.edits).length) return alert("Save first, then send.");
+  on("srPush", "onclick", async () => {
+    // Brandon 2026-11-09: "if we click send these dates to track we can automatically save it" = save unsaved changes first, then the send pop-up
+    if (Object.keys(SR.edits).length) { const rows = Object.entries(SR.edits).filter(([k, e]) => e.rate != null && !SR.bkd?.[k]).map(([k, e]) => ({ date: k, rate: e.rate, min: e.min, note: e.why ? e.why.join(" → ").slice(0, 300) : null }));
+      if (rows.some(r => r.rate < 25 || r.rate > 20000)) return alert("A rate is outside $25 – $20,000.");
+      if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return alert("Minimum nights must be 1 – 60.");
+      if (rows.length) { const sv = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (sv.error) return alert(niceE(sv.error)); }
+      SR.edits = {}; await loadSetRates(); return document.getElementById("srPush")?.click(); }
     const n = R.filter(r => r.v.saved).length; if (!n) return alert("No saved suggestions in these dates. Save first.");
     srSendOpen(R, async () => { const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return alert(niceE(r.error)); loadSetRates(); }); });
   document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!confirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
