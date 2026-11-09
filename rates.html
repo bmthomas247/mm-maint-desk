@@ -1371,6 +1371,7 @@ function srDraw() {
   // every label for the night (Brandon 2026-11-08: Cottonwood openings were hidden behind "Opening weekend" / "Thanksgiving")
   const pk = k => typeof holOf === "function" ? [...new Set(holOf(k))].join(" · ") || null : null;
   html += `<div class="ovc" style="margin-bottom:18px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Nights</h3><span class="sp" style="flex:1"></span>
+      <button class="ovbtn dygo" id="srFillIn" title="Fill every night's Our rate + min nights in one go, then see what changed">✨ Fill in Our rate</button>
       <button class="ovbtn" id="srReset" title="Throw away the changes not saved yet (typed rates and built prices) and the builder settings you changed; go back to what's saved">↺ Reset</button>
       <button class="ovbtn" id="srSave"${Object.keys(SR.edits).length ? "" : " disabled"}>💾 Save as suggested ${Object.keys(SR.edits).length || ""}</button>
       <button class="ovbtn" id="srPush" style="background:var(--forest-2,#5b8a1e);color:#fff;border-color:var(--forest-2,#5b8a1e)">⇪ Send these dates to Track</button></div>
@@ -1676,7 +1677,28 @@ async function srCopyFrom(R) { const h = SR.homes.find(x => x.code === SR.code);
       SR.edits[r.k] = { rate, min: r.v.min, why: [`copied from ${code} ${fmt(p)}${pct ? ` ${pct > 0 ? "+" : ""}${pct}%` : ""}`] }; }
     m.close(); if (!SR.diff.length) return alert(`No prices found for ${code} in these dates.`);
     SR.dynMsg = `Copied ${SR.diff.length} nights from ${code}. Not saved yet.`; srDraw(); setTimeout(srDiffOpen, 0); }; }
+// Fill in Our rate for every night in the dates from one source; opens the What-changed list; nothing saved until Save
+function srFillIn(R) {
+  const m = srModal(`Fill in Our rate · ${escH(SR.code)}`, `<p class="small muted">Every night in these dates (${R.length}) gets a price from the source you pick. Nights a person saved by hand can be skipped.</p>
+      ${[["dyn", "⚡ Dynamic pricing (our rules in the Dynamic pricing boxes)"], ["t", "Track now (what's in Track today)"], ["s", "Our pricing engine's suggestion"], ["g", srGrpName() + " (average of their Track prices)"], ["c", "Comps' daily rate"]]
+        .map(([v, t], i) => `<label class="cpl"><input type="radio" name="fsrc" value="${v}"${i === 0 ? " checked" : ""}> ${t}</label>`).join("")}
+      <label class="cpl">Then adjust by <input type="number" id="fPct" value="0" step="1" style="width:70px"> %</label>
+      <label class="cpl"><input type="checkbox" id="fKeep" checked> Leave nights a person saved by hand</label>`,
+    `<span class="sp"></span><button class="ovbtn" data-mclose>Cancel</button><button class="ovbtn dygo" id="fGo">Fill in</button>`);
+  m.el.querySelector("#fGo").onclick = () => { const src = m.el.querySelector("[name=fsrc]:checked").value, pct = +m.el.querySelector("#fPct").value || 0, keep = m.el.querySelector("#fKeep").checked; m.close();
+    if (src === "dyn") { const w = $("dyWhich"); if (w) w.value = "all"; return $("srFill")?.click(); }
+    const byHand = k => { const s = SR.ours_n[k]; return s && !/^Auto re-price/.test(s.by || ""); };
+    SR.diff = []; let n = 0;
+    for (const r of R) { if (keep && byHand(r.k)) continue;
+      const p = src === "t" ? (r.t ? +r.t.rate : null) : src === "s" ? r.s?.price : src === "g" ? r.b : src === "c" ? r.c?.adr : null; if (p == null) continue;
+      const rate = Math.max(25, Math.round(p * (1 + pct / 100))), min = src === "t" ? (r.t?.min_nights ?? r.v.min) : src === "s" ? (r.s?.min ?? r.v.min) : r.v.min, sv = SR.ours_n[r.k], tk = SR.track?.[r.k];
+      const lbl = { t: "Track now", s: "engine", g: srGrpName(), c: "comps' daily rate" }[src];
+      SR.diff.push({ k: r.k, before: sv ? +sv.rate : tk ? +tk.rate : null, after: rate, bmin: sv ? sv.min_nights ?? null : tk?.min_nights ?? null, amin: min, src: sv ? "saved" : tk ? "Track" : "", why: [`from ${lbl} ${fmt(p)}${pct ? ` ${pct > 0 ? "+" : ""}${pct}%` : ""}`] });
+      SR.edits[r.k] = { rate, min, why: [`filled from ${lbl} ${fmt(p)}${pct ? ` ${pct > 0 ? "+" : ""}${pct}%` : ""}`] }; n++; }
+    if (!n) return alert("That source has no prices for these dates.");
+    SR.dynMsg = `Filled ${n} nights. Not saved yet.`; srDraw(); setTimeout(srDiffOpen, 0); }; }
 function srWire(R) {
+  if ($("srFillIn")) $("srFillIn").onclick = () => srFillIn(R);
   if ($("srCopy")) $("srCopy").onclick = () => srCopyFrom(R); if ($("srHistAll")) $("srHistAll").onclick = () => srHistory(null);
   document.querySelectorAll("[data-hist]").forEach(b => b.onclick = e => { e.stopPropagation(); srHistory(b.dataset.hist); });
   setTimeout(srStaleCheck, 400);
