@@ -339,14 +339,15 @@ details.dyacc:not([open])>summary::after{transform:rotate(-90deg)}details.dyacc:
 .srpan{cursor:grab;touch-action:pan-y}.srpan.dragging{cursor:grabbing;user-select:none}
 table.srt tr[data-k] td:first-child{cursor:cell;user-select:none}table.srt tr.srsel td{background:rgba(136,181,53,.22)!important}
 #srBulkBar{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:70;display:none;gap:14px;align-items:center;flex-wrap:wrap;background:var(--forest,#3c5f12);color:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 12px 30px rgba(0,0,0,.25);font-size:13px}
-#srCtip{position:fixed;z-index:80;display:none;width:min(480px,calc(100vw - 20px));max-height:min(520px,calc(100vh - 20px));overflow-y:auto;overflow-x:hidden;box-sizing:border-box;background:#fff;color:#1f2a14;border-radius:14px;box-shadow:0 14px 36px rgba(0,0,0,.22);padding:14px 16px;font-size:12.5px;border:1px solid #e3e9da}
-#srCtip .cth{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}#srCtip .cth b{font-size:14px}
-#srCtip .ctts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px}
-#srCtip .ctt{background:#f3f6ee;border-radius:10px;padding:8px 10px}#srCtip .ctt b{display:block;font-size:17px;line-height:1.2}#srCtip .ctt span{font-size:11px;color:#6b7563}
+#srCtip{position:fixed;z-index:80;display:none;width:min(480px,calc(100vw - 20px));max-height:calc(100vh - 16px);overflow-y:auto;overflow-x:hidden;box-sizing:border-box;background:#fff;color:#1f2a14;border-radius:14px;box-shadow:0 14px 36px rgba(0,0,0,.22);padding:10px 12px;font-size:11px;border:1px solid #e3e9da}
+#srCtip .cth{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}#srCtip .cth b{font-size:13px}
+#srCtip .ctts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
+#srCtip .ctt{background:#f3f6ee;border-radius:8px;padding:5px 7px}#srCtip .ctt b{display:block;font-size:13px;line-height:1.2}#srCtip .ctt span{font-size:9.5px;color:#6b7563;line-height:1.2;display:block}
 #srCtip .ctt i{font-style:normal;font-size:11px;padding:1px 6px;border-radius:9px;vertical-align:middle}#srCtip i.up{background:#fbe9d6;color:#8a4b10}#srCtip i.dn{background:#e5f2d8;color:#2f5a10}
-#srCtip table{width:100%;border-collapse:collapse;table-layout:fixed}#srCtip th:first-child,#srCtip td:first-child{width:56%;overflow-wrap:anywhere;white-space:normal}#srCtip th{font-size:11px;color:#6b7563;font-weight:600;text-align:left;padding:4px 6px}
-#srCtip td{padding:5px 6px;border-top:1px solid #eef1ea}#srCtip td:nth-child(n+2),#srCtip th:nth-child(n+2){text-align:right;white-space:nowrap}
-#srCtip tr.ctme td{background:#e5f2d8;font-weight:700;color:#2f5a10}#srCtip .ctf{margin-top:10px;font-size:11px;color:#6b7563;line-height:1.4}
+#srCtip table{width:100%;border-collapse:collapse;table-layout:fixed}#srCtip th:first-child,#srCtip td:first-child{width:58%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#srCtip th{font-size:9.5px;color:#6b7563;font-weight:600;text-align:left;padding:4px 6px}
+#srCtip table td,#srCtip table th{font-size:11px;line-height:1.25;padding:1px 5px;height:auto}#srCtip table th{font-size:9.5px}#srCtip td{border-top:1px solid #f1f3ee}#srCtip th{padding:2px 5px}#srCtip td:nth-child(n+2),#srCtip th:nth-child(n+2){text-align:right;white-space:nowrap}
+#srCtip tr.ctout td{color:#8a938a;text-decoration:line-through;text-decoration-color:#c7ccc3}#srCtip tr.ctout td:first-child{text-decoration:none}
+#srCtip tr.ctme td{background:#e5f2d8;font-weight:700;color:#2f5a10}#srCtip .ctf{margin-top:6px;font-size:9.5px;color:#6b7563;line-height:1.4}
 .srctd{cursor:help}
 #srBulkBar .sbhint{font-size:11.5px;opacity:.85}
 #srBulkBar .sbg{display:inline-flex;gap:6px;align-items:center}#srBulkBar button[data-sb^="p"],#srBulkBar button[data-sb^="m"]{width:30px;height:30px;border:0;border-radius:8px;background:#fff;color:var(--forest,#3c5f12);cursor:pointer;font-size:12px}
@@ -1170,19 +1171,20 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
   const inp = document.querySelector(`[data-srr="${k}"]`), our = inp && inp.value !== "" ? +inp.value : srVal(k).rate;
   const day = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   if (!op.length) return `<div class="cth"><b>Comps · ${escH(day)}</b></div><p class="small muted">No open comps with a price this night${bk.length ? ` (${bk.length} booked)` : ""}.</p>`;
-  const v = op.map(x => x.rate).sort((a, b) => a - b), mean = v.reduce((a, b) => a + b, 0) / v.length, mid = srPct(v, 0.5);
-  const tv = op.map(x => x.tot).filter(x => x), tmean = tv.length ? tv.reduce((a, b) => a + b, 0) / tv.length : null;
+  const v = op.map(x => x.rate).sort((a, b) => a - b), tv0 = srTrim(v), mean = tv0.reduce((a, b) => a + b, 0) / tv0.length, mid = srPct(v, 0.5);
+  const tv = srTrim(op.map(x => x.tot).filter(x => x)), tmean = tv.length ? tv.reduce((a, b) => a + b, 0) / tv.length : null;
   const vs = our != null ? Math.round((our / mean - 1) * 100) : null, rank = our != null ? v.filter(x => x < our).length : null;
   const tile = (n, l) => `<div class="ctt"><b>${n}</b><span>${l}</span></div>`;
   let rows = "", placed = our == null;
   const me = () => `<tr class="ctme"><td>★ ${escH(SR.code || "This home")} (our rate)</td><td>${fmt(our)}</td><td></td></tr>`;
   for (const x of op) { if (!placed && our <= x.rate) { rows += me(); placed = true; }
-    rows += `<tr><td>${escH(x.name)} <span class="muted">· ${x.ch}</span></td><td>${fmt(x.rate)}</td><td class="muted">${x.tot ? fmt(x.tot) : ""}</td></tr>`; }
+    const out = op.length >= 5 && (x === op[0] || x === op[op.length - 1]);
+    rows += `<tr${out ? ' class="ctout" title="Left out of the average (lowest or highest)"' : ""}><td title="${escH(x.name)}">${escH(x.name)} <span class="muted">· ${x.ch}${out ? " · not in avg" : ""}</span></td><td>${fmt(x.rate)}</td><td class="muted">${x.tot ? fmt(x.tot) : ""}</td></tr>`; }
   if (!placed) rows += me();
   const a = srCompAir(k);
   return `<div class="cth"><b>Comps · ${escH(day)}</b><span class="muted">${op.length} open · ${bk.length} booked</span></div>
-    <div class="ctts">${tile(fmt(mean), "Comps' average")}${tile(fmt(mid), "Middle comp")}${tile(`${fmt(v[0])}–${fmt(v[v.length - 1])}`, "Low – high")}
-      ${our != null ? tile(`${fmt(our)} <i class="${vs > 0 ? "up" : "dn"}">${vs > 0 ? "+" : ""}${vs}%</i>`, `Our rate vs average · cheaper than ${op.length - rank} of ${op.length}`) : ""}</div>
+    <div class="ctts">${tile(fmt(mean), v.length >= 5 ? "Average (high + low left out)" : "Comps' average")}${tile(fmt(mid), "Middle comp")}${tile(`${fmt(v[0])}–${fmt(v[v.length - 1])}`, "Low – high")}
+      ${our != null ? tile(`${fmt(our)} <i class="${vs > 0 ? "up" : "dn"}">${vs > 0 ? "+" : ""}${vs}%</i>`, `Ours vs avg · under ${op.length - rank} of ${op.length}`) : ""}</div>
     <div class="ctlist"><table><thead><tr><th>Comp</th><th>Daily rate</th><th>Guest total / night</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax${tmean ? ` (average ${fmt(tmean)})` : ""}.${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
 function srCtipWire() { let pop = document.getElementById("srCtip");
@@ -1192,7 +1194,7 @@ function srCtipWire() { let pop = document.getElementById("srCtip");
   const show = td => { clearTimeout(hide); pop.innerHTML = srCompPop(td.dataset.ctip); pop.style.display = "block";
     const r = td.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
     let x = Math.min(window.innerWidth - w - 10, Math.max(10, r.left + r.width / 2 - w / 2)), y = r.bottom + 6;
-    if (y + h > window.innerHeight - 10) y = Math.max(10, r.top - h - 6);
+    if (y + h > window.innerHeight - 8) y = r.top - h - 6 >= 8 ? r.top - h - 6 : Math.max(8, window.innerHeight - h - 8);
     pop.style.left = x + "px"; pop.style.top = y + "px"; };
   document.querySelectorAll("td[data-ctip]").forEach(td => {
     td.addEventListener("mouseenter", () => show(td));
@@ -1205,13 +1207,15 @@ function srCompTip(k) { const L = srCompList(k); if (!L.length) return "No comp 
     ...op.map(x => `${fmt(x.rate)}${x.tot ? "  (" + fmt(x.tot) + " total)" : ""}  ${x.name} · ${x.ch}`),
     ...(bk.length ? [`Booked (${bk.length}): ${bk.map(x => x.name).join(", ")}`] : []),
     "Source: Key Data Airbnb + Vrbo calendars (nightly); totals from Airbnb checkout quotes."].join("\n"); }
+// Brandon 2026-11-08: comps' averages leave out the highest and the lowest comp (outliers) when there are 5 or more
+const srTrim = (v, f = x => x) => v.length < 5 ? v : [...v].sort((a, b) => f(a) - f(b)).slice(1, -1);
 function srComp(k) {   // comps' average daily rate that night (same as the Desk calendar's ADR): open comps only, Airbnb else VRBO
   const by = {};
   for (const n of SR.nightly) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
     const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5); if (off < 0 || off >= n.avail.length) continue;
     (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] }; }
   const v = []; for (const c of Object.values(by)) { const x = c.Airbnb || c.VRBO; if (x && x.open && x.rate != null) v.push(+x.rate); }
-  return v.length >= 2 ? { adr: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+  const t = srTrim(v); return v.length >= 2 ? { adr: t.reduce((a, b) => a + b, 0) / t.length, n: v.length, trim: t.length < v.length } : null;
 }
 const srShadow = k => { const x = SR.x?.shadow; if (!x) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(x.start_date + "T12:00:00")) / 864e5);
   const p = x.price?.[off]; return p == null ? null : { price: +p, why: x.why?.[off] || "", rule: x.rule?.[off] || "", min: x.min_stay?.[off] ?? null, med: x.comp_median?.[off] ?? null }; };
@@ -1312,7 +1316,7 @@ function srCompAllIn(rows) { const by = {};
     const pn = (r.pre_tax ? r.total * (1 + AIRBNB_TAX) : +r.total) / r.nights;
     for (let i = 0; i < r.nights; i++) { const k = addD(r.check_in, i); ((by[k] ||= {})[r.comp_id] ||= []).push([pn, r.nights]); } }
   const out = {}; for (const [k, m] of Object.entries(by)) { const v = Object.values(m).map(a => [a.reduce((x, y) => x + y[0], 0) / a.length, a.reduce((x, y) => x + y[1], 0) / a.length]);
-    if (v.length >= 2) out[k] = { v: v.reduce((x, y) => x + y[0], 0) / v.length, n: v.length, nt: v.reduce((x, y) => x + y[1], 0) / v.length, all: v.map(x => x[0]).sort((x, y) => x - y) }; }
+    const t = srTrim(v, x => x[0]); if (v.length >= 2) out[k] = { v: t.reduce((x, y) => x + y[0], 0) / t.length, n: v.length, nt: t.reduce((x, y) => x + y[1], 0) / t.length, all: v.map(x => x[0]).sort((x, y) => x - y) }; }
   return out; }
 // p-th percentile (0..1) of a sorted list, straight-line between values
 const srPct = (a, p) => { if (!a?.length) return null; const i = (a.length - 1) * p, lo = Math.floor(i); return a[lo] + (a[Math.min(lo + 1, a.length - 1)] - a[lo]) * (i - lo); };
