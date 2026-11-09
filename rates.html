@@ -306,6 +306,10 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .srlbt{background:var(--ovsoft,#f3f6ee);border-radius:12px;padding:10px 12px}
 .srlbt b{display:block;font-size:20px;line-height:1.15}
 .srlbt span{font-size:11.5px;color:var(--muted)}
+.srlbt em{display:block;font-style:normal;font-size:11px;color:#8a8f87;margin-top:4px;line-height:1.3}
+.hrg{display:inline-grid;place-items:center;min-width:1.9em;padding:2px 6px;border-radius:8px;font-weight:800;color:#fff;background:#6b7280}
+.hrg-A{background:#2f6d1e}.hrg-B{background:#5d8f2a}.hrg-C{background:#b38a12}.hrg-D{background:#b4532a}
+.srbig .hrg{font-size:30px;min-width:1.6em;margin-right:4px}
 .srlbh{margin:4px 0 6px;font-size:14px}
 .srlbtab{width:100%;border-collapse:collapse;font-size:13px}
 .srlbtab th,.srlbtab td{padding:7px 8px;text-align:left;border-top:1px solid var(--ovgrid);white-space:nowrap}
@@ -1138,13 +1142,18 @@ async function loadSetRates() {
   SR.pushes = ps.data || []; SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {};
   { const pre = (h.comp_id || "").match(/^[a-z]+-/)?.[0], tests = (SR.homes || []).map(x => x.comp_id).filter(Boolean);
     SR.grpPre = (h.code || "").split(" ")[0]; SR.grp = [];
-    SR.compName = {}; if (comp?.set_id) { const cn = await sb.from("comps").select("id,label:label_public").eq("set_id", comp.set_id); for (const c of cn.data || []) SR.compName[c.id] = c.label; }
+    SR.compName = {}; SR.compKd = []; if (comp?.set_id) { const cn = await sb.from("comps").select("id,label:label_public,tier,active").eq("set_id", comp.set_id); for (const c of cn.data || []) SR.compName[c.id] = c.label;
+      const pids = (cn.data || []).filter(c => c.tier === "Primary" && c.active !== false).map(c => c.id);
+      if (pids.length) { const kq = await sb.from("kd_listing_details").select("comp_id,captured_at,lb:raw->listing->>last_booking_on,ota:raw->listing->>ota,ms:raw->listing->>min_stay,perf:raw->listing->performance->last_12_months").in("comp_id", pids).gte("captured_at", addD(today, -45)).order("captured_at", { ascending: false }).limit(pids.length * 6);
+        const seen = {}; for (const r of kq.data || []) { const k = r.comp_id; if (!seen[k] || (seen[k].ota !== "airbnb" && r.ota === "airbnb")) seen[k] = r; } SR.compKd = Object.values(seen); } }
     // Brandon 2026-11-08: only our homes in the SAME comp group (e.g. PL Studio - Original), test homes left out
     const mates = comp?.set_id ? SR.ours.filter(c => c.set_id === comp.set_id && c.id !== h.comp_id && !tests.includes(c.id)).map(c => c.id) : [];
     SR.grpTail = (state.sets.find(x => x.id === comp?.set_id)?.name || "").split(" - ").slice(1).join(" - ");
     if (mates.length) { const g = await sb.from("latest_beyond").select("comp_id,start_date,price").in("comp_id", mates); SR.grp = g.data || []; } }
   if (SR.dynFor !== h.code) { SR.dyn = null; SR.dynSaved = h.dyn || null; } SR.dynFor = h.code;   // this home's saved settings (merged over the defaults)
   { const sc = await sb.rpc("rates_set_scoreboard", { p_code: h.code }); SR.score = sc.error ? { err: sc.error.message } : sc.data; }
+  { const d = SR.x?.quality?.run_date; SR.qAll = [];
+    if (d) { const qa = await sb.from("home_quality").select("comp_id,zi:parts->inside->z,zm:parts->matchups->z").eq("run_date", d); SR.qAll = (qa.data || []).map(r => ({ id: r.comp_id, z: r.zi ?? r.zm })); } }
   SR.bk = cid ? ((await sb.from("our_bookings").select("reservation_id,kind,status,booked_at,arrival,nights").eq("comp_id", cid).gte("booked_at", addD(today, -60))).data || []) : [];
   SR.lb = cid ? ((await sb.from("our_bookings").select("reservation_id,arrival,departure,nights,channel,gross_rent,booked_at,status").eq("comp_id", cid).eq("kind", "guest").gte("booked_at", addD(today, -365)).order("booked_at", { ascending: false }).limit(400)).data || [])
     .filter(b => !/owner|o-guest|comp\/charity|commission/i.test(b.channel || "")) : [];
@@ -1221,6 +1230,23 @@ const srShadow = k => { const x = SR.x?.shadow; if (!x) return null; const off =
   const p = x.price?.[off]; return p == null ? null : { price: +p, why: x.why?.[off] || "", rule: x.rule?.[off] || "", min: x.min_stay?.[off] ?? null, med: x.comp_median?.[off] ?? null }; };
 // "Home at a glance" (Brandon 2026-11-08): Home Rater, what guests say, how long it's been on each booking site.
 // Recent bookings: stats + the last 3 bookings' rates (Track our_bookings; rent before cleaning, fees and tax)
+// Reviews = revenue (Brandon 2026-11-08): count of 4-5* reviews (2 yrs) + bookings (12 mo) raise the standard price; 1-3* lower it;
+// a home with few good reviews starts lower so reviews start flowing. Same math in rates_set_auto.py.
+function srRevBoost(Y) { Y = Y || Object.assign({ revPer: 0.5, revBk: 0.25, revBad: 2, revCap: 15, newN: 5, newOff: 10 }, SR.dynSaved || {}, SR.dyn || {});
+  const since = addD(iso(new Date()), -730), S = SR.homes?.find(x => x.code === SR.code)?.auto_summary || {};
+  let good, bad;
+  if (SR.x?.reviews?.reviews) { const L = SR.x.reviews.reviews.filter(r => r.overall != null && r.channel !== "Website" && String(r.submitted || r.check_in || "").slice(0, 10) >= since);
+    good = L.filter(r => +r.overall >= 4).length; bad = L.length - good; }
+  else if (S.rev_good != null) { good = +S.rev_good; bad = +S.rev_bad || 0; } else return null;
+  const bk = (SR.lb || []).filter(b => b.status !== "Cancelled").length, n = +Y.newN || 0;
+  const newP = n > 0 && good < n ? (+Y.newOff || 0) * (1 - good / n) : 0, cap = +Y.revCap || 15;
+  const raw = good * (+Y.revPer || 0) + bk * (+Y.revBk || 0) - bad * (+Y.revBad || 0) - newP, pct = Math.max(-cap, Math.min(cap, raw));
+  const txt = `${good} review${good === 1 ? "" : "s"} of 4–5★${bad ? ` and ${bad} of 1–3★` : ""} in 2 years, ${bk} booking${bk === 1 ? "" : "s"} in 12 months${newP ? `, new-home start −${newP.toFixed(1)}%` : ""} = ${pct > 0 ? "+" : ""}${pct.toFixed(1)}% on the standard price${raw !== pct ? ` (capped at ${cap}%)` : ""}`;
+  return { pct, good, bad, bk, newP, txt, short: `reviews ${good}×4–5★${bad ? ", " + bad + "×1–3★" : ""} + ${bk} bookings${newP ? " + new home" : ""}` }; }
+// Home Rater grades (Brandon 2026-11-08: "easier for staff to understand"): p = share of our homes it beats
+const hrGrade = p => p == null ? null : p >= 0.9 ? "A+" : p >= 0.75 ? "A" : p >= 0.5 ? "B" : p >= 0.25 ? "C" : "D";
+const hrBadge = g => g ? `<span class="hrg hrg-${g[0]}">${g}</span>` : "—";
+const hrRankP = (list, key) => { const L = list.filter(r => r[key] != null).sort((a, b) => b[key] - a[key]), n = L.length; L.forEach((r, i) => { r.grade = hrGrade(n > 1 ? (n - 1 - i) / (n - 1) : 0.5); }); };
 function srLastBkCard() {
   const L = SR.lb || [], now = Date.now(), dAgo = t => (now - new Date(t)) / 864e5;
   const site = c => /ABB|bnb/i.test(c || "") ? "Airbnb" : /VRBO/i.test(c || "") ? "Vrbo" : /BDC/i.test(c || "") ? "Booking.com" : /^Guest( MM)?$/i.test(c || "") ? "Direct" : (c || "—");
@@ -1231,13 +1257,23 @@ function srLastBkCard() {
   const nts = in90.reduce((x, b) => x + (b.nights || 0), 0), rent = in90.reduce((x, b) => x + (+b.gross_rent || 0), 0);
   const last = live[0], dl = last ? Math.floor(dAgo(last.booked_at)) : null, cx90 = L.filter(b => b.status === "Cancelled" && dAgo(b.booked_at) <= 90).length;
   const dt = d => new Date(String(d).length > 10 ? d : d + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" });
-  const tile = (v, k) => `<div class="srlbt"><b>${v}</b><span>${k}</span></div>`;
+  const tile = (v, k, c) => `<div class="srlbt"><b>${v}</b><span>${k}</span>${c ? `<em>${c}</em>` : ""}</div>`;
+  // comps (Primary, same set): Key Data listing details (monthly) + their nightly calendars
+  const K = SR.compKd || [], med = a => { a = a.filter(v => v != null && isFinite(v)).sort((x, y) => x - y); return a.length ? a[a.length >> 1] : null; };
+  const kAgo = med(K.map(r => r.lb ? Math.floor((now - new Date(r.lb + "T12:00:00")) / 864e5) : null)), kAt = K[0]?.captured_at ? new Date(K[0].captured_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  const kAdr = avg(srTrim(K.map(r => r.perf?.adr ? +r.perf.adr : null).filter(v => v))), kOcc = avg(K.map(r => r.perf?.guest_occupancy != null ? +r.perf.guest_occupancy : null)), kMs = med(K.map(r => r.ms ? +r.ms : null));
+  const today0 = iso(new Date()), oc = SR.ourCal, ourB = d => { if (!oc) return null; const o = Math.round((new Date(d + "T12:00:00") - new Date(oc.start_date + "T12:00:00")) / 864e5); const v = oc.avail?.[o]; return v == null ? null : v === "0" ? 1 : 0; };
+  const fillN = n => { const ks = Array.from({ length: n }, (_, i) => addD(today0, i)), o = avg(ks.map(ourB)), c = avg(ks.map(k => srFill(k))); return { o, c }; };
+  const f30 = fillN(30), f90 = fillN(90), pc = v => v == null ? "—" : Math.round(v * 100) + "%";
+  const ourKd = (SR.x?.kd || []).map(r => r.raw?.listing).find(L => L?.performance?.last_12_months?.guest_occupancy != null);
+  const kdn = K.length ? `${K.length} comps, Key Data ${kAt}` : "";
   const tiles = `<div class="srlbts">` +
-    tile(last ? (dl < 1 ? "Today" : dl === 1 ? "1 day ago" : dl + " days ago") : "None", "Last booking made") +
-    tile(in30.length, "Bookings made, last 30 days") + tile(in90.length, "Bookings made, last 90 days") +
-    tile(nts ? fmt(rent / nts) : "—", "Rent / night, last 90 days") +
-    tile(in90.length ? Math.round(avg(in90.map(ahead))) + " days" : "—", "Booked ahead (average)") +
-    tile(in90.length ? avg(in90.map(b => b.nights)).toFixed(1) + " nights" : "—", "Stay length (average)") +
+    tile(last ? (dl < 1 ? "Today" : dl === 1 ? "1 day ago" : dl + " days ago") : "None", "Last booking made", kAgo != null ? `Comps: ${kAgo} days ago (middle comp · ${kdn})` : "") +
+    tile(in30.length, "Bookings made, last 30 days", f30.c != null ? `Next 30 nights booked: ours ${pc(f30.o)} · comps ${pc(f30.c)}` : "") +
+    tile(in90.length, "Bookings made, last 90 days", f90.c != null ? `Next 90 nights booked: ours ${pc(f90.o)} · comps ${pc(f90.c)}` : "") +
+    tile(nts ? fmt(rent / nts) : "—", "Rent / night, last 90 days", kAdr ? `Comps: ${fmt(kAdr)} a night, last 12 months (${kdn})` : "") +
+    tile(in90.length ? Math.round(avg(in90.map(ahead))) + " days" : "—", "Booked ahead (average)", kOcc != null ? `Booked last 12 months: comps ${pc(kOcc)}${ourKd ? ` · ours ${pc(+ourKd.performance.last_12_months.guest_occupancy)}` : ""} (Key Data)` : "") +
+    tile(in90.length ? avg(in90.map(b => b.nights)).toFixed(1) + " nights" : "—", "Stay length (average)", kMs ? `Comps' minimum stay: ${kMs} nights (middle comp)` : "") +
     tile(cx90, "Cancelled, last 90 days") + `</div>`;
   const rows = live.slice(0, 3).map(b => { const p = pn(b), f = SR.fee?.[feeCh(b.channel)], base = p != null && f?.mult ? p / f.mult : null;
     const ks = Array.from({ length: b.nights || 0 }, (_, i) => addD(b.arrival, i)), cmp = avg(ks.map(k => srComp(k)?.adr)), trk = avg(ks.map(k => SR.track?.[k] ? +SR.track[k].rate : null));
@@ -1248,7 +1284,7 @@ function srLastBkCard() {
   const table = rows ? `<div class="wide"><table class="srlbtab"><thead><tr><th>Booked</th><th>Stay</th><th>Nights</th><th>Site</th><th>Rent</th><th>Rent / night</th><th>≈ Base rate</th><th>Track now</th><th>Comps' daily rate</th><th>Booked ahead</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : `<p class="small muted">No guest bookings for this home in the last year.</p>`;
   return `<div class="ovgrid" style="margin-bottom:18px"><div class="ovc w6 srg"><h3>Recent bookings</h3><div class="cs">Guest bookings made in the last year (owner stays, owner guests and comps left out). The last 3 show what each one paid a night.</div>${tiles}<h4 class="srlbh">Last 3 bookings</h4>${table}
-    <div class="src">Source: Track reservations (our_bookings), rent before cleaning, fees and tax. "≈ Base rate" takes out the site's markup using this home's own Track quotes (ESTIMATE); "Track now" and "Comps' daily rate" are today's numbers for those same nights, so you can see if we're priced higher or lower now.</div></div></div>`;
+    <div class="src">Source: Track reservations (our_bookings), rent before cleaning, fees and tax. Grey lines = the comps in this home's set: Key Data listing details (last booking, nightly rate + booked share over 12 months, minimum stay; refreshed monthly) and the comps' Airbnb/Vrbo calendars (next 30/90 nights). "≈ Base rate" takes out the site's markup using this home's own Track quotes (ESTIMATE); "Track now" and "Comps' daily rate" are today's numbers for those same nights, so you can see if we're priced higher or lower now.</div></div></div>`;
 }
 function srGlance(h) {
   const X = SR.x || {}, av = a => { a = a.filter(v => v != null && !isNaN(v)); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
@@ -1257,7 +1293,11 @@ function srGlance(h) {
   // Home Rater
   const q = X.quality, m = q?.parts?.matchups, ins = q?.parts?.inside, ai = X.ai, rt = X.ratings, z = ins?.z ?? m?.z;
   const lvl = z == null ? "Not rated yet" : z >= 0.5 ? "Nicer than most of our homes" : z <= -0.5 ? "Below most of our homes" : "About average for our homes";
-  const rater = `<div class="srbig">${m?.elo ? Math.round(m.elo) : "—"}<span>${escH(lvl)}</span></div>` +
+  const zs = (SR.qAll || []).map(r => r.z).filter(v => v != null), gp = z != null && zs.length > 1 ? zs.filter(v => v < z).length / (zs.length - 1) : null, gr = hrGrade(gp);
+  const rnk = z != null && zs.length ? zs.filter(v => v > z).length + 1 : null;
+  const rater = `<div class="srbig">${gr ? hrBadge(gr) : "—"}<span>${escH(lvl)}${gp != null ? ` · better than ${Math.round(gp * 100)}% of our homes (#${rnk} of ${zs.length})` : ""}</span></div>` +
+    row("Grade scale", "A+ top 10% · A top 25% · B top half · C · D bottom 25%") +
+    row("Head-to-head score", m?.elo ? `${Math.round(m.elo)} (1500 = average)` : "—") +
     row("Staff head-to-head picks", m ? `${m.games} matchup${m.games === 1 ? "" : "s"}` : "none yet") +
     row("Staff 1–5 scores", rt.length ? `${av(rt.map(r => +r.overall)).toFixed(1)} from ${rt.length}` : "none yet") +
     row("Claude photo score (ESTIMATE)", ai?.overall != null ? `${(+ai.overall).toFixed(1)} / 5` : "—") +
@@ -1281,7 +1321,7 @@ function srGlance(h) {
   const missing = ["Airbnb", "Vrbo"].filter(o => !kd.some(L => otaName(L.ota || "") === o) && !(X.links || []).some(l => l.active && (l.channel === o || (o === "Vrbo" && l.channel === "VRBO"))));
   return `<div class="ovgrid" style="margin-bottom:18px">` +
     card("Home Rater", "How this home stacks up against our other homes", rater, `Source: Home Rater (head-to-head picks + 1–5 scores), quality.py run ${escH(q?.run_date || "—")}; photo score = Claude reading the listing photos.`) +
-    card("What guests say", "Last 2 years, worst categories first", guests, `Source: Track guest reviews ${rv?.synced ? "(synced " + new Date(rv.synced).toLocaleDateString() + ")" : ""}; staff-named complaints hidden.`) +
+    card("What guests say", "Every review we have, worst categories first", guests, `Source: Track guest reviews ${rv?.synced ? "(synced " + new Date(rv.synced).toLocaleDateString() + ")" : ""}; staff-named complaints hidden.`) +
     card("On the booking sites", "How long it's been listed, and how it's doing there", otas + (missing.length ? `<div class="srq muted">Not found on ${missing.join(" or ")} yet.</div>` : ""), `Source: Key Data listing details${X.kd?.[0] ? " (" + new Date(X.kd[0].captured_at).toLocaleDateString() + ")" : ""} + the listing links on the Desk.`) + `</div>` + srLastBkCard();
 }
 // share of comps booked/blocked that night (Airbnb, else VRBO calendars) for the demand step
@@ -1391,7 +1431,7 @@ function srDraw() {
   const Y = SR.dyn ||= Object.assign({ base: SR.fee?.Airbnb ? "a" : SR.x?.shadow ? "s" : "c", under: 5, maxU: 10, momU: 3, momMax: 15, momDays: 14, lvl: 0, follow: 0.5, hiD: 10, loD: 5, dow: [0, 0, 0, 0, 0, 12, 12], hol: 15, lm7: 10, lm3: 15, far: 5,
     gapD: 15, gapMax: 3, adjD: 5, paceD: 5, paceU: 5, snowU: 8, snowIn: 4, jump: 35,
     lowPct: 35, mix7: 50, mix3: 100, los4: 0, los7: 10, los14: 15, los28: 20, learnUp: 2, learnQuiet: "", learnDown: 1, learnMax: 25, learnMin: -20,
-    floor: "", floorStay: "", floorStayHol: "", revUp: 5, revMax: 15, revDown: 5, ceil: "", minWk: "", minHol: "", rd: "1", which: "all" }, SR.dynSaved || {});
+    floor: "", floorStay: "", floorStayHol: "", revPer: 0.5, revBk: 0.25, revBad: 2, revCap: 15, newN: 5, newOff: 10, ceil: "", minWk: "", minHol: "", rd: "1", which: "all" }, SR.dynSaved || {});
   const num = (id, v, w, title, step) => `<input type="number" id="${id}" value="${v}" step="${step || 1}" style="width:${w || 70}px"${title ? ` title="${escH(title)}"` : ""}>`;
   const DN = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
   html += `<details class="ovc dyacc" style="margin-bottom:18px"${srDynOpen() ? " open" : ""}><summary><h3>Dynamic pricing</h3><div class="cs">Every night gets its own price. Booking sites reward listings whose rates move with demand. Build, check the chart and table (ⓘ shows each night's steps), then Save.</div></summary>
@@ -1410,10 +1450,14 @@ function srDraw() {
         <label>Highest above the comps' average %${num("dyLearnMax", Y.learnMax ?? 25)}</label>
         <label>Lowest vs the comps' average %${num("dyLearnMin", Y.learnMin ?? -20)}</label>
         <b class="dysub">Reviews = revenue</b>
-        <label title="Guest stars on Airbnb, Vrbo and Google in the last 2 years (3+ reviews; website reviews left out)">Great reviews (4.8★+): up %${num("dyRevUp", Y.revUp ?? 5)}</label>
-        <label title="Great reviews let the standard price climb this much higher; 4.5–4.8★ gets half">…and the highest goes up by %${num("dyRevMax", Y.revMax ?? 15)}</label>
-        <label>Weak reviews (under 4.5★): down %${num("dyRevDown", Y.revDown ?? 5)}</label>
-        <div class="small muted">${(() => { const S = SR.homes.find(x => x.code === SR.code)?.auto_summary; return S?.rev_n ? `${escH(SR.code)}: ${(+S.rev_avg).toFixed(2)}★ from ${S.rev_n} reviews in 2 years${S.rev_n < 3 ? " (needs 3+ to count)" : ""}.` : `${escH(SR.code)} has no guest reviews in the last 2 years yet.`; })()}</div>
+        <label title="Each Airbnb, Vrbo or Google review of 4 or 5 stars in the last 2 years (website reviews left out)">Each 4–5★ review: up %${num("dyRevPer", Y.revPer ?? 0.5, 72, "", 0.25)}</label>
+        <label title="Each guest booking made in the last 12 months (owner stays left out)">Each booking, last 12 months: up %${num("dyRevBk", Y.revBk ?? 0.25, 72, "", 0.25)}</label>
+        <label title="Each review of 1 to 3 stars in the last 2 years">Each 1–3★ review: down %${num("dyRevBad", Y.revBad ?? 2, 72, "", 0.5)}</label>
+        <label title="Reviews + bookings can move the standard price at most this much, up or down; it also lets the learned price climb this much higher">Most reviews can move it %${num("dyRevCap", Y.revCap ?? 15)}</label>
+        <b class="dysub">New homes: get reviews flowing</b>
+        <label title="A home with fewer 4–5★ reviews than this (last 2 years) starts lower">Until it has this many good reviews${num("dyNewN", Y.newN ?? 5)}</label>
+        <label title="With no reviews at all it starts this much lower; each good review takes part of it away">…start this much lower %${num("dyNewOff", Y.newOff ?? 10)}</label>
+        <div class="small muted">${(() => { const B = srRevBoost(); return B ? escH(SR.code) + ": " + escH(B.txt) + "." : ""; })()}</div>
         <div class="small muted">${(() => { const lb = (SR.bk || []).filter(b => b.kind === "guest" && !/cancel/i.test(b.status || "") && b.booked_at).map(b => b.booked_at).sort().pop();
           const P = SR.homes.find(x => x.code === SR.code)?.auto_summary?.pace;
           const pace = P ? `<br><b>Booked, next 60 nights:</b> ${escH(SR.code)} ${P.ours}% · our other ${P.others} homes in this group ${P.group_now ?? "—"}% now · the group this time last year ${P.group_ly ?? "—"}%${P.group_ly != null && P.ours <= P.group_ly - 15 ? " ⚠ behind last year" : ""}. ` : "";
@@ -1818,7 +1862,7 @@ function srWire(R) {
         lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, los4: g("dyLos4"), los7: g("dyLos7"), los14: g("dyLos14"), los28: g("dyLos28"), snowU: nz("dySnowU"), jump: nz("dyJump"),
         floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: "", minHol: g("dyMinHol"), minDef: g("dyMinDef"), minDow: [...document.querySelectorAll("[data-mdow]")].map(i => i.value), minSeasons: srReadSeasons(), rd: g("dyRd"), which: g("dyWhich"),
         under: nz("dyUnder"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
-        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revUp: nz("dyRevUp"), revMax: nz("dyRevMax"), revDown: nz("dyRevDown"), floorStayHol: g("dyFloorStayHol") });
+        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), floorStayHol: g("dyFloorStayHol") });
       const on = $("auOn").checked, send = $("auSend").checked;
       if (send && !confirm(`Send ${SR.code}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
       const r = await sb.rpc("rates_set_auto", { p_code: SR.code, p_dyn: SR.dyn, p_on: on, p_days: +$("auDays").value, p_send: send });
@@ -1846,7 +1890,7 @@ function srWire(R) {
       lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, los4: g("dyLos4"), los7: g("dyLos7"), los14: g("dyLos14"), los28: g("dyLos28"), snowU: nz("dySnowU"), jump: nz("dyJump"),
       floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: "", minHol: g("dyMinHol"), minDef: g("dyMinDef"), minDow: [...document.querySelectorAll("[data-mdow]")].map(i => i.value), minSeasons: srReadSeasons(), rd: g("dyRd"), which: g("dyWhich"),
       under: nz("dyUnder"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
-        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revUp: nz("dyRevUp"), revMax: nz("dyRevMax"), revDown: nz("dyRevDown"), floorStayHol: g("dyFloorStayHol") });
+        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), floorStayHol: g("dyFloorStayHol") });
     const Y = SR.dyn, today = iso(new Date(new Date().setHours(12, 0, 0, 0))), pc = v => (v > 0 ? "+" : "") + Math.round(v) + "%";
     // "usual" = comps over the nearby two weeks, so following the comps only reacts to night-to-night moves (same as rates_set_auto.py)
     const cMedK = k => { const v = []; for (let i = -7; i <= 7; i++) { const c = srComp(addD(k, i)); if (c) v.push(c.adr); } v.sort((x, y) => x - y); return v.length >= 5 ? v[v.length >> 1] : null; };
@@ -1863,19 +1907,18 @@ function srWire(R) {
     const pace = ob.length >= 20 && cf.length >= 20 ? (ob.filter(v => v === "0").length / ob.length - cf.reduce((x, y) => x + y, 0) / cf.length) * 100 : null;
     const rnd = v => Y.rd === "9" ? Math.max(29, Math.round((v + 1) / 10) * 10 - 1) : Math.round(v / +Y.rd) * +Y.rd;
     let n = 0; const built = [];
-    const RS = SR.homes.find(x => x.code === SR.code)?.auto_summary || {}, rA = +RS.rev_avg || 0, rN = +RS.rev_n || 0;
-    const R = rN >= 3 ? (rA >= 4.8 ? +Y.revUp || 0 : rA >= 4.5 ? (+Y.revUp || 0) / 2 : -(+Y.revDown || 0)) : 0;
-    const lMaxE = (+Y.learnMax || 25) + (rN >= 3 ? (rA >= 4.8 ? +Y.revMax || 0 : rA >= 4.5 ? (+Y.revMax || 0) / 2 : 0) : 0);
+    const RB = srRevBoost(Y), RV = RB ? RB.pct : 0;
+    const lMaxE = (+Y.learnMax || 25) + Math.max(0, RV);
     const A = Y.base === "a", L = Math.max(+Y.learnMin || -20, Math.min(lMaxE, +(Y.learn?.lvl || 0))), LP = (+Y.lowPct || 35) / 100, U = +Y.under || 0;
     for (const r of R) { if (Y.which === "empty" && r.v.set) continue;
       const ct = srCompTot(r.k), clo = A && ct ? srCompLow(r.k, LP) : null, out0 = Math.round((new Date(r.k + "T12:00:00") - new Date(today + "T12:00:00")) / 864e5);
       // standard = comps' average − $under, moved by what bookings taught us; last minute slides toward the cheaper comps
-      const std = ct ? (ct.v - U) * (1 + L / 100) * (1 + R / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
+      const std = ct ? (ct.v - U) * (1 + L / 100) * (1 + RV / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
       const mix = ourAv(r.k) === "0" ? 0 : out0 <= 3 ? (+Y.mix3 || 0) / 100 : out0 <= 7 ? (+Y.mix7 || 0) / 100 : 0;
       const tgt = std == null ? null : low != null && low < std ? std + (low - std) * mix : std;
       const b0 = A ? srRackFor(tgt, ct?.nt) : Y.base === "s" ? r.s?.price : Y.base === "b" ? r.b : Y.base === "t" ? (r.t ? +r.t.rate : null) : Y.base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null);
       if (b0 == null) continue;
-      const why = A ? [`comps' average total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `$${U} under${L ? `, learned ${L > 0 ? "+" : ""}${L.toFixed(1)}%` : ""}${R ? `, reviews ${rA.toFixed(2)}★ (${rN}) ${R > 0 ? "+" : ""}${R}%` : ""} = ${fmt(std)}`,
+      const why = A ? [`comps' average total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `$${U} under${L ? `, learned ${L > 0 ? "+" : ""}${L.toFixed(1)}%` : ""}${RV ? `, ${RB.short} ${RV > 0 ? "+" : ""}${RV.toFixed(1)}%` : ""} = ${fmt(std)}`,
           ...(mix && low != null && low < std ? [`${out0} days out: ${Math.round(mix * 100)}% toward the cheaper comps (${fmt(clo)}) = ${fmt(tgt)}`] : []), `guest total ${fmt(tgt)} → our rate ${fmt(b0)}`]
         : [`start: ${{ s: "engine", c: "comps' daily rate", b: "our other homes' average", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = b0;
       const step = (f, t) => { if (!f || f === 1) return; v *= f; why.push(`${t} ${pc((f - 1) * 100)} → ${fmt(v)}`); };
@@ -3146,10 +3189,10 @@ function ppRate(g) {
     for (const r of L) { r.sPos = sc.indexOf(r) + 1; r.pPos = pr.indexOf(r) + 1; r.nSet = L.length;
       if (sc.length >= 3 && pr.length >= 3 && r.sPos && r.pPos) { if (r.sPos <= Math.ceil(sc.length / 3) && r.pPos > Math.ceil(pr.length * 2 / 3)) r.flag = "🟡 Rated near the top of its neighborhood but priced near the bottom: room to raise";
         else if (r.sPos > Math.ceil(sc.length * 2 / 3) && r.pPos <= Math.ceil(pr.length / 3)) r.flag = "🔴 Priced near the top of its neighborhood but rated near the bottom: may be why it books slowly"; } } }
-  rows.sort((a, b) => (b.score ?? -1) - (a.score ?? -1)); PP.rateRows = rows;
+  hrRankP(rows, "score"); rows.sort((a, b) => (b.score ?? -1) - (a.score ?? -1)); PP.rateRows = rows;
   const few = rows.filter(r => r.n === 0).length;
   return `<p class="small">${rows.filter(r => r.flag?.startsWith("🟡")).length} 🟡 rated high, priced low · ${rows.filter(r => r.flag?.startsWith("🔴")).length} 🔴 priced high, rated low · ${few} of ${rows.length} homes have no staff score yet (AI score used; ESTIMATE)</p>
-  <div class="wrap" style="max-height:620px;overflow:auto"><table class="small"><tr><th>#</th><th style="text-align:left">Home</th><th>Score</th><th>Staff (raters)</th><th>AI</th><th>Airbnb ★ (reviews)</th><th>Guest reviews, Track (24 mo)</th><th>Head-to-head</th><th>Rated in neighborhood</th><th>Priced in neighborhood</th><th>Posted next 30</th><th>RevPAR last 90</th><th style="text-align:left">Note</th></tr>${rows.map((r, i) => `<tr><td class="muted">${i + 1}</td><td>${escH(r.x.name)}<div class="muted">${escH(r.x.set)}</div></td><td><b>${f(r.score)}</b></td><td>${f(r.staff)}${r.n ? ` <span class="muted">(${r.n})</span>` : ""}</td><td>${f(r.ai)}</td><td>${r.guest ? r.guest.toFixed(2) + ` <span class="muted">(${r.rev})</span>` : "—"}</td><td>${grCell(r.gr)}</td><td>${r.elo == null ? "—" : Math.round(r.elo)}</td><td>${r.sPos ? `#${r.sPos} of ${r.nSet}` : "—"}</td><td>${r.pPos ? `#${r.pPos} of ${r.nSet}` : "—"}</td><td>${fmt(r.post)}</td><td>${fmt(r.revpar)}</td><td>${escH(r.flag || "")}</td></tr>`).join("")}</table></div>
+  <div class="wrap" style="max-height:620px;overflow:auto"><table class="small"><tr><th>#</th><th style="text-align:left">Home</th><th>Grade</th><th>Score</th><th>Staff (raters)</th><th>AI</th><th>Airbnb ★ (reviews)</th><th>Guest reviews, Track (24 mo)</th><th>Head-to-head</th><th>Rated in neighborhood</th><th>Priced in neighborhood</th><th>Posted next 30</th><th>RevPAR last 90</th><th style="text-align:left">Note</th></tr>${rows.map((r, i) => `<tr><td class="muted">${i + 1}</td><td>${escH(r.x.name)}<div class="muted">${escH(r.x.set)}</div></td><td>${hrBadge(r.grade)}</td><td><b>${f(r.score)}</b></td><td>${f(r.staff)}${r.n ? ` <span class="muted">(${r.n})</span>` : ""}</td><td>${f(r.ai)}</td><td>${r.guest ? r.guest.toFixed(2) + ` <span class="muted">(${r.rev})</span>` : "—"}</td><td>${grCell(r.gr)}</td><td>${r.elo == null ? "—" : Math.round(r.elo)}</td><td>${r.sPos ? `#${r.sPos} of ${r.nSet}` : "—"}</td><td>${r.pPos ? `#${r.pPos} of ${r.nSet}` : "—"}</td><td>${fmt(r.post)}</td><td>${fmt(r.revpar)}</td><td>${escH(r.flag || "")}</td></tr>`).join("")}</table></div>
   <p class="small muted" style="margin:4px 0 0">Score = staff overall when 2+ people scored the home; 1 rater = half staff, half AI; none = AI score (from listing photos + Track amenities). Airbnb ★ from the home's Airbnb listing. Guest reviews = every Airbnb + Vrbo review in Track (reviews shown only on our website are left out: the site shows only good ones), last 24 months (last 12 count double), with repeat complaints from reviews of 4★ or less; click to read them in Reviews. They count in the home's score for pricing (quality.py, Brandon 2026-10-29). "Rated / priced in neighborhood" compare our own homes in the same neighborhood (Beyond posted price, next 30 days, open nights). Sources: Home Rater (Desk), home_ai, Beyond API, Track (reviews: Track API channel reviews via home_quality${RT.grDay ? ", " + RT.grDay : ""}). ESTIMATE.</p>`;
 }
 // Guest reviews per home (Brandon 2026-10-29): read from the nightly home_quality run (quality.py, parts.guest_reviews) - numbers + complaint themes only
@@ -3252,7 +3295,7 @@ async function ppDownload() {
   if (PP.tab === "daily") { const ks = ppRange(g, g.today, PP.days); add("Daily pricing", [["Neighborhood", "Home", ...ks], ...ppHomes(g).map(h => [h.set, h.name, ...ks.map(k => { const n = g.N[h.id]?.[k]; return n ? (n.kind === "guest" ? "Booked " + Math.round(n.rent || 0) : n.kind === "owner" ? "Owner" : "Blocked") : ppPosted(g, h.id, k); })])]);
     add("Comp nightly", [["Neighborhood", ...ks], ...[...new Set(ppHomes(g).map(h => h.set_id))].map(sid => [g.setName[sid], ...ks.map(k => g.CD[sid]?.[k]?.adr != null ? Math.round(g.CD[sid][k].adr) : "")])]); }
   if (PP.tab === "season") { ppSeason(g); add("Season review", [["Neighborhood", "Home", "Season", "Booked %", "Comps booked %", "Booked ADR", "Posted (open nights)", "Comp nightly", "Gap", "Action", "Why"], ...PP.seasonRows.map(z => [z.x.set, z.x.name, z.n, z.s.fill, z.s.cFill, z.s.adr, z.s.post, z.s.cAdr, z.s.gap, z.act.replace(/^\S+ /, ""), z.why])]); }
-  if (PP.tab === "rate") { ppRate(g); add("Home ratings", [["Rank", "Neighborhood", "Home", "Score", "Staff", "Raters", "AI", "Airbnb rating", "Airbnb reviews", "Guest reviews Track (24 mo, weighted ★)", "Track reviews (24 mo)", "Repeat complaints", "Head-to-head", "Rated in neighborhood", "Priced in neighborhood", "Posted next 30", "RevPAR last 90", "Note"], ...PP.rateRows.map((r, i) => [i + 1, r.x.set, r.x.name, r.score, r.staff, r.n, r.ai, r.guest, r.rev, r.gr?.avg_12mo_weighted ?? "", r.gr?.reviews_24mo ?? "", (r.gr?.complaints || []).map(c => c.theme + " x" + c.reviews).join(", "), r.elo, r.sPos, r.pPos, r.post, r.revpar, r.flag || ""])]); }
+  if (PP.tab === "rate") { ppRate(g); add("Home ratings", [["Rank", "Neighborhood", "Home", "Grade", "Score", "Staff", "Raters", "AI", "Airbnb rating", "Airbnb reviews", "Guest reviews Track (24 mo, weighted ★)", "Track reviews (24 mo)", "Repeat complaints", "Head-to-head", "Rated in neighborhood", "Priced in neighborhood", "Posted next 30", "RevPAR last 90", "Note"], ...PP.rateRows.map((r, i) => [i + 1, r.x.set, r.x.name, r.grade || "", r.score, r.staff, r.n, r.ai, r.guest, r.rev, r.gr?.avg_12mo_weighted ?? "", r.gr?.reviews_24mo ?? "", (r.gr?.complaints || []).map(c => c.theme + " x" + c.reviews).join(", "), r.elo, r.sPos, r.pPos, r.post, r.revpar, r.flag || ""])]); }
   if (PP.tab === "hood") { ppHoodRep(g); add("Neighborhoods", [["Neighborhood", "Our homes", "Comps", "Booked next 30", "Comps booked next 30", "Booked next 90", "Posted next 30 (Airbnb basis)", "Comp nightly next 30", "Gap", "Rent last 90", "RevPAR last 90", "Nights on books next 90", "Same day LY", "Pace vs LY"], ...PP.hoodRows.map(r => [r.name, r.n, r.comps, r.f30, r.cf30, r.f90, r.post != null ? r.post * PP_BASIS : null, r.cadr, r.gap, r.rent90, r.revpar, r.otb, r.ly, r.pace])]); }
   if (PP.tab === "pace" || PP.tab === "chan") { const t = document.querySelector("#ppBody table"); add(PP.tab === "pace" ? "Pace" : "Channel mix", [...t.rows].map(r => [...r.cells].map(c => c.innerText))); }
   if (PP.tab === "perf") { ppPerf(g); add("Unit performance", [["Rank", "Neighborhood", "Home", "Bedrooms", "Booked % last 90", "ADR last 90", "RevPAR last 90", "Rent last 90", "Rent YTD", "Booked % next 90", "Rent next 90", "Owner nights next 90", "Avg stay", "Days booked ahead", "AI score"], ...PP.perfRows.map(r => [r.rank, r.x.set, r.x.name, r.x.bedrooms, r.p.fill, r.p.adr, r.p.revpar, r.p.rent, r.ytd, r.n.fill, r.n.rent, r.n.own, r.los, r.lead, r.ai])]); }
@@ -3802,6 +3845,7 @@ function rankHtml() {
   const rows = (RT.homes || []).map(h => { const s = S[h.id], a = RT.ai[h.id]; const staff = s?.avg.overall ?? null;
     return { h, staff, n: s?.n || 0, ai: a?.overall ?? null, ins: s?.avg.inside ?? null, aiIns: a?.inside ?? null, guest: a?.rating ? +a.rating : null, rev: a?.reviews || 0, elo: G[h.id] ? E[h.id] : null, games: G[h.id] || 0,
       blend: staff != null ? (s.n >= 2 ? staff : (staff + (a?.overall ?? staff)) / 2) : a?.overall ?? null }; });
+  hrRankP(rows, "blend");
   const k = RT.sortK || "blend"; rows.sort((x, y) => (y[k] ?? -1) - (x[k] ?? -1));
   const inSet = {}; for (const r of [...rows].sort((x, y) => (y.blend ?? -1) - (x.blend ?? -1))) { const g = (inSet[r.h.set_id] ||= []); g.push(r); r.setPos = g.length; }
   rows.forEach(r => r.setN = inSet[r.h.set_id].length);
@@ -3812,8 +3856,8 @@ function rankHtml() {
   const pk = RT.poll ? RT.poll.kind + "|" + RT.poll.season : "auto|auto";
   const pollSel = `<div class="rrow small" style="margin-top:12px;border-top:1px solid var(--line);padding-top:8px"><b>Slack poll question:</b><select id="rPoll">${POLL_OPTS.map(([k, l]) => `<option value="${k}"${pk === k ? " selected" : ""}>${escH(l)}</option>`).join("")}</select><span id="rPollMsg" class="muted">Used by the daily Slack poll until you change it.</span></div>`;
   return seasonSel + `<p class="small"><b>Every home ranked against every other home, across all neighborhoods.</b> "In its neighborhood" = where it sits among our homes in the same neighborhood (the better ones should price higher).</p><p class="small muted">Score = staff overall when 2+ people scored the home; with 1 person it's half staff, half AI; with none it's the AI score (ESTIMATE). Head-to-head starts at 1500. Click a column to sort.</p>
-    <div class="wrap"><table><tr><th>#</th><th>Home</th><th>In its neighborhood</th>${th("blend", "Score")}${th("staff", "Staff overall")}${th("ai", "AI overall")}${th("ins", "Staff inside")}${th("aiIns", "AI inside")}${th("guest", "Guest ★")}${th("elo", "Head-to-head")}</tr>
-    ${rows.map((r, i) => `<tr><td class="small muted">${i + 1}</td><td>${escH(r.h.name)}<div class="small muted">${escH(r.h.set)}</div></td><td class="small">${r.setN > 1 ? `#${r.setPos} of ${r.setN}` : '<span class="muted">only one</span>'}</td><td><b>${f(r.blend)}</b></td><td>${f(r.staff)}${r.n ? ` <span class="small muted">(${r.n})</span>` : ""}</td><td>${f(r.ai)}</td><td>${f(r.ins)}</td><td>${f(r.aiIns)}</td><td>${r.guest ? r.guest.toFixed(2) + ` <span class="small muted">(${r.rev})</span>` : "—"}</td><td>${r.elo == null ? "—" : Math.round(r.elo) + ` <span class="small muted">(${r.games})</span>`}</td></tr>`).join("")}</table></div>
+    <div class="wrap"><table><tr><th>#</th><th>Home</th><th>In its neighborhood</th><th>Grade</th>${th("blend", "Score")}${th("staff", "Staff overall")}${th("ai", "AI overall")}${th("ins", "Staff inside")}${th("aiIns", "AI inside")}${th("guest", "Guest ★")}${th("elo", "Head-to-head")}</tr>
+    ${rows.map((r, i) => `<tr><td class="small muted">${i + 1}</td><td>${escH(r.h.name)}<div class="small muted">${escH(r.h.set)}</div></td><td class="small">${r.setN > 1 ? `#${r.setPos} of ${r.setN}` : '<span class="muted">only one</span>'}</td><td>${hrBadge(r.grade)}</td><td><b>${f(r.blend)}</b></td><td>${f(r.staff)}${r.n ? ` <span class="small muted">(${r.n})</span>` : ""}</td><td>${f(r.ai)}</td><td>${f(r.ins)}</td><td>${f(r.aiIns)}</td><td>${r.guest ? r.guest.toFixed(2) + ` <span class="small muted">(${r.rev})</span>` : "—"}</td><td>${r.elo == null ? "—" : Math.round(r.elo) + ` <span class="small muted">(${r.games})</span>`}</td></tr>`).join("")}</table></div>
     ${hoodTbl}${state.raterOnly ? "" : pollSel}<p class="small muted">Sources: staff scores and matchups saved on the Desk, plus Slack home poll votes; AI score from each home's Airbnb listing photos and amenities (captured 2026-10-20); guest rating from the Airbnb listing.</p>`;
 }
 async function saveDuel(a, b, w, why) { const season = RT.season === "any" ? null : RT.season;
