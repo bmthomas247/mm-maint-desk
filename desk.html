@@ -716,7 +716,9 @@ function render0(){
   var mb=$("meetbtn"); if(mb){ mb.setAttribute("aria-pressed",String(!!S.ui.meeting)); mb.textContent=S.ui.meeting?"Back to the desk":"Monday meeting"+(D.bwLoaded&&typeof meetCount==="function"?" ("+meetCount()+")":""); mb.classList.toggle("pri",!!S.ui.meeting);
     if(MEET) mb.textContent="← Back to the meeting"; if(EMB) mb.style.display=MEET && !S.ui.meeting?"":"none"; }   // hub: only on the Meetings tab, after opening a job from it
   $("sect").style.display=S.ui.meeting||MEET?"none":"";
-  if(S.ui.meeting){ $("view").innerHTML=vMeet(); if(typeof autoQueueRepeats==="function") autoQueueRepeats(); return; }
+  if(S.ui.meeting){ var ma=document.activeElement, maid=ma&&ma.id, mss=ma&&ma.selectionStart, mse=ma&&ma.selectionEnd;
+    $("view").innerHTML=vMeet(); if(maid && $(maid)){ var mn=$(maid); mn.focus(); try{ if(mss!=null) mn.setSelectionRange(mss,mse); }catch(e){} }
+    if(typeof autoQueueRepeats==="function") autoQueueRepeats(); return; }
   var v=$("view"); var f={today:vToday,check:vCheck,care:vCare,jobs:vJobs,projects:vProjects,routines:vRoutines,trash:vTrash,homes:vHomes,vendors:vVendors,vused:vVused,repeats:vRepeats,
     money:vMoney,recalls:vRecalls,rvr:vRvr,fire:vFire,firesys:function(){ return LIC?LIC.vFireSys():""; },lease:function(){ return LIC?LIC.vLease():""; }}[S.tab];
   // keep focus + caret in text inputs across re-render
@@ -3763,24 +3765,63 @@ function meetUploadGo(mk){ if(MUP.busy) return; var sb=window.MM_SB, fs=[].slice
   .then(function(){ if(!texts.length){ msg.textContent="Saved. There were no words to read: add the transcript or notes too."; return null; }
       var target=ids.filter(function(x){ return x.has; }).pop()||ids[ids.length-1]; msg.textContent="Reading it… (about a minute)";
       var items=meetItems().map(function(it){ return {key:it.key,title:it.title,next:it.proj?(it.proj.next||""):""}; });
-      return sb.functions.invoke("meet-notes-read",{body:{id:target.id,text:texts.join("\n\n"),items:items}}); })
+      MUP.last={id:target.id,text:texts.join("\n\n"),items:items,from:names.join(", "),answers:[]};
+      return sb.functions.invoke("meet-notes-read",{body:{id:target.id,text:MUP.last.text,items:items}}); })
   .then(function(r){ if(!r) return; var b=r.data||{}; if(r.error||!b.ok){ msg.textContent=(b.error)||"Couldn't read it. Try again."; return; }
       msg.textContent="Done."; meetUploadShow(b.result,names.join(", ")); })
   .catch(function(e){ msg.textContent="Not saved: "+((e&&e.message)||"error"); })
   .then(function(){ MUP.busy=false; var g=$("mup_go"); if(g) g.disabled=false; meetUploadList(mk); }); }
+function meetUploadAnswer(){ var sb=window.MM_SB, L=MUP.last, qs=[].slice.call(document.querySelectorAll("[data-mupq]")), msg=$("mup_qmsg"); if(!L) return;
+  var ans=qs.map(function(x){ return {q:x.dataset.mupq,a:x.value.trim()}; }).filter(function(x){ return x.a; }); if(!ans.length) return toast("Type an answer first");
+  L.answers=L.answers.concat(ans); if(msg) msg.textContent="Updating the notes…"; $("mup_qgo").disabled=true;
+  sb.functions.invoke("meet-notes-read",{body:{id:L.id,text:L.text,items:L.items,answers:L.answers}}).then(function(r){ var b=r.data||{};
+    if(r.error||!b.ok){ if(msg) msg.textContent=b.error||"Couldn't update. Try again."; $("mup_qgo").disabled=false; return; } meetUploadShow(b.result,L.from); }); }
 function meetUploadShow(res,from){ var el=$("mup_res"); if(!el||!res) return; var byKey={}; meetItems().forEach(function(it){ byKey[it.key]=it; });
+  var qs=res.questions||[], canAsk=MUP.last && MUP.last.from===from;
   var its=(res.items||[]).filter(function(x){ return byKey[x.key]; }), nw=res.new_items||[];
   el.innerHTML='<div class="mc-next"><b>What the hub found'+(from?' in '+esc(from):'')+':</b> '+esc(res.summary||"")+'</div>'+
     (its.length?'<h4 class="lbl" style="margin-top:10px">Notes for items on the list ('+its.length+') — untick any you don\'t want</h4>'+its.map(function(x,i){ return '<label class="mh-row" style="grid-template-columns:24px 1fr;cursor:pointer"><input type="checkbox" checked data-mupi="'+i+'"><div><b>'+esc(byKey[x.key].title)+'</b><div>'+esc(x.note)+'</div>'+(x.next?'<div class="mh-n">➜ Next: '+esc(x.next)+'</div>':'')+(x.quote?'<div class="note">“'+esc(x.quote)+'”</div>':'')+'</div></label>'; }).join(""):'<div class="note" style="margin-top:8px">Nothing matched the items on the list.</div>')+
     (nw.length?'<h4 class="lbl" style="margin-top:10px">Also came up ('+nw.length+') — goes into "Anything else"</h4>'+nw.map(function(x,i){ return '<label class="mh-row" style="grid-template-columns:24px 1fr;cursor:pointer"><input type="checkbox" checked data-mupn="'+i+'"><div><b>'+esc(x.title)+'</b><div>'+esc(x.note)+'</div>'+(x.next?'<div class="mh-n">➜ Next: '+esc(x.next)+'</div>':'')+'</div></label>'; }).join(""):'')+
+    (qs.length?'<div class="mc-next none" style="margin-top:10px"><b>❓ A few questions so the notes are right'+(canAsk?'':' (answer them right after an upload)')+'</b>'+qs.map(function(q){ return '<div style="margin-top:6px">'+esc((byKey[q.key]?byKey[q.key].title+': ':'')+q.question)+(canAsk?'<input data-mupq="'+esc((byKey[q.key]?byKey[q.key].title+': ':'')+q.question)+'" style="width:100%;margin-top:3px" placeholder="Your answer (leave blank to skip)">':'')+'</div>'; }).join("")+
+      (canAsk?'<div style="margin-top:8px"><button class="btn sm pri" id="mup_qgo">Answer and update the notes</button> <span class="note" id="mup_qmsg"></span></div>':'')+'</div>':'')+
+    ((res.answered||[]).length?'<div class="note" style="margin-top:6px">Updated with your answers ('+res.answered.length+').</div>':'')+
     ((its.length||nw.length)?'<div style="margin-top:10px"><button class="btn pri" id="mup_put">Put the ticked ones into the meeting notes</button> <span class="note">You still press Add / Update on each item, so nothing is saved until you check it.</span></div>':'');
+  var qg=$("mup_qgo"); if(qg) qg.onclick=meetUploadAnswer;
   var put=$("mup_put"); if(put) put.onclick=function(){ S.ui.mnDraft=S.ui.mnDraft||{}; var n=0, log=meetLog(S.ui.meetDay||mondayOf());
     el.querySelectorAll("[data-mupi]").forEach(function(cb){ if(!cb.checked) return; var x=its[+cb.dataset.mupi], k=sid(x.key), ent=log[k]||{}, mine=meetPeople(ent).filter(function(y){ return y.by===S.me; })[0]||{};
       var cur=S.ui.mnDraft["mt_"+k]!=null?S.ui.mnDraft["mt_"+k]:(mine.text||""), curx=S.ui.mnDraft["mx_"+k]!=null?S.ui.mnDraft["mx_"+k]:(mine.next||"");
       S.ui.mnDraft["mt_"+k]=(cur?cur+"\n":"")+x.note; if(x.next) S.ui.mnDraft["mx_"+k]=(curx?curx+"\n":"")+x.next; n++; });
     var add=[]; el.querySelectorAll("[data-mupn]").forEach(function(cb){ if(!cb.checked) return; var x=nw[+cb.dataset.mupn]; add.push("• "+x.title+": "+x.note+(x.next?" Next: "+x.next:"")); });
     if(add.length){ var doc=S.config["meet_"+(S.ui.meetDay||mondayOf())]||{}, nv=S.ui.meetDraft!=null?S.ui.meetDraft:(doc.text||""); S.ui.meetDraft=(nv?nv+"\n":"")+add.join("\n"); }
-    closeModal(); render(); savedPop((n+add.length)+" note"+(n+add.length===1?"":"s")+" filled in — check each one and press Add / Update"); }; }
+    closeModal(); render(); savedPop((n+add.length)+" note"+(n+add.length===1?"":"s")+" filled in — check each one, then press Add / Update"); }; }
+function meetSaveItem(key,quiet,bt){ var it=meetItems().filter(function(x){ return x.key===key; })[0]; if(!it) return; var ik=sid(it.key), tx3=fv("mt_"+ik), nx3=fv("mx_"+ik), tk3=quiet?[]:meetTkNums(fv("mk_"+ik)), mk3=S.ui.meetDay||mondayOf();
+  if(!S.me) return; if(bt) bt.disabled=true; meetStat(ik,"Saving…");
+  return S.db.doc("config/meet_"+mk3).get().then(function(snap){   // fresh copy so two people saving don't wipe each other
+      var cm=(snap&&snap.exists?snap.data():S.config["meet_"+mk3])||{}, items=Object.assign({},cm.items||{}), ent=Object.assign({},items[ik]||{}), ppl=Object.assign({},ent.people||{});
+      if(ent.text && ent.by && !ppl[ent.by]) ppl[ent.by]={text:ent.text,at:ent.at};
+      ppl[S.me]={text:tx3,next:nx3,at:Date.now()}; items[ik]={text:tx3,next:nx3,by:S.me,at:Date.now(),title:it.title,people:ppl};
+      return put("config","meet_"+mk3,{items:items,day:mk3},cm); })
+    .then(function(){ if(!it.save || (!tx3 && !nx3 && !tk3.length)) return; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}, patch={};
+      if(tx3||nx3){ var ns=(cur.notes||[]).slice(), mine={by:S.me,at:Date.now(),meet:mk3,text:"Monday meeting "+fmtD(mk3)+": "+(tx3||"(next step only)"),next:nx3||"",tickets:tk3};
+        var at=-1; ns.forEach(function(n,i){ if(n.by===S.me && n.meet===mk3) at=i; }); if(at>-1){ mine.tickets=(ns[at].tickets||[]).concat(tk3); ns[at]=mine; } else ns.push(mine); patch.notes=ns; }
+      if(nx3 && it.save.coll==="projedits" && nx3!==(cur.next||"")){ patch.next=nx3; patch.nextBy=S.me; patch.nextAt=Date.now(); }
+      if(tk3.length){ var have=(cur.tickets||[]).map(String); patch.tickets=have.concat(tk3.filter(function(n){ return have.indexOf(n)<0; })); }
+      return put(it.save.coll,it.save.id,patch,cur); })
+    .then(function(){ meetDraftDrop(ik); if(!quiet){ var ti=document.getElementById("mk_"+ik); if(ti) ti.value=""; if(S.ui.mnDraft) delete S.ui.mnDraft["mk_"+ik];
+        savedPop(tk3.length?"Note saved · ticket"+(tk3.length>1?"s":"")+" #"+tk3.join(", #")+" linked":"Note saved"); render(); }
+      meetStat(ik,"Saved ✓ "+new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})); })
+    .catch(function(){ meetStat(ik,"Not saved — check your signal and press the button",true); })
+    .then(function(){ if(bt) bt.disabled=false; }); }
+var MSTAT={}; function meetStat(ik,t,bad){ MSTAT[ik]={t:t,bad:!!bad}; var e=document.getElementById("ms_"+ik); if(e){ e.textContent=t; e.style.color=bad?"#b33":""; } }
+function meetDraftKey(ik){ return "mm_meetdraft_"+(S.ui.meetDay||mondayOf())+"_"+ik; }
+function meetDraftDrop(ik){ try{ localStorage.removeItem(meetDraftKey(ik)); }catch(e){} if(S.ui.mnDraft){ delete S.ui.mnDraft["mt_"+ik]; delete S.ui.mnDraft["mx_"+ik]; } }
+function meetDraftGet(id){ var ik=id.slice(3); try{ var j=JSON.parse(localStorage.getItem(meetDraftKey(ik))||"null"); return j&&j[id]!=null?j[id]:null; }catch(e){ return null; } }
+var MAUTO={}; function meetAuto(t){ var id=t.id, ik=id.slice(3);   // auto-save 2 s after someone stops typing (Brandon 2026-11-09: "some notes got lost")
+  try{ var kk=meetDraftKey(ik), j=JSON.parse(localStorage.getItem(kk)||"{}"); j[id]=t.value; localStorage.setItem(kk,JSON.stringify(j)); }catch(e){}
+  meetStat(ik,"Typing… saves by itself"); clearTimeout(MAUTO[ik]);
+  MAUTO[ik]=setTimeout(function(){ var it=meetItems().filter(function(x){ return sid(x.key)===ik; })[0]; if(it) meetSaveItem(it.key,true); },2000); }
+var MAUTON; function meetAutoNotes(){ clearTimeout(MAUTON); var st=$("meetnotes_st"); if(st) st.textContent="Typing… saves by itself";
+  MAUTON=setTimeout(function(){ if(!S.me) return; var mk2=S.ui.meetDay||mondayOf(); put("config","meet_"+mk2,{text:fv("meetnotes"),day:mk2},S.config["meet_"+mk2]).then(function(){ S.ui.meetDraft=null; var st2=$("meetnotes_st"); if(st2) st2.textContent="Saved ✓ "+new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}); }); },2000); }
 function meetTkNums(t){ var out=[]; String(t||"").replace(/\d{4,7}/g,function(n){ if(out.indexOf(n)<0) out.push(n); }); return out; }
 function meetTickets(it){ if(!it.save) return []; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}; return (cur.tickets||[]).map(String); }
 function savedPop(msg){ var e=document.getElementById("savedpop"); if(!e){ e=document.createElement("div"); e.id="savedpop";
@@ -3814,6 +3855,7 @@ function vMeet(){
     grps[g].forEach(function(it){ var k=sid(it.key), ent=log[k]||{}, ppl=meetPeople(ent), mine=ppl.filter(function(x){ return x.by===S.me; })[0]||{}, cov=ppl.some(function(x){ return String(x.text||"").trim(); }) || meetTouched(it,mk);
       var hist=meetHist(it,k,past,ppl), hopen=(S.ui.mhOpen||{})[k], shown=hopen?hist:hist.slice(0,3), nx=meetNext(it,hist), tks=meetTickets(it);
       var dv=(S.ui.mnDraft||{})["mt_"+k], xdv=(S.ui.mnDraft||{})["mx_"+k], tdv=(S.ui.mnDraft||{})["mk_"+k];
+      if(dv==null) dv=meetDraftGet("mt_"+k); if(xdv==null) xdv=meetDraftGet("mx_"+k);
       h+='<div class="mcard'+(cov?' cov':'')+'"><div class="mc-top"><span class="mc-title">'+esc(it.title)+'</span>'+it.homes.slice(0,3).map(propLink).join(" ")+
         (it.stage?'<span class="pill">'+esc(it.stage)+'</span>':'')+(it.badge||'')+(it.who?'<span class="note">'+esc(it.who)+'</span>':'')+(cov?'<span class="pill done">covered this week</span>':'')+
         '<span style="flex:1"></span>'+(it.url?'<a class="note" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.src||"Open")+' ↗</a>':'')+(it.extra||'')+'</div>'+
@@ -3825,11 +3867,12 @@ function vMeet(){
         '<div class="mc-form"><label class="mc-l"><span>Your note this week</span><textarea id="mt_'+esc(k)+'" rows="2" placeholder="What was decided">'+esc(dv!=null?dv:(mine.text||""))+'</textarea></label>'+
         '<label class="mc-l"><span>What needs to happen next</span><textarea id="mx_'+esc(k)+'" rows="2" placeholder="Who does what, by when">'+esc(xdv!=null?xdv:(mine.next||""))+'</textarea></label>'+
         (it.save?'<label class="mc-l"><span>Ticket #</span><input id="mk_'+esc(k)+'" inputmode="numeric" placeholder="105423" title="Freshdesk ticket numbers (more than one: 105423, 105430). They link to this '+(it.save.coll==="projedits"?'project':'job')+'." value="'+esc(tdv!=null?tdv:"")+'"></label>':'<span></span>')+
-        '<button class="btn sm pri mc-save" data-meetitem="'+esc(it.key)+'">'+(mine.text||mine.next?'Update':'Add')+'</button></div></div>'; });
+        '<button class="btn sm pri mc-save" data-meetitem="'+esc(it.key)+'">'+(mine.text||mine.next?'Update':'Add')+'</button></div>'+
+        '<div class="note" id="ms_'+esc(k)+'" style="margin-top:4px;min-height:14px'+((MSTAT[k]||{}).bad?';color:#b33':'')+'">'+esc((MSTAT[k]||{}).t||((mine.text||mine.next)?'Saves by itself as you type':''))+'</div></div>'; });
     h+='</section>'; });
   var nv=S.ui.meetDraft!=null?S.ui.meetDraft:(doc.text||"");
   h+='<section class="panel pad"><h3 class="lbl">Anything else — to-dos for Chris, Cheree and the team</h3><textarea id="meetnotes" style="width:100%;min-height:120px;margin-top:6px">'+esc(nv)+'</textarea>'+
-    '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn sm pri" data-act="meetsave">Save</button>'+(doc.by?'<span class="note">saved by '+esc(nameFor(doc.by))+' '+esc(ago(ymd(doc.at)))+'</span>':'')+'</div>'+
+    '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn sm pri" data-act="meetsave">Save</button><span class="note" id="meetnotes_st">'+(doc.by?'saved by '+esc(nameFor(doc.by))+' '+esc(ago(ymd(doc.at)))+' · saves by itself as you type':'Saves by itself as you type')+'</span></div>'+
     ((doc.transcript||MREC.text)?'<details style="margin-top:8px"'+(MREC.on?' open':'')+'><summary class="note" style="cursor:pointer">Recording transcript</summary><div class="vmeta" style="white-space:pre-wrap;max-height:220px;overflow:auto">'+esc(MREC.on?MREC.text+" "+MREC.live:(doc.transcript||""))+'</div></details>':'')+
     (past.length?'<div class="note" style="margin-top:8px">Past meetings: '+past.slice(0,12).map(function(d){ return '<a href="#" data-meetday="'+esc(d)+'">'+esc(fmtD(d))+'</a>'; }).join(" · ")+'</div>':'')+'</section>';
   return h; }
@@ -4708,20 +4751,7 @@ document.addEventListener("click",function(ev){
   if(d.mhall){ S.ui.mhOpen=S.ui.mhOpen||{}; S.ui.mhOpen[d.mhall]=!S.ui.mhOpen[d.mhall]; return render(); }
   if(d.meetday){ ev.preventDefault(); S.ui.meetDay=d.meetday; return render(); }
   if(d.meetgo){ ev.preventDefault(); S.ui.meeting=false; return go(d.meetgo); }
-  if(d.meetitem){ if(!need()) return; var it=meetItems().filter(function(x){ return x.key===d.meetitem; })[0]; if(!it) return; var ik=sid(it.key), tx3=fv("mt_"+ik), nx3=fv("mx_"+ik), tk3=meetTkNums(fv("mk_"+ik)), mk3=S.ui.meetDay||mondayOf();
-    var bt=ev.target.closest("button"); if(bt) bt.disabled=true;
-    return S.db.doc("config/meet_"+mk3).get().then(function(snap){   // fresh copy so two people saving don't wipe each other
-      var cm=(snap&&snap.exists?snap.data():S.config["meet_"+mk3])||{}, items=Object.assign({},cm.items||{}), ent=Object.assign({},items[ik]||{}), ppl=Object.assign({},ent.people||{});
-      if(ent.text && ent.by && !ppl[ent.by]) ppl[ent.by]={text:ent.text,at:ent.at};
-      ppl[S.me]={text:tx3,next:nx3,at:Date.now()}; items[ik]={text:tx3,next:nx3,by:S.me,at:Date.now(),title:it.title,people:ppl};
-      return put("config","meet_"+mk3,{items:items,day:mk3},cm); }).then(function(){ if(S.ui.mnDraft){ delete S.ui.mnDraft["mt_"+ik]; delete S.ui.mnDraft["mx_"+ik]; delete S.ui.mnDraft["mk_"+ik]; }
-      if((!tx3 && !nx3 && !tk3.length) || !it.save) return; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}, patch={};
-      if(tx3||nx3) patch.notes=(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:"Monday meeting "+fmtD(mk3)+": "+(tx3||"(next step only)"),next:nx3||"",tickets:tk3}]);
-      if(nx3 && it.save.coll==="projedits"){ patch.next=nx3; patch.nextBy=S.me; patch.nextAt=Date.now(); }
-      if(tk3.length){ var have=(cur.tickets||[]).map(String); patch.tickets=have.concat(tk3.filter(function(n){ return have.indexOf(n)<0; })); }
-      return put(it.save.coll,it.save.id,patch,cur); }).then(function(){ var ti=document.getElementById("mk_"+ik); if(ti) ti.value="";
-      savedPop(tk3.length?"Note saved · ticket"+(tk3.length>1?"s":"")+" #"+tk3.join(", #")+" linked":"Note saved"); render(); })
-      .catch(function(){ if(bt) bt.disabled=false; }); }
+  if(d.meetitem){ if(!need()) return; return meetSaveItem(d.meetitem,false,ev.target.closest("button")); }
   if(d.meetnote){ if(!need()) return; var P2=projects().filter(function(x){ return x.id===d.meetnote; })[0]; var tx2=fv("mn_"+sid(d.meetnote)); if(!P2||!tx2) return; var pk2=sid(P2.id), cur2=S.projedits[pk2]||{};
     return put("projedits",pk2,{notes:(cur2.notes||[]).concat([{by:S.me,at:Date.now(),text:"Monday meeting "+fmtD(S.ui.meetDay||mondayOf())+": "+tx2}])},cur2).then(function(){ if(S.ui.mnDraft) delete S.ui.mnDraft["mn_"+sid(d.meetnote)]; toast("Added to the project"); }); }
   if(d.copen){ S.ui.cOpen=S.ui.cOpen||{}; if(S.ui.cOpen[d.copen]) delete S.ui.cOpen[d.copen]; else S.ui.cOpen[d.copen]=1; return render(); }
@@ -4940,8 +4970,8 @@ document.addEventListener("input",function(ev){
     var cb=document.querySelector('[data-rci="'+t.dataset.rcq+'"][data-i="'+t.dataset.i+'"]'); if(cb && +t.value>0) cb.checked=true; return; }
   if(t.id==="rvq"){ S.ui.rvq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.id==="hq"){ S.ui.hq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
-  if(t.id==="meetnotes"){ S.ui.meetDraft=t.value; return; }
-  if(t.id && (t.id.indexOf("mn_")===0 || t.id.indexOf("mt_")===0 || t.id.indexOf("mk_")===0 || t.id.indexOf("mx_")===0)){ S.ui.mnDraft=S.ui.mnDraft||{}; S.ui.mnDraft[t.id]=t.value; return; }
+  if(t.id==="meetnotes"){ S.ui.meetDraft=t.value; meetAutoNotes(); return; }
+  if(t.id && (t.id.indexOf("mn_")===0 || t.id.indexOf("mt_")===0 || t.id.indexOf("mk_")===0 || t.id.indexOf("mx_")===0)){ if(S.ui.meeting && (t.id.indexOf("mt_")===0 || t.id.indexOf("mx_")===0)) meetAuto(t); S.ui.mnDraft=S.ui.mnDraft||{}; S.ui.mnDraft[t.id]=t.value; return; }
   if(t.id==="meetday"){ S.ui.meetDraft=null; S.ui.meetDay=t.value?mondayOf(t.value):""; return render(); }
   if(t.id==="vuq"){ S.ui.vuq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.id==="vq"){ S.ui.vq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
