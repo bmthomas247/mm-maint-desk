@@ -1295,7 +1295,8 @@ function srGlance(h) {
   const lvl = z == null ? "Not rated yet" : z >= 0.5 ? "Nicer than most of our homes" : z <= -0.5 ? "Below most of our homes" : "About average for our homes";
   const zs = (SR.qAll || []).map(r => r.z).filter(v => v != null), gp = z != null && zs.length > 1 ? zs.filter(v => v < z).length / (zs.length - 1) : null, gr = hrGrade(gp);
   const rnk = z != null && zs.length ? zs.filter(v => v > z).length + 1 : null;
-  const rater = `<div class="srbig">${gr ? hrBadge(gr) : "—"}<span>${escH(lvl)}${gp != null ? ` · better than ${Math.round(gp * 100)}% of our homes (#${rnk} of ${zs.length})` : ""}</span></div>` +
+  const lvl2 = gr ? { "A+": "One of our best homes", A: "Nicer than most of our homes", B: "In the better half of our homes", C: "In the lower half of our homes", D: "Below most of our homes" }[gr] : lvl;
+  const rater = `<div class="srbig">${gr ? hrBadge(gr) : "—"}<span>${escH(lvl2)}${gp != null ? ` · better than ${Math.round(gp * 100)}% of our homes (#${rnk} of ${zs.length})` : ""}</span></div>` +
     row("Grade scale", "A+ top 10% · A top 25% · B top half · C · D bottom 25%") +
     row("Head-to-head score", m?.elo ? `${Math.round(m.elo)} (1500 = average)` : "—") +
     row("Staff head-to-head picks", m ? `${m.games} matchup${m.games === 1 ? "" : "s"}` : "none yet") +
