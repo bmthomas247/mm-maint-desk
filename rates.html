@@ -2076,6 +2076,14 @@ function srWire(R) {
     for (const x of built) { if (x.dw !== 0 || holOfK(addD(x.r.k, 1))) continue;
       const fs = [addD(x.r.k, -2), addD(x.r.k, -1)].map(k => byK[k]?.v ?? srVal(k).rate).filter(v => v != null);
       if (fs.length && x.v > 0.95 * Math.min(...fs)) { x.v = 0.95 * Math.min(...fs); x.why.push(`Sunday kept under Fri/Sat → ${fmt(x.v)}`); } }
+    { const XW = x => { const md = x.r.k.slice(5); return md >= "12-24" || md === "01-01"; }, xw = built.filter(XW);
+      const core = xw.filter(x => x.r.k.slice(5) !== "12-24").map(x => x.v).sort((a, b) => a - b);
+      if (core.length >= 3) { const lv = core.length % 2 ? core[core.length >> 1] : (core[core.length / 2 - 1] + core[core.length / 2]) / 2;
+        for (const x of xw) { const md = x.r.k.slice(5), top = md === "12-25" || md === "12-31", nv = md === "12-24" ? x.v : Math.max(x.v, top ? lv * 1.05 : lv);   // fill the dips, never lower a night
+          if (Math.abs(nv - x.v) >= 0.5) { x.v = nv; x.why.push(`Christmas week kept smooth: ${top ? "top night, at least the week level +5%" : "raised to the week level"} ${fmt(lv)} → ${fmt(x.v)}`); }
+          if ((top || md === "01-01") && (x.min || 0) < 3) { x.min = 3; x.why.push("min stay 3 (Christmas / New Year's)"); } }
+        const mx = Math.max(...xw.filter(x => !["12-24", "12-25", "12-31"].includes(x.r.k.slice(5))).map(x => x.v), 0);
+        for (const x of xw) if (["12-25", "12-31"].includes(x.r.k.slice(5)) && x.v < mx) { x.v = mx; x.why.push(`Christmas week: top night, at least the week's highest ${fmt(mx)}`); } } }
     let moved = 0, last = null; SR.diff = [];
     const own = SR.owner, ownMin = k => own ? (own.min_price_peak != null && own.peak_start && own.peak_end && k >= own.peak_start && k <= own.peak_end ? +own.min_price_peak : own.min_price != null ? +own.min_price : null) : null;
     for (const x of built) { let v = x.v; const wa = Y.floor !== "" ? +Y.floor : null, om = ownMin(x.r.k);
