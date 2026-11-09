@@ -219,7 +219,7 @@ details.acc[open]>summary{margin-bottom:6px}
 .pwr{list-style:none;margin:2px 0 8px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;text-align:left;font-size:13.5px;color:var(--muted);font-weight:700}
 .pwr li.ok{color:var(--forest-2)}
 .pwshow{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600;margin:4px 0;cursor:pointer;text-align:left}.pwshow input{width:auto;margin:0}
-.apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:8px}.apps div{border:1px solid var(--line);border-radius:12px;padding:10px 12px}.apps a{font-weight:700;margin-right:10px}
+.appblk{border-top:1px solid #e3e8dc;padding:10px 0 6px;margin-top:4px}.appblk:first-of-type{border-top:0}.apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:8px}.apps div{border:1px solid var(--line);border-radius:12px;padding:10px 12px}.apps a{font-weight:700;margin-right:10px}
 .seg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px} .seg button{flex:1;min-width:110px}
 .seg button.on{background:var(--moose-soft);border-color:var(--moose);color:var(--moose-ink)}
 .fb{border-top:1px solid var(--line);padding:12px 0}.fb:first-child{border-top:0}
@@ -315,7 +315,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="calendar.js?v=20261109wcapp"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
-<script src="staffing.js?v=20261109coach"></script>
+<script src="staffing.js?v=20261109apps"></script>
 <script src="perks.js"></script>
 <script src="calls.js"></script>
 <script src="market_watch.js"></script>
@@ -1673,6 +1673,25 @@ async function pennyBriefCard(box){
 }
 /* My settings: 🔔 Notifications (Brandon 2026-11-05). Optional Slack messages + bell items per kind (hub_notify_set); the work alerts
    this person gets are listed as always on; "Ask for another alert" goes to the admins as a private ask (hub-feedback, alert:true). */
+/* My settings ▸ 📲 My apps (Brandon 2026-11-09: "the app download in the settings of the employee … GPS, Moose Time, Authenticator").
+   Moose Time = the Windows app (hub_work_app.sql, workcheck_app/): only for people who work on a computer (work_app_mine().needs).
+   GPS = Traccar Client: only for people on the field GPS list (field_gps_me().on_list); set-up is on Staffing ▸ Phone GPS. */
+const MT_EXE = "https://ogugdhhiajebfdwpzofp.supabase.co/storage/v1/object/public/hub-apps/MooseHubWorkCheck.exe";
+async function appsCard(){
+  const a = document.getElementById("appsMt"), g = document.getElementById("appsGps"); if(!a || !g) return;
+  try{ const m = (await sb.rpc("work_app_mine")).data;
+    if(m && m.needs){ const last = m.last_slot ? Date.parse(m.last_slot) : 0, mins = last ? Math.round((Date.now() - last) / 6e4) : null, old = m.last_ver && m.latest_ver && m.last_ver !== m.latest_ver;
+      a.innerHTML = `<div class="appblk"><b>💻 Moose Time (Windows computer)</b> ${!last ? `<span class="pill amber">Not set up yet</span>` : mins < 20 ? `<span class="pill green">Running on ${esc(m.last_device || "your computer")}</span>` : `<span class="pill">Last heard ${mins < 90 ? mins + " min ago" : esc(new Date(last).toLocaleDateString())}</span>`}${old ? ` <span class="pill amber">New version ${esc(m.latest_ver)}</span>` : ""}
+        <p class="muted" style="margin:2px 0 6px">Clock in and out from your computer, and it opens the hub for you already signed in. While you're clocked in it records how much the keyboard and mouse were used (never what you type) and one screenshot every 10 minutes. Only you, your manager and Brandon/Kim see it.</p>
+        <a class="btn small primary" href="${MT_EXE}" download>⬇ Download Moose Time</a>
+        <p class="muted" style="margin:6px 0 0;font-size:13px">Open the file. If Windows says "Windows protected your PC", click More info ▸ Run anyway. Sign in, then click the round M by the clock to clock in or out. It starts with Windows. To update, download and open it again.</p></div>`; } }catch(e){}
+  try{ const f = (await sb.rpc("field_gps_me")).data;
+    if(f && f.on_list){ const mine = (f.devices || []).filter(d => d.user_id === f.me && !d.off), seen = mine.map(d => d.last_seen).filter(Boolean).sort().pop();
+      g.innerHTML = `<div class="appblk"><b>📍 GPS (Traccar Client on your phone)</b> ${mine.length ? `<span class="pill green">Phone set up${seen ? " · last point " + esc(new Date(seen).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) : ""}</span>` : `<span class="pill amber">Not set up yet</span>`}
+        <p class="muted" style="margin:2px 0 6px">Free app that sends your phone's location to the hub, kept only while you're clocked in.</p>
+        <div class="apps"><div><b>Traccar Client</b><br><a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" rel="noopener">iPhone</a><a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" rel="noopener">Android</a></div></div>
+        <a class="btn small" href="#/field_gps" style="margin-top:6px">Set up my phone →</a></div>`; } }catch(e){}
+}
 async function notifyCard(box){
   if(!box) return;
   const [r, fb, pb] = await Promise.all([sb.rpc("hub_notify_mine"), sb.rpc("hub_feedback_board"), sb.rpc("penny_brief_mine")]);
@@ -1776,9 +1795,11 @@ function settingsView2(v){
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Choose a picture<input type="file" id="avfile" accept="image/*" style="display:none"></label>
       ${PREFS.avatar ? `<button class="btn small" id="avdel">Remove</button>` : ""}<span class="muted" id="avmsg" style="align-self:center">Any picture you like — it's cropped to a circle.</span></div></div></div>
     <div class="card"><b style="font-size:17px">🔑 My password</b><p class="muted" style="margin:4px 0 8px">Set or change the password you sign in with (Hub and Moose Locks). You'll need your current password or a code from your email.</p><button class="btn small" id="mypw">Set a new password</button></div>
-    <div class="card"><b style="font-size:17px">📱 2-step sign-in app</b><p class="muted" style="margin:4px 0 0">Signing in asks for a 6-digit code from a free authenticator app on your phone. Get one here:</p>
+    <div class="card"><b style="font-size:17px">📲 My apps</b><p class="muted" style="margin:4px 0 8px">Every app you use for work, in one place.</p>
+      <div id="appsMt"></div><div id="appsGps"></div>
+      <div class="appblk"><b>📱 Authenticator (2-step sign-in)</b><p class="muted" style="margin:2px 0 0">Signing in asks for a 6-digit code from a free authenticator app on your phone. Get one here:</p>
       <div class="apps">${AUTH_APPS.map(([n, i, g]) => `<div><b>${n}</b><br><a href="${i}" target="_blank" rel="noopener">iPhone</a><a href="${g}" target="_blank" rel="noopener">Android</a></div>`).join("")}</div>
-      <p class="muted" style="margin:8px 0 0;font-size:13px">New phone? Ask Brandon or Kim to reset your 2-step, then scan the new code when you sign in.</p></div>
+      <p class="muted" style="margin:8px 0 0;font-size:13px">New phone? Ask Brandon or Kim to reset your 2-step, then scan the new code when you sign in.</p></div></div>
     ${PWP.length ? `<details class="card acc" id="pwpcard"><summary><b style="font-size:17px">🔑 Team passwords</b><span class="muted">${PWP.length} people</span></summary>
       <p class="muted" style="margin:4px 0 8px">Set a password for someone on your team. Saving signs them out of every phone and computer. Every change is logged.</p>
       ${PWP.map(x => `<div class="ord"><b style="flex:1">${esc(x.name)}<div class="muted" style="font-weight:600;font-size:13px">${esc(x.teams || "")}</div></b><button class="btn small" data-pwp="${x.id}">Set password</button></div>`).join("")}</details>` : ""}
@@ -1851,7 +1872,7 @@ function settingsView2(v){
     $("#intown").onblur = () => { $("#intown").onchange(); autoSave(); };
     $("#mypw").onclick = myPwBox;
     v.querySelectorAll("[data-pwp]").forEach(b => b.onclick = () => accPw(PWP.find(p => p.id === b.dataset.pwp), msg => { $("#prefmsg").textContent = msg; }));
-    notifyCard($("#ntfbox")); pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
+    appsCard(); notifyCard($("#ntfbox")); pennyBriefCard($("#pbrief")); pdCard($("#pdesk")); if(window.bannersCard) bannersCard($("#bnrbox"));   // banners.js: admins + managers only (hub_banner_teams)
     setOneOpen(v);
   };
   draw();
