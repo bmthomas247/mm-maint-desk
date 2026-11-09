@@ -1321,6 +1321,9 @@ function srGlance(h) {
   const rater = `<div class="srbig">${gr ? `<em class="srgr srgr-${gr[0]}">${gr} <small>grade</small></em>` : "—"}<span>${escH(lvl2)}${gp != null ? ` · better than ${Math.round(gp * 100)}% of our homes (#${rnk} of ${zs.length})` : ""}</span></div>` +
     row("Grade scale", "A+ top 10% · A top 25% · B top half · C · D bottom 25%") +
     row("Head-to-head score", m?.elo ? `${Math.round(m.elo)} (1500 = average)` : "—") +
+    (() => { const F = h.track_facts || {}, d = q?.parts?.listing?.detail || {};
+      return row("Hot tub", (F.hot_tub === "private" ? "Private" : F.hot_tub === "hot_tub" ? "Yes (private or shared?)" : F.hot_tub === "none" ? "None" : "—") + (d.hot_tub != null ? ` · counts ${d.hot_tub >= 1 ? "full" : d.hot_tub > 0 ? "as shared" : "nothing"} in the score` : "")) +
+        row("Pets", F.pet == null ? "—" : F.pet ? "Takes pets · priced up in summer" : "No pets · priced down in summer"); })() +
     row("Staff head-to-head picks", m ? `${m.games} matchup${m.games === 1 ? "" : "s"}` : "none yet") +
     row("Staff 1–5 scores", rt.length ? `${av(rt.map(r => +r.overall)).toFixed(1)} from ${rt.length}` : "none yet") +
     row("Claude photo score (ESTIMATE)", ai?.overall != null ? `${(+ai.overall).toFixed(1)} / 5` : "—") +
