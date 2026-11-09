@@ -2857,7 +2857,7 @@ function vProjects(){
   h+=ps.length?'<div class="pjgrid">'+ps.map(function(p){ var st=daysBetween(p.lastDate||p.updated,t), hot=stale(p);
       return '<button class="pjc'+(hot?' hot':'')+'" data-proj="'+esc(p.id)+'"><div style="display:flex;justify-content:space-between;align-items:center"><span class="pjic">'+(PJ_ICON[p.stage]||"🛠️")+'</span>'+projPill(p.stage)+'</div>'+
         '<div class="pjt">'+esc(p.title)+'</div>'+
-        (p.homes.length?'<div class="pjh">'+p.homes.slice(0,4).map(function(c){ return '<span>'+esc(c)+'</span>'; }).join("")+(p.homes.length>4?'<span>+'+(p.homes.length-4)+'</span>':'')+(p.office?'<span>Office</span>':'')+'</div>':'')+
+        (p.homes.length?(p.homes.length<=2?homeNowHtml(p.homes,2).replace('margin-top:8px','margin-top:0'):'<div class="pjh">'+p.homes.slice(0,4).map(function(c){ var hn=homeNow(c); return '<span title="'+esc(hn.now+' · '+hn.next)+'">'+(hn.cls==="blk"?'🔒 ':hn.cls==="occ"?'🧳 ':'')+esc(c)+'</span>'; }).join("")+(p.homes.length>4?'<span>+'+(p.homes.length-4)+'</span>':'')+(p.office?'<span>Office</span>':'')+'</div>'):'')+
         ((p.edit.vendorNames||[]).length?'<div style="font-size:12px;font-weight:700">🧰 '+esc(p.edit.vendorNames.slice(0,3).join(", "))+(p.edit.vendorNames.length>3?' +'+(p.edit.vendorNames.length-3):'')+'</div>':'')+
         '<div class="pjn'+(p.next?'':' none')+'">'+(p.next?'👉 '+esc(p.next.slice(0,140)):'No next step written yet')+'</div>'+
         '<div class="pjf">'+(p.who?'<span>'+esc(p.who)+'</span> · ':'')+'<span class="'+(st>10&&p.stage!=="done"?'late':'')+'">updated '+esc(ago(p.lastDate))+'</span>'+(p.created?' · <span>started '+esc(fmtD(p.created))+'</span>':'')+((p.edit.tickets||[]).length?' · 🎫 '+p.edit.tickets.length:'')+'<span class="go">Open →</span></div></button>'; }).join("")+'</div>'
@@ -2875,6 +2875,7 @@ function projDetail(p){ if(!p) return '<div class="empty">Pick a project.</div>'
   if(p.stage!=="done") h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+pjxBtns("projedits",sid(p.id))+(p.edit.laterUntil&&p.edit.laterUntil>t?'<span class="note">⏸ Off the Monday meeting until '+esc(fmtD(p.edit.laterUntil))+(p.edit.laterWhy?' · '+esc(p.edit.laterWhy):'')+'</span>':'')+'</div>';
   else if(p.edit.closedWhy) h+='<div class="note" style="margin-bottom:10px">'+(p.edit.closedWhy==="not needed"?'🚫 Closed, not needed':'✓ Done')+(p.edit.closedBy?' · '+esc(nameFor(p.edit.closedBy)):'')+(p.edit.closedAt?' · '+esc(fmtD(ymd(p.edit.closedAt))):'')+'. Change Stage below to open it again.</div>';
   h+=pjVenHtml(sid(p.id),p.edit,true).replace('margin-top:8px','margin:0 0 10px');
+  if(p.homes.length) h+='<div style="margin:-4px 0 12px">'+homeNowHtml(p.homes,12)+'</div>';
   var tl=meetHist({proj:p},sid(p.id),[],[]);
   h+='<div class="block"><h4>Timeline <span class="note" style="font-weight:400">· '+tl.length+' entr'+(tl.length===1?'y':'ies')+(p.created?' · started '+esc(fmtD(p.created)):'')+'</span></h4>'+
     (p.next?'<div class="mc-next" style="margin:0 0 10px"><b>👉 Next up:</b> '+linkify(p.next)+'</div>':'')+
@@ -3937,6 +3938,17 @@ function tkLookup(inp){ var sb=window.MM_SB, nums=meetTkNums(inp.value), info=do
       var ta=document.getElementById(inp.dataset.tkfill); if(!ta) return;
       var line="Freshdesk #"+n+" — "+(t.subject||"")+" ("+(t.status||"")+(t.created?", "+fmtD(String(t.created).slice(0,10)):"")+(t.from?", from "+t.from:"")+")"+(t.text?": "+t.text.trim().slice(0,400)+(t.text.length>400?"…":""):"");
       ta.value=(ta.value.trim()?ta.value.trim()+"\n":"")+line; ta.dispatchEvent(new Event("input",{bubbles:true})); }); },500); }
+/* Each home on a project: who's in it now (guest / owner / blocked) and the next check-in (Brandon 2026-11-09). Track stays via staysOf(). */
+function homeNow(code){ var t=today(); if(/^L-/.test(code)) return {now:"Lease home",cls:"",next:""};
+  var ss=staysOf(code).slice().sort(function(a,b){ return String(a.in).localeCompare(String(b.in)); });
+  var cur=ss.filter(function(x){ return x.in<=t && t<x.out; })[0], nx=ss.filter(function(x){ return x.in>t; })[0], ng=ss.filter(function(x){ return x.in>t && x.what==="guest in"; })[0];
+  var lab=function(x){ return x.what==="guest in"?"Guest":x.what==="owner in"?"Owner":x.what==="blocked"?"Blocked":"Owner stay"; };
+  return {now:cur?(cur.what==="blocked"?"🔒 Blocked":cur.what==="guest in"?"🧳 Guest in":"🏡 Owner in")+" until "+fmtD(cur.out):"Empty now", cls:cur?(cur.what==="blocked"?"blk":"occ"):"free",
+    next:nx?"Next: "+lab(nx)+" "+fmtD(nx.in)+(ng&&ng!==nx?" · next guest "+fmtD(ng.in):""):"No check-ins on the books"}; }
+function homeNowHtml(homes,max){ var hs=(homes||[]).slice(0,max||4); if(!hs.length || !((S.feeds.occupancy||{}).units)) return "";
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+hs.map(function(c){ var h=homeNow(c), bg=h.cls==="blk"?"#fdecec":h.cls==="occ"?"#eef3fb":"#f1f6e8", fg=h.cls==="blk"?"#9b2c2c":h.cls==="occ"?"#24456e":"#3c5f12";
+    return '<span style="background:'+bg+';color:'+fg+';border-radius:12px;padding:4px 10px;font-size:12px;line-height:1.35"><b>'+esc(c)+'</b> · '+esc(h.now)+(h.next?'<br><span style="opacity:.85">'+esc(h.next)+'</span>':'')+'</span>'; }).join("")+
+    ((homes||[]).length>(max||4)?'<span class="note">+'+((homes||[]).length-(max||4))+' more</span>':'')+'</div>'; }
 function meetTkNums(t){ var out=[]; String(t||"").replace(/\d{4,7}/g,function(n){ if(out.indexOf(n)<0) out.push(n); }); return out; }
 function meetTickets(it){ if(!it.save) return []; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}; return (cur.tickets||[]).map(String); }
 function savedPop(msg){ var e=document.getElementById("savedpop"); if(!e){ e=document.createElement("div"); e.id="savedpop";
@@ -3998,6 +4010,7 @@ function vMeet(){
         (it.stage?'<span class="pill">'+esc(it.stage)+'</span>':'')+(it.badge||'')+(it.who?'<span class="note">'+esc(it.who)+'</span>':'')+(cov?'<span class="pill done">covered this week</span>':'')+
         '<span style="flex:1"></span>'+(it.save?pjxBtns(it.save.coll,it.save.id):'')+(it.proj?'<button class="btn sm pri" data-proj="'+esc(it.proj.id)+'">⤢ Open project</button>':it.url?'<a class="note" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.src||"Open")+' ↗</a>':'')+(it.extra||'')+'</div>'+
         (it.read.length?'<div style="margin-top:5px">'+it.read.map(function(x){ return '<div class="note">'+x+'</div>'; }).join("")+'</div>':'')+
+        homeNowHtml(it.homes,4)+
         ((it.proj||it.job)?'<div class="mc-next'+(nx.text?'':' none')+'"><b>👉 Next up'+(it.proj?' for this project':'')+':</b> '+(nx.text?linkify(nx.text)+(nx.by?' <span class="note">('+esc(nx.by)+(nx.d?', '+esc(fmtD(nx.d)):'')+')</span>':''):'<span class="note">Nothing written yet. Add it below.</span>')+'</div>':'')+
         (it.proj?pjVenHtml(it.save.id,it.proj.edit,true):'')+
         (tks.length?'<div class="mc-tk">🎫 Tickets: '+tks.map(function(n){ return '<a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener" title="Open in Freshdesk">#'+esc(n)+' ↗</a>'; }).join("")+'</div>':'')+
