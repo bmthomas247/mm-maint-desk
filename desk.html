@@ -2892,19 +2892,22 @@ function projDetail(p){ if(!p) return '<div class="empty">Pick a project.</div>'
   var hs={}; p.homes.forEach(function(c){ hs[c]=1; }); var ws=words(p.title);
   var bw=D.jobs.filter(function(j){ return j.src==="breezeway" && hs[j.prop] && !bwNoise(j) && !j.vendorVisit && (j.status!=="done" || daysBetween(j.finished||"2000-01-01",t)<=45); })
     .map(function(j){ var sc=words(j.title).filter(function(w){ return ws.indexOf(w)>-1; }).length; return {j:j,sc:sc}; })
-    .sort(function(a,b){ return b.sc-a.sc || (b.j.due||b.j.finished||"").localeCompare(a.j.due||a.j.finished||""); }).slice(0,10);
+    .sort(function(a,b){ return (b.j.due||b.j.finished||"").localeCompare(a.j.due||a.j.finished||"") || b.sc-a.sc; }).slice(0,30);
   var open=bw.filter(function(x){ return x.j.status!=="done"; });
-  h+='<div class="block"><h4>In Breezeway at '+(p.homes.length===1?'this home':'these homes')+'</h4>'+
+  var bwAll=(S.ui.pjBwAll||{})[p.id], bwShow=bwAll?bw:bw.slice(0,3);
+  var bwH='<div class="block"><h4>In Breezeway at '+(p.homes.length===1?'this home':'these homes')+(bw.length?' <span class="note" style="font-weight:400">· '+bw.length+'</span>':'')+'</h4>'+
     (!p.homes.length?'<div class="note">No home on this project, so there\'s nothing to check in Breezeway.</div>':
-     bw.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+bw.map(function(x){ return jobRow(x.j,false); }).join("")+'</div>':'')+
+     bw.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+bwShow.map(function(x){ return jobRow(x.j,false); }).join("")+'</div>'+
+       (bw.length>3?'<button class="mh-more" data-pjbwall="'+esc(p.id)+'">'+(bwAll?'Show only the 3 newest':'Show all '+bw.length)+'</button>':''):'')+
     (p.homes.length && !open.length && p.stage!=="done" && p.stage!=="on hold"?'<div class="stopbox" style="margin-top:8px"><b>Nothing open in Breezeway for this.</b> If there\'s a visit coming, it should be on the schedule. <button class="btn sm pri" data-act="projbw">Put a task in Breezeway</button></div>':'')+'</div>';
-  // updates timeline
+  // updates timeline (Breezeway moved to the bottom, Brandon 2026-11-09)
   var ups=(p.updates||[]).slice().reverse();
   var sr=projSlackReplies(p); if(sr.length) h+='<div class="block"><h4>Replies in Slack</h4><div class="log">'+sr.map(function(r){ return '<div class="logrow"><div class="logmeta">'+esc(r.by||"")+' · '+esc(r.at?new Date(r.at).toLocaleString():"")+'</div><div class="logtxt">'+esc(r.text||"")+'</div></div>'; }).join("")+'</div></div>';
-  h+='<div class="block"><h4>Updates <span class="note" style="font-weight:400">· also shows on the Monday maintenance meeting</span></h4><div class="addline" style="flex-wrap:wrap"><textarea id="p_note" placeholder="What happened, who is doing what, by when" style="flex:2;min-width:200px"></textarea><textarea id="p_nnext" placeholder="What needs to happen next" style="flex:1;min-width:160px"></textarea><input id="p_tk" placeholder="Ticket #" inputmode="numeric" style="width:110px"><button class="btn sm" data-act="projnote">Add</button></div>'+
+  h+='<div class="block"><h4>Updates <span class="note" style="font-weight:400">· also shows on the Monday maintenance meeting</span></h4><div class="addline" style="flex-wrap:wrap"><input id="p_tk" data-tkfill="p_note" placeholder="Ticket #" inputmode="numeric" style="width:110px" title="Type a Freshdesk ticket number: what the ticket says is filled into the note" value="'+esc(pjDraft("p_tk"))+'"><textarea id="p_note" placeholder="What happened, who is doing what, by when" style="flex:2;min-width:200px">'+esc(pjDraft("p_note"))+'</textarea><textarea id="p_nnext" placeholder="What needs to happen next" style="flex:1;min-width:160px">'+esc(pjDraft("p_nnext"))+'</textarea><button class="btn sm" data-act="projnote">Add</button></div><div class="note" id="tki_p_tk" style="margin-top:4px"></div>'+
     ((p.edit.tickets||[]).length?'<div class="mc-tk" style="margin-top:8px">🎫 Tickets: '+p.edit.tickets.map(function(n){ return '<a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener">#'+esc(n)+' ↗</a>'; }).join("")+'</div>':'')+
     '<div class="log" style="margin-top:10px">'+p.notesD.slice().reverse().map(function(n){ return '<div class="logrow"><div class="logmeta">'+esc(nameFor(n.by))+' · '+esc(new Date(n.at).toLocaleString())+'</div><div class="logtxt">'+linkify(n.text)+(n.next?'<div style="color:#3c5f12;font-weight:600;margin-top:3px">➜ Next: '+linkify(n.next)+'</div>':'')+'</div></div>'; }).join("")+'</div></div>';
   h+='<div class="block"><h4>Earlier updates (from Asana)</h4>'+(ups.length?'<div class="log">'+ups.map(function(x){ return '<div class="logrow"><div class="logmeta">'+esc(x.date?fmtD(x.date):"")+(x.head&&x.head!=="Start"&&!/^\\d/.test(x.head)?' · '+esc(x.head.slice(0,60)):'')+'</div><div class="logtxt">'+esc(x.text)+'</div></div>'; }).join("")+'</div>':'<div class="note">No dated updates.</div>')+'</div>';
+  h+=bwH;
   return h+'</div>';
 }
 
@@ -3773,7 +3776,7 @@ var MEET_CSS='<style>.mcard{background:#fff;border:1px solid var(--line);border-
   '.mh-row{display:grid;grid-template-columns:78px 1fr;gap:10px;padding:7px 0;border-top:1px solid var(--line-2,#eee);font-size:13px;line-height:1.45}.mh-row:first-of-type{border-top:0}'+
   '.mh-d{color:#888;font-size:12px;padding-top:1px}.mh-by{font-weight:700}.mh-n{margin-top:3px;color:#3c5f12;font-size:12.5px;font-weight:600}'+
   '.mh-more{background:none;border:0;color:#3c5f12;font-weight:700;cursor:pointer;padding:6px 0 0;font-size:12.5px}'+
-  '.mc-form{display:grid;grid-template-columns:1.3fr 1fr 120px auto;gap:10px;margin-top:12px;align-items:end;border-top:1px dashed var(--line);padding-top:10px}'+
+  '.mc-form{display:grid;grid-template-columns:120px 1.3fr 1fr auto;gap:10px;margin-top:12px;align-items:end;border-top:1px dashed var(--line);padding-top:10px}'+
   '.mc-l{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:#666}.mc-l textarea,.mc-l input{width:100%;font-weight:400}'+
   '@media(max-width:860px){.mc-form{grid-template-columns:1fr}.mh-row{grid-template-columns:1fr;gap:2px}}</style>';
 /* Upload a meeting recording / transcript / notes (2026-11-09, Brandon): anyone at the meeting sends in Zoom (or other) notes + recordings;
@@ -3921,6 +3924,19 @@ function pjVenPick(id){ if(!need()) return; var cur=S.projedits[id]||{}, have={}
       var patch={vendors:ids,vendorNames:names};
       if(added.length||gone.length) patch.notes=(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:(added.length?"Vendors added: "+added.join(", "):"")+(added.length&&gone.length?". ":"")+(gone.length?"Vendors taken off: "+gone.join(", "):"")}]);
       closeModal(); return put("projedits",id,patch,cur).then(function(){ savedPop(ids.length?ids.length+" vendor"+(ids.length===1?"":"s")+" on this project":"No vendors on this project"); render(); }); },"Save vendors"); }
+function pjDraft(f){ return ((S.ui.pjDraft||{})[f+"|"+S.ui.proj])||""; }
+/* Ticket # -> what the Freshdesk ticket says goes into the note (fd_ticket_brief, hub_fd_ticket_brief.sql; Brandon 2026-11-09) */
+var TKSEEN={};
+function tkLookup(inp){ var sb=window.MM_SB, nums=meetTkNums(inp.value), info=document.getElementById("tki_"+inp.id); clearTimeout(inp._tk);
+  if(!sb || !nums.length){ if(info) info.textContent=""; return; }
+  inp._tk=setTimeout(function(){ var n=nums[nums.length-1]; if(info) info.textContent="Looking up Freshdesk #"+n+"…";
+    sb.rpc("fd_ticket_brief",{p_id:+n}).then(function(r){ var t=r&&r.data, inf=document.getElementById("tki_"+inp.id);
+      if(!t){ if(inf) inf.innerHTML='Freshdesk #'+esc(n)+' isn\'t in the hub\'s copy (last ~200 days). It still links: <a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener">open it ↗</a>'; return; }
+      if(inf) inf.innerHTML='🎫 <a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener">#'+esc(n)+'</a> · '+esc(t.subject||"")+' · '+esc(t.status||"")+(t.from?' · from '+esc(t.from):'')+' — added to the note';
+      var key=inp.dataset.tkfill+"|"+n; if(TKSEEN[key]) return; TKSEEN[key]=1;
+      var ta=document.getElementById(inp.dataset.tkfill); if(!ta) return;
+      var line="Freshdesk #"+n+" — "+(t.subject||"")+" ("+(t.status||"")+(t.created?", "+fmtD(String(t.created).slice(0,10)):"")+(t.from?", from "+t.from:"")+")"+(t.text?": "+t.text.trim().slice(0,400)+(t.text.length>400?"…":""):"");
+      ta.value=(ta.value.trim()?ta.value.trim()+"\n":"")+line; ta.dispatchEvent(new Event("input",{bubbles:true})); }); },500); }
 function meetTkNums(t){ var out=[]; String(t||"").replace(/\d{4,7}/g,function(n){ if(out.indexOf(n)<0) out.push(n); }); return out; }
 function meetTickets(it){ if(!it.save) return []; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}; return (cur.tickets||[]).map(String); }
 function savedPop(msg){ var e=document.getElementById("savedpop"); if(!e){ e=document.createElement("div"); e.id="savedpop";
@@ -3936,7 +3952,7 @@ function vMeet(){
   var trash=routines().filter(isTrash).map(function(r){ var p=trashPlan(r); return p?{r:r,p:p}:null; }).filter(Boolean);
   var seas=routinesDue().filter(function(r){ return r.cadence==="seasonal" && !r.doneNow; });
   var wk=new Date(Date.parse(t+"T12:00:00")-7*864e5).toISOString().slice(0,10), noTime=fx.notime.filter(function(j){ return (j.finished||"")>=wk; });
-  var h=MEET_CSS+'<div class="sechead" style="align-items:flex-start"><div><h2>Monday maintenance meeting · '+esc(fmtD(mk))+' <button class="btn sm pri" data-act="newproj" style="vertical-align:middle">+ Project</button></h2><p>Chris, Cheree and the team. Go down the list, write what was decided on each one — it goes onto the project or job too.</p></div>'+
+  var h=MEET_CSS+PJ_CSS+'<div class="sechead" style="align-items:flex-start"><div><h2>Monday maintenance meeting · '+esc(fmtD(mk))+' <button class="btn sm pri" data-act="newproj" style="vertical-align:middle">+ Project</button></h2><p>Chris, Cheree and the team. Go down the list, write what was decided on each one — it goes onto the project or job too.</p></div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="date" id="meetday" value="'+esc(mk)+'">'+
     (typeof (window.SpeechRecognition||window.webkitSpeechRecognition)==="function"?'<button class="btn sm'+(MREC.on?' pri':'')+'" data-act="meetrec">'+(MREC.on?'● Stop recording':'Record the meeting')+'</button>':'')+
     '<button class="btn sm" id="mupbtn" onclick="meetUpload()">⬆ Upload recording / notes</button><button class="btn sm" data-act="meetprint">Print / PDF</button></div></div>';
@@ -3948,7 +3964,30 @@ function vMeet(){
       (cb.length?'Home care due: '+cb.map(function(b){ return esc(b.c.name)+' <b>'+b.due.length+'</b>'; }).join(" · ")+'<br>':'')+
       (seas.length?'Seasonal: '+seas.map(function(r){ return esc(r.title); }).join(" · ")+'<br>':'')+
       (trash.length?'Trash: '+trash.map(function(x){ return esc(x.r.title.replace(/^Trash\s*/i,"").slice(0,30))+' out '+x.p.out.length+' / skip '+x.p.skip.length; }).join(" · "):'')+'</div></section></div>';
-  var grps={}; items.forEach(function(it){ (grps[it.grp]=grps[it.grp]||[]).push(it); });
+  var mu=S.ui, mq=String(mu.mq||"").toLowerCase().trim(), gnames=[]; items.forEach(function(it){ if(gnames.indexOf(it.grp)<0) gnames.push(it.grp); });
+  var stages=[]; items.forEach(function(it){ if(it.stage && stages.indexOf(it.stage)<0) stages.push(it.stage); });
+  var isCov=function(it){ return meetPeople(log[sid(it.key)]||{}).some(function(x){ return String(x.text||"").trim(); }) || meetTouched(it,mk); };
+  var shown=items.filter(function(it){
+    if(mu.mgrp && it.grp!==mu.mgrp) return false;
+    if(mu.mcov==="todo" && isCov(it)) return false; if(mu.mcov==="done" && !isCov(it)) return false;
+    if(mu.mstage && it.stage!==mu.mstage) return false;
+    if(mu.mven==="yes" && !(it.proj && (it.proj.edit.vendorNames||[]).length)) return false;
+    if(mu.mven==="no" && it.proj && (it.proj.edit.vendorNames||[]).length) return false;
+    if(mu.mnext==="none" && !(it.proj && !it.proj.next)) return false;
+    if(!mq) return true;
+    var hay=[it.title,(it.homes||[]).join(" "),it.who||"",it.stage||"",it.grp,it.proj?(it.proj.next||"")+" "+(it.proj.edit.vendorNames||[]).join(" ")+" "+(it.proj.notesD||[]).map(function(n){ return n.text; }).join(" "):"",
+      meetPeople(log[sid(it.key)]||{}).map(function(x){ return (x.text||"")+" "+(x.next||""); }).join(" ")].join(" ").toLowerCase();
+    return mq.split(/\s+/).every(function(w){ return hay.indexOf(w)>-1; }); });
+  var sel=function(id,cur,opts){ return '<select id="'+id+'" style="border-radius:999px;padding:6px 10px;border:1px solid #e1e6d6">'+opts.map(function(o){ return '<option value="'+esc(o[0])+'"'+((cur||"")===o[0]?' selected':'')+'>'+esc(o[1])+'</option>'; }).join("")+'</select>'; };
+  h+='<div class="pjbar" style="margin-bottom:14px"><input type="search" id="meetq" placeholder="Search projects, homes, people, notes, vendors…" value="'+esc(mu.mq||"")+'">'+
+    sel("meetgrp",mu.mgrp,[["","All sections"]].concat(gnames.map(function(g){ return [g,g]; })))+
+    sel("meetcov",mu.mcov,[["","Covered or not"],["todo","Not covered yet"],["done","Covered this week"]])+
+    (stages.length?sel("meetstage",mu.mstage,[["","Any status"]].concat(stages.map(function(x){ return [x,x]; }))):'')+
+    sel("meetven",mu.mven,[["","Vendors: any"],["yes","Has a vendor"],["no","No vendor yet"]])+
+    sel("meetnext",mu.mnext,[["","Next step: any"],["none","No next step written"]])+
+    ((mq||mu.mgrp||mu.mcov||mu.mstage||mu.mven||mu.mnext)?'<button class="pjpill" data-meetclr="1">Clear ✕</button><span class="note">'+shown.length+' of '+items.length+'</span>':'')+'</div>';
+  if(!shown.length) h+='<div class="panel pad note" style="margin-bottom:14px">Nothing matches. <a href="#" data-meetclr="1">Clear the search</a></div>';
+  var grps={}; shown.forEach(function(it){ (grps[it.grp]=grps[it.grp]||[]).push(it); });
   Object.keys(grps).forEach(function(g){
     h+='<section style="margin-bottom:16px"><h3 class="lbl" style="margin:0 0 8px">'+esc(g)+' <span class="muted">'+grps[g].length+'</span></h3>';
     grps[g].forEach(function(it){ var k=sid(it.key), ent=log[k]||{}, ppl=meetPeople(ent), mine=ppl.filter(function(x){ return x.by===S.me; })[0]||{}, cov=ppl.some(function(x){ return String(x.text||"").trim(); }) || meetTouched(it,mk);
@@ -3964,10 +4003,9 @@ function vMeet(){
         (tks.length?'<div class="mc-tk">🎫 Tickets: '+tks.map(function(n){ return '<a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener" title="Open in Freshdesk">#'+esc(n)+' ↗</a>'; }).join("")+'</div>':'')+
         (hist.length?'<div class="mh"><div class="mh-h">History · '+hist.length+' note'+(hist.length===1?'':'s')+'</div>'+shown.map(function(x){ return '<div class="mh-row"><span class="mh-d">'+esc(x.d?fmtD(x.d):"")+'</span><div><span class="mh-by">'+esc(x.by||x.src||"")+'</span>'+(x.by&&x.src?' <span class="note">· '+esc(x.src)+'</span>':'')+'<div>'+linkify(x.text||"")+'</div>'+(x.next?'<div class="mh-n">➜ Next: '+linkify(x.next)+'</div>':'')+'</div></div>'; }).join("")+
           (hist.length>3?'<button class="mh-more" data-mhall="'+esc(k)+'">'+(hopen?'Show only the last 3':'Show all '+hist.length+' notes')+'</button>':'')+'</div>':'')+
-        '<div class="mc-form"><label class="mc-l"><span>Your note this week</span><textarea id="mt_'+esc(k)+'" rows="2" placeholder="What was decided">'+esc(dv!=null?dv:(mine.text||""))+'</textarea></label>'+
+        '<div class="mc-form">'+(it.save?'<label class="mc-l"><span>Ticket #</span><input id="mk_'+esc(k)+'" data-tkfill="mt_'+esc(k)+'" inputmode="numeric" placeholder="105423" title="Type a Freshdesk ticket number: what the ticket says is filled into your note, and the ticket links to this '+(it.save.coll==="projedits"?'project':'job')+'." value="'+esc(tdv!=null?tdv:"")+'"></label>':'<span></span>')+'<label class="mc-l"><span>Your note this week</span><textarea id="mt_'+esc(k)+'" rows="2" placeholder="What was decided">'+esc(dv!=null?dv:(mine.text||""))+'</textarea></label>'+
         '<label class="mc-l"><span>What needs to happen next</span><textarea id="mx_'+esc(k)+'" rows="2" placeholder="Who does what, by when">'+esc(xdv!=null?xdv:(mine.next||""))+'</textarea></label>'+
-        (it.save?'<label class="mc-l"><span>Ticket #</span><input id="mk_'+esc(k)+'" inputmode="numeric" placeholder="105423" title="Freshdesk ticket numbers (more than one: 105423, 105430). They link to this '+(it.save.coll==="projedits"?'project':'job')+'." value="'+esc(tdv!=null?tdv:"")+'"></label>':'<span></span>')+
-        '<button class="btn sm pri mc-save" data-meetitem="'+esc(it.key)+'">'+(mine.text||mine.next?'Update':'Add')+'</button></div>'+
+        '<button class="btn sm pri mc-save" data-meetitem="'+esc(it.key)+'">'+(mine.text||mine.next?'Update':'Add')+'</button></div><div class="note" id="tki_mk_'+esc(k)+'"></div>'+
         '<div class="note" id="ms_'+esc(k)+'" style="margin-top:4px;min-height:14px'+((MSTAT[k]||{}).bad?';color:#b33':'')+'">'+esc((MSTAT[k]||{}).t||((mine.text||mine.next)?'Saves by itself as you type':''))+'</div></div>'; });
     h+='</section>'; });
   var later=projects().filter(function(p){ return !p.office && !p.hidden && p.stage!=="done" && (p.stage==="on hold" || (p.edit.laterUntil && p.edit.laterUntil>t)); }).map(function(p){ return {title:p.title,until:p.edit.laterUntil&&p.edit.laterUntil>t?p.edit.laterUntil:"",why:p.stage==="on hold"?(p.edit.holdWhy||"on hold"):p.edit.laterWhy,hold:p.stage==="on hold",coll:"projedits",id:sid(p.id),pid:p.id}; })
@@ -4825,6 +4863,8 @@ document.addEventListener("click",function(ev){
       .then(function(){ toast(rr.props.length+" Breezeway task"+(rr.props.length===1?"":"s")+" queued — the hub creates them within a minute or two"); }); }
   if(d.pjx){ return pjxDo(d.pjx); }
   if(d.pjven){ return pjVenPick(d.pjven); }
+  if(d.meetclr){ ev.preventDefault(); S.ui.mq=""; S.ui.mgrp=S.ui.mcov=S.ui.mstage=S.ui.mven=S.ui.mnext=""; return render(); }
+  if(d.pjbwall){ S.ui.pjBwAll=S.ui.pjBwAll||{}; S.ui.pjBwAll[d.pjbwall]=!S.ui.pjBwAll[d.pjbwall]; return render(); }
   if(d.proj){ S.ui.proj=d.proj; return render(); }
   if(d.projf!=null){ S.ui.projF=d.projf==='all'?'':d.projf; if(d.projf==='done') S.ui.projDone=true; return render(); }
   if(d.act==='projclose'){ S.ui.proj=''; return render(); }
@@ -4957,7 +4997,7 @@ document.addEventListener("click",function(ev){
         if(tx||pnx) pp.notes=(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:tx||"(next step only)",next:pnx||"",tickets:ptk}]);
         if(pnx){ pp.next=pnx; pp.nextBy=S.me; pp.nextAt=Date.now(); }
         if(ptk.length){ var phv=(cur.tickets||[]).map(String); pp.tickets=phv.concat(ptk.filter(function(n){ return phv.indexOf(n)<0; })); }
-        return put("projedits",pk,pp,cur).then(function(){ savedPop(ptk.length?"Note saved · ticket"+(ptk.length>1?"s":"")+" #"+ptk.join(", #")+" linked":"Note saved"); }); }
+        return put("projedits",pk,pp,cur).then(function(){ ["p_note","p_nnext","p_tk"].forEach(function(f){ if(S.ui.pjDraft) delete S.ui.pjDraft[f+"|"+S.ui.proj]; }); render(); savedPop(ptk.length?"Note saved · ticket"+(ptk.length>1?"s":"")+" #"+ptk.join(", #")+" linked":"Note saved"); }); }
       return mNewJob({prop:P.homes[0]||"",title:P.title}); }
     case "deljob": if(!j) return; return put("deskjobs",j.id,{deleted:true},S.deskjobs[j.id]).then(function(){ S.ui.sel=""; toast("Removed"); });
     case "newroutine": return mRoutine();
@@ -5061,6 +5101,7 @@ document.addEventListener("change",function(ev){
   if(t.id==="projoffice"){ S.ui.projOffice=t.checked; return render(); }
   if(t.id==="projdone"){ S.ui.projDone=t.checked; return render(); }
   if(t.id==="projsort"){ S.ui.projSort=t.value; return render(); }
+  if(/^meet(grp|cov|stage|ven|next)$/.test(t.id)){ S.ui["m"+t.id.slice(4)]=t.value; return render(); }
   if(t.id==="pjv_q"){ var vq=t.value.toLowerCase().trim(); document.querySelectorAll(".pjvrow").forEach(function(r){ r.style.display=!vq||r.dataset.t.indexOf(vq)>-1?"":"none"; }); return; }
   if(t.id==="projq"){ S.ui.projQ=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.classList&&t.classList.contains("care_pick")){ var ck2=t.dataset.cpk; S.ui.carePick=S.ui.carePick||{}; S.ui.carePick[ck2]=S.ui.carePick[ck2]||{}; S.ui.carePick[ck2][t.value]=t.checked; return render(); }
@@ -5080,6 +5121,9 @@ document.addEventListener("input",function(ev){
     var cb=document.querySelector('[data-rci="'+t.dataset.rcq+'"][data-i="'+t.dataset.i+'"]'); if(cb && +t.value>0) cb.checked=true; return; }
   if(t.id==="rvq"){ S.ui.rvq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.id==="hq"){ S.ui.hq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
+  if(t.dataset && t.dataset.tkfill) tkLookup(t);
+  if(t.id==="p_note"||t.id==="p_nnext"||t.id==="p_tk"){ S.ui.pjDraft=S.ui.pjDraft||{}; S.ui.pjDraft[t.id+"|"+S.ui.proj]=t.value; return; }
+  if(t.id==="meetq"){ S.ui.mq=t.value; clearTimeout(t._d); t._d=setTimeout(render,180); return; }
   if(t.id==="meetnotes"){ S.ui.meetDraft=t.value; meetAutoNotes(); return; }
   if(t.id && (t.id.indexOf("mn_")===0 || t.id.indexOf("mt_")===0 || t.id.indexOf("mk_")===0 || t.id.indexOf("mx_")===0)){ if(S.ui.meeting && (t.id.indexOf("mt_")===0 || t.id.indexOf("mx_")===0)) meetAuto(t); S.ui.mnDraft=S.ui.mnDraft||{}; S.ui.mnDraft[t.id]=t.value; return; }
   if(t.id==="meetday"){ S.ui.meetDraft=null; S.ui.meetDay=t.value?mondayOf(t.value):""; return render(); }
