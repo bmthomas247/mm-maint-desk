@@ -189,6 +189,11 @@ table{font-size:14px}th{color:var(--muted);font-weight:700}tr.click:hover td,.tb
 .fdask{border:1px dashed var(--line-2,#cfd8cb);border-radius:12px;padding:10px;margin-top:8px;display:grid;gap:6px}.fdask select,.fdask input{max-width:420px}
 .fdstat{border-radius:10px;padding:6px 10px;margin-top:6px!important;font-size:13px;background:var(--ground)}.fdstat.accept{background:var(--greenbg)}.fdstat.reject{background:var(--ground)}.fdstat.later{background:var(--amberbg)}
 .fdbulk{background:var(--ground);border-radius:12px;padding:6px 10px}
+.fdhead .fdhome{font-size:19px;font-weight:800}.fdhead .fdkind{font-size:13px;font-weight:700;color:var(--muted)}.fdhead .fddates{margin-left:auto;font-size:13px;color:var(--muted)}
+.fdwhy{font-size:14.5px;line-height:1.45;margin:4px 0 6px!important}
+.fdbig{display:inline-flex;gap:10px;align-items:baseline;flex-wrap:wrap;background:var(--ground);border-radius:12px;padding:7px 12px;font-size:15px}.fdbig .fdnew{font-size:20px;font-weight:800;color:var(--forest-2,#2f4a10)}.fdbig .fdpct{font-weight:800;padding:1px 8px;border-radius:999px;background:var(--card)}.fdbig .fdpct.dn{color:var(--red)}.fdbig .fdpct.upp{color:var(--forest-2,#2f4a10)}
+.fdmore{font-size:13px;color:var(--muted);margin-top:6px!important}.fdmore summary{cursor:pointer;color:var(--teal2)}.fdmore>div{margin:4px 0}
+.fdacts .fdx{display:none}.fdacts.all .fdx{display:inline-flex}.fdacts .fdtoggle{background:none;border:none;color:var(--teal2);font-weight:700;cursor:pointer;font-size:13px;padding:4px 6px}
 .fdacts .tab.fdgo{border-color:var(--moose,#88B535);background:var(--moose-soft,#eef5e0);font-weight:800}.fdacts .tab.on{background:var(--forest-2);color:#fff}
 .pk{position:relative;max-width:620px;margin:4px 0 8px}.pk input{width:100%;font-size:16px;padding:12px 52px 12px 14px;border-radius:14px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
 .pkbtn{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:20px;padding:6px 12px;cursor:pointer;color:var(--ink);min-width:44px;min-height:44px}
@@ -4170,18 +4175,32 @@ function fdCard(x) {
   const d = x.d, done = d && d.decision !== "later";
   const status = d ? `<div class="fdstat ${d.decision}"><b>${d.decision === "accept" ? "✓ Doing it" : d.decision === "reject" ? "Left as is" : "Waiting"}</b> · ${escH(d.note || "")} <span class="muted">· ${escH(d.created_by || "")}, ${new Date(d.created_at).toLocaleDateString()}${d.carried ? " (earlier copy of this finding)" : ""}${d.sent_to_kolleen ? " · sent to Kolleen" : d.decision === "accept" && x.change ? " · on the Kolleen list" : ""}</span>
       ${fu.map(f => `<div class="small">🙋 Asked ${escH(f.who)}: <b>${f.status === "done" || f.status === "useful" ? "done ✓" : f.status === "dismissed" || f.status === "not_useful" ? "they hid it" : "not done yet"}</b>${f.status_at && f.status !== "new" ? ` <span class="muted">${new Date(f.status_at).toLocaleDateString()}</span>` : ""}</div>`).join("")}</div>` : "";
+  const md = s => { const d = new Date(s + "T12:00:00"); return isNaN(d) ? s : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+  const nice = x.date_from ? (x.date_from === x.date_to ? md(x.date_from) : `${md(x.date_from)} – ${md(x.date_to)}`) : "";
+  const tt = String(x.title || ""), ci = tt.indexOf(": "), home = x.home || (ci > 0 ? tt.slice(ci + 2) : tt);
+  const kind = String(FD_KIND[x.kind] || (ci > 0 ? tt.slice(0, ci) : "")).replace(/^\S+\s/, m => /[A-Za-z]/.test(m) ? m : "").replace(/\s*\(.*\)$/, "");
+  const ev = String(x.evidence || ""), m1 = ev.match(/^.*?[.;](\s|$)/), first0 = (m1 ? m1[0] : ev), rest = ev.slice(first0.length).trim(), first = first0.trim().replace(/;$/, ".");
+  const c = x.change, big = !c ? "" : c.kind === "min"
+    ? `<div class="fdbig"><span>Min stay ${c.cur}</span><span>→</span><span class="fdnew">${c.new} nights</span></div>`
+    : `<div class="fdbig"><span>${c.kind === "min_price" ? "Beyond minimum" : "Now"} ${fmt(c.cur)}</span><span>→</span><span class="fdnew">${fmt(c.new)}</span>${c.pct != null ? `<span class="fdpct ${c.pct < 0 ? "dn" : "upp"}">${c.pct > 0 ? "+" : ""}${c.pct}%</span>` : ""}${c.kind === "rate" || !c.kind ? `<span class="small muted">average a night</span>` : ""}</div>`;
+  const acts = fdActs(x), nMain = acts.length - FD_COMMON.length;
   return `<div class="fdcard sev${x.severity || 2}" data-fid="${x.id}">
-    <div class="fdhead"><b>${escH(x.title)}</b>${dates ? `<span class="pill">${escH(dates)}</span>` : ""}</div>
-    <div class="small">${escH(x.evidence || "")}</div>
-    <div class="small" style="color:var(--teal2)">→ ${escH(x.suggestion || "")}</div>
-    ${x.change ? `<div class="fdchg small">Suggested change: ${chg(x.change)}</div>` : ""}
-    <div class="small muted">Sources: ${escH(x.sources || "")}</div>
+    <div class="fdhead"><span class="fdhome">${escH(home)}</span>${kind ? `<span class="fdkind">${escH(kind)}</span>` : ""}${nice ? `<span class="fddates">${escH(nice)}</span>` : ""}</div>
+    <div class="fdwhy">${escH(first)}</div>
+    ${big}
     ${status}
     ${done ? `<div class="rrow" style="margin:6px 0 0"><button class="tab" data-again="1">Decide again</button></div>` : ""}
-    <div class="fdacts"${done ? ' style="display:none"' : ""}><span class="small muted">What would we do?</span>${fdActs(x).map(([l], i) => `<button class="tab${i < fdActs(x).length - FD_COMMON.length ? " fdgo" : ""}" data-act="${i}">${escH(l)}</button>`).join("")}</div>
-    <div class="fdpanel"></div></div>`;
+    <div class="fdacts"${done ? ' style="display:none"' : ""}>${acts.map(([l], i) => `<button class="tab${i < nMain ? " fdgo" : " fdx"}" data-act="${i}">${escH(l)}</button>`).join("")}<button class="fdtoggle" type="button">${nMain ? "More choices ▾" : "Choices ▾"}</button></div>
+    <div class="fdpanel"></div>
+    <details class="fdmore"><summary>Details & sources</summary>
+      ${rest ? `<div>${escH(rest)}</div>` : ""}
+      ${x.suggestion ? `<div>→ ${escH(x.suggestion)}</div>` : ""}
+      ${c && c.note ? `<div>${escH(c.note)}</div>` : ""}
+      <div>Sources: ${escH(x.sources || "")}</div></details></div>`;
 }
 function fdWire(el) {
+  el.querySelectorAll(".fdtoggle").forEach(b => { const a = b.parentElement; if (!a.querySelector(".fdgo")) { a.classList.add("all"); b.remove(); return; }
+    b.onclick = () => { a.classList.toggle("all"); b.textContent = a.classList.contains("all") ? "Fewer choices ▴" : "More choices ▾"; }; });
   el.querySelectorAll("[data-again]").forEach(b => b.onclick = () => { const c = b.closest(".fdcard"); c.querySelector(".fdacts").style.display = ""; b.parentElement.remove(); });
   el.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
     const card = b.closest(".fdcard"), id = +card.dataset.fid, x = FD.rows.find(r => r.id === id), [label, dec, o] = fdActs(x)[+b.dataset.act];
