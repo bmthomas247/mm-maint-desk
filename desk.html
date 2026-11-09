@@ -717,7 +717,11 @@ function render0(){
     if(MEET) mb.textContent="← Back to the meeting"; if(EMB) mb.style.display=MEET && !S.ui.meeting?"":"none"; }   // hub: only on the Meetings tab, after opening a job from it
   $("sect").style.display=S.ui.meeting||MEET?"none":"";
   if(S.ui.meeting){ var ma=document.activeElement, maid=ma&&ma.id, mss=ma&&ma.selectionStart, mse=ma&&ma.selectionEnd;
-    $("view").innerHTML=vMeet(); if(maid && $(maid)){ var mn=$(maid); mn.focus(); try{ if(mss!=null) mn.setSelectionRange(mss,mse); }catch(e){} }
+    var mpop=$("hpop"), mpst=mpop?mpop.scrollTop:0, mpc=mpop&&mpop.getAttribute("aria-label");
+    var mh=vMeet(), msel=S.ui.proj?projects().filter(function(p){ return p.id===S.ui.proj; })[0]:null;
+    if(msel) mh+='<div class="hpop" id="hpop" role="dialog" aria-modal="true" aria-label="'+esc(msel.title)+'"><div class="hpbox"><div class="hpbar"><button class="btn sm" data-act="projclose">← Back to the meeting</button><button class="mx" data-act="projclose" aria-label="Close" title="Close">✕</button></div>'+projDetail(msel)+'</div></div>';
+    $("view").innerHTML=mh; var mpop2=$("hpop"); if(mpop2 && mpop2.getAttribute("aria-label")===mpc) mpop2.scrollTop=mpst; document.body.classList.toggle("hpopen",!!mpop2);
+    if(maid && $(maid)){ var mn=$(maid); mn.focus(); try{ if(mss!=null) mn.setSelectionRange(mss,mse); }catch(e){} }
     if(typeof autoQueueRepeats==="function") autoQueueRepeats(); return; }
   var v=$("view"); var f={today:vToday,check:vCheck,care:vCare,jobs:vJobs,projects:vProjects,routines:vRoutines,trash:vTrash,homes:vHomes,vendors:vVendors,vused:vVused,repeats:vRepeats,
     money:vMoney,recalls:vRecalls,rvr:vRvr,fire:vFire,firesys:function(){ return LIC?LIC.vFireSys():""; },lease:function(){ return LIC?LIC.vLease():""; }}[S.tab];
@@ -2832,7 +2836,7 @@ function vProjects(){
   var ps=all.filter(function(p){ if(f==="done") return p.stage==="done"; if(!u.projDone && p.stage==="done") return false;
       if(f==="stale") return stale(p); if(f==="nonext") return p.stage!=="done" && !p.next; if(f==="week") return p.stage!=="done" && daysBetween(p.lastDate||p.updated,t)<=7;
       if(f && f!=="all") return p.stage===f; return true; })
-    .filter(function(p){ return !q || (p.title+" "+p.homes.join(" ")+" "+(p.next||"")+" "+(p.who||"")).toLowerCase().indexOf(q)>-1; })
+    .filter(function(p){ return !q || (p.title+" "+p.homes.join(" ")+" "+(p.next||"")+" "+(p.who||"")+" "+(p.edit.vendorNames||[]).join(" ")).toLowerCase().indexOf(q)>-1; })
     .sort(function(a,b){ return (stale(b)?1:0)-(stale(a)?1:0) || (b.lastDate||"").localeCompare(a.lastDate||""); });
   if(u.proj && !all.some(function(p){ return p.id===u.proj; })) u.proj="";
   var cnt=function(st){ return live.filter(function(p){ return p.stage===st; }).length; };
@@ -2849,6 +2853,7 @@ function vProjects(){
       return '<button class="pjc'+(hot?' hot':'')+'" data-proj="'+esc(p.id)+'"><div style="display:flex;justify-content:space-between;align-items:center"><span class="pjic">'+(PJ_ICON[p.stage]||"🛠️")+'</span>'+projPill(p.stage)+'</div>'+
         '<div class="pjt">'+esc(p.title)+'</div>'+
         (p.homes.length?'<div class="pjh">'+p.homes.slice(0,4).map(function(c){ return '<span>'+esc(c)+'</span>'; }).join("")+(p.homes.length>4?'<span>+'+(p.homes.length-4)+'</span>':'')+(p.office?'<span>Office</span>':'')+'</div>':'')+
+        ((p.edit.vendorNames||[]).length?'<div style="font-size:12px;font-weight:700">🧰 '+esc(p.edit.vendorNames.slice(0,3).join(", "))+(p.edit.vendorNames.length>3?' +'+(p.edit.vendorNames.length-3):'')+'</div>':'')+
         '<div class="pjn'+(p.next?'':' none')+'">'+(p.next?'👉 '+esc(p.next.slice(0,140)):'No next step written yet')+'</div>'+
         '<div class="pjf">'+(p.who?'<span>'+esc(p.who)+'</span> · ':'')+'<span class="'+(st>10&&p.stage!=="done"?'late':'')+'">updated '+esc(ago(p.lastDate))+'</span>'+((p.edit.tickets||[]).length?' · 🎫 '+p.edit.tickets.length:'')+'<span class="go">Open →</span></div></button>'; }).join("")+'</div>'
     :'<div class="panel pad empty">No projects match.</div>';
@@ -2864,6 +2869,12 @@ function projDetail(p){ if(!p) return '<div class="empty">Pick a project.</div>'
     '<span>· started '+esc(fmtD(p.created))+'</span><span class="'+(stale>10?'qlate':'')+'">· last update '+esc(ago(p.lastDate))+'</span></div></div><div class="dbody">';
   if(p.stage!=="done") h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+pjxBtns("projedits",sid(p.id))+(p.edit.laterUntil&&p.edit.laterUntil>t?'<span class="note">⏸ Off the Monday meeting until '+esc(fmtD(p.edit.laterUntil))+(p.edit.laterWhy?' · '+esc(p.edit.laterWhy):'')+'</span>':'')+'</div>';
   else if(p.edit.closedWhy) h+='<div class="note" style="margin-bottom:10px">'+(p.edit.closedWhy==="not needed"?'🚫 Closed, not needed':'✓ Done')+(p.edit.closedBy?' · '+esc(nameFor(p.edit.closedBy)):'')+(p.edit.closedAt?' · '+esc(fmtD(ymd(p.edit.closedAt))):'')+'. Change Stage below to open it again.</div>';
+  h+=pjVenHtml(sid(p.id),p.edit,true).replace('margin-top:8px','margin:0 0 10px');
+  var tl=meetHist({proj:p},sid(p.id),[],[]);
+  h+='<div class="block"><h4>Timeline <span class="note" style="font-weight:400">· '+tl.length+' entr'+(tl.length===1?'y':'ies')+(p.created?' · started '+esc(fmtD(p.created)):'')+'</span></h4>'+
+    (p.next?'<div class="mc-next" style="margin:0 0 10px"><b>👉 Next up:</b> '+linkify(p.next)+'</div>':'')+
+    (tl.length?'<div style="border-left:3px solid #c7e86b;margin-left:8px;padding-left:16px">'+tl.map(function(x){ return '<div style="position:relative;padding:0 0 14px"><span style="position:absolute;left:-24px;top:3px;width:13px;height:13px;border-radius:50%;background:'+(x.src==="Asana"?'#cfd6c4':'#2f5212')+';border:2px solid #fff;box-shadow:0 0 0 1px #c7e86b"></span>'+
+      '<div class="note"><b style="color:#17220f">'+esc(x.d?fmtD(x.d):"")+'</b> · '+esc(x.by||x.src||"")+(x.by&&x.src?' ('+esc(x.src)+')':'')+'</div><div style="margin-top:2px">'+linkify(x.text||"")+'</div>'+(x.next?'<div class="mh-n">➜ Next: '+linkify(x.next)+'</div>':'')+'</div>'; }).join("")+'</div>':'<div class="note">Nothing yet.</div>')+'</div>';
   if(stale>10 && p.stage!=="done") h+='<div class="warnbox"><b>No update in '+stale+' days.</b> Worth a nudge at Monday\'s meeting.</div>';
   h+='<div class="block"><h4>Where it stands</h4><div class="fields">'+
     '<label class="f"><span>Stage</span><select id="p_stage">'+PSTAGE.map(function(s){ return '<option value="'+esc(s[0])+'"'+(s[0]===p.stage?' selected':'')+'>'+s[1]+'</option>'; }).join("")+'</select></label>'+
@@ -3719,7 +3730,7 @@ function repeatSlackBtn(x){ var s=slackState(x);
 /* ================= MONDAY MAINTENANCE MEETING ================= */
 function mondayOf(d){ var x=new Date(Date.parse((d||today())+"T12:00:00")); var wd=x.getDay(); x=new Date(x.getTime()-((wd+6)%7)*864e5); return x.toISOString().slice(0,10); }
 function meetItems(){
-  var ps=projects().filter(function(p){ return !p.office && !p.hidden && p.stage!=="done" && !(p.edit.laterUntil && p.edit.laterUntil>today()); }).sort(function(a,b){ return (b.lastDate||"").localeCompare(a.lastDate||""); });
+  var ps=projects().filter(function(p){ return !p.office && !p.hidden && p.stage!=="done" && p.stage!=="on hold" && !(p.edit.laterUntil && p.edit.laterUntil>today()); }).sort(function(a,b){ return (b.lastDate||"").localeCompare(a.lastDate||""); });
   var owners=D.jobs.filter(function(j){ var e=S.edits[sid(j.id)]||{}; return j.list==="Owner Relations · On Program Owners" && j.kind!=="info" && j.status!=="done" && !(e.laterUntil && e.laterUntil>today()); });
   var rep=repeats(90).same.filter(realRepeat).slice(0,8);
   var out=[];
@@ -3864,27 +3875,47 @@ var MAUTON; function meetAutoNotes(){ clearTimeout(MAUTON); var st=$("meetnotes_
    a job to status done; Postpone keeps it open and off the Monday meeting until the date (laterUntil). Each one leaves a note with who + why. */
 function pjxBtns(coll,id){ return '<span style="display:inline-flex;gap:4px"><button class="btn sm" data-pjx="done|'+esc(coll)+'|'+esc(id)+'" title="It\'s finished">✓ Done</button>'+
   '<button class="btn sm" data-pjx="drop|'+esc(coll)+'|'+esc(id)+'" title="No longer needs to be done">🚫 Not needed</button>'+
+  (coll==="projedits"?'<button class="btn sm" data-pjx="hold|'+esc(coll)+'|'+esc(id)+'" title="Put the project on hold">✋ Hold</button>':'')+
   '<button class="btn sm" data-pjx="later|'+esc(coll)+'|'+esc(id)+'" title="Take it off the meeting until a date">⏸ Postpone</button></span>'; }
 function pjxDo(v){ if(!need()) return; var a=v.split("|"), kind=a[0], coll=a[1], id=a.slice(2).join("|"), cur=(coll==="projedits"?S.projedits:S.edits)[id]||{};
   var addNote=function(txt){ return (cur.notes||[]).concat([{by:S.me,at:Date.now(),text:txt}]); };
   var save=function(patch,msg){ return put(coll,id,patch,cur).then(function(){ savedPop(msg); render(); }); };
   if(kind==="back") return save({laterUntil:"",laterWhy:"",notes:addNote("Brought back onto the Monday meeting early")},"Back on the meeting list");
+  if(kind==="unhold") return save({stage:"open",laterUntil:"",holdWhy:"",notes:addNote("Taken off hold")},"Taken off hold — back on the meeting");
   var d14=new Date(Date.now()+14*864e5).toISOString().slice(0,10);
   var pj=coll==="projedits"?projects().filter(function(x){ return sid(x.id)===id; })[0]:null, jb=coll==="edits"?D.jobs.filter(function(x){ return sid(x.id)===id; })[0]:null;
   var last=meetHist(pj?{proj:pj}:jb?{job:jb}:{},id,[],[])[0];   // newest note (desk, meeting or Asana)
   var body=(pj||jb?'<div style="font-weight:800;margin-bottom:8px">'+esc((pj||jb).title)+'</div>':'')+
     (last?'<div class="mc-next" style="margin:0 0 10px"><b>Last note</b> <span class="note">'+esc((last.by||last.src||"")+(last.d?' · '+fmtD(last.d):''))+'</span><div style="margin-top:4px">'+linkify(last.text||"")+'</div>'+(last.next?'<div class="mh-n">➜ Next: '+linkify(last.next)+'</div>':'')+'</div>':'<div class="note" style="margin-bottom:10px">No notes on this yet.</div>')+
-    '<div class="fields">'+(kind==="later"?'<label class="f"><span>Postpone until</span><input type="date" id="pjx_d" value="'+d14+'" min="'+today()+'"></label>':'')+
-    '<label class="f" style="grid-column:1/-1"><span>'+(kind==="done"?'Add a closing note (optional): what was done, by who':kind==="drop"?'Why isn\'t it needed any more?':'Why are we waiting?')+'</span><textarea id="pjx_w" rows="4" style="width:100%" placeholder="'+(kind==="done"?'e.g. HOA finished the concrete Nov 7; Chris checked it':kind==="drop"?'e.g. owner decided not to':'e.g. after the snow melts')+'"></textarea></label></div>';
-  openModal(kind==="done"?"Mark it done":kind==="drop"?"Not needed any more":"Postpone it",body,function(){ var w=fv("pjx_w"), dd=fv("pjx_d");
-    if(kind==="drop" && !w) return toast("Say why, so the team knows");
+    '<div class="fields">'+(kind==="hold"?'<label class="f"><span>Check on it again (optional)</span><input type="date" id="pjx_d" min="'+today()+'"></label>':'')+(kind==="later"?'<label class="f"><span>Postpone until</span><input type="date" id="pjx_d" value="'+d14+'" min="'+today()+'"></label>':'')+
+    '<label class="f" style="grid-column:1/-1"><span>'+(kind==="done"?'Add a closing note (optional): what was done, by who':kind==="drop"?'Why isn\'t it needed any more?':kind==="hold"?'Why is it on hold?':'Why are we waiting?')+'</span><textarea id="pjx_w" rows="4" style="width:100%" placeholder="'+(kind==="done"?'e.g. HOA finished the concrete Nov 7; Chris checked it':kind==="drop"?'e.g. owner decided not to':'e.g. after the snow melts')+'"></textarea></label></div>';
+  openModal(kind==="done"?"Mark it done":kind==="drop"?"Not needed any more":kind==="hold"?"Put the project on hold":"Postpone it",body,function(){ var w=fv("pjx_w"), dd=fv("pjx_d");
+    if((kind==="drop"||kind==="hold") && !w) return toast("Say why, so the team knows");
+    if(kind==="hold"){ closeModal(); return save({stage:"on hold",holdWhy:w,laterUntil:dd||"",notes:addNote("On hold: "+w+(dd?" (check again "+fmtD(dd)+")":""))},"On hold"+(dd?" until "+fmtD(dd):"")); }
     if(kind==="later" && !(dd>today())) return toast("Pick a date after today");
     closeModal(); var who=S.me, at=Date.now();
     if(kind==="later") return save({laterUntil:dd,laterWhy:w,notes:addNote("Postponed until "+fmtD(dd)+(w?": "+w:""))},"Postponed until "+fmtD(dd));
     var txt=(kind==="done"?"Marked done":"Closed — not needed")+(w?": "+w:"");
     if(coll==="projedits") return save({stage:"done",closedWhy:kind==="done"?"done":"not needed",closedBy:who,closedAt:at,laterUntil:"",notes:addNote(txt)},kind==="done"?"Marked done ✓":"Closed — not needed");
     return save({status:"done",closedWhy:kind==="done"?"done":"not needed",closedBy:who,closedAt:at,laterUntil:"",notes:addNote(txt)},kind==="done"?"Marked done ✓":"Closed — not needed");
-  },kind==="done"?"Mark done":kind==="drop"?"Close it":"Postpone"); }
+  },kind==="done"?"Mark done":kind==="drop"?"Close it":kind==="hold"?"Hold it":"Postpone"); }
+/* Vendors on a project, more than one (Brandon 2026-11-09). projedits.vendors = vendor ids from the Vendors list; names kept too. */
+function pjVendors(e){ var ids=(e&&e.vendors)||[], nm=(e&&e.vendorNames)||[]; return ids.map(function(id,i){ return D.vendors.filter(function(v){ return String(v.id)===String(id); })[0]||{id:id,name:nm[i]||"Vendor"}; }); }
+function pjVenHtml(id,e,canEdit){ var vs=pjVendors(e);
+  return '<div class="pjven" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12.5px"><b>🧰 Vendors:</b>'+
+    (vs.length?vs.map(function(v){ var ph=v.phone||((v.edit||{}).phone)||""; return '<span style="background:#eef3fb;border-radius:999px;padding:3px 10px">'+esc(v.name)+(v.trade?' <span class="note">· '+esc(v.trade)+'</span>':'')+(ph?' · <a href="tel:'+esc(String(ph).replace(/[^\d+]/g,""))+'">'+esc(ph)+'</a>':'')+'</span>'; }).join(""):'<span class="note">none yet</span>')+
+    (canEdit?'<button class="btn sm" data-pjven="'+esc(id)+'">'+(vs.length?'✎ Vendors':'+ Vendor')+'</button>':'')+'</div>'; }
+function pjVenPick(id){ if(!need()) return; var cur=S.projedits[id]||{}, have={}; (cur.vendors||[]).forEach(function(x){ have[String(x)]=1; });
+  var list=D.vendors.slice().sort(function(a,b){ return (have[String(b.id)]?1:0)-(have[String(a.id)]?1:0) || String(a.name||"").localeCompare(String(b.name||"")); });
+  openModal("Vendors on this project",'<input id="pjv_q" placeholder="Find a vendor or trade…" style="width:100%;margin-bottom:8px">'+
+    '<div id="pjv_list" style="max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:4px 10px">'+list.map(function(v){ return '<label class="pjvrow" data-t="'+esc((v.name+" "+(v.trade||"")+" "+(v.cat||"")).toLowerCase())+'" style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line-2);cursor:pointer"><input type="checkbox" class="pjv_cb" value="'+esc(v.id)+'"'+(have[String(v.id)]?' checked':'')+'><span><b>'+esc(v.name)+'</b>'+(v.trade?' <span class="note">· '+esc(v.trade)+'</span>':'')+'</span></label>'; }).join("")+'</div>'+
+    '<div class="note" style="margin-top:6px">Tick as many as you need. Not on the list? Add them on the Vendors page first.</div>',
+    function(){ var ids=[].slice.call(document.querySelectorAll(".pjv_cb:checked")).map(function(x){ return x.value; });
+      var names=ids.map(function(i){ var v=D.vendors.filter(function(x){ return String(x.id)===i; })[0]; return v?v.name:""; });
+      var before=(cur.vendorNames||[]), added=names.filter(function(n){ return before.indexOf(n)<0; }), gone=before.filter(function(n){ return names.indexOf(n)<0; });
+      var patch={vendors:ids,vendorNames:names};
+      if(added.length||gone.length) patch.notes=(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:(added.length?"Vendors added: "+added.join(", "):"")+(added.length&&gone.length?". ":"")+(gone.length?"Vendors taken off: "+gone.join(", "):"")}]);
+      closeModal(); return put("projedits",id,patch,cur).then(function(){ savedPop(ids.length?ids.length+" vendor"+(ids.length===1?"":"s")+" on this project":"No vendors on this project"); render(); }); },"Save vendors"); }
 function meetTkNums(t){ var out=[]; String(t||"").replace(/\d{4,7}/g,function(n){ if(out.indexOf(n)<0) out.push(n); }); return out; }
 function meetTickets(it){ if(!it.save) return []; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}; return (cur.tickets||[]).map(String); }
 function savedPop(msg){ var e=document.getElementById("savedpop"); if(!e){ e=document.createElement("div"); e.id="savedpop";
@@ -3921,9 +3952,10 @@ function vMeet(){
       if(dv==null) dv=meetDraftGet("mt_"+k); if(xdv==null) xdv=meetDraftGet("mx_"+k);
       h+='<div class="mcard'+(cov?' cov':'')+'"><div class="mc-top"><span class="mc-title">'+esc(it.title)+'</span>'+it.homes.slice(0,3).map(propLink).join(" ")+
         (it.stage?'<span class="pill">'+esc(it.stage)+'</span>':'')+(it.badge||'')+(it.who?'<span class="note">'+esc(it.who)+'</span>':'')+(cov?'<span class="pill done">covered this week</span>':'')+
-        '<span style="flex:1"></span>'+(it.save?pjxBtns(it.save.coll,it.save.id):'')+(it.url?'<a class="note" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.src||"Open")+' ↗</a>':'')+(it.extra||'')+'</div>'+
+        '<span style="flex:1"></span>'+(it.save?pjxBtns(it.save.coll,it.save.id):'')+(it.proj?'<button class="btn sm pri" data-proj="'+esc(it.proj.id)+'">⤢ Open project</button>':it.url?'<a class="note" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.src||"Open")+' ↗</a>':'')+(it.extra||'')+'</div>'+
         (it.read.length?'<div style="margin-top:5px">'+it.read.map(function(x){ return '<div class="note">'+x+'</div>'; }).join("")+'</div>':'')+
         ((it.proj||it.job)?'<div class="mc-next'+(nx.text?'':' none')+'"><b>👉 Next up'+(it.proj?' for this project':'')+':</b> '+(nx.text?linkify(nx.text)+(nx.by?' <span class="note">('+esc(nx.by)+(nx.d?', '+esc(fmtD(nx.d)):'')+')</span>':''):'<span class="note">Nothing written yet. Add it below.</span>')+'</div>':'')+
+        (it.proj?pjVenHtml(it.save.id,it.proj.edit,true):'')+
         (tks.length?'<div class="mc-tk">🎫 Tickets: '+tks.map(function(n){ return '<a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener" title="Open in Freshdesk">#'+esc(n)+' ↗</a>'; }).join("")+'</div>':'')+
         (hist.length?'<div class="mh"><div class="mh-h">History · '+hist.length+' note'+(hist.length===1?'':'s')+'</div>'+shown.map(function(x){ return '<div class="mh-row"><span class="mh-d">'+esc(x.d?fmtD(x.d):"")+'</span><div><span class="mh-by">'+esc(x.by||x.src||"")+'</span>'+(x.by&&x.src?' <span class="note">· '+esc(x.src)+'</span>':'')+'<div>'+linkify(x.text||"")+'</div>'+(x.next?'<div class="mh-n">➜ Next: '+linkify(x.next)+'</div>':'')+'</div></div>'; }).join("")+
           (hist.length>3?'<button class="mh-more" data-mhall="'+esc(k)+'">'+(hopen?'Show only the last 3':'Show all '+hist.length+' notes')+'</button>':'')+'</div>':'')+
@@ -3933,9 +3965,9 @@ function vMeet(){
         '<button class="btn sm pri mc-save" data-meetitem="'+esc(it.key)+'">'+(mine.text||mine.next?'Update':'Add')+'</button></div>'+
         '<div class="note" id="ms_'+esc(k)+'" style="margin-top:4px;min-height:14px'+((MSTAT[k]||{}).bad?';color:#b33':'')+'">'+esc((MSTAT[k]||{}).t||((mine.text||mine.next)?'Saves by itself as you type':''))+'</div></div>'; });
     h+='</section>'; });
-  var later=projects().filter(function(p){ return !p.office && !p.hidden && p.stage!=="done" && p.edit.laterUntil && p.edit.laterUntil>t; }).map(function(p){ return {title:p.title,until:p.edit.laterUntil,why:p.edit.laterWhy,coll:"projedits",id:sid(p.id)}; })
+  var later=projects().filter(function(p){ return !p.office && !p.hidden && p.stage!=="done" && (p.stage==="on hold" || (p.edit.laterUntil && p.edit.laterUntil>t)); }).map(function(p){ return {title:p.title,until:p.edit.laterUntil&&p.edit.laterUntil>t?p.edit.laterUntil:"",why:p.stage==="on hold"?(p.edit.holdWhy||"on hold"):p.edit.laterWhy,hold:p.stage==="on hold",coll:"projedits",id:sid(p.id),pid:p.id}; })
     .concat(D.jobs.filter(function(j){ var e=S.edits[sid(j.id)]||{}; return j.list==="Owner Relations · On Program Owners" && j.status!=="done" && e.laterUntil && e.laterUntil>t; }).map(function(j){ var e=S.edits[sid(j.id)]; return {title:j.title,until:e.laterUntil,why:e.laterWhy,coll:"edits",id:sid(j.id)}; }));
-  if(later.length) h+='<details class="mcard" style="margin-bottom:16px"><summary style="cursor:pointer;font-weight:700">⏸ Postponed ('+later.length+') — back on the list on their date</summary>'+later.sort(function(a,b){ return a.until.localeCompare(b.until); }).map(function(x){ return '<div class="mh-row"><span class="mh-d">until '+esc(fmtD(x.until))+'</span><div><b>'+esc(x.title)+'</b>'+(x.why?' <span class="note">· '+esc(x.why)+'</span>':'')+' <button class="btn sm" data-pjx="back|'+esc(x.coll)+'|'+esc(x.id)+'">Bring back now</button></div></div>'; }).join("")+'</details>';
+  if(later.length) h+='<details class="mcard" style="margin-bottom:16px"><summary style="cursor:pointer;font-weight:700">✋ On hold & ⏸ postponed ('+later.length+')</summary>'+later.sort(function(a,b){ return (a.until||"9").localeCompare(b.until||"9"); }).map(function(x){ return '<div class="mh-row"><span class="mh-d">'+(x.hold?'on hold':'')+(x.until?(x.hold?'<br>':'')+'until '+esc(fmtD(x.until)):'')+'</span><div><b>'+esc(x.title)+'</b>'+(x.why?' <span class="note">· '+esc(x.why)+'</span>':'')+' '+(x.pid?'<button class="btn sm" data-proj="'+esc(x.pid)+'">⤢ Open</button> ':'')+(x.hold?'<button class="btn sm" data-pjx="unhold|'+esc(x.coll)+'|'+esc(x.id)+'">Take off hold</button>':'<button class="btn sm" data-pjx="back|'+esc(x.coll)+'|'+esc(x.id)+'">Bring back now</button>')+'</div></div>'; }).join("")+'</details>';
   var nv=S.ui.meetDraft!=null?S.ui.meetDraft:(doc.text||"");
   h+='<section class="panel pad"><h3 class="lbl">Anything else — to-dos for Chris, Cheree and the team</h3><textarea id="meetnotes" style="width:100%;min-height:120px;margin-top:6px">'+esc(nv)+'</textarea>'+
     '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn sm pri" data-act="meetsave">Save</button><span class="note" id="meetnotes_st">'+(doc.by?'saved by '+esc(nameFor(doc.by))+' '+esc(ago(ymd(doc.at)))+' · saves by itself as you type':'Saves by itself as you type')+'</span></div>'+
@@ -4787,6 +4819,7 @@ document.addEventListener("click",function(ev){
       dept:/inspect|smoke|detector|fire/i.test(rr.title)?"inspection":"maintenance",when:rr.when||"",status:"queued",by:S.me,at:Date.now()})
       .then(function(){ toast(rr.props.length+" Breezeway task"+(rr.props.length===1?"":"s")+" queued — the hub creates them within a minute or two"); }); }
   if(d.pjx){ return pjxDo(d.pjx); }
+  if(d.pjven){ return pjVenPick(d.pjven); }
   if(d.proj){ S.ui.proj=d.proj; return render(); }
   if(d.projf!=null){ S.ui.projF=d.projf==='all'?'':d.projf; if(d.projf==='done') S.ui.projDone=true; return render(); }
   if(d.act==='projclose'){ S.ui.proj=''; return render(); }
@@ -5022,6 +5055,7 @@ document.addEventListener("change",function(ev){
   if(t.id==="m_prop" && $("m_job")){ $("m_job").innerHTML=jobOptions(t.value.trim(),""); return; }
   if(t.id==="projoffice"){ S.ui.projOffice=t.checked; return render(); }
   if(t.id==="projdone"){ S.ui.projDone=t.checked; return render(); }
+  if(t.id==="pjv_q"){ var vq=t.value.toLowerCase().trim(); document.querySelectorAll(".pjvrow").forEach(function(r){ r.style.display=!vq||r.dataset.t.indexOf(vq)>-1?"":"none"; }); return; }
   if(t.id==="projq"){ S.ui.projQ=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.classList&&t.classList.contains("care_pick")){ var ck2=t.dataset.cpk; S.ui.carePick=S.ui.carePick||{}; S.ui.carePick[ck2]=S.ui.carePick[ck2]||{}; S.ui.carePick[ck2][t.value]=t.checked; return render(); }
   if(t.id==="bwign"){ S.ui.showIgn=t.checked; return render(); }
