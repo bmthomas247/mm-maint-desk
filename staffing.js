@@ -183,19 +183,20 @@ async function wcAppCard(el){
   if(!el) return;
   let m; try { const r = await sb.rpc("work_app_mine"); m = r.data; } catch(e){ return; }
   if(!m || !m.needs) return;
-  const last = m.last_slot ? Date.parse(m.last_slot) : 0, mins = last ? Math.round((Date.now() - last) / 6e4) : null;
+  const last = Math.max(m.last_slot ? Date.parse(m.last_slot) : 0, m.seen_at ? Date.parse(m.seen_at) : 0), mins = last ? Math.round((Date.now() - last) / 6e4) : null;
+  const run = !!(m.seen_at && Date.now() - Date.parse(m.seen_at) < 3 * 6e4) || (!m.seen_at && mins < 20), win = /Windows NT/.test(navigator.userAgent) && !/Mobile|Android/.test(navigator.userAgent);
   const ago = mins == null ? "" : mins < 2 ? "just now" : mins < 90 ? mins + " min ago" : new Date(last).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
-  const old = m.last_ver && m.latest_ver && m.last_ver !== m.latest_ver;
+  const ver = m.seen_ver || m.last_ver, old = ver && m.latest_ver && ver !== m.latest_ver;
   const st = !last ? `<span class="pill amber">Not set up on your computer yet</span>`
-    : `<span class="pill ${mins < 20 ? "green" : ""}">${mins < 20 ? "Running" : "Last heard"} ${mins < 20 ? "on " + esc(m.last_device || "your computer") : ago + (m.last_device ? " · " + esc(m.last_device) : "")}</span>${old ? ` <span class="pill amber">New version ${esc(m.latest_ver)}: download it again</span>` : ""}`;
+    : `<span class="pill ${run ? "green" : ""}">${run ? "Running" : "Last heard"} ${run ? "on " + esc(m.seen_device || m.last_device || "your computer") : ago + ((m.seen_device || m.last_device) ? " · " + esc(m.seen_device || m.last_device) : "")}</span>${old ? ` <span class="pill amber">New version ${esc(m.latest_ver)}: download it again</span>` : ""}`;
   el.innerHTML = `<details class="card" ${!last || old ? "open" : ""}><summary><b style="font-size:16px">💻 Moose Time (Windows)</b> ${st}</summary>
     <p class="sm" style="margin:8px 0">If you work on a computer, keep Moose Time running. It's also in My settings ▸ My apps. It only records while you're clocked in on the hub: every 10 minutes how much the keyboard and mouse were used (counts only, never what you type) and one screenshot of each screen. Only you, your manager and Brandon/Kim can see them, and screenshots are removed after 30 days.</p>
-    <a class="btn primary" href="${WC_EXE}" download>⬇ Download Moose Time</a>
+    ${win && last && !run && window.mtStart ? `<button class="btn primary" type="button" onclick="mtStart()">▶ Start Moose Time</button> ` : ""}<a class="btn${win && last && !run ? "" : " primary"}" href="${WC_EXE}" download>⬇ Download Moose Time</a>
     <ol class="sm" style="margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li>Open the downloaded file <b>MooseHubWorkCheck.exe</b>. If Windows says <i>"Windows protected your PC"</i>, click <b>More info</b> ▸ <b>Run anyway</b>.</li>
       <li>Sign in with your hub email and password (or "Email me a code instead"), then your 2-step code if you use one. The hub then opens in your browser, signed in.</li>
       <li>Look for the round <b>M</b> by the clock (bottom right; it may be under the ^ arrow). <b>Green</b> = recording (you're clocked in), <b>grey</b> = clocked out, nothing recorded. Click the M to <b>clock in or out</b>; right-click for "Open the hub".</li>
-      <li>It starts by itself when Windows starts. You only do this once per computer. To update, download and open it again.</li></ol></details>`;
+      <li>It starts by itself when Windows starts, and the hub starts it for you if it's off (your browser asks "Open Moose Time?" the first time: tick <b>Always allow</b>). You only install it once per computer. To update, download and open it again.</li></ol></details>`;
 }
 window.staffingView = async function(v){
   css();
