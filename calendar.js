@@ -974,7 +974,37 @@ window.ptoReport = async function(v, sub){
 const WCF = { mouse_only:["Mouse only", "An hour or more of mouse movement with no typing. A mouse mover looks like this, but so can reading or scrolling."],
   same_screen:["Same screen", "Screenshots of a screen didn't change for 40+ minutes while activity was counted. A plug-in mouse mover can't change the screen."],
   low_activity:["Low activity", "Under 15% keyboard/mouse activity across 2+ desktop hours."],
-  hubstaff_flag:["Hubstaff flag", "Hubstaff's own unusual-activity check flagged this day with medium or high confidence."] };
+  hubstaff_flag:["Hubstaff flag", "Hubstaff's own unusual-activity check flagged this day with medium or high confidence."],
+  software_input:["Software input", "Half or more of the mouse/keyboard input that day was made by a program, not a person's hand (Windows marks it). Mouse-mover programs do this; so can some remote-control tools."],
+  app_off:["App off", "Clocked in on the hub for 30+ minutes while the Work check app wasn't running on their computer."] };
+/* Work check app screenshots + 10-minute activity for one person-day (hub_work_shots / hub_work_slots, RLS hub_team_sees; signed links last 10 min) */
+async function wcShots(u, day, name){
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px";
+  box.innerHTML = `<div class="card" style="max-width:1100px;width:100%;margin:0"><div class="row" style="justify-content:space-between"><b style="font-size:16px">${esc(name)} · ${esc(fday(day))}</b><button class="btn small" data-x>✕ Close</button></div><p class="muted">Loading…</p></div>`;
+  document.body.appendChild(box);
+  const close = () => box.remove(); box.onclick = e => { if(e.target === box) close(); }; box.querySelector("[data-x]").onclick = close;
+  const a = new Date(day + "T00:00:00"), b = new Date(a.getTime() + 864e5);
+  const [sh, sl] = await Promise.all([sb.from("hub_work_shots").select("id,at,screen,path,w,h,gone_at").eq("user_id", u).gte("at", a.toISOString()).lt("at", b.toISOString()).order("at"),
+    sb.from("hub_work_slots").select("slot,secs,active_secs,key_secs,mouse_secs,injected,keys,clicks,moves,locked_secs").eq("user_id", u).gte("slot", a.toISOString()).lt("slot", b.toISOString()).order("slot")]);
+  const shots = sh.data || [], slots = sl.data || [], live = shots.filter(x => !x.gone_at);
+  let urls = {};
+  if(live.length){ const r = await sb.storage.from("work-shots").createSignedUrls(live.map(x => x.path), 600); (r.data || []).forEach((x, i) => { if(x.signedUrl) urls[live[i].path] = x.signedUrl; }); }
+  const t = s => new Date(s).toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" });
+  const bar = s => { const k = Math.round(100 * s.key_secs / s.secs), m = Math.round(100 * s.mouse_secs / s.secs), act = Math.round(100 * s.active_secs / s.secs), ev = s.keys + s.clicks + s.moves, inj = s.injected && ev ? Math.round(100 * s.injected / ev) : 0;
+    return `<div title="${t(s.slot)}: activity ${act}% · keyboard ${k}% · mouse ${m}%${inj ? ` · ${inj}% made by software` : ""}${s.locked_secs ? ` · locked ${Math.round(s.locked_secs / 60)} min` : ""}" style="display:inline-flex;flex-direction:column-reverse;width:9px;height:44px;margin-right:2px;background:#eee;vertical-align:bottom"><span style="height:${act * .44}px;background:${inj >= 50 ? "#c62828" : s.key_secs ? "#2e7d32" : "#f9a825"}"></span></div>`; };
+  const moments = {}; shots.forEach(x => (moments[x.at.slice(0, 16)] = moments[x.at.slice(0, 16)] || []).push(x));
+  const cell = (x, many) => `<div>${x.gone_at ? `<div class="muted sm" style="height:120px;display:grid;place-items:center;background:#f3f3f3;border-radius:8px">Removed after 30 days</div>`
+      : urls[x.path] ? `<a href="${urls[x.path]}" target="_blank" rel="noopener"><img src="${urls[x.path]}" loading="lazy" style="width:100%;border-radius:8px;border:1px solid #ddd"></a>` : `<div class="muted sm">Couldn't open it.</div>`}
+    <div class="sm muted">${t(x.at)}${many ? " · screen " + (x.screen + 1) : ""}</div></div>`;
+  box.firstElementChild.innerHTML = `<div class="row" style="justify-content:space-between"><b style="font-size:16px">${esc(name)} · ${esc(fday(day))}</b><button class="btn small" data-x>✕ Close</button></div>
+    <div style="margin:10px 0"><b class="sm">Activity, every 10 minutes</b> <span class="muted sm">(green = typing, amber = mouse only, red = made by software; hover for numbers)</span>
+      <div style="overflow-x:auto;white-space:nowrap;padding:6px 0">${slots.map(bar).join("") || `<span class="muted sm">No activity sent that day.</span>`}</div>
+      ${slots.length ? `<div class="muted sm">${t(slots[0].slot)} – ${t(new Date(Date.parse(slots[slots.length - 1].slot) + 6e5))}</div>` : ""}</div>
+    <b class="sm">Screenshots (${shots.length})</b>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:8px">${Object.keys(moments).sort().map(k => moments[k].map(x => cell(x, moments[k].length > 1)).join("")).join("") || `<p class="muted sm">No screenshots that day.</p>`}</div>`;
+  box.querySelector("[data-x]").onclick = close;
+}
 window.workCheck = async function(v){
   css();
   const days = ST.wcDays || 14, only = ST.wcOnly !== false, from = addD(today(), -(days - 1));
@@ -989,24 +1019,25 @@ window.workCheck = async function(v){
       <td>${all.filter(x => x.user_id === id && (x.flags || []).length).length || "—"}</td><td>${Math.max(0, ...all.filter(x => x.user_id === id).map(x => x.mouse_only_min || 0))} min</td><td>${Math.max(0, ...all.filter(x => x.user_id === id).map(x => x.same_screen_min || 0))} min</td></tr>`; };
   const pill = f => `<span class="pill ${f === "hubstaff_flag" || f === "same_screen" ? "red" : "amber"}" title="${esc((WCF[f] || [])[1] || "")}">${esc((WCF[f] || [f])[0])}</span>`;
   const row = r => `<tr><td><b>${esc(who(r.user_id))}</b><br><span class="muted">${esc(fday(r.day))}</span></td>
-    <td>${hrs(r.desktop_h)}${+r.tracked_h > +r.desktop_h + 0.1 ? `<div class="muted" style="font-size:12px">+${hrs(Math.round((r.tracked_h - r.desktop_h) * 100) / 100)} phone</div>` : ""}</td>
+    <td>${hrs(r.desktop_h)}${r.app_off_min ? `<div class="muted" style="font-size:12px">app off ${hrs(Math.round(r.app_off_min / 6) / 10)} while clocked in</div>` : ""}${+r.tracked_h > +r.desktop_h + 0.1 ? `<div class="muted" style="font-size:12px">+${hrs(Math.round((r.tracked_h - r.desktop_h) * 100) / 100)} phone</div>` : ""}</td>
     <td>${r.activity_pct == null ? "—" : r.activity_pct + "%"}<div class="muted" style="font-size:12px">keys ${r.keys_pct ?? "—"}% · mouse ${r.mouse_pct ?? "—"}%</div></td>
     <td>${r.mouse_only_min || 0} min</td><td>${r.same_screen_min || 0} min<div class="muted" style="font-size:12px">${r.shots || 0} shots</div></td>
-    <td>${(r.flags || []).map(pill).join(" ") || `<span class="muted">—</span>`}${(r.unusual || []).map(u => `<div style="font-size:12px"><a href="${esc(u.url || "#")}" target="_blank" rel="noopener">Hubstaff: ${esc((u.type || "").replace(/_/g, " "))}</a> <span class="muted">(${esc(u.confidence || "")}, ${u.active_min} of ${u.tracked_min} min active)</span></div>`).join("")}</td>
-    <td style="white-space:nowrap"><a class="btn small" href="${esc(r.hs_url || "#")}" target="_blank" rel="noopener">Screenshots ↗</a>
+    <td>${(r.flags || []).map(pill).join(" ") || `<span class="muted">—</span>`}${(r.unusual || []).map(u => `<div style="font-size:12px"><a href="${esc(u.url || "#")}" target="_blank" rel="noopener">Hubstaff: ${esc((u.type || "").replace(/_/g, " "))}</a> <span class="muted">(${esc(u.confidence || "")}, ${u.active_min} of ${u.tracked_min} min active)</span></div>`).join("")}${r.injected_pct ? `<div class="muted" style="font-size:12px">${r.injected_pct}% of input made by software</div>` : ""}</td>
+    <td style="white-space:nowrap">${r.source === "hub_app" ? `<button class="btn small" data-wshots="${r.user_id}|${r.day}">Screenshots</button>` : r.hs_url ? `<a class="btn small" href="${esc(r.hs_url)}" target="_blank" rel="noopener">Screenshots ↗</a>` : ""}
       ${r.reviewed_by ? `<div class="muted" style="font-size:12px">Looked at by ${esc(r.reviewed_by)}${r.review_note ? ": " + esc(r.review_note) : ""}</div>` : `<button class="btn small" data-rv="${r.user_id}|${r.day}">Looked at</button>`}</td></tr>`;
   v.innerHTML = `<div class="page cal wide"><div style="padding:0 0 8px"><a href="#/reports">← All reports</a></div>
     <div class="chead"><h2>Work check</h2>
       <span class="vsw">${[7,14,30].map(n => `<button class="btn small${n === days ? " primary" : ""}" data-wd="${n}">${n} days</button>`).join("")}</span>
       <label class="lyr"><input type="checkbox" id="wconly" ${only ? "checked" : ""}>Only days with a flag</label></div>
-    <p class="muted" style="margin:0 0 10px">${ME.admin ? "Everyone" : "Your team"} · computer (desktop app) time only; phone-app time has no keyboard or mouse to measure · source: Hubstaff, checked by the hub${all[0] ? " (updated " + esc(new Date(all[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) + ")" : ""}</p>
+    <p class="muted" style="margin:0 0 10px">${ME.admin ? "Everyone" : "Your team"} · computer time only; phone time has no keyboard or mouse to measure · source: the Moose Hub Work check app (Hubstaff before Nov 11)${all[0] ? " (updated " + esc(new Date(all[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) + ")" : ""}</p>
     <div class="card"><b style="font-size:16px">By person, last ${days} days</b><div class="tow"><table class="to"><tr><th>Who</th><th>Days</th><th>Desktop hours</th><th>Activity</th><th>Flagged days</th><th>Longest mouse-only</th><th>Longest same screen</th></tr>
-      ${ids.map(sum).join("") || `<tr><td colspan="7" class="muted">Nobody on your team tracks computer time in Hubstaff.</td></tr>`}</table></div></div>
+      ${ids.map(sum).join("") || `<tr><td colspan="7" class="muted">Nobody on your team has computer time yet.</td></tr>`}</table></div></div>
     <div class="card"><b style="font-size:16px">${only ? "Days to look at" : "Every day"} (${rows.length})</b>${rows.length ? `<div class="tow"><table class="to"><tr><th>Who / day</th><th>Hours</th><th>Activity</th><th>Mouse only</th><th>Same screen</th><th>Flags</th><th></th></tr>${rows.map(row).join("")}</table></div>` : `<p class="muted" style="margin:4px 0 0">Nothing flagged in the last ${days} days.</p>`}</div>
     <div class="card"><b style="font-size:16px">What the checks mean</b>${Object.values(WCF).map(([l, d]) => `<div style="font-size:13px;margin:4px 0"><b>${esc(l)}:</b> ${esc(d)}</div>`).join("")}
-      <p class="muted" style="font-size:12px;margin:6px 0 0">A flag is a reason to look at the screenshots, not proof. Screenshots stay in Hubstaff; the hub only compares them and keeps the minutes.</p></div></div>`;
+      <p class="muted" style="font-size:12px;margin:6px 0 0">A flag is a reason to look at the screenshots, not proof. Screenshots from the Work check app are private (the person, their manager and Brandon/Kim) and removed after 30 days; older Hubstaff days link to Hubstaff.</p></div></div>`;
   v.querySelectorAll("[data-wd]").forEach(b => b.onclick = () => { ST.wcDays = +b.dataset.wd; workCheck(v); });
   v.querySelector("#wconly").onchange = e => { ST.wcOnly = e.target.checked; workCheck(v); };
+  v.querySelectorAll("[data-wshots]").forEach(b => b.onclick = () => { const [u, d] = b.dataset.wshots.split("|"); wcShots(u, d, who(u)); });
   v.querySelectorAll("[data-rv]").forEach(b => b.onclick = async () => { const [u, d] = b.dataset.rv.split("|"), note = prompt("Note (optional):");
     if(note === null) return; const r = await sb.rpc("work_check_review", { p_user:u, p_day:d, p_note:note }); if(r.error) alert(r.error.message); else workCheck(v); });
 };
