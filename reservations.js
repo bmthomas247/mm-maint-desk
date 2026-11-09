@@ -649,7 +649,7 @@ async function queue(v){
       <div class="grow"><h1>Moose Check lists</h1><div class="sub" id="rq_sub"></div></div>
       <div class="rhbtns"><div class="rsync" title="Steps tick themselves as these update">${RI.sync}<div><b>Data sync</b><small>Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""}</small></div></div>
       <button class="deskbtn" id="rq_new" type="button" style="cursor:pointer;font-family:inherit" title="Open the check list for a Track reservation, even one booked a minute ago">${RSV('<path d="M12 5v14M5 12h14"/>')}<span>Start a check list</span></button>
-      <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a></div></div>
+      <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a><a class="deskbtn" href="#/reservations/asana" title="Work done in Asana that the hub check list doesn't show yet">${RI.held}<span>Asana check</span></a></div></div>
     ${B.canMgr && (B.asks || []).some(a => a.status === "open") ? `<div class="card" style="border-color:var(--amber)"><b>🙋 Waiting on a manager</b> <span class="muted">· reply in Slack or open the check list</span>
       ${B.asks.filter(a => a.status === "open").map(a => { const st = B.stays.find(x => x.res === a.res) || {};
         return `<div style="padding:5px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(a.res)}"><b>${esc(st.unit || "#" + a.res)} · ${esc(st.guest || "")}</b></a> — ${esc(a.by_name || "")}: “${esc(a.note)}” <span class="muted">${esc(when(a.at))}</span></div>`; }).join("")}</div>` : ""}
@@ -1085,6 +1085,68 @@ function startList(){
   };
 }
 
+/* ---------- Asana check (Brandon 2026-11-09: "go through asana once more on the checklists and make sure all the work is accounted for").
+   res_asana_snap = what each stay's Asana Rental Checklist shows done (res_asana_compare.py after every Asana pull); the hub side comes
+   from prep() (manual + auto ticks), so only real gaps show. "Looked at" = res_asana_look (append-only). */
+async function asanaCheck(v){
+  v.innerHTML = `<div class="page rpage"><p class="muted">Loading…</p></div>`;
+  try { await load(true); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load: ${esc(e.message)}</p></div></div>`; return; }
+  if(!B){ location.hash = "#/home"; return; }
+  const [sn, lk, rn] = await Promise.all([sb.from("res_asana_snap").select("*").range(0, 4999), sb.from("res_asana_looked").select("res,item,note,by_name,at").range(0, 9999),
+    sb.from("res_asana_runs").select("at,stats").order("at", { ascending:false }).limit(1)]);
+  if(sn.error){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load: ${esc(window.niceErr ? niceErr(sn.error) : sn.error.message)}</p></div></div>`; return; }
+  const looked = {}; (lk.data || []).forEach(r => looked[r.res + "|" + r.item] = r);
+  const stays = {}; B.stays.forEach(s => stays[s.res] = s);
+  const SD = {}; B.steps.forEach(t => SD[t.key] = t);
+  const rows = [];   // one per stay with gaps
+  (sn.data || []).forEach(a => {
+    const s = stays[a.res];
+    if(!s){ if(!a.completed) rows.push({ a, s:null, gaps:[{ item:"stay", what:"Open in Asana, but not in the hub's check lists (lease, checked out 90+ days ago, or not in Track's copy)" }] }); return; }
+    const gaps = [];
+    (a.done_steps || []).forEach(x => { const h = (s.steps || []).find(t => t.key === x.step);
+      if(h && !h.done) gaps.push({ item:"step:" + x.step, step:h, what:"Done in Asana, not ticked in the hub", x }); });
+    (a.part_steps || []).forEach(x => { const h = (s.steps || []).find(t => t.key === x.step);
+      if(h && !h.done) gaps.push({ item:"part:" + x.step, step:h, what:"Started in Asana (some items ticked), not ticked in the hub", x }); });
+    (a.unmapped || []).forEach(x => gaps.push({ item:"item:" + x.name, what:"Ticked in Asana, no matching hub step", x }));
+    if(gaps.length) rows.push({ a, s, gaps });
+  });
+  let showLooked = false;
+  const draw = () => {
+    const list = rows.map(r => ({ ...r, g:r.gaps.filter(g => showLooked || !looked[r.a.res + "|" + g.item]) })).filter(r => r.g.length)
+      .sort((x, y) => ((x.s && x.s.arrive) || "9") < ((y.s && y.s.arrive) || "9") ? -1 : 1);
+    const nG = list.reduce((n, r) => n + r.g.length, 0), nL = Object.keys(looked).length;
+    const run = (rn.data || [])[0];
+    v.innerHTML = `<div class="page rpage"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a class="btn small" href="#/reservations">← Back</a><h2 style="margin:0">Asana check</h2></div>
+      <p class="muted">Work the team ticked in Asana's Rental Checklists that the hub check list doesn't show as done. Auto ticks from Track, Breezeway and the rest already count.
+      Fix each one on the check list (tick it, or leave it open if it really isn't done), then press <b>Looked at</b>. Asana read ${esc(run ? when(run.at) : "–")}${run && run.stats ? ` · ${run.stats.stays} Asana check lists` : ""}.</p>
+      <div class="card" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><b>${list.length} stays · ${nG} items to look at</b>
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="raq_l" ${showLooked ? "checked" : ""} style="width:auto"> Show ones already looked at (${nL})</label></div>
+      ${list.map(r => { const s = r.s, a = r.a;
+        return `<div class="card"><div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px">
+          <b>${esc(s ? (s.unit || "") + " · " + (s.guest || "") : "Res #" + a.res)}</b><span class="muted">#${esc(a.res)}${s ? ` · arrives ${esc(day(s.arrive))}` : ""} · Asana: ${esc(a.section || "-")}${a.completed ? " (completed)" : ""}</span>
+          <span style="flex:1"></span>${s ? `<a class="btn small" href="#/reservations/${encodeURIComponent(a.res)}">Open check list</a>` : ""}${a.link ? `<a class="btn small" href="${esc(a.link)}" target="_blank" rel="noopener">Asana ↗</a>` : ""}</div>
+          ${r.g.map(g => { const lo = looked[a.res + "|" + g.item];
+            return `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line,#e5e5e5)">
+              <div style="flex:1;min-width:0"><div><b>${esc(g.step ? (g.step.grp ? g.step.grp + ": " : "") + g.step.label : (g.x && g.x.name) || "")}</b> <span class="pill amber">${esc(g.what)}</span></div>
+              ${g.x && g.x.items ? `<div class="muted" style="font-size:12.5px">Asana: ${esc(g.x.items.join(" · "))}${g.x.by ? ` — ${esc(g.x.by)}` : ""}${g.x.at ? `, ${esc(when(g.x.at))}` : ""}</div>` : ""}
+              ${g.x && g.x.done ? `<div class="muted" style="font-size:12.5px">Ticked in Asana: ${esc(g.x.done.join(" · "))}<br>Not ticked: ${esc(g.x.open.join(" · "))}</div>` : ""}
+              ${g.x && g.x.name && !g.step ? `<div class="muted" style="font-size:12.5px">${g.x.by ? esc(g.x.by) : ""}${g.x.at ? `, ${esc(when(g.x.at))}` : ""}</div>` : ""}
+              ${lo ? `<div class="muted" style="font-size:12px">✓ Looked at by ${esc(lo.by_name)} ${esc(when(lo.at))}${lo.note ? `: ${esc(lo.note)}` : ""}</div>` : ""}</div>
+              ${lo ? "" : `<button class="btn small" type="button" data-raq="${esc(a.res)}" data-it="${esc(g.item)}">Looked at</button>`}</div>`; }).join("")}</div>`; }).join("")
+      || `<div class="card"><p class="muted">Everything done in Asana shows as done in the hub. 🎉</p></div>`}</div>`;
+    v.querySelector("#raq_l").onchange = e => { showLooked = e.target.checked; draw(); };
+    v.querySelectorAll("[data-raq]").forEach(b => b.onclick = async () => {
+      const note = prompt("Anything to note? (optional — e.g. \"ticked it\", \"not really done\")", "");
+      if(note === null) return;
+      b.disabled = true;
+      const r = await sb.rpc("res_asana_look", { p_res:b.dataset.raq, p_item:b.dataset.it, p_note:note || null });
+      if(r.error){ b.disabled = false; alert(window.niceErr ? niceErr(r.error) : r.error.message); return; }
+      looked[b.dataset.raq + "|" + b.dataset.it] = { by_name:"you", at:new Date().toISOString(), note };
+      const y = window.scrollY; draw(); window.scrollTo(0, y); });
+  };
+  draw();
+}
+
 /* ---------- Held up report: open check lists by what holds them up */
 async function held(v){
   v.innerHTML = `<div class="page rpage"><p class="muted">Loading…</p></div>`;
@@ -1125,6 +1187,7 @@ document.addEventListener("keydown", e => { if(e.key !== "Escape" || !document.g
   if([...document.querySelectorAll("body > div")].some(d => d.id !== "rpop" && /z-index:\s*60/.test(d.style.cssText))) return;   // a box opened on top (charge, UAA form) closes first
   popClose(true); });
 window.resCheckView = async function(v){ css(); const a = hashArg();
+  if(a === "asana") return asanaCheck(v);
   if(a && a !== "held") return popOpen(v, a);
   const kind = a === "held" ? "held" : "queue";
   const back = underOk(v) && UNDER.kind === kind ? UNDER.keep || scrollKeep(v) : null;
