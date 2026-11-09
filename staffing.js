@@ -188,9 +188,9 @@ async function wcAppCard(el){
   const old = m.last_ver && m.latest_ver && m.last_ver !== m.latest_ver;
   const st = !last ? `<span class="pill amber">Not set up on your computer yet</span>`
     : `<span class="pill ${mins < 20 ? "green" : ""}">${mins < 20 ? "Running" : "Last heard"} ${mins < 20 ? "on " + esc(m.last_device || "your computer") : ago + (m.last_device ? " · " + esc(m.last_device) : "")}</span>${old ? ` <span class="pill amber">New version ${esc(m.latest_ver)}: download it again</span>` : ""}`;
-  el.innerHTML = `<details class="card" ${!last || old ? "open" : ""}><summary><b style="font-size:16px">💻 Work check app (Windows)</b> ${st}</summary>
-    <p class="sm" style="margin:8px 0">If you work on a computer, keep this app running. It only records while you're clocked in on the hub: every 10 minutes how much the keyboard and mouse were used (counts only, never what you type) and one screenshot of each screen. Only you, your manager and Brandon/Kim can see them, and screenshots are removed after 30 days.</p>
-    <a class="btn primary" href="${WC_EXE}" download>⬇ Download for Windows</a>
+  el.innerHTML = `<details class="card" ${!last || old ? "open" : ""}><summary><b style="font-size:16px">💻 Moose Time (Windows)</b> ${st}</summary>
+    <p class="sm" style="margin:8px 0">If you work on a computer, keep Moose Time running. It's also in My settings ▸ My apps. It only records while you're clocked in on the hub: every 10 minutes how much the keyboard and mouse were used (counts only, never what you type) and one screenshot of each screen. Only you, your manager and Brandon/Kim can see them, and screenshots are removed after 30 days.</p>
+    <a class="btn primary" href="${WC_EXE}" download>⬇ Download Moose Time</a>
     <ol class="sm" style="margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li>Open the downloaded file <b>MooseHubWorkCheck.exe</b>. If Windows says <i>"Windows protected your PC"</i>, click <b>More info</b> ▸ <b>Run anyway</b>.</li>
       <li>Sign in with your hub email and password (or "Email me a code instead"), then your 2-step code if you use one. The hub then opens in your browser, signed in.</li>
