@@ -384,7 +384,7 @@ window.myPerf = async function(v){
       <p style="margin:0 0 4px">You earn <b>${esc(c.hours_per)} h</b> of paid time off for every <b>${esc(c.hours_worked)} h</b> you work, up to <b>${esc(c.maximum_to_accrue)} h</b> saved up. It rolls over and never expires.${have != null && c.maximum_to_accrue && +have >= +c.maximum_to_accrue ? ` <span class="pill amber">You're at the ${esc(c.maximum_to_accrue)} h max. You keep all of it; you start earning again once you use some.</span>` : ""}</p>
       <p class="muted sm" style="margin:0 0 4px">Paid time off is 40 hours at most at one time.</p>
       ${wk ? `<p class="muted sm" style="margin:0">At your pace this year (about ${hh(wk)} worked a week) that's about ${hh(wk * c.hours_per / c.hours_worked)} of PTO a week.</p>` : ""}
-      <p class="muted sm" style="margin:4px 0 0">Ask for it under Staffing ▸ Request Time Off. Source: hours you tracked × the PTO policy, worked out by the hub${b.as_of ? ` (updated ${esc(dnm(dkey(b.as_of)))})` : ""}.</p></div>`; }).join("");
+      <p class="muted sm" style="margin:4px 0 0">Ask for it under Staffing ▸ Request Time Off. Source: hours you worked (your hub clock-ins) × the PTO policy, worked out by the hub${b.as_of ? ` (updated ${esc(dnm(dkey(b.as_of)))})` : ""}.</p></div>`; }).join("");
   const rows = r.data || [], f = x => x == null ? "—" : (+x).toLocaleString(undefined, { maximumFractionDigits:2 });
   const ix = i => i == null ? "" : ` <span class="pill ${i >= 115 ? "green" : i <= 85 ? "amber" : ""}" title="100 = the team's average">${i}</span>`;
   const grps = [...new Set(rows.map(x => x.grp))];
