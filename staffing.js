@@ -395,9 +395,36 @@ const PM = { tech:[["tasks","Tasks worked"],["tasks_per_hr","Tasks per regular h
     ["calls","Phone calls"],["calls_per_hr","Phone calls per hour"],["talk_hrs","Time on the phone (hours)"],["activity","Computer activity (%)"],["flag_days","Days with a Work check flag"],
     ["fd_first_hrs","First reply (median hours, lower is better)"],["reviews_good","Praised in guest reviews"]] };
 const PG = { tech:"Maintenance", office:"Office & front desk" }, PP = { "30d":"Last 30 days", "90d":"Last 90 days", "365d":"Last 12 months" };
+/* Field work coaching (Brandon 2026-11-09: "help the field crew see when they are driving bad routes and other items"; picked Route check,
+   Driving habits, Tasks done; tips, no score). my_field_coach() = your own days (hub_field_coach.sql, built hourly by field_coach.py). */
+function fcCard(F){
+  if(!F.length) return "";
+  const sum = (k, f) => F.reduce((a, x) => a + (f(x) || 0), 0);
+  const done = sum(0, x => x.tasks && x.tasks.done), miss = sum(0, x => x.tasks && (x.tasks.nostart + x.tasks.together));
+  const rd = F.filter(x => x.route), flag = rd.filter(x => x.route.flag), save = flag.reduce((a, x) => a + (+x.route.save_mi || 0), 0);
+  const dv = F.filter(x => x.driving), mi = dv.reduce((a, x) => a + (+x.driving.miles || 0), 0), hb = dv.reduce((a, x) => a + (+x.driving.brakes || 0) + (+x.driving.starts || 0), 0);
+  const tile = (n, l) => `<div style="flex:1;min-width:130px;background:var(--moose-soft,#eef5e0);border-radius:14px;padding:10px 12px"><div style="font-size:22px;font-weight:800">${n}</div><div class="muted sm">${l}</div></div>`;
+  const tips = F.filter(x => (x.tips || []).length).slice(0, 14);
+  const quiet = F.length - F.filter(x => (x.tips || []).length).length;
+  const day = x => { const t = x.tasks || {}, r = x.route; return `<div style="padding:8px 0;border-top:1px solid var(--line,#e1e7de)"><b>${esc(dnm(x.day))}</b>
+    <span class="muted sm">${t.done ? ` · ${t.done} task${t.done === 1 ? "" : "s"} done` : ""}${r ? ` · about ${esc(r.est_mi)} mi between homes${r.src === "phone" ? " (phone GPS)" : " (from your Start taps)"}` : ""}${x.driving ? ` · ${esc(x.driving.miles)} mi driven` : ""}</span>
+    <ul style="margin:4px 0 0 18px;padding:0">${x.tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>`; };
+  return `<div class="card"><b style="font-size:16px">Your field work (last 4 weeks)</b>
+    <p class="muted sm" style="margin:2px 0 10px">Tips to make your days easier. Only you and your manager see this, and it's never compared with a coworker.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${tile(done, "Breezeway tasks done")}
+      ${tile(done ? Math.round(100 * (done - miss) / done) + "%" : "—", "Tasks with a real Start + Finish tap")}
+      ${tile(rd.length ? `${flag.length} of ${rd.length}` : "—", "Days a shorter route was possible")}
+      ${tile(flag.length ? "~" + Math.round(save) + " mi" : "—", "Miles a shorter order could have saved (estimate)")}
+      ${tile(dv.length ? (mi ? Math.round(hb / mi * 100) : 0) : "—", dv.length ? "Hard brakes + starts per 100 miles" : "Driving habits start once your phone GPS is set up (Staffing ▸ Phone GPS)")}
+    </div>
+    ${tips.map(day).join("")}
+    ${quiet ? `<p class="muted sm" style="margin:8px 0 0">👍 ${quiet} day${quiet === 1 ? "" : "s"} with nothing to change.</p>` : ""}
+    <p class="muted sm" style="margin:8px 0 0">Route miles are estimates (straight-line distance between homes × 1.3 for road bends), from your phone GPS stops at our homes, or the order you tapped Start on Breezeway tasks when your phone wasn't sending. Driving comes from the company truck's Bouncie tracker on trips your phone was in. Updated every hour.</p></div>`;
+}
 window.myPerf = async function(v){
   css(); v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
-  const [r, pt] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto")]); if(current() !== "stf_perf") return;
+  const [r, pt, fcr] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto"), sb.rpc("my_field_coach", { p_days:28 })]); if(current() !== "stf_perf") return;
   // PTO you're earning (Brandon 2026-10-29: "show how much PTO they are aquiring"); my_pto() = your own row (hub_my_pto.sql)
   const pto = (pt && pt.data) || [], hh = x => x == null ? "—" : (Math.round(+x * 10) / 10).toLocaleString() + " h";
   const ptoCard = pto.map(b => { const c = b.config || {}, have = b.calc_hours != null ? b.calc_hours : b.hours;
@@ -414,7 +441,7 @@ window.myPerf = async function(v){
   const grps = [...new Set(rows.map(x => x.grp))];
   v.innerHTML = `<div class="page stf wide"><h2 style="margin:0 0 6px">My performance</h2>
     <p class="muted" style="margin:0 0 10px">How you've been doing, from the same numbers your manager sees. The small number next to a measure compares you with the team: 100 = the team's average${rows[0] ? ` · updated ${esc(dnm(rows[0].as_of))}` : ""}.</p>
-    ${ptoCard}${grps.map(g => `<div class="card"><b style="font-size:16px">${esc(PG[g] || g)}</b><div class="tow"><table><tr><th></th>${rows.filter(x => x.grp === g).map(x => `<th class="r">${esc(PP[x.period] || x.period)}</th>`).join("")}</tr>
+    ${ptoCard}${fcCard((fcr && fcr.data) || [])}${grps.map(g => `<div class="card"><b style="font-size:16px">${esc(PG[g] || g)}</b><div class="tow"><table><tr><th></th>${rows.filter(x => x.grp === g).map(x => `<th class="r">${esc(PP[x.period] || x.period)}</th>`).join("")}</tr>
       <tr><td><b>Grade</b><div class="muted sm">A+ top 10% · A top 25% · B top half · C · D bottom 25%</div></td>${rows.filter(x => x.grp === g).map(x => { const gr = (x.metrics || {}).grade;
         return `<td class="r">${gr ? `<span class="pill ${gr[0] === "A" ? "green" : gr === "C" ? "amber" : gr === "D" ? "red" : ""}" style="font-size:16px;font-weight:800">${esc(gr)}</span>` : "—"}</td>`; }).join("")}</tr>
       <tr><td><b>Overall</b></td>${rows.filter(x => x.grp === g).map(x => `<td class="r"><b>${x.score == null ? "—" : Math.round(x.score)}</b>${x.rank ? `<div class="muted sm">#${x.rank} of ${x.of_n}</div>` : ""}</td>`).join("")}</tr>
