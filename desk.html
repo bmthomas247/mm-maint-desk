@@ -2912,9 +2912,68 @@ function projDetail(p){ if(!p) return '<div class="empty">Pick a project.</div>'
   return h+'</div>';
 }
 
+/* Brandon 2026-11-09: pick homes by typing (search as you type, chips with x); the hidden #id keeps "A, B" like the old text box */
+function homePick(id,sel){ sel=(sel||[]).map(canon).filter(Boolean);
+  return '<div class="f hpkwrap" data-for="'+id+'" style="grid-column:1/-1;position:relative"><span>Homes</span>'+
+    '<input type="hidden" id="'+id+'" value="'+esc(sel.join(", "))+'"><div class="hpkchips" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px"></div>'+
+    '<input class="hpkin" type="text" autocomplete="off" placeholder="Type a home code or name, e.g. PL 536" oninput="hpkSearch(this)" onfocus="hpkSearch(this)" onkeydown="hpkKey(event,this)" onblur="hpkBlur(this)">'+
+    '<div class="hpksug" style="display:none;position:absolute;left:0;right:0;z-index:60;background:#fff;border:1px solid #d8ddd2;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:240px;overflow:auto;margin-top:4px"></div>'+
+    '<img src="data:," alt="" style="display:none" onerror="hpkDraw(this.parentNode)"></div>'; }
+(function(){
+  function h(t){ return String(t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function cur(w){ var v=document.getElementById(w.getAttribute("data-for")).value; return v?v.split(/\s*,\s*/).filter(Boolean):[]; }
+  function setv(w,a){ document.getElementById(w.getAttribute("data-for")).value=a.join(", "); hpkDraw(w); }
+  function all(){ return (D.homes||[]).filter(function(x){ return !x.company; }).map(function(x){ return {c:x.code,n:x.name||x.community||""}; }); }
+  window.hpkDraw=function(w){ var a=cur(w); w.querySelector(".hpkchips").innerHTML=a.length?a.map(function(c){ return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 6px 3px 10px;border-radius:999px;background:#e8f0dc;color:#2f4a10;font-size:13px;font-weight:600">'+h(c)+
+      '<button type="button" data-n="'+h(c)+'" onmousedown="hpkDel(event,this)" title="Remove" style="border:0;background:transparent;cursor:pointer;font-size:14px;line-height:1;padding:0 4px;color:#2f4a10">×</button></span>'; }).join(""):'<span class="note">No home yet.</span>'; };
+  window.hpkSearch=function(inp){ var w=inp.closest(".hpkwrap"), q=inp.value.trim().toLowerCase(), qn=q.replace(/\s+/g,""), have=cur(w), sug=w.querySelector(".hpksug");
+    if(!q){ sug.style.display="none"; return; }
+    var list=all().filter(function(x){ return have.indexOf(x.c)<0 && (x.c.toLowerCase().replace(/\s+/g,"").indexOf(qn)>-1 || x.n.toLowerCase().indexOf(q)>-1); })
+      .sort(function(a,b){ var x=a.c.toLowerCase().replace(/\s+/g,"").indexOf(qn)===0, y=b.c.toLowerCase().replace(/\s+/g,"").indexOf(qn)===0; return (y-x)||a.c.localeCompare(b.c); }).slice(0,12);
+    sug.innerHTML=list.length?list.map(function(x,i){ return '<div class="hpkopt'+(i?"":" on")+'" data-n="'+h(x.c)+'" onmousedown="hpkPick(event,this)" style="padding:8px 12px;cursor:pointer;'+(i?"":"background:#eef3e6;")+'"><b>'+h(x.c)+'</b>'+(x.n?' <span class="note">'+h(x.n)+'</span>':'')+'</div>'; }).join(""):'<div class="note" style="padding:8px 12px">No home matches.</div>';
+    sug.style.display="block"; };
+  function add(w,c){ var a=cur(w); if(a.indexOf(c)<0) a.push(c); setv(w,a); var inp=w.querySelector(".hpkin"); inp.value=""; hpkSearch(inp); }
+  window.hpkPick=function(e,el){ e.preventDefault(); add(el.closest(".hpkwrap"),el.getAttribute("data-n")); };
+  window.hpkDel=function(e,el){ e.preventDefault(); var w=el.closest(".hpkwrap"); setv(w,cur(w).filter(function(c){ return c!==el.getAttribute("data-n"); })); };
+  window.hpkBlur=function(inp){ setTimeout(function(){ var s=inp.closest(".hpkwrap").querySelector(".hpksug"); if(s) s.style.display="none"; },120); };
+  window.hpkKey=function(e,inp){ var w=inp.closest(".hpkwrap"), o=[].slice.call(w.querySelectorAll(".hpkopt")), i=o.findIndex(function(x){ return x.classList.contains("on"); });
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){ e.preventDefault(); if(!o.length) return; var j=Math.max(0,Math.min(o.length-1,i+(e.key==="ArrowDown"?1:-1)));
+      o.forEach(function(x,k){ x.classList.toggle("on",k===j); x.style.background=k===j?"#eef3e6":""; }); o[j].scrollIntoView({block:"nearest"}); }
+    else if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); if(o[i<0?0:i]) add(w,o[i<0?0:i].getAttribute("data-n")); }
+    else if(e.key==="Escape"){ w.querySelector(".hpksug").style.display="none"; }
+    else if(e.key==="Backspace"&&!inp.value){ var a=cur(w); a.pop(); setv(w,a); } };
+})();
+function pjUniq(a){ var o=[]; (a||[]).forEach(function(x){ if(x!=null && x!=="" && o.indexOf(x)<0) o.push(x); }); return o; }
+window.pjmSearch=function(inp,keepId){ var w=inp.closest(".pjmwrap"), q=inp.value.trim().toLowerCase(), sug=w.querySelector(".pjmsug");
+  if(!q){ sug.style.display="none"; return; }
+  var list=projects().filter(function(x){ return String(x.id)!==String(keepId) && !x.hidden && x.stage!=="done" && (x.title+" "+x.homes.join(" ")).toLowerCase().indexOf(q)>-1; }).slice(0,10);
+  sug.innerHTML=list.length?list.map(function(x){ return '<div data-id="'+esc(String(x.id))+'" onmousedown="pjmPick(event,this,\''+esc(String(keepId))+'\')" style="padding:8px 12px;cursor:pointer"><b>'+esc(x.title)+'</b>'+(x.homes.length?' <span class="note">'+esc(x.homes.slice(0,4).join(", "))+'</span>':'')+' <span class="note">· '+esc(x.stage||"open")+'</span></div>'; }).join(""):'<div class="note" style="padding:8px 12px">No open project matches.</div>';
+  sug.style.display="block"; };
+window.pjmBlur=function(inp){ setTimeout(function(){ var s=inp.closest(".pjmwrap").querySelector(".pjmsug"); if(s) s.style.display="none"; },150); };
+window.pjmPick=function(e,el,keepId){ e.preventDefault(); if(!need()) return;
+  var all=projects(), K=all.filter(function(x){ return String(x.id)===String(keepId); })[0], O=all.filter(function(x){ return String(x.id)===el.getAttribute("data-id"); })[0];
+  if(!K||!O) return;
+  if(!confirm('Combine "'+O.title+'" into "'+K.title+'"?\n\nIts notes, homes, vendors, followers and tickets move here and "'+O.title+'" is closed as a duplicate.')) return;
+  var kp=sid(K.id), op=sid(O.id), ke=S.projedits[kp]||{}, oe=S.projedits[op]||{}, now=Date.now(), tag="[from \""+O.title+"\"] ";
+  var asana=(O.updates||[]).filter(function(u){ return u.text||u.head; }).map(function(u){ return {by:"Asana",at:Date.parse(u.date)||0,text:tag+(u.head?u.head+(u.text?": ":""):"")+(u.text||"")}; });
+  var notes=(ke.notes||[]).concat((oe.notes||[]).map(function(n){ return Object.assign({},n,{text:tag+(n.text||"")}); }),asana,[{by:S.me,at:now,text:"Combined with the duplicate project \""+O.title+"\""}]).sort(function(a,b){ return (a.at||0)-(b.at||0); });
+  var vI=(ke.vendors||[]).slice(), vN=(ke.vendorNames||[]).slice();
+  (oe.vendors||[]).forEach(function(id,i){ if(vI.map(String).indexOf(String(id))<0){ vI.push(id); vN.push((oe.vendorNames||[])[i]||""); } });
+  var patch={notes:notes,followers:pjUniq((ke.followers||[]).concat(oe.followers||[])),vendors:vI,vendorNames:vN,tickets:pjUniq((ke.tickets||[]).concat(oe.tickets||[])),mergedFrom:pjUniq((ke.mergedFrom||[]).concat([O.id]))};
+  if(!K.next && O.next) patch.next=O.next; if(!K.who && O.who) patch.who=O.who;
+  var homes=pjUniq((K.props&&K.props.length?K.props:K.homes).concat(O.homes||[]));
+  var p1=K.origin==="desk"?put("deskprojects",kp,{props:homes},S.deskprojects[kp]):Promise.resolve(); if(K.origin!=="desk") patch.props=homes;
+  return p1.then(function(){ return put("projedits",kp,patch,ke); })
+    .then(function(){ return put("projedits",op,{hidden:true,mergedInto:K.id,stage:"done",closedWhy:"combined",closedBy:S.me,closedAt:now,laterUntil:"",
+      notes:(oe.notes||[]).concat([{by:S.me,at:now,text:"Combined into \""+K.title+"\" (duplicate)"}])},oe); })
+    .then(function(){ closeModal(); toast("Combined into "+K.title); render(); }); };
 function mProject(id){ var P=id?projects().filter(function(x){ return x.id===id; })[0]:null;
   openModal(P?"Edit project":"New project",'<div class="fields">'+fld("np_t","What is it",P?P.title:"",null,'placeholder="e.g. BHV 5557 deck refinish + hot tub move"')+
-    fld("np_h","Homes (codes, comma between)",P?(P.props||P.homes||[]).join(", "):"",null,'placeholder="BHV 5557"')+
+    homePick("np_h",P?(P.props||P.homes||[]):[])+
+    (P?'<div class="f pjmwrap" style="grid-column:1/-1;position:relative;border-top:1px dashed #d8ddd2;padding-top:10px;margin-top:4px"><span>Combine a duplicate into this one</span>'+
+      '<input class="pjmin" type="text" autocomplete="off" placeholder="Type the other project\'s name or a home code" oninput="pjmSearch(this,\''+esc(String(P.id))+'\')" onblur="pjmBlur(this)">'+
+      '<div class="pjmsug" style="display:none;position:absolute;left:0;right:0;z-index:60;background:#fff;border:1px solid #d8ddd2;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:240px;overflow:auto;margin-top:4px"></div>'+
+      '<div class="note" style="margin-top:4px">Its notes, Asana updates, homes, vendors, followers and tickets move here; the duplicate is closed as "combined" (nothing is deleted).</div></div>':'')+
     (P?'':'<label class="f"><span>Stage</span><select id="np_s">'+PSTAGE.filter(function(x){ return x[0]!=="done"; }).map(function(x){ return '<option value="'+x[0]+'">'+x[1]+'</option>'; }).join("")+'</select></label>'+
     '<label class="f"><span>Who owns it</span><select id="np_w">'+whoOptions("","—")+'</select></label>'+
     '<label class="f" style="grid-column:1/-1"><span>Next step</span><input id="np_n"></label>'+
@@ -3741,7 +3800,8 @@ function mondayOf(d){ var x=new Date(Date.parse((d||today())+"T12:00:00")); var 
 function meetItems(){
   var ps=projects().filter(function(p){ return !p.office && !p.hidden && p.stage!=="done" && p.stage!=="on hold" && !(p.edit.laterUntil && p.edit.laterUntil>today()); }).sort(function(a,b){ return (b.lastDate||"").localeCompare(a.lastDate||""); });
   var owners=D.jobs.filter(function(j){ var e=S.edits[sid(j.id)]||{}; return j.list==="Owner Relations · On Program Owners" && j.kind!=="info" && j.status!=="done" && !(e.laterUntil && e.laterUntil>today()); });
-  var rep=repeats(90).same.filter(realRepeat).slice(0,8);
+  var roff=(S.config.repeat_off||{}).items||{};
+  var rep=repeats(90).same.filter(realRepeat).filter(function(x){ var o=roff[x.prop+"|"+x.cat]; return !o || repLast(x)>o.last; }).slice(0,8);
   var out=[];
   ps.forEach(function(p){ var u=(p.updates||[])[(p.updates||[]).length-1]||{}, dn=p.notesD[p.notesD.length-1];
     out.push({key:"p:"+p.id,grp:"Ongoing projects",title:p.title,homes:p.homes||[],url:p.url,src:"Asana history",stage:p.stage||"open",who:p.who,
@@ -3749,8 +3809,16 @@ function meetItems(){
   owners.forEach(function(j){ out.push({key:"j:"+j.id,grp:"On Program Owners",title:j.title,homes:[j.prop].filter(Boolean),url:j.srcUrl,src:"Asana",stage:bwState(j)==="missing"?"not in Breezeway":j.status,badge:bwBadge(j),
       read:[esc((j.detail||"").slice(-320))].concat(thumbs(j,4,true,70)?[thumbs(j,4,true,70)]:[]),save:{coll:"edits",id:sid(j.id)},job:j}); });
   rep.forEach(function(x){ out.push({key:"r:"+x.prop+"|"+x.cat,grp:"Repeat problems (90 days)",title:x.prop+" — "+x.cat+" ×"+x.jobs.length,homes:[x.prop],stage:slackState(x)==="sent"?"Chris & Jeff told":"",
-      read:x.jobs.slice(0,4).map(function(j){ return esc(fmtD(j.created||j.when))+' — '+(j.srcUrl?'<a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>':esc(j.title)); }),extra:repeatSlackBtn(x)}); });
+      read:x.jobs.slice(0,4).map(function(j){ return esc(fmtD(j.created||j.when))+' — '+(j.srcUrl?'<a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>':esc(j.title)); }),
+      extra:'<button class="btn sm" data-repoff="'+esc(x.prop+"|"+x.cat+"|"+repLast(x))+'" title="Fixed or nothing to do: take it off the meeting (it comes back if a new job like this shows up)">🚫 Not needed</button> '+repeatSlackBtn(x)}); });
   return out; }
+function repLast(x){ return x.jobs.map(function(j){ return String(j.created||j.when||""); }).sort().pop()||""; }
+function repOff(v){ if(!need()) return; var a=v.split("|"), key=a[0]+"|"+a[1], last=a.slice(2).join("|");
+  openModal("Not needed any more",'<div style="font-weight:800;margin-bottom:8px">'+esc(a[0]+" — "+a[1])+'</div><div class="fields"><label class="f" style="grid-column:1/-1"><span>Why isn\'t it needed? (e.g. all fixed, nothing ongoing)</span><textarea id="rpo_w" rows="3" style="width:100%"></textarea></label></div>'+
+    '<div class="note">It comes off the Monday meeting. If a new job like this shows up at '+esc(a[0])+', it comes back.</div>',
+    function(){ var w=fv("rpo_w"); if(!w) return toast("Say why, so the team knows");
+      var cur=S.config.repeat_off||{}, items=Object.assign({},cur.items||{}); items[key]={by:S.me,at:Date.now(),why:w,last:last};
+      return put("config","repeat_off",{items:items},cur).then(function(){ closeModal(); savedPop("Taken off the meeting"); render(); }); },"Not needed"); }
 function meetLog(mk){ return (S.config["meet_"+mk]||{}).items||{}; }
 function prevMeets(mk){ return Object.keys(S.config).filter(function(k){ return k.indexOf("meet_")===0 && k.slice(5)<mk; }).map(function(k){ return k.slice(5); }).sort().reverse(); }
 function meetCount(){ return meetItems().length; }
@@ -4008,7 +4076,7 @@ function vMeet(){
       if(dv==null) dv=meetDraftGet("mt_"+k); if(xdv==null) xdv=meetDraftGet("mx_"+k);
       h+='<div class="mcard'+(cov?' cov':'')+'"><div class="mc-top"><span class="mc-title">'+esc(it.title)+'</span>'+it.homes.slice(0,3).map(propLink).join(" ")+
         (it.stage?'<span class="pill">'+esc(it.stage)+'</span>':'')+(it.badge||'')+(it.who?'<span class="note">'+esc(it.who)+'</span>':'')+(cov?'<span class="pill done">covered this week</span>':'')+
-        '<span style="flex:1"></span>'+(it.save?pjxBtns(it.save.coll,it.save.id):'')+(it.proj?'<button class="btn sm pri" data-proj="'+esc(it.proj.id)+'">⤢ Open project</button>':it.url?'<a class="note" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.src||"Open")+' ↗</a>':'')+(it.extra||'')+'</div>'+
+        '<span style="flex:1"></span>'+(it.save?pjxBtns(it.save.coll,it.save.id):'')+(it.proj?'<button class="btn sm" data-pjedit="'+esc(it.proj.id)+'" title="Change the name or the homes">✎ Edit</button><button class="btn sm pri" data-proj="'+esc(it.proj.id)+'">⤢ Open project</button>':it.url?'<a class="note" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.src||"Open")+' ↗</a>':'')+(it.extra||'')+'</div>'+
         (it.read.length?'<div style="margin-top:5px">'+it.read.map(function(x){ return '<div class="note">'+x+'</div>'; }).join("")+'</div>':'')+
         homeNowHtml(it.homes,4)+
         ((it.proj||it.job)?'<div class="mc-next'+(nx.text?'':' none')+'"><b>👉 Next up'+(it.proj?' for this project':'')+':</b> '+(nx.text?linkify(nx.text)+(nx.by?' <span class="note">('+esc(nx.by)+(nx.d?', '+esc(fmtD(nx.d)):'')+')</span>':''):'<span class="note">Nothing written yet. Add it below.</span>')+'</div>':'')+
@@ -4907,6 +4975,8 @@ document.addEventListener("click",function(ev){
   if(d.pjven){ return pjVenPick(d.pjven); }
   if(d.meetclr){ ev.preventDefault(); S.ui.mq=""; S.ui.mgrp=S.ui.mcov=S.ui.mstage=S.ui.mven=S.ui.mnext=""; return render(); }
   if(d.pjbwall){ S.ui.pjBwAll=S.ui.pjBwAll||{}; S.ui.pjBwAll[d.pjbwall]=!S.ui.pjBwAll[d.pjbwall]; return render(); }
+  if(d.pjedit){ return mProject(d.pjedit); }
+  if(d.repoff){ return repOff(d.repoff); }
   if(d.proj){ S.ui.proj=d.proj; return render(); }
   if(d.projf!=null){ S.ui.projF=d.projf==='all'?'':d.projf; if(d.projf==='done') S.ui.projDone=true; return render(); }
   if(d.act==='projclose'){ S.ui.proj=''; return render(); }
