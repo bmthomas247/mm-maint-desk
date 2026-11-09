@@ -292,7 +292,7 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .dygo{background:var(--forest-2,#5b8a1e)!important;color:#fff!important;border-color:var(--forest-2,#5b8a1e)!important;justify-content:center}
 .srt th{z-index:3!important;box-shadow:0 1px 0 var(--ovgrid)}.srt td{position:relative;z-index:0}
 .srfee{background:var(--ovbg);border-radius:12px;padding:8px 12px;font-size:12.5px;color:var(--ink2);margin-top:10px;line-height:1.5}
-.srt td.gp{background:rgba(136,181,53,.07)}.srt th.gp{background:linear-gradient(rgba(136,181,53,.07),rgba(136,181,53,.07)),var(--ovcard)}   /* solid sticky header (2026-11-08) */.srt td.gp{font-weight:700}.srt td.gp.muted{font-weight:500;color:var(--muted)}.srt td.gpi{color:var(--muted);font-weight:500}.srt td.gp.gpc{font-weight:600}
+.srt td.gp{background:rgba(136,181,53,.07)}.srt th.gp{background:linear-gradient(rgba(136,181,53,.07),rgba(136,181,53,.07)),var(--ovcard)}   /* solid sticky header (2026-11-08) */.srt td.gp{font-weight:700}.srt td.gp.muted{font-weight:500;color:var(--muted)}.srt td.gpi{color:var(--muted);font-weight:500}.srbk{display:inline-block;background:#2f6d1e;color:#fff;border-radius:7px;padding:1px 7px;font-weight:700;font-size:11px}.srlock{display:inline-block;min-width:74px;padding:6px 8px;border-radius:9px;background:#e8efe0;font-weight:700;color:#2f6d1e}.srt td.gp.gpc{font-weight:600}
 .srwarn{background:var(--amberbg);border-radius:12px;padding:9px 12px;font-size:13px;margin-top:10px}
 .srin.pre{color:var(--muted);background:var(--ovbg)}.srrate{white-space:nowrap}
 .srby{display:inline-grid;place-items:center;min-width:24px;height:22px;padding:0 5px;margin-left:6px;border-radius:999px;background:var(--pine-soft,#eaf3da);color:var(--forest,#3c5f12);font-size:10.5px;font-weight:800;vertical-align:middle}
@@ -1160,6 +1160,10 @@ async function loadSetRates() {
   { const d = SR.x?.quality?.run_date; SR.qAll = [];
     if (d) { const qa = await sb.from("home_quality").select("comp_id,zi:parts->inside->z,zm:parts->matchups->z").eq("run_date", d); SR.qAll = (qa.data || []).map(r => ({ id: r.comp_id, z: r.zi ?? r.zm })); } }
   SR.bk = cid ? ((await sb.from("our_bookings").select("reservation_id,kind,status,booked_at,arrival,nights").eq("comp_id", cid).gte("booked_at", addD(today, -60))).data || []) : [];
+  SR.bkd = {};   // Brandon 2026-11-08: booked nights are locked and say so in What's on
+  if (cid) { const bq = await sb.from("our_bookings").select("reservation_id,arrival,departure,nights,kind,channel,gross_rent,status").eq("comp_id", cid).gt("departure", today).neq("status", "Cancelled").limit(500);
+    for (const b of bq.data || []) { const pn = b.kind === "guest" && b.nights && +b.gross_rent ? +b.gross_rent / b.nights : null;
+      for (let k = b.arrival; k < b.departure; k = addD(k, 1)) SR.bkd[k] = { kind: b.kind, ch: b.channel, pn, res: b.reservation_id, a: b.arrival, z: b.departure }; } }
   SR.lb = cid ? ((await sb.from("our_bookings").select("reservation_id,arrival,departure,nights,channel,gross_rent,booked_at,status").eq("comp_id", cid).eq("kind", "guest").gte("booked_at", addD(today, -365)).order("booked_at", { ascending: false }).limit(400)).data || [])
     .filter(b => !/owner|o-guest|comp\/charity|commission/i.test(b.channel || "")) : [];
   // second source for Airbnb daily rates: the newest AirROI pull per comp (Key Data feeds the main number from 2026-11-09)
@@ -1426,7 +1430,9 @@ const srGrp = k => { const v = (SR.grp || []).map(b => { const off = Math.round(
 const srGrpName = () => `Our ${SR.grpPre || ""}${SR.grpTail ? " " + SR.grpTail : ""} homes`;
 const srBeyond = k => { const b = SR.beyond; if (!b) return null; const off = Math.round((new Date(k + "T12:00:00") - new Date(b.start_date + "T12:00:00")) / 864e5); const v = b.price?.[off]; return v == null ? null : +v; };
 // Our rate starts as Track's current rate (Brandon 2026-11-08); set = someone saved or typed a rate for that night.
-function srVal(k) { const e = SR.edits[k], s = SR.ours_n[k], t = SR.track?.[k];
+const srBkLbl = b => b.kind === "owner" ? "Owner stay" : b.kind === "block" ? `Blocked${b.ch ? " · " + b.ch : ""}` : `Booked${b.ch ? " · " + String(b.ch).replace(/^Guest\s*/i, "").replace(/^ABB$/i, "Airbnb").replace(/^MM$/i, "our site") || "" : ""}`;
+function srVal(k) { const B = SR.bkd?.[k]; if (B) return { rate: B.pn != null ? Math.round(B.pn) : null, min: null, changed: false, saved: false, set: true, booked: B };
+  const e = SR.edits[k], s = SR.ours_n[k], t = SR.track?.[k];
   return { rate: e?.rate !== undefined ? e.rate : s ? +s.rate : t ? +t.rate : null, min: e?.min !== undefined ? e.min : s ? s.min_nights ?? null : t?.min_nights ?? null,
     changed: !!e, saved: !!s, set: !!e || !!s, by: s?.by || null, at: s?.at || null }; }
 const srIni = n => String(n || "").split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
@@ -1570,10 +1576,10 @@ function srDraw() {
     <div class="srwarn">⚠ Rates here are only <b>suggestions</b>. Nothing changes in Track until someone presses <b>Send these dates to Track</b> (top right). <b>Save</b> keeps your rates as suggested prices with your initials. Grey = Track's current rate.</div>
     ${srFeeNote()}<div class="wrap" style="max-height:620px;overflow:auto;margin-top:10px"><table class="srt"><tr><th>Night</th><th>What's on</th><th title="Our own pricing engine (hover ⓘ for its reason)">Engine</th><th title="Average rate in Track of our other homes in this building (test homes left out)">${srGrpName()}</th><th>Comps</th><th title="Starts at Track's current rate. Type a new one, then Save = a suggestion with your initials. It only reaches Track with Send these dates to Track.">Our rate</th><th>Min nights</th><th class="gpi" title="What a guest pays per night at our rate on Airbnb (Track's markup + fees + cleaning over 3 nights + tax). Just to know.">Guest pays · Airbnb</th><th class="gpi" title="Just to know">Vrbo</th><th class="gp" title="What a guest pays per night on our website at our rate. This is the number we match to the comps.">Our site</th><th class="gp" title="The comps' Airbnb checkout total per night incl. cleaning, fees + 13.12% est. tax">Comps all-in</th><th class="gp" title="Our site all-in vs the comps' all-in (Airbnb all-in when we have no own-site quotes). Green = within 5%.">vs comps</th></tr>` +
     R.map(r => { const d = new Date(r.k + "T12:00:00"), wk = d.getDay() === 5 || d.getDay() === 6, g = r.v.rate != null && r.b ? (r.v.rate / r.b - 1) * 100 : null;
-      return `<tr data-k="${r.k}" class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}${SR.sel?.has(r.k) ? " srsel" : ""}"><td><b class="srhk" data-hist="${r.k}" title="Price history for this night">${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
+      return `<tr data-k="${r.k}" class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}${SR.sel?.has(r.k) ? " srsel" : ""}"><td><b class="srhk" data-hist="${r.k}" title="Price history for this night">${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${r.v.booked ? `<span class="srbk" title="${escH(`${srBkLbl(r.v.booked)} · ${r.v.booked.a} to ${r.v.booked.z}${r.v.booked.res > 0 ? " · res " + r.v.booked.res : ""}${r.v.booked.pn != null ? " · rent " + fmt(r.v.booked.pn) + "/night" : ""}`)}">🔒 ${escH(srBkLbl(r.v.booked))}</span>${pk(r.k) ? "<br>" : ""}` : ""}${escH(pk(r.k) || "")}</td>
         <td>${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy" tabindex="0" role="button" aria-label="Why this price" data-why="${escH(r.s.why || "")}" data-p="${r.s.price}" data-k="${r.k}">ⓘ</span>` : "—"}</td>
         <td title="${r.g ? escH(`${r.g.n} homes: ${fmt(r.g.lo)} to ${fmt(r.g.hi)}`) : ""}">${fmt(r.b)}${r.g ? `<div class="srair">${r.g.n} homes</div>` : ""}</td><td class="srctd" data-ctip="${r.k}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
-        <td class="srrate"><input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin${r.v.set ? "" : " pre"}" title="${r.v.set ? "" : "Track's current rate"}">${r.v.changed ? srOurWhy(r) : ""}${r.v.saved && !r.v.changed ? `${srOurWhy(r)}<span class="srby" title="Suggested by ${escH(r.v.by || "")}${r.v.at ? ", " + escH(new Date(r.v.at).toLocaleString()) : ""}">${escH(srIni(r.v.by))}</span>` : ""}</td><td><input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm${r.v.set ? "" : " pre"}"></td>
+        <td class="srrate">${r.v.booked ? `<span class="srlock" title="Booked: this is the rent per night it booked at (before cleaning, fees and tax). Booked nights can't be changed or sent.">🔒 ${r.v.rate != null ? fmt(r.v.rate) : "—"}</span>` : `<input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin${r.v.set ? "" : " pre"}" title="${r.v.set ? "" : "Track's current rate"}">`}${r.v.changed ? srOurWhy(r) : ""}${r.v.saved && !r.v.changed ? `${srOurWhy(r)}<span class="srby" title="Suggested by ${escH(r.v.by || "")}${r.v.at ? ", " + escH(new Date(r.v.at).toLocaleString()) : ""}">${escH(srIni(r.v.by))}</span>` : ""}</td><td>${r.v.booked ? "" : `<input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm${r.v.set ? "" : " pre"}">`}</td>
         ${srGuestCells(r)}</tr>`; }).join("") + `</table>${SR.to < addD(iso(new Date()), 364) ? `<div class="srmore"><span>That's ${R.length} nights, through ${new Date(SR.to + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}. Want to see further out?</span><button class="ovbtn" data-srmore="60">Load 60 more nights</button></div>` : ""}</div>
     <div class="src">Suggested = our own pricing engine (hover ⓘ for its reason). Track now = rack rate (RR) + minimum stay in Track, read every 30 min. ${srGrpName()} = average rate in Track of our other homes there (test homes left out; Beyond's price while it prices them). Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
   html += srScore();
@@ -1624,6 +1630,7 @@ function srCal() {
   draw();
 }
 function srGuestCells(r) {
+  if (r.v.booked) { const ca = SR.compAll?.[r.k]?.v; return `<td data-gpk="${r.k}" class="gpw" style="display:none"></td><td class="gpi">—</td><td class="gpi">—</td><td class="gp muted">—</td><td class="gp gpc">${ca ? fmt(ca) : "—"}</td><td class="gp gpc"></td>`; }
   const base = r.v.rate, set = r.v.set, ab = srGuest(base, "Airbnb"), mid = srGuestMid(base), ca = SR.compAll?.[r.k]?.v, g = mid != null && ca ? (mid / ca - 1) * 100 : null;
   const c = (v, t, k) => `<td class="${k}${set ? "" : " muted"}" title="${escH(t)}">${v == null ? "—" : fmt(v)}</td>`;
   return `<td data-gpk="${r.k}" class="gpw" style="display:none"></td>` + c(ab, (set ? "At our rate" : "At Track's current rate (nothing set yet)") + " · just to know", "gpi") + c(srGuest(base, "VRBO"), "Vrbo · just to know", "gpi") + c(srGuest(base, "Direct"), "Our website: the number we match to the comps", "gp") +
@@ -1891,7 +1898,7 @@ function srFillIn(R) {
     if (src === "dyn") { const w = $("dyWhich"); if (w) w.value = "all"; return $("srFill")?.click(); }
     const byHand = k => { const s = SR.ours_n[k]; return s && !/^Auto re-price/.test(s.by || ""); };
     SR.diff = []; let n = 0;
-    for (const r of R) { if (keep && byHand(r.k)) continue;
+    for (const r of R) { if (SR.bkd?.[r.k]) continue; if (keep && byHand(r.k)) continue;
       const p = src === "t" ? (r.t ? +r.t.rate : null) : src === "s" ? r.s?.price : src === "g" ? r.b : src === "c" ? r.c?.adr : null; if (p == null) continue;
       const rate = Math.max(25, Math.round(p * (1 + pct / 100))), min = src === "t" ? (r.t?.min_nights ?? r.v.min) : src === "s" ? (r.s?.min ?? r.v.min) : r.v.min, sv = SR.ours_n[r.k], tk = SR.track?.[r.k];
       const lbl = { t: "Track now", s: "engine", g: srGrpName(), c: "comps' daily rate" }[src];
@@ -1968,7 +1975,7 @@ function srWire(R) {
     const RB = srRevBoost(Y), RV = RB ? RB.pct : 0;
     const lMaxE = (+Y.learnMax || 25) + Math.max(0, RV);
     const A = Y.base === "a", L = Math.max(+Y.learnMin || -20, Math.min(lMaxE, +(Y.learn?.lvl || 0))), LP = (+Y.lowPct || 35) / 100, U = +Y.under || 0;
-    for (const r of R) { if (Y.which === "empty" && r.v.set) continue;
+    for (const r of R) { if (SR.bkd?.[r.k]) continue; if (Y.which === "empty" && r.v.set) continue;
       const ct = srCompTot(r.k), clo = A && ct ? srCompLow(r.k, LP) : null, out0 = Math.round((new Date(r.k + "T12:00:00") - new Date(today + "T12:00:00")) / 864e5);
       // standard = comps' average − $under, moved by what bookings taught us; last minute slides toward the cheaper comps
       const std = ct ? (ct.v - U) * (1 + L / 100) * (1 + RV / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
@@ -2029,7 +2036,7 @@ function srWire(R) {
   on("srReset", "onclick", () => { const n = Object.keys(SR.edits).length;
     if (n && !confirm(`Throw away ${n} unsaved night${n > 1 ? "s" : ""} and go back to the saved prices and settings?`)) return;
     SR.edits = {}; SR.dyn = null; SR.dynMsg = ""; srDraw(); });
-  on("srSave", "onclick", async () => { const rows = Object.entries(SR.edits).filter(([, e]) => e.rate != null).map(([k, e]) => ({ date: k, rate: e.rate, min: e.min, note: e.why ? e.why.join(" → ").slice(0, 300) : null }));
+  on("srSave", "onclick", async () => { const rows = Object.entries(SR.edits).filter(([k, e]) => e.rate != null && !SR.bkd?.[k]).map(([k, e]) => ({ date: k, rate: e.rate, min: e.min, note: e.why ? e.why.join(" → ").slice(0, 300) : null }));
     if (rows.some(r => r.rate < 25 || r.rate > 20000)) return alert("A rate is outside $25 – $20,000.");
     if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return alert("Minimum nights must be 1 – 60.");
     const r = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
