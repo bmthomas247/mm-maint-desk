@@ -226,7 +226,7 @@ main .card h2{font-weight:700}
 .ovbtn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--ovcard);color:var(--ink);border-radius:12px;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--ovsh);min-height:38px}
 .ovbtn:hover{border-color:var(--moose)}
 .srmore{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:var(--ovbg,#f3f6ee);border-radius:12px;margin:8px 0;font-size:13px}
-.srhfs{margin-left:auto;display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}.srhf{background:var(--ovbg,#f3f6ee);border-radius:12px;padding:6px 12px;text-align:center;min-width:64px}.srhf b{display:block;font-size:20px;line-height:1.15}.srhf span{font-size:11px;color:var(--muted)}.srhfx{display:flex;flex-direction:column;justify-content:center;font-size:12px;max-width:260px}.srhfx span{color:var(--muted)}
+.srhfs{margin-left:auto;align-self:center;display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:1px;max-width:340px;min-width:0;font-size:11.5px;color:var(--muted);line-height:1.35}.srhfs b{font-size:13.5px;color:var(--ink,#1f2a14);white-space:nowrap}.srhfs .srhfb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px}
 .ovfil{display:flex;gap:10px 12px;flex-wrap:wrap;align-items:flex-end;background:var(--ovcard);border-radius:16px;box-shadow:var(--ovsh);padding:12px 14px;margin:0 0 16px}
 .ovfil label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .ovfil select,.ovfil input{font:inherit;font-size:14px;text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink);background:var(--ovbg);border:1px solid var(--line);border-radius:11px;padding:8px 10px;min-height:40px}
@@ -1434,10 +1434,9 @@ const srIni = n => String(n || "").split(/[\s@._-]+/).filter(Boolean).slice(0, 2
 function srHomeFacts(h) { if (!h) return "";
   const t = SR.hh?.[h.code] || {}, c = SR.ours?.find(x => x.id === h.comp_id) || {};
   const bd = t.beds ?? c.bedrooms, ba = t.baths != null ? +t.baths : null, sl = c.sleeps;
-  const it = (v, l) => v == null ? "" : `<div class="srhf"><b>${v}</b><span>${l}</span></div>`;
+  const top = [bd == null ? "" : bd === 0 ? "Studio" : `${bd} bd`, ba == null ? "" : `${ba} ba`, sl == null ? "" : `sleeps ${sl}`].filter(Boolean).join(" · ");
   const beds = t.bed_config ? String(t.bed_config).replace(/�/g, "·") : "";
-  return `<div class="srhfs" title="Source: Track (bedrooms, baths, beds) + the comps list (sleeps)">${it(bd === 0 ? "Studio" : bd, bd === 0 ? "" : "Bedrooms")}${it(ba, "Baths")}${it(sl, "Sleeps")}
-    ${beds || t.community ? `<div class="srhfx">${t.community ? `<b>${escH(t.community)}</b>` : ""}${beds ? `<span>🛏 ${escH(beds)}</span>` : ""}</div>` : ""}</div>`; }
+  return `<div class="srhfs" title="${escH(`Source: Track (bedrooms, baths, beds) + the comps list (sleeps)${beds ? " · Beds: " + beds : ""}`)}">${top ? `<b>${escH(top)}</b>` : ""}${t.community ? `<span>${escH(t.community)}</span>` : ""}${beds ? `<span class="srhfb">Beds: ${escH(beds)}</span>` : ""}</div>`; }
 function srDraw() {
   const el = $("srBody"), h = SR.homes.find(x => x.code === SR.code);
   const addOpts = SR.ours.filter(c => !SR.homes.some(x => x.code === c.code)).map(c => `<option>${escH(c.code)}</option>`).join("");
