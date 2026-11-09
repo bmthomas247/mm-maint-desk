@@ -315,7 +315,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="calendar.js?v=20261109wcapp"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
-<script src="staffing.js?v=20261109wcapp"></script>
+<script src="staffing.js?v=20261109wcapp2"></script>
 <script src="perks.js"></script>
 <script src="calls.js"></script>
 <script src="market_watch.js"></script>
@@ -326,7 +326,10 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="accounting.js?v=20261105a"></script>
 <script>
 const C = window.MM_CONFIG;
-try{ if(/type=(magiclink|recovery|signup|invite)/.test(location.hash)) sessionStorage.setItem("mm_pw_offer", "1"); }catch(e){}   // signed in from an emailed link -> offer "Set a password?" (2026-11-02)
+try{ if(/type=(magiclink|recovery|signup|invite)/.test(location.hash)) sessionStorage.setItem("mm_pw_offer", "1"); }catch(e){}
+// 2026-11-09 (Brandon): signed in on the Work check app -> it opens the hub signed in (#mmapp=<one-time token hash>, functions/work-app-handoff)
+let HANDOFF = (location.hash.match(/^#mmapp=([A-Za-z0-9_-]{20,})$/) || [])[1] || null;
+if(HANDOFF) history.replaceState(null, "", location.pathname + location.search + "#/home");   // signed in from an emailed link -> offer "Set a password?" (2026-11-02)
 const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" }, global:{ fetch:(...a) => window.MMOFF ? MMOFF.fetch(...a) : fetch(...a) } });   // offline.js: saved copy on this device (2026-10-30)
 /* weak / no signal (offline.js, Brandon 2026-10-30): these pages open from the saved copy; the rest say they need signal */
 const OFFK = ["homes", "homes_str", "homes_lease", "homes_2h", "homes_hoa", "homes_co", "staffing", "stf_sched", "stf_perf", "cal_off"];
@@ -597,6 +600,9 @@ const NEXT_OK = ["maint.html"];
 
 /* ---------- shell */
 async function boot(){
+  if(HANDOFF){ const t = HANDOFF; HANDOFF = null;
+    const r = await sb.auth.verifyOtp({ token_hash:t, type:"magiclink" });
+    if(r.error) return loginView("The sign-in from the Work check app has expired. Open the hub again from the app (M by the clock), or sign in here."); }
   if(window.MMOFF) MMOFF.scope(true);   // the sign-in reads below are saved for no-signal days
   const { data:{ session } } = await sb.auth.getSession();
   OFFLINE = false;
