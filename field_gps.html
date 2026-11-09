@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Phone GPS</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Staffing ▸ Phone GPS (desk 'field_gps'; hub_field_gps.sql, Brandon 2026-11-09). Field crew set up the free Traccar Client app;
+     it sends to the Edge Function field-gps with the phone's own key; the hub keeps points only while they're clocked in.
+     Access is enforced in Supabase (field_gps_me / hub_gps_* RLS); this page only shows what the server returns. -->
+<style>
+:root{ --moose:#88B535; --moose-soft:#eef5e0; --forest:#3c5f12; --ground:#f5f7f0; --card:#fff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f;
+  --line:#e1e7de; --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06); }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --ground:#11160f; --card:#1a2117; --ink:#e8efe3; --ink-2:#c3cdbd; --muted:#93a08c; --line:#2c3628; --moose-soft:#24321a; --red-soft:#3a1d19; --amber-soft:#3a2d12; } }
+*{box-sizing:border-box} body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.45 Manrope,system-ui,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:16px}
+.head{background:linear-gradient(135deg,#3c5f12,#5b8a1e);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:14px}
+.head h1{margin:0 0 4px;font-size:22px} .head p{margin:0;opacity:.9}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:17px}
+.muted{color:var(--muted)} .small{font-size:13px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none;min-height:44px}
+.btn.primary{background:var(--forest);border-color:var(--forest);color:#fff} .btn.red{color:var(--red)}
+.pill{display:inline-block;border-radius:99px;padding:2px 10px;font-size:12.5px;font-weight:700;background:var(--moose-soft);color:var(--forest)}
+.pill.off{background:var(--red-soft);color:var(--red)} .pill.warn{background:var(--amber-soft);color:var(--amber)}
+ol.steps{padding-left:22px;margin:8px 0} ol.steps li{margin:8px 0}
+.copy{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}.copy span{flex:none} .copy input{flex:1;min-width:0;font:13px ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink)}
+.qr{background:#fff;border-radius:14px;padding:10px;display:inline-block} .qr svg{width:240px;height:240px;display:block}
+table{display:block;overflow-x:auto;width:100%;border-collapse:collapse;font-size:14px} th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;color:var(--muted)}
+select{font:inherit;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);min-height:44px}
+.note{background:var(--amber-soft);border-radius:12px;padding:10px 12px;margin:10px 0}
+@media (max-width:640px){ .hidesm{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const when = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "never";
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+if(window.top !== window) document.body.classList.add("inhub");
+
+const SERVER = C.url.replace(/\/$/, "") + "/functions/v1/field-gps";
+// Traccar settings (keys from the app's own QR reader, traccar-client configuration_service.dart, read 2026-11-09)
+const OPTS = "accuracy=high&interval=60&distance=50&angle=30&heartbeat=300&buffer=true&stop_detection=true";
+const IOS = "https://apps.apple.com/app/traccar-client/id843156974", AND = "https://play.google.com/store/apps/details?id=org.traccar.client";
+const S = { me:null, made:null, last:{} };
+
+async function load(){
+  const r = await sb.rpc("field_gps_me");
+  if(r.error){ $("#app").innerHTML = `<div class="card"><p>Couldn't load. Check your signal and try again.</p></div>`; return; }
+  S.me = r.data;
+  if(S.me.can_read){
+    const since = new Date(Date.now() - 36 * 3600e3).toISOString();
+    const p = await sb.from("hub_gps_points").select("user_id,at,lat,lng,acc_m,test").gte("at", since).order("at", { ascending:false }).limit(2000);
+    S.last = {}; for(const x of (p.data || [])) if(!S.last[x.user_id]) S.last[x.user_id] = x;
+  }
+  draw();
+}
+
+function qrSvg(text){ const q = qrcode(0, "M"); q.addData(text, "Byte"); q.make(); return q.createSvgTag({ cellSize:6, margin:2, scalable:true }); }
+
+function setupBox(m){
+  const link = `${SERVER}?id=${encodeURIComponent(m.key)}&${OPTS}`;
+  return `<div class="card" id="setup"><h2>Set up ${esc(m.who)}</h2>
+    <div class="note"><b>This key is shown only now.</b> Finish the steps before you leave this page. If you lose it, just tap "Set up a phone" again and turn the old one off.</div>
+    <ol class="steps">
+      <li>Install the free <b>Traccar Client</b> app: <a href="${IOS}" target="_blank" rel="noopener">iPhone</a> · <a href="${AND}" target="_blank" rel="noopener">Android</a>.</li>
+      <li>Open it. Tap the <b>QR code</b> button and scan this code (open this page on a computer, or have Chris or an admin show it to you):<br>
+        <div class="qr" style="margin-top:8px">${qrSvg(link)}</div>
+        <p class="small muted">On the phone itself? Skip the QR code: in the app's settings, paste these two instead.</p>
+        <div class="copy"><span class="small" style="width:110px">Device identifier</span><input readonly value="${esc(m.key)}"><button class="btn" data-copy="${esc(m.key)}">Copy</button></div>
+        <div class="copy"><span class="small" style="width:110px">Server URL</span><input readonly value="${esc(SERVER)}"><button class="btn" data-copy="${esc(SERVER)}">Copy</button></div>
+        <p class="small muted">Then set Location accuracy <b>High</b>, Distance <b>50</b>, Interval <b>60</b>, Offline buffering <b>on</b>.</p></li>
+      <li>Allow location <b>Always</b> (iPhone: Settings ▸ Traccar Client ▸ Location ▸ Always + Precise. Android: Allow all the time, and turn off battery saving for the app).</li>
+      <li>Turn on the <b>tracking switch</b> in the app and leave it on. The hub only keeps where you are <b>while you're clocked in</b>; anything sent while clocked out is thrown away.</li>
+      <li>Clock in on the hub and come back here: "Last seen" should show a time within a few minutes.</li>
+    </ol>
+    <button class="btn" data-done>Done</button></div>`;
+}
+
+function phones(list, mine){
+  if(!list.length) return `<p class="muted">No phone set up yet.</p>`;
+  return `<table><tr><th>Phone</th>${mine ? "" : "<th>Person</th>"}<th>Last seen</th><th class="hidesm">Kept · not clocked in</th><th class="hidesm">Battery</th><th></th></tr>` +
+    list.map(d => `<tr><td>${esc(d.label || "Phone")} <span class="muted small">…${esc(d.tail)}</span>${d.test ? ' <span class="pill warn">test</span>' : ""}${d.off ? ' <span class="pill off">off</span>' : ""}</td>
+      ${mine ? "" : `<td>${esc(d.name)}</td>`}<td>${when(d.last_point || d.last_seen)}</td><td class="hidesm">${d.kept} · ${d.dropped}</td>
+      <td class="hidesm">${d.batt == null ? "" : Math.round(d.batt) + "%"}</td>
+      <td>${d.off ? "" : `<button class="btn red" data-off="${d.id}">Turn off</button>`}</td></tr>`).join("") + `</table>`;
+}
+
+function draw(){
+  const m = S.me, mine = m.devices.filter(d => d.user_id === m.me);
+  let h = `<div class="head"><h1>Phone GPS</h1><p>Where field work happens, from the Traccar app on your phone. Kept only while you're clocked in on the hub.</p></div>`;
+  if(S.made) h += setupBox(S.made);
+  if(m.on_list){
+    h += `<div class="card"><h2>Your phone</h2>
+      <p>${m.clocked_in ? '<span class="pill">Clocked in: GPS is being kept</span>' : '<span class="pill warn">Clocked out: GPS is not kept</span>'}</p>
+      ${phones(mine, true)}
+      <p style="margin-top:12px"><button class="btn primary" data-new="me">Set up a phone</button></p></div>`;
+  }
+  if(m.can_read){
+    const rows = m.people.map(p => { const ds = m.devices.filter(d => d.user_id === p.user_id && !d.off && !d.test), l = S.last[p.user_id];
+      return `<tr><td><b>${esc(p.label)}</b></td><td>${p.clocked_in ? '<span class="pill">In</span>' : '<span class="muted">Out</span>'}</td>
+        <td>${ds.length ? ds.length + " phone" + (ds.length > 1 ? "s" : "") : '<span class="pill warn">not set up</span>'}</td>
+        <td>${p.today}</td><td>${l ? `<a href="https://www.google.com/maps?q=${l.lat},${l.lng}" target="_blank" rel="noopener">${when(l.at)}</a>` : '<span class="muted">none</span>'}</td>
+        ${m.admin ? `<td><button class="btn" data-new="${p.user_id}">Set up a phone</button></td>` : "<td></td>"}</tr>`; }).join("");
+    h += `<div class="card"><h2>Field crew</h2>
+      <table><tr><th>Person</th><th>Now</th><th>Phone</th><th>Points today</th><th>Last point</th><th></th></tr>${rows}</table>
+      <p class="small muted">Points are kept only while the person is clocked in on the hub. Stops at our homes feed Team ratings ▸ GPS check every morning.</p></div>
+      <div class="card"><h2>All phones</h2>${phones(m.devices, false)}
+      ${m.admin ? `<p style="margin-top:12px"><button class="btn" data-new="test">Set up my own test phone</button> <span class="small muted">A test phone sends even when you're not clocked in; it never counts in ratings.</span></p>` : ""}</div>`;
+  }
+  if(!m.on_list && !m.can_read) h += `<div class="card"><p class="muted">Nothing to show.</p></div>`;
+  $("#app").innerHTML = h;
+}
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.copy != null){ try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; } catch { b.previousElementSibling.select(); } return; }
+  if(b.hasAttribute("data-done")){ S.made = null; return load(); }
+  if(b.dataset.off){
+    if(!confirm("Turn this phone off? Anything it sends after this is thrown away. (Set up the new phone after.)")) return;
+    const r = await sb.rpc("field_gps_device_off", { p_id: +b.dataset.off }); if(r.error) alert(errText(r.error)); return load();
+  }
+  if(b.dataset.new){
+    const v = b.dataset.new, test = v === "test", self = v === "me" || test;
+    const p = self ? null : S.me.people.find(x => x.user_id === v);
+    const label = prompt("Name this phone (for example: Dave's iPhone)", test ? "Test phone" : ((p ? p.label : "My") + "'s phone")); if(label === null) return;
+    b.disabled = true;
+    const r = await sb.rpc("field_gps_device_new", { p_user: self ? null : v, p_label: label, p_test: test });
+    b.disabled = false;
+    if(r.error){ alert(errText(r.error)); return; }
+    S.made = { key: r.data.key, who: self ? (test ? "your test phone" : "your phone") : (p ? p.label + "'s phone" : "the phone") };
+    draw(); $("#setup").scrollIntoView({ behavior:"smooth" });
+  }
+});
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<div class="card"><h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p></div>`; return; }
+  load();
+})();
+</script>
+</body>
+</html>
