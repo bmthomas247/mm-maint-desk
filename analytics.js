@@ -915,7 +915,8 @@ async function revMore(el, tab, ctx){
     const by = {}; M.forEach(x => (by[x.home] = by[x.home] || []).push(x));
     const homes = Object.keys(by).sort();
     el.querySelector("#rll").innerHTML = homes.length ? homes.map(hm => `<div class="card" style="margin:0 0 12px;padding:12px 14px"><h3 style="margin:0 0 8px;font-size:16px">${esc(hm)}
-        <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#" data-home="${esc(hm)}">all its reviews →</a></h3>
+        <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#" data-home="${esc(hm)}">all its reviews →</a>
+        <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#/tools_listing" data-lw="${esc(hm)}">✍ Listing Writer (preview + send to Track) →</a></h3>
       ${dHtml(hm)}${by[hm].sort((a, b) => (a.in_listing === "no" ? 0 : 1) - (b.in_listing === "no" ? 0 : 1) || b.review_ids.length - a.review_ids.length).map(x => `<div style="border-top:1px solid var(--line);padding:10px 0" data-li="${x.id}">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${esc(x.theme)}</b><span class="pill ${INL[x.in_listing][1]}">${INL[x.in_listing][0]}</span>
           <span class="pill">${x.review_ids.length} review${x.review_ids.length === 1 ? "" : "s"}</span>${x.status !== "new" ? `<span class="pill green">${esc(ST[x.status])}</span>` : ""}</div>
@@ -932,6 +933,7 @@ async function revMore(el, tab, ctx){
     el.querySelectorAll("[data-home]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showHome(a.dataset.home); });
     el.querySelectorAll("[data-cp]").forEach(b => b.onclick = async () => { const t = b.parentElement.querySelector("[data-sg]").textContent;
       try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch(e){ b.textContent = "Select + Ctrl+C"; } });
+    el.querySelectorAll("[data-lw]").forEach(a => a.onclick = () => { try { localStorage.setItem("lw_home", a.dataset.lw); } catch(e){} });   // Tools ▸ Listing Writer opens on this home
     el.querySelectorAll("details.rldraft").forEach(x => x.ontoggle = () => { OPEN[x.dataset.dh] = x.open; });
     el.querySelectorAll("[data-cpd]").forEach(b => b.onclick = async () => { const t = (b.closest("p").querySelector("[data-cpt]") || b.closest("details").querySelector("[data-full]")).textContent;
       try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch(e){ b.textContent = "Select + Ctrl+C"; } });
