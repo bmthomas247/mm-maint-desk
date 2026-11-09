@@ -397,30 +397,88 @@ const PM = { tech:[["tasks","Tasks worked"],["tasks_per_hr","Tasks per regular h
 const PG = { tech:"Maintenance", office:"Office & front desk" }, PP = { "30d":"Last 30 days", "90d":"Last 90 days", "365d":"Last 12 months" };
 /* Field work coaching (Brandon 2026-11-09: "help the field crew see when they are driving bad routes and other items"; picked Route check,
    Driving habits, Tasks done; tips, no score). my_field_coach() = your own days (hub_field_coach.sql, built hourly by field_coach.py). */
+function fcCss(){ if(document.getElementById("fcCss")) return; const st = document.createElement("style"); st.id = "fcCss"; st.textContent = `
+  .mp{--g:#3c5f12;--g2:#88b535;--gl:#dbe9c3;--gs:#f1f6e8;--am:#b5770a;--ams:#fbf0d9;--rd:#c8382b}
+  .mp .mhead{background:linear-gradient(135deg,#3c5f12,#5b8a1e);color:#fff;border-radius:18px;padding:16px 20px;margin-bottom:12px}
+  .mp .mhead h2{margin:0 0 2px;color:#fff;font-size:22px}.mp .mhead p{margin:0;opacity:.92}
+  .mp .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:12px}
+  .mp .grid.stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+  .mp .tile{background:var(--card,#fff);border:1px solid var(--line,#e8ece5);border-radius:16px;padding:14px 16px;box-shadow:0 2px 10px rgba(20,40,25,.06);min-width:0}
+  .mp .tile.wide2{grid-column:span 2}
+  .mp .tile h3{margin:0 0 6px;font-size:14px;color:var(--muted,#6b776f);font-weight:700}
+  .mp .big{font-size:30px;font-weight:800;line-height:1.1;letter-spacing:-.5px}
+  .mp .dl{display:inline-block;font-size:12px;font-weight:700;border-radius:6px;padding:1px 6px;margin-top:6px;background:var(--gs);color:var(--g)}
+  .mp .dl.dn{background:var(--ams);color:var(--am)}
+  .mp .sub{color:var(--muted,#6b776f);font-size:12.5px}
+  .mp .bars{display:flex;align-items:flex-end;gap:6px;height:130px;margin-top:24px}
+  .mp .bars{justify-content:space-between}.mp .bars span{flex:1;max-width:34px;background:var(--gl);border-radius:99px;min-height:8px;position:relative}
+  .mp .bars span.hi{background:var(--g)}.mp .bars span:hover{background:var(--g2)}
+  .mp .bars span em{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-style:normal;font-size:11px;font-weight:700;background:var(--g);color:#fff;border-radius:6px;padding:1px 5px;white-space:nowrap}
+  .mp .axis{display:flex;justify-content:space-between;color:var(--muted,#6b776f);font-size:11px;margin-top:6px}
+  .mp .ring{display:flex;align-items:center;gap:14px}.mp .ring svg{flex:none}
+  .mp .heat{display:grid;grid-template-columns:48px repeat(7,1fr);gap:4px;margin-top:8px;font-size:11px;color:var(--muted,#6b776f);align-items:center}
+  .mp .heat i{display:block;height:26px;border-radius:6px;background:var(--gs)}
+  .mp .meter{height:12px;background:var(--gs);border-radius:99px;overflow:hidden;margin:8px 0 4px}.mp .meter i{display:block;height:100%;background:var(--g2);border-radius:99px}
+  .mp .row{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:13.5px}.mp .row .lab{flex:0 0 46%}.mp .row .trk{flex:1;height:10px;background:var(--gs);border-radius:99px;position:relative}
+  .mp .row .trk i{position:absolute;left:0;top:0;bottom:0;background:var(--g2);border-radius:99px}.mp .row .trk b{position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:#6b776f}
+  .mp .row .val{flex:0 0 52px;text-align:right;font-weight:700}
+  .mp .grade{font-size:46px;font-weight:800;line-height:1;color:var(--g)}.mp .grade.C{color:var(--am)}.mp .grade.D{color:var(--rd)}
+  .mp .try{background:var(--gs);border-radius:12px;padding:10px 12px;margin:6px 0}.mp .try b{color:var(--g)}
+  @media (prefers-color-scheme: dark){ .mp{--gl:#3a4a2a;--gs:#24321a;--ams:#3a2d12} }
+  @media (max-width:640px){ .mp .row .lab{flex-basis:40%} .mp .bars{gap:3px} .mp .tile.wide2{grid-column:auto} }`; document.head.appendChild(st); }
+const fcWeekKey = k => { const d = new Date(k + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); };
+function fcBars(vals, labs, tip, fmt){   // rounded pill bars; the best one dark with its number on top
+  const mx = Math.max(1, ...vals), hi = vals.indexOf(Math.max(...vals));
+  return `<div class="bars" role="img" aria-label="${esc(tip)}">${vals.map((v, i) => `<span class="${i === hi && v ? "hi" : ""}" style="height:${Math.max(6, Math.round(v / mx * 100))}%" title="${esc(labs[i])}">${i === hi && v ? `<em>${esc(fmt ? fmt(v) : v)}</em>` : ""}</span>`).join("")}</div>`;
+}
+function fcRing(p, lab){ const r = 34, c = 2 * Math.PI * r, on = Math.max(0, Math.min(100, p));
+  return `<svg width="88" height="88" viewBox="0 0 88 88" role="img" aria-label="${esc(lab)}"><circle cx="44" cy="44" r="${r}" fill="none" stroke="var(--gs)" stroke-width="10"/>
+    <circle cx="44" cy="44" r="${r}" fill="none" stroke="var(--g)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(c * on / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 44 44)"/>
+    <text x="44" y="50" text-anchor="middle" font-size="18" font-weight="800" fill="currentColor">${on}%</text></svg>`; }
+const fcDelta = (now, prev, unit) => { if(prev == null || now == null) return ""; const dlt = Math.round((now - prev) * 10) / 10; if(!dlt) return `<span class="dl">same as last week</span>`;
+  return `<span class="dl ${dlt > 0 ? "" : "dn"}">${dlt > 0 ? "▲" : "▼"} ${Math.abs(dlt)}${unit} vs last week</span>`; };
+// Field work as pictures (Brandon 2026-11-09: "fun and easy to read … more graphs and designs … encourage good work behavior and see how
+// someone can succeed"; look = his sample dashboard: white cards, big numbers with a vs-last-week pill, rounded bars, a ring, a heat grid).
+// my_field_coach() = your own days (hub_field_coach.sql, built hourly by field_coach.py). Every number compares you only with yourself.
 function fcCard(F){
   if(!F.length) return "";
-  const sum = (k, f) => F.reduce((a, x) => a + (f(x) || 0), 0);
-  const done = sum(0, x => x.tasks && x.tasks.done), miss = sum(0, x => x.tasks && (x.tasks.nostart + x.tasks.together));
-  const rd = F.filter(x => x.route), flag = rd.filter(x => x.route.flag), save = flag.reduce((a, x) => a + (+x.route.save_mi || 0), 0);
-  const dv = F.filter(x => x.driving), mi = dv.reduce((a, x) => a + (+x.driving.miles || 0), 0), hb = dv.reduce((a, x) => a + (+x.driving.brakes || 0) + (+x.driving.starts || 0), 0);
-  const tile = (n, l) => `<div style="flex:1;min-width:130px;background:var(--moose-soft,#eef5e0);border-radius:14px;padding:10px 12px"><div style="font-size:22px;font-weight:800">${n}</div><div class="muted sm">${l}</div></div>`;
-  const tips = F.filter(x => (x.tips || []).length).slice(0, 14);
-  const quiet = F.length - F.filter(x => (x.tips || []).length).length;
-  const day = x => { const t = x.tasks || {}, r = x.route; return `<div style="padding:8px 0;border-top:1px solid var(--line,#e1e7de)"><b>${esc(dnm(x.day))}</b>
-    <span class="muted sm">${t.done ? ` · ${t.done} task${t.done === 1 ? "" : "s"} done` : ""}${r ? ` · about ${esc(r.est_mi)} mi between homes${r.src === "phone" ? " (phone GPS)" : " (from your Start taps)"}` : ""}${x.driving ? ` · ${esc(x.driving.miles)} mi driven` : ""}</span>
-    <ul style="margin:4px 0 0 18px;padding:0">${x.tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>`; };
-  return `<div class="card"><b style="font-size:16px">Your field work (last 4 weeks)</b>
-    <p class="muted sm" style="margin:2px 0 10px">Tips to make your days easier. Only you and your manager see this, and it's never compared with a coworker.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      ${tile(done, "Breezeway tasks done")}
-      ${tile(done ? Math.round(100 * (done - miss) / done) + "%" : "—", "Tasks with a real Start + Finish tap")}
-      ${tile(rd.length ? `${flag.length} of ${rd.length}` : "—", "Days a shorter route was possible")}
-      ${tile(flag.length ? "~" + Math.round(save) + " mi" : "—", "Miles a shorter order could have saved (estimate)")}
-      ${tile(dv.length ? (mi ? Math.round(hb / mi * 100) : 0) : "—", dv.length ? "Hard brakes + starts per 100 miles" : "Driving habits start once your phone GPS is set up (Staffing ▸ Phone GPS)")}
+  const asc = [...F].sort((a, b) => a.day < b.day ? -1 : 1), last14 = asc.slice(-14);
+  const done = x => (x.tasks || {}).done || 0, real = x => Math.max(0, done(x) - ((x.tasks || {}).nostart || 0) - ((x.tasks || {}).together || 0));
+  const tight = x => x.route && x.route.est_mi ? Math.min(100, Math.round(100 * x.route.best_mi / x.route.est_mi)) : null;
+  // weeks Sun-Sat; last week counts only up to the same weekday as today, so a Monday isn't compared with a whole week
+  const todayK = new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" }), dow = new Date(todayK + "T12:00:00Z").getUTCDay(), thisWk = fcWeekKey(todayK);
+  const wk = {}; asc.forEach(x => { const k = fcWeekKey(x.day), w = (wk[k] = wk[k] || { d:0, r:0, t:[] }), wd = new Date(x.day + "T12:00:00Z").getUTCDay();
+    if(k !== thisWk && wd > dow && Date.parse(thisWk) - Date.parse(k) <= 7 * 864e5) return;   // last week, after today's weekday: left out of the compare
+    w.d += done(x); w.r += real(x); if(tight(x) != null) w.t.push(tight(x)); });
+  const wks = Object.keys(wk).sort(), W = wks.map(k => wk[k]), cur = wk[thisWk] || { d:0, r:0, t:[] }, prv = wk[wks.filter(k => k < thisWk).pop()] || null;
+  const avg = a => a && a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length) : null, pct = w => w && w.d ? Math.round(100 * w.r / w.d) : null;
+  const stat = (h, v, delta, sub) => `<div class="tile"><h3>${h}</h3><div class="big">${v}</div>${delta || ""}${sub ? `<div class="sub" style="margin-top:4px">${sub}</div>` : ""}</div>`;
+  const allT = asc.filter(x => tight(x) != null), lt = allT.slice(-10), dv = asc.filter(x => x.driving);
+  const smooth = dv.length ? Math.round(100 * dv.filter(x => (x.driving.brakes + x.driving.starts) === 0 && !x.driving.fast).length / dv.length) : null;
+  const hw = wks.slice(-4), byDay = {}; asc.forEach(x => byDay[x.day] = done(x)); const hmx = Math.max(1, ...Object.values(byDay));
+  const heat = `<div class="heat"><span></span>${["S","M","T","W","T","F","S"].map(x => `<span style="text-align:center">${x}</span>`).join("")}
+    ${hw.map(k => { const s0 = new Date(k + "T12:00:00Z"); return `<span>${s0.toLocaleDateString([], { timeZone:"UTC", month:"short", day:"numeric" })}</span>` + [0,1,2,3,4,5,6].map(i => { const dd = new Date(s0); dd.setUTCDate(dd.getUTCDate() + i); const key = dd.toISOString().slice(0, 10), n = byDay[key] || 0;
+      return `<i title="${esc(dnm(key))}: ${n} tasks" style="${n ? `background:var(--g);opacity:${(0.25 + 0.75 * n / hmx).toFixed(2)}` : ""}"></i>`; }).join(""); }).join("")}</div>`;
+  const tips = [...F].sort((a, b) => a.day < b.day ? 1 : -1).flatMap(x => (x.tips || []).map(t => ({ d:x.day, t }))).slice(0, 3);
+  return `<div class="grid stats">
+      ${stat("Tasks this week", cur ? cur.d : 0, fcDelta(cur && cur.d, prv && prv.d, "").replace("vs last week", "vs same days last week"), "from Breezeway")}
+      ${stat("Start + Finish taps", pct(cur) == null ? "—" : pct(cur) + "%", fcDelta(pct(cur), pct(prv), " pts"), "goal 80%+")}
+      ${stat("Route tightness", avg(cur && cur.t) == null ? "—" : avg(cur.t) + "%", fcDelta(avg(cur && cur.t), prv ? avg(prv.t) : null, " pts"), "100% = the shortest order")}
+      ${stat("Smooth driving", smooth == null ? "🚗" : smooth + "%", "", smooth == null ? "starts once your phone GPS is set up" : "days with no hard brakes or 75+ mph")}
     </div>
-    ${tips.map(day).join("")}
-    ${quiet ? `<p class="muted sm" style="margin:8px 0 0">👍 ${quiet} day${quiet === 1 ? "" : "s"} with nothing to change.</p>` : ""}
-    <p class="muted sm" style="margin:8px 0 0">Route miles are estimates (straight-line distance between homes × 1.3 for road bends), from your phone GPS stops at our homes, or the order you tapped Start on Breezeway tasks when your phone wasn't sending. Driving comes from the company truck's Bouncie tracker on trips your phone was in. Updated every hour.</p></div>`;
+    <div class="grid">
+      <div class="tile wide2"><h3>Tasks done each day</h3>${fcBars(last14.map(done), last14.map(x => `${dnm(x.day)}: ${done(x)} tasks`), "Tasks done each day")}
+        <div class="axis"><span>${esc(dnm(last14[0].day))}</span><span>${esc(dnm(last14[last14.length - 1].day))}</span></div></div>
+      <div class="tile"><h3>Start + Finish tap habit</h3><div class="ring">${fcRing(pct(cur) || 0, "Start + Finish taps this week")}
+        <div class="sub">Tap <b>Start</b> when you begin and <b>Finish</b> when you're done, so your time on every job counts.${pct(prv) != null ? `<br>Last week: ${pct(prv)}%` : ""}</div></div></div>
+    </div>
+    <div class="grid">
+      <div class="tile"><h3>Route tightness by day</h3>${lt.length ? fcBars(lt.map(tight), lt.map(x => `${dnm(x.day)}: ${tight(x)}% (about ${x.route.est_mi} mi)`), "Route tightness by day", v => v + "%")
+        + `<div class="axis"><span>${esc(dnm(lt[0].day))}</span><span>${esc(dnm(lt[lt.length - 1].day))}</span></div>` : `<p class="sub">Shows once you've visited 3+ homes in a day.</p>`}</div>
+      <div class="tile"><h3>Your busy days</h3>${heat}<div class="sub" style="margin-top:6px">Darker = more tasks done that day.</div></div>
+    </div>
+    ${tips.length ? `<div class="tile" style="margin-bottom:12px"><h3>Try this</h3>${tips.map(x => `<div class="try"><b>${esc(dnm(x.d))}:</b> ${esc(x.t)}</div>`).join("")}</div>` : ""}
+    <p class="sub" style="margin:0 0 12px">Only you and your manager see this. Route miles are estimates (straight-line distance between homes × 1.3), from your phone GPS stops or the order you tapped Start on Breezeway tasks. Updated every hour.</p>`;
 }
 window.myPerf = async function(v){
   css(); v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
@@ -431,7 +489,7 @@ window.myPerf = async function(v){
     if(b.salaried) return `<div class="card"><b style="font-size:16px">Salaried time off</b><div style="font-size:22px;margin:6px 0"><b>${hh(have)}</b> left</div>
       <p class="muted sm" style="margin:0">Salaried staff get ${esc(c.hours_per_year || 80)} hours a year${b.used_ytd != null ? ` · used this year: ${hh(b.used_ytd)}` : ""}.</p></div>`;
     const wk = b.worked_ytd && b.calc_from ? (+b.worked_ytd) / Math.max(1, (Date.now() - Date.parse(new Date().getFullYear() + "-01-01")) / (7 * DAY)) : null;
-    return `<div class="card"><b style="font-size:16px">Paid time off you're earning</b><div style="font-size:22px;margin:6px 0"><b>${hh(have)}</b> available</div>
+    return `<div class="card"><b style="font-size:16px">Paid time off you're earning</b><div style="font-size:22px;margin:6px 0"><b>${hh(have)}</b> available</div>${c.maximum_to_accrue && have != null ? `<div class="meter" title="${esc(hh(have))} of ${esc(c.maximum_to_accrue)} h max"><i style="width:${Math.min(100, Math.round(100 * +have / +c.maximum_to_accrue))}%"></i></div>` : ""}
       <p style="margin:0 0 4px">You earn <b>${esc(c.hours_per)} h</b> of paid time off for every <b>${esc(c.hours_worked)} h</b> you work, up to <b>${esc(c.maximum_to_accrue)} h</b> saved up. It rolls over and never expires.${have != null && c.maximum_to_accrue && +have >= +c.maximum_to_accrue ? ` <span class="pill amber">You're at the ${esc(c.maximum_to_accrue)} h max. You keep all of it; you start earning again once you use some.</span>` : ""}</p>
       <p class="muted sm" style="margin:0 0 4px">Paid time off is 40 hours at most at one time.</p>
       ${wk ? `<p class="muted sm" style="margin:0">At your pace this year (about ${hh(wk)} worked a week) that's about ${hh(wk * c.hours_per / c.hours_worked)} of PTO a week.</p>` : ""}
@@ -439,13 +497,16 @@ window.myPerf = async function(v){
   const rows = r.data || [], f = x => x == null ? "—" : (+x).toLocaleString(undefined, { maximumFractionDigits:2 });
   const ix = i => i == null ? "" : ` <span class="pill ${i >= 115 ? "green" : i <= 85 ? "amber" : ""}" title="100 = the team's average">${i}</span>`;
   const grps = [...new Set(rows.map(x => x.grp))];
-  v.innerHTML = `<div class="page stf wide"><h2 style="margin:0 0 6px">My performance</h2>
-    <p class="muted" style="margin:0 0 10px">How you've been doing, from the same numbers your manager sees. The small number next to a measure compares you with the team: 100 = the team's average${rows[0] ? ` · updated ${esc(dnm(rows[0].as_of))}` : ""}.</p>
-    ${ptoCard}${fcCard((fcr && fcr.data) || [])}${grps.map(g => `<div class="card"><b style="font-size:16px">${esc(PG[g] || g)}</b><div class="tow"><table><tr><th></th>${rows.filter(x => x.grp === g).map(x => `<th class="r">${esc(PP[x.period] || x.period)}</th>`).join("")}</tr>
-      <tr><td><b>Grade</b><div class="muted sm">A+ top 10% · A top 25% · B top half · C · D bottom 25%</div></td>${rows.filter(x => x.grp === g).map(x => { const gr = (x.metrics || {}).grade;
-        return `<td class="r">${gr ? `<span class="pill ${gr[0] === "A" ? "green" : gr === "C" ? "amber" : gr === "D" ? "red" : ""}" style="font-size:16px;font-weight:800">${esc(gr)}</span>` : "—"}</td>`; }).join("")}</tr>
-      <tr><td><b>Overall</b></td>${rows.filter(x => x.grp === g).map(x => `<td class="r"><b>${x.score == null ? "—" : Math.round(x.score)}</b>${x.rank ? `<div class="muted sm">#${x.rank} of ${x.of_n}</div>` : ""}</td>`).join("")}</tr>
-      ${(PM[g] || []).map(([k, l]) => `<tr><td>${esc(l)}</td>${rows.filter(x => x.grp === g).map(x => `<td class="r">${f((x.metrics || {})[k])}${ix(((x.metrics || {}).idx || {})[k])}</td>`).join("")}</tr>`).join("")}</table></div></div>`).join("")
+  fcCss(); v.innerHTML = `<div class="page stf wide mp"><div class="mhead"><h2>My performance</h2><p>See how you're doing and where you can shine. These numbers are about you, so you can beat your own best week.</p></div>
+    ${fcCard((fcr && fcr.data) || [])}${ptoCard}${grps.map(g => { const R = rows.filter(x => x.grp === g), cur = R.find(x => x.period === "30d") || R[0], m = (cur && cur.metrics) || {}, idx = m.idx || {};
+      const bar = (k, l) => { const n = idx[k]; if(n == null) return ""; const w = Math.max(2, Math.min(100, n / 2));
+        return `<div class="row"><span class="lab">${esc(l)}</span><span class="trk" title="${esc(l)}: ${f(m[k])} · 100 = the team's average"><i style="width:${w}%"></i><b></b></span><span class="val">${f(m[k])}</span></div>`; };
+      return `<div class="tile" style="margin-bottom:12px"><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div><div class="grade ${esc((m.grade || "")[0] || "")}">${esc(m.grade || "—")}</div><div class="sub">${esc(PG[g] || g)} grade · ${esc(PP[cur && cur.period] || "")}</div></div>
+        <div style="flex:1;min-width:200px">${R.map(x => `<span class="pill ${((x.metrics || {}).grade || "")[0] === "A" ? "green" : ""}" style="margin:2px">${esc(PP[x.period] || x.period)}: ${esc((x.metrics || {}).grade || "—")}</span>`).join("")}
+          <div class="sub" style="margin-top:4px">A+ top 10% · A top 25% · B top half · C · D bottom 25%</div></div></div>
+        <div style="margin-top:10px">${(PM[g] || []).map(([k, l]) => bar(k, l)).join("")}</div>
+        <div class="sub">The line in the middle of each bar = the team's average. Past it = above average.</div></div>`; }).join("")
       || (pto.length ? "" : `<div class="card"><p class="muted" style="margin:0">There aren't enough numbers for you yet. Check back after a few weeks of work.</p></div>`)}
     <p class="muted sm">Your grade compares you with the others who do the same kind of work, per hour you're clocked in. Sources: Breezeway tasks, your hub clock-ins (Hubstaff before Nov 11), Reservation check lists, Freshdesk tickets, phone calls (Track), Work check computer activity and guest reviews, worked out once a day by the hub.</p></div>`;
 };
