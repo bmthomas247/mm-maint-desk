@@ -820,6 +820,14 @@ async function bellLoad(force){
   // Folio reports waiting (2026-11-02): only reviewers read other people's rows (RLS), so this is 0 for everyone else
   if(DESKS.some(x => x.key === "res_report" || x.key === "tools_report")){ const fr = await q(sb.from("res_folio_reports").select("id", { count:"exact", head:true }).eq("status", "new").neq("reporter_name", ME.name || ""));
     if(fr.count) it.push({ ic:"🚩", t:`${fr.count} new folio report${fr.count === 1 ? "" : "s"}`, s:"Someone flagged a folio for a manager", href:"#/res_report", k:"bell_folio" }); }
+  // Set rates (2026-11-08): what the morning re-price changed + old comp data, per test home (rates_set_homes.auto_summary)
+  if(DESKS.some(x => x.key === "rates_set")){ let seenR = []; try { seenR = JSON.parse(localStorage.getItem("mm_seen_rates") || "[]"); } catch(e){}
+    const rh = await q(sb.from("rates_set_homes").select("code, auto_summary").eq("on_test", true)), dd = d => new Date(d + "T12:00").toLocaleDateString(undefined, { month:"short", day:"numeric" });
+    (rh.data || []).forEach(h => { const S = h.auto_summary; if(!S || S.day !== today) return;
+      const k1 = `sum|${h.code}|${S.day}`, k2 = `old|${h.code}|${S.day}`;
+      if(S.changed && !seenR.includes(k1)) it.push({ ic:"🏷️", t:`${h.code}: the morning re-price changed ${S.changed} night${S.changed === 1 ? "" : "s"}`,
+        s:`${S.up} up · ${S.down} down${S.big ? ` · biggest ${dd(S.big.night)} $${Math.round(S.big.from)} → $${Math.round(S.big.to)}` : ""} · check before sending to Track`, href:"#/rates_set", k:"bell_rates", rs:[k1] });
+      if(S.stale && !seenR.includes(k2)) it.push({ ic:"⚠️", t:`${h.code}: the comp prices are old`, s:[S.cal_age != null ? `daily rates ${S.cal_age} days old` : "", S.quote_age != null ? `checkout prices ${S.quote_age} days old` : ""].filter(Boolean).join(" · ") + " · prices built from them may be off", href:"#/rates_set", k:"bell_rates", rs:[k2] }); }); }
   { let seenN = []; try { seenN = JSON.parse(localStorage.getItem("mm_seen_home_notes") || "[]"); } catch(e){}
     const hn = await q(sb.rpc("home_notes_recent", { p_days:7 })), newN = (hn.data || []).filter(x => !seenN.includes(x.id));
     newN.slice(0, 3).forEach(x => it.push({ ic:"📝", t:`New note on ${x.home}`, s:`${x.by_name || "Someone"}: ${x.note}`.slice(0, 140), href:`#/homes/${encodeURIComponent(x.home)}`, k:"bell_notes", hn:[x.id] }));
@@ -839,6 +847,8 @@ function bellDraw(){
     if(x.mr){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_meet_answers") || "[]"); } catch(er){}
       s = s.concat(x.mr).slice(-300); try { localStorage.setItem("mm_seen_meet_answers", JSON.stringify(s)); } catch(er){}
       if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); }
+    if(x.rs){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_rates") || "[]"); } catch(er){}
+      s = s.concat(x.rs).slice(-200); try { localStorage.setItem("mm_seen_rates", JSON.stringify(s)); } catch(er){} setTimeout(() => bellLoad(true), 300); }
     if(x.hn){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_home_notes") || "[]"); } catch(er){}
       s = s.concat(x.hn).slice(-300); try { localStorage.setItem("mm_seen_home_notes", JSON.stringify(s)); } catch(er){}
       if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); } });
