@@ -92,7 +92,11 @@ function schedWhen(key){ const s = ST.sched[key]; if(!s || !s.start_time) return
   return { when: t12(st) + (e != null ? "–" + t12(String(Math.floor(e / 60) % 24).padStart(2, "0") + ":" + String(e % 60).padStart(2, "0")) : "") + " Mountain" + (s.source ? " (" + s.source + ")" : "") }; }
 function render(v, key, data, ppl){
   const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
-  const noteFor = (d, k) => notes.find(n => n.day === d && n.item === k);
+  // everyone in the meeting keeps their own note per topic (hub_meeting_notes_everyone.sql); the newest one says where it stands
+  const notesOf = (d, k) => notes.filter(n => n.day === d && n.item === k && n.text);
+  const noteFor = (d, k) => { const a = notesOf(d, k); return a[a.length - 1]; };
+  const myNote = (d, k) => notes.find(n => n.day === d && n.item === k && n.mine);
+  const othersHtml = (d, k) => { const o = notesOf(d, k).filter(n => !n.mine); return o.length ? `<div class="mprev">${o.map(n => `<div><b>${esc(n.by || "Someone")}:</b> ${esc(n.text)}</div>`).join("")}</div>` : ""; };
   const past = [...new Set(notes.map(n => n.day))].filter(d => d < day).sort().reverse();
   // a note's state (hub_meeting_note_state.sql): only 'covered' counts; 'waiting' / 'scheduled' stay open (Jeff's test log #11)
   const stOf = n => n && n.text ? (n.state || "covered") : "";
@@ -118,9 +122,9 @@ function render(v, key, data, ppl){
   Object.keys(grps).forEach(g => {
     h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3>`;
     grps[g].forEach(it => {
-      const mine = noteFor(day, it.key) || {}, st = stOf(mine), cov = st === "covered", dv = ST.drafts[key + "|" + it.key];
+      const mine = myNote(day, it.key) || {}, st = stOf(noteFor(day, it.key)), cov = st === "covered", dv = ST.drafts[key + "|" + it.key];
       const pill = st === "covered" ? `<span class="pill green">covered</span>` : st === "waiting" ? `<span class="pill amber">waiting on owner</span>` : st === "scheduled" ? `<span class="pill amber">scheduled</span>` : "";
-      const prev = past.slice(0, 3).map(d => { const n = noteFor(d, it.key); return n && n.text ? `<div><b>${esc(fmt(d))}:</b> ${esc(n.text)}</div>` : ""; }).join("");
+      const prev = past.slice(0, 3).map(d => notesOf(d, it.key).map(n => `<div><b>${esc(fmt(d))}${n.by ? " · " + esc(n.by) : ""}:</b> ${esc(n.text)}</div>`).join("")).join("");
       const itTasks = open.filter(t => t.item_key === it.key);
       h += `<div class="card mi${cov ? " cov" : ""}"><div class="mt"><b>${esc(it.title)}</b>${pill}${linkHtml(it.link)}</div>
         ${(it.lines || []).filter(Boolean).length ? `<ul>${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
@@ -128,14 +132,14 @@ function render(v, key, data, ppl){
         <p class="msrc">Source: ${esc(it.src || "")}</p>
         ${prev ? `<div class="mprev">${prev}</div>` : ""}
         ${itTasks.length ? `<div class="mprev">${itTasks.map(t => "☐ " + esc(t.text) + (t.who ? " · " + esc(t.who) : "")).join("<br>")}</div>` : ""}
-        <div class="mrow"><textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(dv != null ? dv : (mine.text || ""))}</textarea>
+        ${othersHtml(day, it.key)}
+        <div class="mrow"><textarea data-note="${esc(it.key)}" placeholder="Your note: what was decided, who is doing it, by when">${esc(dv != null ? dv : (mine.text || ""))}</textarea>
           <select data-nstate="${esc(it.key)}" aria-label="Where it stands">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
-          <button class="btn small primary" data-nsave="${esc(it.key)}">${st ? "Update" : "Save"}</button></div>
-        ${mine.by ? `<p class="msrc">Saved by ${esc(mine.by)}</p>` : ""}
+          <button class="btn small primary" data-nsave="${esc(it.key)}">${mine.text ? "Update my note" : "Add my note"}</button></div>
         ${taskForm(it.key)}</div>`; }); });
-  const gen = noteFor(day, "_notes") || {}, gdv = ST.drafts[key + "|_notes"];
-  h += `<h3 class="mg">Anything else</h3><div class="card"><textarea data-note="_notes" style="width:100%;min-height:110px" placeholder="Other topics, ideas, decisions">${esc(gdv != null ? gdv : (gen.text || ""))}</textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">Save</button>${gen.by ? `<span class="muted" style="font-size:12.5px">Saved by ${esc(gen.by)}</span>` : ""}</div>
+  const gen = myNote(day, "_notes") || {}, gdv = ST.drafts[key + "|_notes"];
+  h += `<h3 class="mg">Anything else</h3><div class="card">${othersHtml(day, "_notes")}<textarea data-note="_notes" style="width:100%;min-height:110px" placeholder="Your notes: other topics, ideas, decisions">${esc(gdv != null ? gdv : (gen.text || ""))}</textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">${gen.text ? "Update my note" : "Add my note"}</button></div>
       ${past.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Past meetings: ${past.slice(0, 12).map(d => `<a href="#" data-mday="${esc(d)}">${esc(fmt(d))}</a>`).join(" · ")}</p>` : ""}</div>
     <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each item shows where it came from.</p></div>`;
   v.innerHTML = h;
