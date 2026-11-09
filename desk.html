@@ -4007,13 +4007,15 @@ function tkLookup(inp){ var sb=window.MM_SB, nums=meetTkNums(inp.value), info=do
       var line="Freshdesk #"+n+" — "+(t.subject||"")+" ("+(t.status||"")+(t.created?", "+fmtD(String(t.created).slice(0,10)):"")+(t.from?", from "+t.from:"")+")"+(t.text?": "+t.text.trim().slice(0,400)+(t.text.length>400?"…":""):"");
       ta.value=(ta.value.trim()?ta.value.trim()+"\n":"")+line; ta.dispatchEvent(new Event("input",{bubbles:true})); }); },500); }
 /* Each home on a project: who's in it now (guest / owner / blocked) and the next check-in (Brandon 2026-11-09). Track stays via staysOf(). */
+function homeCal(code){ var hc=((S.feeds["home-calendar"]||{}).units||{})[code];   // feeds/home-calendar: stays a year out + Track blocks (home_calendar_feed.py)
+  if(!hc) return null; return hc.map(function(x){ return {in:x.in,out:x.out,what:x.k==="block"?"blocked":x.k==="owner"?"owner in":x.k==="lease"?"lease":"guest in",why:x.why,k:x.k}; }); }
 function homeNow(code){ var t=today(); if(/^L-/.test(code)) return {now:"Lease home",cls:"",next:""};
-  var ss=staysOf(code).slice().sort(function(a,b){ return String(a.in).localeCompare(String(b.in)); });
+  var hc=homeCal(code), ss=(hc||(S.feeds["home-calendar"]?[]:staysOf(code))).slice().sort(function(a,b){ return String(a.in).localeCompare(String(b.in)); });
   var cur=ss.filter(function(x){ return x.in<=t && t<x.out; })[0], nx=ss.filter(function(x){ return x.in>t; })[0], ng=ss.filter(function(x){ return x.in>t && x.what==="guest in"; })[0];
   var lab=function(x){ return x.what==="guest in"?"Guest":x.what==="owner in"?"Owner":x.what==="blocked"?"Blocked":"Owner stay"; };
-  return {now:cur?(cur.what==="blocked"?"🔒 Blocked":cur.what==="guest in"?"🧳 Guest in":"🏡 Owner in")+" until "+fmtD(cur.out):"Empty now", cls:cur?(cur.what==="blocked"?"blk":"occ"):"free",
+  return {now:cur?(cur.what==="blocked"?"🔒 On hold"+(cur.why?" ("+cur.why+")":""):cur.what==="guest in"?(cur.k==="ownerguest"?"🧳 Owner's guest in":"🧳 Guest in"):cur.what==="lease"?"Tenant in":"🏡 Owner in")+" until "+fmtD(cur.out):"Empty now", cls:cur?(cur.what==="blocked"?"blk":"occ"):"free",
     next:nx?"Next: "+lab(nx)+" "+fmtD(nx.in)+(ng&&ng!==nx?" · next guest "+fmtD(ng.in):""):"No check-ins on the books"}; }
-function homeNowHtml(homes,max){ var hs=(homes||[]).slice(0,max||4); if(!hs.length || !((S.feeds.occupancy||{}).units)) return "";
+function homeNowHtml(homes,max){ var hs=(homes||[]).slice(0,max||4); if(!hs.length || !(S.feeds["home-calendar"] || (S.feeds.occupancy||{}).units)) return "";
   return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+hs.map(function(c){ var h=homeNow(c), bg=h.cls==="blk"?"#fdecec":h.cls==="occ"?"#eef3fb":"#f1f6e8", fg=h.cls==="blk"?"#9b2c2c":h.cls==="occ"?"#24456e":"#3c5f12";
     return '<span style="background:'+bg+';color:'+fg+';border-radius:12px;padding:4px 10px;font-size:12px;line-height:1.35"><b>'+esc(c)+'</b> · '+esc(h.now)+(h.next?'<br><span style="opacity:.85">'+esc(h.next)+'</span>':'')+'</span>'; }).join("")+
     ((homes||[]).length>(max||4)?'<span class="note">+'+((homes||[]).length-(max||4))+' more</span>':'')+'</div>'; }
