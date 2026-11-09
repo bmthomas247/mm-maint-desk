@@ -1184,10 +1184,13 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
   const v = op.map(x => x.rate).sort((a, b) => a - b), tv0 = srTrim(v), mean = tv0.reduce((a, b) => a + b, 0) / tv0.length, mid = srPct(v, 0.5);
   const tv = srTrim(op.map(x => x.tot).filter(x => x)), tmean = tv.length ? tv.reduce((a, b) => a + b, 0) / tv.length : null;
   const vs = our != null ? Math.round((our / mean - 1) * 100) : null, rank = our != null ? v.filter(x => x < our).length : null;
-  const ogt = our != null ? srGuest(our, "Airbnb") : null, tall = op.map(x => x.tot).filter(x => x), vt = ogt && tmean ? Math.round((ogt / tmean - 1) * 100) : null, trank = ogt ? tall.filter(x => x < ogt).length : null;
+  // our all-in: this home's own Airbnb quotes, else Vrbo, else our site; none = the comps' own all-in ÷ daily-rate ratio (ESTIMATE)
+  const ochs = [["Airbnb", "Airbnb"], ["VRBO", "Vrbo"], ["Direct", "our site"]].find(([c]) => srGuest(1, c) != null);
+  const crat = op.filter(x => x.tot && x.rate).map(x => x.tot / x.rate).sort((a, b) => a - b), cr = crat.length ? crat[Math.floor(crat.length / 2)] : null;
+  const ogt = our == null ? null : ochs ? srGuest(our, ochs[0]) : cr ? our * cr : null, ogtHow = ochs ? (ochs[0] === "Airbnb" ? "" : ` (from our ${ochs[1]} quotes)`) : ogt ? " (no quotes of ours: comps' markup, ESTIMATE)" : "", tall = op.map(x => x.tot).filter(x => x), vt = ogt && tmean ? Math.round((ogt / tmean - 1) * 100) : null, trank = ogt ? tall.filter(x => x < ogt).length : null;
   const tile = (n, l) => `<div class="ctt"><b>${n}</b><span>${l}</span></div>`;
   let rows = "", placed = our == null;
-  const me = () => `<tr class="ctme"><td>★ ${escH(SR.code || "This home")} (our rate)</td><td>${fmt(our)}</td><td>${ogt ? fmt(ogt) : ""}</td></tr>`;
+  const me = () => `<tr class="ctme"><td>★ ${escH(SR.code || "This home")} (our rate)</td><td>${fmt(our)}</td><td title="${escH("What a guest pays a night at our rate" + ogtHow)}">${ogt ? fmt(ogt) + (ogtHow ? "*" : "") : ""}</td></tr>`;
   for (const x of op) { if (!placed && our <= x.rate) { rows += me(); placed = true; }
     const out = op.length >= 5 && (x === op[0] || x === op[op.length - 1]);
     rows += `<tr${out ? ' class="ctout" title="Left out of the average (lowest or highest)"' : ""}><td title="${escH(x.name)}">${escH(x.name)} <span class="muted">· ${x.ch}${out ? " · not in avg" : ""}</span></td><td>${fmt(x.rate)}</td><td class="muted">${x.tot ? fmt(x.tot) : ""}</td></tr>`; }
@@ -1198,7 +1201,7 @@ function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.
       ${vt != null ? tile(`${fmt(ogt)} <i class="${vt > 0 ? "up" : "dn"}">${vt > 0 ? "+" : ""}${vt}%</i>`, `Our guest total vs avg ${fmt(tmean)} · under ${tall.length - trank} of ${tall.length}`)
         : our != null ? tile(`${fmt(our)} <i class="${vs > 0 ? "up" : "dn"}">${vs > 0 ? "+" : ""}${vs}%</i>`, `Ours vs avg daily rate · under ${op.length - rank} of ${op.length}`) : ""}</div>
     <div class="ctlist"><table><thead><tr><th>Comp</th><th>Daily rate</th><th>Guest total / night</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax${tmean ? ` (average ${fmt(tmean)}, high + low left out)` : ""}; ours = what an Airbnb guest pays at our rate (this home's own Track quotes, cleaning over 3 nights, ESTIMATE).${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
+    <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax${tmean ? ` (average ${fmt(tmean)}, high + low left out)` : ""}; ours = what an Airbnb guest pays at our rate (this home's own Track quotes, cleaning over 3 nights, ESTIMATE)${ogtHow ? `; *${escH(ogtHow.trim())}` : ""}.${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
 function srCtipWire() { let pop = document.getElementById("srCtip");
   if (!pop) { pop = document.createElement("div"); pop.id = "srCtip"; document.body.appendChild(pop);
     pop.addEventListener("mouseleave", () => { pop.style.display = "none"; }); }
