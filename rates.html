@@ -1295,7 +1295,7 @@ function srDraw() {
       "Average nightly rate of the open comps that night, before cleaning and tax (ESTIMATE). Main source: Key Data's Airbnb calendars (cleaning ÷ 5.5 taken out) and Vrbo, nightly. AirROI (paid, pulled on a budget) is shown as a second check. Same basis as Track's rack rate.") + `</div>`;
   html += srGlance(h);
   // chart
-  html += `<div class="ovc" style="margin-bottom:18px"><h3>Rate per night</h3><div class="cs">${R.length} nights · Track's rack rate basis (before cleaning, fees and tax)</div><div class="srzoom"><button type="button" class="ovbtn" data-zm="in">＋ Zoom in</button><button type="button" class="ovbtn" data-zm="out">－ Zoom out</button><button type="button" class="ovbtn" data-zm="all">Show all</button><span class="small muted" id="srZoomLbl">Drag the chart to slide · scroll on it to zoom</span></div><div class="ovwrap srpan" id="srChart">${srSvg(R)}<div class="ovtip"></div></div>
+  html += `<div class="ovc" style="margin-bottom:18px"><h3>Rate per night</h3><div class="cs">${R.length} nights · Track's rack rate basis (before cleaning, fees and tax)</div><div class="srzoom"><button type="button" class="ovbtn" data-zm="in">＋ Zoom in</button><button type="button" class="ovbtn" data-zm="out">－ Zoom out</button><button type="button" class="ovbtn" data-zm="all">Show all</button><span class="small muted" id="srZoomLbl">Drag the chart to slide · use + Zoom in / − Zoom out</span></div><div class="ovwrap srpan" id="srChart">${srSvg(R)}<div class="ovtip"></div></div>
     <div class="ovleg"><span><i class="ln" style="background:var(--ours)"></i>Our suggested rate</span><span><i class="ln" style="background:#1f3a0c;opacity:.7"></i>Engine</span><span><i class="ln" style="background:#5b6bd1"></i>${srGrpName()}</span><span><i class="ln" style="background:var(--ink2)"></i>Track now</span><span><i class="ln" style="background:var(--comp)"></i>Comps' daily rate</span></div></div>`;
   // Dynamic pricing builder (Brandon 2026-11-08; round 2 same day: "we are missing some of the other cool dynamic pricing tools").
   // Every night gets its own price; each built night keeps its steps (ⓘ next to Our rate; saved as that night's note).
@@ -1528,12 +1528,12 @@ function srSvg(R) {
 function srChartInit(R) { const wrap = $("srChart"); if (!wrap) return; const n = R.length, MINW = Math.min(7, n);
   if (!SR.cv || SR.cvN !== n) { SR.cv = [0, n - 1]; SR.cvN = n; }
   const draw = () => { const [a, b] = SR.cv, part = R.slice(a, b + 1); wrap.querySelector("svg,.ovempty")?.remove(); wrap.insertAdjacentHTML("afterbegin", srSvg(part)); srHover(part);
-    const l = $("srZoomLbl"); if (l) l.textContent = b - a + 1 < n ? `Showing ${b - a + 1} of ${n} nights (${new Date(part[0].k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${new Date(part[part.length - 1].k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}) · drag to slide, scroll to zoom` : "Drag the chart to slide · scroll on it to zoom"; };
+    const l = $("srZoomLbl"); if (l) l.textContent = b - a + 1 < n ? `Showing ${b - a + 1} of ${n} nights (${new Date(part[0].k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${new Date(part[part.length - 1].k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}) · drag to slide` : "Drag the chart to slide · use + Zoom in / − Zoom out"; };
   const set = (a, w) => { w = Math.max(MINW, Math.min(n, Math.round(w))); a = Math.max(0, Math.min(n - w, Math.round(a))); SR.cv = [a, a + w - 1]; draw(); };
   const zoom = (f, at) => { const [a, b] = SR.cv, w = b - a + 1, c = at ?? (a + b) / 2, nw = w * f; set(c - (c - a) * nw / w, nw); };
   const idxAt = e => { const b = wrap.getBoundingClientRect(), [a, z] = SR.cv, fr = Math.max(0, Math.min(1, ((e.clientX - b.left) / b.width * 1000 - 56) / (1000 - 56 - 10))); return a + fr * (z - a); };
   if (!wrap.dataset.zw) { wrap.dataset.zw = 1;
-    wrap.addEventListener("wheel", e => { e.preventDefault(); zoom(e.deltaY < 0 ? 0.8 : 1.25, idxAt(e)); }, { passive: false });
+    /* no mouse-wheel zoom (Brandon 2026-11-08): scrolling over the chart scrolls the page; use the Zoom buttons */
     let drag = null;
     wrap.addEventListener("pointerdown", e => { if (e.button !== 0) return; drag = { x: e.clientX, a: SR.cv[0] }; wrap.setPointerCapture(e.pointerId); wrap.classList.add("dragging"); });
     wrap.addEventListener("pointermove", e => { if (!drag) return; const b = wrap.getBoundingClientRect(), [a, z] = SR.cv, per = b.width * (1000 - 66) / 1000 / Math.max(1, z - a);
