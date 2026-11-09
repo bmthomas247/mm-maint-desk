@@ -11,7 +11,7 @@
   var put = function(t){ try{ localStorage.setItem(KEY, String(t)); }catch(e){} };
   var bootLast = get();   // read before any tap on this page, so opening the page after hours away can't reset the clock
   // arriving from an emailed sign-in link = just signed in
-  if(/access_token=|refresh_token=|[?&]code=|type=(magiclink|recovery|signup|invite)/.test(location.hash + location.search)){ bootLast = Date.now(); put(bootLast); }
+  if(/access_token=|refresh_token=|[?&]code=|type=(magiclink|recovery|signup|invite)|^#mmapp=/.test(location.hash + location.search)){ bootLast = Date.now(); put(bootLast); }
   function poke(){ var t = Date.now(); if(t - wrote > 10e3){ wrote = t; put(t); } hideBar(); }
   function listen(w){
     try{ ["pointerdown","keydown","wheel","touchstart","scroll","mousemove"].forEach(function(ev){ w.addEventListener(ev, poke, { capture:true, passive:true }); }); }catch(e){}
