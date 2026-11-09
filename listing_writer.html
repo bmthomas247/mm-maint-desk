@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Listing Writer</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Tools ▸ Listing Writer (hub key tools_listing; follows the Reviews desk). Brandon 2026-11-08: "build what you did into a tool into the hub,
+     then we can preview the one we send to track". Edge Function listing-writer (hub_listing_writer.sql): load Track's text per site, write a new
+     version from what guests love (reviews + Reviews ▸ Listing ideas), edit, preview before/after per site, send to the sites you tick.
+     Writing + sending = admins + managers with Reviews (review_insight_can_edit); everyone else with Reviews can look. -->
+<style>
+:root{--forest:#3c5f12;--pine:#4f7a18;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;
+  --amber:#b5770a;--amber-soft:#fbf0d9;--red:#c8382b;--red-soft:#fbe6e3;--green:#3a7d44;--green-soft:#e6f1ea;--mark:#dcefc9;--radius:16px;
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;--amber-soft:#33270c;--green-soft:#16301f;--red-soft:#3a1712;--mark:#26401a}}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}.muted{color:var(--muted)}.small{font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
+label{display:block;font-weight:800;font-size:13px;margin:10px 0 4px;color:var(--ink-2)}
+select,textarea,input[type=text]{width:100%;font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:9px 12px;background:var(--card);color:var(--ink)}
+textarea{resize:vertical}textarea.long{min-height:420px;font-size:14px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:40px;padding:0 14px;font:inherit;font-weight:800;cursor:pointer}
+.btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn:disabled{opacity:.55;cursor:default}.btn.sm{min-height:28px;padding:0 9px;font-size:12px;border-radius:8px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grow{flex:1;min-width:220px}
+.cnt{font-size:12px;font-weight:800;padding:1px 8px;border-radius:999px;background:var(--green-soft);color:var(--green);margin-left:6px}.cnt.bad{background:var(--red-soft);color:var(--red)}
+.pill{display:inline-block;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2)}.pill.g{background:var(--green-soft);color:var(--green)}.pill.r{background:var(--red-soft);color:var(--red)}
+.q{border-left:3px solid #9cc47a;padding:2px 0 2px 10px;margin:4px 0;font-size:14px}
+.warn{background:var(--amber-soft);border-radius:12px;padding:10px 12px;font-size:14px;margin:8px 0}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}.tab{border:1px solid var(--line-2);border-radius:999px;padding:5px 13px;font-weight:800;font-size:13px;cursor:pointer;background:var(--card);color:var(--ink)}
+.tab.on{background:var(--forest);border-color:var(--forest);color:#fff}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:760px){.cols{grid-template-columns:1fr}}
+.pv{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--ground)}.pv h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.pv .t{font-weight:800;font-size:17px;margin:0 0 6px}.pv .b{white-space:pre-wrap;font-size:14px;max-height:520px;overflow:auto}
+mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 2px}
+.site{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}.site:first-child{border-top:0}.site input{margin-top:4px;width:18px;height:18px}
+.res li{margin:3px 0}
+dialog{border:0;border-radius:16px;max-width:560px;width:calc(100% - 32px);padding:18px;background:var(--card);color:var(--ink)}dialog::backdrop{background:rgba(0,0,0,.45)}
+</style>
+</head><body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const dt = s => s ? new Date(s).toLocaleString([], { month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const FIELDS = [["abb_headline", "Airbnb title", "abb_headline"], ["abb_summary", "Airbnb summary (shown first)", "abb_summary"], ["vrbo_headline", "Vrbo headline", "vrbo_headline"], ["long", "Long description (Vrbo, Airbnb “The space”, our booking site + the other sites)", null]];
+const S = { homes:[], home:"", L:null, draft:null, text:null, tab:"airbnb", busy:false };
+const lastHome = () => { try { return localStorage.getItem("lw_home") || ""; } catch(e){ return ""; } };
+
+async function call(body){
+  const r = await sb.functions.invoke("listing-writer", { body });
+  if(r.error){ let m = r.error.message; try { const j = await r.error.context.json(); if(j && j.error) m = j.error; } catch(e){} return { ok:false, error:m }; }
+  return r.data || { ok:false, error:"no answer" };
+}
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/tools_listing" target="_top">Go to the Moose Hub →</a></p>`; return; }
+  const can = (await sb.rpc("hub_can", { p_desk:"reviews" })).data || (await sb.rpc("hub_can", { p_desk:"analytics" })).data;
+  if(!can){ (window.top !== window ? window.top : window).location.href = "hub.html#/home"; return; }
+  const [h, ideas] = await Promise.all([sb.from("hub_homes").select("code,name,track_id,active").eq("active", true).order("code"),
+    sb.from("review_listing_ideas").select("home").eq("gone", false)]);
+  const n = {}; (ideas.data || []).forEach(x => n[x.home] = (n[x.home] || 0) + 1);
+  S.homes = (h.data || []).filter(x => x.track_id && !/^L-/.test(x.code)).map(x => ({ ...x, ideas:n[x.code] || 0 }));
+  const want = decodeURIComponent(location.hash.slice(1)) || lastHome();
+  shell(); if(want && S.homes.some(x => x.code === want)){ $("#home").value = want; load(want); }
+}
+
+function shell(){
+  $("#app").innerHTML = `<h1>✍ Listing Writer</h1>
+    <p class="muted" style="margin:0">Rewrites a home's listing so it says what guests keep praising in their reviews, using the home's own text in Track. Look it over, change anything, preview it the way each site shows it, then send it to Track. Track passes it on to Airbnb, Vrbo and our other sites.</p>
+    <div class="card"><div class="row"><div class="grow"><label for="home" style="margin-top:0">Home</label>
+      <select id="home"><option value="">Pick a home…</option>${S.homes.map(x => `<option value="${esc(x.code)}">${esc(x.code)} · ${esc(x.name || "")}${x.ideas ? ` · ${x.ideas} review idea${x.ideas === 1 ? "" : "s"}` : ""}</option>`).join("")}</select></div></div>
+      <div id="top"></div></div><div id="body"></div>`;
+  $("#home").onchange = () => load($("#home").value);
+}
+
+async function load(code){
+  S.home = code; S.L = null; S.draft = null; S.text = null;
+  try { localStorage.setItem("lw_home", code); } catch(e){}
+  if(!code){ $("#top").innerHTML = ""; $("#body").innerHTML = ""; return; }
+  $("#top").innerHTML = `<p class="muted">Reading ${esc(code)}'s text in Track…</p>`; $("#body").innerHTML = "";
+  const r = await call({ action:"load", home:code });
+  if(!r.ok){ $("#top").innerHTML = `<p class="warn">Couldn't load: ${esc(r.error)}</p>`; return; }
+  S.L = r; S.draft = r.drafts[0] || null;
+  S.text = S.draft ? fromDraft(S.draft) : { ...r.base };
+  draw();
+}
+const fromDraft = d => ({ abb_headline:d.headline || "", abb_summary:d.summary || "", vrbo_headline:d.vrbo_headline || "", long:d.description || "" });
+const lim = k => ({ abb_headline:S.L.limits.abb_headline, abb_summary:S.L.limits.abb_summary, vrbo_headline:S.L.limits.vrbo_headline, long:S.L.limits.long_max })[k];
+const cnt = k => { const n = (S.text[k] || "").length, bad = n > lim(k) || (k === "long" && n < S.L.limits.long_min); return `<span class="cnt${bad ? " bad" : ""}" data-cnt="${k}">${n.toLocaleString()}${k === "long" ? "" : " / " + lim(k)}</span>`; };
+
+function draw(){
+  const L = S.L, d = S.draft, E = L.edit;
+  const ab = L.sites.find(s => s.kind === "airbnb"), last = L.sites.map(s => s.updatedAt).sort().pop();
+  $("#top").innerHTML = `<p class="small muted" style="margin:10px 0 0">In Track now: ${L.sites.length} site${L.sites.length === 1 ? "" : "s"} with text (${L.sites.map(s => esc(s.name)).join(", ")}). Last changed in Track ${esc(dt(last))}.${L.ideas.length ? ` Reviews ▸ Listing ideas has ${L.ideas.length} idea${L.ideas.length === 1 ? "" : "s"} for this home.` : ""}</p>`;
+  const inc = d ? (d.included || []) : [];
+  $("#body").innerHTML = `
+  <div class="card"><h2>1 · Write it from the reviews</h2>
+    ${d ? `<p class="small" style="margin:0 0 6px">Showing the draft from <b>${esc(dt(d.created_at))}</b> by ${esc(d.by_name || "")}${d.status === "used" ? ` · <span class="pill g">sent to Track</span>` : ""}.
+      ${L.drafts.length > 1 ? `<select id="dsel" style="width:auto;padding:4px 8px;font-size:13px">${L.drafts.map((x, i) => `<option value="${i}">${esc(dt(x.created_at))} · ${esc(x.by_name || "")}${x.status === "used" ? " · sent" : ""}</option>`).join("")}</select>` : ""}</p>`
+      : `<p class="small muted" style="margin:0 0 6px">No draft yet: the boxes below hold what Track has now.</p>`}
+    ${E ? `<div class="row"><button class="btn pri" id="write">✍ ${d ? "Write a new version" : "Write a new version from the reviews"}</button><span class="muted small" id="wmsg">About a minute and ~15¢.${inc.length ? ` Keeps what you added anyway: ${inc.map(esc).join(" · ")}.` : ""}</span></div>` : `<p class="small muted">Managers and admins can write and send.</p>`}
+    ${d ? draftNotes(d, E) : ""}</div>
+  <div class="card"><h2>2 · Check and change the words</h2>
+    ${FIELDS.map(([k, t]) => `<label for="f_${k}">${t} ${cnt(k)}</label>${k === "abb_headline" || k === "vrbo_headline" ? `<input type="text" id="f_${k}" data-f="${k}" value="${esc(S.text[k])}"${E ? "" : " readonly"}>`
+      : `<textarea id="f_${k}" data-f="${k}" class="${k === "long" ? "long" : ""}" rows="${k === "long" ? 18 : 4}"${E ? "" : " readonly"}>${esc(S.text[k])}</textarea>`}`).join("")}
+    <div class="row" style="margin-top:10px">${d ? `<button class="btn sm" id="rdraft">↺ Back to the draft's words</button>` : ""}<button class="btn sm" id="rtrack">↺ What Track has now</button></div></div>
+  <div class="card"><h2>3 · Preview</h2>
+    <div class="tabs">${[["airbnb", "Airbnb"], ["vrbo", "Vrbo"], ["other", "Our booking site + other sites"]].map(([k, t]) => `<button class="tab${S.tab === k ? " on" : ""}" data-tab="${k}">${t}</button>`).join("")}</div>
+    <div id="pv"></div><p class="small muted" style="margin:8px 0 0">Green = new or changed sentences from the draft. Left = what guests see today (Track's text now).</p></div>
+  ${E ? `<div class="card"><h2>4 · Send to Track</h2><div id="sites"></div>
+    <div class="row" style="margin-top:10px"><button class="btn pri" id="send">Send to Track…</button><span class="small muted" id="smsg"></span></div>
+    <p class="small muted" style="margin:8px 0 0">The hub writes only the boxes above into the sites you tick, checks Track's copy right after, and keeps the old text so it can be put back. Track sends it on to each site (Airbnb and Vrbo can take a little while to show it).</p></div>` : ""}
+  ${L.sends.length ? `<div class="card"><h2>Sent before</h2><ul class="res small" style="margin:0;padding-left:18px">${L.sends.map(x => `<li>${esc(dt(x.at))} · ${esc(x.by_name || "")} · ${esc(x.site || "")}: ${x.ok ? `<span class="pill g">done</span>` : `<span class="pill r">not done</span> ${esc(x.error || "")}`}</li>`).join("")}</ul></div>` : ""}
+  <p class="small muted">Sources: the home's text in Track (read live${ab ? `, Airbnb last changed ${esc(dt(ab.updatedAt))}` : ""}); its public guest reviews from the last 2 years (Airbnb, Vrbo, Google; our website's own are left out) and Reviews ▸ Listing ideas; written by Claude (AI). Guest quotes are checked word for word. Nothing goes to Track until someone presses Send.</p>`;
+  wire(); preview(); sitesDraw();
+}
+
+function draftNotes(d, E){
+  return `${(d.favorites || []).length ? `<label>What guests love (their own words)</label>${d.favorites.map(f => `<div class="q"><b>${esc(f.what)}:</b> “${esc(f.quote)}” <span class="muted small">— ${esc(f.channel || "")} · ${esc(f.stay || "")}</span></div>`).join("")}` : ""}
+    ${(d.changes || []).length ? `<label>What changed</label><ul style="margin:0;padding-left:18px;font-size:14px">${d.changes.map(c => `<li><b>${esc(c.what)}:</b> ${esc(c.new_text)}</li>`).join("")}</ul>` : ""}
+    ${(d.left_out || []).length ? `<div class="warn"><b>⚠ Not pushed harder, because guests also complained:</b>${d.left_out.map(x => `<br>• <b>${esc(x.what)}:</b> ${esc(x.why)}${E ? ` <button class="btn sm" data-inc="${esc(x.what)}">Add it anyway</button>` : ""}`).join("")}</div>` : ""}
+    ${(d.included || []).length ? `<p class="small muted">Added anyway at the team's ask: ${d.included.map(esc).join(" · ")}</p>` : ""}`;
+}
+
+function marked(text){
+  let b = esc(text || "");
+  ((S.draft && S.draft.changes) || []).forEach(c => { const t = esc(c.new_text || ""); if(t && b.includes(t)) b = b.split(t).join(`<mark>${t}</mark>`); });
+  return b;
+}
+function preview(){
+  const B = S.L.base, T = S.text, k = S.tab, n = S.L.sites.filter(s => s.kind === "other" || s.kind === "website").length;
+  const box = (h, title, sum, body, after) => `<div class="pv"><h4>${h}</h4>${title != null ? `<div class="t">${after ? marked(title) : esc(title) || `<span class="muted">(none)</span>`}</div>` : ""}${sum != null ? `<div class="b" style="margin:0 0 10px">${after ? marked(sum) : esc(sum)}</div>` : ""}${sum != null && body != null ? `<h4>The space</h4>` : ""}<div class="b">${after ? marked(body) : esc(body)}</div></div>`;
+  $("#pv").innerHTML = `<div class="cols">${k === "airbnb" ? box("Airbnb now", B.abb_headline, B.abb_summary, B.long) + box("Airbnb after", T.abb_headline, T.abb_summary, T.long, 1)
+    : k === "vrbo" ? box("Vrbo now", B.vrbo_headline, null, B.long) + box("Vrbo after", T.vrbo_headline, null, T.long, 1)
+    : box(`${n} other site${n === 1 ? "" : "s"} now`, null, null, B.long) + box("After", null, null, T.long, 1)}</div>`;
+}
+function sitesDraw(){
+  const el = $("#sites"); if(!el) return;
+  const what = s => s.kind === "airbnb" ? "title, summary + The space" : s.kind === "vrbo" ? "headline + description" : "description";
+  el.innerHTML = S.L.sites.map(s => `<label class="site" style="margin:0;font-weight:600"><input type="checkbox" data-site="${s.id}"${s.enabled ? " checked" : ""}>
+    <span><b>${esc(s.name)}</b> <span class="muted small">— ${what(s)}${s.enabled ? "" : " · turned off in Track"} · last changed ${esc(dt(s.updatedAt))}</span></span></label>`).join("")
+    + `<div class="row" style="margin-top:6px"><button class="btn sm" id="sall">Tick all</button><button class="btn sm" id="smain">Only Airbnb + Vrbo</button></div>`;
+  $("#sall").onclick = () => $$("[data-site]").forEach(x => x.checked = true);
+  $("#smain").onclick = () => $$("[data-site]").forEach(x => { const s = S.L.sites.find(y => y.id === +x.dataset.site); x.checked = s.kind === "airbnb" || s.kind === "vrbo"; });
+}
+
+function wire(){
+  $$("[data-f]").forEach(x => x.oninput = () => { S.text[x.dataset.f] = x.value; const c = $(`[data-cnt="${x.dataset.f}"]`); c.outerHTML = cnt(x.dataset.f); preview(); });
+  $$("[data-tab]").forEach(b => b.onclick = () => { S.tab = b.dataset.tab; $$("[data-tab]").forEach(x => x.classList.toggle("on", x === b)); preview(); });
+  const ds = $("#dsel"); if(ds) ds.onchange = () => { S.draft = S.L.drafts[+ds.value]; S.text = fromDraft(S.draft); draw(); if(ds) $("#dsel").value = ds.value; };
+  const rd = $("#rdraft"); if(rd) rd.onclick = () => { S.text = fromDraft(S.draft); draw(); };
+  $("#rtrack").onclick = () => { S.text = { ...S.L.base }; draw(); };
+  const w = $("#write"); if(w) w.onclick = () => write([]);
+  $$("[data-inc]").forEach(b => b.onclick = () => write([b.dataset.inc]));
+  const sd = $("#send"); if(sd) sd.onclick = confirmSend;
+}
+
+async function write(extra){
+  if(S.busy) return; S.busy = true;
+  const inc = [...((S.draft && S.draft.included) || [])]; extra.forEach(x => { if(!inc.includes(x)) inc.push(x); });
+  const b = $("#write"); if(b) b.disabled = true; $("#wmsg").textContent = "Reading the reviews and writing… about a minute.";
+  const r = await call({ action:"draft", home:S.home, include:inc }); S.busy = false;
+  if(!r.ok){ if(b) b.disabled = false; $("#wmsg").textContent = "Couldn't write it: " + r.error; return; }
+  S.L.drafts.unshift(r.draft); S.draft = r.draft; S.text = fromDraft(r.draft); draw();
+}
+
+function problems(){
+  const T = S.text, P = [], Lm = S.L.limits;
+  if(T.abb_headline.length > Lm.abb_headline) P.push("Airbnb title is over 50 characters");
+  if(T.abb_summary.length > Lm.abb_summary) P.push("Airbnb summary is over 500 characters");
+  if(T.vrbo_headline.length > Lm.vrbo_headline) P.push("Vrbo headline is over 80 characters");
+  if(T.long.length < Lm.long_min) P.push("Long description is under 400 characters");
+  return P;
+}
+function confirmSend(){
+  const pick = $$("[data-site]").filter(x => x.checked).map(x => S.L.sites.find(s => s.id === +x.dataset.site));
+  const P = problems(), D = $("#dlg");
+  if(!pick.length) P.push("Tick at least one site");
+  const same = ["abb_headline", "abb_summary", "vrbo_headline", "long"].every(k => (S.text[k] || "").trim() === (S.L.base[k] || "").trim());
+  if(same) P.push("Nothing changed from what Track has now");
+  D.innerHTML = P.length ? `<h2>Can't send yet</h2><ul>${P.map(x => `<li>${esc(x)}</li>`).join("")}</ul><div class="row"><button class="btn" id="dx">OK</button></div>`
+    : `<h2>Send ${esc(S.home)}'s new text to Track?</h2><p>This changes the listing text on <b>${pick.length} site${pick.length === 1 ? "" : "s"}</b>: ${pick.map(s => esc(s.name)).join(", ")}. Guests will see it once Track passes it on.</p>
+      <p class="small muted">The old text is kept in the hub, so it can be put back.</p><div class="row"><button class="btn pri" id="dgo">Yes, send it</button><button class="btn" id="dx">Not yet</button></div>`;
+  D.showModal(); $("#dx").onclick = () => D.close();
+  const g = $("#dgo"); if(g) g.onclick = async () => { g.disabled = true; g.textContent = "Sending…";
+    const r = await call({ action:"send", home:S.home, draft_id:S.draft ? S.draft.id : null, texts:S.text, sites:pick.map(s => ({ id:s.id, updatedAt:s.updatedAt })) });
+    const R = r.results || [];
+    D.innerHTML = `<h2>${r.ok ? "Sent ✓" : R.some(x => x.ok) ? "Partly sent" : "Not sent"}</h2>${r.error ? `<p class="warn">${esc(r.error)}</p>` : ""}
+      ${R.length ? `<ul class="res">${R.map(x => `<li><b>${esc(x.site || x.id)}</b>: ${x.ok ? "done, Track shows the new text" : esc(x.error || "not done")}</li>`).join("")}</ul>` : ""}<div class="row"><button class="btn pri" id="dx">OK</button></div>`;
+    $("#dx").onclick = () => { D.close(); load(S.home); }; };
+}
+boot();
+</script>
+</body></html>
