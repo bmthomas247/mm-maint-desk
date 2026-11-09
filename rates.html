@@ -338,7 +338,8 @@ details.dyacc:not([open])>summary::after{transform:rotate(-90deg)}details.dyacc:
 .srzoom{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 8px}.srzoom .ovbtn{padding:5px 10px;font-size:12.5px}
 .srpan{cursor:grab;touch-action:pan-y}.srpan.dragging{cursor:grabbing;user-select:none}
 table.srt tr[data-k] td:first-child{cursor:cell;user-select:none}table.srt tr.srsel td{background:rgba(136,181,53,.22)!important}
-#srBulkBar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;display:none;gap:14px;align-items:center;flex-wrap:wrap;background:var(--forest,#3c5f12);color:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 12px 30px rgba(0,0,0,.25);font-size:13px}
+#srBulkBar{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:70;display:none;gap:14px;align-items:center;flex-wrap:wrap;background:var(--forest,#3c5f12);color:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 12px 30px rgba(0,0,0,.25);font-size:13px}
+#srBulkBar .sbhint{font-size:11.5px;opacity:.85}
 #srBulkBar .sbg{display:inline-flex;gap:6px;align-items:center}#srBulkBar button[data-sb^="p"],#srBulkBar button[data-sb^="m"]{width:30px;height:30px;border:0;border-radius:8px;background:#fff;color:var(--forest,#3c5f12);cursor:pointer;font-size:12px}
 #srBulkBar input,#srBulkBar select{width:58px;border:0;border-radius:8px;padding:5px 6px;font:inherit}#srBulkBar select{width:auto}#srBulkBar .ovbtn{background:rgba(255,255,255,.15);color:#fff;border-color:transparent}
 .dyseas{flex:0 0 100%;display:flex;flex-direction:column;gap:6px}.dyseas:empty{display:none}
@@ -1640,6 +1641,7 @@ function srBulk() { const tbl = document.querySelector("[data-srr]")?.closest("t
     bar.innerHTML = `<b id="sbN"></b><span class="sbg">Price <button type="button" data-sb="p-">▼</button><button type="button" data-sb="p+">▲</button> by <input type="number" id="sbAmt" value="5" min="1" step="1">
       <select id="sbUnit"><option value="$">$</option><option value="%">%</option></select></span>
       <span class="sbg">Min nights <button type="button" data-sb="m-">▼</button><button type="button" data-sb="m+">▲</button></span>
+      <span class="sbhint">or type a price / min nights in any selected night to set them all</span>
       <button type="button" class="ovbtn" data-sb="clear">Clear</button>`;
     bar.addEventListener("click", e => { const b = e.target.closest("[data-sb]"); if (!b) return; srBulkMove(b.dataset.sb); }); }
   const paint = () => { rows().forEach(t => t.classList.toggle("srsel", sel.has(t.dataset.k))); bar.style.display = sel.size ? "flex" : "none";
@@ -1656,6 +1658,12 @@ function srBulk() { const tbl = document.querySelector("[data-srr]")?.closest("t
   tbl.addEventListener("mouseover", e => { if (!drag) return; const tr = e.target.closest("tr[data-k]"); if (!tr) return;
     sel.clear(); range(drag.start, tr.dataset.k).forEach(x => sel.add(x)); paint(); });
   document.addEventListener("mouseup", () => { drag = null; });
+  // Brandon 2026-11-08: type in one selected night = the same price (or min nights) on every selected night
+  const mirror = (e, fire) => { const i = e.target, k = i.dataset?.srr || i.dataset?.srm; if (!k || !sel.has(k) || sel.size < 2) return;
+    const at = i.dataset.srr ? "data-srr" : "data-srm";
+    for (const x of sel) { if (x === k) continue; const o = tbl.querySelector(`[${at}="${x}"]`); if (!o) continue; o.value = i.value; o.classList.remove("pre"); if (fire) o.onchange?.(); } };
+  tbl.addEventListener("input", e => mirror(e, false));
+  tbl.addEventListener("change", e => mirror(e, true));
   paint(); }
 function srBulkMove(op) { const sel = SR.sel; if (!sel) return;
   if (op === "clear") { sel.clear(); return window.srBulkPaint?.(); }
