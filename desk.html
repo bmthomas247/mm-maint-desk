@@ -4445,9 +4445,38 @@ function slackChName(id){ var c=SLACK_CH.filter(function(x){ return x[0]===id; }
 /* ---- project owner + followers ---- */
 function projPeople(){ return slackPeople(); }
 function projPeople0(){ var n={}; Object.keys(((S.config.slack||{}).people)||{}).forEach(function(k){ n[k]=1; }); (typeof ROSTER!=="undefined"?ROSTER:[]).forEach(function(r){ n[r[0]]=1; }); return Object.keys(n).sort(); }
+/* Brandon 2026-11-09: followers = type a name, search as you type, tap to add (chips with x). The hidden .p_fol boxes stay the saved data. */
 function projFollowBlock(p){ var f=(p.edit&&p.edit.followers)||[];
-  return '<label class="f" style="grid-column:1/-1"><span>Followers — get the Monday Slack update too</span><div class="chiprow" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px">'+
-    projPeople().map(function(n){ return '<label class="toggle"><input type="checkbox" class="p_fol" value="'+esc(n)+'"'+(f.indexOf(n)>-1?' checked':'')+'> '+esc(n)+'</label>'; }).join("")+'</div></label>'; }
+  return '<div class="f folwrap" style="grid-column:1/-1;position:relative"><span>Followers — get the Monday Slack update too</span>'+
+    '<div class="folchips" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px"></div>'+
+    '<input class="folin" type="text" autocomplete="off" placeholder="Type a name to add a follower…" oninput="folSearch(this)" onfocus="folSearch(this)" onkeydown="folKey(event,this)" onblur="folBlur(this)">'+
+    '<div class="folsug" style="display:none;position:absolute;left:0;right:0;z-index:30;background:var(--card,#fff);border:1px solid var(--line,#d8ddd2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:240px;overflow:auto;margin-top:4px"></div>'+
+    '<div style="display:none">'+projPeople().map(function(n){ return '<input type="checkbox" class="p_fol" value="'+esc(n)+'"'+(f.indexOf(n)>-1?' checked':'')+'>'; }).join("")+'</div>'+
+    '<img src="data:," alt="" style="display:none" onerror="folDraw(this.parentNode)"></div>'; }
+(function(){
+  function boxes(w){ return [].slice.call(w.querySelectorAll(".p_fol")); }
+  function h(t){ return String(t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  window.folDraw = function(w){ var on = boxes(w).filter(function(b){ return b.checked; });
+    w.querySelector(".folchips").innerHTML = on.length ? on.map(function(b){ return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 6px 3px 10px;border-radius:999px;background:#e8f0dc;color:#2f4a10;font-size:13px;font-weight:600">'+h(b.value)+
+      '<button type="button" data-n="'+h(b.value)+'" onmousedown="folDel(event,this)" title="Remove" style="border:0;background:transparent;cursor:pointer;font-size:14px;line-height:1;padding:0 4px;color:#2f4a10">×</button></span>'; }).join("")
+      : '<span class="muted small">No followers yet.</span>'; };
+  window.folSearch = function(inp){ var w = inp.closest(".folwrap"), q = inp.value.trim().toLowerCase(), sug = w.querySelector(".folsug");
+    var list = boxes(w).filter(function(b){ return !b.checked && (!q || b.value.toLowerCase().indexOf(q) > -1); })
+      .sort(function(a, b){ var x = a.value.toLowerCase().indexOf(q) === 0, y = b.value.toLowerCase().indexOf(q) === 0; return (y - x) || a.value.localeCompare(b.value); });
+    if (!list.length) { sug.innerHTML = q ? '<div class="muted small" style="padding:8px 12px">No one by that name.</div>' : ""; sug.style.display = q ? "block" : "none"; return; }
+    sug.innerHTML = list.map(function(b, i){ return '<div class="folopt'+(i ? "" : " on")+'" data-n="'+h(b.value)+'" onmousedown="folPick(event,this)" style="padding:8px 12px;cursor:pointer;'+(i ? "" : "background:#eef3e6;")+'">'+h(b.value)+'</div>'; }).join("");
+    sug.style.display = "block"; };
+  function add(w, n){ boxes(w).forEach(function(b){ if (b.value === n) b.checked = true; }); folDraw(w); var inp = w.querySelector(".folin"); inp.value = ""; folSearch(inp); }
+  window.folPick = function(e, el){ e.preventDefault(); add(el.closest(".folwrap"), el.getAttribute("data-n")); };
+  window.folDel = function(e, el){ e.preventDefault(); var w = el.closest(".folwrap"), n = el.getAttribute("data-n"); boxes(w).forEach(function(b){ if (b.value === n) b.checked = false; }); folDraw(w); };
+  window.folBlur = function(inp){ setTimeout(function(){ var s = inp.closest(".folwrap").querySelector(".folsug"); if (s) s.style.display = "none"; }, 120); };
+  window.folKey = function(e, inp){ var w = inp.closest(".folwrap"), o = [].slice.call(w.querySelectorAll(".folopt")), i = o.findIndex(function(x){ return x.classList.contains("on"); });
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (!o.length) return; var j = Math.max(0, Math.min(o.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
+      o.forEach(function(x, k){ x.classList.toggle("on", k === j); x.style.background = k === j ? "#eef3e6" : ""; }); o[j].scrollIntoView({block: "nearest"}); }
+    else if (e.key === "Enter") { e.preventDefault(); if (o[i < 0 ? 0 : i]) add(w, o[i < 0 ? 0 : i].getAttribute("data-n")); }
+    else if (e.key === "Escape") { w.querySelector(".folsug").style.display = "none"; }
+    else if (e.key === "Backspace" && !inp.value) { var on = boxes(w).filter(function(b){ return b.checked; }).pop(); if (on) { on.checked = false; folDraw(w); } } };
+})();
 function projMsg(p){ var link="https://claude.ai/artifact/MdYfu9PYsAZcQ1q38xxx65";
   return "*"+p.title+"*"+(p.homes.length?" ("+p.homes.slice(0,6).join(", ")+")":"")+"\nStage: "+((PSTAGE.filter(function(x){ return x[0]===p.stage; })[0]||[p.stage,p.stage])[1])+
     (p.next?"\nNext: "+p.next:"\nNext: nothing written yet — what needs to happen next?")+
