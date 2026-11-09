@@ -437,52 +437,79 @@ function fcRing(p, lab){ const r = 34, c = 2 * Math.PI * r, on = Math.max(0, Mat
     <text x="44" y="50" text-anchor="middle" font-size="18" font-weight="800" fill="currentColor">${on}%</text></svg>`; }
 const fcDelta = (now, prev, unit) => { if(prev == null || now == null) return ""; const dlt = Math.round((now - prev) * 10) / 10; if(!dlt) return `<span class="dl">same as last week</span>`;
   return `<span class="dl ${dlt > 0 ? "" : "dn"}">${dlt > 0 ? "▲" : "▼"} ${Math.abs(dlt)}${unit} vs last week</span>`; };
-// Field work as pictures (Brandon 2026-11-09: "fun and easy to read … more graphs and designs … encourage good work behavior and see how
-// someone can succeed"; look = his sample dashboard: white cards, big numbers with a vs-last-week pill, rounded bars, a ring, a heat grid).
-// my_field_coach() = your own days (hub_field_coach.sql, built hourly by field_coach.py). Every number compares you only with yourself.
+// rolling: the last 7 days (today included) vs the 7 days before, so Monday mornings aren't all zeros
+function fcWeeks(rows, val){
+  const todayK = new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" }), t0 = Date.parse(todayK + "T12:00:00Z");
+  let cur = 0, prv = 0, any = false;
+  rows.forEach(x => { const ago = Math.round((t0 - Date.parse(x.day + "T12:00:00Z")) / 864e5), v = +val(x) || 0;
+    if(ago >= 0 && ago < 7) cur += v; else if(ago >= 7 && ago < 14){ prv += v; any = true; } });
+  return { cur, prv: any ? prv : null };
+}
+function fcHeat(rows, val, unit){
+  const byDay = {}; rows.forEach(x => byDay[x.day] = val(x) || 0); const hmx = Math.max(1, ...Object.values(byDay));
+  const todayK = new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" }), w0 = fcWeekKey(todayK), wks = [3, 2, 1, 0].map(n => { const d = new Date(w0 + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - 7 * n); return d.toISOString().slice(0, 10); });
+  return `<div class="heat"><span></span>${["S","M","T","W","T","F","S"].map(x => `<span style="text-align:center">${x}</span>`).join("")}
+    ${wks.map(k => { const s0 = new Date(k + "T12:00:00Z"); return `<span>${s0.toLocaleDateString([], { timeZone:"UTC", month:"short", day:"numeric" })}</span>` + [0,1,2,3,4,5,6].map(i => { const dd = new Date(s0); dd.setUTCDate(dd.getUTCDate() + i); const key = dd.toISOString().slice(0, 10), n = byDay[key] || 0;
+      return `<i title="${esc(dnm(key))}: ${Math.round(n * 10) / 10} ${unit}" style="${n ? `background:var(--g);opacity:${(0.25 + 0.75 * n / hmx).toFixed(2)}` : ""}"></i>`; }).join(""); }).join("")}</div>`;
+}
+const fcStat = (h, v, delta, sub) => `<div class="tile"><h3>${h}</h3><div class="big">${v}</div>${delta || ""}${sub ? `<div class="sub" style="margin-top:4px">${sub}</div>` : ""}</div>`;
+// Everyone's work (Brandon 2026-11-09: "can we load other data too?"): stats per day from field_coach.py everyone() =
+// hours (hub clock), tasks (Breezeway), steps (check lists), fd (Freshdesk tickets resolved), calls (Track Pulse), kudos (guest reviews).
+const GM = [["hours", "Hours worked", "h", "your hub clock-ins"], ["tasks", "Breezeway tasks done", "tasks", "from Breezeway"], ["steps", "Check list steps", "steps", "ticked on Reservations check lists"],
+  ["fd", "Freshdesk tickets solved", "tickets", "as the agent on the ticket"], ["calls", "Phone calls", "calls", "from Track Pulse"]];
+function genCard(F){
+  const asc = [...F].sort((a, b) => a.day < b.day ? -1 : 1), st = x => x.stats || {};
+  const have = GM.filter(([k]) => asc.some(x => +st(x)[k] > 0));
+  const ka = (asc.slice().reverse().find(x => st(x).kudos_all) || { stats:{} }).stats.kudos_all;
+  if(!have.length && !ka) return "";
+  const r1 = n => Math.round(n * 10) / 10;
+  const main = have.filter(([k]) => k !== "hours").sort((a, b) => asc.reduce((s, x) => s + (+st(x)[b[0]] || 0), 0) - asc.reduce((s, x) => s + (+st(x)[a[0]] || 0), 0))[0];
+  const last14 = asc.slice(-14);
+  // hours per week (last 8 weeks)
+  const hw = {}; asc.forEach(x => { const k = fcWeekKey(x.day); hw[k] = (hw[k] || 0) + (+st(x).hours || 0); }); const hk0 = Object.keys(hw).sort(), hf = hk0.findIndex(k => hw[k] > 0), hk = (hf < 0 ? [] : hk0.slice(hf)).slice(-8);
+  return `<div class="sub" style="margin:0 0 6px">Last 7 days</div><div class="grid stats">${have.map(([k, l, u, src]) => { const w = fcWeeks(asc, x => +st(x)[k]);
+      return fcStat(l, r1(w.cur) + (k === "hours" ? " h" : ""), fcDelta(r1(w.cur), w.prv == null ? null : r1(w.prv), k === "hours" ? " h" : "").replace("vs last week", "vs the 7 days before"), src); }).join("")}</div>
+    <div class="grid">
+      ${main ? `<div class="tile wide2"><h3>${esc(main[1])} each day</h3>${fcBars(last14.map(x => +st(x)[main[0]] || 0), last14.map(x => `${dnm(x.day)}: ${+st(x)[main[0]] || 0} ${main[2]}`), main[1] + " each day")}
+        <div class="axis"><span>${esc(dnm(last14[0].day))}</span><span>${esc(dnm(last14[last14.length - 1].day))}</span></div></div>` : ""}
+      ${have.some(([k]) => k === "hours") && hk.length ? `<div class="tile"><h3>Hours by week</h3>${fcBars(hk.map(k => r1(hw[k])), hk.map(k => `Week of ${dnm(k)}: ${r1(hw[k])} h`), "Hours by week", v => v + " h")}
+        <div class="axis"><span>${esc(dnm(hk[0]))}</span><span>this week</span></div></div>` : ""}
+      ${main ? `<div class="tile"><h3>Your busy days</h3>${fcHeat(asc, x => +st(x)[main[0]], main[2])}<div class="sub" style="margin-top:6px">Darker = more ${esc(main[2])} that day.</div></div>` : ""}
+      ${ka ? `<div class="tile"><h3>❤️ Guest shout-outs</h3><div class="big">${ka.n}</div><div class="sub">guest review${ka.n === 1 ? "" : "s"} named you for great work</div>
+        ${ka.latest.map(k => `<div class="try">“${esc(k.q)}…” <span class="sub">${esc(k.stars ? "★".repeat(Math.round(+k.stars)) : "")} ${esc(k.home || "")} · ${esc(dnm(k.day))}</span></div>`).join("")}</div>` : ""}
+    </div>`;
+}
+// Field work (Brandon 2026-11-09; field crew only): Start + Finish taps, route tightness, smooth driving, tips. my_field_coach() rows.
 function fcCard(F){
-  if(!F.length) return "";
-  const asc = [...F].sort((a, b) => a.day < b.day ? -1 : 1), last14 = asc.slice(-14);
+  const asc = [...F].filter(x => x.tasks || x.route || x.driving).sort((a, b) => a.day < b.day ? -1 : 1).filter(x => Date.now() - Date.parse(x.day) <= 29 * 864e5);
+  if(!asc.length) return "";
   const done = x => (x.tasks || {}).done || 0, real = x => Math.max(0, done(x) - ((x.tasks || {}).nostart || 0) - ((x.tasks || {}).together || 0));
   const tight = x => x.route && x.route.est_mi ? Math.min(100, Math.round(100 * x.route.best_mi / x.route.est_mi)) : null;
-  // weeks Sun-Sat; last week counts only up to the same weekday as today, so a Monday isn't compared with a whole week
-  const todayK = new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" }), dow = new Date(todayK + "T12:00:00Z").getUTCDay(), thisWk = fcWeekKey(todayK);
-  const wk = {}; asc.forEach(x => { const k = fcWeekKey(x.day), w = (wk[k] = wk[k] || { d:0, r:0, t:[] }), wd = new Date(x.day + "T12:00:00Z").getUTCDay();
-    if(k !== thisWk && wd > dow && Date.parse(thisWk) - Date.parse(k) <= 7 * 864e5) return;   // last week, after today's weekday: left out of the compare
-    w.d += done(x); w.r += real(x); if(tight(x) != null) w.t.push(tight(x)); });
-  const wks = Object.keys(wk).sort(), W = wks.map(k => wk[k]), cur = wk[thisWk] || { d:0, r:0, t:[] }, prv = wk[wks.filter(k => k < thisWk).pop()] || null;
-  const avg = a => a && a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length) : null, pct = w => w && w.d ? Math.round(100 * w.r / w.d) : null;
-  const stat = (h, v, delta, sub) => `<div class="tile"><h3>${h}</h3><div class="big">${v}</div>${delta || ""}${sub ? `<div class="sub" style="margin-top:4px">${sub}</div>` : ""}</div>`;
-  const allT = asc.filter(x => tight(x) != null), lt = allT.slice(-10), dv = asc.filter(x => x.driving);
-  const smooth = dv.length ? Math.round(100 * dv.filter(x => (x.driving.brakes + x.driving.starts) === 0 && !x.driving.fast).length / dv.length) : null;
-  const hw = wks.slice(-4), byDay = {}; asc.forEach(x => byDay[x.day] = done(x)); const hmx = Math.max(1, ...Object.values(byDay));
-  const heat = `<div class="heat"><span></span>${["S","M","T","W","T","F","S"].map(x => `<span style="text-align:center">${x}</span>`).join("")}
-    ${hw.map(k => { const s0 = new Date(k + "T12:00:00Z"); return `<span>${s0.toLocaleDateString([], { timeZone:"UTC", month:"short", day:"numeric" })}</span>` + [0,1,2,3,4,5,6].map(i => { const dd = new Date(s0); dd.setUTCDate(dd.getUTCDate() + i); const key = dd.toISOString().slice(0, 10), n = byDay[key] || 0;
-      return `<i title="${esc(dnm(key))}: ${n} tasks" style="${n ? `background:var(--g);opacity:${(0.25 + 0.75 * n / hmx).toFixed(2)}` : ""}"></i>`; }).join(""); }).join("")}</div>`;
-  const tips = [...F].sort((a, b) => a.day < b.day ? 1 : -1).flatMap(x => (x.tips || []).map(t => ({ d:x.day, t }))).slice(0, 3);
-  return `<div class="grid stats">
-      ${stat("Tasks this week", cur ? cur.d : 0, fcDelta(cur && cur.d, prv && prv.d, "").replace("vs last week", "vs same days last week"), "from Breezeway")}
-      ${stat("Start + Finish taps", pct(cur) == null ? "—" : pct(cur) + "%", fcDelta(pct(cur), pct(prv), " pts"), "goal 80%+")}
-      ${stat("Route tightness", avg(cur && cur.t) == null ? "—" : avg(cur.t) + "%", fcDelta(avg(cur && cur.t), prv ? avg(prv.t) : null, " pts"), "100% = the shortest order")}
-      ${stat("Smooth driving", smooth == null ? "🚗" : smooth + "%", "", smooth == null ? "starts once your phone GPS is set up" : "days with no hard brakes or 75+ mph")}
+  const D = fcWeeks(asc, done), R = fcWeeks(asc, real), pct = (r, d) => d ? Math.round(100 * r / d) : null;
+  const pc = pct(R.cur, D.cur), pp = R.prv == null ? null : pct(R.prv, D.prv);
+  const avg = a => a.length ? Math.round(a.reduce((s, v) => s + v, 0) / a.length) : null;
+  const allT = asc.filter(x => tight(x) != null), lt = allT.slice(-10), thisWk = fcWeekKey(new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" }));
+  const tCur = avg(allT.filter(x => fcWeekKey(x.day) === thisWk).map(tight)), tPrv = avg(allT.filter(x => fcWeekKey(x.day) < thisWk).slice(-5).map(tight));
+  const dv = asc.filter(x => x.driving), smooth = dv.length ? Math.round(100 * dv.filter(x => (x.driving.brakes + x.driving.starts) === 0 && !x.driving.fast).length / dv.length) : null;
+  const tips = [...asc].reverse().flatMap(x => (x.tips || []).map(t => ({ d:x.day, t }))).slice(0, 3);
+  return `<h3 style="margin:6px 0 8px;font-size:16px">🧰 Your field work</h3>
+    <div class="grid stats">
+      ${fcStat("Start + Finish taps", pc == null ? "—" : pc + "%", fcDelta(pc, pp, " pts").replace("vs last week", "vs the 7 days before"), "last 7 days · goal 80%+")}
+      ${fcStat("Route tightness", tCur == null ? (tPrv == null ? "—" : tPrv + "%") : tCur + "%", tCur != null ? fcDelta(tCur, tPrv, " pts") : "", "100% = the shortest order")}
+      ${fcStat("Smooth driving", smooth == null ? "🚗" : smooth + "%", "", smooth == null ? "starts once your phone GPS is set up" : "days with no hard brakes or 75+ mph")}
     </div>
     <div class="grid">
-      <div class="tile wide2"><h3>Tasks done each day</h3>${fcBars(last14.map(done), last14.map(x => `${dnm(x.day)}: ${done(x)} tasks`), "Tasks done each day")}
-        <div class="axis"><span>${esc(dnm(last14[0].day))}</span><span>${esc(dnm(last14[last14.length - 1].day))}</span></div></div>
-      <div class="tile"><h3>Start + Finish tap habit</h3><div class="ring">${fcRing(pct(cur) || 0, "Start + Finish taps this week")}
-        <div class="sub">Tap <b>Start</b> when you begin and <b>Finish</b> when you're done, so your time on every job counts.${pct(prv) != null ? `<br>Last week: ${pct(prv)}%` : ""}</div></div></div>
-    </div>
-    <div class="grid">
-      <div class="tile"><h3>Route tightness by day</h3>${lt.length ? fcBars(lt.map(tight), lt.map(x => `${dnm(x.day)}: ${tight(x)}% (about ${x.route.est_mi} mi)`), "Route tightness by day", v => v + "%")
+      <div class="tile"><h3>Start + Finish tap habit</h3><div class="ring">${fcRing(pc || 0, "Start + Finish taps, last 7 days")}
+        <div class="sub">Tap <b>Start</b> when you begin and <b>Finish</b> when you're done, so your time on every job counts.${pp != null ? `<br>The 7 days before: ${pp}%` : ""}</div></div></div>
+      <div class="tile wide2"><h3>Route tightness by day</h3>${lt.length ? fcBars(lt.map(tight), lt.map(x => `${dnm(x.day)}: ${tight(x)}% (about ${x.route.est_mi} mi)`), "Route tightness by day", v => v + "%")
         + `<div class="axis"><span>${esc(dnm(lt[0].day))}</span><span>${esc(dnm(lt[lt.length - 1].day))}</span></div>` : `<p class="sub">Shows once you've visited 3+ homes in a day.</p>`}</div>
-      <div class="tile"><h3>Your busy days</h3>${heat}<div class="sub" style="margin-top:6px">Darker = more tasks done that day.</div></div>
     </div>
     ${tips.length ? `<div class="tile" style="margin-bottom:12px"><h3>Try this</h3>${tips.map(x => `<div class="try"><b>${esc(dnm(x.d))}:</b> ${esc(x.t)}</div>`).join("")}</div>` : ""}
-    <p class="sub" style="margin:0 0 12px">Only you and your manager see this. Route miles are estimates (straight-line distance between homes × 1.3), from your phone GPS stops or the order you tapped Start on Breezeway tasks. Updated every hour.</p>`;
+    <p class="sub" style="margin:0 0 12px">Route miles are estimates (straight-line distance between homes × 1.3), from your phone GPS stops or the order you tapped Start on Breezeway tasks.</p>`;
 }
 window.myPerf = async function(v){
   css(); v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
-  const [r, pt, fcr] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto"), sb.rpc("my_field_coach", { p_days:28 })]); if(current() !== "stf_perf") return;
+  const [r, pt, fcr] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto"), sb.rpc("my_field_coach", { p_days:56 })]); if(current() !== "stf_perf") return;
   // PTO you're earning (Brandon 2026-10-29: "show how much PTO they are aquiring"); my_pto() = your own row (hub_my_pto.sql)
   const pto = (pt && pt.data) || [], hh = x => x == null ? "—" : (Math.round(+x * 10) / 10).toLocaleString() + " h";
   const ptoCard = pto.map(b => { const c = b.config || {}, have = b.calc_hours != null ? b.calc_hours : b.hours;
@@ -498,9 +525,10 @@ window.myPerf = async function(v){
   const ix = i => i == null ? "" : ` <span class="pill ${i >= 115 ? "green" : i <= 85 ? "amber" : ""}" title="100 = the team's average">${i}</span>`;
   const grps = [...new Set(rows.map(x => x.grp))];
   fcCss(); v.innerHTML = `<div class="page stf wide mp"><div class="mhead"><h2>My performance</h2><p>See how you're doing and where you can shine. These numbers are about you, so you can beat your own best week.</p></div>
-    ${fcCard((fcr && fcr.data) || [])}${ptoCard}${grps.map(g => { const R = rows.filter(x => x.grp === g), cur = R.find(x => x.period === "30d") || R[0], m = (cur && cur.metrics) || {}, idx = m.idx || {};
+    ${genCard((fcr && fcr.data) || [])}${fcCard((fcr && fcr.data) || [])}${ptoCard}${grps.map(g => { const R = rows.filter(x => x.grp === g), cur = R.find(x => x.period === "30d") || R[0], m = (cur && cur.metrics) || {}, idx = m.idx || {};
       const bar = (k, l) => { const n = idx[k]; if(n == null) return ""; const w = Math.max(2, Math.min(100, n / 2));
         return `<div class="row"><span class="lab">${esc(l)}</span><span class="trk" title="${esc(l)}: ${f(m[k])} · 100 = the team's average"><i style="width:${w}%"></i><b></b></span><span class="val">${f(m[k])}</span></div>`; };
+      if(!m.grade && !Object.keys(idx).length) return "";   // nothing to show for this kind of work yet
       return `<div class="tile" style="margin-bottom:12px"><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
         <div><div class="grade ${esc((m.grade || "")[0] || "")}">${esc(m.grade || "—")}</div><div class="sub">${esc(PG[g] || g)} grade · ${esc(PP[cur && cur.period] || "")}</div></div>
         <div style="flex:1;min-width:200px">${R.map(x => `<span class="pill ${((x.metrics || {}).grade || "")[0] === "A" ? "green" : ""}" style="margin:2px">${esc(PP[x.period] || x.period)}: ${esc((x.metrics || {}).grade || "—")}</span>`).join("")}
