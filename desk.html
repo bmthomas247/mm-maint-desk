@@ -3740,6 +3740,7 @@ function meetUpload(){ var sb=window.MM_SB; if(!sb) return toast("Sign in first"
     '<div id="mup_res" style="margin-top:12px"></div><div id="mup_list" style="margin-top:12px"></div>');
   $("modal").classList.add("wide");
   $("mup_go").onclick=function(){ meetUploadGo(mk); }; meetUploadList(mk); }
+window.meetUpload=meetUpload;   // the header button calls it from onclick (desk code is inside a wrapper)
 function meetUploadList(mk){ var sb=window.MM_SB; sb.from("hub_meeting_uploads").select("id,file_name,path,kind,size,status,error,result,by_name,at").eq("meet","meet_maint").eq("day",mk).eq("off",false).order("at",{ascending:false}).then(function(r){
   var l=(r&&r.data)||[], el=$("mup_list"); MUP.rows=l; if(!el) return; if(!l.length){ el.innerHTML=""; return; }
   el.innerHTML='<h4 class="lbl">Sent in for this meeting</h4>'+l.map(function(x){ return '<div class="logrow"><div class="logmeta">'+esc(x.by_name||"")+' · '+esc(new Date(x.at).toLocaleString())+' · '+esc(x.status==="read"?"read":x.status==="no_text"?"recording only":x.status)+'</div><div class="logtxt">'+
