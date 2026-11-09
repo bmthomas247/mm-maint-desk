@@ -512,20 +512,18 @@ window.myPerf = async function(v){
   const [r, pt, fcr] = await Promise.all([sb.rpc("my_performance"), sb.rpc("my_pto"), sb.rpc("my_field_coach", { p_days:56 })]); if(current() !== "stf_perf") return;
   // PTO you're earning (Brandon 2026-10-29: "show how much PTO they are aquiring"); my_pto() = your own row (hub_my_pto.sql)
   const pto = (pt && pt.data) || [], hh = x => x == null ? "—" : (Math.round(+x * 10) / 10).toLocaleString() + " h";
+  // Brandon 2026-11-09: "lets not push the pto so much" -> one quiet line near the bottom, details folded
   const ptoCard = pto.map(b => { const c = b.config || {}, have = b.calc_hours != null ? b.calc_hours : b.hours;
-    if(b.salaried) return `<div class="card"><b style="font-size:16px">Salaried time off</b><div style="font-size:22px;margin:6px 0"><b>${hh(have)}</b> left</div>
-      <p class="muted sm" style="margin:0">Salaried staff get ${esc(c.hours_per_year || 80)} hours a year${b.used_ytd != null ? ` · used this year: ${hh(b.used_ytd)}` : ""}.</p></div>`;
-    const wk = b.worked_ytd && b.calc_from ? (+b.worked_ytd) / Math.max(1, (Date.now() - Date.parse(new Date().getFullYear() + "-01-01")) / (7 * DAY)) : null;
-    return `<div class="card"><b style="font-size:16px">Paid time off you're earning</b><div style="font-size:22px;margin:6px 0"><b>${hh(have)}</b> available</div>${c.maximum_to_accrue && have != null ? `<div class="meter" title="${esc(hh(have))} of ${esc(c.maximum_to_accrue)} h max"><i style="width:${Math.min(100, Math.round(100 * +have / +c.maximum_to_accrue))}%"></i></div>` : ""}
-      <p style="margin:0 0 4px">You earn <b>${esc(c.hours_per)} h</b> of paid time off for every <b>${esc(c.hours_worked)} h</b> you work, up to <b>${esc(c.maximum_to_accrue)} h</b> saved up. It rolls over and never expires.${have != null && c.maximum_to_accrue && +have >= +c.maximum_to_accrue ? ` <span class="pill amber">You're at the ${esc(c.maximum_to_accrue)} h max. You keep all of it; you start earning again once you use some.</span>` : ""}</p>
-      <p class="muted sm" style="margin:0 0 4px">Paid time off is 40 hours at most at one time.</p>
-      ${wk ? `<p class="muted sm" style="margin:0">At your pace this year (about ${hh(wk)} worked a week) that's about ${hh(wk * c.hours_per / c.hours_worked)} of PTO a week.</p>` : ""}
-      <p class="muted sm" style="margin:4px 0 0">Ask for it under Staffing ▸ Request Time Off. Source: hours you worked (your hub clock-ins) × the PTO policy, worked out by the hub${b.as_of ? ` (updated ${esc(dnm(dkey(b.as_of)))})` : ""}.</p></div>`; }).join("");
+    const what = b.salaried ? "Salaried time off" : "Paid time off";
+    const more = b.salaried ? `Salaried staff get ${esc(c.hours_per_year || 80)} hours a year${b.used_ytd != null ? `; used this year: ${hh(b.used_ytd)}` : ""}.`
+      : `You earn ${esc(c.hours_per)} h for every ${esc(c.hours_worked)} h you work, up to ${esc(c.maximum_to_accrue)} h. It rolls over and never expires; 40 hours at most at one time. Source: your hub clock-ins × the PTO policy${b.as_of ? ` (updated ${esc(dnm(dkey(b.as_of)))})` : ""}.`;
+    return `<details class="tile" style="margin-bottom:12px;padding:10px 16px"><summary style="cursor:pointer;font-size:14px">${what}: <b>${hh(have)}</b> ${b.salaried ? "left" : "available"} <span class="sub">· details</span></summary>
+      <p class="sub" style="margin:6px 0 0">${more} Ask for it under Staffing ▸ Request Time Off.</p></details>`; }).join("");
   const rows = r.data || [], f = x => x == null ? "—" : (+x).toLocaleString(undefined, { maximumFractionDigits:2 });
   const ix = i => i == null ? "" : ` <span class="pill ${i >= 115 ? "green" : i <= 85 ? "amber" : ""}" title="100 = the team's average">${i}</span>`;
   const grps = [...new Set(rows.map(x => x.grp))];
   fcCss(); v.innerHTML = `<div class="page stf wide mp"><div class="mhead"><h2>My performance</h2><p>See how you're doing and where you can shine. These numbers are about you, so you can beat your own best week.</p></div>
-    ${genCard((fcr && fcr.data) || [])}${fcCard((fcr && fcr.data) || [])}${ptoCard}${grps.map(g => { const R = rows.filter(x => x.grp === g), cur = R.find(x => x.period === "30d") || R[0], m = (cur && cur.metrics) || {}, idx = m.idx || {};
+    ${genCard((fcr && fcr.data) || [])}${fcCard((fcr && fcr.data) || [])}${grps.map(g => { const R = rows.filter(x => x.grp === g), cur = R.find(x => x.period === "30d") || R[0], m = (cur && cur.metrics) || {}, idx = m.idx || {};
       const bar = (k, l) => { const n = idx[k]; if(n == null) return ""; const w = Math.max(2, Math.min(100, n / 2));
         return `<div class="row"><span class="lab">${esc(l)}</span><span class="trk" title="${esc(l)}: ${f(m[k])} · 100 = the team's average"><i style="width:${w}%"></i><b></b></span><span class="val">${f(m[k])}</span></div>`; };
       if(!m.grade && !Object.keys(idx).length) return "";   // nothing to show for this kind of work yet
@@ -535,7 +533,7 @@ window.myPerf = async function(v){
           <div class="sub" style="margin-top:4px">A+ top 10% · A top 25% · B top half · C · D bottom 25%</div></div></div>
         <div style="margin-top:10px">${(PM[g] || []).map(([k, l]) => bar(k, l)).join("")}</div>
         <div class="sub">The line in the middle of each bar = the team's average. Past it = above average.</div></div>`; }).join("")
-      || (pto.length ? "" : `<div class="card"><p class="muted" style="margin:0">There aren't enough numbers for you yet. Check back after a few weeks of work.</p></div>`)}
+      || (pto.length ? "" : `<div class="card"><p class="muted" style="margin:0">There aren't enough numbers for you yet. Check back after a few weeks of work.</p></div>`)}${ptoCard}
     <p class="muted sm">Your grade compares you with the others who do the same kind of work, per hour you're clocked in. Sources: Breezeway tasks, your hub clock-ins (Hubstaff before Nov 11), Reservation check lists, Freshdesk tickets, phone calls (Track), Work check computer activity and guest reviews, worked out once a day by the hub.</p></div>`;
 };
 
