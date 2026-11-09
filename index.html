@@ -1686,11 +1686,20 @@ const MT_EXE = "https://ogugdhhiajebfdwpzofp.supabase.co/storage/v1/object/publi
    app (v1.3.0+ registers moosetime:// for the Windows user) already signed in as them. The browser asks "Open Moose Time?" the
    first time (tick "Always allow"). The app tells the hub it's running every minute (hub_work_app_seen, work_app_mine().seen_at). */
 const MT_WIN = /Windows NT/.test(navigator.userAgent) && !/Mobile|Android/.test(navigator.userAgent);
-async function mtStart(){
-  try{ const { data:{ session } } = await sb.auth.getSession(); if(!session) return false;
+function mtSay(t, bad){   // small note bottom-left so a click always shows what happened
+  let b = document.getElementById("mtsay"); if(!b){ b = document.createElement("div"); b.id = "mtsay"; document.body.appendChild(b); }
+  b.style.cssText = "position:fixed;left:16px;bottom:16px;z-index:70;background:" + (bad ? "#fff3f3;border:1px solid #e3b4b4" : "#fff;border:1px solid #cfd8c4") + ";border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.15);padding:10px 14px;max-width:min(420px,calc(100vw - 32px));font-size:14px";
+  b.textContent = t; clearTimeout(b._t); b._t = setTimeout(() => b.remove(), 12000);
+}
+async function mtStart(quiet){
+  try{ const { data:{ session } } = await sb.auth.getSession(); if(!session){ if(!quiet) mtSay("Sign in to the hub first.", 1); return false; }
     const r = await fetch(MM_CONFIG.url + "/functions/v1/work-app-handoff", { method:"POST", headers:{ Authorization:"Bearer " + session.access_token, apikey:MM_CONFIG.anonKey, "Content-Type":"application/json" }, body:"{}" });
-    const j = await r.json(); if(!j || !j.h) return false;
-    location.href = "moosetime://open?h=" + encodeURIComponent(j.h); return true; }catch(e){ return false; }
+    const j = await r.json().catch(() => ({}));
+    if(!j || !j.h){ console.warn("Moose Time start:", r.status, j && j.error); if(!quiet) mtSay("Couldn't start Moose Time: " + ((j && j.error) || ("the hub answered " + r.status)), 1); return false; }
+    console.info("Moose Time start: opening moosetime://");
+    location.href = "moosetime://open?h=" + encodeURIComponent(j.h);
+    if(!quiet) mtSay("Opening Moose Time… If your browser asks \"Open Moose Time?\", tick Always allow and click Open. Nothing happens? Download and open Moose Time once on this computer.");
+    return true; }catch(e){ console.warn("Moose Time start:", e); if(!quiet) mtSay("Couldn't start Moose Time: " + (e.message || e), 1); return false; }
 }
 window.mtStart = mtStart;
 const mtRunning = m => !!(m && m.seen_at && Date.now() - Date.parse(m.seen_at) < 3 * 6e4);
@@ -1703,7 +1712,7 @@ async function mtAuto(){
   if(!m || !m.needs || !m.seen_ver || mtRunning(m)) return;
   if(m.seen_ver.split(".").map(Number).reduce((a, x) => a * 100 + x, 0) < 10300) return;   // older app: no moosetime:// link yet
   try{ sessionStorage.setItem("mm_mt_auto", "1"); }catch(e){}
-  mtStart();
+  mtStart(true);
   // if the browser didn't open it (blocked, or "Cancel"), leave one tap-able reminder for a while
   setTimeout(() => { if(document.getElementById("mtbar")) return;
     const b = document.createElement("div"); b.id = "mtbar";
