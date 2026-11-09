@@ -310,6 +310,7 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .hrg{display:inline-grid;place-items:center;min-width:1.9em;padding:2px 6px;border-radius:8px;font-weight:800;color:#fff;background:#6b7280}
 .hrg-A{background:#2f6d1e}.hrg-B{background:#5d8f2a}.hrg-C{background:#b38a12}.hrg-D{background:#b4532a}
 .srbig .hrg{font-size:30px;min-width:1.6em;margin-right:4px}
+.srg .srbig em.srgr{font-style:normal;font-size:30px;font-weight:800;line-height:1.1}.srg .srbig em.srgr small{font-size:14px;font-weight:600;color:var(--muted)}.srgr-A{color:#2f6d1e}.srgr-B{color:#5d8f2a}.srgr-C{color:#b38a12}.srgr-D{color:#b4532a}
 .srlbh{margin:4px 0 6px;font-size:14px}
 .srlbtab{width:100%;border-collapse:collapse;font-size:13px}
 .srlbtab th,.srlbtab td{padding:7px 8px;text-align:left;border-top:1px solid var(--ovgrid);white-space:nowrap}
@@ -1299,7 +1300,7 @@ function srGlance(h) {
   const zs = (SR.qAll || []).map(r => r.z).filter(v => v != null), gp = z != null && zs.length > 1 ? zs.filter(v => v < z).length / (zs.length - 1) : null, gr = hrGrade(gp);
   const rnk = z != null && zs.length ? zs.filter(v => v > z).length + 1 : null;
   const lvl2 = gr ? { "A+": "One of our best homes", A: "Nicer than most of our homes", B: "In the better half of our homes", C: "In the lower half of our homes", D: "Below most of our homes" }[gr] : lvl;
-  const rater = `<div class="srbig">${gr ? hrBadge(gr) : "—"}<span>${escH(lvl2)}${gp != null ? ` · better than ${Math.round(gp * 100)}% of our homes (#${rnk} of ${zs.length})` : ""}</span></div>` +
+  const rater = `<div class="srbig">${gr ? `<em class="srgr srgr-${gr[0]}">${gr} <small>grade</small></em>` : "—"}<span>${escH(lvl2)}${gp != null ? ` · better than ${Math.round(gp * 100)}% of our homes (#${rnk} of ${zs.length})` : ""}</span></div>` +
     row("Grade scale", "A+ top 10% · A top 25% · B top half · C · D bottom 25%") +
     row("Head-to-head score", m?.elo ? `${Math.round(m.elo)} (1500 = average)` : "—") +
     row("Staff head-to-head picks", m ? `${m.games} matchup${m.games === 1 ? "" : "s"}` : "none yet") +
