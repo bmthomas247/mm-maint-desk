@@ -2805,7 +2805,7 @@ function projects(){ var imp=(((S.feeds.projects||{}).projects)||[]).map(functio
   if(e.title) x.title=e.title; if(e.props) x.props=e.props;
   x.stage=e.stage||p.stage; x.next=e.next||""; x.who=e.who||""; x.followers=e.followers||[]; x.notesD=e.notes||[]; x.hidden=!!e.hidden; x.edit=e;
   var ups=(p.updates||[]).filter(function(u){ return u.date; }); x.lastDate=ups.length?ups[ups.length-1].date:p.updated;
-  if(x.notesD.length){ var ln=ymd(x.notesD[x.notesD.length-1].at); if(ln>x.lastDate) x.lastDate=ln; }
+  if(x.notesD.length){ var ln=ymd(x.notesD[x.notesD.length-1].at); if(ln>x.lastDate) x.lastDate=ln; x.lastAt=new Date(Math.max.apply(null,x.notesD.map(function(n){ return +n.at||0; }))).toISOString(); }
   x.homes=projHomes(p); return x; }); }
 var PSTAGE=[["open","Open"],["scheduled","Scheduled"],["waiting","Waiting"],["on hold","On hold"],["done","Done"]];
 /* Projects page = Locks office look + feature-card grid (Brandon 2026-11-09, his FlowUp sample). Card tap = the project in a pop-up (#hpop, same as Property Details). */
@@ -2837,7 +2837,11 @@ function vProjects(){
       if(f==="stale") return stale(p); if(f==="nonext") return p.stage!=="done" && !p.next; if(f==="week") return p.stage!=="done" && daysBetween(p.lastDate||p.updated,t)<=7;
       if(f && f!=="all") return p.stage===f; return true; })
     .filter(function(p){ return !q || (p.title+" "+p.homes.join(" ")+" "+(p.next||"")+" "+(p.who||"")+" "+(p.edit.vendorNames||[]).join(" ")).toLowerCase().indexOf(q)>-1; })
-    .sort(function(a,b){ return (stale(b)?1:0)-(stale(a)?1:0) || (b.lastDate||"").localeCompare(a.lastDate||""); });
+    .sort(function(a,b){ var o=u.projSort||"activity";   // Brandon 2026-11-09: sort by recent activity or start date
+      if(o==="new") return String(b.created||"").localeCompare(String(a.created||"")) || String(b.lastDate||"").localeCompare(String(a.lastDate||""));
+      if(o==="old") return String(a.created||"9").localeCompare(String(b.created||"9")) || String(b.lastDate||"").localeCompare(String(a.lastDate||""));
+      if(o==="quiet") return String(a.lastDate||"").localeCompare(String(b.lastDate||""));
+      return String(b.lastAt||b.lastDate||"").localeCompare(String(a.lastAt||a.lastDate||"")); });
   if(u.proj && !all.some(function(p){ return p.id===u.proj; })) u.proj="";
   var cnt=function(st){ return live.filter(function(p){ return p.stage===st; }).length; };
   var tile=function(key,n,label){ return '<button class="pjst'+(f===key?' on':'')+'" data-projf="'+key+'"><b>'+n+'</b><span>'+label+'</span></button>'; };
@@ -2847,6 +2851,7 @@ function vProjects(){
   h+='<div class="pjbar">'+[["all","All",live.length],["open","Open",cnt("open")],["scheduled","Scheduled",cnt("scheduled")],["waiting","Waiting",cnt("waiting")],["on hold","On hold",cnt("on hold")],["done","Done",all.length-live.length]]
       .map(function(x){ return '<button class="pjpill'+((f||"all")===x[0]?' on':'')+'" data-projf="'+esc(x[0])+'">'+x[1]+'<i>'+x[2]+'</i></button>'; }).join("")+
     '<input type="search" id="projq" placeholder="Find a project, home, person…" value="'+esc(u.projQ||"")+'">'+
+    '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Sort <select id="projsort" style="border-radius:999px;padding:6px 10px;border:1px solid #e1e6d6">'+[["activity","Recent activity"],["quiet","Least recent activity"],["new","Started: newest first"],["old","Started: oldest first"]].map(function(o){ return '<option value="'+o[0]+'"'+((u.projSort||"activity")===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join("")+'</select></label>'+
     '<label class="toggle"><input type="checkbox" id="projoffice"'+(u.projOffice?' checked':'')+'> Office items</label>'+
     '<label class="toggle"><input type="checkbox" id="projdone"'+(u.projDone?' checked':'')+'> Show done</label></div>';
   h+=ps.length?'<div class="pjgrid">'+ps.map(function(p){ var st=daysBetween(p.lastDate||p.updated,t), hot=stale(p);
@@ -2855,7 +2860,7 @@ function vProjects(){
         (p.homes.length?'<div class="pjh">'+p.homes.slice(0,4).map(function(c){ return '<span>'+esc(c)+'</span>'; }).join("")+(p.homes.length>4?'<span>+'+(p.homes.length-4)+'</span>':'')+(p.office?'<span>Office</span>':'')+'</div>':'')+
         ((p.edit.vendorNames||[]).length?'<div style="font-size:12px;font-weight:700">🧰 '+esc(p.edit.vendorNames.slice(0,3).join(", "))+(p.edit.vendorNames.length>3?' +'+(p.edit.vendorNames.length-3):'')+'</div>':'')+
         '<div class="pjn'+(p.next?'':' none')+'">'+(p.next?'👉 '+esc(p.next.slice(0,140)):'No next step written yet')+'</div>'+
-        '<div class="pjf">'+(p.who?'<span>'+esc(p.who)+'</span> · ':'')+'<span class="'+(st>10&&p.stage!=="done"?'late':'')+'">updated '+esc(ago(p.lastDate))+'</span>'+((p.edit.tickets||[]).length?' · 🎫 '+p.edit.tickets.length:'')+'<span class="go">Open →</span></div></button>'; }).join("")+'</div>'
+        '<div class="pjf">'+(p.who?'<span>'+esc(p.who)+'</span> · ':'')+'<span class="'+(st>10&&p.stage!=="done"?'late':'')+'">updated '+esc(ago(p.lastDate))+'</span>'+(p.created?' · <span>started '+esc(fmtD(p.created))+'</span>':'')+((p.edit.tickets||[]).length?' · 🎫 '+p.edit.tickets.length:'')+'<span class="go">Open →</span></div></button>'; }).join("")+'</div>'
     :'<div class="panel pad empty">No projects match.</div>';
   var sel=u.proj?all.filter(function(p){ return p.id===u.proj; })[0]:null;
   if(sel) h+='<div class="hpop" id="hpop" role="dialog" aria-modal="true" aria-label="'+esc(sel.title)+'"><div class="hpbox"><div class="hpbar"><button class="btn sm" data-act="projclose">← All projects</button><button class="mx" data-act="projclose" aria-label="Close" title="Close">✕</button></div>'+projDetail(sel)+'</div></div>';
@@ -5055,6 +5060,7 @@ document.addEventListener("change",function(ev){
   if(t.id==="m_prop" && $("m_job")){ $("m_job").innerHTML=jobOptions(t.value.trim(),""); return; }
   if(t.id==="projoffice"){ S.ui.projOffice=t.checked; return render(); }
   if(t.id==="projdone"){ S.ui.projDone=t.checked; return render(); }
+  if(t.id==="projsort"){ S.ui.projSort=t.value; return render(); }
   if(t.id==="pjv_q"){ var vq=t.value.toLowerCase().trim(); document.querySelectorAll(".pjvrow").forEach(function(r){ r.style.display=!vq||r.dataset.t.indexOf(vq)>-1?"":"none"; }); return; }
   if(t.id==="projq"){ S.ui.projQ=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.classList&&t.classList.contains("care_pick")){ var ck2=t.dataset.cpk; S.ui.carePick=S.ui.carePick||{}; S.ui.carePick[ck2]=S.ui.carePick[ck2]||{}; S.ui.carePick[ck2][t.value]=t.checked; return render(); }
