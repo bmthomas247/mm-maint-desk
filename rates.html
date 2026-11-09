@@ -1790,6 +1790,29 @@ function srSteppers(root) { (root || document).querySelectorAll(".dyng input[typ
     if (i.value === "") i.value = "0"; d > 0 ? i.stepUp() : i.stepDown();
     i.dispatchEvent(new Event("input", { bubbles: true })); i.dispatchEvent(new Event("change", { bubbles: true })); }); }); }
 // Pop-up after Build prices: every night whose price or minimum stay changed vs what's saved (or Track now)
+function srSendOpen(R, go) {
+  const D = R.filter(r => r.v.saved && !r.v.booked && r.v.rate != null).map(r => ({ k: r.k, b: r.t && r.t.rate != null ? +r.t.rate : null, bmin: r.t ? r.t.min_nights : null, a: +r.v.rate, amin: r.v.min ?? null, why: (SR.ours_n[r.k] || {}).note || "" }));
+  const ch = D.filter(d => d.b == null || Math.abs(d.a - d.b) >= 1 || (d.amin ?? null) !== (d.bmin ?? null));
+  const up = ch.filter(d => d.b != null && d.a > d.b), dn = ch.filter(d => d.b != null && d.a < d.b), avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const bA = avg(D.map(d => d.b).filter(v => v != null)), aA = avg(D.map(d => d.a)), sum = ch.reduce((t, d) => t + (d.b != null ? d.a - d.b : 0), 0);
+  const short = w => String(w).split(" → ").filter(x => !/^(guest total|= \$|\$\d+ under)/.test(x)).map(x => x.replace(/ → \$[\d,]+$/, "")).slice(0, 3).join(" · ");
+  document.getElementById("srDiff")?.remove();
+  const el = document.createElement("div"); el.id = "srDiff";
+  el.innerHTML = `<div class="sdbox" role="dialog" aria-label="Send to Track"><div class="sdhead"><div><h3>Send ${escH(srName(SR.code))} to Track?</h3>
+      <div class="cs">${D.length} saved nights, ${escH(SR.from)} → ${escH(SR.to)}. "Track now" = the rack rate in Track (read in the last 30 minutes). Booked nights are never sent.${SR.switch === "on" ? " It goes within a minute." : " Sending is switched off until go-live, so it waits in the queue."}</div></div><button class="sdx" aria-label="Close">✕</button></div>
+    <div class="sdtiles"><div><b>${ch.length}</b><span>nights change in Track</span></div><div><b class="up">${up.length}</b><span>go up</span></div><div><b class="dn">${dn.length}</b><span>go down</span></div>
+      <div><b>${fmt(bA)} → ${fmt(aA)}</b><span>average night</span></div><div><b class="${sum >= 0 ? "up" : "dn"}">${sum >= 0 ? "+" : "−"}${fmt(Math.abs(sum))}</b><span>all nights added up</span></div></div>
+    <div class="sdwrap">${ch.length ? `<table class="srt"><tr><th>Night</th><th>Track now</th><th>We send</th><th>Change</th><th>Min nights</th><th>Why</th></tr>${ch.map(d => { const dd = d.b != null ? d.a - d.b : null, pc = d.b ? dd / d.b * 100 : null;
+      return `<tr><td>${new Date(d.k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</td><td>${fmt(d.b)}</td><td><b>${fmt(d.a)}</b></td>
+        <td class="${dd > 0 ? "up" : dd < 0 ? "dn" : ""}">${dd == null ? "new" : dd === 0 ? "same" : (dd > 0 ? "+" : "−") + fmt(Math.abs(dd)) + (pc != null ? ` (${pc > 0 ? "+" : ""}${Math.round(pc)}%)` : "")}</td>
+        <td>${(d.amin ?? null) !== (d.bmin ?? null) ? `${d.bmin ?? "—"} → <b>${d.amin ?? "—"}</b>` : d.amin ?? "—"}</td><td class="sdwhy" title="${escH(d.why)}">${escH(short(d.why))}</td></tr>`; }).join("")}</table>`
+      : `<p class="small muted">Track already has these prices and minimum stays. Sending changes nothing.</p>`}</div>
+    <div class="sdfoot"><span class="sp"></span><button class="ovbtn" data-sd="close">Cancel</button><button class="ovbtn dygo" data-sd="send"${ch.length ? "" : " disabled"}>📤 Send ${ch.length} night${ch.length === 1 ? "" : "s"} to Track</button></div></div>`;
+  document.body.appendChild(el);
+  const close = () => { el.remove(); document.removeEventListener("keydown", esc); }, esc = e => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", esc);
+  el.addEventListener("click", e => { if (e.target === el || e.target.closest(".sdx") || e.target.dataset.sd === "close") return close();
+    if (e.target.dataset.sd === "send") { close(); go(); } }); }
 function srDiffOpen() { const D = (SR.diff || []), ch = D.filter(d => d.before == null || Math.abs(d.after - d.before) >= 1 || (d.amin ?? null) !== (d.bmin ?? null));
   document.getElementById("srDiff")?.remove();
   const up = ch.filter(d => d.before != null && d.after > d.before), dn = ch.filter(d => d.before != null && d.after < d.before), avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
@@ -2009,14 +2032,16 @@ function srWire(R) {
     const A = Y.base === "a", L = Math.max(+Y.learnMin || -20, Math.min(lMaxE, +(Y.learn?.lvl || 0))), LP = (+Y.lowPct || 35) / 100, U = +Y.under || 0;
     for (const r of R) { if (SR.bkd?.[r.k]) continue; if (Y.which === "empty" && r.v.set) continue;
       const ct = srCompTot(r.k), clo = A && ct ? srCompLow(r.k, LP) : null, out0 = Math.round((new Date(r.k + "T12:00:00") - new Date(today + "T12:00:00")) / 864e5);
-      // standard = comps' average − $under, moved by what bookings taught us; last minute slides toward the cheaper comps
-      const std = ct ? (ct.v - U) * (1 + L / 100) * (1 + RV / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
-      const mix = ourAv(r.k) === "0" ? 0 : out0 <= 3 ? (+Y.mix3 || 0) / 100 : out0 <= 7 ? (+Y.mix7 || 0) / 100 : 0;
+      const hN = (typeof holOf === "function" && holOf(r.k)[0]) || (typeof peakOf === "function" && peakOf(r.k)) || "", hQ = out0 <= 14 ? 0.75 : 0.9;
+      const hV = A && ct && hN ? srCompLow(r.k, hQ) : null, cv = hV != null && hV > ct.v ? hV : ct?.v;
+      // standard = comps' average − $under (holidays: the comps' high end), moved by what bookings taught us; last minute slides toward the cheaper comps (not on holidays)
+      const std = ct ? (cv - U) * (1 + L / 100) * (1 + RV / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
+      const mix = hN || ourAv(r.k) === "0" ? 0 : out0 <= 3 ? (+Y.mix3 || 0) / 100 : out0 <= 7 ? (+Y.mix7 || 0) / 100 : 0;
       const tgt = std == null ? null : low != null && low < std ? std + (low - std) * mix : std;
       const b0 = A ? srRackFor(tgt, ct?.nt) : Y.base === "s" ? r.s?.price : Y.base === "b" ? r.b : Y.base === "t" ? (r.t ? +r.t.rate : null) : Y.base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null);
       let far = null; if (b0 == null || out0 >= (+Y.farDays || 180)) { far = srLyRate(r.k); if (!far && b0 == null) continue; }
       const why = far ? [`${out0} days out (comps too far out): last year at ${far.who} ${fmt(far.v)}/night (our rate, ${far.n} stays around ${far.near.slice(5)}) + ${Y.farLY ?? 20}% = ${fmt(far.v * (1 + (Y.farLY ?? 20) / 100))}`]
-        : A ? [`comps' average total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `$${U} under${L ? `, learned ${L > 0 ? "+" : ""}${L.toFixed(1)}%` : ""}${RV ? `, ${RB.short} ${RV > 0 ? "+" : ""}${RV.toFixed(1)}%` : ""} = ${fmt(std)}`,
+        : A ? [cv !== ct.v ? `${hN.replace(/^event: /, "")}: comps' high end (${Math.round(hQ * 100)}th percentile) ${fmt(cv)}/night (average ${fmt(ct.v)})` : `comps' average total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `$${U} under${L ? `, learned ${L > 0 ? "+" : ""}${L.toFixed(1)}%` : ""}${RV ? `, ${RB.short} ${RV > 0 ? "+" : ""}${RV.toFixed(1)}%` : ""} = ${fmt(std)}`,
           ...(mix && low != null && low < std ? [`${out0} days out: ${Math.round(mix * 100)}% toward the cheaper comps (${fmt(clo)}) = ${fmt(tgt)}`] : []), `guest total ${fmt(tgt)} → our rate ${fmt(b0)}`]
         : [`start: ${{ s: "engine", c: "comps' daily rate", b: "our other homes' average", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = far ? far.v * (1 + (Y.farLY ?? 20) / 100) : b0;
       const step = (f, t) => { if (far || !f || f === 1) return; v *= f; why.push(`${t} ${pc((f - 1) * 100)} → ${fmt(v)}`); };
@@ -2080,8 +2105,7 @@ function srWire(R) {
     const r = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   on("srPush", "onclick", async () => { if (Object.keys(SR.edits).length) return alert("Save first, then send.");
     const n = R.filter(r => r.v.saved).length; if (!n) return alert("No saved suggestions in these dates. Save first.");
-    if (!confirm(`Send our ${n} saved night${n > 1 ? "s" : ""} for ${srName(SR.code)} (${SR.from} → ${SR.to}) to Track's rack rate?${SR.switch === "on" ? " It goes within a minute." : " Sending is switched off until go-live, so it will wait in the queue."}`)) return;
-    const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
+    srSendOpen(R, async () => { const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return alert(niceE(r.error)); loadSetRates(); }); });
   document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!confirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   on("srCsv", "onclick", () => { if (!R) return; const q = v => v == null ? "" : String(v);
     const lines = [["Night", "Track now", "Track min", srGrpName() + " avg", "Comps daily rate", "Our rate", "Our min"].join(",")].concat(R.map(r => [r.k, q(r.t?.rate), q(r.t?.min_nights), q(r.b), r.c ? Math.round(r.c.adr) : "", q(r.v.rate), q(r.v.min)].join(",")));
