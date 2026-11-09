@@ -1552,13 +1552,14 @@ function srDraw() {
         <label>Comps 60%+ booked: up %${num("dyHi", Y.hiD)}</label><label>Comps 20% or less booked: down %${num("dyLo", Y.loD)}</label>
         <label title="Compares how booked our home is over the next 30 nights with the comps">We're 15+ pts behind the comps: down %${num("dyPaceD", Y.paceD)}</label><label>We're 15+ pts ahead: up %${num("dyPaceU", Y.paceU)}</label>
         <label>Within 7 days down %${num("dyLm7", Y.lm7)}</label><label>Within 3 days down %${num("dyLm3", Y.lm3)}</label>
-        <label>Never more than % under the comps' total${num("dyMaxU", Y.maxU ?? 10)}</label></details></div>
+</details></div>
       <div class="dyng"><b>3 · Day of week %</b>${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((n, i) => `<label>${n}: up %<input type="number" data-dow="${i}" value="${Y.dow[i]}" step="1"></label>`).join("")}
         <label>Holidays + events up %${num("dyHol", Y.hol)}</label><div class="small muted">Sunday stays under that weekend's Fri/Sat unless Monday is a holiday.</div></div>
       <div class="dyng"><b>4 · Our calendar</b><label title="Open nights boxed in by bookings on both sides">Gap between stays: down %${num("dyGapD", Y.gapD)}</label>
         <label title="Gaps of 2 up to this many nights count">Counts as a gap up to (nights)${num("dyGapMax", Y.gapMax)}</label>
         <label title="Open night right before or after a booked stay (half on Fri/Sat)">Next to a booked stay: down %${num("dyAdjD", Y.adjD)}</label><div class="small muted">Gaps get a min stay that fits (never 1 night).</div></div>
       <div class="dyng"><b>5 · Last minute + weather</b><label title="Normally we price near the comps' average. Last minute we move toward what the cheaper comps charge.">Cheaper comps = the lowest %${num("dyLowPct", Y.lowPct ?? 35)}</label>
+        <label title="Brandon 2026-11-09: our price never goes more than this % under the comps' average guest total, whatever the start, last minute or learning. Walk-away and owner minimums can still raise it.">Never more than % under the comps' average${num("dyMaxU", Y.maxU ?? 10)}</label>
         <label title="0 = stay at our standard price, 100 = all the way to the cheaper comps">Within 7 days: move toward them %${num("dyMix7", Y.mix7 ?? 50)}</label>
         <label>Within 3 days: move toward them %${num("dyMix3", Y.mix3 ?? 100)}</label><label>120+ days out up %${num("dyFar", Y.far)}</label>
         <label style="grid-column:1/-1" title="Nights too far out for comp prices start from what guests paid at this home on the same nights last year (same weekday, ±7 days), or at our other homes in its group, plus this %. Brandon 2026-11-09: 15–25% so we save our calendar.">Too far out for comps: last year's rate + %${num("dyFarLY", Y.farLY ?? 20)}</label>
@@ -2054,8 +2055,9 @@ function srWire(R) {
     const own = SR.owner, ownMin = k => own ? (own.min_price_peak != null && own.peak_start && own.peak_end && k >= own.peak_start && k <= own.peak_end ? +own.min_price_peak : own.min_price != null ? +own.min_price : null) : null;
     for (const x of built) { let v = x.v; const wa = Y.floor !== "" ? +Y.floor : null, om = ownMin(x.r.k);
       // never give it away: never under the cheaper comps (A), or not more than maxU% under the comps' total (other starts)
-      const lo = x.ly ? null : A ? (x.clo != null ? srRackFor(x.clo - U, x.ct?.nt) : null) : x.ct && Y.maxU !== "" ? srRackFor(x.ct.v * (1 - (+Y.maxU || 0) / 100), x.ct.nt) : null;
-      if (lo != null && v < lo) { v = lo; x.why.push(A ? `held at the cheaper comps' price → ${fmt(v)}` : `held at ${+Y.maxU || 0}% under the comps' total → ${fmt(v)}`); }
+      const mU = Y.maxU === "" || Y.maxU == null ? 10 : +Y.maxU, l10 = x.ct ? srRackFor(x.ct.v * (1 - mU / 100), x.ct.nt) : null;
+      const lc = !x.ly && A && x.clo != null ? srRackFor(x.clo - U, x.ct?.nt) : null, lo = l10 != null && lc != null ? Math.max(l10, lc) : (l10 ?? lc);
+      if (lo != null && v < lo) { v = lo; x.why.push(lo === lc && lc !== l10 ? `held at the cheaper comps' price → ${fmt(v)}` : `held at ${mU}% under the comps' average total (never lower) → ${fmt(v)}`); }
       if (om != null && v < om) { v = om; x.why.push(`owner minimum ${fmt(om)}`); }
       const wsN = Y.floorStay !== "" && Y.floorStay != null ? +Y.floorStay : (Y.floor !== "" && Y.floor != null ? null : srBedStay()), wsH = Y.floorStayHol !== "" && Y.floorStayHol != null ? +Y.floorStayHol : null;
       const useH = wsH != null && x.hol && !x.gap, ws = useH ? wsH : wsN;
