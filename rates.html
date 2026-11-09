@@ -225,6 +225,7 @@ main .card h2{font-weight:700}
 .ovhead .sp{flex:1}.ovhead label{color:var(--muted);font-size:13px}
 .ovbtn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--ovcard);color:var(--ink);border-radius:12px;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--ovsh);min-height:38px}
 .ovbtn:hover{border-color:var(--moose)}
+.srmore{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px;background:var(--ovbg,#f3f6ee);border-radius:12px;margin:8px 0;font-size:13px}
 .srhfs{margin-left:auto;display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}.srhf{background:var(--ovbg,#f3f6ee);border-radius:12px;padding:6px 12px;text-align:center;min-width:64px}.srhf b{display:block;font-size:20px;line-height:1.15}.srhf span{font-size:11px;color:var(--muted)}.srhfx{display:flex;flex-direction:column;justify-content:center;font-size:12px;max-width:260px}.srhfx span{color:var(--muted)}
 .ovfil{display:flex;gap:10px 12px;flex-wrap:wrap;align-items:flex-end;background:var(--ovcard);border-radius:16px;box-shadow:var(--ovsh);padding:12px 14px;margin:0 0 16px}
 .ovfil label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -1108,13 +1109,13 @@ const SR = { code: null, from: null, to: null, edits: {} };
 async function loadSetRates() {
   const el = $("srBody"); el.innerHTML = `<p class="small muted">Loading…</p>`;
   const today = iso(new Date(new Date().setHours(12, 0, 0, 0)));
-  if (!SR.from) { SR.from = today; SR.to = addD(today, 59); }
+  if (!SR.from) { SR.from = today; SR.to = addD(today, 119); }   // Brandon 2026-11-08: the 120-night booking window first
   const [hm, sw, ours, hh] = await Promise.all([sb.from("rates_set_homes").select("*").order("code"), sb.rpc("rates_set_switch"),
     sb.from("comps").select("id,set_id,label,bedrooms,sleeps").eq("tier", "Ours").eq("active", true),
     sb.from("hub_homes").select("code,beds,baths,bed_config,community").eq("active", true)]);
   SR.hh = Object.fromEntries((hh.data || []).map(r => [r.code, r]));
   if (hm.error) { el.innerHTML = `<p class="up small">Couldn't load: ${escH(hm.error.message)}</p>`; return; }
-  SR.homes = (hm.data || []).filter(h => h.on_test); SR.switch = sw.data || "off";
+  SR.homes = (hm.data || []).filter(h => h.on_test).sort((a, b) => srName(a.code).localeCompare(srName(b.code), undefined, { numeric: true })); SR.switch = sw.data || "off";
   SR.ours = (ours.data || []).map(c => ({ ...c, code: houseName(c.label || c.id, state.sets.find(s => s.id === c.set_id)?.name) })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   if (!SR.code || !SR.homes.some(h => h.code === SR.code)) SR.code = SR.homes[0]?.code || null;
   if (!SR.code) { srDraw(); return; }
@@ -1445,7 +1446,7 @@ function srDraw() {
     <div class="ovfil"><label>Test home<select id="srHome">${SR.homes.map(x => `<option value="${escH(x.code)}"${x.code === SR.code ? " selected" : ""}>${escH(srName(x.code))}</option>`).join("") || "<option value=''>No test homes yet</option>"}</select></label>
       <label>Add a home to the test<select id="srAdd"><option value="">Pick one of our homes…</option>${addOpts}</select></label>
       <label>Dates<button type="button" class="ovdate" id="srPick" title="Opens a two-month calendar: our price each night vs the comps, nights that look off in color">📅 ${new Date(SR.from + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })} → ${new Date(SR.to + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</button></label>
-      <div class="ovdq">${[30, 60, 90, 180].map(n => `<button class="ovchipb" data-srd="${n}">Next ${n}</button>`).join("")}</div>${srHomeFacts(h)}</div>`;
+      <div class="ovdq">${[30, 60, 90, 120, 180].map(n => `<button class="ovchipb" data-srd="${n}">Next ${n}</button>`).join("")}</div>${srHomeFacts(h)}</div>`;
   if (!h) { el.innerHTML = html + `<div class="ovc"><p class="small muted">Add one of our homes above to start.</p></div>`; srWire(); return; }
   const live = SR.switch === "on";
   html += `<div class="ovnote" style="background:${live ? "var(--greenbg,#e6f5ea)" : "var(--amberbg)"}">${live ? "✅ <b>Sending to Track is ON.</b>" : "⏸ <b>Sending to Track is OFF until go-live</b> (Brandon: Monday or Tuesday). You can set and save rates now; sends wait in the queue."}
@@ -1574,7 +1575,7 @@ function srDraw() {
         <td>${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy" tabindex="0" role="button" aria-label="Why this price" data-why="${escH(r.s.why || "")}" data-p="${r.s.price}" data-k="${r.k}">ⓘ</span>` : "—"}</td>
         <td title="${r.g ? escH(`${r.g.n} homes: ${fmt(r.g.lo)} to ${fmt(r.g.hi)}`) : ""}">${fmt(r.b)}${r.g ? `<div class="srair">${r.g.n} homes</div>` : ""}</td><td class="srctd" data-ctip="${r.k}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
         <td class="srrate"><input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin${r.v.set ? "" : " pre"}" title="${r.v.set ? "" : "Track's current rate"}">${r.v.changed ? srOurWhy(r) : ""}${r.v.saved && !r.v.changed ? `${srOurWhy(r)}<span class="srby" title="Suggested by ${escH(r.v.by || "")}${r.v.at ? ", " + escH(new Date(r.v.at).toLocaleString()) : ""}">${escH(srIni(r.v.by))}</span>` : ""}</td><td><input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm${r.v.set ? "" : " pre"}"></td>
-        ${srGuestCells(r)}</tr>`; }).join("") + `</table></div>
+        ${srGuestCells(r)}</tr>`; }).join("") + `</table>${SR.to < addD(iso(new Date()), 364) ? `<div class="srmore"><span>That's ${R.length} nights, through ${new Date(SR.to + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}. Want to see further out?</span><button class="ovbtn" data-srmore="60">Load 60 more nights</button></div>` : ""}</div>
     <div class="src">Suggested = our own pricing engine (hover ⓘ for its reason). Track now = rack rate (RR) + minimum stay in Track, read every 30 min. ${srGrpName()} = average rate in Track of our other homes there (test homes left out; Beyond's price while it prices them). Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
   html += srScore();
   // sends
@@ -1930,6 +1931,7 @@ function srWire(R) {
     if (!confirm(`Add ${c} to the Set rates test? Nothing is sent to Track until someone presses Send and Beyond is marked off for it.`)) { e.target.value = ""; return; }
     const r = await sb.rpc("rates_set_home", { p_code: c, p_on: true }); if (r.error) return alert(niceE(r.error)); SR.code = c; loadSetRates(); });
   on("srPick", "onclick", srCal);
+  document.querySelectorAll("[data-srmore]").forEach(b => b.onclick = () => { const w = b.closest(".wrap"), y = w?.scrollTop; SR.to = addD(SR.to, +b.dataset.srmore); srDraw(); const w2 = document.querySelector("#srBody .wrap"); if (w2 && y != null) w2.scrollTop = y; });
   document.querySelectorAll("[data-srd]").forEach(b => b.onclick = () => { const t = iso(new Date(new Date().setHours(12, 0, 0, 0))); SR.from = t; SR.to = addD(t, +b.dataset.srd - 1); srDraw(); });
   on("srBoff", "onchange", async e => { const v = e.target.checked;
     if (v && !confirm(`Confirm Beyond Pricing is turned OFF for ${srName(SR.code)} (in Beyond, or Kolleen did it)? If it's still on, Beyond will write over our rates in Track.`)) { e.target.checked = false; return; }
