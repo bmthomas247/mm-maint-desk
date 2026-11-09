@@ -391,7 +391,9 @@ window.staffSched = async function(v){
 /* ---------- Staffing ▸ My performance (Brandon 2026-10-29: "show it to the employee in the hub so they can keep track of how good they have
    been doing"). my_performance() = your own Techs / Office rows of Team ratings (hub_my_performance.sql); 100 = the team's average. ---------- */
 const PM = { tech:[["tasks","Tasks worked"],["tasks_per_hr","Tasks per regular hour"],["regular_hrs","Regular hours"],["days_worked","Days worked"],["reviews_good","Praised in guest reviews"]],
-  office:[["steps","Check list steps"],["fd_resolved","Freshdesk tickets resolved"],["fd_handled","Freshdesk tickets handled"],["fd_first_hrs","First reply (median hours, lower is better)"],["reviews_good","Praised in guest reviews"]] };
+  office:[["hours","Clocked hours"],["steps","Check list steps"],["steps_per_hr","Check list steps per hour"],["fd_resolved","Freshdesk tickets resolved"],["fd_per_hr","Freshdesk tickets per hour"],
+    ["calls","Phone calls"],["calls_per_hr","Phone calls per hour"],["talk_hrs","Time on the phone (hours)"],["activity","Computer activity (%)"],["flag_days","Days with a Work check flag"],
+    ["fd_first_hrs","First reply (median hours, lower is better)"],["reviews_good","Praised in guest reviews"]] };
 const PG = { tech:"Maintenance", office:"Office & front desk" }, PP = { "30d":"Last 30 days", "90d":"Last 90 days", "365d":"Last 12 months" };
 window.myPerf = async function(v){
   css(); v.innerHTML = `<div class="page stf wide"><p class="muted">Loading…</p></div>`;
@@ -413,10 +415,12 @@ window.myPerf = async function(v){
   v.innerHTML = `<div class="page stf wide"><h2 style="margin:0 0 6px">My performance</h2>
     <p class="muted" style="margin:0 0 10px">How you've been doing, from the same numbers your manager sees. The small number next to a measure compares you with the team: 100 = the team's average${rows[0] ? ` · updated ${esc(dnm(rows[0].as_of))}` : ""}.</p>
     ${ptoCard}${grps.map(g => `<div class="card"><b style="font-size:16px">${esc(PG[g] || g)}</b><div class="tow"><table><tr><th></th>${rows.filter(x => x.grp === g).map(x => `<th class="r">${esc(PP[x.period] || x.period)}</th>`).join("")}</tr>
+      <tr><td><b>Grade</b><div class="muted sm">A+ top 10% · A top 25% · B top half · C · D bottom 25%</div></td>${rows.filter(x => x.grp === g).map(x => { const gr = (x.metrics || {}).grade;
+        return `<td class="r">${gr ? `<span class="pill ${gr[0] === "A" ? "green" : gr === "C" ? "amber" : gr === "D" ? "red" : ""}" style="font-size:16px;font-weight:800">${esc(gr)}</span>` : "—"}</td>`; }).join("")}</tr>
       <tr><td><b>Overall</b></td>${rows.filter(x => x.grp === g).map(x => `<td class="r"><b>${x.score == null ? "—" : Math.round(x.score)}</b>${x.rank ? `<div class="muted sm">#${x.rank} of ${x.of_n}</div>` : ""}</td>`).join("")}</tr>
       ${(PM[g] || []).map(([k, l]) => `<tr><td>${esc(l)}</td>${rows.filter(x => x.grp === g).map(x => `<td class="r">${f((x.metrics || {})[k])}${ix(((x.metrics || {}).idx || {})[k])}</td>`).join("")}</tr>`).join("")}</table></div></div>`).join("")
       || (pto.length ? "" : `<div class="card"><p class="muted" style="margin:0">There aren't enough numbers for you yet. Check back after a few weeks of work.</p></div>`)}
-    <p class="muted sm">Sources: Breezeway tasks, Hubstaff hours, Reservation check lists, Freshdesk tickets and guest reviews, worked out once a day by the hub.</p></div>`;
+    <p class="muted sm">Your grade compares you with the others who do the same kind of work, per hour you're clocked in. Sources: Breezeway tasks, your hub clock-ins (Hubstaff before Nov 11), Reservation check lists, Freshdesk tickets, phone calls (Track), Work check computer activity and guest reviews, worked out once a day by the hub.</p></div>`;
 };
 
 /* ---------- Hubstaff renewal warning (Brandon 2026-10-29: "a warning going to admin until brandon or kim confirms that we have moved out
