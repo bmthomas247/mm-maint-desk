@@ -902,7 +902,8 @@ async function revMore(el, tab, ctx){
         <p style="margin:0 0 4px"><b>Short summary (Airbnb):</b> <span data-cpt>${esc(d.summary || "")}</span> <small class="muted">(${(d.summary || "").length} characters)</small> <button class="btn small" data-cpd>Copy</button></p>
         ${(d.favorites || []).length ? `<p style="margin:8px 0 2px"><b>What guests love</b> (their own words)</p>${d.favorites.map(f => `<div style="border-left:3px solid #9cc47a;padding:2px 0 2px 10px;margin:3px 0"><b>${esc(f.what)}:</b> “${esc(f.quote)}” <small class="muted">— ${esc(f.channel || "")} · ${esc(f.stay || "")}</small></div>`).join("")}` : ""}
         ${(d.changes || []).length ? `<p style="margin:8px 0 2px"><b>What changed</b> (green in the description below)</p><ul style="margin:0 0 4px 18px;padding:0">${d.changes.map(c => `<li style="margin:2px 0"><b>${esc(c.what)}:</b> ${esc(c.new_text)}${(c.review_ids || []).length ? ` <a class="anlink" href="#" data-ids="${c.review_ids.join(",")}">reviews →</a>` : ""}</li>`).join("")}</ul>` : ""}
-        ${(d.left_out || []).length ? `<div style="margin:6px 0;padding:6px 10px;border-radius:8px;background:#fff4dc;color:#5a4300;font-size:13.5px"><b>⚠ Not pushed harder, because guests also complained:</b>${d.left_out.map(x => `<br>• <b>${esc(x.what)}:</b> ${esc(x.why)}`).join("")}</div>` : ""}
+        ${(d.left_out || []).length ? `<div style="margin:6px 0;padding:6px 10px;border-radius:8px;background:#fff4dc;color:#5a4300;font-size:13.5px"><b>⚠ Not pushed harder, because guests also complained:</b>${d.left_out.map(x => `<br>• <b>${esc(x.what)}:</b> ${esc(x.why)}${edit ? ` <button class="btn small" data-inc="${esc(hm)}" data-what="${esc(x.what)}">Add it anyway</button>` : ""}`).join("")}</div>`
+        : ""}${(d.included || []).length ? `<p class="muted" style="margin:6px 0;font-size:13px">Added anyway at the team's ask: ${d.included.map(esc).join(" · ")}</p>` : ""}
         <p style="margin:8px 0 2px"><b>Full description</b> <button class="btn small" data-cpd>Copy the description</button></p>
         <div data-cpt data-full style="white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;max-height:420px;overflow:auto">${body}</div>
         <p class="muted" style="margin:6px 0 0;font-size:12.5px">Written by Claude (AI) from ${esc(d.listing_source || "our website listing")} + this home's public guest reviews (2 years); guest quotes checked word for word. Check it reads right, then paste it into Track / Airbnb / Vrbo yourself — the hub never changes a listing. Cost ${d.cost_usd != null ? "$" + (+d.cost_usd).toFixed(2) : "—"}.</p>
@@ -934,9 +935,12 @@ async function revMore(el, tab, ctx){
     el.querySelectorAll("details.rldraft").forEach(x => x.ontoggle = () => { OPEN[x.dataset.dh] = x.open; });
     el.querySelectorAll("[data-cpd]").forEach(b => b.onclick = async () => { const t = (b.closest("p").querySelector("[data-cpt]") || b.closest("details").querySelector("[data-full]")).textContent;
       try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch(e){ b.textContent = "Select + Ctrl+C"; } });
-    el.querySelectorAll("[data-draft]").forEach(b => b.onclick = async () => { const hm = b.dataset.draft, m = b.parentElement.querySelector("[data-dmsg]");
-      b.disabled = true; if(m) m.textContent = " Reading the listing and the reviews… about a minute.";
-      const r = await sb.functions.invoke("review-listing", { body:{ action:"draft", home:hm } });
+    // "Write it again" keeps what the team already said to add anyway; "Add it anyway" adds one more (Brandon 2026-11-08, RJ 912 hot tub)
+    el.querySelectorAll("[data-draft],[data-inc]").forEach(b => b.onclick = async () => { const hm = b.dataset.draft || b.dataset.inc;
+      const m = b.parentElement.querySelector("[data-dmsg]") || b.closest("details").querySelector("[data-dmsg]");
+      const inc = [...((DRAFT[hm] && DRAFT[hm].included) || [])]; if(b.dataset.what && !inc.includes(b.dataset.what)) inc.push(b.dataset.what);
+      b.disabled = true; if(m) m.textContent = " Reading the listing and the reviews… about a minute."; else b.textContent = "Writing… about a minute";
+      const r = await sb.functions.invoke("review-listing", { body:{ action:"draft", home:hm, include:inc } });
       const err = r.error ? r.error.message : r.data && !r.data.ok ? r.data.error : "";
       if(err){ b.disabled = false; if(m) m.textContent = " Couldn't write it: " + err; return; }
       OPEN[hm] = true; revMore(el, tab, ctx); });
