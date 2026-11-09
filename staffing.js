@@ -176,6 +176,27 @@ const addForm = (uid, boss) => `<details class="card"><summary><b>${boss ? "Add 
   <input type="datetime-local" data-at="${uid}"><input data-an="${uid}" placeholder="${boss ? "Note (optional)" : "What happened? (your manager sees it)"}" style="flex:1;min-width:180px">
   <button class="btn primary" data-add="${uid}">${boss ? "Add" : "Send to my manager"}</button></div></details>`;
 
+/* ---------- Work check app (Windows) download + is it running (hub_work_app.sql, workcheck_app/). Brandon 2026-11-09: our own app replaces
+   Hubstaff's desktop app; cloud workers + office staff run it; it records only while clocked in on the hub. Only shown to people who need it. ---------- */
+const WC_EXE = "https://ogugdhhiajebfdwpzofp.supabase.co/storage/v1/object/public/hub-apps/MooseHubWorkCheck.exe";
+async function wcAppCard(el){
+  if(!el) return;
+  let m; try { const r = await sb.rpc("work_app_mine"); m = r.data; } catch(e){ return; }
+  if(!m || !m.needs) return;
+  const last = m.last_slot ? Date.parse(m.last_slot) : 0, mins = last ? Math.round((Date.now() - last) / 6e4) : null;
+  const ago = mins == null ? "" : mins < 2 ? "just now" : mins < 90 ? mins + " min ago" : new Date(last).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+  const old = m.last_ver && m.latest_ver && m.last_ver !== m.latest_ver;
+  const st = !last ? `<span class="pill amber">Not set up on your computer yet</span>`
+    : `<span class="pill ${mins < 20 ? "green" : ""}">${mins < 20 ? "Running" : "Last heard"} ${mins < 20 ? "on " + esc(m.last_device || "your computer") : ago + (m.last_device ? " · " + esc(m.last_device) : "")}</span>${old ? ` <span class="pill amber">New version ${esc(m.latest_ver)}: download it again</span>` : ""}`;
+  el.innerHTML = `<details class="card" ${!last || old ? "open" : ""}><summary><b style="font-size:16px">💻 Work check app (Windows)</b> ${st}</summary>
+    <p class="sm" style="margin:8px 0">If you work on a computer, keep this app running. It only records while you're clocked in on the hub: every 10 minutes how much the keyboard and mouse were used (counts only, never what you type) and one screenshot of each screen. Only you, your manager and Brandon/Kim can see them, and screenshots are removed after 30 days.</p>
+    <a class="btn primary" href="${WC_EXE}" download>⬇ Download for Windows</a>
+    <ol class="sm" style="margin:10px 0 0;padding-left:20px;line-height:1.6">
+      <li>Open the downloaded file <b>MooseHubWorkCheck.exe</b>. If Windows says <i>"Windows protected your PC"</i>, click <b>More info</b> ▸ <b>Run anyway</b>.</li>
+      <li>Sign in with your hub email and password (or "Email me a code instead"), then your 2-step code if you use one.</li>
+      <li>Look for the round <b>M</b> by the clock (bottom right; it may be under the ^ arrow). <b>Green</b> = recording (you're clocked in), <b>grey</b> = clocked out, nothing recorded.</li>
+      <li>It starts by itself when Windows starts. You only do this once per computer. To update, download and open it again.</li></ol></details>`;
+}
 window.staffingView = async function(v){
   css();
   v.innerHTML = `<div class="page stf"><p class="muted">Loading…</p></div>`;
@@ -210,7 +231,7 @@ window.staffingView = async function(v){
       <p class="muted sm" style="margin:-4px 0 10px">Your phone's location is saved once when you clock in or out (only you, your manager and Brandon/Kim see it). Not during the day.</p>
       <div class="card">${nav}${weekTable(mine, w, pl, false, scOf(myId))}${ok ? `<p class="sm" style="margin:6px 0 0">✅ Approved by ${esc(ok.approved_by)} (${hm(+ok.hours)})</p>` : ""}</div>
       ${pendAll.filter(p => p.user_id === myId).length ? `<div class="card"><b>Waiting for your manager</b><table>${pendAll.filter(p => p.user_id === myId).map(p => pendRow(p, null, false)).join("")}</table></div>` : ""}
-      ${addForm(myId, false)}`;
+      ${addForm(myId, false)}<div id="wcapp"></div>`;
   }
   if(team.length){
     const wait = pendAll.filter(p => p.user_id !== myId);
@@ -254,6 +275,7 @@ window.staffingView = async function(v){
   SS.timer = setInterval(() => { if(!document.body.contains(v) || !/^#\/staffing/.test(location.hash)) return clearInterval(SS.timer);
     if(v.querySelector(".edbox,.otplan,details.card[open]") || (document.activeElement && v.contains(document.activeElement) && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))) return;
     re(); }, 120e3);
+  wcAppCard(v.querySelector("#wcapp"));
   const pb = v.querySelector("#punch");
   if(pb) pb.onclick = () => { pb.disabled = true; pb.textContent = "Getting your location…";
     const go = (lat, lng, acc) => sb.rpc("clock_punch", { p_kind:pb.dataset.k, p_lat:lat, p_lng:lng, p_acc:acc }).then(r => { err(r); re(); });
