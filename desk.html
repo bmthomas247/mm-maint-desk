@@ -3684,7 +3684,7 @@ function meetItems(){
   var out=[];
   ps.forEach(function(p){ var u=(p.updates||[])[(p.updates||[]).length-1]||{}, dn=p.notesD[p.notesD.length-1];
     out.push({key:"p:"+p.id,grp:"Ongoing projects",title:p.title,homes:p.homes||[],url:p.url,src:"Asana history",stage:p.stage||"open",who:p.who,
-      read:[u.head?'<b>'+esc(u.head)+'</b> '+esc((u.text||"").slice(0,300)):'',p.next?'Next: '+esc(p.next):'',dn?'Desk note ('+esc(nameFor(dn.by))+' '+esc(fmtD(ymd(dn.at)))+'): '+esc(dn.text):''].filter(Boolean),
+      read:[u.head?'<b>'+esc(u.head)+'</b> '+esc((u.text||"").slice(0,300)):'',p.next?'Next: '+esc(p.next):'',dn?'Desk note ('+esc(nameFor(dn.by))+' '+esc(fmtD(ymd(dn.at)))+'): '+linkify(dn.text):''].filter(Boolean),
       save:{coll:"projedits",id:sid(p.id)}}); });
   owners.forEach(function(j){ out.push({key:"j:"+j.id,grp:"On Program Owners",title:j.title,homes:[j.prop].filter(Boolean),url:j.srcUrl,src:"Asana",stage:bwState(j)==="missing"?"not in Breezeway":j.status,badge:bwBadge(j),
       read:[esc((j.detail||"").slice(-320))].concat(thumbs(j,4,true,70)?[thumbs(j,4,true,70)]:[]),save:{coll:"edits",id:sid(j.id)},job:j}); });
@@ -3694,6 +3694,18 @@ function meetItems(){
 function meetLog(mk){ return (S.config["meet_"+mk]||{}).items||{}; }
 function prevMeets(mk){ return Object.keys(S.config).filter(function(k){ return k.indexOf("meet_")===0 && k.slice(5)<mk; }).map(function(k){ return k.slice(5); }).sort().reverse(); }
 function meetCount(){ return meetItems().length; }
+/* each person keeps their own note per item (2026-11-09, Brandon: anyone can add notes, not just Kim). Old single notes still show. */
+function meetPeople(ent){ var o=ent.people||{}, a=Object.keys(o).map(function(b){ return Object.assign({by:b},o[b]); });
+  if(!a.length && ent.text) a=[{by:ent.by,text:ent.text,at:ent.at}];
+  else if(ent.text && ent.by && !o[ent.by]) a.unshift({by:ent.by,text:ent.text,at:ent.at});
+  return a.sort(function(x,y){ return (x.at||0)-(y.at||0); }); }
+function meetTkNums(t){ var out=[]; String(t||"").replace(/\d{4,7}/g,function(n){ if(out.indexOf(n)<0) out.push(n); }); return out; }
+function meetTickets(it){ if(!it.save) return []; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}; return (cur.tickets||[]).map(String); }
+function savedPop(msg){ var e=document.getElementById("savedpop"); if(!e){ e=document.createElement("div"); e.id="savedpop";
+    e.style.cssText="position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:9999;background:#fff;color:#1f2a15;border:2px solid #4a6b1f;border-radius:16px;padding:18px 28px;font-size:17px;font-weight:700;box-shadow:0 12px 40px rgba(0,0,0,.25);text-align:center;transition:opacity .25s";
+    document.body.appendChild(e); }
+  e.innerHTML='✅ '+esc(msg); e.style.opacity="1"; e.style.display="block"; clearTimeout(savedPop._t);
+  savedPop._t=setTimeout(function(){ e.style.opacity="0"; setTimeout(function(){ e.style.display="none"; },260); },1800); }
 function vMeet(){
   var mk=S.ui.meetDay||mondayOf(), doc=(S.config["meet_"+mk]||{}), log=doc.items||{}, t=today(), items=meetItems(), past=prevMeets(mk);
   var covered=items.filter(function(it){ return log[sid(it.key)] && String(log[sid(it.key)].text||"").trim(); }).length;
@@ -3717,16 +3729,21 @@ function vMeet(){
   var grps={}; items.forEach(function(it){ (grps[it.grp]=grps[it.grp]||[]).push(it); });
   Object.keys(grps).forEach(function(g){
     h+='<section style="margin-bottom:16px"><h3 class="lbl" style="margin:0 0 8px">'+esc(g)+' <span class="muted">'+grps[g].length+'</span></h3>';
-    grps[g].forEach(function(it){ var k=sid(it.key), mine=log[k]||{}, cov=!!String(mine.text||"").trim();
-      var prev=past.slice(0,3).map(function(d){ var x=meetLog(d)[k]; return x&&x.text?'<div class="note"><b>'+esc(fmtD(d))+':</b> '+esc(x.text)+'</div>':''; }).join("");
+    grps[g].forEach(function(it){ var k=sid(it.key), ent=log[k]||{}, ppl=meetPeople(ent), mine=ppl.filter(function(x){ return x.by===S.me; })[0]||{}, cov=ppl.some(function(x){ return String(x.text||"").trim(); });
+      var others=ppl.filter(function(x){ return x.by!==S.me && String(x.text||"").trim(); });
+      var prev=past.slice(0,3).map(function(d){ return meetPeople(meetLog(d)[k]||{}).filter(function(x){ return x.text; }).map(function(x){ return '<div class="note"><b>'+esc(fmtD(d))+(x.by?' · '+esc(nameFor(x.by)):'')+':</b> '+linkify(x.text)+'</div>'; }).join(""); }).join("");
+      var tks=meetTickets(it), tdv=(S.ui.mnDraft||{})["mk_"+k];
       var dv=(S.ui.mnDraft||{})["mt_"+k];
       h+='<div class="panel pad" style="margin-bottom:9px'+(cov?';opacity:.72':'')+'"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b>'+esc(it.title)+'</b>'+it.homes.slice(0,3).map(propLink).join(" ")+
         (it.stage?'<span class="pill">'+esc(it.stage)+'</span>':'')+(it.badge||'')+(it.who?'<span class="note">'+esc(it.who)+'</span>':'')+(cov?'<span class="pill done">covered</span>':'')+
         (it.url?'<a class="note" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.src||"Open")+' ↗</a>':'')+(it.extra||'')+'</div>'+
         (it.read.length?'<div style="margin-top:5px">'+it.read.map(function(x){ return '<div class="note">'+x+'</div>'; }).join("")+'</div>':'')+
         (prev?'<div style="margin-top:5px;border-left:2px solid var(--line);padding-left:8px">'+prev+'</div>':'')+
-        '<div style="display:flex;gap:6px;margin-top:7px;align-items:flex-start"><textarea id="mt_'+esc(k)+'" rows="2" style="flex:1" placeholder="This week — what was decided, who is doing it, by when">'+esc(dv!=null?dv:(mine.text||""))+'</textarea>'+
-        '<button class="btn sm pri" data-meetitem="'+esc(it.key)+'">'+(cov?'Update':'Add')+'</button></div></div>'; });
+        (tks.length?'<div class="note" style="margin-top:5px">Tickets: '+tks.map(function(n){ return '<a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener" title="Open in Freshdesk">#'+esc(n)+' ↗</a>'; }).join(" · ")+'</div>':'')+
+        (others.length?'<div style="margin-top:5px">'+others.map(function(x){ return '<div class="note"><b>'+esc(nameFor(x.by))+' (this week):</b> '+linkify(x.text)+'</div>'; }).join("")+'</div>':'')+
+        '<div style="display:flex;gap:6px;margin-top:7px;align-items:flex-start;flex-wrap:wrap"><textarea id="mt_'+esc(k)+'" rows="2" style="flex:1;min-width:220px" placeholder="Your note this week — what was decided, who is doing it, by when">'+esc(dv!=null?dv:(mine.text||""))+'</textarea>'+
+        (it.save?'<input id="mk_'+esc(k)+'" style="width:130px" inputmode="numeric" placeholder="Ticket #" title="Freshdesk ticket numbers (more than one: 105423, 105430). They link to this '+(it.save.coll==="projedits"?'project':'job')+'." value="'+esc(tdv!=null?tdv:"")+'">':'')+
+        '<button class="btn sm pri" data-meetitem="'+esc(it.key)+'">'+(mine.text?'Update':'Add')+'</button></div></div>'; });
     h+='</section>'; });
   var nv=S.ui.meetDraft!=null?S.ui.meetDraft:(doc.text||"");
   h+='<section class="panel pad"><h3 class="lbl">Anything else — to-dos for Chris, Cheree and the team</h3><textarea id="meetnotes" style="width:100%;min-height:120px;margin-top:6px">'+esc(nv)+'</textarea>'+
@@ -4608,11 +4625,19 @@ document.addEventListener("click",function(ev){
     return slackEditor(d.repslack,repeatDoc(rx,"queued")); }
   if(d.meetday){ ev.preventDefault(); S.ui.meetDay=d.meetday; return render(); }
   if(d.meetgo){ ev.preventDefault(); S.ui.meeting=false; return go(d.meetgo); }
-  if(d.meetitem){ if(!need()) return; var it=meetItems().filter(function(x){ return x.key===d.meetitem; })[0]; if(!it) return; var ik=sid(it.key), tx3=fv("mt_"+ik), mk3=S.ui.meetDay||mondayOf();
-    var cm=S.config["meet_"+mk3]||{}, items=Object.assign({},cm.items||{}); items[ik]={text:tx3,by:S.me,at:Date.now(),title:it.title};
-    return put("config","meet_"+mk3,{items:items,day:mk3},cm).then(function(){ if(S.ui.mnDraft) delete S.ui.mnDraft["mt_"+ik];
-      if(!tx3 || !it.save) return; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{};
-      return put(it.save.coll,it.save.id,{notes:(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:"Monday meeting "+fmtD(mk3)+": "+tx3}])},cur); }).then(function(){ toast("Noted"); }); }
+  if(d.meetitem){ if(!need()) return; var it=meetItems().filter(function(x){ return x.key===d.meetitem; })[0]; if(!it) return; var ik=sid(it.key), tx3=fv("mt_"+ik), tk3=meetTkNums(fv("mk_"+ik)), mk3=S.ui.meetDay||mondayOf();
+    var bt=ev.target.closest("button"); if(bt) bt.disabled=true;
+    return S.db.doc("config/meet_"+mk3).get().then(function(snap){   // fresh copy so two people saving don't wipe each other
+      var cm=(snap&&snap.exists?snap.data():S.config["meet_"+mk3])||{}, items=Object.assign({},cm.items||{}), ent=Object.assign({},items[ik]||{}), ppl=Object.assign({},ent.people||{});
+      if(ent.text && ent.by && !ppl[ent.by]) ppl[ent.by]={text:ent.text,at:ent.at};
+      ppl[S.me]={text:tx3,at:Date.now()}; items[ik]={text:tx3,by:S.me,at:Date.now(),title:it.title,people:ppl};
+      return put("config","meet_"+mk3,{items:items,day:mk3},cm); }).then(function(){ if(S.ui.mnDraft){ delete S.ui.mnDraft["mt_"+ik]; delete S.ui.mnDraft["mk_"+ik]; }
+      if((!tx3 && !tk3.length) || !it.save) return; var cur=(it.save.coll==="projedits"?S.projedits:S.edits)[it.save.id]||{}, patch={};
+      if(tx3) patch.notes=(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:"Monday meeting "+fmtD(mk3)+": "+tx3}]);
+      if(tk3.length){ var have=(cur.tickets||[]).map(String); patch.tickets=have.concat(tk3.filter(function(n){ return have.indexOf(n)<0; })); }
+      return put(it.save.coll,it.save.id,patch,cur); }).then(function(){ var ti=document.getElementById("mk_"+ik); if(ti) ti.value="";
+      savedPop(tk3.length?"Note saved · ticket"+(tk3.length>1?"s":"")+" #"+tk3.join(", #")+" linked":"Note saved"); render(); })
+      .catch(function(){ if(bt) bt.disabled=false; }); }
   if(d.meetnote){ if(!need()) return; var P2=projects().filter(function(x){ return x.id===d.meetnote; })[0]; var tx2=fv("mn_"+sid(d.meetnote)); if(!P2||!tx2) return; var pk2=sid(P2.id), cur2=S.projedits[pk2]||{};
     return put("projedits",pk2,{notes:(cur2.notes||[]).concat([{by:S.me,at:Date.now(),text:"Monday meeting "+fmtD(S.ui.meetDay||mondayOf())+": "+tx2}])},cur2).then(function(){ if(S.ui.mnDraft) delete S.ui.mnDraft["mn_"+sid(d.meetnote)]; toast("Added to the project"); }); }
   if(d.copen){ S.ui.cOpen=S.ui.cOpen||{}; if(S.ui.cOpen[d.copen]) delete S.ui.cOpen[d.copen]; else S.ui.cOpen[d.copen]=1; return render(); }
@@ -4659,7 +4684,7 @@ document.addEventListener("click",function(ev){
     return put("edits",ek,{handled:!!d.fuok,by:S.me,at:Date.now()},S.edits[ek]).then(function(){ toast(d.fuok?"Marked handled":"Back on the list"); }); }
   var j=S.ui.sel&&D.byId[S.ui.sel];
   switch(d.act){
-    case "meetsave": { if(!need()) return; var mk2=S.ui.meetDay||mondayOf(); return put("config","meet_"+mk2,{text:fv("meetnotes"),day:mk2},S.config["meet_"+mk2]).then(function(){ S.ui.meetDraft=null; toast("Meeting notes saved"); }); }
+    case "meetsave": { if(!need()) return; var mk2=S.ui.meetDay||mondayOf(); return put("config","meet_"+mk2,{text:fv("meetnotes"),day:mk2},S.config["meet_"+mk2]).then(function(){ S.ui.meetDraft=null; savedPop("Meeting notes saved"); }); }
     case "meetprint": return window.print();
     case "meetrec": return meetRec();
     case "mclose": return closeModal();
@@ -4828,7 +4853,7 @@ document.addEventListener("input",function(ev){
   if(t.id==="rvq"){ S.ui.rvq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.id==="hq"){ S.ui.hq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.id==="meetnotes"){ S.ui.meetDraft=t.value; return; }
-  if(t.id && (t.id.indexOf("mn_")===0 || t.id.indexOf("mt_")===0)){ S.ui.mnDraft=S.ui.mnDraft||{}; S.ui.mnDraft[t.id]=t.value; return; }
+  if(t.id && (t.id.indexOf("mn_")===0 || t.id.indexOf("mt_")===0 || t.id.indexOf("mk_")===0)){ S.ui.mnDraft=S.ui.mnDraft||{}; S.ui.mnDraft[t.id]=t.value; return; }
   if(t.id==="meetday"){ S.ui.meetDraft=null; S.ui.meetDay=t.value?mondayOf(t.value):""; return render(); }
   if(t.id==="vuq"){ S.ui.vuq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
   if(t.id==="vq"){ S.ui.vq=t.value; clearTimeout(t._d); t._d=setTimeout(render,160); return; }
