@@ -1365,10 +1365,11 @@ function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[
   /* paint stays in Home details only (Brandon 2026-11-03) */
   if(false && t.guest_code){ var inn=t.guest_in&&Date.parse(t.guest_in)<=Date.now(); cells.push(tCell("Guest","Locks",["Door code: "+t.guest_code,inn?"In house until "+fmtD(t.guest_out):"Next stay "+fmtD(t.guest_in)])); }
   cells.push(hoaCell(c,p));
-  if(o.can && o.list.length){ var w=o.list[0];
-    cells.push(tCell("Owner",w.plan?"Contract: "+w.plan:"",[{html:'<div class="tl" title="From '+(w.src==="Track"?"Track":"a hub edit")+'"><span class="ql">Name</span>'+esc(w.name||"")+''+(o.list.length>1?' <span class="muted">+'+(o.list.length-1)+' more</span>':'')+'</div>'},
-      w.phone?{html:'<div class="tl"><span class="ql">Phone</span>'+ocon("tel",w.phone)+'</div>'}:"",
-      w.email?{html:'<div class="tl"><span class="ql">Email</span>'+ocon("mail",w.email)+'</div>'}:""],false,"hown")); }
+  if(o.can && o.list.length){ var w=o.list[0], ow=[], sh=o.list.slice(0,3);
+    sh.forEach(function(x,i){ ow.push({html:'<div class="tl"'+(i?' style="margin-top:6px"':'')+' title="From '+(x.src==="Track"?"Track":"a hub edit")+'"><span class="ql">Name</span>'+esc(x.name||"")+(i===sh.length-1&&o.list.length>3?' <span class="muted">+'+(o.list.length-3)+' more</span>':'')+'</div>'});
+      if(x.phone) ow.push({html:'<div class="tl"><span class="ql">Phone</span>'+ocon("tel",x.phone)+'</div>'});
+      if(x.email) ow.push({html:'<div class="tl"><span class="ql">Email</span>'+ocon("mail",x.email)+'</div>'}); });
+    cells.push(tCell(o.list.length>1?"Owners":"Owner",w.plan?"Contract: "+w.plan:"",ow,false,"hown")); }
   cells.push(tnCell(c));
   return cells.join("")||'<div class="hql"><div class="muted">No codes on file yet.</div></div>'; }
 function homeTile(p){ var c=p.code, os=ownerStay(c), occ=os&&os.in<=today(), q=homeQuick(c,p);
@@ -1865,7 +1866,10 @@ function ownerName(raw){ var n=String(raw||"").trim(), plan="";
   var m=n.match(/^(.*?)\s*\(((?:prime|lease|complete|fp)[^)]*)\)\s*$/i); if(m&&m[1]){ n=m[1]; plan=m[2]; }
   return {name:n||String(raw||""), plan:plan}; }
 function ownerOf(code){ var oc=(S.ownercontacts||{})[sid(code)]||{}, f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFeed(f,code)||[]):[];
-  var list=tr.map(function(o){ var n=ownerName(o.name); return {name:o.fullName||n.name,plan:n.plan,phone:o.phone,email:o.email,src:"Track"}; });
+  var list=[]; tr.forEach(function(o){ var n=ownerName(o.name), ppl=(o.people||[]).filter(function(p){ return p.first||p.last; });
+    if(ppl.length<2||!ppl.some(function(p){ return p.email||p.phone; })){ list.push({name:o.fullName||n.name,plan:n.plan,phone:o.phone,email:o.email,src:"Track"}); return; }
+    /* bug #34 (2026-11-09): every owner on the home with their own phone + email; the first falls back to the owner record */
+    ppl.forEach(function(p,i){ list.push({name:((p.first||"")+" "+(p.last||"")).trim(),plan:i===0?n.plan:"",phone:p.phone||(i===0?o.phone:""),email:p.email||(i===0?o.email:""),src:"Track"}); }); });
   if(oc.name||oc.phone||oc.email) list=[{name:oc.name||((list[0]||{}).name)||"",phone:oc.phone||((list[0]||{}).phone)||"",email:oc.email||((list[0]||{}).email)||"",src:"Edited in the hub"+(oc.by?" by "+nameFor(oc.by):""),notes:oc.notes||""}].concat(list.slice(1));
   return {can:!!f||Object.keys(S.ownercontacts||{}).length>0, list:list}; }
 /* Quick view text, easy to scan (Brandon 2026-10-28): "Label: value" lines show the label small and the answer bold; codes/numbers get a highlight. */
