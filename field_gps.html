@@ -52,7 +52,8 @@ if(window.top !== window) document.body.classList.add("inhub");
 
 const SERVER = C.url.replace(/\/$/, "") + "/functions/v1/field-gps";
 // Traccar settings (keys from the app's own QR reader, traccar-client configuration_service.dart, read 2026-11-09)
-const OPTS = "accuracy=high&interval=60&distance=50&angle=30&heartbeat=300&buffer=true&stop_detection=true";
+// Lighter (Brandon 2026-11-09: Bouncie covers driving): a point every 150 m while moving, every 10 min while still; high accuracy kept so stops match the right home.
+const OPTS = "accuracy=high&interval=300&distance=150&angle=0&heartbeat=600&buffer=true&stop_detection=true";
 const IOS = "https://apps.apple.com/app/traccar-client/id843156974", AND = "https://play.google.com/store/apps/details?id=org.traccar.client";
 const S = { me:null, made:null, last:{} };
 
@@ -81,7 +82,7 @@ function setupBox(m){
         <p class="small muted">On the phone itself? Skip the QR code: in the app's settings, paste these two instead.</p>
         <div class="copy"><span class="small" style="width:110px">Device identifier</span><input readonly value="${esc(m.key)}"><button class="btn" data-copy="${esc(m.key)}">Copy</button></div>
         <div class="copy"><span class="small" style="width:110px">Server URL</span><input readonly value="${esc(SERVER)}"><button class="btn" data-copy="${esc(SERVER)}">Copy</button></div>
-        <p class="small muted">Then set Location accuracy <b>High</b>, Distance <b>50</b>, Interval <b>60</b>, Offline buffering <b>on</b>.</p></li>
+        <p class="small muted">Then set Location accuracy <b>High</b>, Distance <b>150</b>, Interval <b>300</b>, Stationary heartbeat <b>600</b>, Offline buffering <b>on</b>.</p></li>
       <li>Allow location <b>Always</b> (iPhone: Settings ▸ Traccar Client ▸ Location ▸ Always + Precise. Android: Allow all the time, and turn off battery saving for the app).</li>
       <li>Turn on the <b>tracking switch</b> in the app and leave it on. The hub only keeps where you are <b>while you're clocked in</b>; anything sent while clocked out is thrown away.</li>
       <li>Clock in on the hub and come back here: "Last seen" should show a time within a few minutes.</li>
