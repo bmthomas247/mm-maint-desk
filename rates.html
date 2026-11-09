@@ -339,6 +339,15 @@ details.dyacc:not([open])>summary::after{transform:rotate(-90deg)}details.dyacc:
 .srpan{cursor:grab;touch-action:pan-y}.srpan.dragging{cursor:grabbing;user-select:none}
 table.srt tr[data-k] td:first-child{cursor:cell;user-select:none}table.srt tr.srsel td{background:rgba(136,181,53,.22)!important}
 #srBulkBar{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:70;display:none;gap:14px;align-items:center;flex-wrap:wrap;background:var(--forest,#3c5f12);color:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 12px 30px rgba(0,0,0,.25);font-size:13px}
+#srCtip{position:fixed;z-index:80;display:none;width:min(480px,calc(100vw - 20px));max-height:min(520px,calc(100vh - 20px));overflow-y:auto;overflow-x:hidden;box-sizing:border-box;background:#fff;color:#1f2a14;border-radius:14px;box-shadow:0 14px 36px rgba(0,0,0,.22);padding:14px 16px;font-size:12.5px;border:1px solid #e3e9da}
+#srCtip .cth{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}#srCtip .cth b{font-size:14px}
+#srCtip .ctts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px}
+#srCtip .ctt{background:#f3f6ee;border-radius:10px;padding:8px 10px}#srCtip .ctt b{display:block;font-size:17px;line-height:1.2}#srCtip .ctt span{font-size:11px;color:#6b7563}
+#srCtip .ctt i{font-style:normal;font-size:11px;padding:1px 6px;border-radius:9px;vertical-align:middle}#srCtip i.up{background:#fbe9d6;color:#8a4b10}#srCtip i.dn{background:#e5f2d8;color:#2f5a10}
+#srCtip table{width:100%;border-collapse:collapse;table-layout:fixed}#srCtip th:first-child,#srCtip td:first-child{width:56%;overflow-wrap:anywhere;white-space:normal}#srCtip th{font-size:11px;color:#6b7563;font-weight:600;text-align:left;padding:4px 6px}
+#srCtip td{padding:5px 6px;border-top:1px solid #eef1ea}#srCtip td:nth-child(n+2),#srCtip th:nth-child(n+2){text-align:right;white-space:nowrap}
+#srCtip tr.ctme td{background:#e5f2d8;font-weight:700;color:#2f5a10}#srCtip .ctf{margin-top:10px;font-size:11px;color:#6b7563;line-height:1.4}
+.srctd{cursor:help}
 #srBulkBar .sbhint{font-size:11.5px;opacity:.85}
 #srBulkBar .sbg{display:inline-flex;gap:6px;align-items:center}#srBulkBar button[data-sb^="p"],#srBulkBar button[data-sb^="m"]{width:30px;height:30px;border:0;border-radius:8px;background:#fff;color:var(--forest,#3c5f12);cursor:pointer;font-size:12px}
 #srBulkBar input,#srBulkBar select{width:58px;border:0;border-radius:8px;padding:5px 6px;font:inherit}#srBulkBar select{width:auto}#srBulkBar .ovbtn{background:rgba(255,255,255,.15);color:#fff;border-color:transparent}
@@ -1156,6 +1165,40 @@ function srCompList(k) { const by = {};
   return Object.entries(by).map(([id, c]) => { const x = c.Airbnb || c.VRBO, t = tot[id];
     return { name: SR.compName?.[id] || id, ch: c.Airbnb ? "Airbnb" : "Vrbo", open: !!x?.open, rate: x?.rate != null ? +x.rate : null, tot: t ? t.reduce((a, b) => a + b, 0) / t.length : null }; })
     .sort((a, b) => (b.open - a.open) || ((a.rate ?? 1e9) - (b.rate ?? 1e9))); }
+// Comps pop-up: average + middle + range, where this home sits, then every open comp low to high with this home placed among them
+function srCompPop(k) { const L = srCompList(k), op = L.filter(x => x.open && x.rate != null), bk = L.filter(x => !x.open);
+  const inp = document.querySelector(`[data-srr="${k}"]`), our = inp && inp.value !== "" ? +inp.value : srVal(k).rate;
+  const day = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  if (!op.length) return `<div class="cth"><b>Comps · ${escH(day)}</b></div><p class="small muted">No open comps with a price this night${bk.length ? ` (${bk.length} booked)` : ""}.</p>`;
+  const v = op.map(x => x.rate).sort((a, b) => a - b), mean = v.reduce((a, b) => a + b, 0) / v.length, mid = srPct(v, 0.5);
+  const tv = op.map(x => x.tot).filter(x => x), tmean = tv.length ? tv.reduce((a, b) => a + b, 0) / tv.length : null;
+  const vs = our != null ? Math.round((our / mean - 1) * 100) : null, rank = our != null ? v.filter(x => x < our).length : null;
+  const tile = (n, l) => `<div class="ctt"><b>${n}</b><span>${l}</span></div>`;
+  let rows = "", placed = our == null;
+  const me = () => `<tr class="ctme"><td>★ ${escH(SR.code || "This home")} (our rate)</td><td>${fmt(our)}</td><td></td></tr>`;
+  for (const x of op) { if (!placed && our <= x.rate) { rows += me(); placed = true; }
+    rows += `<tr><td>${escH(x.name)} <span class="muted">· ${x.ch}</span></td><td>${fmt(x.rate)}</td><td class="muted">${x.tot ? fmt(x.tot) : ""}</td></tr>`; }
+  if (!placed) rows += me();
+  const a = srCompAir(k);
+  return `<div class="cth"><b>Comps · ${escH(day)}</b><span class="muted">${op.length} open · ${bk.length} booked</span></div>
+    <div class="ctts">${tile(fmt(mean), "Comps' average")}${tile(fmt(mid), "Middle comp")}${tile(`${fmt(v[0])}–${fmt(v[v.length - 1])}`, "Low – high")}
+      ${our != null ? tile(`${fmt(our)} <i class="${vs > 0 ? "up" : "dn"}">${vs > 0 ? "+" : ""}${vs}%</i>`, `Our rate vs average · cheaper than ${op.length - rank} of ${op.length}`) : ""}</div>
+    <div class="ctlist"><table><thead><tr><th>Comp</th><th>Daily rate</th><th>Guest total / night</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="ctf">Daily rate = before cleaning and tax (Key Data / Vrbo calendars). Guest total = the Airbnb checkout price per night with cleaning, fees and est. tax${tmean ? ` (average ${fmt(tmean)})` : ""}.${a ? ` AirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}.` : ""}${bk.length ? `<br>Booked: ${escH(bk.map(x => x.name).join(", "))}` : ""}</div>`; }
+function srCtipWire() { let pop = document.getElementById("srCtip");
+  if (!pop) { pop = document.createElement("div"); pop.id = "srCtip"; document.body.appendChild(pop);
+    pop.addEventListener("mouseleave", () => { pop.style.display = "none"; }); }
+  let hide = null;
+  const show = td => { clearTimeout(hide); pop.innerHTML = srCompPop(td.dataset.ctip); pop.style.display = "block";
+    const r = td.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    let x = Math.min(window.innerWidth - w - 10, Math.max(10, r.left + r.width / 2 - w / 2)), y = r.bottom + 6;
+    if (y + h > window.innerHeight - 10) y = Math.max(10, r.top - h - 6);
+    pop.style.left = x + "px"; pop.style.top = y + "px"; };
+  document.querySelectorAll("td[data-ctip]").forEach(td => {
+    td.addEventListener("mouseenter", () => show(td));
+    td.addEventListener("mouseleave", e => { if (e.relatedTarget && pop.contains(e.relatedTarget)) return; hide = setTimeout(() => { if (!pop.matches(":hover")) pop.style.display = "none"; }, 150); });
+    td.addEventListener("click", () => pop.style.display === "block" ? (pop.style.display = "none") : show(td)); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") pop.style.display = "none"; }); }
 function srCompTip(k) { const L = srCompList(k); if (!L.length) return "No comp calendars for this night.";
   const op = L.filter(x => x.open && x.rate != null), bk = L.filter(x => !x.open);
   return [`Comps open that night (${op.length}) · daily rate before cleaning + tax${op.some(x => x.tot) ? " · guest total per night on Airbnb" : ""}:`,
@@ -1427,7 +1470,7 @@ function srDraw() {
     R.map(r => { const d = new Date(r.k + "T12:00:00"), wk = d.getDay() === 5 || d.getDay() === 6, g = r.v.rate != null && r.b ? (r.v.rate / r.b - 1) * 100 : null;
       return `<tr data-k="${r.k}" class="${wk ? "wk" : ""}${r.v.changed ? " chg" : ""}${SR.sel?.has(r.k) ? " srsel" : ""}"><td><b class="srhk" data-hist="${r.k}" title="Price history for this night">${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b></td><td class="small muted">${escH(pk(r.k) || "")}</td>
         <td>${r.s ? `<b>${fmt(r.s.price)}</b>${r.s.min ? `<span class="muted small"> · ${r.s.min}n</span>` : ""} <span class="srwhy" tabindex="0" role="button" aria-label="Why this price" data-why="${escH(r.s.why || "")}" data-p="${r.s.price}" data-k="${r.k}">ⓘ</span>` : "—"}</td>
-        <td title="${r.g ? escH(`${r.g.n} homes: ${fmt(r.g.lo)} to ${fmt(r.g.hi)}`) : ""}">${fmt(r.b)}${r.g ? `<div class="srair">${r.g.n} homes</div>` : ""}</td><td style="cursor:help" title="${escH(srCompTip(r.k) + (() => { const a = srCompAir(r.k); return a ? `\nAirROI check: ${fmt(a.adr)} from ${a.n} comps, pulled ${new Date(a.at).toLocaleDateString()}` : ""; })())}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
+        <td title="${r.g ? escH(`${r.g.n} homes: ${fmt(r.g.lo)} to ${fmt(r.g.hi)}`) : ""}">${fmt(r.b)}${r.g ? `<div class="srair">${r.g.n} homes</div>` : ""}</td><td class="srctd" data-ctip="${r.k}">${r.c ? fmt(r.c.adr) + `<span class="muted small"> · ${r.c.n}</span>` : "—"}${(() => { const a = srCompAir(r.k); return a && r.c ? `<div class="srair">AirROI ${fmt(a.adr)}</div>` : ""; })()}</td>
         <td class="srrate"><input type="number" min="25" max="20000" step="1" data-srr="${r.k}" value="${r.v.rate ?? ""}" class="srin${r.v.set ? "" : " pre"}" title="${r.v.set ? "" : "Track's current rate"}">${r.v.changed ? srOurWhy(r) : ""}${r.v.saved && !r.v.changed ? `${srOurWhy(r)}<span class="srby" title="Suggested by ${escH(r.v.by || "")}${r.v.at ? ", " + escH(new Date(r.v.at).toLocaleString()) : ""}">${escH(srIni(r.v.by))}</span>` : ""}</td><td><input type="number" min="1" max="60" step="1" data-srm="${r.k}" value="${r.v.min ?? ""}" class="srin sm${r.v.set ? "" : " pre"}"></td>
         ${srGuestCells(r)}</tr>`; }).join("") + `</table></div>
     <div class="src">Suggested = our own pricing engine (hover ⓘ for its reason). Track now = rack rate (RR) + minimum stay in Track, read every 30 min. ${srGrpName()} = average rate in Track of our other homes there (test homes left out; Beyond's price while it prices them). Comps = average nightly rate of the open comps (ESTIMATE). Our rate goes into Track's rack rate; Track's channel rates (Airbnb, VRBO…) follow it the way they follow Beyond's today.</div></div>`;
@@ -1758,7 +1801,7 @@ function srWire(R) {
   setTimeout(srStaleCheck, 400);
   if (new URLSearchParams(location.search).get("hist") === "1" && !SR.histShown) { SR.histShown = 1; setTimeout(() => srHistory(null), 300); }
   document.querySelector("details.dyacc")?.addEventListener("toggle", e => { try { localStorage.setItem("mm_dyn_open", e.target.open ? "1" : "0"); } catch (x) {} });
-  setTimeout(srBulk, 0);
+  setTimeout(srBulk, 0); setTimeout(srCtipWire, 0);
   { const add = $("dySeasAdd"), box = $("dySeas");
     if (add && box) { add.onclick = () => { box.insertAdjacentHTML("beforeend", srSeasRow({})); srSteppers(box); };
       box.addEventListener("click", e => { if (e.target.closest("[data-ms-del]")) e.target.closest("[data-ms]").remove(); }); } }
