@@ -15,7 +15,13 @@ const MEET = {
   meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
   meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
-const MCSS = `.mtg .mpsul{padding:6px 8px}.mpsur{display:flex;gap:12px;align-items:center;padding:9px 8px;border-radius:10px;cursor:pointer}
+const MCSS = `.mpsur.cov{opacity:.62}.mrc{display:inline-flex;gap:4px;align-items:center;flex:0 0 auto}.mrc .btn{padding:1px 8px;font-size:12px;min-height:0}
+.mpsur.mrow2>i{width:30px;height:30px;font-size:14px;font-weight:800}.mpsur.mrow2{padding:7px 8px}.mrow2 small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mprice{font-weight:800;color:#24452c;margin-left:4px}.mhl{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 2px}
+.mhp{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:7px;background:#eef0ea;color:#555;white-space:nowrap}
+.mhp.oh{background:#fde7c9;color:#9a4a00}.mhp.sh{background:#dceafb;color:#1d4f91}.mhp.pc{background:#fde8e6;color:#b42318}.mhp.old{background:#f1f2ee;color:#888;font-weight:600}
+.msale{display:grid;grid-template-columns:1fr 1fr;gap:6px}.msale label,.msale1{display:grid;gap:3px;font-size:12.5px;color:var(--muted)}.msale1{margin-top:6px}.msale input,.msale1 input{width:100%}
+.mtg .mpsul{padding:6px 8px}.mpsur{display:flex;gap:12px;align-items:center;padding:9px 8px;border-radius:10px;cursor:pointer}
 .mpsur+.mpsur{border-top:1px solid var(--line)}.mpsur:hover,.mpsur:focus{background:#f6f7f2;outline:none}
 .mpsur>i{font-style:normal;width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:18px;flex:0 0 auto;color:#fff}
 .mpsum{flex:1;min-width:0}.mpsut{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:14px}.mpsut>span{min-width:0}
@@ -279,6 +285,24 @@ const absLink = l => !l ? "" : /^https?:/.test(l) ? l : "https://crew.moosemanag
 const homeOf = it => { const m = String(it.title || "").match(/^([A-Z0-9][A-Z0-9-]*(?: [A-Z0-9-]+)?)(\s·|$)/); return m ? m[1] : ""; };
 /* Property Set Up rows (Brandon 2026-11-10: "horizontal percentage ... click from these into the property set up desk ... in the meeting
    its just quick notes and information"). psu = homes being set up, off = homes leaving us. */
+/* homes for sale (hub_meeting_sale_list.sql item.sale): price, MLS #, agent + highlights (open house, showing, price change) */
+const money = n => n == null || n === "" ? "" : "$" + Number(n).toLocaleString("en-US");
+const dshort = s0 => s0 ? new Date(String(s0).slice(0, 10) + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }) : "";
+function saleOf(it){
+  const x = it.sale || {}, z = x.zillow || {}, inf = x.info || {}, T0 = ymd(new Date()), pills = []; let hot = false;
+  let oh = z.open_house; if(typeof oh === "string"){ try { oh = JSON.parse(oh); } catch(e){ oh = { description: oh }; } }
+  if(oh && (oh.start_date || oh.description)){ const d0 = String(oh.start_date || "").slice(0, 10), past = d0 && d0 < T0;
+    if(!past){ hot = true; pills.push(`<span class="mhp oh">🏠 Open house ${esc(d0 ? dshort(d0) : "")}${oh.start_date ? " " + esc(new Date(oh.start_date).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })) + (oh.end_date ? "–" + esc(new Date(oh.end_date).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })) : "") : esc(oh.description || "")}</span>`); } }
+  (x.shows || []).forEach(sh => { const d0 = String(sh.day || "").slice(0, 10), up = d0 >= T0, oh2 = /open house/i.test(sh.name || "");
+    if(up) hot = true;
+    pills.push(`<span class="mhp ${up ? (oh2 ? "oh" : "sh") : "old"}" title="${esc(sh.name || "")} (Breezeway)">${oh2 ? "🏠 Open house" : "👀 Showing"} ${esc(dshort(d0))}${up ? "" : " ✓"}</span>`); });
+  if(z.price_change){ const d0 = String(z.price_change_date || "").slice(0, 10), recent = d0 && (new Date(T0) - new Date(d0)) / 864e5 <= 30;
+    if(recent) hot = true;
+    pills.push(`<span class="mhp ${recent ? "pc" : "old"}">${z.price_change < 0 ? "▼ Price cut" : "▲ Price up"} ${esc(money(Math.abs(z.price_change)))}${d0 ? " " + esc(dshort(d0)) : ""}</span>`); }
+  if(!z.price && !x.setup) pills.push(`<span class="mhp old">Not on Zillow</span>`);
+  return { home: String(it.title || ""), price: z.price ? money(z.price) : "", listed: z.listed_on ? "Listed " + dshort(z.listed_on) + (z.days_on_zillow != null ? " · " + z.days_on_zillow + " days" : "") : "",
+    mls: inf.mls, agent: inf.agent, broker: z.broker, setup: x.setup ? "Set Up " + x.setup.pct + "%" : "", pills, hot, link: z.link, info: inf, z, x };
+}
 const isPsu = it => /^(psu|off)$/.test(kindOf(it));
 const psuInfo = it => { const l0 = (it.lines || [])[0] || "", m = l0.match(/^(.*?) · owner (.*?) · (\d+) of (\d+) steps done/);
   return { home: homeOf(it) || String(it.title).split(" · ")[0], pct: +((String(it.title).match(/(\d+)% done/) || [])[1] || 0),
@@ -360,16 +384,21 @@ function render(v, key, data, ppl){
             <div class="mpsub"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div>
             <small class="muted">${esc([P.kind, P.done != null ? P.done + " of " + P.total + " steps" : "", P.next[0] ? "Next: " + P.next[0] : ""].filter(Boolean).join(" · "))}</small></div></div>`; });
       h += `</div>`; return; }
-    h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3><div class="mgrid">`;
+    /* every section = small sideways rows (Brandon 2026-11-10: "i like how they are sideways and smaller not such big tiles") */
+    const isSale = kindOf(grps[g][0]) === "sale";
+    h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3><div class="card mpsul">`;
     grps[g].forEach(it => { const st = stItem(it), nt = notesOf(day, it.key).length, tk = open.filter(t => t.item_key === it.key), od = tk.filter(t => t.due && t.due < T).length, last = noteFor(null, it.key);
-      h += `<div class="mcardx${st === "covered" ? " cov" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button">
-        <div class="mtop">${pill(st)}${od ? `<span class="mpill bad">${od} overdue</span>` : ""}</div>
-        <b class="mtt">${esc(it.title)}</b>${ownerOf(it) ? `<span class="mown">👤 ${esc(ownerOf(it))}</span>` : ""}${kindOf(it) === "psu" || kindOf(it) === "off" ? (pc => `<div class="mprog" style="margin:0"><i style="width:${pc}%"></i></div>`)(+((String(it.title).match(/(\d+)% done/) || [])[1] || 0)) : ""}
-        <p class="mdesc">${esc(short(last ? last.text : (it.lines || []).filter(l => l && !/^Owner: /.test(l))[0] || it.ask || "", 130))}</p>
-        <div class="mnums"><div><b>${nt}</b><span>Notes today</span></div><div><b>${tk.length}</b><span>Open tasks</span></div></div>
-        <div class="mdiv"></div>
-        ${it.ask ? `<div class="mnext"><small>Decide</small>${esc(short(it.ask, 90))}</div>` : ""}
-        <div class="macts"><button class="btn small" data-open="${esc(it.key)}">Open</button>${st !== "covered" ? `<button class="btn small" data-quick="${esc(it.key)}" title="Mark covered (adds a note)">✓ Covered</button>` : ""}</div></div>`; });
+      if(isSale){ const S = saleOf(it);
+        h += `<div class="mpsur${st === "covered" ? " cov" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button"><i style="background:${S.hot ? "#c2410c" : "#3c5f12"}">🏷️</i>
+          <div class="mpsum"><div class="mpsut"><span><b>${esc(S.home)}</b>${S.price ? ` <span class="mprice">${esc(S.price)}</span>` : ""}${st ? " " + pill(st) : ""}${nt ? ` <span class="mpill">📝 ${nt}</span>` : ""}</span><span class="muted" style="font-size:12px;white-space:nowrap">${esc(S.listed)}</span></div>
+            <div class="mhl">${S.pills.join("")}</div>
+            <small class="muted">${esc([S.mls ? "MLS # " + S.mls : "MLS # —", S.agent || S.broker || "Agent —", S.setup].filter(Boolean).join(" · "))}</small></div></div>`;
+        return; }
+      const desc = last ? last.text : (it.lines || []).filter(l => l && !/^Owner: /.test(l))[0] || it.ask || "";
+      h += `<div class="mpsur mrow2${st === "covered" ? " cov" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button"><i style="background:${st === "covered" ? "#3c7d1e" : /^(waiting|scheduled)$/.test(st) ? "#c98a16" : od ? "#b42318" : "#5b6b84"}">${st === "covered" ? "✓" : /^(waiting|scheduled)$/.test(st) ? "⏳" : od ? "!" : "•"}</i>
+        <div class="mpsum"><div class="mpsut"><span><b>${esc(it.title)}</b>${ownerOf(it) ? `<span class="muted"> · 👤 ${esc(ownerOf(it))}</span>` : ""}</span>
+          <span class="mrc">${nt ? `<span class="mpill">📝 ${nt}</span>` : ""}${tk.length ? `<span class="mpill${od ? " bad" : ""}">☐ ${tk.length}</span>` : ""}${st !== "covered" ? `<button class="btn small" data-quick="${esc(it.key)}" title="Mark covered (adds a note)">✓</button>` : ""}</span></div>
+          <small class="muted">${esc(short(desc, 150))}</small></div></div>`; });
     h += `</div>`; });
   if(items.length && !shown.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing matches.</p></div>`;
   h += `<h3 class="mg">All open tasks <span class="muted">${open.length}</span></h3><div class="card" style="padding:8px 14px">
@@ -398,7 +427,24 @@ function render(v, key, data, ppl){
     const tfl = t => MX.tf === "all" ? true : MX.tf === "today" ? t.due === T : MX.tf === "week" ? t.due && t.due >= T && t.due <= wk : MX.tf === "over" ? t.due && t.due < T : MX.tf === "done" ? !!t.done_at : true;
     const isOfb = kindOf(it) === "ofb", fid = isOfb ? +String(it.key).split(":")[1] : 0;
     let b = "";
-    if(MX.tab === "ov" && isPsu(it)){
+    if(MX.tab === "ov" && kindOf(it) === "sale"){
+      const S = saleOf(it), I = S.info || {};
+      b = `<div class="mbox"><div class="mpsut"><span style="font-size:20px;font-weight:800">${esc(S.price || "Price not on Zillow")}</span><span class="muted">${esc(S.listed)}</span></div>
+          <div class="mhl" style="margin:8px 0">${S.pills.join("") || `<span class="muted" style="font-size:13px">No open house, showing or price change found.</span>`}</div>
+          <small class="muted">${esc([S.broker ? "Brokerage: " + S.broker : "", S.z.status || "", S.x.job ? "Job: " + S.x.job : ""].filter(Boolean).join(" · "))}</small>
+          ${S.x.setup ? `<div style="margin-top:8px;font-size:13px">Launch Pad sale checklist: <b>${S.x.setup.pct}%</b>${S.x.setup.next ? " · next: " + esc(S.x.setup.next) : ""}</div>` : ""}
+          <div class="macts">${S.link ? `<a class="btn small primary" href="${esc(S.link)}" target="_blank" rel="noopener">🏠 Open on Zillow ↗</a>` : ""}${S.x.setup ? `<a class="btn small" href="#/property_setup">🚀 Launch Pad</a>` : ""}</div></div>
+        <div class="mbox"><b>Listing info</b><p class="muted" style="font-size:12px;margin:0 0 6px">Zillow doesn't share the MLS number or agent, so type them once here.${I.updated_by ? " Last saved by " + esc(I.updated_by) + "." : ""}</p>
+          <div class="msale"><label>MLS #<input id="msm" value="${esc(I.mls || "")}"></label><label>Listing agent<input id="msa" value="${esc(I.agent || "")}" placeholder="${esc(S.broker || "")}"></label>
+          <label>Agent phone<input id="msp" value="${esc(I.agent_phone || "")}"></label><label>Agent email<input id="mse" value="${esc(I.agent_email || "")}"></label></div>
+          <label class="msale1">Note<input id="msn" value="${esc(I.note || "")}" placeholder="e.g. owner wants us to keep renting until closing"></label>
+          <div class="macts"><button class="btn small primary" id="mss">Save listing info</button><span class="muted" id="msmsg" style="font-size:13px"></span></div></div>
+        ${it.ask ? `<div class="msig"><i>✦</i><div><small>Ask everyone</small>${esc(it.ask)}</div></div>` : ""}
+        <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key))}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(ST.drafts[key + "|" + it.key] || "")}</textarea>
+          <div class="macts"><select data-nstate="${esc(it.key)}" aria-label="Where it stands" style="width:auto">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
+          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button></div></div>
+        <p class="msrc">Source: ${esc(it.src || "")} · Showings and open houses from Breezeway tasks</p>`;
+    } else if(MX.tab === "ov" && isPsu(it)){
       const P = psuInfo(it), lg = MX.psu[String(it.key).split(":")[1]] || [], dv2 = ST.drafts[key + "|" + it.key];
       b = `<div class="mbox"><div class="mpsut"><span>${esc(P.kind)}${P.owner ? " · owner " + esc(P.owner) : ""}</span><b>${P.pct}%</b></div>
           <div class="mpsub" style="margin:6px 0"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div>
@@ -446,6 +492,11 @@ function render(v, key, data, ppl){
     o.querySelectorAll("[data-sug]").forEach(x => x.onclick = () => { const s = sg[+x.dataset.sug]; MX.sug[it.key] = { text:s.text, due:addDays(T, s.days) }; panel();
       const i = o.querySelector('[data-tf="who"]'); if(i) i.focus(); });
     wire(o); msgWire(o, it); bwWire(o, it);
+    const sbtn = o.querySelector("#mss");
+    if(sbtn) sbtn.onclick = async () => { const g2 = i => o.querySelector(i).value; sbtn.disabled = true;
+      const r = await sb.rpc("meeting_sale_set", { p_meet:key, p_home:String(it.key).slice(5), p_mls:g2("#msm"), p_agent:g2("#msa"), p_phone:g2("#msp"), p_email:g2("#mse"), p_note:g2("#msn") }); sbtn.disabled = false;
+      if(r.error) return o.querySelector("#msmsg").textContent = "Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message);
+      o.querySelector("#msmsg").textContent = "Saved ✓"; redraw(); };
     const pn = o.querySelector("#mpsun"), ps = o.querySelector("#mpsus");
     if(pn){ pn.oninput = () => ST.drafts[key + "|" + it.key] = pn.value;
       ps.onclick = async () => { if(!pn.value.trim()) return pn.focus(); ps.disabled = true; o.querySelector("#mpsum").textContent = "Saving…";
