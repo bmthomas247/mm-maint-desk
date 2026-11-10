@@ -15,7 +15,14 @@ const MEET = {
   meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
   meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
-const MCSS = `.mown{display:block;font-size:13px;color:var(--ink-2,#444);font-weight:600;margin-top:-2px}
+const MCSS = `.mtg .mpsul{padding:6px 8px}.mpsur{display:flex;gap:12px;align-items:center;padding:9px 8px;border-radius:10px;cursor:pointer}
+.mpsur+.mpsur{border-top:1px solid var(--line)}.mpsur:hover,.mpsur:focus{background:#f6f7f2;outline:none}
+.mpsur>i{font-style:normal;width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:18px;flex:0 0 auto;color:#fff}
+.mpsum{flex:1;min-width:0}.mpsut{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:14px}.mpsut>span{min-width:0}
+.mpsub{height:8px;border-radius:9px;background:#e7e8e2;overflow:hidden;margin:5px 0 3px}.mpsub i{display:block;height:100%;border-radius:9px}
+.mpsum small{font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mtg .mpsul{display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));column-gap:18px}.mtg .mpsul .mpsur+.mpsur{border-top:0}.mtg .mpsul .mpsur{border-bottom:1px solid var(--line)}
+.mown{display:block;font-size:13px;color:var(--ink-2,#444);font-weight:600;margin-top:-2px}
 .mbwj{border-top:1px solid var(--line);padding:8px 0}.mbwj:first-of-type{border-top:0;padding-top:0}.mbwj .mt2{font-size:13.5px;margin-bottom:4px}
 .mbwh{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 8px;background:#f6f7f2;border-radius:8px;margin:4px 0;font-size:13.5px}.mbwh small{display:block;color:var(--muted);font-size:12px}
 .mbwc{display:grid;gap:6px;padding:8px;border:1px dashed var(--line);border-radius:8px;margin:4px 0 8px}.mbwc select,.mbwc input{width:auto}
@@ -250,7 +257,8 @@ function upShow(res, from, key, items, redraw){
    Next steps = suggested tasks built from the topic (one tap fills the task form) + the topic's tasks (All / Today / This week / Overdue).
    Tasks go to a person (meeting_task_add2, hub_meeting_actions.sql): they see it on Home + the bell, and get a Slack DM when that's on.
    Owner follow-ups close from the panel (meeting_ofb_set). Wrap up = what was decided + who does what, to copy. */
-const MX = { tp:{}, filt:"all", q:"", open:null, tab:"ov", tf:"all", sug:{}, bw:{}, bwp:{}, bwopen:false, chg:null };
+const MX = { tp:{}, filt:"all", q:"", open:null, tab:"ov", tf:"all", sug:{}, bw:{}, bwp:{}, bwopen:false, chg:null, psu:{}, psuAt:0 };
+async function psuLoad(){ try { const r = await sb.from("psu_progress").select("job_id,log"); (r.data || []).forEach(x => MX.psu[x.job_id] = x.log || []); MX.psuAt = Date.now(); } catch(e){} }
 /* Breezeway from the meeting (hub_meeting_breezeway.sql): tasks this meeting sent + the Breezeway people list */
 async function bwLoad(key){ try { const [a, b] = await Promise.all([sb.rpc("meeting_bw_list", { p_meet:key }), MX.bwp[key] ? null : sb.rpc("meeting_bw_people", { p_meet:key })]);
   MX.bw[key] = a.data || []; if(b) MX.bwp[key] = b.data || []; } catch(e){ MX.bw[key] = MX.bw[key] || []; } }
@@ -269,6 +277,15 @@ const TEAMFOR = { lic:["licensing","the licensing team"], alert:["maint_manager"
 const PAGENAME = { "#/licensing":"📄 Open the Licenses page", "#/lic_fire":"📄 Open Fire suppression", "#/property_setup":"🚀 Open Launch Pad" };
 const absLink = l => !l ? "" : /^https?:/.test(l) ? l : "https://crew.moosemanagement.com/hub.html" + (/^#/.test(l) ? l : "#/" + l);
 const homeOf = it => { const m = String(it.title || "").match(/^([A-Z0-9][A-Z0-9-]*(?: [A-Z0-9-]+)?)(\s·|$)/); return m ? m[1] : ""; };
+/* Property Set Up rows (Brandon 2026-11-10: "horizontal percentage ... click from these into the property set up desk ... in the meeting
+   its just quick notes and information"). psu = homes being set up, off = homes leaving us. */
+const isPsu = it => /^(psu|off)$/.test(kindOf(it));
+const psuInfo = it => { const l0 = (it.lines || [])[0] || "", m = l0.match(/^(.*?) · owner (.*?) · (\d+) of (\d+) steps done/);
+  return { home: homeOf(it) || String(it.title).split(" · ")[0], pct: +((String(it.title).match(/(\d+)% done/) || [])[1] || 0),
+    kind: m ? m[1] : kindOf(it) === "off" ? "Leaving management" : "", owner: m ? m[2] : "", done: m ? +m[3] : null, total: m ? +m[4] : null,
+    next: (it.lines || []).filter(l => /^Next: /.test(l)).map(l => l.slice(6)) }; };
+const psuColor = pc => pc >= 75 ? "#3c7d1e" : pc >= 40 ? "#2f6fb0" : "#d0742c";
+const psuIcon = it => kindOf(it) === "off" ? "🚪" : /lease/i.test(psuInfo(it).kind) ? "🔑" : /2nd/i.test(psuInfo(it).kind) ? "🏡" : "🏠";
 const ownerOf = it => { const l = (it.lines || []).find(x => /^Owner: /.test(x || "")); return l ? l.slice(7) : ""; };
 const kindOf = it => String(it.key || "").split(":")[0];
 const short = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n - 1).trim() + "…" : s; };
@@ -335,6 +352,14 @@ function render(v, key, data, ppl){
   if(!items.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing came up from the data this week. Use "Anything else" below.</p></div>`;
   const grps = {}; shown.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
   Object.keys(grps).forEach(g => {
+    if(grps[g].every(isPsu)){
+      h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span> <a class="muted" href="#/property_setup" style="font-size:12.5px;font-weight:400">Open Launch Pad ↗</a></h3><div class="card mpsul">`;
+      grps[g].forEach(it => { const P = psuInfo(it), st = stItem(it), nt = notesOf(day, it.key).length;
+        h += `<div class="mpsur" data-open="${esc(it.key)}" tabindex="0" role="button"><i style="background:${psuColor(P.pct)}">${psuIcon(it)}</i>
+          <div class="mpsum"><div class="mpsut"><span><b>${esc(P.home)}</b>${P.owner ? `<span class="muted"> · ${esc(P.owner)}</span>` : ""}${st ? " " + pill(st) : ""}${nt ? ` <span class="mpill">📝 ${nt}</span>` : ""}</span><b>${P.pct}%</b></div>
+            <div class="mpsub"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div>
+            <small class="muted">${esc([P.kind, P.done != null ? P.done + " of " + P.total + " steps" : "", P.next[0] ? "Next: " + P.next[0] : ""].filter(Boolean).join(" · "))}</small></div></div>`; });
+      h += `</div>`; return; }
     h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3><div class="mgrid">`;
     grps[g].forEach(it => { const st = stItem(it), nt = notesOf(day, it.key).length, tk = open.filter(t => t.item_key === it.key), od = tk.filter(t => t.due && t.due < T).length, last = noteFor(null, it.key);
       h += `<div class="mcardx${st === "covered" ? " cov" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button">
@@ -373,7 +398,20 @@ function render(v, key, data, ppl){
     const tfl = t => MX.tf === "all" ? true : MX.tf === "today" ? t.due === T : MX.tf === "week" ? t.due && t.due >= T && t.due <= wk : MX.tf === "over" ? t.due && t.due < T : MX.tf === "done" ? !!t.done_at : true;
     const isOfb = kindOf(it) === "ofb", fid = isOfb ? +String(it.key).split(":")[1] : 0;
     let b = "";
-    if(MX.tab === "ov"){
+    if(MX.tab === "ov" && isPsu(it)){
+      const P = psuInfo(it), lg = MX.psu[String(it.key).split(":")[1]] || [], dv2 = ST.drafts[key + "|" + it.key];
+      b = `<div class="mbox"><div class="mpsut"><span>${esc(P.kind)}${P.owner ? " · owner " + esc(P.owner) : ""}</span><b>${P.pct}%</b></div>
+          <div class="mpsub" style="margin:6px 0"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div>
+          <small class="muted">${P.done != null ? P.done + " of " + P.total + " steps done" : ""}</small>
+          ${P.next.length ? `<div style="margin-top:8px"><b style="font-size:13px">Next up</b><ul class="mlines">${P.next.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>` : ""}</div>
+        ${it.ask ? `<div class="msig"><i>✦</i><div><small>Ask everyone</small>${esc(it.ask)}</div></div>` : ""}
+        <div class="mbox"><b>📝 Note for Launch Pad</b><p class="muted" style="font-size:12px;margin:0 0 6px">Saved on this home's meeting notes in Property Set Up (and here).</p>
+          ${feedHtml(notesOf(day, it.key))}<textarea id="mpsun" placeholder="What did we say? Who does what?">${esc(dv2 != null ? dv2 : "")}</textarea>
+          <div class="macts"><button class="btn small primary" id="mpsus">Save to Launch Pad</button><span class="muted" id="mpsum" style="font-size:13px"></span></div></div>
+        ${lg.length ? `<div class="mbox"><b>Earlier meeting notes (Launch Pad)</b>${lg.map(e => `<div class="mfn" style="margin-top:6px"><b>${esc(fmt(e.day))}</b><span class="muted"> · ${esc(e.src || e.by || "")}</span><div style="white-space:pre-wrap;font-size:13.5px">${esc(e.text)}</div></div>`).join("")}</div>` : ""}
+        <div class="macts"><a class="btn small primary" href="#/property_setup">🚀 Open in Property Set Up</a></div>
+        <p class="msrc">Source: ${esc(it.src || "")}</p>`;
+    } else if(MX.tab === "ov"){
       b = `${(it.lines || []).filter(Boolean).length ? `<ul class="mlines">${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Decide in the meeting</small>${esc(it.ask)}</div></div>` : ""}
         <p class="msrc">Source: ${esc(it.src || "")}</p>
@@ -408,6 +446,12 @@ function render(v, key, data, ppl){
     o.querySelectorAll("[data-sug]").forEach(x => x.onclick = () => { const s = sg[+x.dataset.sug]; MX.sug[it.key] = { text:s.text, due:addDays(T, s.days) }; panel();
       const i = o.querySelector('[data-tf="who"]'); if(i) i.focus(); });
     wire(o); msgWire(o, it); bwWire(o, it);
+    const pn = o.querySelector("#mpsun"), ps = o.querySelector("#mpsus");
+    if(pn){ pn.oninput = () => ST.drafts[key + "|" + it.key] = pn.value;
+      ps.onclick = async () => { if(!pn.value.trim()) return pn.focus(); ps.disabled = true; o.querySelector("#mpsum").textContent = "Saving…";
+        const r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:pn.value.trim() }); ps.disabled = false;
+        if(r.error) return o.querySelector("#mpsum").textContent = "Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message);
+        delete ST.drafts[key + "|" + it.key]; redraw(); }; }
     const sv = (res, fu, btn) => async () => { const r0 = res ? o.querySelector("#mofbr").value.trim() : ""; if(res && !r0) return o.querySelector("#mofbr").focus();
       btn.disabled = true; const r = await sb.rpc("meeting_ofb_set", { p_meet:key, p_day:day, p_id:fid, p_result:r0 || null, p_followup:fu ? o.querySelector("#mofbd").value || null : null }); btn.disabled = false;
       if(r.error) return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); redraw(); };
@@ -555,6 +599,7 @@ function render(v, key, data, ppl){
   };
   v.querySelectorAll("[data-mday]").forEach(a => a.onclick = e => { e.preventDefault(); ST.day[key] = a.dataset.mday; ST.drafts = {}; render(v, key, data, ppl); window.scrollTo(0, 0); });
   if(!MX.tp[key]) taskPeople(key).then(() => render(v, key, data, ppl));
+  if(items.some(isPsu) && Date.now() - MX.psuAt > 120000) psuLoad().then(() => { if(MX.open && document.getElementById("mpov")) panel(); });
   if(!MX.bw[key]) bwLoad(key).then(() => { if(MX.open && document.getElementById("mpov")) panel(); });
 }
 /* Home + bell (2026-11-10): tasks people were given in a meeting (my_meeting_tasks, hub_meeting_actions.sql). Tick done right here.
