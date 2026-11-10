@@ -15,7 +15,8 @@ const MEET = {
   meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
   meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
-const MCSS = `.mpsur.cov{opacity:.62}.mrc{display:inline-flex;gap:4px;align-items:center;flex:0 0 auto}.mrc .btn{padding:1px 8px;font-size:12px;min-height:0}
+const MCSS = `.mtg .mplus{font-size:20px;line-height:1;min-width:38px;padding:0 10px;font-weight:800}
+.mpsur.cov{opacity:.62}.mrc{display:inline-flex;gap:4px;align-items:center;flex:0 0 auto}.mrc .btn{padding:1px 8px;font-size:12px;min-height:0}
 .mpsur.mrow2>i{width:30px;height:30px;font-size:14px;font-weight:800}.mpsur.mrow2{padding:7px 8px}.mrow2 small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mprice{font-weight:800;color:#24452c;margin-left:4px}.mhl{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 2px}
 .mhp{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:7px;background:#eef0ea;color:#555;white-space:nowrap}
@@ -129,6 +130,9 @@ function linkHtml(u){
 async function load(v, key){
   const r = await sb.rpc("meeting_agenda", { p_meet:key });
   if(r.error || !r.data){ v.innerHTML = `<div class="page"><div class="card"><p class="muted">Couldn't load the agenda${r.error ? ": " + esc(r.error.message) : ""}.</p></div></div>`; return null; }
+  try { const t = await sb.rpc("meeting_topics", { p_meet:key });
+    (t.data || []).forEach(x => (r.data.items = r.data.items || []).push({ grp:x.grp || "Added topics", key:"own:" + x.id, title:x.title, lines:x.note ? [x.note] : [],
+      src:"Added by " + (x.by || "someone") + ", " + new Date(x.at).toLocaleDateString(undefined, { month:"short", day:"numeric" }), own:x.id })); } catch(e){}
   ST.data[key] = r.data; return r.data;
 }
 window.meetView = async function(v, key){
@@ -360,7 +364,7 @@ function render(v, key, data, ppl){
   const taskForm = (k, title, pre) => `<div class="mtask" data-tform="${esc(k)}" data-ttitle="${esc(title || "")}"><input placeholder="New task: what needs to happen" data-tf="text" value="${esc(pre ? pre.text : "")}">
       <select data-tf="who" aria-label="Who">${pplOpts(pre && pre.who)}</select><input type="date" data-tf="due" value="${esc(pre && pre.due || "")}"><button class="btn small primary" data-tadd="${esc(k)}">+ Add task</button></div>`;
   const q = MX.q.trim().toLowerCase();
-  const shown = items.filter(it => { const st = stItem(it);
+  const shown = items.filter(it => { const st = stItem(it); if(st === "covered") return false;
     if(MX.filt === "todo" && st) return false; if(MX.filt === "cov" && st !== "covered") return false; if(MX.filt === "wait" && !/^(waiting|scheduled)$/.test(st)) return false;
     if(MX.filt === "tasks" && !open.some(t => t.item_key === it.key)) return false;
     return !q || [it.title, it.grp, (it.lines || []).join(" "), it.ask].join(" ").toLowerCase().includes(q); });
@@ -368,10 +372,10 @@ function render(v, key, data, ppl){
   const tile = (n, l, ic, cls) => `<div class="mtile${cls ? " " + cls : ""}"><div><b>${n}</b><span>${l}</span></div><i>${ic}</i></div>`;
   let h = `<div class="page mtg"><div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
       <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}</p></div>
-    <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻</button><button class="btn small" id="mup">⬆ Upload recording / notes</button><button class="btn small" id="mprint">Print</button><button class="btn small primary" id="mwrap">✅ Wrap up</button></div></div>
+    <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻</button><button class="btn small" id="mup">⬆ Upload recording / notes</button><button class="btn small" id="mprint">Print</button><button class="btn small primary" id="mwrap">✅ Wrap up</button><button class="btn small primary mplus" id="mplus" title="Add a topic or bring back a covered one" aria-label="Add or bring back a topic">+</button></div></div>
     <div class="mtiles">${tile(items.length, "Topics", "📋")}${tile(covered + " / " + items.length, "Covered", "✓", "g")}${tile(waiting, "Waiting / scheduled", "⏳")}${tile(open.length, overdue.length ? `Open tasks · <em>${overdue.length} overdue</em>` : "Open tasks", "☐", overdue.length ? "r" : "")}</div>
     <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div>
-    <div class="mbar"><div class="mfts">${fbtn("all", "All", items.length)}${fbtn("todo", "To cover", items.length - covered - waiting)}${fbtn("wait", "Waiting", waiting)}${fbtn("cov", "Covered", covered)}${fbtn("tasks", "Has tasks", items.filter(it => open.some(t => t.item_key === it.key)).length)}</div>
+    <div class="mbar"><div class="mfts">${fbtn("all", "All", items.length)}${fbtn("todo", "To cover", items.length - covered - waiting)}${fbtn("wait", "Waiting", waiting)}${fbtn("tasks", "Has tasks", items.filter(it => open.some(t => t.item_key === it.key)).length)}</div>
       <input id="mq" placeholder="🔍 Search topics" value="${esc(MX.q)}"></div>`;
   if(!items.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing came up from the data this week. Use "Anything else" below.</p></div>`;
   const grps = {}; shown.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
@@ -461,6 +465,7 @@ function render(v, key, data, ppl){
       b = `${(it.lines || []).filter(Boolean).length ? `<ul class="mlines">${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Decide in the meeting</small>${esc(it.ask)}</div></div>` : ""}
         <p class="msrc">Source: ${esc(it.src || "")}</p>
+        ${it.own ? `<div class="macts" style="margin-top:0"><button class="btn small" id="mtoff">🗑 Remove this topic</button></div>` : ""}
         <div class="macts">${it.link ? `<a class="btn small primary" href="${esc(it.link)}"${/^https?:/.test(it.link) ? ` target="_blank" rel="noopener"` : ""}>${esc(PAGENAME[it.link] || (/zillow/.test(it.link) ? "🏠 Open on Zillow ↗" : "Open the page ↗"))}</a>` : ""}${tko.length ? `<button class="btn small" data-ptab="nx">☐ ${tko.length} open task${tko.length > 1 ? "s" : ""}</button>` : ""}${sg.length ? `<button class="btn small" data-ptab="nx">✦ ${sg.length} suggested next step${sg.length > 1 ? "s" : ""}</button>` : ""}
           ${/^(ofb|behind|omb|pf|rule)$/.test(kindOf(it)) ? `<a class="btn small" href="#/rates_set">📈 Open Set rates</a>` : ""}</div>
         ${isOfb ? `<div class="mbox"><b>Owner follow-up</b><textarea id="mofbr" placeholder="What did the owner say? (closes this follow-up on the Rates desk)"></textarea>
@@ -492,6 +497,9 @@ function render(v, key, data, ppl){
     o.querySelectorAll("[data-sug]").forEach(x => x.onclick = () => { const s = sg[+x.dataset.sug]; MX.sug[it.key] = { text:s.text, due:addDays(T, s.days) }; panel();
       const i = o.querySelector('[data-tf="who"]'); if(i) i.focus(); });
     wire(o); msgWire(o, it); bwWire(o, it);
+    const toff = o.querySelector("#mtoff");
+    if(toff) toff.onclick = async () => { if(!confirm("Remove \"" + it.title + "\" from this meeting? (Its notes stay.)")) return;
+      const r = await sb.rpc("meeting_topic_off", { p_id:it.own }); if(r.error) return alert("Couldn't remove: " + r.error.message); close(); redraw(); };
     const sbtn = o.querySelector("#mss");
     if(sbtn) sbtn.onclick = async () => { const g2 = i => o.querySelector(i).value; sbtn.disabled = true;
       const r = await sb.rpc("meeting_sale_set", { p_meet:key, p_home:String(it.key).slice(5), p_mls:g2("#msm"), p_agent:g2("#msa"), p_phone:g2("#msp"), p_email:g2("#mse"), p_note:g2("#msn") }); sbtn.disabled = false;
@@ -633,6 +641,28 @@ function render(v, key, data, ppl){
     if(r.error) return alert("Couldn't save: " + r.error.message); redraw(); };
   $("#mprint").onclick = () => window.print();
   $("#mup").onclick = () => upOpen(v, key, day, items, () => render(v, key, data, ppl));
+  $("#mplus").onclick = () => {   // + : add a topic, or bring back one covered today
+    document.getElementById("mpov")?.remove();
+    const cov = items.filter(it => stItem(it) === "covered"), gl = [...new Set(items.map(it => it.grp))];
+    const o = document.createElement("div"); o.id = "mpov"; o.className = "mpov";
+    o.innerHTML = `<div class="mpanel"><div class="mph"><div><h3>Add or bring back a topic</h3><span class="muted">${esc(m.name)} meeting · ${esc(fmt(day))}</span></div><button class="btn small" data-pclose>✕</button></div>
+      <div class="mpb"><div class="mbox"><b>➕ New topic</b>
+          <div class="mbwf"><label>Topic<input id="mtt" placeholder="e.g. BHL 4206 owner wants a call about rates"></label>
+          <label>Details (optional)<textarea id="mtn" placeholder="What do we need to talk about?"></textarea></label>
+          <label>Section<select id="mtg"><option value="">Added topics</option>${gl.map(g2 => `<option>${esc(g2)}</option>`).join("")}</select></label></div>
+          <p class="muted" style="font-size:12px;margin:4px 0 0">It stays on this meeting every week until someone removes it.</p>
+          <div class="macts"><button class="btn small primary" id="mtadd">Add topic</button><span class="muted" id="mtm" style="font-size:13px"></span></div></div>
+        <div class="mbox"><b>↩ Covered today (${cov.length})</b>${cov.length ? cov.map(it => `<div class="msug"><span><b>${esc(it.title)}</b><span class="muted" style="font-size:12px"> · ${esc(it.grp)}</span></span><button class="btn small" data-back="${esc(it.key)}">Bring back</button></div>`).join("")
+          : `<p class="muted" style="font-size:13px;margin:0">Nothing covered yet today.</p>`}</div></div></div>`;
+    document.body.appendChild(o); o.onclick = e => { if(e.target === o) o.remove(); }; o.querySelector("[data-pclose]").onclick = () => o.remove();
+    o.querySelector("#mtadd").onclick = async e => { const t2 = o.querySelector("#mtt").value.trim(); if(t2.length < 2) return o.querySelector("#mtt").focus();
+      e.target.disabled = true; const r = await sb.rpc("meeting_topic_add", { p_meet:key, p_title:t2, p_note:o.querySelector("#mtn").value, p_grp:o.querySelector("#mtg").value || null }); e.target.disabled = false;
+      if(r.error) return o.querySelector("#mtm").textContent = "Couldn't add: " + (window.niceErr ? niceErr(r.error) : r.error.message);
+      o.remove(); MX.open = "own:" + r.data; MX.tab = "ov"; redraw(); };
+    o.querySelectorAll("[data-back]").forEach(b => b.onclick = async () => { b.disabled = true;
+      const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:b.dataset.back, p_text:"Brought back to the agenda.", p_state:"open" });
+      if(r.error){ b.disabled = false; return alert("Couldn't: " + r.error.message); } o.remove(); redraw(); });
+  };
   $("#mwrap").onclick = () => {   // what was decided + who does what, ready to copy
     const L = [`${m.name} meeting · ${fmt(day)}`, ""];
     const dec = items.map(it => ({ it, n: notesOf(day, it.key) })).filter(x => x.n.length);
