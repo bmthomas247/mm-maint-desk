@@ -86,7 +86,8 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 @media(max-width:640px){ .rlk{max-width:none!important} .rlk .stats{grid-template-columns:repeat(2,1fr)} .rfg{grid-template-columns:1fr 1fr} .rgrid{grid-template-columns:1fr} .rhead .deskbtn span{display:none} .rhead{flex-wrap:wrap} .rhead .rhbtns{flex-basis:100%;justify-content:flex-start} .rhead .rsync{max-width:none;flex:1} .rtabs button{padding:7px 10px 7px 8px;font-size:13px} }`;
 const CH = { abnb:"Airbnb", vrbo:"VRBO / VRPC / Phone", ws:"Whimstay / Hopper", oguest:"Owner guest", owner:"Owner stay" };
 // waiting_pay is never saved: a Checkout stay with a balance still due shows there (Kim 2026-11-02, see prep)
-const STAGE = { in_progress:"In progress", waiting_pay:"Waiting on payment", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
+// abb_pay is never saved either: Airbnb stays that have checked in wait there until Airbnb's payout matches Track's You Earn (Brandon 2026-11-10)
+const STAGE = { in_progress:"In progress", waiting_pay:"Waiting on payment", abb_pay:"Waiting on Airbnb payout", checkout:"Checkout", owner_done:"Owner stay done", cancelling:"Cancellations", closed:"Closed" };
 // Neighborhoods: unit code prefix -> name (maintenance_desk/units.json "communities", from Track units)
 const HOODS = {"BHL":"Bear Hollow Lodges","BHR":"Bear Hollow Ridge","BHV":"Bear Hollow Village","BRR":"Black Rock Ridge","BSR":"Blackstone Residences","CH":"Carriage House",
   "CR":"Coyote Ridge","CV":"Crestview","DR":"Discovery Ridge","DS":"Deer Springs","EH":"Edelweiss Haus","FB":"Fox Bay","FP":"Foxpoint","HS":"Hailstone Heights",
@@ -189,6 +190,7 @@ async function load(force){
       const run = (fp.data || [])[0];
       if(run && run.day >= addDay(B.today, -2)) (Array.isArray(run.items) ? run.items : []).forEach(i => { if(i && i.res) B.failed[String(i.res)] = i; });
     } catch(e){} }
+  if(B){ try { const ab = await sb.rpc("res_abb_list"); B.abb = ab.error ? null : ab.data; } catch(e){ B.abb = null; } }   // Airbnb payout matches (hub_res_abb_payouts.sql)
   if(B) B.stays.forEach(prep);
   if(B) seenRecord(sn && sn.data);
   return B;
@@ -535,6 +537,14 @@ function prep(s){
   else if(s.stage === "in_progress" && ready && s.chan === "owner" && (!byPerson || tickedSince)) s.stage = "owner_done";   // Brandon 2026-11-06
   if(s.stage === "checkout" && owed) s.stage = "waiting_pay";
   if(s.stage === "waiting_pay" && s.payFlag) s.blockers.push(fp ? "Payment declined" : /No card/.test(s.payFlag) ? "No card on file for the next payment" : "Balance off");
+  // Brandon 2026-11-10: Airbnb pays about a day after check-in. Checked-in Airbnb stays (last 90 days) wait in "Waiting on Airbnb payout" until the
+  // payout in Airbnb's transaction file matches Track's You Earn within $1 (res_abb_match.py, which then adds the Pmt Rec tag in Track).
+  s.abb = B.abb && B.abb.rows ? B.abb.rows[String(s.res)] || null : null;
+  if(B.abb && s.chan === "abnb" && s.status !== "Cancelled" && s.arrive <= today && s.arrive >= addDay(today, -90)
+     && ["checkout", "waiting_pay", "closed"].includes(s.stage) && !(s.abb && s.abb.status === "ok")){
+    s.stage = "abb_pay";
+    if(s.abb && s.abb.status === "off") s.blockers.push("Airbnb payout doesn't match");
+    else if(s.abb && s.abb.status === "no_earn") s.blockers.push("No Airbnb payment in Track"); }
   s.state = s.stage === "closed" ? "Complete" : s.status === "Cancelled" && s.stage !== "closed" ? "Cancelling" : s.got === 0 ? "Not started"
     : s.got >= s.need ? (s.depart < today ? "Ready to close" : "Paperwork done") : s.waiting.length ? "Waiting" : "In progress";
 }
@@ -551,6 +561,7 @@ const kindOf = s => s.chan === "abnb" ? "airbnb" : s.chan === "owner" ? "owner" 
 const RSV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const RI = { in_progress:RSV('<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2"/><circle cx="5" cy="19" r="1"/>'),
   waiting_pay:RSV('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>'),
+  abb_pay:RSV('<path d="M12 3c-2 4-6 9-6 12a6 6 0 0 0 12 0c0-3-4-8-6-12z"/><path d="M12 11v6M10 13h3a1 1 0 0 1 0 2h-2a1 1 0 0 0 0 2h3"/>'),
   checkout:RSV('<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M9 16l-4-4 4-4M5 12h11"/>'),
   owner_done:RSV('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
   cancelling:RSV('<circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/>'),
@@ -565,6 +576,62 @@ const HELD_GROUP = { Prospector:"On-site management", Westgate:"On-site manageme
   "Day 7: act today":"Day 4 / day 7", "Day 4: missing documents":"Day 4 / day 7" };
 const heldKey = b => HELD_GROUP[b] || b;
 const heldHas = (s, k) => [...s.blockers, ...s.waiting].some(b => b === k || heldKey(b) === k);
+/* ---------- Waiting on Airbnb payout (Brandon 2026-11-10) */
+function abbPill(s){
+  const a = s.abb;
+  if(!a || a.status === "no_payout") return `<span class="pill grey" title="No line for this stay in the Airbnb files yet (Airbnb pays about a day after check-in)">💳 No Airbnb payout yet</span>`;
+  if(a.status === "no_earn") return `<span class="pill amber" title="Airbnb paid, but Track has no Airbnb payment with a commission line on the folio yet">💳 Not in Track yet</span>`;
+  if(a.status === "off") return `<span class="pill red" title="Airbnb's payout and Track's You Earn are more than $1 apart">💳 Payout ${a.diff != null ? (a.diff > 0 ? money(a.diff) + " over" : money(-a.diff) + " short") : "doesn't match"}</span>`;
+  return `<span class="pill green">💳 Payout matches Track</span>`;
+}
+function abbCard(list){
+  const A = B.abb || {}, up = A.last_upload, n = k => list.filter(s => (s.abb ? s.abb.status : "no_payout") === k).length;
+  return `<div class="card"><b>💳 Airbnb payouts</b> <span class="muted">· Airbnb pays about a day after check-in. The hub matches each payout in Airbnb's transaction file to Track's You Earn (within $1), adds the ABB/BDC/WS Pmt Rec tag in Track, and the stay moves on to Checkout by itself.</span>
+    <div class="rmoney" style="margin-top:8px"><span class="pill red">${n("off")} don't match</span><span class="pill amber">${n("no_earn")} not in Track yet</span><span class="pill grey">${n("no_payout")} no payout yet</span>
+      ${A.checked ? `<span class="muted">Last check ${esc(when(A.checked))}</span>` : ""}${A.last_line ? `<span class="muted">Newest Airbnb line ${esc(dayY(A.last_line))}</span>` : ""}
+      ${up ? `<span class="muted">Last file: ${esc(up.file || "")} · ${esc(up.by || "")} · ${esc(when(up.at))}</span>` : ""}</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <label class="btn small" style="cursor:pointer">⬆ Upload Airbnb's transaction file (.csv)<input type="file" id="rq_abbf" accept=".csv,text/csv" style="display:none"></label>
+      <span class="muted" id="rq_abbm" style="font-size:13px">In Airbnb: Earnings ▸ Transaction history ▸ Export CSV. A file saved in Dropbox ▸ 12-TRACK Software ▸ Daily checks ▸ Airbnb payouts is read too, every 3 hours.</span></div>
+    ${!B.money ? `<p class="muted" style="margin:6px 0 0;font-size:13px">A manager sees the dollar amounts.</p>` : ""}</div>`;
+}
+function csvParse(t){
+  const rows = []; let row = [], f = "", q = false;
+  for(let i = 0; i < t.length; i++){ const c = t[i];
+    if(q){ if(c === '"'){ if(t[i + 1] === '"'){ f += '"'; i++; } else q = false; } else f += c; }
+    else if(c === '"') q = true; else if(c === ",") { row.push(f); f = ""; }
+    else if(c === "\n" || c === "\r"){ if(c === "\r" && t[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+    else f += c; }
+  if(f !== "" || row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => x !== ""));
+}
+async function abbUpload(file, done){
+  const m = $("#rq_abbm"); if(!file || !m) return;
+  const say = (t, bad) => { m.textContent = t; m.style.color = bad ? "var(--red,#c0392b)" : ""; };
+  try {
+    say("Reading " + file.name + "…");
+    const rows = csvParse((await file.text()).replace(/^﻿/, "")), head = (rows.shift() || []).map(h => h.toLowerCase().replace(/[^a-z]/g, ""));
+    const col = n => head.indexOf(n);
+    if(col("type") < 0 || col("amount") < 0 || col("confirmationcode") < 0) return say("That doesn't look like Airbnb's transaction file (it needs Type, Confirmation code and Amount columns).", true);
+    const usd = v => { v = String(v || "").replace(/[^0-9.\-]/g, ""); return /^-?\d+(\.\d+)?$/.test(v) ? v : null; };
+    const iso = v => { v = String(v || "").trim(); const x = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return x ? `${x[3]}-${x[1].padStart(2, "0")}-${x[2].padStart(2, "0")}` : /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null; };
+    const cut = addDay(B.today, -150), get = (r, n) => col(n) < 0 ? "" : String(r[col(n)] || "").trim();
+    const lines = rows.map(r => ({ d:iso(get(r, "date")), type:get(r, "type") || null, code:get(r, "confirmationcode").toUpperCase() || null, guest:get(r, "guest") || null,
+        listing:get(r, "listing") || null, start:iso(get(r, "startdate")), end:iso(get(r, "enddate")), nights:/^\d+$/.test(get(r, "nights")) ? get(r, "nights") : null,
+        amount:usd(get(r, "amount")), paid:usd(get(r, "paidout")), details:get(r, "details").slice(0, 300) || null }))
+      .filter(l => l.type && (l.amount || l.paid) && ((l.start && l.start >= cut) || (l.d && l.d >= cut)));   // the hub only checks the last 90 days of stays
+    if(!lines.length) return say("No lines from the last few months in that file.", true);
+    let added = 0;
+    for(let i = 0; i < lines.length; i += 3000){
+      say(`Saving ${Math.min(i + 3000, lines.length)} of ${lines.length} lines…`);
+      const r = await sb.rpc("res_abb_upload", { p_rows:lines.slice(i, i + 3000), p_file:file.name }); if(r.error) throw r.error;
+      added += (r.data && r.data.added) || 0; }
+    say(`Saved ${lines.length} lines (${added} new). The hub checks them against Track within a few minutes; this list updates by itself.`);
+    let tries = 0; const t0 = B.abb && B.abb.checked;
+    const poll = async () => { tries++; try { const ab = await sb.rpc("res_abb_list"); if(ab.data && ab.data.checked !== t0) return done && done(); } catch(e){} if(tries < 12) setTimeout(poll, 30000); };
+    setTimeout(poll, 30000);
+  } catch(e){ say("Couldn't save the file: " + (window.niceErr ? niceErr(e) : e.message), true); }
+}
 async function queue(v){
   v.innerHTML = `<div class="page rpage rlk"><p class="muted">Loading…</p></div>`;
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load the check lists: ${esc(e.message)}</p></div></div>`; return; }
@@ -574,7 +641,7 @@ async function queue(v){
   // groups (like the Locks office neighborhoods): day of the sort date (month for the past lists) or neighborhood
   // Brandon 2026-11-03: Find searches every tab (a stay on Waiting on payment couldn't be found from In progress); results grouped by tab
   let ALLQ = false;
-  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ) return "@" + s.stage; if(F.by === "res") return "#"; if(F.by === "res_asc") return "#a"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" ? d : d.slice(0, 7); };
+  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ) return "@" + s.stage; if(F.by === "res") return "#"; if(F.by === "res_asc") return "#a"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" || F.stage === "abb_pay" ? d : d.slice(0, 7); };
   const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k; if(k[0] === "@") return STAGE[k.slice(1)] || k.slice(1); if(k === "#") return "By reservation #, highest first"; if(k === "#a") return "By reservation #, lowest first";
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
@@ -595,7 +662,7 @@ async function queue(v){
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))}</span></div>
       <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^(Owner Guest|O-Guest)\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
-        ${ALLQ ? `<span class="pill plain">${esc(STAGE[s.stage] || s.stage)}</span>` : ""}<span class="pill plain grey">${s.got} of ${s.need} steps</span>${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill ${/^Day 7/.test(b) ? "red" : "amber"}">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
+        ${ALLQ ? `<span class="pill plain">${esc(STAGE[s.stage] || s.stage)}</span>` : ""}<span class="pill plain grey">${s.got} of ${s.need} steps</span>${s.chan === "abnb" && (s.stage === "abb_pay" || s.abb) ? abbPill(s) : ""}${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill ${/^Day 7/.test(b) ? "red" : "amber"}">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
       ${s.alerts2.some(a => a.lvl === "stop") ? `<div class="rnext stop">⚠ ${esc(s.alerts2.find(a => a.lvl === "stop").t.split(". ")[0])}</div>` : ""}
       ${s.next.length && (s.stage === "in_progress" || s.stage === "waiting_pay") ? `<div class="rnext"><b>Next:</b> ${esc(s.next[0])}</div>` : ""}
       <div class="progress"><i style="width:${pct}%"></i></div>${workers(s)}</a>`; };
@@ -630,13 +697,14 @@ async function queue(v){
     else if(ALLQ){ const so = Object.keys(STAGE); groups.sort((a, b) => so.indexOf(a.k.slice(1)) - so.indexOf(b.k.slice(1))); }
     // Janae, Pyper, Kim 2026-11-03: failed payments stay in Waiting on payment, listed here (daily failed-payments check + no card on file)
     const fpl = !ALLQ && F.stage === "waiting_pay" ? inStage.filter(s => s.payFlag) : [];
-    $("#rqbody").innerHTML = (ALLQ ? `<p class="muted" style="margin:4px 2px 10px">Searching every tab · ${rows.length} ${rows.length === 1 ? "stay" : "stays"} found. Tap a tab to clear the search.</p>` : "")
+    $("#rqbody").innerHTML = (!ALLQ && F.stage === "abb_pay" ? abbCard(inStage) : "") + (ALLQ ? `<p class="muted" style="margin:4px 2px 10px">Searching every tab · ${rows.length} ${rows.length === 1 ? "stay" : "stays"} found. Tap a tab to clear the search.</p>` : "")
       + (fpl.length ? `<div class="card" style="border-color:var(--red,#c0392b)"><b>⚠️ ${fpl.length} ${fpl.length === 1 ? "reservation has" : "reservations have"} a payment problem</b> <span class="muted">· declined payments, no card on file, credits, balances inside 14 days or after the stay · Track reports: <a href="https://moosemanagement.trackhs.com/reports/pms-folio-balance/" target="_blank" rel="noopener">Folio balance ↗</a> · <a href="https://moosemanagement.trackhs.com/reports/pms-cancellation-balance/" target="_blank" rel="noopener">Cancellation balance ↗</a></span>
         ${fpl.map(s => `<div style="padding:6px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(s.res)}"><b>${esc(s.unit || "")} · ${esc(s.guest || "#" + s.res)}</b></a> <span class="muted">#${esc(s.res)} · arrives ${esc(dayY(s.arrive))} · ${s.balance < 0 ? "credit " + esc(money(-s.balance)) : esc(money(s.balance)) + " due"}</span><div style="font-size:13px">${esc(s.payFlag)}</div></div>`).join("")}</div>` : "")
       + (rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
       return `<div class="rgh" data-g="${esc(g.k)}"><span>${esc(gName(g.k).toUpperCase())} · ${g.s.length} ${g.s.length === 1 ? "STAY" : "STAYS"}</span><span>${shut ? "▾" : "▴"}</span></div>
       ${shut ? "" : `<div class="rgrid">${g.s.map(tile).join("")}</div>`}`; }).join("")
       : `<div class="card"><p class="muted" style="margin:0">Nothing here${F.q || F.chan || F.held || F.area || F.kind ? " with these filters" : ""}.</p></div>`);
+    const abf = $("#rq_abbf"); if(abf) abf.onchange = e => abbUpload(e.target.files && e.target.files[0], async () => { await load(true); draw(); });
     v.querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; if(ALLQ){ F.q = ""; $("#rq_q").value = ""; } draw(); });
     v.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => { F.kind = F.kind === b.dataset.kind ? "" : b.dataset.kind; draw(); });
     v.querySelectorAll("[data-held]").forEach(b => b.onclick = () => { const k = b.dataset.held;
@@ -709,6 +777,7 @@ async function card(v, res){
         <span>Guarantee: <b>${esc(s.guarantee || "—")}</b></span><span>Agreement: <b>${esc(s.agreement || "—")}</b></span>
         ${B.money ? `<span>Rent ${money(s.rent)}</span><span>Fees ${money(s.fees)}</span><span>Taxes ${money(s.taxes)}</span><span>Total <b>${money(s.total)}</b></span>` : ""}
         <span>Paid <b>${money(s.paid)}</b></span><span>Balance <b>${money(s.balance)}</b></span>${chargeBtn(s)}</div>
+      ${s.chan === "abnb" && (s.abb || s.stage === "abb_pay") ? `<div class="rmoney"><span class="muted">Airbnb payout</span>${abbPill(s)}${s.abb && B.money && s.abb.payout != null ? `<span>Airbnb paid <b>${money(s.abb.payout)}</b></span>` : ""}${s.abb && B.money && s.abb.earn != null ? `<span>Track You Earn <b>${money(s.abb.earn)}</b></span>` : ""}${s.abb && s.abb.src ? `<span class="muted">${esc(s.abb.src)}</span>` : ""}${s.abb && s.abb.tagged === "hub" ? `<span class="pill green">Pmt Rec tag added by the hub</span>` : ""}${s.abb && s.abb.at ? `<span class="muted">checked ${esc(when(s.abb.at))}</span>` : ""}</div>` : ""}
       ${s.ah ? `<div class="rmoney"><span class="muted">Autohost</span><span>Status: <b>${esc(s.ah.verify || "unknown")}</b></span>${s.ah.reason ? `<span>${esc(s.ah.reason)}</span>` : ""}<span>Portal: <b>${s.ah.portal ? "done" : "not done"}</b></span></div>` : ""}
       ${s.td && s.td.msgs && (s.td.msgs.in || s.td.msgs.out) ? `<div class="rmoney"><span class="muted">Guest messages (Track)</span><span>${s.td.msgs.in} from the guest · ${s.td.msgs.out} from us</span>
         ${msgOwed(s) ? `<span class="pill amber">Reply owed since ${esc(when(s.td.msgs.lastIn))}</span>` : `<span class="pill green">Answered</span>`}</div>` : ""}
@@ -733,7 +802,7 @@ async function card(v, res){
     <div class="card">
       ${s.next.length && s.stage !== "closed" ? `<div class="rnext big"><b>Next up:</b> ${s.next.map(esc).join(" · then ")}${s.waiting.length ? ` <span class="muted">· waiting on ${esc(s.waiting.join(", "))}</span>` : ""}</div>` : ""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="flex:1">${s.got} of ${s.need} steps done</b>
-        <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay").map(([k, l]) => `<option value="${k}" ${(s.stage === "waiting_pay" ? "checkout" : s.stage) === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <select id="rx_stage" style="width:auto">${Object.entries(STAGE).filter(([k]) => k !== "waiting_pay" && k !== "abb_pay").map(([k, l]) => `<option value="${k}" ${(s.stage === "waiting_pay" || s.stage === "abb_pay" ? (s.stageSet === "closed" ? "closed" : "checkout") : s.stage) === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       ${s.stage === "waiting_pay" && !s.payFlag ? `<div class="rrule info">Waiting on payment: ${money(s.balance)} is still due. Track takes the next payments from the card on file, so nothing to do unless one fails. It moves to Checkout by itself once the balance is $0.</div>`
         : s.payWhy ? `<div class="rrule stop">${s.stage === "waiting_pay" ? "Waiting on payment: " : ""}${esc(s.payWhy)} ${s.balance > 0 ? money(s.balance) + " still due. " : ""}${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : /No card/.test(s.payWhy) ? "Ask the guest to add a card in the guest portal, or pay the balance." : "Fix it on the folio in Track; it moves to Checkout by itself once the balance is $0."}</div>` : ""}
       <div class="rchips"><span class="muted" style="align-self:center">⏸ Waiting on</span>${[...WAIT, ...s.waiting.filter(w => !WAIT.includes(w))].map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}" title="${esc(WAIT_TIP[w] || (s.waiting.includes(w) ? "Tap to take it off hold" : "Put the check list on hold for this"))}">${esc(w)}${s.waiting.includes(w) && !WAIT.includes(w) ? " ✕" : ""}</button>`).join("")}<button class="rchip" data-waitother="1">+ Other reason</button></div>
