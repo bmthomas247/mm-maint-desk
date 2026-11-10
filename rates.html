@@ -1585,7 +1585,7 @@ function srDraw() {
         <label title="Blank = the business table below (by bedrooms + days out). A number here wins for this home on every holiday and key-event night.">Holidays + events${num("dyMinHol", Y.minHol ?? "", 60, "blank = business table")}</label>
         <div class="dyseas" id="dySeas">${(Y.minSeasons || []).map(srSeasRow).join("")}</div>
         <button type="button" class="ovbtn" id="dySeasAdd">+ Add a season</button>
-        <div class="small muted dylosx" style="grid-column:1/-1"><b>Holiday minimums (business table, ${srBeds() <= 1 ? "studio/1BR" : srBeds() <= 3 ? "2-3BR" : "4BR+"} for this home)</b> · days out 90+ / 31-89 / 15-30 / 8-14 / 0-7: ${Object.values(SR_HOLMIN).map(h => `${h.name} ${h[srBeds() <= 1 ? "s" : srBeds() <= 3 ? "m" : "b"].join("-")}`).join(" · ")}. From our guest stays over each holiday, Nov 2023 - Nov 2026: early bookers stay longer, short stays come in the last few weeks.</div>
+        <div class="small muted dylosx" style="grid-column:1/-1"><b>Everyday minimums (business table, blank boxes above)</b> · winter studio 1 Sun–Thu / 2 Fri–Sat, 2–3BR 2 / 3, 4BR+ 3 (2 inside 14 days) · summer studio 1, 2–3BR 2, 4BR+ 3 · off-season studio 1, others 2. Airbnb still needs 2 nights (Track's Airbnb rate).<br><b>Holiday minimums (business table, ${srBeds() <= 1 ? "studio/1BR" : srBeds() <= 3 ? "2-3BR" : "4BR+"} for this home)</b> · days out 90+ / 31-89 / 15-30 / 8-14 / 0-7: ${Object.values(SR_HOLMIN).map(h => `${h.name} ${h[srBeds() <= 1 ? "s" : srBeds() <= 3 ? "m" : "b"].join("-")}`).join(" · ")}. From our guest stays over each holiday, Nov 2023 - Nov 2026: early bookers stay longer, short stays come in the last few weeks.</div>
         <div class="small muted dylosx">Blank = leave it. Which one wins: a gap between stays (so gaps can sell) → this home's holiday number → the holiday table → a season → the day of the week → every night. Never 1 night. A season is a date range, e.g. Christmas week 5 or summer 3.</div></div>
       <div class="dyng dylos"><b>8 · Longer stays</b>${SR_LOS.map(L => `<label>${L}+ nights: down %<input type="number" id="dyLos${L}" value="${Y["los" + L] ?? ""}" step="1"></label>`).join("")}
         <div class="small muted dylosx">${(() => { const v = Object.values(SR.edits || {}).map(e => e.rate).filter(x => x != null), base = v.length ? v.reduce((a, b) => a + b, 0) / v.length : (() => { const t = Object.values(SR.track || {}).map(x => +x.rate).filter(x => x); return t.length ? t.reduce((a, b) => a + b, 0) / t.length : null; })();
@@ -1856,7 +1856,13 @@ function srMinFor(Y, k, dw, hol, out) { const nz = v => v !== "" && v != null &&
   const se = (Y.minSeasons || []).find(x => x.from <= k && k <= x.to && nz(x.min)); if (se) return { m: nz(se.min), why: se.name || "season" };
   const d = nz((Y.minDow || [])[dw] ?? ((dw === 5 || dw === 6) ? Y.minWk : "")); if (d) return { m: d, why: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw] };
   if (nz(Y.minDef)) return { m: nz(Y.minDef), why: "every night" };
+  { const dm = out != null ? srDayMin(k, dw, out) : null; if (dm) return dm; }
   return null; }
+// Everyday business minimums by season + bedroom size (Brandon 2026-11-10; our Track stays 2020-2026 + Key Data market stays).
+function srDayMin(k, dw, out) { const md = k.slice(5), b = srBeds(), sz = b <= 1 ? 0 : b <= 3 ? 1 : 2, we = dw === 5 || dw === 6;
+  const sea = (md >= "11-20" || md <= "03-31") ? "winter" : (md >= "06-15" && md <= "08-31") ? "summer" : "off";
+  const m = sea === "winter" ? [we ? 2 : 1, we ? 3 : 2, out <= 14 ? 2 : 3][sz] : sea === "summer" ? [1, 2, 3][sz] : [1, 2, 2][sz];
+  return { m, one: m === 1, why: `everyday ${sea === "off" ? "off-season" : sea}, ${["studio/1BR", "2-3BR", "4BR+"][sz]}` }; }
 // Highlight nights in the table (drag down the rows, Shift-click for a range, Ctrl/⌘-click one), then move them all at once.
 function srBulk() { const tbl = document.querySelector("[data-srr]")?.closest("table"); if (!tbl) return;
   const sel = SR.sel ||= new Set(), rows = () => [...tbl.querySelectorAll("tr[data-k]")], keys = () => rows().map(t => t.dataset.k);
@@ -2078,7 +2084,7 @@ function srWire(R) {
       if (sn && sn.in >= Y.snowIn) step(1 + Y.snowU / 100, `${sn.in}" snow forecast (NWS)`);
       const mr = srMinFor(Y, r.k, dw, hol, out); if (gapMin == null && mr) why.push(`min stay ${mr.m} (${mr.why})`);
       const min = gapMin ?? mr?.m ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
-      let mn = Math.max(srMinLo(Y), gapMin ?? min ?? 2);
+      let mn = Math.max(gapMin == null && mr?.one ? 1 : srMinLo(Y), gapMin ?? min ?? 2);
       { const lmv = out <= 3 && Y.minLm3 !== "" && Y.minLm3 != null ? +Y.minLm3 : out <= 7 && Y.minLm7 !== "" && Y.minLm7 != null ? +Y.minLm7 : null;
         if (lmv && lmv < mn) { mn = Math.max(srMinLo(Y), lmv); why.push(`last minute: min stay ${mn}`); } }
       built.push({ r, v, why, ct, clo, ly: !!far, hol: !!hol, gap: gapMin != null, dw, min: mn /* 2+ nights unless the home allows 1 (Brandon 2026-11-09) */ }); n++; }
