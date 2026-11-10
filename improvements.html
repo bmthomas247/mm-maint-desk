@@ -83,6 +83,7 @@ dialog textarea{min-height:70px;resize:vertical}
   .two{grid-template-columns:1fr}
 }
 body.inhub .wrap{padding-top:10px}
+body.embed .wrap{padding:0 0 20px;max-width:none} body.embed .head{display:none}
 .btn.primary{background:var(--forest);border-color:var(--forest)}
 .icard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;padding:14px 16px}
 .icard .top{display:flex;gap:8px 12px;align-items:baseline;flex-wrap:wrap}
@@ -121,6 +122,9 @@ const free = (home, n = 4) => { const out = []; for(let i = 1; i <= 45 && out.le
   if(!(S.stays || []).some(x => base(x.unit) === base(home) && x.in <= d && d < x.out)) out.push(d); } return out; };
 const pick = id => `<select data-pp="${id}" title="Assign to">${(S.ppl || []).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("") || `<option value="">Chris Robinson</option>`}</select>`;
 if(window.top !== window) document.body.classList.add("inhub");
+if(new URLSearchParams(location.search).get("embed") === "1"){ document.body.classList.add("embed");   // inside Reviews ▸ Improvements (2026-11-10)
+  const tell = () => parent.postMessage({ mmImpH:document.documentElement.scrollHeight }, location.origin);
+  try { new ResizeObserver(tell).observe(document.body); } catch(e){ setInterval(tell, 1000); } }
 const P = new URLSearchParams(location.search);
 const AREA = P.get("area") === "housekeeping" ? "housekeeping" : "maintenance";
 const SL = { new:"New", planned:"Planned", scheduled:"Scheduled", done:"Done", not_doing:"Not doing" };
