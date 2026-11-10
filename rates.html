@@ -1175,7 +1175,7 @@ async function loadSetRates() {
     if (ids.length) { const ar = await sb.from("nightly_snapshots").select("comp_id,start_date,rates,avail,captured_at").eq("channel", "Airbnb").like("source", "AirROI%").in("comp_id", ids).order("captured_at", { ascending: false }).limit(ids.length * 4);
       for (const n of ar.data || []) if (!SR.air[n.comp_id]) SR.air[n.comp_id] = n; } }
   SR.fee = srFeeModel(SR.ck || [], h.comp_id); SR.compAll = srCompAllIn(SR.ck || []); SR.totRatio = null;
-  try { SR.owner = h.comp_id ? ((await sb.from("owner_rules").select("min_price,min_price_peak,peak_start,peak_end,note").eq("comp_id", h.comp_id)).data || [])[0] || null : null; } catch (e) { SR.owner = null; }
+  try { SR.owner = h.comp_id ? (rs => rs.find(x => x.min_price_peak != null && x.peak_start && x.peak_end) || rs[0] || null)((await sb.from("owner_rules").select("min_price,min_price_peak,peak_start,peak_end,note,captured_at").eq("comp_id", h.comp_id).order("captured_at", { ascending: false })).data || []) : null; } catch (e) { SR.owner = null; }
   srDraw();
 }
 // Every comp that night: its own daily rate (Airbnb, else Vrbo) and its Airbnb checkout total per night when we have one.
@@ -2105,7 +2105,8 @@ function srWire(R) {
         const mx = Math.max(...xw.filter(x => !["12-24", "12-25", "12-31"].includes(x.r.k.slice(5))).map(x => x.v), 0);
         for (const x of xw) if (["12-25", "12-31"].includes(x.r.k.slice(5)) && x.v < mx) { x.v = mx; x.why.push(`Christmas week: top night, at least the week's highest ${fmt(mx)}`); } } }
     let moved = 0, last = null; SR.diff = [];
-    const own = SR.owner, ownMin = k => own ? (own.min_price_peak != null && own.peak_start && own.peak_end && k >= own.peak_start && k <= own.peak_end ? +own.min_price_peak : own.min_price != null ? +own.min_price : null) : null;
+    const own = SR.owner, inPk = (k, a, b) => { const md = k.slice(5), A = String(a).slice(-5), B = String(b).slice(-5); return A <= B ? md >= A && md <= B : md >= A || md <= B; },
+      ownMin = k => own ? (own.min_price_peak != null && own.peak_start && own.peak_end && inPk(k, own.peak_start, own.peak_end) ? +own.min_price_peak : own.min_price != null ? +own.min_price : null) : null;
     for (const x of built) { let v = x.v; const wa = Y.floor !== "" ? +Y.floor : null, om = ownMin(x.r.k);
       // never give it away: never under the cheaper comps (A), or not more than maxU% under the comps' total (other starts)
       const mU = Y.maxU === "" || Y.maxU == null ? 10 : +Y.maxU, l10 = x.ct ? srRackFor(x.ct.v * (1 - mU / 100), x.ct.nt) : null;
