@@ -315,7 +315,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="idle.js"></script>
 <script src="reservations.js"></script>
 <script src="analytics.js?v=20261109grade"></script>
-<script src="meetings.js?v=20261110feed"></script>
+<script src="meetings.js?v=20261110act"></script>
 <script src="calendar.js?v=20261110day"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
@@ -829,6 +829,7 @@ async function bellLoad(force){
       t:`${f1(a.who)} ${a.answer === "yes" ? "is coming to" : a.answer === "no" ? "can't make" : "suggested another time for"} ${a.title}`,
       s:a.answer === "suggest" ? when(a.sug_day, a.sug_start) + " instead of " + when(a.day, a.start) : when(a.day, a.start), href:`#/cal_me/m${a.id}`, k:"bell_meet", mr:[a.rid] }));
     if(na.length > 3) it.push({ ic:"📅", t:`${na.length - 3} more answer${na.length === 4 ? "" : "s"} on your meetings`, s:"Tap to mark read", k:"bell_meet", mr:na.slice(3).map(a => a.rid), quiet:true }); }
+  if(window.meetTasksBell){ const mt = await window.meetTasksBell().catch(() => []); it.push(...mt); }   // meetings.js (2026-11-10)
   if(window.otBellItems){ const ot = await window.otBellItems().catch(() => []); it.push(...ot); }   // staffing.js: close to 40 h (was a banner until 2026-11-06)
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
@@ -2070,6 +2071,7 @@ async function homeView(v){
     <div id="hclk"></div>
     <div id="bdays"></div>
     <div id="chk"></div>
+    <div id="mtk"></div>
     <div id="ptips"></div>
     <div id="hq"></div>
     <div class="card daily" id="daily"></div>
@@ -2088,7 +2090,8 @@ async function homeView(v){
   if(window.calHomeCard && $("#mywk")) calHomeCard($("#mywk"));   // calendar.js (2026-10-29)
   homeClock($("#hclk"));   // 2026-11-06 (Brandon): clock in/out right on Home
   loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello(); pennyTips($("#ptips")); homeQuick($("#hq"));
-  if(window.checksHome) checksHome($("#chk"));   // checks.js: my checks + issues warning (Brandon 2026-10-29)
+  if(window.checksHome) checksHome($("#chk"));
+  if(window.meetTasksHome) meetTasksHome($("#mtk"));   // meetings.js: tasks given to me in a meeting (2026-11-10)   // checks.js: my checks + issues warning (Brandon 2026-10-29)
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
