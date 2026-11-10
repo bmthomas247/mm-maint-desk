@@ -189,11 +189,11 @@ function chip(t, opts = {}){
   const cls = ["chip", (t.priority || "normal"), t.stage === "finished" ? "done" : t.stage === "in_progress" ? "prog" : "", p ? (p.fail ? "fail" : "pend") : ""].join(" ");
   /* By home view: the row is the home, so the card is the task + who's on it (like Breezeway's Property Schedule) */
   if(opts.home){ const ppl = (t.who || []).map(n => { const c = (S.B.crew || []).find(x => x.bwName === n); return c ? c.first : n.split(" ")[0]; });
-    return `<button class="${cls}" draggable="${t.stage === "finished" ? "false" : "true"}" data-t="${t.id}" title="${esc(t.name)}">
+    return `<button class="${cls}" draggable="${t.stage === "finished" || !S.B.canAct ? "false" : "true"}" data-t="${t.id}" title="${esc(t.name)}">
       <b class="nm" style="color:var(--ink)">${esc(t.name)}</b>${t.time ? `<span class="muted">${esc(String(t.time).slice(0, 5))} </span>` : ""}
       ${t.priority === "urgent" || t.priority === "high" ? `<span class="tg late">${esc(t.priority)}</span>` : ""}${late ? `<span class="tg late">late</span>` : ""}
       <span class="ppl2">${ppl.length ? ppl.map(n => `<i>${esc(n)}</i>`).join("") : '<i class="none">no one yet</i>'}</span></button>`; }
-  return `<button class="${cls}" draggable="${t.stage === "finished" ? "false" : "true"}" data-t="${t.id}" title="${esc(t.home + " · " + t.name + (p && p.fail ? "\nBreezeway: " + p.fail : p ? "\nSending to Breezeway…" : ""))}">
+  return `<button class="${cls}" draggable="${t.stage === "finished" || !S.B.canAct ? "false" : "true"}" data-t="${t.id}" title="${esc(t.home + " · " + t.name + (p && p.fail ? "\nBreezeway: " + p.fail : p ? "\nSending to Breezeway…" : ""))}">
     <b>${esc(t.home || "No home")}</b>${t.time ? ` <span class="muted">${esc(String(t.time).slice(0, 5))}</span>` : ""}
     ${t.priority === "urgent" || t.priority === "high" ? `<span class="tg late">${esc(t.priority)}</span>` : ""}
     ${late ? `<span class="tg late">late</span>` : ""}${st ? `<span class="tg stay" title="${st.owner ? "Owner" : st.lease ? "Tenant" : "Guest"} staying">${st.owner ? "owner in" : st.lease ? "tenant" : "guest in"}</span>` : ""}
@@ -219,7 +219,7 @@ function render(){
       <div class="right"><span class="seg"><button data-view="tech" class="${S.view === "tech" ? "on" : ""}">By tech</button><button data-view="home" class="${S.view === "home" ? "on" : ""}">By home</button></span>
       <button class="btn sm" data-nav="-7">‹</button><button class="btn sm" data-nav="0">This week</button><button class="btn sm" data-nav="7">›</button>
       <button class="btn sm" data-days="${S.days === 7 ? 14 : 7}">${S.days === 7 ? "Show 2 weeks" : "Show 1 week"}</button><button class="btn sm" data-act="reload">↻</button></div></div>
-    <div class="sub">${esc(dLabel(S.start))} – ${esc(dLabel(to))} · drag a task onto a tech and a day, or tap it · Breezeway copy updated ${esc(pulled)}</div>
+    <div class="sub">${esc(dLabel(S.start))} – ${esc(dLabel(to))} · ${S.B.canAct ? "drag a task onto a tech and a day, or tap it" : "tap a task to see it"} · Breezeway copy updated ${esc(pulled)}</div>
     <div class="tiles">
       <button class="tile${S.side === "hand" ? " on" : ""}" data-side="hand"><b>${handList.length}</b><span>Not handed out yet</span></button>
       <button class="tile${S.side === "week" ? " on" : ""}" data-side="week"><b>${weekOpen.length}</b><span>Open tasks this ${S.days === 7 ? "week" : "2 weeks"}</span></button>
@@ -227,7 +227,8 @@ function render(){
       <button class="tile${S.side === "nodate" ? " on" : ""}" data-side="nodate"><b>${undated.length}</b><span>No date</span></button>
       <div class="tile" style="cursor:default"><b>${all.filter(t => t.stage === "finished" && inWin(t)).length}</b><span>Done in these days</span></div>
     </div></div>`;
-  if(!S.B.canAct) h += `<div class="warn">Changes to Breezeway are switched off right now, so the board is look-only.</div>`;
+  if(!S.B.canEdit) h += `<div class="note">You can see the crew's plan here. Managers hand out and move tasks.</div>`;
+  else if(!S.B.canAct) h += `<div class="warn">Changes to Breezeway are switched off right now, so the board is look-only.</div>`;
   if(!scheduled) h += `<div class="note">No crew shifts are set in the hub for these days. Set them in Staffing ▸ Schedule and each tech's hours show here, with a warning when a day is planned past their shift.</div>`;
   h += `<div class="layout"><aside class="side" id="side"><header><b>${{ hand:"Not handed out yet", week:"Open tasks in these days", late:"Past due", nodate:"No date" }[S.side]}</b>
       <div class="muted">${S.side === "hand" ? "Dated tasks only on Chris or no one (past due included). Drag onto a tech's day." : "Drag onto a tech's day to plan it."} Drop a task here to take it back.</div>
@@ -324,8 +325,9 @@ function open(t){
     <label>Comment for the tech (goes on the task in Breezeway)<textarea id="f_cm" maxlength="1000" placeholder="Optional"></textarea></label>
     <div class="err" id="f_err"></div></div>
     <div class="dfoot"><a class="btn ghost" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Breezeway ↗</a>
-      ${t.stage !== "finished" ? `<button class="btn danger" data-act="close">Close task</button>` : ""}
+      ${t.stage !== "finished" && S.B.canAct ? `<button class="btn danger" data-act="close">Close task</button>` : ""}
       <button class="btn" data-act="x">Cancel</button><button class="btn primary" data-act="save"${S.B.canAct ? "" : " disabled"}>Save</button></div>`;
+  if(!S.B.canAct){ $$("input,select,textarea", d).forEach(x => x.disabled = true); const sv = $('[data-act="save"]', d); if(sv) sv.remove(); const cm = $("#f_cm", d); if(cm) cm.closest("label").remove(); }
   d.dataset.t = t.id; d.showModal();
 }
 document.addEventListener("click", async e => {
