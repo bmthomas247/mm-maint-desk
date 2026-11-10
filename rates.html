@@ -1582,10 +1582,11 @@ function srDraw() {
         <label title="Nights 4–7 days out: the minimum stay drops to this (never raised). Blank = no change.">Last minute, within 7 days${num("dyMinLm7", Y.minLm7 ?? "", 60, "blank = no change")}</label>
         <label title="Nights 0–3 days out: the minimum stay drops to this (never raised). Blank = no change.">Last minute, within 3 days${num("dyMinLm3", Y.minLm3 ?? "", 60, "blank = no change")}</label>
         ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((n, i) => `<label>${n}<input type="number" data-mdow="${i}" value="${(Y.minDow || [])[i] ?? (i >= 5 && Y.minWk ? Y.minWk : "")}" min="2" step="1"></label>`).join("")}
-        <label title="Holiday and key-event nights (the ★ list)">Holidays + events${num("dyMinHol", Y.minHol ?? "", 60)}</label>
+        <label title="Blank = the business table below (by bedrooms + days out). A number here wins for this home on every holiday and key-event night.">Holidays + events${num("dyMinHol", Y.minHol ?? "", 60, "blank = business table")}</label>
         <div class="dyseas" id="dySeas">${(Y.minSeasons || []).map(srSeasRow).join("")}</div>
         <button type="button" class="ovbtn" id="dySeasAdd">+ Add a season</button>
-        <div class="small muted dylosx">Blank = leave it. Which one wins: a gap between stays (so gaps can sell) → holidays → a season → the day of the week → every night. Never 1 night. A season is a date range, e.g. Christmas week 5 or summer 3.</div></div>
+        <div class="small muted dylosx" style="grid-column:1/-1"><b>Holiday minimums (business table, ${srBeds() <= 1 ? "studio/1BR" : srBeds() <= 3 ? "2-3BR" : "4BR+"} for this home)</b> · days out 90+ / 31-89 / 15-30 / 8-14 / 0-7: ${Object.values(SR_HOLMIN).map(h => `${h.name} ${h[srBeds() <= 1 ? "s" : srBeds() <= 3 ? "m" : "b"].join("-")}`).join(" · ")}. From our guest stays over each holiday, Nov 2023 - Nov 2026: early bookers stay longer, short stays come in the last few weeks.</div>
+        <div class="small muted dylosx">Blank = leave it. Which one wins: a gap between stays (so gaps can sell) → this home's holiday number → the holiday table → a season → the day of the week → every night. Never 1 night. A season is a date range, e.g. Christmas week 5 or summer 3.</div></div>
       <div class="dyng dylos"><b>8 · Longer stays</b>${SR_LOS.map(L => `<label>${L}+ nights: down %<input type="number" id="dyLos${L}" value="${Y["los" + L] ?? ""}" step="1"></label>`).join("")}
         <div class="small muted dylosx">${(() => { const v = Object.values(SR.edits || {}).map(e => e.rate).filter(x => x != null), base = v.length ? v.reduce((a, b) => a + b, 0) / v.length : (() => { const t = Object.values(SR.track || {}).map(x => +x.rate).filter(x => x); return t.length ? t.reduce((a, b) => a + b, 0) / t.length : null; })();
           if (!base || !SR.fee?.Airbnb) return "Guest prices by stay length show once there are prices for these dates.";
@@ -1836,9 +1837,22 @@ function srDiffOpen() { const D = (SR.diff || []), ch = D.filter(d => d.before =
     if (e.target.dataset.sd === "undo") { close(); SR.edits = {}; SR.diff = []; SR.dynMsg = "Build undone."; srDraw(); } }); }
 const srSeasRow = x => `<div class="dyseasrow" data-ms><input type="date" data-ms-from value="${x?.from || ""}"> to <input type="date" data-ms-to value="${x?.to || ""}"><label>min<input type="number" data-ms-min min="2" step="1" value="${x?.min ?? ""}"></label><input type="text" data-ms-name placeholder="Name (e.g. Christmas week)" value="${escH(x?.name || "")}"><button type="button" class="ovbtn" data-ms-del title="Remove this season">✕</button></div>`;
 const srReadSeasons = () => [...document.querySelectorAll("[data-ms]")].map(r => ({ from: r.querySelector("[data-ms-from]").value, to: r.querySelector("[data-ms-to]").value, min: r.querySelector("[data-ms-min]").value, name: r.querySelector("[data-ms-name]").value.trim() })).filter(x => x.from && x.to && x.min);
+// Holiday minimum stays by bedroom size + days out (Brandon 2026-11-10; our Track guest stays Nov 2023 - Nov 2026).
+// Columns = 90+ days out, 31-89, 15-30, 8-14, 0-7. Rows: s = studio/1BR, m = 2-3BR, b = 4BR+.
+const SR_HOLMIN = {
+  xmas: { name: "Christmas / New Year's", s: [5, 4, 4, 3, 2], m: [5, 5, 4, 4, 3], b: [6, 5, 5, 4, 3] },
+  thx:  { name: "Thanksgiving",           s: [2, 2, 2, 2, 2], m: [3, 3, 3, 3, 3], b: [4, 4, 4, 3, 3] }, /* smaller homes lower: family stays split across homes (Brandon 2026-11-10) */
+  mlk:  { name: "MLK weekend",            s: [3, 3, 3, 3, 2], m: [3, 3, 3, 3, 2], b: [3, 3, 3, 3, 2] },
+  pres: { name: "Presidents Day",         s: [3, 3, 3, 3, 2], m: [4, 4, 3, 3, 3], b: [4, 4, 3, 3, 3] } };
+function srHolMin(k, out) { const md = k.slice(5), pk = (typeof peakOf === "function" && peakOf(k)) || "";
+  const key = (md >= "12-20" || md <= "01-02") ? "xmas" : /Thanksgiving/i.test(pk) ? "thx" : /MLK/i.test(pk) ? "mlk" : /Presidents/i.test(pk) ? "pres" : null;
+  if (!key) return null; const b = srBeds(), row = SR_HOLMIN[key][b <= 1 ? "s" : b <= 3 ? "m" : "b"];
+  const i = out >= 90 ? 0 : out >= 31 ? 1 : out >= 15 ? 2 : out >= 8 ? 3 : 4;
+  return { m: row[i], why: `${SR_HOLMIN[key].name}, ${b <= 1 ? "studio/1BR" : b <= 3 ? "2-3BR" : "4BR+"}, ${out} days out` }; }
 // minimum stay for a night from the settings (null = no rule); gaps are handled by the caller
-function srMinFor(Y, k, dw, hol) { const nz = v => v !== "" && v != null && +v > 0 ? Math.max(srMinLo(Y), +v) : null;
+function srMinFor(Y, k, dw, hol, out) { const nz = v => v !== "" && v != null && +v > 0 ? Math.max(srMinLo(Y), +v) : null;
   if (hol && nz(Y.minHol)) return { m: nz(Y.minHol), why: "holiday" };
+  { const hm = out != null ? srHolMin(k, out) : null; if (hm) return { m: Math.max(srMinLo(Y), hm.m), why: hm.why }; }
   const se = (Y.minSeasons || []).find(x => x.from <= k && k <= x.to && nz(x.min)); if (se) return { m: nz(se.min), why: se.name || "season" };
   const d = nz((Y.minDow || [])[dw] ?? ((dw === 5 || dw === 6) ? Y.minWk : "")); if (d) return { m: d, why: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw] };
   if (nz(Y.minDef)) return { m: nz(Y.minDef), why: "every night" };
@@ -2062,7 +2076,7 @@ function srWire(R) {
       if (!A && out <= 3) step(1 - Y.lm3 / 100, `${out} days out`); else if (!A && out <= 7) step(1 - Y.lm7 / 100, `${out} days out`); else if (out >= 120) step(1 + Y.far / 100, `${out} days out`);
       const sn = out <= 7 && typeof mkFor === "function" && state.mk?.loaded ? mkFor(r.k).snow : null;
       if (sn && sn.in >= Y.snowIn) step(1 + Y.snowU / 100, `${sn.in}" snow forecast (NWS)`);
-      const mr = srMinFor(Y, r.k, dw, hol); if (gapMin == null && mr) why.push(`min stay ${mr.m} (${mr.why})`);
+      const mr = srMinFor(Y, r.k, dw, hol, out); if (gapMin == null && mr) why.push(`min stay ${mr.m} (${mr.why})`);
       const min = gapMin ?? mr?.m ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
       let mn = Math.max(srMinLo(Y), gapMin ?? min ?? 2);
       { const lmv = out <= 3 && Y.minLm3 !== "" && Y.minLm3 != null ? +Y.minLm3 : out <= 7 && Y.minLm7 !== "" && Y.minLm7 != null ? +Y.minLm7 : null;
@@ -2081,7 +2095,7 @@ function srWire(R) {
       if (core.length >= 3) { const lv = core.length % 2 ? core[core.length >> 1] : (core[core.length / 2 - 1] + core[core.length / 2]) / 2;
         for (const x of xw) { const md = x.r.k.slice(5), top = md === "12-25" || md === "12-31", nv = md === "12-24" ? x.v : Math.max(x.v, top ? lv * 1.05 : lv);   // fill the dips, never lower a night
           if (Math.abs(nv - x.v) >= 0.5) { x.v = nv; x.why.push(`Christmas week kept smooth: ${top ? "top night, at least the week level +5%" : "raised to the week level"} ${fmt(lv)} → ${fmt(x.v)}`); }
-          if ((top || md === "01-01") && (x.min || 0) < 3) { x.min = 3; x.why.push("min stay 3 (Christmas / New Year's)"); } }
+          } /* Christmas min stays now come from SR_HOLMIN (Brandon 2026-11-10) */
         const mx = Math.max(...xw.filter(x => !["12-24", "12-25", "12-31"].includes(x.r.k.slice(5))).map(x => x.v), 0);
         for (const x of xw) if (["12-25", "12-31"].includes(x.r.k.slice(5)) && x.v < mx) { x.v = mx; x.why.push(`Christmas week: top night, at least the week's highest ${fmt(mx)}`); } } }
     let moved = 0, last = null; SR.diff = [];
