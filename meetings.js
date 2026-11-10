@@ -15,7 +15,8 @@ const MEET = {
   meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
   meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
-const MCSS = `.mtg .mtiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:4px 0 8px}.mtg .mtiles.two{grid-template-columns:1fr 1fr}
+const MCSS = `.page.mtg{max-width:1800px;padding:20px 28px}
+.mtg .mtiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:4px 0 8px}.mtg .mtiles.two{grid-template-columns:1fr 1fr}
 .mtg .mtile{background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .mtg .mtile b{display:block;font-size:22px;line-height:1.1} .mtg .mtile span{font-size:12.5px;color:var(--muted)} .mtg .mtile em{color:#b42318;font-style:normal;font-weight:700}
 .mtg .mtile i{font-style:normal;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:#eef3e6;color:#3c5f12;font-size:13px}
