@@ -301,6 +301,10 @@ body.pennyonly #pennyBox .ph{cursor:default}
 body.ordrag{user-select:none;cursor:grabbing}
 .ints{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0} .ints label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);border-radius:999px;padding:7px 12px;font-weight:700;font-size:14px;cursor:pointer;background:var(--card)}
 .ints input{width:auto;min-height:0;margin:0} .ints label.on{background:var(--moose-soft);border-color:var(--moose);color:var(--moose-ink)}
+
+.bellpop .bn.bkid{margin-left:22px;padding-top:6px;padding-bottom:6px}.bellpop .bn.bkid small{font-size:11px}
+.bellpop .bcar{margin-left:auto;color:#6b7a5e;font-size:13px;padding-left:6px}
+.bellpop .bgact{display:flex;gap:14px;justify-content:flex-end;padding:2px 12px 8px;font-size:12px}.bellpop .bgact a{color:#3c5f12;font-weight:600;text-decoration:none}
 </style>
 </head>
 <body>
@@ -845,25 +849,47 @@ async function bellLoad(force){
     newN.slice(0, 3).forEach(x => it.push({ ic:"📝", t:`New note on ${x.home}`, s:`${x.by_name || "Someone"}: ${x.note}`.slice(0, 140), href:`#/homes/${encodeURIComponent(x.home)}`, k:"bell_notes", hn:[x.id] }));
     if(newN.length > 3) it.push({ ic:"📝", t:`${newN.length - 3} more new property note${newN.length === 4 ? "" : "s"}`, s:newN.slice(3, 6).map(x => x.home).join(" · ") + " · tap to mark read", k:"bell_notes", hn:newN.slice(3).map(x => x.id), quiet:true }); }
   const offK = new Set((NOTIFY.items || []).filter(x => x.on === false).map(x => x.key));
-  BELL.items = it.filter(x => !offK.has(x.k));
+  BELL.items = bellGroup(it.filter(x => !offK.has(x.k)));
   const n = BELL.items.length; document.querySelectorAll(".mbell").forEach(b => { b.classList.toggle("has", n > 0); b.querySelector(".bdot").textContent = n > 9 ? "9+" : n;
     b.title = n ? `Notifications (${n})` : "Notifications"; });
   if($("#bellpop") && $("#bellpop").classList.contains("on")) bellDraw();
 }
+// Bunch the bell (2026-11-10, Brandon: "when theres multiple alerts from one desk … have it say so"): 2+ items of the same kind = one row
+const BELL_GL = { bell_rates:"Set rates", bell_meet:"Meetings", bell_notes:"Property notes", bell_timeoff:"Time off & shifts", bell_folio:"Folio reports" };
+function bellGroup(list){
+  const by = {}, out = [];
+  list.forEach(x => { const g = x.k || x.grp; if(!g){ out.push(x); return; }
+    if(!by[g]){ by[g] = { k:x.k, gk:g, kids:[] }; out.push(by[g]); } by[g].kids.push(x); });
+  return out.map(x => { if(!x.kids) return x; if(x.kids.length === 1) return x.kids[0];
+    const k = x.kids, n = k.reduce((a, y) => a + ((y.quiet && (y.hn || y.mr || []).length) || 1), 0), label = BELL_GL[x.gk] || "Alerts";
+    let s = k.filter(y => !y.quiet).map(y => y.t).slice(0, 2).join(" · ");
+    if(x.gk === "bell_rates"){ const ch = k.filter(y => y.ic === "🏷️").length, old = k.filter(y => y.ic === "⚠️").length;
+      s = [ch ? `morning re-price changed prices at ${ch} home${ch === 1 ? "" : "s"}` : "", old ? `old comp prices at ${old} home${old === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · "); }
+    return { grp:true, gk:x.gk, k:x.k, ic:k[0].ic, kids:k, href:k.every(y => y.href === k[0].href) ? k[0].href : "",
+      t:`${label}: ${n} alerts`, s:(s ? s + " · " : "") + "tap to see them" }; });
+}
+function bellSeen(x){
+  const add = (key, ids, cap) => { if(!ids || !ids.length) return; let s = []; try { s = JSON.parse(localStorage.getItem(key) || "[]"); } catch(er){}
+    s = s.concat(ids).slice(-cap); try { localStorage.setItem(key, JSON.stringify(s)); } catch(er){} };
+  add("mm_seen_meet_answers", x.mr, 300); add("mm_seen_rates", x.rs, 200); add("mm_seen_home_notes", x.hn, 300);
+}
 function bellDraw(){
-  const p = $("#bellpop");
-  p.innerHTML = `<h4>Notifications</h4>` + (BELL.items.length ? BELL.items.map((x, i) => `<a class="bn" href="${x.href || "#"}" data-bn="${i}"><span class="bi">${x.ic}</span><span><b>${esc(x.t)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ""}</span></a>`).join("")
+  const p = $("#bellpop"), flat = [];
+  BELL.open = BELL.open || new Set();
+  const row = (x, kid) => { const i = flat.push(x) - 1, op = x.grp && BELL.open.has(x.gk);
+    return `<a class="bn${kid ? " bkid" : ""}${x.grp ? " bgrp" : ""}" href="${x.grp ? "#" : (x.href || "#")}" data-bn="${i}"><span class="bi">${x.ic}</span><span><b>${esc(x.t)}</b>${x.s && !op ? `<small>${esc(x.s)}</small>` : ""}</span>${x.grp ? `<span class="bcar">${op ? "▾" : "▸"}</span>` : ""}</a>`
+      + (op ? x.kids.map(y => row(y, true)).join("") + `<div class="bgact">${x.href ? `<a href="${x.href}" data-bgo="${esc(x.gk)}">Open</a>` : ""}<a href="#" data-bgr="${esc(x.gk)}">Mark all read</a></div>` : ""); };
+  p.innerHTML = `<h4>Notifications</h4>` + (BELL.items.length ? BELL.items.map(x => row(x)).join("")
     : `<div class="bnone">You're all caught up. 🎉</div>`);
-  p.querySelectorAll("[data-bn]").forEach(a => a.onclick = e => { const x = BELL.items[+a.dataset.bn]; p.classList.remove("on");
+  const grpOf = g => BELL.items.find(y => y.gk === g && y.grp);
+  p.querySelectorAll("[data-bgr]").forEach(a => a.onclick = e => { e.preventDefault(); const g = grpOf(a.dataset.bgr); if(!g) return;
+    g.kids.forEach(bellSeen); BELL.open.delete(g.gk); setTimeout(() => bellLoad(true), 100); });
+  p.querySelectorAll("[data-bgo]").forEach(a => a.onclick = () => { p.classList.remove("on"); });
+  p.querySelectorAll("[data-bn]").forEach(a => a.onclick = e => { const x = flat[+a.dataset.bn];
+    if(x.grp){ e.preventDefault(); e.stopPropagation(); BELL.open.has(x.gk) ? BELL.open.delete(x.gk) : BELL.open.add(x.gk); bellDraw(); return; }
+    p.classList.remove("on");
     if(x.penny){ e.preventDefault(); pennyOpen(true); if($("#pennyLog").children.length) pennyAnswers(); setTimeout(() => bellLoad(true), 1500); }
-    if(x.mr){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_meet_answers") || "[]"); } catch(er){}
-      s = s.concat(x.mr).slice(-300); try { localStorage.setItem("mm_seen_meet_answers", JSON.stringify(s)); } catch(er){}
-      if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); }
-    if(x.rs){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_rates") || "[]"); } catch(er){}
-      s = s.concat(x.rs).slice(-200); try { localStorage.setItem("mm_seen_rates", JSON.stringify(s)); } catch(er){} setTimeout(() => bellLoad(true), 300); }
-    if(x.hn){ let s = []; try { s = JSON.parse(localStorage.getItem("mm_seen_home_notes") || "[]"); } catch(er){}
-      s = s.concat(x.hn).slice(-300); try { localStorage.setItem("mm_seen_home_notes", JSON.stringify(s)); } catch(er){}
-      if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); } });
+    if(x.mr || x.rs || x.hn){ bellSeen(x); if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); } });
 }
 function bellSetup(){
   if(!$("#bellpop")){ const p = document.createElement("div"); p.className = "bellpop"; p.id = "bellpop"; document.body.appendChild(p);
