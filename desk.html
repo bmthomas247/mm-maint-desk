@@ -297,7 +297,7 @@ body.hpopen{overflow:hidden}
 .tadd{padding:4px 2px 24px}
 
 /* homes */
-.appl{overflow-x:auto;border:1px solid var(--line-2);border-radius:8px}
+.appl{overflow-x:auto;border:1px solid var(--line-2);border-radius:8px}.applcs{display:grid;gap:8px}.applc{border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--surface,#fff)}.applh{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}.applh b{font-size:14px}.applm{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 14px;margin-top:6px;font-size:13px}.applm .lb{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280)}.applm .mono{word-break:break-all}.applp{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.appla{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}.applc .note2{font-size:12.5px;color:var(--muted,#6b7280);margin-top:4px;line-height:1.35}
 table.t{width:100%;border-collapse:collapse;font-size:12.5px}
 table.t th{text-align:left;font-family:Archivo;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface-2)}
 table.t td{padding:7px 9px;border-bottom:1px solid var(--line-2);vertical-align:top}
@@ -1477,18 +1477,20 @@ function homeDetail(code){
   var missL=aps.filter(function(x){ return !/^(TV|Sound bar|Fireplace|BBQ)$/.test(x.type) && (!x.model||x.conf==="wrong-photo"||x.conf==="low") && !S.bwq[sid("lbl_"+code+"_"+x.key)]; });
   var ah=''; ah+='<details class="infocat" data-appl="1"'+(S.ui.applOpen?' open':'')+'><summary>Appliances <span class="muted">'+aps.length+'</span></summary><div class="links" style="margin-bottom:8px"><button class="btn sm ghost" data-act="addappl" data-code="'+esc(code)+'">+ Add</button>'+(missL.length>1?' <button class="btn sm" data-lblall="'+esc(code)+'">Get label photos for '+missL.length+' missing</button>':'')+'</div>';
   if(!aps.length) ah+='<div class="note">None recorded in Asana or the new-property inspection.</div>';
-  else ah+='<div class="appl"><table class="t"><thead><tr><th>What</th><th>Brand · model</th><th>Serial</th><th>Age / life</th><th></th></tr></thead><tbody>'+
+  else ah+='<div class="applcs">'+
     aps.map(function(x){ var rc=x.recalls&&x.recalls.length;
-      return '<tr><td>'+esc(x.type)+(x.location?'<div class="muted">'+esc(x.location)+'</div>':'')+(x.src==="inspection"?'<div class="muted">from the new-property inspection</div>'+(x.photos&&x.photos.length?'<div style="display:flex;gap:4px;margin-top:4px">'+x.photos.slice(0,4).map(function(u,i){ return aimgTag(u,x.photos,i); }).join("")+'</div>':''):'')+'</td>'+
-        '<td>'+(x.brand||x.model?esc(x.brand)+(x.model?' <span class="mono">'+esc(x.model)+'</span>':''):'<span class="muted">'+(x.src==="inspection"&&x.photos&&x.photos.length&&!x.conf?'label not read yet':'—')+'</span>')+
-        (x.conf==="wrong-photo"?'<div class="badge draft">Wrong label photo</div>':x.conf==="medium"||x.conf==="low"?'<div class="muted">read off a blurry label — check</div>':x.conf==="no-label"&&x.src==="inspection"?'<div class="muted">no label in the photos</div>':'')+(x.lnote?'<div class="muted">'+esc(x.lnote)+'</div>':'')+
-        (rc?x.recalls.map(function(r){ return '<div><a class="badge recall" href="'+esc(r.url)+'" target="_blank" rel="noopener">Recall '+esc(r.date)+'</a></div>'; }).join(""):'')+'</td>'+
-        '<td class="mono">'+esc(x.serial||"")+'</td>'+
-        '<td>'+lifeBar(x)+(x.year?'<div class="muted">made '+x.year+(x.yearHow?' <span title="'+esc(x.yearHow)+'">ⓘ</span>':'')+'</div>':x.geGuess?'<div class="muted">GE serial: '+x.geGuess.mon+' '+x.geGuess.years.join(" or ")+'</div>':'')+
-        (x.decision?'<div class="badge '+(x.decision==="replace"?"recall":"ok")+'">'+esc(x.decision)+' · '+esc(fmtD(ymd(x.decidedAt)))+'</div>':'')+'</td>'+
-        '<td style="white-space:nowrap"><button class="btn sm" data-rvr="'+esc(code)+'|'+esc(x.key)+'">Repair or replace?</button> '+
-        '<button class="btn sm ghost" data-aedit="'+esc(code)+'|'+esc(x.key)+'">Edit</button>'+(!x.model||x.conf==="wrong-photo"||x.conf==="low"?(function(){ var q=S.bwq[sid("lbl_"+code+"_"+x.key)]; if(q&&q.kind==="covered") q=S.bwq[q.coveredBy]||q; return q?' <span class="pill '+(q.status==="created"?"done":"waiting")+'">'+(q.status==="created"?"Photo task in Breezeway":"Photo task going in")+'</span>':' <button class="btn sm" data-lblreq="'+esc(code)+'|'+esc(x.key)+'" title="Breezeway task: take a clear photo of the make/model label">Get label photo</button>'; })():'')+(x.url?' <a class="golink" href="'+esc(x.url)+'" target="_blank" rel="noopener">Label ↗</a>':'')+'</td></tr>'; }).join("")+
-    '</tbody></table></div><div class="note" style="margin-top:6px">Life = typical years for that appliance (NAHB). Bar turns amber at 70% and red past its typical life.</div>';
+      var bm=(x.brand||x.model?esc(x.brand)+(x.model?' <span class="mono">'+esc(x.model)+'</span>':''):'<span class="muted">'+(x.src==="inspection"&&x.photos&&x.photos.length&&!x.conf?'label not read yet':'—')+'</span>');
+      var flag=(x.conf==="wrong-photo"?'<div class="badge draft">Wrong label photo</div>':x.conf==="medium"||x.conf==="low"?'<div class="note2">Read off a blurry label — check</div>':x.conf==="no-label"&&x.src==="inspection"?'<div class="note2">No label in the photos</div>':'');
+      var age=lifeBar(x)+(x.year?'<div class="muted">made '+x.year+(x.yearHow?' <span title="'+esc(x.yearHow)+'">ⓘ</span>':'')+'</div>':x.geGuess?'<div class="muted">GE serial: '+x.geGuess.mon+' '+x.geGuess.years.join(" or ")+'</div>':'');
+      return '<div class="applc"><div class="applh"><b>'+esc(x.type)+'</b>'+(x.location?'<span class="muted">'+esc(x.location)+'</span>':'')+(x.src==="inspection"?'<span class="muted">from the new-property inspection</span>':'')+
+        (x.decision?'<span class="badge '+(x.decision==="replace"?"recall":"ok")+'">'+esc(x.decision)+' · '+esc(fmtD(ymd(x.decidedAt)))+'</span>':'')+'</div>'+
+        '<div class="applm"><div><span class="lb">Brand · model</span>'+bm+'</div><div><span class="lb">Serial</span>'+(x.serial?'<span class="mono">'+esc(x.serial)+'</span>':'<span class="muted">—</span>')+'</div><div><span class="lb">Age / life</span>'+age+'</div></div>'+
+        flag+(x.lnote?'<div class="note2">'+esc(x.lnote)+'</div>':'')+
+        (rc?'<div class="applp">'+x.recalls.map(function(r){ return '<a class="badge recall" href="'+esc(r.url)+'" target="_blank" rel="noopener">Recall '+esc(r.date)+'</a>'; }).join("")+'</div>':'')+
+        (x.src==="inspection"&&x.photos&&x.photos.length?'<div class="applp">'+x.photos.slice(0,6).map(function(u,i){ return aimgTag(u,x.photos,i); }).join("")+'</div>':'')+
+        '<div class="appla"><button class="btn sm" data-rvr="'+esc(code)+'|'+esc(x.key)+'">Repair or replace?</button>'+
+        '<button class="btn sm ghost" data-aedit="'+esc(code)+'|'+esc(x.key)+'">Edit</button>'+(!x.model||x.conf==="wrong-photo"||x.conf==="low"?(function(){ var q=S.bwq[sid("lbl_"+code+"_"+x.key)]; if(q&&q.kind==="covered") q=S.bwq[q.coveredBy]||q; return q?'<span class="pill '+(q.status==="created"?"done":"waiting")+'">'+(q.status==="created"?"Photo task in Breezeway":"Photo task going in")+'</span>':'<button class="btn sm" data-lblreq="'+esc(code)+'|'+esc(x.key)+'" title="Breezeway task: take a clear photo of the make/model label">Get label photo</button>'; })():'')+(x.url?'<a class="golink" href="'+esc(x.url)+'" target="_blank" rel="noopener">Label ↗</a>':'')+'</div></div>'; }).join("")+
+    '</div><div class="note" style="margin-top:6px">Life = typical years for that appliance (NAHB). Bar turns amber at 70% and red past its typical life.</div>';
   if(S.ui.rvr && S.ui.rvr.code===code) ah+='<div id="rvrbox" style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface-2)">'+rvrPanel()+'</div>';
   ah+='</details>';
   // info
