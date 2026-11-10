@@ -121,6 +121,7 @@ function occurs(m, a, b){
   const out = []; let d = D(a); d.setDate(d.getDate() + (m.dow - d.getDay() + 7) % 7);
   for(; ymd(d) <= b; d.setDate(d.getDate() + 7)){
     const s = ymd(d);
+    if((m.anchor && s < m.anchor) || (m.until && s > m.until)) continue;   // anchor = first meeting (meeting_on() in SQL reads it the same way)
     if(m.every === 14 && m.anchor){ const n = Math.round((D(s) - D(m.anchor)) / 864e5); if(n < 0 || n % 14) continue; }
     out.push(s); }
   return out;
@@ -267,17 +268,44 @@ async function meetTiles(v){
       <div class="when"><b>Next: ${nx ? esc(nx === t ? "Today" : fday(nx)) : "—"}</b>${m.last_day ? ` · last met ${esc(fday(m.last_day))}` : ""}</div>
       <div class="muted" style="font-size:13px;margin-top:6px" data-agenda="${m.meet}">${m.meet === "meet_maint" ? "Projects, owner jobs and repeat problems from the Maintenance desk." : "Checking what's coming up…"}</div>
       ${m.open_tasks != null ? `<div style="margin-top:6px;font-size:13px"><b>${m.open_tasks} open task${m.open_tasks === 1 ? "" : "s"}</b>${(m.tasks || []).length ? `<ul>${m.tasks.map(x => `<li>${esc(x.text)}${x.who ? " · " + esc(x.who) : ""}${x.due ? " · due " + esc(fday(x.due)) : ""}</li>`).join("")}</ul>` : ""}</div>` : ""}</a>
-      <div class="row"><a class="btn small primary" href="#/${m.meet}">Open agenda</a>${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">▶ Join</a>` : ""}${ME.admin ? `<button class="btn small" data-settime="${m.meet}">${m.start ? "Change time" : "Set time"}</button>` : ""}</div></div>`; };
+      <div class="row"><a class="btn small primary" href="#/${m.meet}">Open agenda</a>${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">▶ Join</a>` : ""}${ME.admin ? `<button class="btn small" data-settime="${m.meet}">${m.start ? "Change day & time" : "Set day & time"}</button>` : ""}</div></div>`; };
   v.innerHTML = `<div class="page cal">${tabs("cal_meet")}<div class="chead"><h2>Weekly meetings</h2></div>
     ${ms.length ? `<div class="tiles">${ms.map(tile).join("")}</div>` : `<div class="card"><p class="muted" style="margin:0">No weekly meetings on your calendar.</p></div>`}
     <p class="muted" style="font-size:12px">Times: ${esc([...new Set(ms.filter(m => m.start).map(m => NAMES[m.meet] + " from " + m.source))].join("; ") || "not set yet")}.</p></div>`;
-  v.querySelectorAll("[data-settime]").forEach(b => b.onclick = async () => {
-    const m = ms.find(x => x.meet === b.dataset.settime);
-    const t1 = prompt(`Start time for ${NAMES[m.meet]} (Mountain), like 9:00 or 14:30. Leave empty for no time.`, m.start || ""); if(t1 === null) return;
-    const mm = /^(\d{1,2}):(\d{2})$/.exec(t1.trim()); if(t1.trim() && !mm) return alert("Type the time like 9:00 or 14:30.");
-    const len = t1.trim() ? prompt("How many minutes?", m.minutes || 60) : null;
-    const r = await sb.rpc("meeting_sched_set", { p_meet:m.meet, p_start:t1.trim() ? mm[1].padStart(2, "0") + ":" + mm[2] : null, p_minutes:len ? +len : null });
-    if(r.error) return alert("Couldn't save: " + r.error.message); meetTiles(v); });
+  // Change day & time (Brandon 2026-11-10): date of the next meeting + how often + time + length -> meeting_sched_set2 (hub_meeting_sched_day.sql)
+  v.querySelectorAll("[data-settime]").forEach(b => b.onclick = () => {
+    const m = ms.find(x => x.meet === b.dataset.settime), nx = occurs(m, t, addD(t, m.nth ? 120 : 28))[0] || t;
+    const rep0 = m.nth ? "month" : m.every === 14 ? "2weeks" : "week", tm = [];
+    for(let x = 5 * 60; x < 23 * 60; x += 15) tm.push(String(Math.floor(x / 60)).padStart(2, "0") + ":" + String(x % 60).padStart(2, "0"));
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px";
+    ov.innerHTML = `<div class="card" style="max-width:440px;width:100%;margin:0;padding:18px 20px;max-height:92vh;overflow:auto">
+      <div style="display:flex;align-items:center;gap:10px"><h2 style="font-size:19px;flex:1;margin:0">${esc(NAMES[m.meet] || m.meet)}</h2><button class="btn small" data-x aria-label="Close" style="border-radius:50%;width:36px;padding:0">✕</button></div>
+      <label class="field"><span>Next meeting on</span><input type="date" id="ms_d" value="${nx}" min="${t}"></label>
+      <label class="field"><span>Repeats</span><select id="ms_r">
+        <option value="week" ${rep0 === "week" ? "selected" : ""}>Every week</option>
+        <option value="2weeks" ${rep0 === "2weeks" ? "selected" : ""}>Every other week</option>
+        <option value="month" ${rep0 === "month" ? "selected" : ""}>Once a month (same week of the month)</option></select></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Starts (Mountain)</span><select id="ms_t"><option value="">No set time</option>${tm.map(x => `<option value="${x}" ${x === m.start ? "selected" : ""}>${ftime(x)}</option>`).join("")}</select></label>
+      <label class="field" style="flex:1;min-width:120px"><span>How long</span><select id="ms_m">${[15, 30, 45, 60, 90, 120, 180].map(x => `<option value="${x}" ${x === (m.minutes || 60) ? "selected" : ""}>${x < 60 ? x + " min" : x / 60 + (x === 60 ? " hour" : " hours")}</option>`).join("")}</select></label></div>
+      <p class="muted" id="ms_p" style="font-size:13px;margin:6px 0 10px"></p>
+      <p class="muted" style="font-size:12px;margin:0 0 10px">This changes it for every meeting from that date on. Reminders, the Office calendar and everyone's busy times follow.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x>Cancel</button><button class="btn primary" id="ms_s">Save</button></div></div>`;
+    document.body.appendChild(ov);
+    const q = s => ov.querySelector(s), close = () => ov.remove();
+    ov.querySelectorAll("[data-x]").forEach(x => x.onclick = close); ov.onclick = e => { if(e.target === ov) close(); };
+    const NTH = ["first","second","third","fourth","fifth"];
+    const prev = () => { const d = q("#ms_d").value, r = q("#ms_r").value, st = q("#ms_t").value; q("#ms_m").disabled = !st;
+      if(!d){ q("#ms_p").textContent = "Pick a date."; return; }
+      const x = D(d), w = DAYS[x.getDay()], n = Math.floor((x.getDate() - 1) / 7);
+      q("#ms_p").innerHTML = "<b>" + esc((r === "month" ? (n > 3 ? "Monthly needs a date from the 1st to the 28th." : "The " + NTH[n] + " " + w + " of every month") : (r === "2weeks" ? "Every other " : "Every ") + w)
+        + (r === "month" && n > 3 ? "" : ", starting " + fday(d)) + (st && !(r === "month" && n > 3) ? " · " + ftime(st) + "–" + ftime(endTime(st, +q("#ms_m").value)) : "")) + "</b>"; };
+    ["#ms_d","#ms_r","#ms_t","#ms_m"].forEach(s => { q(s).onchange = prev; q(s).oninput = prev; }); prev();
+    q("#ms_s").onclick = async () => { const st = q("#ms_t").value, sv = q("#ms_s"); sv.disabled = true; sv.textContent = "Saving…";
+      const r = await sb.rpc("meeting_sched_set2", { p_meet:m.meet, p_day:q("#ms_d").value || null, p_repeat:q("#ms_r").value, p_start:st || null, p_minutes:st ? +q("#ms_m").value : null });
+      if(r.error){ sv.disabled = false; sv.textContent = "Save"; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      close(); meetTiles(v); };
+  });
   ms.filter(m => m.meet !== "meet_maint").forEach(async m => {
     const r = await sb.rpc("meeting_agenda", { p_meet:m.meet }), el = v.querySelector(`[data-agenda="${m.meet}"]`); if(!el) return;
     const it = (r.data && r.data.items) || [], g = [...new Set(it.map(x => x.grp))];
@@ -502,8 +530,8 @@ async function evCal(v, key){
     modal({ h:esc(meet ? NAMES[meet] + " meeting" : "In a meeting"), b:`<p style="margin:6px 0"><b>${esc(fday(day))}${st ? " · " + ftime(st) + (en ? "–" + ftime(en) : "") : ""}</b></p>
       ${(o.people || []).length ? `<p class="muted" style="margin:4px 0">For: ${esc(o.people.map(fn).join(", "))}</p>` : ""}
       ${t.link ? `<a class="btn primary" href="${esc(t.link)}" target="_blank" rel="noopener noreferrer">▶ Join</a>` : ""}
-      <p class="muted" style="font-size:12.5px">A weekly meeting: its time is set for every week under Calendar ▸ Meetings${ME.admin ? " (Change time)" : ""}.</p>
-      <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap">${meet ? `<a class="btn primary" style="flex:1" href="#/${esc(meet)}">Open the agenda</a>` : ""}${ME.admin ? `<a class="btn" href="#/cal_meet">Change time</a>` : ""}</div>` });
+      <p class="muted" style="font-size:12.5px">A weekly meeting: its time is set for every week under Calendar ▸ Meetings${ME.admin ? " (Change day & time)" : ""}.</p>
+      <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap">${meet ? `<a class="btn primary" style="flex:1" href="#/${esc(meet)}">Open the agenda</a>` : ""}${ME.admin ? `<a class="btn" href="#/cal_meet">Change day & time</a>` : ""}</div>` });
     $("#evcard").querySelectorAll(".evft a").forEach(a => a.addEventListener("click", () => $("#evm").classList.remove("on")));
   }
   function meetBox(m, fresh){
