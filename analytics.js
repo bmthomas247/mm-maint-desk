@@ -718,6 +718,7 @@ async function insights(el, tab, ctx){
   const [I, RN, ED, AD] = await Promise.all([sb.from("review_insights").select("*").order("id"),
     sb.from("review_insight_runs").select("id,ran_at,by_name,read,stats,found,new_count,error").order("id", { ascending:false }).limit(6),
     sb.rpc("review_insight_can_edit"), sb.rpc("hub_is_admin")]);
+  const MI = tab === "patterns" ? null : await sb.rpc("hub_can", { p_desk:"maint_improve" }), byHome = !!(MI && MI.data);   // 2026-11-10: Maintenance ▸ Improvements moved here
   if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(I.error) : I.error.message))}</p></div>`; return; }
   const L = I.data || [], runs = RN.data || [], run = runs.find(r => !r.error && r.stats && r.stats.summary) || null, edit = !!ED.data, admin = !!AD.data;
   const pr = { high:"red", medium:"amber", low:"" };
@@ -782,8 +783,19 @@ async function insights(el, tab, ctx){
     wire(); runBtn(); return;
   }
   // Improvements
+  const view = byHome ? (() => { try { return localStorage.getItem("an_ri_view") || "all"; } catch(e){ return "all"; } })() : "all";
+  const vbar = byHome ? `<div class="anbar" style="margin:0 0 10px"><button class="btn small${view === "all" ? " primary" : ""}" data-riv="all">Across our homes</button>
+      <button class="btn small${view === "home" ? " primary" : ""}" data-riv="home">By home: repairs guests mention</button></div>` : "";
+  const vwire = () => el.querySelectorAll("[data-riv]").forEach(b => b.onclick = () => { try { localStorage.setItem("an_ri_view", b.dataset.riv); } catch(e){} insights(el, tab, ctx); });
+  if(view === "home"){
+    el.innerHTML = vbar + `<p class="muted" style="margin:0 0 8px">Any repair guests mention in 2 or more separate reviews at the same home in the last year, with the guests' public words. Set the status, add a note, or schedule it in Breezeway.</p>
+      <iframe id="rimf" src="improvements.html?area=maintenance&embed=1" title="Repairs guests mention" style="width:100%;border:0;min-height:600px;display:block;background:transparent"></iframe>`;
+    if(!window.__riMsg){ window.__riMsg = 1; window.addEventListener("message", e => { const f = document.getElementById("rimf");
+      if(f && e.source === f.contentWindow && e.data && e.data.mmImpH) f.style.height = Math.max(400, +e.data.mmImpH + 10) + "px"; }); }
+    vwire(); return;
+  }
   const st0 = (() => { try { return localStorage.getItem("an_ri_st") || "open"; } catch(e){ return "open"; } })();
-  el.innerHTML = `<p class="muted" style="margin:0 0 8px">Things guests keep bringing up, with what to do about each. ${edit ? "Set who owns it and move it along; when it's marked done, the weekly read checks whether guests still mention it." : ""}</p>
+  el.innerHTML = vbar + `<p class="muted" style="margin:0 0 8px">Things guests keep bringing up, with what to do about each. ${edit ? "Set who owns it and move it along; when it's marked done, the weekly read checks whether guests still mention it." : ""}</p>
     <div class="anbar"><select id="ris"><option value="open">Open (new, planned, doing)</option>${Object.entries(ISTAT).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}<option value="">All</option></select>
       <select id="ria"><option value="">All areas</option>${Object.entries(AREA).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
       <select id="rit"><option value="">All teams</option>${Object.entries(TEAMN).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
@@ -811,7 +823,7 @@ async function insights(el, tab, ctx){
     f.querySelector("#rfGo").onclick = async () => { const r = await sb.rpc("review_insight_add", { p_title:f.querySelector("#rfT").value, p_suggestion:f.querySelector("#rfS").value,
         p_area:f.querySelector("#rfA").value, p_homes:f.querySelector("#rfH").value.split(",").map(s => s.trim()).filter(Boolean), p_teams:[f.querySelector("#rfTm").value].filter(Boolean), p_review_ids:[], p_priority:f.querySelector("#rfP").value });
       if(r.error){ f.querySelector("#rfM").textContent = (window.niceErr ? niceErr(r.error) : r.error.message); return; } insights(el, tab, ctx); }; };
-  draw(); runBtn();
+  draw(); runBtn(); vwire();
 }
 
 /* Reviews ▸ Alerts · Respond · Listing ideas (Brandon 2026-11-03: "make reviews its own desk … a few chairs in it").
