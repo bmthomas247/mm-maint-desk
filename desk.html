@@ -1010,7 +1010,9 @@ var WD=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
 function period(r){ var c=r.cadence; if(c==="daily") return today(); if(c==="weekly") return isoWeek(); if(c==="monthly") return today().slice(0,7); return today().slice(0,4); }
 function rlogFor(r){ return S.rlog[sid(r.id)+"__"+period(r)]; }
 function lastDone(r){ var best=null; Object.keys(S.rlog).forEach(function(k){ var x=S.rlog[k]; if(x.rid===r.id && !x.home && !x.undone && (!best||x.at>best.at)) best=x; }); return best; }
-function routines(){ return Object.keys(S.recurring).map(function(k){ var r=S.recurring[k]; return Object.assign({id:k},r); })
+function routines(){ return Object.keys(S.recurring).map(function(k){ var r=S.recurring[k], o=Object.assign({id:k},r);
+    if(k==="r-appliance-recalls"){ var hs={}; recallHits().forEach(function(x){ hs[x.p.code]=1; }); o.props=Object.keys(hs).sort(); o._rc=recallHits().length; }   // homes follow the recall matches (2026-11-10)
+    return o; })
   .filter(function(r){ return r.active!==false; }); }
 function isDueNow(r){
   var w=(r.when||"").toLowerCase(), d=new Date(), wd=WD[d.getDay()], m=MON[d.getMonth()];
@@ -1055,6 +1057,7 @@ function routineRow(r){
     (r.props&&r.props.length?'<span>· '+r.props.length+' homes</span>':'')+
     (done?'<span>· done by '+esc(nameFor(lg.by))+'</span>':(ld?'<span>· last '+esc(ago(ymd(ld.at)))+' by '+esc(nameFor(ld.by))+'</span>':''))+'</span>'+
     (isTrash(r)?trashBlock(r):'')+(r.detail?'<span class="rd">'+esc(r.detail)+'</span>':'')+
+    (r._rc!=null?'<span class="rd"><b>'+r._rc+' appliance'+(r._rc===1?'':'s')+' matched a recall now.</b> <a href="desk.html?only=recalls" onclick="if(window.top!==window){try{top.RPRUN=&#39;desk.html?only=recalls&#39;;if(top.location.hash===&#39;#/reports&#39;&&top.route)top.route();else top.location.hash=&#39;#/reports&#39;;return false;}catch(e){}}">Open the Appliance recalls report →</a></span>':'')+
     '<span class="rbtns">'+(r.draft?'<button class="btn sm" data-rconfirm="'+esc(r.id)+'">Confirm</button>':'')+
     (r.autoBw?'<span class="pill done">Breezeway schedules it</span>':(r.cadence==="monthly"||r.cadence==="seasonal"?routineBwBtn(r):''))+
     (r.cadence==="seasonal"&&vemMode()?'<button class="btn sm ghost" data-rvem="'+esc(r.id)+'">✉ Vendor email</button>':'')+
