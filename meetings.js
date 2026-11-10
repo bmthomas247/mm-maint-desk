@@ -15,7 +15,54 @@ const MEET = {
   meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
   meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
-const MCSS = `.mtg .mfeed{margin:8px 0;border-left:3px solid #7ea04a;padding:2px 0 2px 10px;display:grid;gap:6px;font-size:13.5px}.mtg .mfeed .mfn div{white-space:pre-wrap}
+const MCSS = `.mtg .mtiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:4px 0 8px}.mtg .mtiles.two{grid-template-columns:1fr 1fr}
+.mtg .mtile{background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.mtg .mtile b{display:block;font-size:22px;line-height:1.1} .mtg .mtile span{font-size:12.5px;color:var(--muted)} .mtg .mtile em{color:#b42318;font-style:normal;font-weight:700}
+.mtg .mtile i{font-style:normal;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:#eef3e6;color:#3c5f12;font-size:13px}
+.mtg .mtile.g b{color:#3c5f12} .mtg .mtile.r b{color:#b42318}
+.mtg .mbar{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin:12px 0 4px}
+.mtg .mbar #mq{max-width:240px;width:100%}
+.mtg .mfts,.mpanel .mfts{display:inline-flex;gap:2px;background:var(--bg-2,#eef0ea);border-radius:10px;padding:3px;flex-wrap:wrap}
+.mft{border:0;background:transparent;padding:5px 10px;border-radius:8px;font:inherit;font-size:13px;color:var(--ink-2,#444);cursor:pointer}
+.mft span{color:var(--muted);font-size:12px} .mft.on{background:var(--card,#fff);box-shadow:0 1px 2px rgba(0,0,0,.1);color:var(--ink,#111);font-weight:700}
+.mtg .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.mtg .mcardx{background:var(--card,#fff);border:1px solid var(--line);border-radius:14px;padding:13px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:box-shadow .15s}
+.mtg .mcardx:hover,.mtg .mcardx:focus{box-shadow:0 4px 14px rgba(0,0,0,.09);outline:none} .mtg .mcardx.cov{opacity:.72}
+.mtop{display:flex;gap:6px;flex-wrap:wrap}
+.mpill{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:7px;background:#f1f2ee;color:#555}
+.mpill.ok{background:#e7f4e1;color:#2f6b1d} .mpill.wait{background:#fdf1dc;color:#8a5a00} .mpill.todo{background:#eef0f5;color:#3d4a66} .mpill.bad{background:#fde8e6;color:#b42318}
+.mtg .mtt{font-size:15px;line-height:1.3} .mtg .mdesc{margin:0;font-size:13px;color:var(--muted);line-height:1.4;min-height:2.8em}
+.mtg .mnums{display:grid;grid-template-columns:1fr 1fr;gap:6px} .mtg .mnums b{display:block;font-size:16px} .mtg .mnums span{font-size:12px;color:var(--muted)}
+.mtg .mdiv{border-top:1px dashed var(--line);margin:2px 0}
+.mtg .mnext{font-size:12.5px;color:var(--ink-2,#333)} .mtg .mnext small,.msig small{display:block;font-size:11.5px;color:var(--muted)}
+.macts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px} .mtg .mcardx .macts{margin-top:auto}
+.mtg .mcardx .macts .btn:first-child{flex:1}
+.mred{color:#b42318;font-weight:700} .mamb{color:#8a5a00;font-weight:700}
+.mpov{position:fixed;inset:0;background:rgba(15,25,15,.35);z-index:900;display:flex;justify-content:flex-end}
+.mpanel{background:var(--bg,#f7f8f4);width:min(560px,100%);height:100%;overflow:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.mph{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:16px 18px 10px;background:var(--card,#fff);border-bottom:1px solid var(--line)}
+.mph h3{margin:6px 0 2px;font-size:18px}
+.mptabs{display:flex;gap:4px;padding:8px 18px;background:var(--card,#fff);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1}
+.mptabs button{border:0;background:transparent;padding:6px 12px;border-radius:8px;font:inherit;font-size:13.5px;cursor:pointer;color:var(--ink-2,#444)}
+.mptabs button span{background:#eef0ea;border-radius:6px;padding:0 6px;font-size:12px;margin-left:3px} .mptabs button.on{background:#eef3e6;color:#24452c;font-weight:700}
+.mpb{padding:14px 18px 30px;display:grid;gap:12px;align-content:start}
+.mpb .mlines{margin:0;padding-left:18px;font-size:13.5px} .mpb .mlines li{margin:3px 0} .mpb .msrc{font-size:12px;color:var(--muted);margin:0}
+.msig{display:flex;gap:10px;background:#eef3e6;border-radius:12px;padding:11px 13px;font-size:14px;font-weight:600;color:#24452c} .msig i{font-style:normal;width:26px;height:26px;border-radius:8px;background:#fff;display:grid;place-items:center;flex:0 0 auto}
+.msig.red{background:#fde8e6;color:#8a1c12}
+.mbox{background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 13px} .mbox>b{display:block;font-size:13.5px;margin-bottom:6px}
+.mbox textarea{width:100%;min-height:60px;font-size:14px}
+.msug{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line);font-size:13.5px} .msug:first-of-type{border-top:0}
+.mpanel .mtask{display:flex;gap:6px;flex-wrap:wrap} .mpanel .mtask input{flex:1;min-width:150px;width:auto} .mpanel .mtask select,.mpanel .mtask input[type=date]{width:auto;flex:0 0 auto}
+.mpanel .tk{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;background:var(--card,#fff);border:1px solid var(--line);border-radius:10px;margin-bottom:6px;font-size:14px}
+.mpanel .tk input[type=checkbox]{width:20px;height:20px;flex:0 0 auto} .mpanel .tk small{display:block;color:var(--muted);font-size:12px} .mpanel .tk.done .tx{text-decoration:line-through;color:var(--muted)}
+.mact{position:relative;padding-left:4px} .maci{display:flex;gap:10px;padding:8px 0;font-size:13.5px;position:relative}
+.maci>i{font-style:normal;width:24px;height:24px;border-radius:50%;background:#eef3e6;display:grid;place-items:center;font-size:12px;flex:0 0 auto;z-index:1}
+.maci:not(:last-child)::before{content:"";position:absolute;left:11px;top:30px;bottom:-6px;border-left:1px solid var(--line)}
+.mab{color:var(--ink-2,#444);white-space:pre-wrap;margin-top:2px}
+.mpanel .mfeed{margin:4px 0 8px;border-left:3px solid #7ea04a;padding:2px 0 2px 10px;display:grid;gap:6px;font-size:13.5px}.mpanel .mfeed .mfn div{white-space:pre-wrap}
+@media (max-width:760px){ .mtg .mtiles{grid-template-columns:1fr 1fr} .mpanel{width:100%} }
+@media print{ .mpov,.mbar,.macts{display:none!important} .mtg .mcardx{break-inside:avoid;box-shadow:none} }
+.mtg .mfeed{margin:8px 0;border-left:3px solid #7ea04a;padding:2px 0 2px 10px;display:grid;gap:6px;font-size:13.5px}.mtg .mfeed .mfn div{white-space:pre-wrap}
 
 .mtg .mhead{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between;margin:0 0 12px}
 .mtg .mhead h2{margin:0;font-size:22px} .mtg .mhead p{margin:4px 0 0}
@@ -189,62 +236,232 @@ function upShow(res, from, key, items, redraw){
     el.querySelectorAll("[data-i]").forEach(cb => { if(!cb.checked) return; const x = its[+cb.dataset.i]; add(x.key, x.note + (x.next ? " Next: " + x.next : "")); n++; });
     el.querySelectorAll("[data-n]").forEach(cb => { if(!cb.checked) return; const x = nw[+cb.dataset.n]; add("_notes", "• " + x.title + ": " + x.note + (x.next ? " Next: " + x.next : "")); n++; });
     upClose(); redraw(); alert(n + " note" + (n === 1 ? "" : "s") + " filled in. Check each one and press Save."); }; }
+/* Meeting page round 2026-11-10 (Brandon: "things need to be able to get done in the meetings not just note taking" + the two
+   sample layouts). Topics = cards in a grid with filters + stat tiles; tapping one opens a panel with Overview · Next steps · Activity.
+   Next steps = suggested tasks built from the topic (one tap fills the task form) + the topic's tasks (All / Today / This week / Overdue).
+   Tasks go to a person (meeting_task_add2, hub_meeting_actions.sql): they see it on Home + the bell, and get a Slack DM when that's on.
+   Owner follow-ups close from the panel (meeting_ofb_set). Wrap up = what was decided + who does what, to copy. */
+const MX = { tp:{}, filt:"all", q:"", open:null, tab:"ov", tf:"all", sug:{} };
+async function taskPeople(key){ if(MX.tp[key]) return MX.tp[key];
+  try { const r = await sb.rpc("meeting_task_people", { p_meet:key }); MX.tp[key] = r.data || []; } catch(e){ MX.tp[key] = []; }
+  return MX.tp[key]; }
+const today = () => ymd(new Date());
+const addDays = (s, n) => { const d = new Date(s + "T12:00"); d.setDate(d.getDate() + n); return ymd(d); };
+/* which team a topic belongs to, for "Message / alert the team" (Brandon 2026-11-10: licenses -> the licensing team) */
+const TEAMFOR = { lic:["licensing","the licensing team"], alert:["maint_manager","maintenance"], mt:["maint_manager","maintenance"], rep:["maint_manager","maintenance"],
+  proj:["maint_manager","maintenance"], ofb:["owner_relations","owner relations"], behind:["owner_relations","owner relations"], omb:["owner_relations","owner relations"],
+  rule:["owner_relations","owner relations"], rv:["owner_relations","owner relations"], ownerstays:["owner_relations","owner relations"], new:["owner_relations","owner relations"],
+  folio:["office_manager","the office managers"], psu:["owner_relations","owner relations"], sale:["owner_relations","owner relations"],
+  off:["owner_relations","owner relations"], big:["maint_manager","maintenance"] };
+const PAGENAME = { "#/licensing":"📄 Open the Licenses page", "#/lic_fire":"📄 Open Fire suppression", "#/property_setup":"🚀 Open Launch Pad" };
+const absLink = l => !l ? "" : /^https?:/.test(l) ? l : "https://crew.moosemanagement.com/hub.html" + (/^#/.test(l) ? l : "#/" + l);
+const homeOf = it => { const m = String(it.title || "").match(/^([A-Z0-9][A-Z0-9-]*(?: [A-Z0-9-]+)?)(\s·|$)/); return m ? m[1] : ""; };
+const kindOf = it => String(it.key || "").split(":")[0];
+const short = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n - 1).trim() + "…" : s; };
+/* suggested next steps, from the kind of topic (Claude's starting list; easy to change here) */
+function suggest(it){
+  const h = homeOf(it), k = kindOf(it), t = String(it.title || "").split(" · ").slice(1).join(" · ") || it.title, out = [];
+  const add = (text, days) => out.push({ text, days: days == null ? 2 : days });
+  const nexts = (it.lines || []).filter(l => /^Next: /.test(l)).map(l => l.slice(6));
+  if(k === "psu"){ nexts.forEach(n => add(n + ` (${h || "set up"})`, 2)); }
+  else if(k === "off"){ add(`Call the ${h || "home"} owner: is there anything we can do to keep them?`, 1); nexts.forEach(n => add(n + ` (${h})`, 3)); }
+  else if(k === "sale"){ add(`Ask the ${h || "home"} owner if we keep managing it until it sells`, 2); add(`Offer the ${h || "home"} buyer our management (reach the listing agent)`, 7); }
+  else if(k === "big"){ add(`Tell the ${h || "home"} owner about: ${short(t, 80)}`, 1); }
+  else if(k === "ofb"){ add(`Call the ${h || "home"} owner about ${t}`, 1); add(`Send the ${h || "home"} owner what we changed and why`, 3); }
+  else if(k === "behind"){ add(`Go through the fixes on the worst-performer page for ${h}`, 3); add(`Talk with the ${h} owner about how it's doing`, 7); }
+  else if(k === "omb" || k === "rule"){ add(`Ask the ${h || "home"} owner to loosen the minimum price / stay`, 3); }
+  else if(k === "rv"){ add(`Fix what the guest wrote about at ${h || t}`, 3); add(`Tell the ${h || "home"} owner about the review`, 2); }
+  else if(k === "alert" || k === "mt" || k === "rep" || k === "proj"){ add(`Make sure the owner knows about: ${short(t, 80)}`, 1); add(`Get a date for the fix: ${short(t, 80)}`, 2); }
+  else if(k === "lic"){ add("Tell the owners who need to sign or pay their license renewal", 3); }
+  else if(k === "ownerstays"){ add("Send a welcome note to each owner arriving", 1); add("Check each owner home is clean and ready", 1); }
+  else if(k === "new"){ add(`Check in with the new ${h || "home"} owner`, 7); }
+  else if(k === "folio" || k === "pf"){ add(`Look into it and reply to whoever reported it: ${short(t, 70)}`, 2); }
+  else if(k === "cmp"){ add("Decide what we do about this competitor intel", 7); }
+  else if(k === "fb"){ add(`Answer the request: ${short(t, 80)}`, 3); }
+  if(it.ask) add(it.ask.replace(/\?$/, ""), 3);
+  return out.slice(0, 4);
+}
 function render(v, key, data, ppl){
   const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
-  // everyone in the meeting keeps their own note per topic (hub_meeting_notes_everyone.sql); the newest one says where it stands
-  const notesOf = (d, k) => { const a = notes.filter(n => n.day === d && n.item === k && n.text).sort((x, y) => String(x.at).localeCompare(String(y.at)));
-    return a.filter((n, i) => !a.slice(i + 1).some(m => (m.by || "") === (n.by || "") && m.text !== n.text && m.text.startsWith(n.text.trim()))); };
-  const tm = a => { try { return new Date(a).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }); } catch(e){ return ""; } };
-  const feedHtml = (d, k) => { const a = notesOf(d, k); return a.length ? `<div class="mfeed">${a.map(n => `<div class="mfn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("")}</div>` : ""; };
+  // every saved note is its own line in the topic's feed (hub_meeting_notes_feed.sql); an older note a person later extended is hidden
+  const notesOf = (d, k) => { const a = notes.filter(n => (d == null || n.day === d) && n.item === k && n.text).sort((x, y) => String(x.at).localeCompare(String(y.at)));
+    return a.filter((n, i) => !a.slice(i + 1).some(q => (q.by || "") === (n.by || "") && q.day === n.day && q.text !== n.text && q.text.startsWith(n.text.trim()))); };
   const noteFor = (d, k) => { const a = notesOf(d, k); return a[a.length - 1]; };
+  const tm = a => { try { return new Date(a).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }); } catch(e){ return ""; } };
   const past = [...new Set(notes.map(n => n.day))].filter(d => d < day).sort().reverse();
-  // a note's state (hub_meeting_note_state.sql): only 'covered' counts; 'waiting' / 'scheduled' stay open (Jeff's test log #11)
   const stOf = n => n && n.text ? (n.state || "covered") : "";
-  const covered = items.filter(it => stOf(noteFor(day, it.key)) === "covered").length;
-  const waiting = items.filter(it => /^(waiting|scheduled)$/.test(stOf(noteFor(day, it.key)))).length;
-  const open = tasks.filter(t => !t.done_at), done = tasks.filter(t => t.done_at);
-  const dl = `<datalist id="mppl">${ppl.map(p => `<option value="${esc(p)}">`).join("")}</datalist>`;
+  const stItem = it => stOf(noteFor(day, it.key));
+  const T = today(), wk = addDays(T, 7);
+  const open = tasks.filter(t => !t.done_at && !t.off), done = tasks.filter(t => t.done_at);
+  const overdue = open.filter(t => t.due && t.due < T);
+  const covered = items.filter(it => stItem(it) === "covered").length;
+  const waiting = items.filter(it => /^(waiting|scheduled)$/.test(stItem(it))).length;
+  const pill = st => st === "covered" ? `<span class="mpill ok">✓ Covered</span>` : st === "waiting" ? `<span class="mpill wait">⏳ Waiting on owner</span>` : st === "scheduled" ? `<span class="mpill wait">🗓 Scheduled</span>` : `<span class="mpill todo">To cover</span>`;
+  const dueTxt = t => !t.due ? "" : t.due < T ? `<span class="mred">Overdue · ${esc(fmt(t.due))}</span>` : t.due === T ? `<span class="mamb">Due today</span>` : "Due " + esc(fmt(t.due));
   const taskRow = t => `<div class="tk${t.done_at ? " done" : ""}"><input type="checkbox" data-tdone="${t.id}" ${t.done_at ? "checked" : ""} aria-label="Done">
-      <div style="flex:1"><span class="tx">${esc(t.text)}</span><small>${[t.who ? "Who: " + esc(t.who) : "", t.due ? "Due " + esc(fmt(t.due)) : "",
-        "From " + esc(fmt(t.day)) + (t.created_by ? " by " + esc(t.created_by) : ""), t.done_at ? "Done" + (t.done_by ? " by " + esc(t.done_by) : "") : ""].filter(Boolean).join(" · ")}</small></div></div>`;
-  const taskForm = (k) => `<div class="mtask" data-tform="${esc(k)}"><input placeholder="New task: what needs to happen" data-tf="text"><input list="mppl" placeholder="Who" data-tf="who" style="max-width:170px"><input type="date" data-tf="due"><button class="btn small" data-tadd="${esc(k)}">+ Task</button></div>`;
-  const grps = {}; items.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
-  let h = `<div class="page mtg">${dl}<div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
-      <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}. Go down the list; write what was decided and add tasks.</p></div>
-    <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻ Refresh</button><button class="btn small" id="mup">⬆ Upload recording / notes</button><button class="btn small" id="mprint">Print / PDF</button></div></div>
-    <div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${covered} of ${items.length} covered${waiting ? ` · ${waiting} waiting / scheduled` : ""}</b><span class="muted" style="font-size:13px">${past[0] ? "Last meeting " + esc(fmt(past[0])) : "First meeting"}</span></div>
-      <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div></div>
-    <h3 class="mg">Open tasks <span class="muted">${open.length}</span></h3><div class="card" style="padding:8px 14px">
+      <div style="flex:1"><span class="tx">${esc(t.text)}</span><small>${[t.who ? "👤 " + esc(t.who) : "No one yet", dueTxt(t), t.item_title && !MX.open ? esc(short(t.item_title, 60)) : "",
+        t.done_at ? "Done" + (t.done_by ? " by " + esc(t.done_by) : "") : "Added " + esc(fmt(t.day)) + (t.created_by ? " by " + esc(t.created_by) : "")].filter(Boolean).join(" · ")}</small></div></div>`;
+  const pplOpts = sel => `<option value="">Who?</option>` + (MX.tp[key] || []).map(p => `<option value="${esc(p.id)}"${sel === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  const taskForm = (k, title, pre) => `<div class="mtask" data-tform="${esc(k)}" data-ttitle="${esc(title || "")}"><input placeholder="New task: what needs to happen" data-tf="text" value="${esc(pre ? pre.text : "")}">
+      <select data-tf="who" aria-label="Who">${pplOpts(pre && pre.who)}</select><input type="date" data-tf="due" value="${esc(pre && pre.due || "")}"><button class="btn small primary" data-tadd="${esc(k)}">+ Add task</button></div>`;
+  const q = MX.q.trim().toLowerCase();
+  const shown = items.filter(it => { const st = stItem(it);
+    if(MX.filt === "todo" && st) return false; if(MX.filt === "cov" && st !== "covered") return false; if(MX.filt === "wait" && !/^(waiting|scheduled)$/.test(st)) return false;
+    if(MX.filt === "tasks" && !open.some(t => t.item_key === it.key)) return false;
+    return !q || [it.title, it.grp, (it.lines || []).join(" "), it.ask].join(" ").toLowerCase().includes(q); });
+  const fbtn = (k, l, n) => `<button class="mft${MX.filt === k ? " on" : ""}" data-filt="${k}">${l} <span>${n}</span></button>`;
+  const tile = (n, l, ic, cls) => `<div class="mtile${cls ? " " + cls : ""}"><div><b>${n}</b><span>${l}</span></div><i>${ic}</i></div>`;
+  let h = `<div class="page mtg"><div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
+      <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}</p></div>
+    <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻</button><button class="btn small" id="mup">⬆ Upload recording / notes</button><button class="btn small" id="mprint">Print</button><button class="btn small primary" id="mwrap">✅ Wrap up</button></div></div>
+    <div class="mtiles">${tile(items.length, "Topics", "📋")}${tile(covered + " / " + items.length, "Covered", "✓", "g")}${tile(waiting, "Waiting / scheduled", "⏳")}${tile(open.length, overdue.length ? `Open tasks · <em>${overdue.length} overdue</em>` : "Open tasks", "☐", overdue.length ? "r" : "")}</div>
+    <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div>
+    <div class="mbar"><div class="mfts">${fbtn("all", "All", items.length)}${fbtn("todo", "To cover", items.length - covered - waiting)}${fbtn("wait", "Waiting", waiting)}${fbtn("cov", "Covered", covered)}${fbtn("tasks", "Has tasks", items.filter(it => open.some(t => t.item_key === it.key)).length)}</div>
+      <input id="mq" placeholder="🔍 Search topics" value="${esc(MX.q)}"></div>`;
+  if(!items.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing came up from the data this week. Use "Anything else" below.</p></div>`;
+  const grps = {}; shown.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
+  Object.keys(grps).forEach(g => {
+    h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3><div class="mgrid">`;
+    grps[g].forEach(it => { const st = stItem(it), nt = notesOf(day, it.key).length, tk = open.filter(t => t.item_key === it.key), od = tk.filter(t => t.due && t.due < T).length, last = noteFor(null, it.key);
+      h += `<div class="mcardx${st === "covered" ? " cov" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button">
+        <div class="mtop">${pill(st)}${od ? `<span class="mpill bad">${od} overdue</span>` : ""}</div>
+        <b class="mtt">${esc(it.title)}</b>${kindOf(it) === "psu" || kindOf(it) === "off" ? (pc => `<div class="mprog" style="margin:0"><i style="width:${pc}%"></i></div>`)(+((String(it.title).match(/(\d+)% done/) || [])[1] || 0)) : ""}
+        <p class="mdesc">${esc(short(last ? last.text : (it.lines || []).filter(Boolean)[0] || it.ask || "", 130))}</p>
+        <div class="mnums"><div><b>${nt}</b><span>Notes today</span></div><div><b>${tk.length}</b><span>Open tasks</span></div></div>
+        <div class="mdiv"></div>
+        ${it.ask ? `<div class="mnext"><small>Decide</small>${esc(short(it.ask, 90))}</div>` : ""}
+        <div class="macts"><button class="btn small" data-open="${esc(it.key)}">Open</button>${st !== "covered" ? `<button class="btn small" data-quick="${esc(it.key)}" title="Mark covered (adds a note)">✓ Covered</button>` : ""}</div></div>`; });
+    h += `</div>`; });
+  if(items.length && !shown.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing matches.</p></div>`;
+  h += `<h3 class="mg">All open tasks <span class="muted">${open.length}</span></h3><div class="card" style="padding:8px 14px">
       ${open.length ? open.map(taskRow).join("") : `<p class="muted" style="margin:6px 0">No open tasks.</p>`}
       ${done.length ? `<details><summary class="muted" style="cursor:pointer;padding:6px 0">Done in the last 3 weeks (${done.length})</summary>${done.map(taskRow).join("")}</details>` : ""}
-      ${taskForm("")}</div>`;
-  if(!items.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing came up from the data this week. Use the notes below for anything else.</p></div>`;
-  Object.keys(grps).forEach(g => {
-    h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3>`;
-    grps[g].forEach(it => {
-      const st = stOf(noteFor(day, it.key)), cov = st === "covered", dv = ST.drafts[key + "|" + it.key];
-      const pill = st === "covered" ? `<span class="pill green">covered</span>` : st === "waiting" ? `<span class="pill amber">waiting on owner</span>` : st === "scheduled" ? `<span class="pill amber">scheduled</span>` : "";
-      const prev = past.slice(0, 3).map(d => notesOf(d, it.key).map(n => `<div><b>${esc(fmt(d))}${n.by ? " · " + esc(n.by) : ""}:</b> ${esc(n.text)}</div>`).join("")).join("");
-      const itTasks = open.filter(t => t.item_key === it.key);
-      h += `<div class="card mi${cov ? " cov" : ""}"><div class="mt"><b>${esc(it.title)}</b>${pill}${linkHtml(it.link)}</div>
-        ${(it.lines || []).filter(Boolean).length ? `<ul>${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
-        ${it.ask ? `<p class="mask">❓ ${esc(it.ask)}</p>` : ""}
-        <p class="msrc">Source: ${esc(it.src || "")}</p>
-        ${prev ? `<div class="mprev">${prev}</div>` : ""}
-        ${itTasks.length ? `<div class="mprev">${itTasks.map(t => "☐ " + esc(t.text) + (t.who ? " · " + esc(t.who) : "")).join("<br>")}</div>` : ""}
-        ${feedHtml(day, it.key)}
-        <div class="mrow"><textarea data-note="${esc(it.key)}" placeholder="Add a note: what was decided, who is doing it, by when">${esc(dv != null ? dv : "")}</textarea>
-          <select data-nstate="${esc(it.key)}" aria-label="Where it stands">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
-          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button></div>
-        ${taskForm(it.key)}</div>`; }); });
+      ${taskForm("", "")}</div>`;
   const gdv = ST.drafts[key + "|_notes"];
-  h += `<h3 class="mg">Anything else</h3><div class="card">${feedHtml(day, "_notes")}<textarea data-note="_notes" style="width:100%;min-height:110px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
+  h += `<h3 class="mg">Anything else</h3><div class="card">${feedHtml(notesOf(day, "_notes"))}<textarea data-note="_notes" style="width:100%;min-height:90px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">Add note</button></div>
       ${past.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Past meetings: ${past.slice(0, 12).map(d => `<a href="#" data-mday="${esc(d)}">${esc(fmt(d))}</a>`).join(" · ")}</p>` : ""}</div>
-    <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each item shows where it came from.</p></div>`;
+    <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each topic shows where it came from.</p></div>`;
+  function feedHtml(a){ return a.length ? `<div class="mfeed">${a.map(n => `<div class="mfn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("")}</div>` : ""; }
   v.innerHTML = h;
+
+  /* ---------- the panel ---------- */
+  function panel(){
+    document.getElementById("mpov")?.remove();
+    const it = items.find(x => x.key === MX.open); if(!it) return;
+    const st = stItem(it), tk = tasks.filter(t => t.item_key === it.key && !t.off), tko = tk.filter(t => !t.done_at), sg = suggest(it), dv = ST.drafts[key + "|" + it.key];
+    const act = []; notesOf(null, it.key).forEach(n => act.push({ at:n.at, ic:"📝", h:`<b>${esc(n.by || "Someone")}</b> added a note${n.day !== day ? " (" + esc(fmt(n.day)) + " meeting)" : ""}`, b:esc(n.text) }));
+    tk.forEach(t => { act.push({ at:t.created_at, ic:"☐", h:`<b>${esc(t.created_by || "Someone")}</b> added a task${t.who ? " for " + esc(t.who) : ""}`, b:esc(t.text) });
+      if(t.done_at) act.push({ at:t.done_at, ic:"✅", h:`<b>${esc(t.done_by || "Someone")}</b> finished a task`, b:esc(t.text) }); });
+    act.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const tabs = [["ov", "Overview", ""], ["nx", "Next steps", tko.length], ["ac", "Activity", act.length]];
+    const tfl = t => MX.tf === "all" ? true : MX.tf === "today" ? t.due === T : MX.tf === "week" ? t.due && t.due >= T && t.due <= wk : MX.tf === "over" ? t.due && t.due < T : MX.tf === "done" ? !!t.done_at : true;
+    const isOfb = kindOf(it) === "ofb", fid = isOfb ? +String(it.key).split(":")[1] : 0;
+    let b = "";
+    if(MX.tab === "ov"){
+      b = `${(it.lines || []).filter(Boolean).length ? `<ul class="mlines">${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
+        ${it.ask ? `<div class="msig"><i>✦</i><div><small>Decide in the meeting</small>${esc(it.ask)}</div></div>` : ""}
+        <p class="msrc">Source: ${esc(it.src || "")}</p>
+        <div class="macts">${it.link ? `<a class="btn small primary" href="${esc(it.link)}"${/^https?:/.test(it.link) ? ` target="_blank" rel="noopener"` : ""}>${esc(PAGENAME[it.link] || (/zillow/.test(it.link) ? "🏠 Open on Zillow ↗" : "Open the page ↗"))}</a>` : ""}${tko.length ? `<button class="btn small" data-ptab="nx">☐ ${tko.length} open task${tko.length > 1 ? "s" : ""}</button>` : ""}${sg.length ? `<button class="btn small" data-ptab="nx">✦ ${sg.length} suggested next step${sg.length > 1 ? "s" : ""}</button>` : ""}
+          ${/^(ofb|behind|omb|pf|rule)$/.test(kindOf(it)) ? `<a class="btn small" href="#/rates_set">📈 Open Set rates</a>` : ""}</div>
+        ${isOfb ? `<div class="mbox"><b>Owner follow-up</b><textarea id="mofbr" placeholder="What did the owner say? (closes this follow-up on the Rates desk)"></textarea>
+          <div class="macts"><button class="btn small primary" id="mofbs">Save the owner's answer</button><span class="muted" style="font-size:13px">or follow up again on</span><input type="date" id="mofbd" value="${esc(addDays(T, 7))}" style="width:auto"><button class="btn small" id="mofbm">Move follow-up</button></div></div>` : ""}
+        ${msgBox(it)}
+        <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key))}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(dv != null ? dv : "")}</textarea>
+          <div class="macts"><select data-nstate="${esc(it.key)}" aria-label="Where it stands" style="width:auto">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
+          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button></div></div>`;
+    } else if(MX.tab === "nx"){
+      const ovd = tko.filter(t => t.due && t.due < T);
+      b = `${ovd.length ? `<div class="msig red"><i>!</i><div><small>Next action</small>${ovd.length} overdue task${ovd.length > 1 ? "s" : ""}</div></div>` : ""}
+        ${sg.length ? `<div class="mbox"><b>✦ Suggested next steps</b>${sg.map((s, i) => `<div class="msug"><span>${esc(s.text)}</span><button class="btn small" data-sug="${i}">+ Use</button></div>`).join("")}</div>` : ""}
+        <div class="mbox"><b>Add a task</b>${taskForm(it.key, it.title, MX.sug[it.key])}</div>
+        <div class="mfts">${[["all","All",tk.length],["today","Today",tk.filter(t => !t.done_at && t.due === T).length],["week","This week",tk.filter(t => !t.done_at && t.due && t.due >= T && t.due <= wk).length],["over","Overdue",ovd.length],["done","Done",tk.filter(t => t.done_at).length]].map(([k2, l, n]) => `<button class="mft${MX.tf === k2 ? " on" : ""}" data-tf2="${k2}">${l} <span>${n}</span></button>`).join("")}</div>
+        <div class="mtl">${tk.filter(tfl).map(taskRow).join("") || `<p class="muted">No tasks here.</p>`}</div>`;
+    } else {
+      b = `<div class="mtiles two">${`<div class="mtile"><div><b>${act.length}</b><span>Total activity</span></div></div><div class="mtile g"><div><b>${notesOf(null, it.key).length}</b><span>Notes</span></div></div>`}</div>
+        <div class="mact">${act.map(a => `<div class="maci"><i>${a.ic}</i><div><div>${a.h}<span class="muted"> · ${esc(tm(a.at))}</span></div><div class="mab">${a.b}</div></div></div>`).join("") || `<p class="muted">Nothing yet.</p>`}</div>`;
+    }
+    const o = document.createElement("div"); o.id = "mpov"; o.className = "mpov";
+    o.innerHTML = `<div class="mpanel" role="dialog" aria-label="${esc(it.title)}"><div class="mph"><div>${pill(st)}<h3>${esc(it.title)}</h3><span class="muted">${esc(it.grp)}</span></div><button class="btn small" data-pclose aria-label="Close">✕</button></div>
+      <div class="mptabs">${tabs.map(([k2, l, n]) => `<button class="${MX.tab === k2 ? "on" : ""}" data-ptab="${k2}">${l}${n !== "" ? ` <span>${n}</span>` : ""}</button>`).join("")}</div><div class="mpb">${b}</div></div>`;
+    document.body.appendChild(o);
+    o.onclick = e => { if(e.target === o) close(); };
+    o.querySelector("[data-pclose]").onclick = close;
+    o.querySelectorAll("[data-ptab]").forEach(x => x.onclick = () => { MX.tab = x.dataset.ptab; panel(); });
+    o.querySelectorAll("[data-tf2]").forEach(x => x.onclick = () => { MX.tf = x.dataset.tf2; panel(); });
+    o.querySelectorAll("[data-sug]").forEach(x => x.onclick = () => { const s = sg[+x.dataset.sug]; MX.sug[it.key] = { text:s.text, due:addDays(T, s.days) }; panel();
+      const i = o.querySelector('[data-tf="who"]'); if(i) i.focus(); });
+    wire(o); msgWire(o, it);
+    const sv = (res, fu, btn) => async () => { const r0 = res ? o.querySelector("#mofbr").value.trim() : ""; if(res && !r0) return o.querySelector("#mofbr").focus();
+      btn.disabled = true; const r = await sb.rpc("meeting_ofb_set", { p_meet:key, p_day:day, p_id:fid, p_result:r0 || null, p_followup:fu ? o.querySelector("#mofbd").value || null : null }); btn.disabled = false;
+      if(r.error) return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); redraw(); };
+    if(isOfb){ const s1 = o.querySelector("#mofbs"), s2 = o.querySelector("#mofbm"); s1.onclick = sv(true, false, s1); s2.onclick = sv(false, true, s2); }
+  }
+  /* message / alert a person or the topic's team: Slack from the hub bot ("From <you> (from the <meeting> meeting on the Moose Hub)"),
+     sent only when the person taps Send; "Give them a task" = a meeting task per person (Home + bell + DM when that's on) */
+  function msgBox(it){
+    const tm2 = TEAMFOR[kindOf(it)], ppl2 = MX.tp[key] || [], mem = tm2 ? ppl2.filter(p => (p.teams || []).includes(tm2[0])) : [];
+    const draft = [it.title, ...(it.lines || []).filter(Boolean).slice(0, 15).map(l => "• " + l), it.ask ? "\n" + it.ask : "", it.link ? "\n" + absLink(it.link) : ""].filter(Boolean).join("\n");
+    return `<div class="mbox" id="mmsg"><b>💬 Message or alert${mem.length ? " " + esc(tm2[1]) : " someone"}</b>
+      <div class="macts" style="margin-top:0"><select id="mmto" style="width:auto;max-width:100%">${mem.length ? `<option value="team">${esc(tm2[1][0].toUpperCase() + tm2[1].slice(1))} (${esc(mem.map(p => p.name.split(" ")[0]).join(", "))})</option>` : `<option value="">Pick a person…</option>`}
+        <optgroup label="People">${ppl2.map(p => `<option value="p:${esc(p.id)}">${esc(p.name)}</option>`).join("")}</optgroup></select></div>
+      <textarea id="mmtx" style="min-height:120px">${esc(draft)}</textarea>
+      <div class="macts"><button class="btn small primary" id="mmsend">Send on Slack</button><button class="btn small" id="mmtask">🔔 Give them a task</button><input type="date" id="mmdue" value="${esc(addDays(T, 3))}" style="width:auto" aria-label="Task due"><span class="muted" id="mmm" style="font-size:13px"></span></div>
+      <p class="muted" style="font-size:12px;margin:4px 0 0">Slack comes from the Moose Hub bot with your name at the top. Nothing goes until you tap Send.</p></div>`;
+  }
+  function msgWire(o, it){
+    const box = o.querySelector("#mmsg"); if(!box) return;
+    const tm2 = TEAMFOR[kindOf(it)], ppl2 = MX.tp[key] || [], msg = box.querySelector("#mmm");
+    const targets = () => { const v2 = box.querySelector("#mmto").value; if(v2 === "team") return ppl2.filter(p => (p.teams || []).includes(tm2[0]));
+      const p = ppl2.find(x => "p:" + x.id === v2); return p ? [p] : []; };
+    box.querySelector("#mmsend").onclick = async e => { const to = targets(), text = box.querySelector("#mmtx").value.trim();
+      if(!to.length) return msg.textContent = "Pick who gets it."; if(text.length < 5) return msg.textContent = "Type a message.";
+      e.target.disabled = true; msg.textContent = "Sending…"; const bad = [];
+      for(const p of to){ const x = await sb.functions.invoke("penny", { body:{ act:{ kind:"slack_post", data:{ to:p.name, text, via:"meeting", meet:m.name } } } });
+        if(!(x.data && x.data.ok)) bad.push(p.name.split(" ")[0] + ": " + ((x.data && x.data.error) || (x.error && (window.niceErr ? niceErr(x.error) : x.error.message)) || "error")); }
+      e.target.disabled = false;
+      await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:it.key, p_text:"Sent on Slack to " + to.filter(p => !bad.some(b => b.startsWith(p.name.split(" ")[0] + ":"))).map(p => p.name).join(", ") + ": " + short(text, 300), p_state:stItem(it) || "covered" });
+      msg.textContent = bad.length ? "Couldn't send to " + bad.join("; ") : "✓ Sent"; if(!bad.length) setTimeout(redraw, 700); };
+    box.querySelector("#mmtask").onclick = async e => { const to = targets(), text = box.querySelector("#mmtx").value.trim().split("\n")[0];
+      if(!to.length) return msg.textContent = "Pick who gets it.";
+      const t = prompt("Task for " + to.map(p => p.name.split(" ")[0]).join(", ") + ":", it.ask ? it.ask.replace(/\?$/, "") + " (" + short(it.title, 60) + ")" : text); if(!t) return;
+      e.target.disabled = true; let err = "";
+      for(const p of to){ const r = await sb.rpc("meeting_task_add2", { p_meet:key, p_day:day, p_item:it.key, p_item_title:it.title, p_text:t, p_who:p.id, p_due:box.querySelector("#mmdue").value || null }); if(r.error) err = r.error.message; }
+      e.target.disabled = false; if(err) return msg.textContent = "Couldn't add: " + err; redraw(); };
+  }
+  function close(){ MX.open = null; document.getElementById("mpov")?.remove(); }
+  if(!window._mxEsc){ window._mxEsc = 1; document.addEventListener("keydown", e => { if(e.key === "Escape" && document.getElementById("mpov")){ MX.open = null; document.getElementById("mpov").remove(); } }); }
   const redraw = async () => { const sy = window.scrollY; const d = await load(v, key); if(d){ render(v, key, d, ppl); window.scrollTo(0, sy); } };
-  v.querySelectorAll("textarea[data-note]").forEach(t => t.oninput = () => ST.drafts[key + "|" + t.dataset.note] = t.value);
+  /* buttons shared by the page and the panel */
+  function wire(root){
+    root.querySelectorAll("textarea[data-note]").forEach(t => t.oninput = () => ST.drafts[key + "|" + t.dataset.note] = t.value);
+    root.querySelectorAll("[data-tform] input[data-tf=text]").forEach(i => i.oninput = () => { const k = i.closest(".mtask").dataset.tform; if(k) MX.sug[k] = Object.assign(MX.sug[k] || {}, { text:i.value }); });
+    root.querySelectorAll("[data-nsave]").forEach(b => b.onclick = async () => {
+      const k = b.dataset.nsave, t = root.querySelector(`textarea[data-note="${CSS.escape(k)}"]`), s = root.querySelector(`select[data-nstate="${CSS.escape(k)}"]`);
+      if(!t.value.trim()) return t.focus();
+      b.disabled = true; const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:k, p_text:t.value.trim(), p_state:s ? s.value : "covered" }); b.disabled = false;
+      if(r.error) return alert("Couldn't save: " + r.error.message);
+      delete ST.drafts[key + "|" + k]; redraw(); });
+    root.querySelectorAll("[data-tadd]").forEach(b => b.onclick = async () => {
+      const f = b.closest(".mtask"), g = n => f.querySelector(`[data-tf="${n}"]`).value.trim();
+      if(g("text").length < 2) return f.querySelector('[data-tf="text"]').focus();
+      b.disabled = true; const r = await sb.rpc("meeting_task_add2", { p_meet:key, p_day:day, p_item:b.dataset.tadd, p_item_title:f.dataset.ttitle || null, p_text:g("text"), p_who:g("who") || null, p_due:g("due") || null }); b.disabled = false;
+      if(r.error) return alert("Couldn't add: " + (window.niceErr ? niceErr(r.error) : r.error.message));
+      delete MX.sug[b.dataset.tadd]; redraw(); });
+    root.querySelectorAll("[data-tdone]").forEach(c => c.onchange = async () => {
+      const r = await sb.rpc("meeting_task_set", { p_id:+c.dataset.tdone, p_done:c.checked, p_off:false });
+      if(r.error){ alert("Couldn't save: " + r.error.message); c.checked = !c.checked; return; }
+      redraw(); });
+  }
+  wire(v);
+  if(MX.open) panel();
+  v.querySelectorAll("[data-open]").forEach(c => { const go = e => { if(e.target.closest("[data-quick]")) return; e.stopPropagation(); MX.open = c.dataset.open; MX.tab = "ov"; MX.tf = "all"; panel(); };
+    c.onclick = go; c.onkeydown = e => { if(e.key === "Enter") go(e); }; });
+  v.querySelectorAll("[data-quick]").forEach(b => b.onclick = async e => { e.stopPropagation(); b.disabled = true;
+    const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:b.dataset.quick, p_text:"Covered in the meeting.", p_state:"covered" });
+    if(r.error){ b.disabled = false; return alert("Couldn't save: " + r.error.message); } redraw(); });
+  v.querySelectorAll("[data-filt]").forEach(b => b.onclick = () => { MX.filt = b.dataset.filt; render(v, key, data, ppl); });
+  const mq = $("#mq"); mq.oninput = () => { MX.q = mq.value; const p = mq.selectionStart; render(v, key, data, ppl); const n = $("#mq"); n.focus(); n.setSelectionRange(p, p); };
   $("#mday").onchange = e => { if(e.target.value){ ST.day[key] = e.target.value; ST.drafts = {}; render(v, key, data, ppl); } };
   $("#mref").onclick = redraw;
   if($("#mlink")) $("#mlink").onclick = async () => {   // admins paste the Zoom / Meet link themselves (it can carry a passcode)
@@ -253,22 +470,42 @@ function render(v, key, data, ppl){
     if(r.error) return alert("Couldn't save: " + r.error.message); redraw(); };
   $("#mprint").onclick = () => window.print();
   $("#mup").onclick = () => upOpen(v, key, day, items, () => render(v, key, data, ppl));
+  $("#mwrap").onclick = () => {   // what was decided + who does what, ready to copy
+    const L = [`${m.name} meeting · ${fmt(day)}`, ""];
+    const dec = items.map(it => ({ it, n: notesOf(day, it.key) })).filter(x => x.n.length);
+    if(dec.length){ L.push("DECIDED"); dec.forEach(x => { L.push(`• ${x.it.title}${stItem(x.it) !== "covered" ? " (" + stItem(x.it) + ")" : ""}`); x.n.forEach(n => L.push(`   - ${n.by || "Someone"}: ${n.text}`)); }); L.push(""); }
+    const other = notesOf(day, "_notes"); if(other.length){ L.push("ANYTHING ELSE"); other.forEach(n => L.push(`• ${n.by || "Someone"}: ${n.text}`)); L.push(""); }
+    if(open.length){ L.push("WHO DOES WHAT"); open.forEach(t => L.push(`• ${t.who || "No one yet"}: ${t.text}${t.due ? " (due " + fmt(t.due) + ")" : ""}`)); L.push(""); }
+    const left = items.filter(it => !stItem(it)); if(left.length){ L.push(`NOT COVERED YET (${left.length})`); left.forEach(it => L.push(`• ${it.title}`)); }
+    const txt = L.join("\n");
+    document.getElementById("mpov")?.remove();
+    const o = document.createElement("div"); o.id = "mpov"; o.className = "mpov";
+    o.innerHTML = `<div class="mpanel"><div class="mph"><div><h3>Wrap up</h3><span class="muted">${covered} of ${items.length} covered · ${open.length} open tasks${items.length - covered - waiting ? ` · ${items.length - covered - waiting} not covered yet` : ""}</span></div><button class="btn small" data-pclose>✕</button></div>
+      <div class="mpb"><textarea id="mwt" style="width:100%;min-height:55vh;font-size:13px">${esc(txt)}</textarea><div class="macts"><button class="btn small primary" id="mwc">📋 Copy</button><span class="muted" style="font-size:13px">Paste it into Slack or an email yourself.</span></div></div></div>`;
+    document.body.appendChild(o); o.onclick = e => { if(e.target === o) o.remove(); }; o.querySelector("[data-pclose]").onclick = () => o.remove();
+    o.querySelector("#mwc").onclick = async () => { try { await navigator.clipboard.writeText(o.querySelector("#mwt").value); o.querySelector("#mwc").textContent = "Copied ✓"; } catch(e){ o.querySelector("#mwt").select(); } };
+  };
   v.querySelectorAll("[data-mday]").forEach(a => a.onclick = e => { e.preventDefault(); ST.day[key] = a.dataset.mday; ST.drafts = {}; render(v, key, data, ppl); window.scrollTo(0, 0); });
-  v.querySelectorAll("[data-nsave]").forEach(b => b.onclick = async () => {
-    const k = b.dataset.nsave, t = v.querySelector(`textarea[data-note="${CSS.escape(k)}"]`), s = v.querySelector(`select[data-nstate="${CSS.escape(k)}"]`);
-    if(!t.value.trim()) return t.focus();
-    b.disabled = true; const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:k, p_text:t.value.trim(), p_state:s ? s.value : "covered" }); b.disabled = false;
-    if(r.error) return alert("Couldn't save: " + r.error.message);
-    delete ST.drafts[key + "|" + k]; redraw(); });
-  v.querySelectorAll("[data-tadd]").forEach(b => b.onclick = async () => {
-    const f = b.closest(".mtask"), g = n => f.querySelector(`[data-tf="${n}"]`).value.trim();
-    if(g("text").length < 2) return f.querySelector('[data-tf="text"]').focus();
-    b.disabled = true; const r = await sb.rpc("meeting_task_add", { p_meet:key, p_day:day, p_item:b.dataset.tadd, p_text:g("text"), p_who:g("who"), p_due:g("due") || null }); b.disabled = false;
-    if(r.error) return alert("Couldn't add: " + r.error.message);
-    redraw(); });
-  v.querySelectorAll("[data-tdone]").forEach(c => c.onchange = async () => {
-    const r = await sb.rpc("meeting_task_set", { p_id:+c.dataset.tdone, p_done:c.checked, p_off:false });
-    if(r.error){ alert("Couldn't save: " + r.error.message); c.checked = !c.checked; return; }
-    redraw(); });
+  if(!MX.tp[key]) taskPeople(key).then(() => render(v, key, data, ppl));
 }
+/* Home + bell (2026-11-10): tasks people were given in a meeting (my_meeting_tasks, hub_meeting_actions.sql). Tick done right here.
+   Meeting name + topic only show when the person can open that meeting (rule 3). */
+window.meetTasksHome = async function(el){
+  if(!el) return; css();
+  const r = await sb.rpc("my_meeting_tasks"); const a = r.data || []; if(r.error || !a.length){ el.innerHTML = ""; return; }
+  const T = ymd(new Date());
+  el.innerHTML = `<div class="card mtg"><b style="font-size:17px">📋 Your tasks from meetings <span class="muted" style="font-weight:400">${a.length}</span></b>
+    ${a.map(t => `<div class="tk"><input type="checkbox" data-mhd="${t.id}" aria-label="Done"><div style="flex:1"><span class="tx">${esc(t.text)}</span>
+      <small>${[t.due ? (t.due < T ? `<span class="mred">Overdue · ${esc(fmt(t.due))}</span>` : t.due === T ? `<span class="mamb">Due today</span>` : "Due " + esc(fmt(t.due))) : "",
+        t.meet ? `<a href="#/${esc(t.meet)}">${esc(t.meet_name)} meeting</a>` : "From " + esc(t.meet_name), t.topic ? esc(t.topic) : "", t.by ? "from " + esc(t.by) : ""].filter(Boolean).join(" · ")}</small></div></div>`).join("")}</div>`;
+  el.querySelectorAll("[data-mhd]").forEach(c => c.onchange = async () => { c.disabled = true;
+    const w = await sb.rpc("meeting_task_set", { p_id:+c.dataset.mhd, p_done:true, p_off:false });
+    if(w.error){ c.disabled = false; c.checked = false; return alert("Couldn't save: " + w.error.message); }
+    c.closest(".tk").classList.add("done"); setTimeout(() => window.meetTasksHome(el), 900); });
+};
+window.meetTasksBell = async function(){
+  const r = await sb.rpc("my_meeting_tasks"); const a = r.data || []; if(r.error || !a.length) return [];
+  const T = ymd(new Date()), od = a.filter(t => t.due && t.due < T).length;
+  return [{ ic:"📋", t:`${a.length} task${a.length === 1 ? "" : "s"} from meetings${od ? ` (${od} overdue)` : ""}`, s:a.slice(0, 2).map(t => t.text).join(" · "), href:"#/home" }];
+};
 })();
