@@ -78,6 +78,11 @@ table.g{border-collapse:separate;border-spacing:0;width:100%;min-width:980px;tab
 .chip .tg{display:inline-block;font-size:10.5px;font-weight:800;border-radius:6px;padding:0 5px;margin-left:3px}
 .tg.stay{background:var(--amber-soft);color:var(--amber)} .tg.late{background:var(--red-soft);color:var(--red)} .tg.more{background:var(--violet-soft);color:var(--violet)}
 .chip.dragging{opacity:.4}
+.ppl2{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px} .ppl2 i{font-style:normal;font-size:10.5px;font-weight:800;background:var(--moose-soft);color:var(--moose-ink);border-radius:999px;padding:0 7px}
+.ppl2 i.none{background:var(--amber-soft);color:var(--amber)}
+.seg{display:inline-flex;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:transparent;color:#fff;font:inherit;font-weight:800;font-size:12.5px;padding:5px 11px;cursor:pointer}
+.seg button.on{background:#fff;color:var(--forest)}
 .mi{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
 .empty{padding:16px;color:var(--muted);font-size:13.5px;text-align:center}
 .note{background:var(--blue-soft);border-radius:12px;padding:9px 13px;font-size:13px;margin:12px 0 0}
@@ -121,7 +126,8 @@ const TODAY = pcDay();
 const OFFICE = [40.6889, -111.5517];   // Moose office, Bear Hollow (5519 Lillehammer Ln) - start of each day's route estimate
 const DEF_MIN = 45;                    // planning guess per task when the template has no finished time on record
 
-const S = { start: sunday(TODAY), days: 7, side: "hand", q: "", B: null, pend: {}, err: "" };
+const S = { start: sunday(TODAY), days: 7, side: "hand", q: "", B: null, pend: {}, err: "", view: "tech" };
+try { S.view = localStorage.getItem("mm_cp_view") === "home" ? "home" : "tech"; } catch(_){}
 
 async function load(quiet){
   const to = addDays(S.start, S.days - 1);
@@ -181,6 +187,12 @@ function chip(t, opts = {}){
   const p = S.pend[t.id], late = isOpen(t) && t.date && t.date < TODAY, st = t.date && t.home && stayOn(t.home, t.date);
   const others = opts.tech ? techsOn(t).filter(x => x.bwName !== opts.tech).map(x => x.first) : [];
   const cls = ["chip", (t.priority || "normal"), t.stage === "finished" ? "done" : t.stage === "in_progress" ? "prog" : "", p ? (p.fail ? "fail" : "pend") : ""].join(" ");
+  /* By home view: the row is the home, so the card is the task + who's on it (like Breezeway's Property Schedule) */
+  if(opts.home){ const ppl = (t.who || []).map(n => { const c = (S.B.crew || []).find(x => x.bwName === n); return c ? c.first : n.split(" ")[0]; });
+    return `<button class="${cls}" draggable="${t.stage === "finished" ? "false" : "true"}" data-t="${t.id}" title="${esc(t.name)}">
+      <b class="nm" style="color:var(--ink)">${esc(t.name)}</b>${t.time ? `<span class="muted">${esc(String(t.time).slice(0, 5))} </span>` : ""}
+      ${t.priority === "urgent" || t.priority === "high" ? `<span class="tg late">${esc(t.priority)}</span>` : ""}${late ? `<span class="tg late">late</span>` : ""}
+      <span class="ppl2">${ppl.length ? ppl.map(n => `<i>${esc(n)}</i>`).join("") : '<i class="none">no one yet</i>'}</span></button>`; }
   return `<button class="${cls}" draggable="${t.stage === "finished" ? "false" : "true"}" data-t="${t.id}" title="${esc(t.home + " · " + t.name + (p && p.fail ? "\nBreezeway: " + p.fail : p ? "\nSending to Breezeway…" : ""))}">
     <b>${esc(t.home || "No home")}</b>${t.time ? ` <span class="muted">${esc(String(t.time).slice(0, 5))}</span>` : ""}
     ${t.priority === "urgent" || t.priority === "high" ? `<span class="tg late">${esc(t.priority)}</span>` : ""}
@@ -204,7 +216,8 @@ function render(){
   const pulled = S.B.pulled ? new Date(S.B.pulled).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) : "—";
   const scheduled = (S.B.shifts || []).length;
   let h = `<div class="hero"><div class="top"><h1>Crew planner</h1>
-      <div class="right"><button class="btn sm" data-nav="-7">‹</button><button class="btn sm" data-nav="0">This week</button><button class="btn sm" data-nav="7">›</button>
+      <div class="right"><span class="seg"><button data-view="tech" class="${S.view === "tech" ? "on" : ""}">By tech</button><button data-view="home" class="${S.view === "home" ? "on" : ""}">By home</button></span>
+      <button class="btn sm" data-nav="-7">‹</button><button class="btn sm" data-nav="0">This week</button><button class="btn sm" data-nav="7">›</button>
       <button class="btn sm" data-days="${S.days === 7 ? 14 : 7}">${S.days === 7 ? "Show 2 weeks" : "Show 1 week"}</button><button class="btn sm" data-act="reload">↻</button></div></div>
     <div class="sub">${esc(dLabel(S.start))} – ${esc(dLabel(to))} · drag a task onto a tech and a day, or tap it · Breezeway copy updated ${esc(pulled)}</div>
     <div class="tiles">
@@ -221,8 +234,20 @@ function render(){
       <div class="pills">${["hand","week","late","nodate"].map(k => `<button class="pt${S.side === k ? " on" : ""}" data-side="${k}">${{ hand:"To hand out", week:"These days", late:"Past due", nodate:"No date" }[k]}</button>`).join("")}</div>
       <input type="search" id="q" placeholder="Find a home or task…" value="${esc(S.q)}"></header>
     <div class="list">${sideList.length ? sideList.slice(0, 250).map(t => chip(t) + (t.date ? "" : "")).join("") : `<div class="empty">Nothing here.</div>`}${sideList.length > 250 ? `<div class="muted">Showing 250 of ${sideList.length}. Search to narrow it.</div>` : ""}</div></aside>
-    <div class="board"><table class="g"><thead><tr><th class="who">Tech</th>${days.map(d => `<th class="${d === TODAY ? "today" : ""}">${esc(dLabel(d))}</th>`).join("")}</tr></thead><tbody>`;
-  techs.forEach(c => {
+    <div class="board"><table class="g"><thead><tr><th class="who">${S.view === "home" ? "Home" : "Tech"}</th>${days.map(d => `<th class="${d === TODAY ? "today" : ""}">${esc(dLabel(d))}</th>`).join("")}</tr></thead><tbody>`;
+  if(S.view === "home"){
+    const ql = S.q.toLowerCase();
+    const hs = [...new Set(all.filter(inWin).map(t => t.home || ""))]
+      .filter(x => !ql || x.toLowerCase().includes(ql) || all.some(t => (t.home || "") === x && inWin(t) && t.name.toLowerCase().includes(ql)))
+      .sort((a, b) => (a === "Moose company" ? -1 : b === "Moose company" ? 1 : a.localeCompare(b, undefined, { numeric:true })));
+    hs.forEach(hm => {
+      h += `<tr><th class="who">${esc(hm === "Moose company" ? "Moose Office" : hm || "No home")}</th>`;
+      days.forEach(d => { const ts = all.filter(t => (t.home || "") === hm && t.date === d).sort((a, b) => String(a.time || "99").localeCompare(String(b.time || "99")));
+        const st = hm && stayOn(hm, d);
+        h += `<td class="${d === TODAY ? "today" : ""}" data-cell="home|${esc(hm)}|${d}" style="height:auto">${st ? `<div class="shift"><span class="tg stay">${st.owner ? "owner in" : st.lease ? "tenant" : "guest in"}</span></div>` : ""}${ts.map(t => chip(t, { home: true })).join("")}</td>`; });
+      h += `</tr>`; });
+    if(!hs.length) h += `<tr><td colspan="${days.length + 1}" class="empty">No tasks in these days.</td></tr>`;
+  } else techs.forEach(c => {
     const canGet = !!c.bw;
     h += `<tr><th class="who">${esc(c.first)}<small>${canGet ? esc(c.bwName || "") : "not in Breezeway yet"}</small></th>`;
     days.forEach(d => {
@@ -279,6 +304,9 @@ document.addEventListener("dragover", e => { if(!DRAG) return; const td = e.targ
 document.addEventListener("drop", e => { if(!DRAG) return; const td = e.target.closest && (e.target.closest("td[data-cell]") || e.target.closest("#side")); const D = DRAG; DRAG = null;
   $$(".drop").forEach(x => x.classList.remove("drop")); if(!td || td.dataset.nodrop) return; e.preventDefault();
   if(td.id === "side"){ if(D.from) send(D.t, { who: moveWho(D.t, D.from, null) }); return; }
+  if(td.dataset.cell.startsWith("home|")){ const [, hm, day2] = td.dataset.cell.split("|");
+    if((D.t.home || "") !== hm){ alert("That task is at " + (D.t.home || "no home") + ". Drop it in its own home's row, or switch to By tech to hand it out."); return; }
+    send(D.t, { day: day2 }); return; }
   const [uid, day] = td.dataset.cell.split("|"), c = (S.B.crew || []).find(x => x.uid === uid);
   send(D.t, { day, who: c && c.bwName !== D.from ? moveWho(D.t, D.from, c.bwName) : null }); });
 
@@ -304,6 +332,7 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("button,[data-nav]"); if(!b) return;
   if(b.classList.contains("chip")){ if(b.closest("td[data-cell]") || b.closest("#side")) open(task(+b.dataset.t)); return; }
   if(b.dataset.nav != null){ const n = +b.dataset.nav; S.start = n ? addDays(S.start, n) : sunday(TODAY); S.B = S.B && Object.assign({}, S.B); load(); return; }
+  if(b.dataset.view){ S.view = b.dataset.view; try { localStorage.setItem("mm_cp_view", S.view); } catch(_){} render(); return; }
   if(b.dataset.days){ S.days = +b.dataset.days; load(); return; }
   if(b.dataset.side){ S.side = b.dataset.side; render(); return; }
   const a = b.dataset.act, d = $("#dlg");
