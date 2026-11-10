@@ -126,7 +126,8 @@ window.meetView = async function(v, key){
   if(sc && sc.data){ ST.sched[key] = sc.data; const s = sc.data;
     MEET[key] = Object.assign({}, MEET[key], { dow:s.dow, nth:s.nth || undefined, anchor:s.anchor || undefined, until:s.until || undefined, every:s.anchor && !s.nth ? s.every : (s.every === 14 ? 14 : undefined) }); }
   const m = MEET[key];
-  if(!ST.day[key]) ST.day[key] = nextDay(m);
+  if(!ST.day[key]){ ST.day[key] = nextDay(m);   // a single moved or skipped meeting (hub_meeting_moves.sql) wins
+    try { const nx = await sb.rpc("meeting_next", { p_meet:key }); if(nx && nx.data && nx.data.day){ ST.day[key] = nx.data.day; ST.next = ST.next || {}; ST.next[key] = nx.data; } } catch(e){} }
   const [data, ppl] = await Promise.all([load(v, key), people()]);
   if(!data) return; render(v, key, data, ppl);
 };
@@ -145,7 +146,9 @@ window.meetJoin = async function(key){
     document.querySelectorAll(".mjoin").forEach(x => x.remove()); meetJoin(key); });
 };
 const t12 = t => { const [h, mi] = t.split(":").map(Number); return (h % 12 || 12) + (mi ? ":" + String(mi).padStart(2, "0") : "") + (h < 12 ? " am" : " pm"); };
-function schedWhen(key){ const s = ST.sched[key]; if(!s || !s.start_time) return {};
+function schedWhen(key){ const s0 = ST.sched[key], nx = ST.next && ST.next[key];
+  const s = nx && nx.day === ST.day[key] && nx.moved_from && nx.start ? Object.assign({}, s0, { start_time:nx.start, minutes:nx.minutes, source:"moved from " + fmt(nx.moved_from) + (nx.note ? ": " + nx.note : "") }) : s0;
+  if(!s || !s.start_time) return {};
   const st = s.start_time.slice(0, 5), x = st.split(":").map(Number), e = s.minutes ? x[0] * 60 + x[1] + s.minutes : null;
   return { when: t12(st) + (e != null ? "–" + t12(String(Math.floor(e / 60) % 24).padStart(2, "0") + ":" + String(e % 60).padStart(2, "0")) : "") + " Mountain" + (s.source ? " (" + s.source + ")" : "") }; }
 /* Upload a recording / transcript / notes (Brandon 2026-11-09, "Yes, add it" to every meeting). Files -> private bucket meeting-files/<meet>/<day>/,
