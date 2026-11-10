@@ -83,7 +83,7 @@ const CCSS = `
 .cal .list .it .d{flex:0 0 92px;color:var(--muted);font-size:13px}
 .cal .pp{padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px} .cal .pp:last-child{border-bottom:0} .cal .pp .ttl{color:var(--muted);font-size:12.5px}
 .cal .pp .ct{display:flex;gap:10px;flex-wrap:wrap;margin-top:3px;font-size:12.5px} .cal .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
-.cal .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}
+.page.cal.calwide{max-width:1800px;padding:20px 28px} .cal .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}
 .cal .tile{display:block;text-decoration:none;color:inherit;margin:0;transition:box-shadow .15s} .cal .tile:hover{box-shadow:0 4px 16px rgba(10,30,20,.14)}
 .cal .tile h3{margin:0 0 2px;font-size:17px} .cal .tile .when{font-size:13px;color:var(--ink-2)} .cal .tile ul{margin:6px 0 0;padding-left:18px;font-size:13px}
 .cal .tile .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
@@ -269,7 +269,7 @@ async function meetTiles(v){
       <div class="muted" style="font-size:13px;margin-top:6px" data-agenda="${m.meet}">${m.meet === "meet_maint" ? "Projects, owner jobs and repeat problems from the Maintenance desk." : "Checking what's coming up…"}</div>
       ${m.open_tasks != null ? `<div style="margin-top:6px;font-size:13px"><b>${m.open_tasks} open task${m.open_tasks === 1 ? "" : "s"}</b>${(m.tasks || []).length ? `<ul>${m.tasks.map(x => `<li>${esc(x.text)}${x.who ? " · " + esc(x.who) : ""}${x.due ? " · due " + esc(fday(x.due)) : ""}</li>`).join("")}</ul>` : ""}</div>` : ""}</a>
       <div class="row"><a class="btn small primary" href="#/${m.meet}">Open agenda</a>${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">▶ Join</a>` : ""}${ME.admin ? `<button class="btn small" data-settime="${m.meet}">${m.start ? "Change day & time" : "Set day & time"}</button>` : ""}</div></div>`; };
-  v.innerHTML = `<div class="page cal">${tabs("cal_meet")}<div class="chead"><h2>Weekly meetings</h2></div>
+  v.innerHTML = `<div class="page cal calwide">${tabs("cal_meet")}<div class="chead"><h2>Weekly meetings</h2></div>
     ${ms.length ? `<div class="tiles">${ms.map(tile).join("")}</div>` : `<div class="card"><p class="muted" style="margin:0">No weekly meetings on your calendar.</p></div>`}
     <p class="muted" style="font-size:12px">Times: ${esc([...new Set(ms.filter(m => m.start).map(m => NAMES[m.meet] + " from " + m.source))].join("; ") || "not set yet")}.</p></div>`;
   // Change day & time (Brandon 2026-11-10): date of the next meeting + how often + time + length -> meeting_sched_set2 (hub_meeting_sched_day.sql)
