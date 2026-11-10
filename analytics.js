@@ -718,7 +718,8 @@ async function insights(el, tab, ctx){
   const [I, RN, ED, AD] = await Promise.all([sb.from("review_insights").select("*").order("id"),
     sb.from("review_insight_runs").select("id,ran_at,by_name,read,stats,found,new_count,error").order("id", { ascending:false }).limit(6),
     sb.rpc("review_insight_can_edit"), sb.rpc("hub_is_admin")]);
-  const MI = tab === "patterns" ? null : await sb.rpc("hub_can", { p_desk:"maint_improve" }), byHome = !!(MI && MI.data);   // 2026-11-10: Maintenance ▸ Improvements moved here
+  const [MI, HI] = tab === "patterns" ? [null, null] : await Promise.all([sb.rpc("hub_can", { p_desk:"maint_improve" }), sb.rpc("hub_can", { p_desk:"hk_improve" })]);
+  const byM = !!(MI && MI.data), byH = !!(HI && HI.data), byHome = byM || byH;   // 2026-11-10: Maintenance + Housekeeping ▸ Improvements moved here (same people as before)   // 2026-11-10: Maintenance ▸ Improvements moved here
   if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(I.error) : I.error.message))}</p></div>`; return; }
   const L = I.data || [], runs = RN.data || [], run = runs.find(r => !r.error && r.stats && r.stats.summary) || null, edit = !!ED.data, admin = !!AD.data;
   const pr = { high:"red", medium:"amber", low:"" };
@@ -783,13 +784,16 @@ async function insights(el, tab, ctx){
     wire(); runBtn(); return;
   }
   // Improvements
-  const view = byHome ? (() => { try { return localStorage.getItem("an_ri_view") || "all"; } catch(e){ return "all"; } })() : "all";
+  let view = byHome ? (() => { try { return localStorage.getItem("an_ri_view") || "all"; } catch(e){ return "all"; } })() : "all";
+  if((view === "home" && !byM) || (view === "hk" && !byH)) view = "all";
   const vbar = byHome ? `<div class="anbar" style="margin:0 0 10px"><button class="btn small${view === "all" ? " primary" : ""}" data-riv="all">Across our homes</button>
-      <button class="btn small${view === "home" ? " primary" : ""}" data-riv="home">By home: repairs guests mention</button></div>` : "";
+      ${byM ? `<button class="btn small${view === "home" ? " primary" : ""}" data-riv="home">By home: repairs guests mention</button>` : ""}
+      ${byH ? `<button class="btn small${view === "hk" ? " primary" : ""}" data-riv="hk">By home: cleaning guests mention</button>` : ""}</div>` : "";
   const vwire = () => el.querySelectorAll("[data-riv]").forEach(b => b.onclick = () => { try { localStorage.setItem("an_ri_view", b.dataset.riv); } catch(e){} insights(el, tab, ctx); });
-  if(view === "home"){
-    el.innerHTML = vbar + `<p class="muted" style="margin:0 0 8px">Any repair guests mention in 2 or more separate reviews at the same home in the last year, with the guests' public words. Set the status, add a note, or schedule it in Breezeway.</p>
-      <iframe id="rimf" src="improvements.html?area=maintenance&embed=1" title="Repairs guests mention" style="width:100%;border:0;min-height:600px;display:block;background:transparent"></iframe>`;
+  if(view === "home" || view === "hk"){ const hk = view === "hk";
+    el.innerHTML = vbar + `<p class="muted" style="margin:0 0 8px">${hk ? "Any cleaning or housekeeping item guests mention in 2 or more separate reviews at the same home in the last year, with the guests' public words. Set the status or add a note; the second tab shows who cleaned before each cleaning review."
+        : "Any repair guests mention in 2 or more separate reviews at the same home in the last year, with the guests' public words. Set the status, add a note, or schedule it in Breezeway."}</p>
+      <iframe id="rimf" src="improvements.html?area=${hk ? "housekeeping" : "maintenance"}&embed=1" title="${hk ? "Cleaning guests mention" : "Repairs guests mention"}" style="width:100%;border:0;min-height:600px;display:block;background:transparent"></iframe>`;
     if(!window.__riMsg){ window.__riMsg = 1; window.addEventListener("message", e => { const f = document.getElementById("rimf");
       if(f && e.source === f.contentWindow && e.data && e.data.mmImpH) f.style.height = Math.max(400, +e.data.mmImpH + 10) + "px"; }); }
     vwire(); return;
