@@ -65,11 +65,15 @@ async function load(v, key){
   ST.data[key] = r.data; return r.data;
 }
 window.meetView = async function(v, key){
-  css(); const m = MEET[key]; if(!m) return;
-  if(!ST.day[key]) ST.day[key] = nextDay(m);
+  css(); if(!MEET[key]) return;
   v.innerHTML = `<div class="page mtg"><p class="muted">Building the agenda…</p></div>`;
-  const [data, ppl, sc] = await Promise.all([load(v, key), people(), sb.from("hub_meeting_sched").select("start_time,minutes,source").eq("meet", key).maybeSingle()]);
-  if(sc && sc.data) ST.sched[key] = sc.data;   // times set on Calendar ▸ Meetings (hub_calendar.sql) win over the defaults here
+  // day + time set on Calendar ▸ Meetings (hub_calendar.sql, hub_meeting_sched_day.sql) win over the defaults here
+  const sc = await sb.from("hub_meeting_sched").select("dow,every,nth,anchor,until,start_time,minutes,source").eq("meet", key).maybeSingle();
+  if(sc && sc.data){ ST.sched[key] = sc.data; const s = sc.data;
+    MEET[key] = Object.assign({}, MEET[key], { dow:s.dow, nth:s.nth || undefined, anchor:s.anchor || undefined, until:s.until || undefined, every:s.anchor && !s.nth ? s.every : (s.every === 14 ? 14 : undefined) }); }
+  const m = MEET[key];
+  if(!ST.day[key]) ST.day[key] = nextDay(m);
+  const [data, ppl] = await Promise.all([load(v, key), people()]);
   if(!data) return; render(v, key, data, ppl);
 };
 /* Monday maintenance (desk.html in a frame, Brandon 2026-10-29): Join button in the green banner next to the page name.
@@ -204,7 +208,7 @@ function render(v, key, data, ppl){
   const taskForm = (k) => `<div class="mtask" data-tform="${esc(k)}"><input placeholder="New task: what needs to happen" data-tf="text"><input list="mppl" placeholder="Who" data-tf="who" style="max-width:170px"><input type="date" data-tf="due"><button class="btn small" data-tadd="${esc(k)}">+ Task</button></div>`;
   const grps = {}; items.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
   let h = `<div class="page mtg">${dl}<div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
-      <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}. Go down the list; write what was decided and add tasks.</p></div>
+      <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}. Go down the list; write what was decided and add tasks.</p></div>
     <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻ Refresh</button><button class="btn small" id="mup">⬆ Upload recording / notes</button><button class="btn small" id="mprint">Print / PDF</button></div></div>
     <div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${covered} of ${items.length} covered${waiting ? ` · ${waiting} waiting / scheduled` : ""}</b><span class="muted" style="font-size:13px">${past[0] ? "Last meeting " + esc(fmt(past[0])) : "First meeting"}</span></div>
       <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div></div>
