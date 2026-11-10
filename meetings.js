@@ -15,7 +15,8 @@ const MEET = {
   meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
   meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
-const MCSS = `
+const MCSS = `.mtg .mfeed{margin:8px 0;border-left:3px solid #7ea04a;padding:2px 0 2px 10px;display:grid;gap:6px;font-size:13.5px}.mtg .mfeed .mfn div{white-space:pre-wrap}
+
 .mtg .mhead{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between;margin:0 0 12px}
 .mtg .mhead h2{margin:0;font-size:22px} .mtg .mhead p{margin:4px 0 0}
 .mtg .mtools{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .mtg .mtools input,.mtg .mtools select{width:auto}
@@ -191,10 +192,11 @@ function upShow(res, from, key, items, redraw){
 function render(v, key, data, ppl){
   const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
   // everyone in the meeting keeps their own note per topic (hub_meeting_notes_everyone.sql); the newest one says where it stands
-  const notesOf = (d, k) => notes.filter(n => n.day === d && n.item === k && n.text);
+  const notesOf = (d, k) => { const a = notes.filter(n => n.day === d && n.item === k && n.text).sort((x, y) => String(x.at).localeCompare(String(y.at)));
+    return a.filter((n, i) => !a.slice(i + 1).some(m => (m.by || "") === (n.by || "") && m.text !== n.text && m.text.startsWith(n.text.trim()))); };
+  const tm = a => { try { return new Date(a).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }); } catch(e){ return ""; } };
+  const feedHtml = (d, k) => { const a = notesOf(d, k); return a.length ? `<div class="mfeed">${a.map(n => `<div class="mfn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("")}</div>` : ""; };
   const noteFor = (d, k) => { const a = notesOf(d, k); return a[a.length - 1]; };
-  const myNote = (d, k) => notes.find(n => n.day === d && n.item === k && n.mine);
-  const othersHtml = (d, k) => { const o = notesOf(d, k).filter(n => !n.mine); return o.length ? `<div class="mprev">${o.map(n => `<div><b>${esc(n.by || "Someone")}:</b> ${esc(n.text)}</div>`).join("")}</div>` : ""; };
   const past = [...new Set(notes.map(n => n.day))].filter(d => d < day).sort().reverse();
   // a note's state (hub_meeting_note_state.sql): only 'covered' counts; 'waiting' / 'scheduled' stay open (Jeff's test log #11)
   const stOf = n => n && n.text ? (n.state || "covered") : "";
@@ -220,7 +222,7 @@ function render(v, key, data, ppl){
   Object.keys(grps).forEach(g => {
     h += `<h3 class="mg">${esc(g)} <span class="muted">${grps[g].length}</span></h3>`;
     grps[g].forEach(it => {
-      const mine = myNote(day, it.key) || {}, st = stOf(noteFor(day, it.key)), cov = st === "covered", dv = ST.drafts[key + "|" + it.key];
+      const st = stOf(noteFor(day, it.key)), cov = st === "covered", dv = ST.drafts[key + "|" + it.key];
       const pill = st === "covered" ? `<span class="pill green">covered</span>` : st === "waiting" ? `<span class="pill amber">waiting on owner</span>` : st === "scheduled" ? `<span class="pill amber">scheduled</span>` : "";
       const prev = past.slice(0, 3).map(d => notesOf(d, it.key).map(n => `<div><b>${esc(fmt(d))}${n.by ? " · " + esc(n.by) : ""}:</b> ${esc(n.text)}</div>`).join("")).join("");
       const itTasks = open.filter(t => t.item_key === it.key);
@@ -230,14 +232,14 @@ function render(v, key, data, ppl){
         <p class="msrc">Source: ${esc(it.src || "")}</p>
         ${prev ? `<div class="mprev">${prev}</div>` : ""}
         ${itTasks.length ? `<div class="mprev">${itTasks.map(t => "☐ " + esc(t.text) + (t.who ? " · " + esc(t.who) : "")).join("<br>")}</div>` : ""}
-        ${othersHtml(day, it.key)}
-        <div class="mrow"><textarea data-note="${esc(it.key)}" placeholder="Your note: what was decided, who is doing it, by when">${esc(dv != null ? dv : (mine.text || ""))}</textarea>
+        ${feedHtml(day, it.key)}
+        <div class="mrow"><textarea data-note="${esc(it.key)}" placeholder="Add a note: what was decided, who is doing it, by when">${esc(dv != null ? dv : "")}</textarea>
           <select data-nstate="${esc(it.key)}" aria-label="Where it stands">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
-          <button class="btn small primary" data-nsave="${esc(it.key)}">${mine.text ? "Update my note" : "Add my note"}</button></div>
+          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button></div>
         ${taskForm(it.key)}</div>`; }); });
-  const gen = myNote(day, "_notes") || {}, gdv = ST.drafts[key + "|_notes"];
-  h += `<h3 class="mg">Anything else</h3><div class="card">${othersHtml(day, "_notes")}<textarea data-note="_notes" style="width:100%;min-height:110px" placeholder="Your notes: other topics, ideas, decisions">${esc(gdv != null ? gdv : (gen.text || ""))}</textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">${gen.text ? "Update my note" : "Add my note"}</button></div>
+  const gdv = ST.drafts[key + "|_notes"];
+  h += `<h3 class="mg">Anything else</h3><div class="card">${feedHtml(day, "_notes")}<textarea data-note="_notes" style="width:100%;min-height:110px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">Add note</button></div>
       ${past.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Past meetings: ${past.slice(0, 12).map(d => `<a href="#" data-mday="${esc(d)}">${esc(fmt(d))}</a>`).join(" · ")}</p>` : ""}</div>
     <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each item shows where it came from.</p></div>`;
   v.innerHTML = h;
@@ -254,6 +256,7 @@ function render(v, key, data, ppl){
   v.querySelectorAll("[data-mday]").forEach(a => a.onclick = e => { e.preventDefault(); ST.day[key] = a.dataset.mday; ST.drafts = {}; render(v, key, data, ppl); window.scrollTo(0, 0); });
   v.querySelectorAll("[data-nsave]").forEach(b => b.onclick = async () => {
     const k = b.dataset.nsave, t = v.querySelector(`textarea[data-note="${CSS.escape(k)}"]`), s = v.querySelector(`select[data-nstate="${CSS.escape(k)}"]`);
+    if(!t.value.trim()) return t.focus();
     b.disabled = true; const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:k, p_text:t.value.trim(), p_state:s ? s.value : "covered" }); b.disabled = false;
     if(r.error) return alert("Couldn't save: " + r.error.message);
     delete ST.drafts[key + "|" + k]; redraw(); });
