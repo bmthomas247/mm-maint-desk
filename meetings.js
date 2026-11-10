@@ -15,7 +15,8 @@ const MEET = {
   meet_track:   { name:"Track Business Review", dow:2, nth:2, until:"2027-12-31", who:"Monthly review with Sohl Chun at Track" },
   meet_trackmk: { name:"Track Digital Marketing", dow:2, nth:3, who:"Monthly review with Marcus Fields at Track" }
 };
-const MCSS = `.mbwj{border-top:1px solid var(--line);padding:8px 0}.mbwj:first-of-type{border-top:0;padding-top:0}.mbwj .mt2{font-size:13.5px;margin-bottom:4px}
+const MCSS = `.mown{display:block;font-size:13px;color:var(--ink-2,#444);font-weight:600;margin-top:-2px}
+.mbwj{border-top:1px solid var(--line);padding:8px 0}.mbwj:first-of-type{border-top:0;padding-top:0}.mbwj .mt2{font-size:13.5px;margin-bottom:4px}
 .mbwh{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 8px;background:#f6f7f2;border-radius:8px;margin:4px 0;font-size:13.5px}.mbwh small{display:block;color:var(--muted);font-size:12px}
 .mbwc{display:grid;gap:6px;padding:8px;border:1px dashed var(--line);border-radius:8px;margin:4px 0 8px}.mbwc select,.mbwc input{width:auto}
 .mbwf{display:grid;gap:8px}.mbwf label{display:grid;gap:3px;font-size:12.5px;color:var(--muted)}.mbwf input,.mbwf select{width:auto}.mbwf #bwh,.mbwf #bwt{width:100%}.mbwf textarea{min-height:80px}
@@ -265,6 +266,7 @@ const TEAMFOR = { lic:["licensing","the licensing team"], alert:["maint_manager"
 const PAGENAME = { "#/licensing":"📄 Open the Licenses page", "#/lic_fire":"📄 Open Fire suppression", "#/property_setup":"🚀 Open Launch Pad" };
 const absLink = l => !l ? "" : /^https?:/.test(l) ? l : "https://crew.moosemanagement.com/hub.html" + (/^#/.test(l) ? l : "#/" + l);
 const homeOf = it => { const m = String(it.title || "").match(/^([A-Z0-9][A-Z0-9-]*(?: [A-Z0-9-]+)?)(\s·|$)/); return m ? m[1] : ""; };
+const ownerOf = it => { const l = (it.lines || []).find(x => /^Owner: /.test(x || "")); return l ? l.slice(7) : ""; };
 const kindOf = it => String(it.key || "").split(":")[0];
 const short = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n - 1).trim() + "…" : s; };
 /* suggested next steps, from the kind of topic (Claude's starting list; easy to change here) */
@@ -334,8 +336,8 @@ function render(v, key, data, ppl){
     grps[g].forEach(it => { const st = stItem(it), nt = notesOf(day, it.key).length, tk = open.filter(t => t.item_key === it.key), od = tk.filter(t => t.due && t.due < T).length, last = noteFor(null, it.key);
       h += `<div class="mcardx${st === "covered" ? " cov" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button">
         <div class="mtop">${pill(st)}${od ? `<span class="mpill bad">${od} overdue</span>` : ""}</div>
-        <b class="mtt">${esc(it.title)}</b>${kindOf(it) === "psu" || kindOf(it) === "off" ? (pc => `<div class="mprog" style="margin:0"><i style="width:${pc}%"></i></div>`)(+((String(it.title).match(/(\d+)% done/) || [])[1] || 0)) : ""}
-        <p class="mdesc">${esc(short(last ? last.text : (it.lines || []).filter(Boolean)[0] || it.ask || "", 130))}</p>
+        <b class="mtt">${esc(it.title)}</b>${ownerOf(it) ? `<span class="mown">👤 ${esc(ownerOf(it))}</span>` : ""}${kindOf(it) === "psu" || kindOf(it) === "off" ? (pc => `<div class="mprog" style="margin:0"><i style="width:${pc}%"></i></div>`)(+((String(it.title).match(/(\d+)% done/) || [])[1] || 0)) : ""}
+        <p class="mdesc">${esc(short(last ? last.text : (it.lines || []).filter(l => l && !/^Owner: /.test(l))[0] || it.ask || "", 130))}</p>
         <div class="mnums"><div><b>${nt}</b><span>Notes today</span></div><div><b>${tk.length}</b><span>Open tasks</span></div></div>
         <div class="mdiv"></div>
         ${it.ask ? `<div class="mnext"><small>Decide</small>${esc(short(it.ask, 90))}</div>` : ""}
@@ -393,7 +395,7 @@ function render(v, key, data, ppl){
         <div class="mact">${act.map(a => `<div class="maci"><i>${a.ic}</i><div><div>${a.h}<span class="muted"> · ${esc(tm(a.at))}</span></div><div class="mab">${a.b}</div></div></div>`).join("") || `<p class="muted">Nothing yet.</p>`}</div>`;
     }
     const o = document.createElement("div"); o.id = "mpov"; o.className = "mpov";
-    o.innerHTML = `<div class="mpanel" role="dialog" aria-label="${esc(it.title)}"><div class="mph"><div>${pill(st)}<h3>${esc(it.title)}</h3><span class="muted">${esc(it.grp)}</span></div><button class="btn small" data-pclose aria-label="Close">✕</button></div>
+    o.innerHTML = `<div class="mpanel" role="dialog" aria-label="${esc(it.title)}"><div class="mph"><div>${pill(st)}<h3>${esc(it.title)}</h3>${ownerOf(it) ? `<div class="mown">👤 ${esc(ownerOf(it))}</div>` : ""}<span class="muted">${esc(it.grp)}</span></div><button class="btn small" data-pclose aria-label="Close">✕</button></div>
       <div class="mptabs">${tabs.map(([k2, l, n]) => `<button class="${MX.tab === k2 ? "on" : ""}" data-ptab="${k2}">${l}${n !== "" ? ` <span>${n}</span>` : ""}</button>`).join("")}</div><div class="mpb">${b}</div></div>`;
     document.body.appendChild(o);
     o.onclick = e => { if(e.target === o) close(); };
