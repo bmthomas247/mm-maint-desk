@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Crew planner</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Maintenance ▸ Crew planner (hub desk 'maint_plan'; hub_crew_plan.sql). Brandon 2026-11-10: "we want to be able to plan peoples days like he
+     does in breezeway by assigning tasks to his team" + "lets make this into a spot in the maintenance desk".
+     Reads crew_plan(): Breezeway maintenance + inspection tasks (bw_tasks), the crew, their hub shifts + approved time off, Track stays at
+     those homes, home map points. Changes = crew_plan_act() -> hk_actions (source crew_board) -> pull_breezeway.py --actions -> Breezeway
+     (within a minute; the stay check moves a non-urgent date off a guest's night). Access is enforced in Supabase (maint_manager + admins). -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.45}
+.wrap{max-width:1800px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:0;font-weight:800;letter-spacing:-.01em}
+.muted{color:var(--muted);font-size:13px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.sm{min-height:30px;padding:0 9px;font-size:12.5px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)} .btn.danger{color:var(--red)}
+.hero{background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;border-radius:18px;padding:16px 18px;box-shadow:var(--shadow)}
+.hero .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.hero .top .right{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hero .btn{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff}
+.hero .sub{font-size:13px;opacity:.9;margin-top:2px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:14px}
+.tile{background:rgba(255,255,255,.96);color:var(--ink);border:0;border-radius:14px;padding:9px 13px;text-align:left;font:inherit;cursor:pointer}
+.tile b{display:block;font-size:22px;font-weight:800;line-height:1.15} .tile span{font-size:12px;color:var(--muted);font-weight:700}
+.tile.on{outline:3px solid var(--moose)}
+.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;margin-top:14px;align-items:start}
+.side{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);position:sticky;top:10px;max-height:calc(100vh - 20px);display:flex;flex-direction:column}
+.side header{padding:12px 12px 8px;border-bottom:1px solid var(--line)}
+.side .pills{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.pt{border:1px solid var(--line-2);background:var(--card);border-radius:999px;padding:3px 10px;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;color:var(--ink)}
+.pt.on{background:var(--forest);border-color:var(--forest);color:#fff}
+.side input{width:100%;font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 9px;background:var(--card);color:var(--ink);margin-top:8px}
+.side .list{overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:80px}
+.side.drop{outline:2px dashed var(--forest-2)}
+.board{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:auto}
+table.g{border-collapse:separate;border-spacing:0;width:100%;min-width:980px;table-layout:fixed}
+.g th,.g td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);vertical-align:top;padding:6px}
+.g thead th{position:sticky;top:0;background:var(--card);z-index:2;font-size:12.5px;text-align:left;font-weight:800}
+.g thead th.today{background:var(--moose-soft);color:var(--moose-ink)}
+.g th.who{width:150px;position:sticky;left:0;background:var(--card);z-index:1;font-size:13.5px}
+.g thead th.who{z-index:3}
+.g th.who small{display:block;font-weight:600;color:var(--muted);font-size:11.5px}
+.g td{min-height:90px;height:96px}
+.g td.today{background:color-mix(in srgb,var(--moose-soft) 45%,transparent)}
+.g td.off{background:repeating-linear-gradient(135deg,transparent 0 8px,var(--line) 8px 9px)}
+.g td.drop{outline:2px solid var(--forest-2);outline-offset:-2px;background:var(--moose-soft)}
+.shift{font-size:11px;font-weight:800;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between;gap:4px}
+.shift .load.over{color:var(--red)}
+.chip{display:block;background:var(--ground);border:1px solid var(--line-2);border-left:4px solid var(--line-2);border-radius:9px;padding:4px 7px;margin-bottom:4px;
+  font-size:12px;line-height:1.3;cursor:grab;user-select:none;text-align:left;width:100%;font-family:inherit;color:var(--ink)}
+.chip b{font-weight:800} .chip .nm{display:block;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.urgent,.chip.high{border-left-color:var(--red)} .chip.normal{border-left-color:var(--forest-2)} .chip.low,.chip.watch{border-left-color:var(--blue)}
+.chip.done{opacity:.55;text-decoration:line-through} .chip.prog{background:var(--blue-soft)}
+.chip.pend{outline:2px dashed var(--amber)} .chip.fail{outline:2px solid var(--red)}
+.chip .tg{display:inline-block;font-size:10.5px;font-weight:800;border-radius:6px;padding:0 5px;margin-left:3px}
+.tg.stay{background:var(--amber-soft);color:var(--amber)} .tg.late{background:var(--red-soft);color:var(--red)} .tg.more{background:var(--violet-soft);color:var(--violet)}
+.chip.dragging{opacity:.4}
+.mi{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
+.empty{padding:16px;color:var(--muted);font-size:13.5px;text-align:center}
+.note{background:var(--blue-soft);border-radius:12px;padding:9px 13px;font-size:13px;margin:12px 0 0}
+.warn{background:var(--amber-soft);color:var(--amber);border-radius:12px;padding:9px 13px;font-size:13px;margin:12px 0 0;font-weight:700}
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:520px;width:calc(100% - 24px);background:var(--card);color:var(--ink);max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog .dbody{padding:18px 20px;overflow:auto;max-height:calc(100vh - 110px)}
+dialog h3{margin:0 0 4px;font-size:18px}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog input,dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:15px;border:1px solid var(--line-2);border-radius:10px;padding:7px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog textarea{min-height:60px;resize:vertical}
+.ppl{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;border:1px solid var(--line);border-radius:10px;padding:8px;max-height:200px;overflow:auto}
+.ppl label{display:flex;gap:6px;align-items:center;margin:0;font-weight:700} .ppl input{width:auto;margin:0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.dfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line);flex-wrap:wrap}
+.err{color:var(--red);font-size:13px;min-height:1em}
+.desc{font-size:13px;color:var(--ink-2);white-space:pre-wrap;background:var(--ground);border-radius:10px;padding:8px 10px;margin:8px 0}
+@media (max-width:900px){ .layout{grid-template-columns:1fr} .side{position:static;max-height:360px} }
+body.inhub .wrap{padding-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+if(window.top !== window) document.body.classList.add("inhub");
+const pcDay = (d = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone:"America/Denver", year:"numeric", month:"2-digit", day:"2-digit" }).format(d);
+const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const dow = iso => new Date(iso + "T12:00:00Z").getUTCDay();
+const dLabel = iso => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric", timeZone:"UTC" });
+const sunday = iso => addDays(iso, -dow(iso));
+const TODAY = pcDay();
+const OFFICE = [40.6889, -111.5517];   // Moose office, Bear Hollow (5519 Lillehammer Ln) - start of each day's route estimate
+const DEF_MIN = 45;                    // planning guess per task when the template has no finished time on record
+
+const S = { start: sunday(TODAY), days: 7, side: "hand", q: "", B: null, pend: {}, err: "" };
+
+async function load(quiet){
+  const to = addDays(S.start, S.days - 1);
+  const r = await sb.rpc("crew_plan", { p_from: S.start, p_to: to });
+  if(r.error){ S.err = errText(r.error); if(!quiet) render(); return; }
+  S.B = r.data; S.err = ""; canonWho();
+  // a sent change is "pending" until Breezeway's answer is back in the copy
+  (S.B.actions || []).forEach(a => { if(a.status === "failed") S.pend[a.task] = { fail: a.result || "Breezeway refused it" }; });
+  Object.keys(S.pend).forEach(id => { const p = S.pend[id], t = task(+id); if(!t || p.fail) return;
+    if((!p.date || t.date === p.date) && (!p.who || sameSet(t.who, p.who))) delete S.pend[id]; });
+  render();
+}
+/* Breezeway shows some people under an older name on tasks (Dave Lanier = "Dave Buddy"): same first name as a crew member = that person */
+function canonWho(){ const crew = (S.B.crew || []).filter(c => c.bwName), map = {};
+  (S.B.tasks || []).forEach(t => (t.who || []).forEach(n => { if(map[n] !== undefined) return;
+    const c = crew.find(c => c.bwName === n) || crew.find(c => n.split(" ")[0].toLowerCase() === (c.first || "").toLowerCase()); map[n] = c ? c.bwName : n; }));
+  (S.B.tasks || []).forEach(t => { t.who = [...new Set((t.who || []).map(n => map[n] || n))]; }); }
+const task = id => (S.B.tasks || []).find(t => t.id === id);
+const sameSet = (a, b) => (a || []).slice().sort().join("|") === (b || []).slice().sort().join("|");
+
+/* crew rows. Chris (maintenance manager) hands tasks out: a task that only has him (or nobody) is "not handed out yet". */
+function crewRows(){
+  const c = S.B.crew || [];
+  const mgr = c.filter(x => x.mgr), techs = c.filter(x => !x.mgr);
+  return { mgrNames: mgr.map(x => x.bwName).filter(Boolean), techs };
+}
+function techsOn(t){ const { techs } = crewRows(); return techs.filter(x => x.bwName && (t.who || []).includes(x.bwName)); }
+function handedOut(t){ return techsOn(t).length > 0 || (t.who || []).some(n => !crewRows().mgrNames.includes(n)); }
+const isOpen = t => t.stage !== "finished";
+function stayOn(home, day){ return (S.B.stays || []).find(s => s.home === home && s.arrive <= day && day < s.depart); }
+
+/* planning minutes per template = middle time of finished tasks of that template in the data */
+function tplMin(){ if(S._tm && S._tm.b === S.B) return S._tm.m; const by = {};
+  (S.B.tasks || []).forEach(t => { if(t.stage === "finished" && +t.min > 3 && +t.min < 600 && t.tpl) (by[t.tpl] = by[t.tpl] || []).push(+t.min); });
+  const m = {}; Object.keys(by).forEach(k => { const a = by[k].sort((x, y) => x - y); m[k] = a[Math.floor(a.length / 2)]; });
+  S._tm = { b: S.B, m }; return m; }
+const estMin = t => (t.stage === "finished" && +t.min > 0 && +t.min < 600) ? +t.min : (tplMin()[t.tpl] || DEF_MIN);
+
+/* straight-line route from the office through each home (nearest next), x1.3 for roads - an estimate only */
+function routeMi(homes){
+  const P = S.B.places || {}, pts = [...new Set(homes)].map(h => P[h]).filter(Boolean);
+  if(!pts.length) return null;
+  const d = (a, b) => { const R = 3958.8, r = x => x * Math.PI / 180, dl = r(b[0] - a[0]), dn = r(b[1] - a[1]);
+    const h = Math.sin(dl / 2) ** 2 + Math.cos(r(a[0])) * Math.cos(r(b[0])) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  let at = OFFICE, left = pts.slice(), tot = 0;
+  while(left.length){ let bi = 0; left.forEach((p, i) => { if(d(at, p) < d(at, left[bi])) bi = i; }); tot += d(at, left[bi]); at = left.splice(bi, 1)[0]; }
+  return (tot + d(at, OFFICE)) * 1.3;
+}
+
+function shiftOf(c, day){ const s = (S.B.shifts || []).filter(x => x.uid === c.uid && x.day === day);
+  if(!s.length) return null; return s.map(x => x.s + "–" + x.e).join(", "); }
+function shiftHrs(c, day){ return (S.B.shifts || []).filter(x => x.uid === c.uid && x.day === day).reduce((a, x) => {
+  const m = v => { const [h, mm] = String(v).split(":").map(Number); return h * 60 + (mm || 0); }; let d = m(x.e) - m(x.s); if(d <= 0) d += 1440; return a + d / 60; }, 0); }
+function isOff(c, day){ return (S.B.off || []).some(o => o.uid === c.uid && o.from <= day && day <= (o.to || o.from)); }
+
+function chip(t, opts = {}){
+  const p = S.pend[t.id], late = isOpen(t) && t.date && t.date < TODAY, st = t.date && t.home && stayOn(t.home, t.date);
+  const others = opts.tech ? techsOn(t).filter(x => x.bwName !== opts.tech).map(x => x.first) : [];
+  const cls = ["chip", (t.priority || "normal"), t.stage === "finished" ? "done" : t.stage === "in_progress" ? "prog" : "", p ? (p.fail ? "fail" : "pend") : ""].join(" ");
+  return `<button class="${cls}" draggable="${t.stage === "finished" ? "false" : "true"}" data-t="${t.id}" title="${esc(t.home + " · " + t.name + (p && p.fail ? "\nBreezeway: " + p.fail : p ? "\nSending to Breezeway…" : ""))}">
+    <b>${esc(t.home || "No home")}</b>${t.time ? ` <span class="muted">${esc(String(t.time).slice(0, 5))}</span>` : ""}
+    ${t.priority === "urgent" || t.priority === "high" ? `<span class="tg late">${esc(t.priority)}</span>` : ""}
+    ${late ? `<span class="tg late">late</span>` : ""}${st ? `<span class="tg stay" title="${st.owner ? "Owner" : st.lease ? "Tenant" : "Guest"} staying">${st.owner ? "owner in" : st.lease ? "tenant" : "guest in"}</span>` : ""}
+    ${others.length ? `<span class="tg more">+${esc(others.join(", "))}</span>` : ""}
+    <span class="nm">${esc(t.name)}</span></button>`;
+}
+
+function render(){
+  const app = $("#app");
+  if(!S.B){ app.innerHTML = S.err ? `<p class="err">${esc(S.err)}</p>` : `<p class="muted">Loading…</p>`; return; }
+  const days = [...Array(S.days)].map((_, i) => addDays(S.start, i)), to = days[days.length - 1];
+  const { techs } = crewRows(), all = S.B.tasks || [], open = all.filter(isOpen);
+  const inWin = t => t.date && t.date >= S.start && t.date <= to;
+  const notOut = open.filter(t => !handedOut(t)), late = open.filter(t => t.date && t.date < TODAY), undated = open.filter(t => !t.date);
+  const weekOpen = open.filter(inWin);
+  const handList = notOut.filter(t => t.date && t.date <= to);
+  const sideList = (S.side === "hand" ? handList : S.side === "late" ? late : S.side === "nodate" ? undated : weekOpen)
+    .filter(t => !S.q || (t.home + " " + t.name).toLowerCase().includes(S.q.toLowerCase()))
+    .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || (a.home || "").localeCompare(b.home || "", undefined, { numeric:true }));
+  const pulled = S.B.pulled ? new Date(S.B.pulled).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) : "—";
+  const scheduled = (S.B.shifts || []).length;
+  let h = `<div class="hero"><div class="top"><h1>Crew planner</h1>
+      <div class="right"><button class="btn sm" data-nav="-7">‹</button><button class="btn sm" data-nav="0">This week</button><button class="btn sm" data-nav="7">›</button>
+      <button class="btn sm" data-days="${S.days === 7 ? 14 : 7}">${S.days === 7 ? "Show 2 weeks" : "Show 1 week"}</button><button class="btn sm" data-act="reload">↻</button></div></div>
+    <div class="sub">${esc(dLabel(S.start))} – ${esc(dLabel(to))} · drag a task onto a tech and a day, or tap it · Breezeway copy updated ${esc(pulled)}</div>
+    <div class="tiles">
+      <button class="tile${S.side === "hand" ? " on" : ""}" data-side="hand"><b>${handList.length}</b><span>Not handed out yet</span></button>
+      <button class="tile${S.side === "week" ? " on" : ""}" data-side="week"><b>${weekOpen.length}</b><span>Open tasks this ${S.days === 7 ? "week" : "2 weeks"}</span></button>
+      <button class="tile${S.side === "late" ? " on" : ""}" data-side="late"><b>${late.length}</b><span>Past due</span></button>
+      <button class="tile${S.side === "nodate" ? " on" : ""}" data-side="nodate"><b>${undated.length}</b><span>No date</span></button>
+      <div class="tile" style="cursor:default"><b>${all.filter(t => t.stage === "finished" && inWin(t)).length}</b><span>Done in these days</span></div>
+    </div></div>`;
+  if(!S.B.canAct) h += `<div class="warn">Changes to Breezeway are switched off right now, so the board is look-only.</div>`;
+  if(!scheduled) h += `<div class="note">No crew shifts are set in the hub for these days. Set them in Staffing ▸ Schedule and each tech's hours show here, with a warning when a day is planned past their shift.</div>`;
+  h += `<div class="layout"><aside class="side" id="side"><header><b>${{ hand:"Not handed out yet", week:"Open tasks in these days", late:"Past due", nodate:"No date" }[S.side]}</b>
+      <div class="muted">${S.side === "hand" ? "Dated tasks only on Chris or no one (past due included). Drag onto a tech's day." : "Drag onto a tech's day to plan it."} Drop a task here to take it back.</div>
+      <div class="pills">${["hand","week","late","nodate"].map(k => `<button class="pt${S.side === k ? " on" : ""}" data-side="${k}">${{ hand:"To hand out", week:"These days", late:"Past due", nodate:"No date" }[k]}</button>`).join("")}</div>
+      <input type="search" id="q" placeholder="Find a home or task…" value="${esc(S.q)}"></header>
+    <div class="list">${sideList.length ? sideList.slice(0, 250).map(t => chip(t) + (t.date ? "" : "")).join("") : `<div class="empty">Nothing here.</div>`}${sideList.length > 250 ? `<div class="muted">Showing 250 of ${sideList.length}. Search to narrow it.</div>` : ""}</div></aside>
+    <div class="board"><table class="g"><thead><tr><th class="who">Tech</th>${days.map(d => `<th class="${d === TODAY ? "today" : ""}">${esc(dLabel(d))}</th>`).join("")}</tr></thead><tbody>`;
+  techs.forEach(c => {
+    const canGet = !!c.bw;
+    h += `<tr><th class="who">${esc(c.first)}<small>${canGet ? esc(c.bwName || "") : "not in Breezeway yet"}</small></th>`;
+    days.forEach(d => {
+      const ts = all.filter(t => t.date === d && (t.who || []).includes(c.bwName)).sort((a, b) => String(a.time || "99").localeCompare(String(b.time || "99")));
+      const mins = ts.reduce((a, t) => a + estMin(t), 0), sh = shiftOf(c, d), shH = shiftHrs(c, d), off = isOff(c, d), mi = routeMi(ts.map(t => t.home).filter(Boolean));
+      const over = shH && mins / 60 > shH;
+      h += `<td class="${d === TODAY ? "today" : ""}${off ? " off" : ""}" data-cell="${c.uid}|${d}" ${canGet ? "" : "data-nodrop=1"}>
+        <div class="shift"><span>${off ? "Time off" : sh ? esc(sh) : '<span title="No hub shift set">—</span>'}</span>${ts.length ? `<span class="load${over ? " over" : ""}" title="Planned time (finished tasks of the same kind; ${DEF_MIN} min when unknown)">${(mins / 60).toFixed(1)} h${shH ? " / " + shH.toFixed(0) : ""}</span>` : ""}</div>
+        ${ts.map(t => chip(t, { tech: c.bwName })).join("")}
+        ${mi != null && ts.length ? `<div class="mi" title="Straight line from the office through each home, x1.3 for roads - an estimate">≈ ${Math.round(mi)} mi · ${new Set(ts.map(t => t.home)).size} home${new Set(ts.map(t => t.home)).size === 1 ? "" : "s"}</div>` : ""}</td>`;
+    });
+    h += `</tr>`;
+  });
+  h += `</tbody></table></div></div>
+    <p class="muted" style="margin-top:10px">A moved date or new tech reaches Breezeway within about a minute. If the new day is a night someone is staying at that home, the hub moves the task to the first free day unless it's urgent or high. Costs still go on each task's Cost tab in Breezeway: Breezeway doesn't let the hub add them.</p>`;
+  app.innerHTML = h;
+  const q = $("#q"); if(q && S._qf){ q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+
+/* ---------- changes ---------- */
+async function send(t, { day, who }){
+  if(!S.B.canAct){ alert("Changes to Breezeway are switched off right now."); return; }
+  const ppl = S.B.people || [], ids = names => names.map(n => (ppl.find(p => p.name === n) || {}).id).filter(Boolean);
+  const steps = [];
+  if(who && !sameSet(who, t.who)){ const pid = ids(who); if(pid.length !== who.length){ alert("Someone picked isn't a Breezeway person."); return; } steps.push(["assign", { people: pid }]); }
+  if(day && day !== t.date) steps.push(["reschedule", { date: day, time: t.time ? String(t.time).slice(0, 5) : null }]);
+  if(!steps.length) return;
+  if(day && day !== t.date && t.home){ const st = stayOn(t.home, day);
+    if(st && !["urgent","high"].includes(t.priority) && !confirm(`${st.owner ? "The owner" : st.lease ? "A tenant" : "A guest"} is staying at ${t.home} on ${dLabel(day)}.\nThe hub will move this task to the first free day. Send it anyway?`)) return; }
+  S.pend[t.id] = { date: day && day !== t.date ? day : null, who: who && !sameSet(who, t.who) ? who : null };
+  if(day) t.date = day; if(who) t.who = who; render();
+  for(const [k, d] of steps){ const r = await sb.rpc("crew_plan_act", { p_task: t.id, p_kind: k, p_data: d });
+    if(r.error){ S.pend[t.id] = { fail: errText(r.error) }; render(); alert(errText(r.error)); return; } }
+  setTimeout(() => load(true), 20000); setTimeout(() => load(true), 75000);
+}
+/* moving between rows: take the tech the task came from off, put the new one on; Chris stays on it when he was */
+function moveWho(t, fromTech, toTech){
+  let w = (t.who || []).slice();
+  if(fromTech) w = w.filter(n => n !== fromTech);
+  const mgr = crewRows().mgrNames;
+  if(toTech && !w.includes(toTech)) w.push(toTech);
+  if(!toTech){ w = w.filter(n => mgr.includes(n)); if(!w.length) w = mgr.slice(0, 1); }
+  return w;
+}
+
+let DRAG = null;
+document.addEventListener("dragstart", e => { const c = e.target.closest && e.target.closest(".chip"); if(!c) return;
+  const cell = c.closest("td[data-cell]"), t = task(+c.dataset.t);
+  const c0 = cell && (S.B.crew || []).find(x => x.uid === cell.dataset.cell.split("|")[0]);
+  DRAG = { t, from: c0 ? c0.bwName : null }; c.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(t.id)); });
+document.addEventListener("dragend", e => { $$(".dragging,.drop").forEach(x => x.classList.remove("dragging", "drop")); });
+document.addEventListener("dragover", e => { if(!DRAG) return; const td = e.target.closest && (e.target.closest("td[data-cell]") || e.target.closest("#side"));
+  if(!td || td.dataset.nodrop) return; e.preventDefault(); $$(".drop").forEach(x => x !== td && x.classList.remove("drop")); td.classList.add("drop"); });
+document.addEventListener("drop", e => { if(!DRAG) return; const td = e.target.closest && (e.target.closest("td[data-cell]") || e.target.closest("#side")); const D = DRAG; DRAG = null;
+  $$(".drop").forEach(x => x.classList.remove("drop")); if(!td || td.dataset.nodrop) return; e.preventDefault();
+  if(td.id === "side"){ if(D.from) send(D.t, { who: moveWho(D.t, D.from, null) }); return; }
+  const [uid, day] = td.dataset.cell.split("|"), c = (S.B.crew || []).find(x => x.uid === uid);
+  send(D.t, { day, who: c && c.bwName !== D.from ? moveWho(D.t, D.from, c.bwName) : null }); });
+
+function open(t){
+  const d = $("#dlg"), ppl = S.B.people || [], st = (S.B.stays || []).filter(s => s.home === t.home && s.depart >= TODAY).slice(0, 4);
+  const p = S.pend[t.id];
+  d.innerHTML = `<div class="dbody"><h3>${esc(t.home || "No home")} · ${esc(t.name)}</h3>
+    <div class="muted">${esc(t.dept)} · ${esc(t.status || t.stage)}${t.priority ? " · " + esc(t.priority) : ""}${t.created ? " · made " + esc(t.created) : ""}${t.min ? " · " + t.min + " min on the clock" : ""}</div>
+    ${p && p.fail ? `<div class="err">Breezeway: ${esc(p.fail)}</div>` : ""}
+    ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ""}
+    ${st.length ? `<div class="muted">Stays: ${st.map(s => `${s.owner ? "owner" : s.lease ? "tenant" : "guest"} ${esc(s.arrive)} → ${esc(s.depart)}`).join(" · ")}</div>` : ""}
+    <div class="two"><label>Day<input type="date" id="f_day" value="${esc(t.date || "")}"></label>
+      <label>Priority<select id="f_pri">${["urgent","high","normal","low","watch"].map(x => `<option${x === (t.priority || "normal") ? " selected" : ""}>${x}</option>`).join("")}</select></label></div>
+    <label>Who's on it</label><div class="ppl">${ppl.map(x => `<label><input type="checkbox" value="${esc(x.name)}"${(t.who || []).includes(x.name) ? " checked" : ""}>${esc(x.name)}</label>`).join("")}</div>
+    <label>Comment for the tech (goes on the task in Breezeway)<textarea id="f_cm" maxlength="1000" placeholder="Optional"></textarea></label>
+    <div class="err" id="f_err"></div></div>
+    <div class="dfoot"><a class="btn ghost" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Breezeway ↗</a>
+      ${t.stage !== "finished" ? `<button class="btn danger" data-act="close">Close task</button>` : ""}
+      <button class="btn" data-act="x">Cancel</button><button class="btn primary" data-act="save"${S.B.canAct ? "" : " disabled"}>Save</button></div>`;
+  d.dataset.t = t.id; d.showModal();
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button,[data-nav]"); if(!b) return;
+  if(b.classList.contains("chip")){ if(b.closest("td[data-cell]") || b.closest("#side")) open(task(+b.dataset.t)); return; }
+  if(b.dataset.nav != null){ const n = +b.dataset.nav; S.start = n ? addDays(S.start, n) : sunday(TODAY); S.B = S.B && Object.assign({}, S.B); load(); return; }
+  if(b.dataset.days){ S.days = +b.dataset.days; load(); return; }
+  if(b.dataset.side){ S.side = b.dataset.side; render(); return; }
+  const a = b.dataset.act, d = $("#dlg");
+  if(a === "reload") return load();
+  if(a === "x") return d.close();
+  if(a === "close" || a === "save"){
+    const t = task(+d.dataset.t); if(!t) return d.close();
+    try {
+      if(a === "close"){ if(!confirm("Close this task in Breezeway?")) return; const r = await sb.rpc("crew_plan_act", { p_task: t.id, p_kind: "close" }); if(r.error) throw r.error; t.stage = "finished"; S.pend[t.id] = {}; d.close(); render(); setTimeout(() => load(true), 20000); return; }
+      const who = $$(".ppl input:checked", d).map(x => x.value), day = $("#f_day").value, pri = $("#f_pri").value, cm = $("#f_cm").value.trim();
+      if(!who.length) throw new Error("Pick at least one person");
+      if(pri !== (t.priority || "normal")){ const r = await sb.rpc("crew_plan_act", { p_task: t.id, p_kind: "priority", p_data: { priority: pri } }); if(r.error) throw r.error; t.priority = pri; }
+      if(cm){ const r = await sb.rpc("crew_plan_act", { p_task: t.id, p_kind: "comment", p_data: { text: cm } }); if(r.error) throw r.error; }
+      d.close(); await send(t, { day: day || null, who });
+      if(!S.pend[t.id] && (pri || cm)) setTimeout(() => load(true), 20000);
+    } catch(err){ $("#f_err").textContent = errText(err); }
+  }
+});
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; S._qf = true; render(); S._qf = false; } });
+document.addEventListener("click", e => { const d = $("#dlg"); if(e.target === d) d.close(); });
+setInterval(() => { if(S.B && !document.hidden && !$("#dlg").open && !DRAG && (document.activeElement || {}).id !== "q") load(true); }, 60000);
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("crew_plan_ok");
+  if(ok.error){ $("#app").innerHTML = `<h1>Crew planner</h1><p class="muted">Couldn't load. Check your signal and try again.</p>`; return; }
+  if(ok.data !== true){ location.replace("hub.html#/home"); return; }
+  load();
+})();
+window.__cp = { S, render, routeMi, moveWho };
+</script>
+</body>
+</html>
