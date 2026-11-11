@@ -1457,7 +1457,9 @@ function homeDetail(code){
     '<label class="f"><span>Year built</span><input id="h_yb" inputmode="numeric" value="'+esc(yb||"")+'" placeholder="e.g. 2006"></label>'+
     '<label class="f"><span>Sq ft</span><input id="h_sq" inputmode="numeric" value="'+esc(pe.sqft||p.sqft||bh.sqft||"")+'"></label>'+
     '<label class="f"><span>Bedrooms</span><input id="h_bd" inputmode="numeric" value="'+esc(hi.beds||"")+'">'+src("beds")+'</label>'+
-    '<label class="f"><span>Maintenance plan</span><select id="h_plan">'+Object.keys(PLANS).map(function(k){ return '<option value="'+k+'"'+(planOf(code)===k?' selected':'')+'>'+esc(PLANS[k].name)+' — $'+PLANS[k].rate+'/h</option>'; }).join("")+'</select></label>'+
+    '<label class="f"><span>Maintenance plan</span><select id="h_plan">'+(function(){ plansNow(); var e=pedit(code).plan, t=trackPlan(code), tk=(t.key&&PLANS[t.key])?t.key:"prime";
+      return '<option value=""'+(e&&PLANS[e]?'':' selected')+'>From Track'+(t.raw?' ('+esc(t.raw)+')':'')+' — $'+PLANS[tk].rate+'/h</option>'+
+      Object.keys(PLANS).map(function(k){ return '<option value="'+k+'"'+(e===k?' selected':'')+'>'+esc(PLANS[k].name)+' — $'+PLANS[k].rate+'/h</option>'; }).join(""); })()+'</select></label>'+
     '<label class="f"><span>Heat tape</span><select id="h_ht"><option value="yes"'+(hi.heatTape===true?' selected':'')+'>Yes</option><option value="no"'+(hi.heatTape===false?' selected':'')+'>No</option>'+(hi.heatTape==null?'<option value="" selected>Not sure</option>':'')+'</select>'+
       (/^(2H-|L-)?BHL\b/.test(code)?'<span class="hint">Bear Hollow Lodges — HOA handles it</span>':src("heatTape"))+'</label>'+(function(){ var bq=hasBBQ(code); var ht2=hasHotTub(code); return '<label class="f"><span>Private hot tub</span><select id="h_hk"><option value="yes"'+(ht2.v===true?' selected':'')+'>Yes</option><option value="no"'+(ht2.v===false?' selected':'')+'>No</option>'+(ht2.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(ht2.why)+'</span></label><label class="f"><span>Private BBQ</span><select id="h_bq"><option value="yes"'+(bq.v===true?' selected':'')+'>Yes</option><option value="no"'+(bq.v===false?' selected':'')+'>No</option>'+(bq.v==null?'<option value="" selected>Not sure</option>':'')+'</select><span class="hint">'+esc(bq.why)+'</span></label>'; })()+'</div>'+(S.ui.homeEd===code?fireFields(code):'')+
     '<div class="links" style="margin-top:8px"><button class="btn sm pri" data-act="savehome" data-code="'+esc(code)+'">Save</button><button class="btn sm ghost" data-act="cancelhome">Cancel</button>'+
@@ -2622,8 +2624,23 @@ function projectedPanel(m){
 }
 
 /* ================= BILL TO OWNERS ================= */
-var PLANS={prime:{name:"Prime (30%)",rate:55,free:0},inclusive:{name:"All Inclusive (40%)",rate:45,free:4},complete:{name:"Complete (20%)",rate:75,free:0}};
-function planOf(code){ return pedit(code).plan||(S.config.rates||{}).defaultPlan||"prime"; }
+/* 2026-11-10 (Brandon "Yes, load them"): hourly maintenance rate per owner plan. Sources (Dropbox, read 2026-11-10):
+   Prime $55 = Terms and Conditions 70-30 Prime (eff. Jan 1 2026); Complete + Core $85 = Moose Comparison Charts (Apr + Jul 2026);
+   Inclusive $45 after 4 free h = old Management Plans w-Inclusive sheet; 2nd Home $35 (9am-9pm) = 2nd Home Mgmt Pricing.pdf;
+   72-28 $65 = Terms and Conditions 72-28 (eff. Jan 1 2027). Lease + plans with no rate found (FP20, PP30, Kim-No Plan, none) = Prime until Brandon says.
+   Rates can be changed on Expenses & Time > Rates & budget (config/rates.plans). */
+var PLANS_BASE={prime:{name:"Prime",rate:55,free:0},complete:{name:"Complete",rate:85,free:0},core:{name:"Core",rate:85,free:0},
+  inclusive:{name:"All Inclusive",rate:45,free:4},h2:{name:"2nd Home",rate:35,free:0},lease:{name:"Lease",rate:55,free:0},p7228:{name:"72-28 (new terms)",rate:65,free:0}};
+var PLANS=PLANS_BASE;
+function plansNow(){ var o=(S.config.rates||{}).plans||{}, P={}; Object.keys(PLANS_BASE).forEach(function(k){ var b=PLANS_BASE[k], x=o[k]||{};
+  P[k]={name:b.name, rate:(x.rate!=null&&x.rate!=="")?+x.rate:b.rate, free:(x.free!=null&&x.free!=="")?+x.free:b.free}; }); PLANS=P; return P; }
+/* the plan in Track's owner name: "BHL 1206 | Jane Doe (Complete)" */
+function trackPlan(code){ var f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFeed(f,code)||[]):[], k="", raw="";
+  tr.forEach(function(o){ var m=String(o.name||"").match(/\(([^)]*)\)\s*$/); if(!m||k) return; raw=m[1].trim(); var t=raw.toLowerCase();
+    k=/^prime/.test(t)?"prime":/^complete/.test(t)?"complete":/^core/.test(t)?"core":/inclusive/.test(t)?"inclusive":/^(2h|2nd home|second home)/.test(t)?"h2":/^lease/.test(t)?"lease":/72.?28/.test(t)?"p7228":"other"; });
+  return {key:k, raw:raw}; }
+function planOf(code){ plansNow(); var e=pedit(code).plan; if(e&&PLANS[e]) return e; var t=trackPlan(code).key; return (t&&PLANS[t])?t:((S.config.rates||{}).defaultPlan||"prime"); }
+function planWhy(code){ var e=pedit(code).plan, t=trackPlan(code); return (e&&PLANS[e])?"set in the hub":t.raw?("Track: "+t.raw+(t.key==="other"?" — no rate on file, using Prime":"")):"no plan in Track — using Prime"; }
 function billingPanel(m,bwDone){
   var byHome={}, used={};
   bwDone.forEach(function(j){ if(!j.prop||j.prop==="Moose company"||j.kind==="inspection"||j.auto) return; var mins=(+j.minutes>720?0:+j.minutes||0), crew=Math.max(1,(j.crew||[]).length);
@@ -2636,14 +2653,14 @@ function billingPanel(m,bwDone){
   var homes=Object.keys(byHome).sort(function(a,b){ return a.localeCompare(b,undefined,{numeric:true}); }), grand=0;
   var rows=homes.map(function(code){ var b=byHome[code], pl=PLANS[planOf(code)]||PLANS.prime, billH=Math.max(0,b.hours-pl.free), labor=billH*pl.rate, tot=labor+b.parts+b.fees; grand+=tot;
     var q=S.bwq[sid("bill_"+m+"_"+code)];
-    return '<tr><td>'+propLink(code)+'</td><td>'+esc(pl.name)+'</td><td class="num">'+b.tasks.length+'</td><td class="num">'+b.hours.toFixed(1)+(pl.free?'<div class="muted">'+pl.free+'h free</div>':'')+'</td><td class="num">'+money2(labor)+'</td><td class="num">'+money2(b.parts)+'</td><td class="num">'+(b.fees?money2(b.fees):'')+'</td><td class="num"><b>'+money2(tot)+'</b></td><td>'+
+    return '<tr><td>'+propLink(code)+'</td><td title="'+esc(planWhy(code))+'">'+esc(pl.name)+' <span class="muted">$'+pl.rate+'/h</span></td><td class="num">'+b.tasks.length+'</td><td class="num">'+b.hours.toFixed(1)+(pl.free?'<div class="muted">'+pl.free+'h free</div>':'')+'</td><td class="num">'+money2(labor)+'</td><td class="num">'+money2(b.parts)+'</td><td class="num">'+(b.fees?money2(b.fees):'')+'</td><td class="num"><b>'+money2(tot)+'</b></td><td>'+
       (q&&q.status==="created"?'<span class="pill done">In Breezeway</span>':q&&q.status==="queued"?'<span class="pill waiting">Sending</span>':q&&q.status==="failed"?'<span class="pill stop" title="'+esc(q.error||"")+'">Failed</span> <button class="btn sm" data-bill="'+esc(code)+'">Retry</button>':
        (tot>0?'<button class="btn sm" data-bill="'+esc(code)+'">Send to Breezeway</button>':''))+'</td></tr>'; });
   var h='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Bill to owners</h3><span class="ct">'+money(grand)+' for '+homes.length+' homes</span>'+
     (homes.length?'<button class="btn sm pri" data-act="billall">Send all to Breezeway</button>':'')+'</div>';
   h+=homes.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Home</th><th>Plan</th><th class="num">Tasks</th><th class="num">Tech hours</th><th class="num">Labor</th><th class="num">Parts</th><th class="num">Fees found</th><th class="num">Total</th><th></th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div>':
     '<div class="empty">No one-off Breezeway work finished this month yet.</div>';
-  h+='<div class="pad note">Labor = time on the Breezeway task × techs on it, at the home\'s plan rate (from Asana: Prime $55/h, All Inclusive $45/h after 4 free hours, Complete $75/h). Parts = expenses logged as "Owner-billed". Fees found = amounts read from the task notes and comments (that reader is paused). '+
+  h+='<div class="pad note">Labor = time on the Breezeway task × techs on it, at the home\'s plan rate (plan from the owner\'s name in Track; rates on Rates & budget). Parts = expenses logged as "Owner-billed". Fees found = amounts read from the task notes and comments (that reader is paused). '+
     'Set each home\'s plan on its Homes page. Breezeway can\'t take costs from the hub yet, so add the labor and parts on each task\'s Cost tab in Breezeway (Bill to: Owner).</div></section>';
   return h;
 }
@@ -2708,7 +2725,7 @@ function ocReview(tids){ if(!OC.items.length) return toast("Track's item list is
         (no?'<div class="note">Nothing goes to Track: it\'s marked '+(p.kind==="moose"?"Moose pays":"skipped")+' so it leaves the list.</div>':
         '<label class="f" style="margin-top:8px"><span>Job title the owner sees <span class="muted" id="oc_w_'+i+'" style="text-transform:none;letter-spacing:0;font-weight:400">· writing it from Breezeway…</span></span><input id="oc_m_'+i+'" maxlength="120" value="'+esc(ocTitle(p))+'"></label>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:8px">'+
-          '<label class="f"><span>'+(cz?'Courtesy (no charge)':'Labor'+(p.hrs?' · '+(+p.hrs)+' h'+(p.quick?' + home inspection':''):''))+'</span><input id="oc_l_'+i+'" type="number" min="0" step="0.01" value="'+p.labor+'"'+(cz?' disabled':'')+'></label>'+
+          '<label class="f"><span title="'+esc(planWhy(p.home))+'">'+(cz?'Courtesy (no charge)':'Labor'+(p.hrs?' · '+(+p.hrs)+' h'+(p.detail.rate?' × $'+(+p.detail.rate)+' '+esc((PLANS[p.detail.plan]||{}).name||""):'')+(p.quick?' + home inspection':''):''))+'</span><input id="oc_l_'+i+'" type="number" min="0" step="0.01" value="'+p.labor+'"'+(cz?' disabled':'')+'></label>'+
           '<label class="f"><span>Parts &amp; materials</span><input id="oc_p_'+i+'" type="number" min="0" step="0.01" value="'+p.parts+'"'+(cz?' disabled':'')+'></label></div>'+
         '<details style="margin-top:8px"'+(cz?'':'')+'><summary class="note" style="cursor:pointer">Explain more to the owner (optional)</summary>'+
           '<textarea id="oc_x_'+i+'" maxlength="1000" style="min-height:56px;width:100%;margin-top:6px" placeholder="Leave empty — owners can reach out with questions"></textarea>'+
@@ -4993,11 +5010,13 @@ function mRates(){ var R=rates(), r=S.config.rates||{};
   openModal("Rates & budget",'<div class="fields">'+fld("m_def","Default crew cost $/h (wage + burden)",R.defaultCost||"","number",'min="0" step="0.5"')+
     fld("m_mile","Mileage $/mi",R.mileage,"number",'min="0" step="0.01"')+fld("m_bill","Bill rate $/h",R.billRate,"number",'min="0" step="1"')+
     area("m_tc","Cost per person (one per line: Name 32.50)",tc)+
-    '<div class="f" style="grid-column:1/-1"><span>Monthly budget by category</span><div class="fields">'+EXCATS.map(function(c,i){ return fld("m_b"+i,c,R.budget[c]||"","number",'min="0" step="10"'); }).join("")+'</div></div></div>'+
-    '<div class="note">Bill rates in Asana: $55/h Prime (30%), $45/h after 4 free hours All Inclusive (40%), $75/h Complete (20%). Mileage default is the IRS 2025 rate — change it if yours differs. Crew cost stays on this board.</div>',
+    '<div class="f" style="grid-column:1/-1"><span>Monthly budget by category</span><div class="fields">'+EXCATS.map(function(c,i){ return fld("m_b"+i,c,R.budget[c]||"","number",'min="0" step="10"'); }).join("")+'</div></div>'+
+    '<div class="f" style="grid-column:1/-1"><span>Maintenance rate by owner plan ($/h; the plan comes from the owner\'s name in Track)</span><div class="fields">'+
+      Object.keys(plansNow()).map(function(k){ return fld("m_pr_"+k,PLANS[k].name+(PLANS[k].free?" (after "+PLANS[k].free+" free h a month)":""),PLANS[k].rate,"number",'min="0" step="1"'); }).join("")+'</div></div></div>'+
+    '<div class="note">Plan rates from Dropbox: Prime $55 (Terms &amp; Conditions 70-30, Jan 2026), Complete + Core $85 (comparison charts, 2026), All Inclusive $45 after 4 free hours, 2nd Home $35 (9am–9pm), 72-28 $65 (new terms, Jan 2027). Lease and plans with no rate on file use Prime. Mileage default is the IRS 2025 rate — change it if yours differs. Crew cost stays on this board.</div>',
   function(){ var tcm={}; fv("m_tc").split(/\n+/).forEach(function(l){ var m=l.trim().match(/^(.+?)\s+\$?([\d.]+)$/); if(m) tcm[m[1].trim()]=+m[2]; });
     var b={}; EXCATS.forEach(function(c,i){ var v=+fv("m_b"+i); if(v) b[c]=v; });
-    return put("config","rates",{defaultCost:+fv("m_def")||0,mileage:+fv("m_mile")||0,billRate:+fv("m_bill")||0,techCost:tcm,budget:b,life:r.life||{}},r).then(function(){ toast("Rates saved"); closeModal(); }); },"Save"); }
+    return put("config","rates",{defaultCost:+fv("m_def")||0,mileage:+fv("m_mile")||0,billRate:+fv("m_bill")||0,techCost:tcm,budget:b,life:r.life||{},plans:(function(){ var o={}; Object.keys(PLANS_BASE).forEach(function(k){ var v=fv("m_pr_"+k); if(v!==""&&+v!==PLANS_BASE[k].rate) o[k]={rate:+v}; }); return o; })(),defaultPlan:r.defaultPlan},r).then(function(){ toast("Rates saved"); closeModal(); }); },"Save"); }
 
 function mHelp(){ openModal("How the desk works",'<div class="prose" style="font-size:13px">'+
   (EMB?'':'<b>Pick your name</b> top right — every change is saved against a person.\n\n')+
