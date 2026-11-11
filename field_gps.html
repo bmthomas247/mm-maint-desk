@@ -80,7 +80,31 @@ async function load(){
 
 function qrSvg(text){ const q = qrcode(0, "M"); q.addData(text, "Byte"); q.make(); return q.createSvgTag({ cellSize:6, margin:2, scalable:true }); }
 
+// Send a crew member their own set-up link (Brandon 2026-11-11: "i want the link to set up the phone for the user").
+// gps_setup.html#k=<key>&n=<first>: no sign-in, the key stays after the # so it never reaches a server.
+const SETUP_PAGE = location.origin + location.pathname.replace(/[^/]*$/, "") + "gps_setup.html";
+function sendBox(m){
+  const url = `${SETUP_PAGE}#k=${encodeURIComponent(m.key)}&n=${encodeURIComponent(m.first)}`;
+  const msg = `Hi ${m.first}, here's your link to set up the Moose Hub phone GPS on your work phone. Open it ON your phone and do the 5 steps (about 3 minutes):
+${url}
+If you already set Traccar up with someone else's info, this link replaces it. Ask Chris or Brandon if you get stuck.`;
+  return `<div class="card" id="setup"><h2>Send ${esc(m.first)} their set-up link</h2>
+    <div class="note"><b>Send it before you leave this page.</b> The link is only shown once. If it gets lost, make a new one and turn the old phone off.</div>
+    <div class="copy"><input readonly value="${esc(url)}"><button class="btn" data-copy="${esc(url)}">Copy link</button></div>
+    <p class="small" style="margin:10px 0 4px"><b>Message</b> (you can change it):</p>
+    <textarea id="gmsg" rows="5" style="width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--ground);color:var(--ink)">${esc(msg)}</textarea>
+    <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn primary" data-slsend="${esc(m.name)}">💬 Send to ${esc(m.first)} in Slack</button>
+      <button class="btn" data-copymsg>Copy message</button>
+      <a class="btn" id="gsms" href="sms:?&body=${encodeURIComponent(msg)}">📱 Text it</a></p>
+    <p class="small muted" id="gsent">Slack sends from the hub's bot with your name at the top. "Text it" opens your phone's messages (on a phone).</p>
+    <details class="small"><summary>Or set it up on ${esc(m.first)}'s phone yourself</summary>
+      <p>Open the link above on their phone, or have them scan this:</p><div class="qr" style="margin-top:8px">${qrSvg(url)}</div></details>
+    <p style="margin-top:12px"><button class="btn" data-done>Done</button></p></div>`;
+}
+
 function setupBox(m){
+  if(m.other) return sendBox(m);
   const link = `${SERVER}?id=${encodeURIComponent(m.key)}&${OPTS}`;
   const store = IS_IOS ? `<a class="btn primary big" href="${IOS}" target="_blank" rel="noopener">⬇ Get Traccar Client (App Store)</a>`
     : IS_AND ? `<a class="btn primary big" href="${AND}" target="_blank" rel="noopener">⬇ Get Traccar Client (Google Play)</a>`
@@ -147,7 +171,7 @@ function draw(){
       return `<tr><td><b>${esc(p.label)}</b></td><td>${p.clocked_in ? '<span class="pill">In</span>' : '<span class="muted">Out</span>'}</td>
         <td>${ds.length ? ds.length + " phone" + (ds.length > 1 ? "s" : "") : '<span class="pill warn">not set up</span>'}</td>
         <td>${p.today}</td><td>${l ? `<a href="https://www.google.com/maps?q=${l.lat},${l.lng}" target="_blank" rel="noopener">${when(l.at)}</a>` : '<span class="muted">none</span>'}</td>
-        ${m.admin ? `<td><button class="btn" data-new="${p.user_id}">Set up a phone</button></td>` : "<td></td>"}</tr>`; }).join("");
+        ${m.admin ? `<td><button class="btn" data-new="${p.user_id}">📲 Make set-up link</button></td>` : "<td></td>"}</tr>`; }).join("");
     h += `<div class="card"><h2>Field crew</h2>
       <table><tr><th>Person</th><th>Now</th><th>Phone</th><th>Points today</th><th>Last point</th><th></th></tr>${rows}</table>
       <p class="small muted">Points are kept only while the person is clocked in on the hub. Stops at our homes feed Team ratings ▸ GPS check every morning.</p></div>
@@ -158,9 +182,19 @@ function draw(){
   $("#app").innerHTML = h;
 }
 
+document.addEventListener("input", e => { if(e.target.id === "gmsg" && $("#gsms")) $("#gsms").href = "sms:?&body=" + encodeURIComponent(e.target.value); });
 document.addEventListener("click", async e => {
   const b = e.target.closest("button"); if(!b) return;
   if(b.dataset.copy != null){ try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; } catch { b.previousElementSibling.select(); } return; }
+  if(b.hasAttribute("data-copymsg")){ try { await navigator.clipboard.writeText($("#gmsg").value); b.textContent = "Copied ✓"; } catch { $("#gmsg").select(); } return; }
+  if(b.dataset.slsend){
+    const text = $("#gmsg").value.trim(); if(text.length < 5) return;
+    b.disabled = true; b.textContent = "Sending…";
+    const x = await sb.functions.invoke("penny", { body:{ act:{ kind:"slack_post", data:{ to: b.dataset.slsend, text, via:"gps" } } } }); const d = x.data || {};
+    b.disabled = false; b.textContent = d.ok ? "Sent ✓" : "💬 Try Slack again";
+    $("#gsent").innerHTML = d.ok ? "✅ Sent in Slack. They open it on their phone." : `<span style="color:var(--red)">Couldn't send it: ${esc(d.error || (x.error && errText(x.error)) || "error")}. Use Copy message or Text it instead.</span>`;
+    return;
+  }
   if(b.hasAttribute("data-done")){ S.made = null; return load(); }
   if(b.dataset.off){
     if(!confirm("Turn this phone off? Anything it sends after this is thrown away. (Set up the new phone after.)")) return;
@@ -170,12 +204,13 @@ document.addEventListener("click", async e => {
     const v = b.dataset.new, test = v === "test", self = v === "me" || test;
     const p = self ? null : S.me.people.find(x => x.user_id === v);
     const kind = IS_IOS ? "iPhone" : IS_AND ? "Android phone" : "phone";
-    const label = (self && !test && ON_PHONE) ? "My " + kind : prompt("Name this phone (for example: Dave's iPhone)", test ? "Test phone" : ((p ? p.label : "My") + "'s phone")); if(label === null) return;
+    const first = p ? String(p.label).split(" ")[0] : "";
+    const label = p ? first + "'s phone" : (self && !test && ON_PHONE) ? "My " + kind : prompt("Name this phone (for example: Dave's iPhone)", test ? "Test phone" : ((p ? p.label : "My") + "'s phone")); if(label === null) return;
     b.disabled = true;
     const r = await sb.rpc("field_gps_device_new", { p_user: self ? null : v, p_label: label, p_test: test });
     b.disabled = false;
     if(r.error){ alert(errText(r.error)); return; }
-    S.made = { key: r.data.key, who: self ? (test ? "your test phone" : "your phone") : (p ? p.label + "'s phone" : "the phone") };
+    S.made = p ? { key: r.data.key, other: true, first, name: p.label } : { key: r.data.key, who: self ? (test ? "your test phone" : "your phone") : (p ? p.label + "'s phone" : "the phone") };
     draw(); $("#setup").scrollIntoView({ behavior:"smooth" });
   }
 });
