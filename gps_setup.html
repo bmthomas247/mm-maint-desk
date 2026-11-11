@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Phone GPS setup</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Phone GPS set-up link (Brandon 2026-11-11: "i want the link to set up the phone for the user").
+     An admin makes a phone on Staffing ▸ Phone GPS for a crew member and sends them
+     crew.moosemanagement.com/gps_setup.html#k=<that phone's key>&n=<first name>.
+     No sign-in: the key sits after the # so it never reaches a server; this page only builds Traccar Client links from it
+     and asks the field-gps function (?check=) when the hub last heard from that phone. -->
+<style>
+:root{ --moose:#88B535; --moose-soft:#eef5e0; --forest:#3c5f12; --ground:#f5f7f0; --card:#fff; --ink:#15201a; --muted:#6b776f;
+  --line:#e1e7de; --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06); }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --ground:#11160f; --card:#1a2117; --ink:#e8efe3; --muted:#93a08c; --line:#2c3628; --moose-soft:#24321a; --red-soft:#3a1d19; --amber-soft:#3a2d12; } }
+*{box-sizing:border-box} body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.5 Manrope,system-ui,sans-serif}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+.head{background:linear-gradient(135deg,#3c5f12,#5b8a1e);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:14px}
+.head h1{margin:0 0 4px;font-size:22px} .head p{margin:0;opacity:.92}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+.num{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--forest);color:#fff;font-weight:800;margin-right:8px;font-size:15px}
+.card h2{margin:0 0 8px;font-size:18px;display:flex;align-items:center}
+.btn{display:flex;justify-content:center;align-items:center;gap:6px;width:100%;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;padding:14px 16px;font:inherit;font-weight:800;cursor:pointer;text-decoration:none;min-height:52px;margin-top:8px}
+.btn.primary{background:var(--forest);border-color:var(--forest);color:#fff}
+.muted{color:var(--muted)} .small{font-size:14px}
+.note{background:var(--amber-soft);border-radius:12px;padding:10px 12px;margin:10px 0}
+.ok{background:var(--moose-soft);color:var(--forest);border-radius:12px;padding:10px 12px;margin-top:10px;font-weight:700}
+.bad{background:var(--red-soft);color:var(--red);border-radius:12px;padding:10px 12px;margin-top:10px;font-weight:700}
+.copy{display:flex;gap:8px;align-items:center;margin:6px 0} .copy input{flex:1;min-width:0;font:14px ui-monospace,monospace;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink)}
+.copy .btn{width:auto;margin:0;min-height:46px}
+ul{padding-left:20px;margin:6px 0} li{margin:5px 0} code{font:14px ui-monospace,monospace;background:var(--ground);padding:1px 5px;border-radius:6px}
+details summary{cursor:pointer;font-weight:700;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG || {};
+const SERVER = String(C.url || "https://ogugdhhiajebfdwpzofp.supabase.co").replace(/\/$/, "") + "/functions/v1/field-gps";
+// same Traccar settings as Staffing ▸ Phone GPS (field_gps.html OPTS)
+const OPTS = "accuracy=high&interval=300&distance=500&angle=0&heartbeat=300&buffer=true&stop_detection=true&wakelock=true";
+const IOS = "https://apps.apple.com/app/traccar-client/id843156974", AND = "https://play.google.com/store/apps/details?id=org.traccar.client";
+const UA = navigator.userAgent, IS_IOS = /iPhone|iPad|iPod/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1), IS_AND = /Android/.test(UA), ON_PHONE = IS_IOS || IS_AND;
+const tLink = rest => IS_AND ? `intent://${rest}#Intent;scheme=org.traccar.client;package=org.traccar.client;end` : `org.traccar.client://${rest}`;
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const H = new URLSearchParams(location.hash.slice(1));
+const KEY = (H.get("k") || "").trim(), FIRST = (H.get("n") || "").trim();
+const ago = d => { const m = Math.round((Date.now() - new Date(d)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
+
+function draw(){
+  const app = document.getElementById("app");
+  if(!/^mh[0-9a-f]{20,}$/.test(KEY)){ app.innerHTML = `<div class="head"><h1>Phone GPS setup</h1></div><div class="card"><p>This link isn't complete. Ask Brandon or Chris for a new set-up link.</p></div>`; return; }
+  const who = FIRST ? esc(FIRST) + "'s" : "your", tail = KEY.slice(-4);
+  const store = IS_IOS ? `<a class="btn primary" href="${IOS}">⬇ Get Traccar Client (App Store)</a>`
+    : IS_AND ? `<a class="btn primary" href="${AND}">⬇ Get Traccar Client (Google Play)</a>`
+    : `<a class="btn" href="${IOS}">iPhone: App Store</a><a class="btn" href="${AND}">Android: Google Play</a>`;
+  const allow = IS_IOS ? `<ul><li>Settings ▸ Traccar Client ▸ Location ▸ <b>Always</b>, and <b>Precise Location</b> on.</li>
+      <li>Settings ▸ Traccar Client ▸ <b>Background App Refresh</b> on.</li><li>Low Power Mode off while you work. Don't swipe Traccar Client closed.</li></ul>`
+    : `<ul><li>Settings ▸ Apps ▸ Traccar Client ▸ Permissions ▸ Location ▸ <b>Allow all the time</b>, and <b>Use precise location</b> on.</li>
+      <li>Settings ▸ Apps ▸ Traccar Client ▸ Battery ▸ <b>Unrestricted</b>.</li>
+      <li>Samsung: Settings ▸ Battery ▸ Background usage limits ▸ Traccar Client must <b>not</b> be in "Sleeping apps" or "Deep sleeping apps".</li>
+      <li>Don't swipe Traccar Client closed from your recent apps.</li></ul>`;
+  app.innerHTML = `<div class="head"><h1>Set up ${who} phone GPS</h1><p>About 3 minutes. Do every step on the phone you carry at work.</p></div>
+    ${ON_PHONE ? "" : `<div class="note"><b>Open this link on the phone</b>, not a computer. Text or Slack it to yourself and tap it there.</div>`}
+    <div class="note small">Opened this from Slack or a text? If a button below does nothing, tap <b>⋮</b> or the share icon and pick <b>Open in browser</b> (Chrome or Safari), then try again.</div>
+    <div class="card"><h2><span class="num">1</span>Get the free app</h2>${store}
+      <p class="small muted">After it installs, <b>open it once</b> and allow what it asks (location, notifications). Then come back to this page.</p></div>
+    <div class="card"><h2><span class="num">2</span>Connect it to the Moose Hub</h2>
+      <p class="small">Tap this, then tap <b>Open</b> and <b>OK</b>:</p>
+      <a class="btn primary" href="${esc(tLink(`config?url=${encodeURIComponent(SERVER)}&id=${encodeURIComponent(KEY)}&${OPTS}`))}">⚙️ Set up Traccar for me</a>
+      <p class="small" style="margin-top:10px"><b>Check it worked:</b> in Traccar Client, <b>Device identifier</b> starts with <code>mh</code> and ends with <code>${tail}</code>, and <b>Server URL</b> ends with <code>/field-gps</code>. If it still says <code>demo.traccar.org</code> or a different number, type them in by hand:</p>
+      <details><summary>Type it in by hand</summary>
+        <p class="small">In Traccar Client: tap <b>Settings</b> (or the ⚙ icon), then copy each one here and paste it there.</p>
+        <p class="small" style="margin:8px 0 2px"><b>Device identifier</b></p>
+        <div class="copy"><input readonly value="${esc(KEY)}"><button class="btn" data-copy="${esc(KEY)}">Copy</button></div>
+        <p class="small" style="margin:8px 0 2px"><b>Server URL</b></p>
+        <div class="copy"><input readonly value="${esc(SERVER)}"><button class="btn" data-copy="${esc(SERVER)}">Copy</button></div>
+        <p class="small muted">Also: Location accuracy <b>High</b>, Distance <b>500</b>, Interval <b>300</b>, Stationary heartbeat <b>300</b>, Offline buffering <b>on</b>, Wake lock <b>on</b>.</p>
+      </details></div>
+    <div class="card"><h2><span class="num">3</span>Let it run all the time</h2>
+      <p class="small">Phones put apps to sleep to save battery, which stops the GPS. Do all of these:</p>${allow}</div>
+    <div class="card"><h2><span class="num">4</span>Turn it on</h2>
+      <a class="btn primary" href="${esc(tLink("action/start"))}">▶ Start tracking</a>
+      <p class="small muted">Leave it on. The hub only keeps where you are <b>while you're clocked in</b>; anything sent while you're clocked out is thrown away.</p></div>
+    <div class="card"><h2><span class="num">5</span>Is it working?</h2>
+      <p class="small">Wait a minute after step 4, then tap:</p>
+      <button class="btn" id="chk">Check my phone</button><div id="chkout"></div></div>
+    <p class="small muted" style="text-align:center">Keep this link to yourself. Questions: ask Chris or Brandon.</p>`;
+}
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.copy != null){ try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; } catch { b.previousElementSibling.select(); } return; }
+  if(b.id === "chk"){
+    const o = document.getElementById("chkout"); o.innerHTML = `<p class="small muted">Checking…</p>`;
+    try {
+      const r = await (await fetch(SERVER + "?check=" + encodeURIComponent(KEY), { cache:"no-store" })).json();
+      if(!r || r.why === "unknown") o.innerHTML = `<div class="bad">This link isn't a phone the hub knows. Ask for a new set-up link.</div>`;
+      else if(r.off) o.innerHTML = `<div class="bad">This phone was turned off on the hub. Ask for a new set-up link.</div>`;
+      else if(!r.last_seen) o.innerHTML = `<div class="bad">Nothing from this phone yet. Check step 2 (Device identifier ends with ${esc(KEY.slice(-4))}), then step 4, wait a minute and check again.</div>`;
+      else o.innerHTML = `<div class="ok">✅ Working. The hub last heard from ${r.first ? esc(r.first) + "'s" : "this"} phone ${esc(ago(r.last_seen))}.</div>
+        <p class="small muted">To keep it working all day, do step 3. Clock in on the hub when you start work.</p>`;
+    } catch { o.innerHTML = `<div class="bad">Couldn't reach the hub. Check your signal and try again.</div>`; }
+  }
+});
+draw();
+</script>
+</body>
+</html>
