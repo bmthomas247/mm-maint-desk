@@ -1760,9 +1760,10 @@ async function appsCard(){
         ${MT_WIN && last && !mtRunning(m) ? `<button class="btn small primary" type="button" onclick="mtStart()">▶ Start Moose Time</button> ` : ""}<a class="btn small${MT_WIN && last && !mtRunning(m) ? "" : " primary"}" href="${MT_EXE}" download>⬇ Download Moose Time</a>
         <p class="muted" style="margin:6px 0 0;font-size:13px">Once it's on this computer the hub starts it for you, signed in (your browser asks "Open Moose Time?" the first time: tick Always allow). To install: open the file. If Windows says "Windows protected your PC", click More info ▸ Run anyway. Sign in, then click the round M by the clock to clock in or out. It starts with Windows. To update, download and open it again.</p></div>`; } }catch(e){}
   try{ const f = (await sb.rpc("field_gps_me")).data;
-    if(f && f.on_list){ const mine = (f.devices || []).filter(d => d.user_id === f.me && !d.off), seen = mine.map(d => d.last_seen).filter(Boolean).sort().pop();
+    const adm = !!(ME && (ME.is_admin || ME.admin));
+    if(f && (f.on_list || adm)){ const mine = (f.devices || []).filter(d => d.user_id === f.me && !d.off), seen = mine.map(d => d.last_seen).filter(Boolean).sort().pop();
       g.innerHTML = `<div class="appblk"><b>📍 GPS (Traccar Client on your phone)</b> ${mine.length ? `<span class="pill green">Phone set up${seen ? " · last point " + esc(new Date(seen).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) : ""}</span>` : `<span class="pill amber">Not set up yet</span>`}
-        <p class="muted" style="margin:2px 0 6px">Free app that sends your phone's location to the hub, kept only while you're clocked in.</p>
+        <p class="muted" style="margin:2px 0 6px">Free app that sends your phone's location to the hub, kept only while you're clocked in.</p>${!f.on_list ? `<p class="muted" style="margin:0 0 6px;font-size:13px">Field crew on the phone GPS list see this card. You're not on the list, so your phone isn't tracked; you can still set up a test phone.</p>` : ""}
         <div class="apps"><div><b>Traccar Client</b><br><a href="https://apps.apple.com/app/traccar-client/id843156974" target="_blank" rel="noopener">iPhone</a><a href="https://play.google.com/store/apps/details?id=org.traccar.client" target="_blank" rel="noopener">Android</a></div></div>
         <a class="btn small" href="#/field_gps" style="margin-top:6px">Set up my phone →</a></div>`; } }catch(e){}
 }
