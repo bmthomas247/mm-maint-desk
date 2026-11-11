@@ -2688,7 +2688,8 @@ function ocPlan(tid){ var tb=S.taskbill[tid]||{}, j=D.byId["bw-"+tid]||{id:"bw-"
     taskBillParts(j,tb).forEach(function(p){ lines.push({item:ocGuess(p.what), what:"Parts: "+p.what, amount:+(+p.amount).toFixed(2)}); });
     (tb.lines||[]).forEach(function(l){ lines.push({item:8, what:"Fee: "+l.what, amount:+(+l.amount).toFixed(2)}); }); }
   return {tid:tid, j:j, home:tb.prop||j.prop||"", kind:kind==="moose"?"moose":kind==="none"?"skip":kind, date:(j.finished||"").slice(0,10)||ymd(Date.now()),
-    memo:(title+(sum?". "+sum:"")).replace(/\.\.+/g,".").slice(0,600), lines:lines, detail:{hours:hrs, rate:rate, billTo:kind, plan:planOf(tb.prop||j.prop)}}; }
+    /* Track shows only the item name on each line (descriptions are dropped - tested 2026-11-10), so the note carries the breakdown */
+    memo:((title+(sum?". "+sum:"")).replace(/\.\.+/g,".")+(kind==="courtesy"?" Courtesy - no charge for our time.":lines.length?" ("+lines.map(function(l){ return l.what.replace(/^(Parts|Fee): /,"")+(/^Labor/.test(l.what)?"":" "+money2(l.amount)); }).join("; ")+")":"")).slice(0,600), lines:lines, detail:{hours:hrs, rate:rate, billTo:kind, plan:planOf(tb.prop||j.prop)}}; }
 function ocReview(tids){ if(!OC.items.length) return toast("Track's item list isn't loaded yet — try again in a moment");
   var P=tids.map(ocPlan), opt=function(sel){ return OC.items.map(function(x){ return '<option value="'+x.id+'"'+(x.id===sel?' selected':'')+'>'+esc(x.name)+'</option>'; }).join(""); };
   var h='<div class="note">Each task goes to its owner\'s Track statement as one charge. The note is what the owner reads; each line shows as the Track item you pick. Change anything before you post.</div>'+
