@@ -745,8 +745,8 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
   const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { pd:{ label:"Property Details", icon:(DESKS.find(x => x.key === "homes") || {}).icon || "home", kids:{ homes_str:"STR", homes_lease:"Lease", homes_2h:"2nd Home", homes_hoa:"HOA", homes_co:"Moose Office" } },
-                   maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_plan:"Crew planner", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_recalls:"Recalls", maint_inv:"Inventory", maint_improve:"Improvements" } },
-                   hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly", hk_inv:"Inventory", hk_improve:"Improvements" } },
+                   maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_plan:"Crew planner", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_inv:"Inventory" } },
+                   hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly", hk_inv:"Inventory" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
                    guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", call_review:"Call review" } },
                    own:{ label:"Owners", icon:"key", kids:{ owner_calls:"Communication", property_setup:"Property Set Up", competitor:"Competitor Playbook", competitor_add:"Add competitor intel" } },
