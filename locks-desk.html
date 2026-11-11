@@ -225,6 +225,13 @@ function ageTxt(d){ const y=(Date.now()-new Date(d+"T12:00:00"))/3.156e10; retur
 const online = h => h && h.last_seen && (Date.now()-new Date(h.last_seen)) < 10*6e4;
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
+let TW = null;   // Track Wi-Fi per home code (home_quick), loaded once
+async function trackWifi(code){
+  try{ if(!TW){ TW = {}; ((await rpc("home_quick"))||[]).forEach(r => { if(r.home) TW[r.home.toUpperCase()] = r; }); }
+    const r = TW[String(code||"").toUpperCase()]; if(!r) return null;
+    const cl = (s, w) => String(s||"").replace(new RegExp("^\\s*(wi-?fi\\s*)?(" + w + ")\\s*[:\\-]\\s*", "i"), "").trim();
+    return { n: cl(r.wifi_name, "name|network|ssid"), p: cl(r.wifi_pass, "password|pass|pw") };
+  }catch(e){ return null; } }
 async function q(table, sel, f){ let x = sb.from(table).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data||[]; }
 async function wake(hubId){ try{ await fetch(C.url+"/realtime/v1/api/broadcast",{method:"POST",headers:{"content-type":"application/json",apikey:C.anonKey,authorization:"Bearer "+((await sb.auth.getSession()).data.session||{}).access_token},body:JSON.stringify({messages:[{topic:"hub-"+hubId,event:"wake",payload:{}}]})}); }catch(e){} }
 /* "Sync with Track now": the ThinkStation picks it up within a minute (new last-minute booking, code change...) */
@@ -854,6 +861,8 @@ async function installHome(pid){
   const heals = hub ? await q("lock_commands","ok,done_at",x=>x.eq("hub_id",hub.id).eq("kind","heal").eq("ok",true).order("done_at",{ascending:false}).limit(1)).catch(()=>[]) : [];
   await loadUpdates(hub);
   const ids = new Set(locks.map(l=>l.id)), a = access[0]||{};
+  // Wi-Fi from Track (home_quick) fills the Guest info boxes when nothing is saved here yet (Brandon 2026-11-11); the tech checks it and taps Save
+  const tw = (!a.wifi_name || !a.wifi_password) ? await trackWifi(p.code) : null;
   const ourA = locks.length ? await q("lock_assign","lock_id,wanted,state",x=>x.in("lock_id",[...ids]).eq("wanted",true)).catch(()=>[]) : [];
   const wipeState = l => { const sent = cmds.some(c=>c.lock_id===l.id), ours = ourA.filter(x=>x.lock_id===l.id).length;
     if(!sent) return ["none", "old codes not cleared yet"];
@@ -1003,8 +1012,8 @@ async function installHome(pid){
         <div class="muted" style="margin-top:4px">One tap does every door. Then wait here - each door turns green when the lock confirms it's clean (1-3 minutes).</div>`
         : `<div class="muted" style="margin-top:6px">This unlocks after step 4 - pair a door first, then come back here.</div>`}` + locks.map(l=>{ const [w, msg] = wipeState(l);
         return `<div class="row" style="margin-top:8px"><b class="grow">${esc(l.name)}</b><span class="pill ${w==="ok"?"green":w==="wait"?"amber":"grey"}">${esc(msg)}</span></div>`; }).join(""),
-    guest: `<div class="grid2"><label class="field"><span>Wi-Fi name</span><input id="wn" value="${esc(a.wifi_name||"")}"></label>
-      <label class="field"><span>Wi-Fi password</span><input id="wp" value="${esc(a.wifi_password||"")}"></label>
+    guest: `${tw && (tw.n || tw.p) ? `<div class="muted" style="margin-bottom:6px">📶 Wi-Fi filled in from Track - check it matches the router, then Save.</div>` : ""}<div class="grid2"><label class="field"><span>Wi-Fi name</span><input id="wn" value="${esc(a.wifi_name||(tw&&tw.n)||"")}"></label>
+      <label class="field"><span>Wi-Fi password</span><input id="wp" value="${esc(a.wifi_password||(tw&&tw.p)||"")}"></label>
       <label class="field"><span>Building / gate code</span><input id="gc" value="${esc(a.gate_code||"")}"></label>
       <label class="field"><span>Garage code</span><input id="gg" value="${esc(a.garage_code||"")}"></label></div>
       <div class="muted">Key box code: ${kb&&kb.code?"<b>on file</b> (key box step)":a.lockbox_code?"<b>on file</b> (from Track)":"<b style='color:var(--red)'>missing</b> - do the key box step"}</div>
