@@ -3455,25 +3455,27 @@ function timesheetPanel(m){
 /* Mobile first like the Locks field app (Brandon 2026-10-28): one phone-width column on every screen, today's route open and the
    other days folded, a sticky route bar with progress, "📍 I'm at the home" to jump to the closest home, compact done cards. */
 function vTrash(){
-  var rs=routines().filter(isTrash).map(function(r){ var p=trashPlan(r); r._day=p?p.day:trashDay(r); return r; })
+  var rs=routines().filter(isTrash).map(function(r){ var p=trashPlan(r); r._day=p?p.day:trashDay(r); if(trashBack(r)) r._day=today(); return r; })
     .sort(function(a,b){ return a._day.localeCompare(b._day)||String(a.title).localeCompare(String(b.title)); });
   var open=S.ui.trashOpen=S.ui.trashOpen||{}, t=today(), first=rs.filter(function(r){ return r._day===t; }).length?t:(rs[0]||{})._day;
-  return '<div class="ttop"><h2>Trash</h2><p>Only homes with a stay or finished work in the last 7 days, or a cleaner there on trash day (this week or last). Tap <b>✓ Out</b> at each home.</p></div>'+
+  return '<div class="ttop"><h2>Trash</h2><p>Only homes with a stay or finished work in the last 7 days, or a cleaner there on trash day (this week or last). Tap <b>✓ Out</b> at each home, and <b>✓ Cans back in</b> on the bring-in day.</p></div>'+
     (rs.length?rs.map(function(r){ return trashRoute(r, open[r.id]!=null?open[r.id]:r._day===first); }).join(""):'<div class="tcard"><div class="twhy">No trash routes yet. Add one with + Trash route: weekly, a title that starts with "Trash", the day, and its homes.</div></div>')+
     '<div class="tadd"><button class="btn sm ghost" data-act="newroutine">+ Trash route</button></div>'; }
 function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.undone, t=today(), rid=esc(r.id);
   var todo=p?p.out.concat(p.check):[], n=p?todo.filter(function(x){ return trashTick(r.id,p.day,x.c); }).length:0, gap=daysBetween(t,r._day);
   var when=gap===0?'<span class="pill soon">Today</span>':gap===1?'<span class="pill mute">Tomorrow</span>':'<span class="pill mute">'+esc(fmtD(r._day))+'</span>';
   var name=String(r.title||"").replace(/^Trash\s*[-–—:]?\s*/i,"")||r.title;
-  var hv=p?trashHeavy(p):[];
+  var hv=p?trashHeavy(p):[], bk=trashBack(r), bkn=bk?bk.homes.filter(function(x){ return trashInTick(r.id,bk.day,x.c); }).length:0;
+  if(bk) when='<span class="pill soon">Bring in today '+bkn+' / '+bk.homes.length+'</span>'+when;
   var bar='<button class="tbarbtn" data-ttoggle="'+rid+'" aria-expanded="'+!!isOpen+'"><span class="tname">'+esc(name)+'</span>'+when+(hv.length?'<span class="pill late">Heavy trash</span>':'')+
     '<span class="tct">'+(p?n+' / '+todo.length:'—')+'</span><span class="tchev" aria-hidden="true">'+(isOpen?'▾':'▸')+'</span>'+
     '<span class="tbar"><i style="width:'+(todo.length?Math.round(n*100/todo.length):(p?100:0))+'%"></i></span></button>';
   if(!isOpen) return '<section class="troute closed" data-troute="'+rid+'">'+bar+'</section>';
+  var bkHtml=bk?trashBackBlock(r,bk):'';
   var foot='<div class="tfoot"><label class="tall"><input type="checkbox" class="cb" data-rtick="'+rid+'"'+(done?' checked':'')+' aria-label="Whole route done"> Whole route done'+
     (done?' <span class="muted">· '+esc(nameFor(lg.by))+(lg.auto?' (every home ticked)':'')+'</span>':'')+'</label>'+
     '<span style="margin-left:auto"></span><button class="btn sm ghost" data-redit="'+rid+'">Edit route</button>'+(r.url?'<a class="golink" href="'+esc(r.url)+'" target="_blank" rel="noopener">Asana ↗</a>':'')+'</div>';
-  if(!p) return '<section class="troute" data-troute="'+rid+'">'+bar+'<div class="tcard"><div class="twhy">Stays from Track aren\'t loaded yet — take all '+(r.props||[]).length+' homes.</div></div>'+foot+'</section>';
+  if(!p) return '<section class="troute" data-troute="'+rid+'">'+bar+bkHtml+'<div class="tcard"><div class="twhy">Stays from Track aren\'t loaded yet — take all '+(r.props||[]).length+' homes.</div></div>'+foot+'</section>';
   var at=S.ui.trashAt&&S.ui.trashAt.rid===r.id?S.ui.trashAt:null, dist=at&&at.lat!=null?trashDists(todo,at):{};
   todo.forEach(function(x){ x._m=dist[x.c]; });
   var byHood={}; todo.forEach(function(x){ var h=((trashProf(x.c)||{}).community||"").trim()||"Other"; (byHood[h]=byHood[h]||[]).push(x); });
@@ -3482,7 +3484,7 @@ function trashRoute(r,isOpen){ var p=trashPlan(r), lg=rlogFor(r), done=lg&&!lg.u
   var heavy=hv.length?'<div class="tbig theavy"><b>Heavy trash day — first pickup after '+esc(hv.map(function(h){ return h.k+" ("+fmtD(h.d)+")"; }).join(" and "))+'.</b> One of our worst trash days: bring extra bags, check every bin, the garage and the curb, and plan extra time.</div>':'';
   var wxs=(r.props||[]).filter(function(c){ return trashWx()[canon(c)] && !todo.some(function(x){ return canon(x.c)===canon(c); }); });
   heavy+=wxs.length?'<div class="tcard twxc"><div class="tch"><b>❄️ Heat tape check</b><span class="muted">no trash this week, just look from the road</span></div>'+wxs.map(function(c){ return '<div class="tch" style="margin-top:6px"><b class="tcode">'+esc(c)+'</b></div>'+trashWxRow(c); }).join("")+'</div>':'';
-  return '<section class="troute" data-troute="'+rid+'">'+bar+heavy+(todo.length&&n<todo.length?trashGpsRow(r,p,todo,at):'')+
+  return '<section class="troute" data-troute="'+rid+'">'+bar+bkHtml+heavy+(todo.length&&n<todo.length?trashGpsRow(r,p,todo,at):'')+
     (todo.length?cards:'<div class="tcard"><div class="twhy">Nothing to take out — nobody stayed and no work was finished since '+esc(fmtD(p.from))+'.</div></div>')+
     (p.skip.length?'<details class="tskip"><summary>Skip '+p.skip.length+' — no stay, clean or finished work since '+esc(fmtD(p.from))+'</summary>'+
       p.skip.map(function(x){ return esc(x.c); }).join(", ")+trashAsanaState(r,p)+'</details>':'')+foot+'</section>'; }
@@ -3586,12 +3588,41 @@ document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-t
   var cs=[].slice.call(document.querySelectorAll('[data-troute="'+CSS.escape(rid)+'"] .tcard')), i=cs.map(function(e){ return e.dataset.thome; }).indexOf(c);
   var nx=cs.slice(i+1).concat(cs.slice(0,i+1)).filter(function(e){ return !e.classList.contains("tdone"); })[0];
   if(nx) trashJump(rid,nx.dataset.thome); else toast("Route done — nice work"); });
+/* 🔙 Bring cans back in (Brandon 2026-11-11): a route titled "Out Tue / In Wed" has a bring-in day. On that day the homes that went
+   out on the last out day come back in: the homes ticked Out that day, or (nobody ticked homes) every home the plan said to take out.
+   Ticks = rlog <route>__<in day>__in__<home> {state:"in", out:<out day>} (day = the day at the home, for Team ratings GPS time). */
+var WD3={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
+function trashInDow(r){ var m=String(r.title||"").match(/\bin\s+(sun|mon|tue|wed|thu|fri|sat)/i); return m?WD3[m[1].toLowerCase()]:null; }
+function trashOutDow(r){ var w=String(r.when||"").toLowerCase().slice(0,3); return WD3[w]!=null?WD3[w]:null; }
+function trashBack(r){ var ind=trashInDow(r), od=trashOutDow(r); if(ind==null||od==null) return null;
+  var t=today(), td=new Date(Date.parse(t+"T12:00:00")); if(td.getDay()!==ind) return null;
+  var gap=(ind-od+7)%7||7, out=new Date(td.getTime()-gap*864e5).toISOString().slice(0,10);
+  var tk=Object.keys(S.rlog).map(function(k){ return S.rlog[k]; }).filter(function(x){ return x&&x.rid===r.id&&x.home&&x.day===out&&!x.undone; });
+  var homes, src;
+  if(tk.length){ homes=tk.filter(function(x){ return x.state==="out"; }).map(function(x){ return {c:x.home,why:"Taken out "+fmtD(out)+" by "+nameFor(x.by)}; }); src="ticked"; }
+  else { var p=trashPlan(r,out); if(!p) return null; homes=p.out.concat(p.check).map(function(x){ return {c:x.c,why:"On the "+fmtD(out)+" list (nobody ticked homes that day)"}; }); src="plan"; }
+  return {day:t,out:out,homes:homes,src:src}; }
+function trashInKey(rid,day,c){ return sid(rid)+"__"+day+"__in__"+sid(c); }
+function trashInTick(rid,day,c){ var x=S.rlog[trashInKey(rid,day,c)]; return x&&!x.undone?x:null; }
+function trashBackBlock(r,b){ var rid=r.id;
+  var cards=b.homes.slice().sort(function(a,c){ return a.c.localeCompare(c.c,undefined,{numeric:true}); }).map(function(x){ var tk=trashInTick(rid,b.day,x.c), key=esc(rid+"|"+b.day+"|"+x.c+"|"+b.out);
+    if(tk) return '<div class="tcard tdone" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill ok">In</span></div>'+
+      '<div class="tdid">Brought in by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tinundo="'+key+'">Undo</button></div></div>';
+    return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill waiting">Bring in</span></div>'+
+      '<div class="twhy">'+esc(x.why)+'</div>'+trashGarage(x.c)+'<div class="tbtns"><button class="btn tgo" data-tin="'+key+'">✓ Cans back in</button></div></div>'; }).join("");
+  return '<div class="tbig" style="background:#eef4e6;border-color:#9bb57a"><b>🔙 Bring the cans back in today</b> — they went out '+esc(fmtD(b.out))+'.</div>'+
+    (b.homes.length?cards:'<div class="tcard"><div class="twhy">Nothing went out '+esc(fmtD(b.out))+', so nothing to bring in.</div></div>')+
+    '<div class="thood" style="margin-top:14px">Next pickup</div>'; }
+document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-tin],[data-tinundo]"); if(!b) return; ev.preventDefault();
+  if(!need()||!S.db) return; var d=b.dataset, v=(d.tin||d.tinundo).split("|"), rid=v[0], day=v[1], out=v[v.length-1], c=v.slice(2,-1).join("|"), k=trashInKey(rid,day,c);
+  var doc=d.tinundo!=null?Object.assign({},S.rlog[k]||{},{undone:true,undoneBy:S.me,at:Date.now()}):{rid:rid,home:c,day:day,state:"in",out:out,by:S.me,at:Date.now()};
+  S.rlog[k]=doc; S.db.doc("rlog/"+k).set(doc).catch(function(){ toast("Not saved — check your signal and try again"); }); render(); });
 function isTrash(r){ return /trash/i.test(r.title||"") && r.cadence==="weekly" && (r.props||[]).length>0; }
 function trashDay(r){ var w=(r.when||r.title||"").toLowerCase(), d=new Date();
   for(var i=0;i<7;i++){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+i); if(w.indexOf(WD[x.getDay()].slice(0,3))>-1) return x.getFullYear()+"-"+p2(x.getMonth()+1)+"-"+p2(x.getDate()); }
   return today(); }
-function trashPlan(r){ var occ=(S.feeds.occupancy||{}).units; if(!occ) return null;
-  var day=trashDay(r), from=new Date(Date.parse(day+"T12:00:00")-6*864e5).toISOString().slice(0,10), out=[], skip=[], check=[];
+function trashPlan(r,dayIn){ var occ=(S.feeds.occupancy||{}).units; if(!occ) return null;
+  var day=dayIn||trashDay(r), from=new Date(Date.parse(day+"T12:00:00")-6*864e5).toISOString().slice(0,10), out=[], skip=[], check=[];
   (r.props||[]).forEach(function(raw){ var c=canon(String(raw).replace(/\s+L$/," ").trim()), lease=/^L-/.test(c)||/\sL$/.test(raw), second=/^2H-/.test(c);
     var st=(fromFeed(occ,c)||fromFeed(occ,c.replace(/^(L-|2H-)/,""))||[]).filter(function(s){ return s.in<=day && s.out>=from; });
     var whys=st.length?[(st.some(function(s){return s.owner;})?"Owner":"Guest")+" stay "+fmtD(st[0].in)+"–"+fmtD(st[st.length-1].out)]:[];
