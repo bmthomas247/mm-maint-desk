@@ -279,7 +279,7 @@ window.staffingView = async function(v){
   wcAppCard(v.querySelector("#wcapp"));
   const pb = v.querySelector("#punch");
   if(pb) pb.onclick = () => { pb.disabled = true; pb.textContent = "Getting your location…";
-    const go = (lat, lng, acc) => sb.rpc("clock_punch", { p_kind:pb.dataset.k, p_lat:lat, p_lng:lng, p_acc:acc }).then(r => { err(r); re(); });
+    const go = (lat, lng, acc) => sb.rpc("clock_punch", { p_kind:pb.dataset.k, p_lat:lat, p_lng:lng, p_acc:acc }).then(r => { if(!err(r) && window.gpsAfterPunch) gpsAfterPunch(pb.dataset.k); re(); });
     if(!navigator.geolocation) return go(null, null, null);
     navigator.geolocation.getCurrentPosition(p => go(p.coords.latitude, p.coords.longitude, Math.round(p.coords.accuracy)), () => go(null, null, null), { enableHighAccuracy:true, timeout:10000, maximumAge:60000 }); };
   v.querySelectorAll("[data-add]").forEach(b => b.onclick = async () => { const u = b.dataset.add, at = v.querySelector(`[data-at="${u}"]`).value;
