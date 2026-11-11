@@ -249,7 +249,7 @@ async function noiseView(){
   const hm = t => (t || "").slice(0,5);
   app.innerHTML = `
     <div class="card"><h3 style="margin-top:0">1 · Get the sensor on the hub</h3>
-      <ol><li><b>On a computer</b> (Chrome) with a USB-C <i>data</i> cable: open <a href="noise-setup.html" target="_blank">Noise sensor setup</a>, load our firmware and join the Wi-Fi of the place it will live (the office Wi-Fi for a test).</li>
+      <ol><li><b>On a computer</b> (Chrome) with a USB-C <i>data</i> cable: open <a href="noise-setup.html" target="_blank">Noise sensor setup</a> and type the home code: its Wi-Fi name + password load from Track with copy buttons. Click Install, then paste them when it asks (office test: the office Wi-Fi).</li>
         <li>On your phone: <a class="btn" href="${MY("integrations/")}" target="_blank" rel="noopener">Open devices</a> → under <b>Discovered</b> you'll see <b>Noise</b> → <b>Add</b> → Submit.</li>
         <li>About a minute later it shows below with a live dB number.</li></ol>
       <div class="muted small">The sensor only sends one number (how loud it is). No sound is recorded or sent.</div></div>
