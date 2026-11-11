@@ -2732,7 +2732,7 @@ function ocParts(){ var it=OC.items.filter(function(x){ return /part/i.test(x.na
 function ocPlan(tid){ var tb=S.taskbill[tid]||{}, j=D.byId["bw-"+tid]||{id:"bw-"+tid,prop:tb.prop,title:"Task "+tid,finished:""}, kind=tb.billTo||"none";
   var hrs=+tb.hours||0, rate=+tb.rate||0, ot=ownerText(j,tb), title=(ot.newTitle||j.title||"").trim(), sum=(ot.summary||(typeof draftSummary==="function"?draftSummary(j):"")||"").trim();
   var fees=(tb.lines||[]).filter(function(l){ return !/trip|call[ -]?out|service call/i.test(l.what||""); }), feeT=fees.reduce(function(a,l){ return a+(+l.amount||0); },0), partT=taskBillParts(j,tb).reduce(function(a,p){ return a+(+p.amount||0); },0);
-  var labor=+(hrs*rate+feeT).toFixed(2), parts=+partT.toFixed(2);
+  var labor=+(hrs*rate).toFixed(2), parts=+(partT+feeT).toFixed(2);
   return {tid:tid, j:j, home:tb.prop||j.prop||"", kind:kind==="moose"?"moose":kind==="none"?"skip":kind, date:(j.finished||"").slice(0,10)||ymd(Date.now()),
     title:title, sum:sum, hrs:hrs, fees:fees.map(function(l){ return l.what; }), quick:hrs>=1&&(+j.minutes||0)>0&&(+j.minutes||0)<50, labor:kind==="courtesy"?1:labor, parts:kind==="courtesy"?0:parts,
     detail:{hours:hrs, rate:rate, fees:fees, parts:taskBillParts(j,tb).map(function(p){ return {what:p.what, amount:p.amount}; }), billTo:kind, plan:planOf(tb.prop||j.prop)}}; }
@@ -2805,6 +2805,24 @@ function tbState(tid){ var oc=ocOf(tid);
   var tb=S.taskbill[tid]||{}, q=S.bwq[sid("tbill_"+tid)];
   if(q&&q.status==="created") return {k:"done",t:q.manual?"Entered in Breezeway":"In Breezeway"}; if(q&&q.status==="failed") return {k:"stop",t:"Failed",e:q.error};
   if(q&&q.status==="queued") return {k:"waiting",t:"Waiting to be entered"}; if(tb.ready) return {k:"scheduled",t:"Ready"}; return null; }
+/* 2026-11-11 (Brandon: "a section where we can add costs, item, description if needed and price"): tb.lines = [{what, desc, amount}].
+   On the Track statement they count as Parts & materials. */
+function tbCostRow(l,locked){ var dis=locked?' disabled':'';
+  return '<div class="tbc" style="display:grid;grid-template-columns:minmax(120px,1fr) minmax(140px,1.4fr) 110px 34px;gap:6px;margin-bottom:6px">'+
+    '<input class="tbc-i" placeholder="Item (e.g. Smoke detector)" value="'+esc(l.what||"")+'"'+dis+'>'+
+    '<input class="tbc-d" placeholder="Description (if needed)" value="'+esc(l.desc||"")+'"'+dis+'>'+
+    '<input class="tbc-p" type="number" min="0" step="0.01" placeholder="Price $" value="'+(l.amount!=null&&l.amount!==""?esc(l.amount):"")+'"'+dis+'>'+
+    (locked?'<span></span>':'<button class="btn sm ghost" data-tbcdel="1" title="Remove this cost" aria-label="Remove this cost">✕</button>')+'</div>'; }
+function tbCostRows(tid,lines,locked){
+  return '<div id="tbc_'+tid+'">'+lines.map(function(l){ return tbCostRow(l,locked); }).join("")+'</div>'+
+    (locked?(lines.length?'':'<div class="note">None</div>'):'<button class="btn sm" style="align-self:flex-start;width:auto" data-tbcadd="'+esc(tid)+'">+ Add a cost</button>'); }
+function tbCostRead(tid){ var box=$("tbc_"+tid), out=[], bad=false; if(!box) return [];
+  [].slice.call(box.querySelectorAll(".tbc")).forEach(function(r){ var w=r.querySelector(".tbc-i").value.trim(), ds=r.querySelector(".tbc-d").value.trim(), p=r.querySelector(".tbc-p").value.trim();
+    if(!w&&!ds&&!p) return; var a=+p.replace(/[$,]/g,""); if(!w||p===""||isNaN(a)){ bad=true; return; } var o={what:w,amount:a}; if(ds) o.desc=ds; out.push(o); });
+  return bad?null:out; }
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-tbcadd],[data-tbcdel]"); if(!b) return; ev.preventDefault();
+  if(b.dataset.tbcadd){ var box=$("tbc_"+b.dataset.tbcadd); if(!box) return; box.insertAdjacentHTML("beforeend",tbCostRow({},false)); var r=box.lastElementChild; if(r) r.querySelector(".tbc-i").focus(); return; }
+  var row=b.closest(".tbc"); if(row) row.remove(); });
 function taskBillRow(j,f,tb){ var tid=j.id.slice(3), d=tb||taskBillDefaults(j,f), pl=PLANS[planOf(j.prop)]||PLANS.prime;
   var lines=(d.lines||[]).map(function(l){ return l.what+" $"+l.amount; }).join("\n"), parts=taskParts(j), sk=d.skipParts||[], st=tbState(tid), locked=st&&(st.k==="waiting"||st.k==="done");
   var cz=d.billTo==="courtesy", labor=(+d.hours||0)*(+d.rate||0), feeT=(d.lines||[]).reduce(function(a,l){ return a+(+l.amount||0); },0), partT=taskBillParts(j,d).reduce(function(a,p){ return a+p.amount; },0), tot=taskBillTotal(j,d);
@@ -2812,13 +2830,13 @@ function taskBillRow(j,f,tb){ var tid=j.id.slice(3), d=tb||taskBillDefaults(j,f)
   var costs='<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface)"><div class="lbl">Costs & totals</div>'+
     line('Labor'+(cz?' — courtesy':''),cz?'$1.00':money2(labor),(laborSupply(d)?'Breezeway supply: '+esc(laborSupply(d).supply)+' × '+laborSupply(d).qty+' · ':'<span style="color:var(--wait)">no Breezeway supply at $'+(+d.rate)+'/h — goes in as an itemized cost</span> · ')+(+d.hours||0)+' h × '+money2(d.rate)+'/h · '+esc(pl.name))+
     (parts.length?parts.map(function(p,i){ var on=sk.indexOf(p.id)<0; return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);align-items:center'+(on?'':';opacity:.5')+'"><label style="flex:1;display:flex;gap:6px;align-items:center"><input type="checkbox" data-tbpart="'+esc(tid)+'" value="'+esc(p.id)+'"'+(on?' checked':'')+(locked?' disabled':'')+'> <span>Parts: '+esc(p.what)+(p.split?' <span class="muted">(this home\'s share)</span>':'')+'</span></label><span class="num mono">'+money2(p.amount)+'</span></div>'; }).join(""):line('<span class="muted">Parts — no receipts linked to this task</span>','$0.00'))+
-    ((d.lines||[]).length?(d.lines||[]).map(function(l){ return line('Fee: '+esc(l.what),cz?'$0.00':money2(l.amount)); }).join(""):line('<span class="muted">Fees — none</span>','$0.00'))+
+    ((d.lines||[]).length?(d.lines||[]).map(function(l){ return line(esc(l.what)+(l.desc?' <span class="muted">— '+esc(l.desc)+'</span>':''),cz?'$0.00':money2(l.amount)); }).join(""):line('<span class="muted">Added costs — none</span>','$0.00'))+
     (+j.cost?line('<span class="muted">Already on the Breezeway Cost tab</span>',money2(j.cost),'not added again'):'')+
     (locked?'':maybeReceipts(j))+
     (d.billTo==="courtesy"?'<div style="display:flex;gap:8px;padding:7px 0 2px;align-items:baseline"><b style="flex:1">Courtesy charge to the owner</b><b class="mono" style="font-size:16px">$1.00</b></div>'+
       '<div class="note">Work worth <s>'+money2(labor+feeT+partT)+'</s> — goes on the statement as a $1.00 labor charge ("Labor — courtesy, no charge") so the owner sees we did it.</div></div>':
     '<div style="display:flex;gap:8px;padding:7px 0 2px;align-items:baseline"><b style="flex:1">'+(d.billTo==="owner"?'Total to bill the owner':d.billTo==="tenant"?'Total to bill the tenant':d.billTo==="moose"?'Total (Moose pays — not billed)':'Nothing to bill')+'</b><b class="mono" style="font-size:16px">'+money2(d.billTo==="owner"||d.billTo==="tenant"?labor+feeT+partT:0)+'</b></div>'+
-    '<div class="note">Labor '+money2(labor)+' + parts '+money2(partT)+' + fees '+money2(feeT)+'</div></div>');
+    '<div class="note">Labor '+money2(labor)+' + parts '+money2(partT)+' + added costs '+money2(feeT)+'</div></div>');
   return '<tr class="xrow"><td colspan="7" style="background:var(--surface-2)"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+
     '<div><div class="lbl">What was done</div>'+reportBlock(j)+thumbs(j,4,true,60)+'<div style="height:8px"></div>'+
       '<div class="note">'+esc((j.crew||[]).join(", ")||j.doneByName||"")+' · '+(j.people||0)+' people on the task · '+(+j.minutes>720?'timer left running':(j.minutes||0)+' min on the clock')+' · <a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">Open in Breezeway ↗</a></div>'+
@@ -2827,7 +2845,7 @@ function taskBillRow(j,f,tb){ var tid=j.id.slice(3), d=tb||taskBillDefaults(j,f)
       '<label class="f"><span>Bill to</span><select id="tb_to_'+tid+'"'+(locked?' disabled':'')+'><option value="owner"'+(d.billTo!=="tenant"&&d.billTo!=="courtesy"?" selected":"")+'>Owner</option><option value="tenant"'+(d.billTo==="tenant"?" selected":"")+'>Lease tenant</option><option value="courtesy"'+(d.billTo==="courtesy"?" selected":" hidden")+'>$1 courtesy</option></select></label>'+
       '<label class="f"><span>Labor hours</span><input id="tb_h_'+tid+'" type="number" min="0" step="0.5" value="'+esc(d.hours)+'"'+(locked?' disabled':'')+'><span class="hint">'+(+j.minutes&&+j.minutes<=720?j.minutes+' min → '+billHours(j.minutes)+' h'+((j.crew||[]).length>1?' × '+j.crew.length+' techs':'')+' (1 h min, then ½ h)':'1 h min, then ½ h')+'</span></label>'+
       '<label class="f"><span>Rate $/h</span><input id="tb_r_'+tid+'" type="number" min="0" step="1" value="'+esc(d.rate)+'"'+(locked?' disabled':'')+'><span class="hint" style="color:var(--accent,#3c5f12);font-weight:700;text-transform:none;letter-spacing:0" title="'+esc(planWhy(j.prop))+'">'+esc(pl.name)+' contract rate: $'+pl.rate+'/h'+(+d.rate!==+pl.rate?' — this task is set to $'+(+d.rate)+'/h':'')+'</span></label>'+
-      '<label class="f" style="grid-column:1/-1"><span>Fees — one per line, "what $amount"</span><textarea id="tb_l_'+tid+'" placeholder="e.g. Trip charge $45"'+(locked?' disabled':'')+'>'+esc(lines)+'</textarea></label></div>'+
+      '<div class="f" style="grid-column:1/-1"><span>Added costs</span>'+tbCostRows(tid,d.lines||[],locked)+'</div></div>'+
       '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">'+
       (tb&&tb.ignored?'<span class="pill">Ignored — not billed</span><button class="btn sm ghost" data-tbunign="'+esc(tid)+'">Don\'t ignore</button>':locked?'<span class="pill '+st.k+'">'+st.t+'</span><span class="note">'+(st.k==="done"?'On the task\'s Cost tab (Bill to: Owner) — it goes to the Track owner statement.':'Claude puts it on the Cost tab on the next Breezeway run.')+'</span>':
        '<button class="btn sm" data-tbsave="'+esc(tid)+'">Save</button>'+(d.billTo==="courtesy"?'<button class="btn sm" data-tbnorm="'+esc(tid)+'">Charge it normally</button>':'<button class="btn sm" data-tbfree="'+esc(tid)+'" title="Labor, parts and fees go to $0 — the owner sees one $1.00 courtesy charge">Do it for free ($1)</button>')+
@@ -5150,7 +5168,7 @@ document.addEventListener("click",function(ev){
   if(d.tbfree){ var fsel=$("tb_to_"+d.tbfree); if(fsel) fsel.value="courtesy"; d.tbready=d.tbfree; }
   if(d.tbnorm){ var nsel=$("tb_to_"+d.tbnorm); if(nsel) nsel.value="owner"; d.tbsave=d.tbnorm; }
   if(d.tbsave||d.tbready||d.tbunready){ var tid=d.tbsave||d.tbready||d.tbunready; if(!need()) return; var jj=D.byId["bw-"+tid], old=S.taskbill[tid]||{};
-    var lines=fv("tb_l_"+tid).split(/\n+/).map(function(l){ var m=l.match(/^(.*?)\s*\$?\s*(-?[\d,]+(?:\.\d+)?)\s*$/); return m?{what:m[1].trim()||"Fee",amount:+m[2].replace(/,/g,"")}:null; }).filter(Boolean);
+    var lines=tbCostRead(tid); if(lines===null) return toast("Each added cost needs an item and a price");
     var sk=[].slice.call(document.querySelectorAll('[data-tbpart="'+tid+'"]')).filter(function(c){ return !c.checked; }).map(function(c){ return c.value; });
     var tb={hours:+fv("tb_h_"+tid)||0, rate:+fv("tb_r_"+tid)||0, billTo:fv("tb_to_"+tid), lines:lines, skipParts:sk, newTitle:fv("tb_t_"+tid), summary:fv("tb_s_"+tid), prop:jj?jj.prop:"", month:jj?(jj.finished||"").slice(0,7):"", ready:d.tbready?true:d.tbunready?false:!!old.ready};
     if(d.tbready){ tb.readyBy=S.me; tb.readyAt=Date.now(); }
