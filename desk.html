@@ -2781,7 +2781,7 @@ function ocReview(tids){ if(!OC.items.length) return toast("Track's item list is
   P.forEach(function(p,i){ var m=$("oc_m_"+i); if(m) m.addEventListener("input",function(){ m.dataset.typed="1"; });
     ["oc_l_"+i,"oc_p_"+i].forEach(function(id){ var el=$(id); if(el) el.addEventListener("input",function(){ var t=$("oc_t_"+i); if(t) t.innerHTML="<b>"+money2(p.kind==="courtesy"?1:(+fv("oc_l_"+i)||0)+(+fv("oc_p_"+i)||0))+"</b> on the owner statement"; }); }); });
   /* owner-friendly wording from Breezeway's notes (owner-text Edge Function); never overwrites what someone typed */
-  var ids=P.map(function(p){ return +p.tid; }).filter(function(x){ return x>0&&x<900000000; }), sb=window.MM_SB;
+  var ids=P.map(function(p){ return +p.tid; }).filter(function(x){ return x>0&&x<900000000&&!((S.taskbill[String(x)]||{}).auto); }), sb=window.MM_SB;
   var done=function(msg){ P.forEach(function(p,i){ var w=$("oc_w_"+i); if(w) w.textContent=msg; }); };
   if(!sb||!ids.length||!sb.functions) return done("");
   sb.functions.invoke("owner-text",{body:{tasks:ids}}).then(function(r){ var T=(r&&r.data&&r.data.texts)||{}; if(r&&r.error) return done("· couldn't write one — check the title");
