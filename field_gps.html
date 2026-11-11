@@ -54,7 +54,7 @@ if(window.top !== window) document.body.classList.add("inhub");
 const SERVER = C.url.replace(/\/$/, "") + "/functions/v1/field-gps";
 // Traccar settings (keys from the app's own QR reader, traccar-client configuration_service.dart, read 2026-11-09)
 // Lighter (Brandon 2026-11-09: Bouncie covers driving): a point every 500 m while moving (Bouncie has the route), every 5 min while still (Brandon 2026-11-09: 5 min); high accuracy kept so stops match the right home.
-const OPTS = "accuracy=high&interval=300&distance=500&angle=0&heartbeat=300&buffer=true&stop_detection=true";
+const OPTS = "accuracy=high&interval=300&distance=500&angle=0&heartbeat=300&buffer=true&stop_detection=true&wakelock=true";   // wakelock (2026-11-11): Brandon's Android went quiet after 10 min sitting still
 const IOS = "https://apps.apple.com/app/traccar-client/id843156974", AND = "https://play.google.com/store/apps/details?id=org.traccar.client";
 // One-tap set-up on the phone itself (Traccar Client source, main.dart + configuration_service.dart, read 2026-11-11):
 // org.traccar.client://<any host>?url=<server>&id=...&settings  = app asks OK, then applies the settings (tracking not started)
@@ -85,33 +85,40 @@ function setupBox(m){
   const store = IS_IOS ? `<a class="btn primary big" href="${IOS}" target="_blank" rel="noopener">⬇ Get Traccar Client (App Store)</a>`
     : IS_AND ? `<a class="btn primary big" href="${AND}" target="_blank" rel="noopener">⬇ Get Traccar Client (Google Play)</a>`
     : `<a href="${IOS}" target="_blank" rel="noopener">iPhone</a> · <a href="${AND}" target="_blank" rel="noopener">Android</a>`;
-  const allow = IS_IOS ? `iPhone: Settings ▸ Traccar Client ▸ Location ▸ <b>Always</b> and turn on <b>Precise Location</b>.`
-    : IS_AND ? `Android: Location ▸ <b>Allow all the time</b>, and Battery ▸ <b>Unrestricted</b> (no battery saving) for Traccar Client.`
-    : `iPhone: Settings ▸ Traccar Client ▸ Location ▸ Always + Precise. Android: Allow all the time, and battery saving off for the app.`;
+  const AND_STEPS = `<ul class="small" style="margin:4px 0 0">
+      <li>Settings ▸ Apps ▸ Traccar Client ▸ Permissions ▸ Location ▸ <b>Allow all the time</b>, and <b>Use precise location</b> on.</li>
+      <li>Settings ▸ Apps ▸ Traccar Client ▸ Battery ▸ <b>Unrestricted</b>.</li>
+      <li>Samsung: Settings ▸ Battery ▸ Background usage limits ▸ make sure Traccar Client is <b>not</b> in "Sleeping apps" or "Deep sleeping apps".</li>
+      <li>Don't swipe Traccar Client closed from your recent apps.</li></ul>`;
+  const IOS_STEPS = `<ul class="small" style="margin:4px 0 0">
+      <li>Settings ▸ Traccar Client ▸ Location ▸ <b>Always</b>, and <b>Precise Location</b> on.</li>
+      <li>Settings ▸ Traccar Client ▸ <b>Background App Refresh</b> on.</li>
+      <li>Low Power Mode off while you work. Don't swipe Traccar Client closed.</li></ul>`;
+  const allow = IS_IOS ? IOS_STEPS : IS_AND ? AND_STEPS : `<b>Android:</b>${AND_STEPS}<b>iPhone:</b>${IOS_STEPS}`;
   return `<div class="card" id="setup"><h2>Set up ${esc(m.who)}</h2>
     <div class="note"><b>Finish these steps before you leave this page.</b> If you lose it, tap "Set up a phone" again and turn the old one off.</div>
     ${ON_PHONE ? `<ol class="steps big">
       <li><b>Get the free app.</b><br>${store}<br><span class="small muted">Already have it? Skip to step 2.</span></li>
       <li><b>Set it up for the Moose Hub.</b> Tap this, then tap <b>Open</b> and <b>OK</b>:<br>
         <a class="btn primary big" href="${esc(cfgLink(m.key))}" target="_top">⚙️ Set up Traccar for me</a></li>
-      <li><b>Let it see your location all the time.</b> ${allow}</li>
+      <li><b>Let it run all the time.</b> Phones put apps to sleep to save battery, which stops the GPS. Do all of these:${allow}</li>
       <li><b>Turn it on.</b><br><a class="btn primary big" href="${T_START}" target="_top">▶ Start tracking</a><br>
         <span class="small muted">Leave it on. The hub only keeps where you are <b>while you're clocked in</b>; anything sent while clocked out is thrown away.</span></li>
-      <li>Clock in on the hub and come back here: "Last seen" shows a time within a few minutes.</li>
+      <li><b>Check it.</b> Clock in on the hub, put the phone in your pocket for 15 minutes, then come back here: "Last seen" should be under 5 minutes ago. If it isn't, redo step 3.</li>
     </ol>
     <details class="small"><summary>Setting up someone else's phone? Show a QR code</summary><div class="qr" style="margin-top:8px">${qrSvg(link)}</div><p class="small muted">In Traccar Client tap the QR code button and scan it.</p></details>`
     : `<ol class="steps">
       <li>On the phone, install the free <b>Traccar Client</b> app: ${store}.</li>
       <li>Open it, tap the <b>QR code</b> button and scan this code:<br><div class="qr" style="margin-top:8px">${qrSvg(link)}</div>
         <p class="small muted">Easier: open <b>crew.moosemanagement.com ▸ Staffing ▸ Phone GPS</b> on the phone itself and tap "Set up a phone" there; it sets the app up with one tap.</p></li>
-      <li>Allow location all the time. ${allow}</li>
+      <li>Let it run all the time (phones put apps to sleep to save battery):${allow}</li>
       <li>Turn on the tracking switch in the app and leave it on. The hub only keeps where you are <b>while you're clocked in</b>.</li>
       <li>Clock in on the hub and come back here: "Last seen" should show a time within a few minutes.</li>
     </ol>`}
     <details class="small" style="margin-top:8px"><summary>Type it in by hand instead</summary>
       <div class="copy"><span class="small" style="width:110px">Device identifier</span><input readonly value="${esc(m.key)}"><button class="btn" data-copy="${esc(m.key)}">Copy</button></div>
       <div class="copy"><span class="small" style="width:110px">Server URL</span><input readonly value="${esc(SERVER)}"><button class="btn" data-copy="${esc(SERVER)}">Copy</button></div>
-      <p class="small muted">Then Location accuracy <b>High</b>, Distance <b>500</b>, Interval <b>300</b>, Stationary heartbeat <b>300</b>, Offline buffering <b>on</b>.</p></details>
+      <p class="small muted">Then Location accuracy <b>High</b>, Distance <b>500</b>, Interval <b>300</b>, Stationary heartbeat <b>300</b>, Offline buffering <b>on</b>, Wake lock <b>on</b>.</p></details>
     <p style="margin-top:12px"><button class="btn" data-done>Done</button></p></div>`;
 }
 
