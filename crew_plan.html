@@ -139,7 +139,10 @@ async function load(quiet){
   const to = addDays(S.start, S.days - 1);
   const [r, f] = await Promise.all([sb.rpc("crew_plan", { p_from: S.start, p_to: to }), sb.rpc("crew_fill_list", { p_day: TODAY })]);
   if(r.error){ S.err = errText(r.error); if(!quiet) render(); return; }
-  S.B = r.data; S.err = ""; S.F = f.error ? null : f.data; canonWho();
+  S.B = r.data; S.err = ""; S.F = f.error ? null : f.data;
+  // Brandon 2026-11-10: Daily Receipts tasks are for the crew to upload receipts in the Breezeway app; they stay in Breezeway, not on this board
+  S.B.tasks = (S.B.tasks || []).filter(t => !/daily receipts/i.test(t.name || ""));
+  canonWho();
   // a sent change is "pending" until Breezeway's answer is back in the copy
   (S.B.actions || []).forEach(a => { if(a.status === "failed") S.pend[a.task] = { fail: a.result || "Breezeway refused it" }; });
   Object.keys(S.pend).forEach(id => { const p = S.pend[id], t = task(+id); if(!t || p.fail) return;
