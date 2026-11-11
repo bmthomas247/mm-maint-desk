@@ -60,8 +60,10 @@ const IOS = "https://apps.apple.com/app/traccar-client/id843156974", AND = "http
 // org.traccar.client://<any host>?url=<server>&id=...&settings  = app asks OK, then applies the settings (tracking not started)
 // org.traccar.client://action/start | /action/stop           = starts / stops tracking, no prompt
 const UA = navigator.userAgent, IS_IOS = /iPhone|iPad|iPod/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1), IS_AND = /Android/.test(UA), ON_PHONE = IS_IOS || IS_AND;
-const T_START = "org.traccar.client://action/start", T_STOP = "org.traccar.client://action/stop";
-const cfgLink = key => `org.traccar.client://config?url=${encodeURIComponent(SERVER)}&id=${encodeURIComponent(key)}&${OPTS}`;
+// Android Chrome won't hand a bare custom-scheme link to the app (seen 2026-11-11 on Brandon's Android): use intent:// links there.
+const tLink = rest => IS_AND ? `intent://${rest}#Intent;scheme=org.traccar.client;package=org.traccar.client;end` : `org.traccar.client://${rest}`;
+const T_START = tLink("action/start"), T_STOP = tLink("action/stop");
+const cfgLink = key => tLink(`config?url=${encodeURIComponent(SERVER)}&id=${encodeURIComponent(key)}&${OPTS}`);
 const S = { me:null, made:null, last:{} };
 
 async function load(){
