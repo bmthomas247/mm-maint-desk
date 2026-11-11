@@ -3647,7 +3647,7 @@ function trashPlan(r,dayIn){ var occ=(S.feeds.occupancy||{}).units; if(!occ) ret
 function trashWork(c,from,day){ var seen={}, out=[];
   [c,c.replace(/^(L-|2H-)/,"")].forEach(function(k){ (D.byProp[k]||[]).forEach(function(j){ if(seen[j.id]) return; seen[j.id]=1;
     var f=String(j.finished||"").slice(0,10);
-    if(j.src!=="breezeway"||j.status!=="done"||!f||f<from||f>day||(D.bulk||{})[j.id]||bwNoise(j)||/trash|garbage/i.test(j.title||"")) return; out.push(j); }); });
+    if(j.src!=="breezeway"||j.status!=="done"||!f||f<from||f>day||(D.bulk||{})[j.id]||bwNoise(j)||/trash|garbage/i.test(j.title||"")||/inspect|walk.?through|hk managers only/i.test(j.title||"")||/inspect/i.test(j.dept||j.department||"")) return; out.push(j); /* inspections leave no trash (Brandon 2026-11-11) */ }); });
   return out.sort(function(a,b){ return String(b.finished).localeCompare(String(a.finished)); }); }
 function trashBlock(r){ var p=trashPlan(r); if(!p) return '<span class="rd">Occupancy from Track isn\'t loaded yet — take all.</span>';
   var li=function(a){ return a.map(function(x){ return '<span title="'+esc(x.why)+'">'+esc(x.c)+'</span>'; }).join(", "); };
