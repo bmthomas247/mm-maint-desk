@@ -24,10 +24,15 @@ esp-web-install-button button,button.go{font:inherit;font-weight:800;font-size:1
   <div class="card ok">This sensor only ever sends one number: how loud the room is (dB). Sound is measured inside the chip and thrown away - nothing is recorded, streamed or listened to. It can't be changed over the internet.</div>
   <div class="card">
     <h2 style="margin-top:0">At the office (Chrome or Edge on a computer)</h2>
+    <label for="nshome" style="font-weight:800;display:block">Which home is this sensor for?</label>
+    <input id="nshome" list="nshomes" placeholder="Type the home code, e.g. RJ 811" autocomplete="off"
+      style="font:inherit;width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);margin-top:6px">
+    <datalist id="nshomes"></datalist>
+    <div id="nswifi" class="muted" style="margin-top:8px">Sign in to the Moose Hub in this browser and the home's Wi-Fi loads here.</div>
     <ol>
       <li>Plug the Atom Echo into this computer with a USB-C cable that carries data (not a charge-only cable).</li>
       <li>Click <b>Install</b>, pick the port that appears (usually "USB JTAG" or "CP210x"), and let it finish - about a minute.</li>
-      <li>When it asks for Wi-Fi, type <b>the home's Wi-Fi name and password</b> (the same network as the Moose hub). You'll find them on the home's Install page.</li>
+      <li>When it asks for Wi-Fi, pick the network shown above and paste the password (📋 Copy). Office test? Use the office Wi-Fi.</li>
     </ol>
     <esp-web-install-button manifest="noise/manifest.json">
       <span slot="unsupported">This browser can't do it - open this page in Chrome or Edge on a computer.</span>
@@ -44,4 +49,41 @@ esp-web-install-button button,button.go{font:inherit;font-weight:800;font-size:1
     </ol>
     <p class="muted">Alerts: louder than the home's limit (80 dB to start) for 10 minutes in quiet hours (10 pm–8 am), or 30 minutes in the day. Change it under the home's "Rules for this home".</p>
   </div>
-</main></body></html>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+// Home Wi-Fi from Track (home_quick(): the same Wi-Fi everyone with Property Details sees). Shown with copy buttons;
+// ESP Web Tools' own Wi-Fi box can't be filled from the page, so the tech pastes it there. Nothing is saved. (Brandon 2026-11-11)
+(async function(){
+  const box = document.getElementById("nswifi"), inp = document.getElementById("nshome");
+  const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const clean = (s, w) => String(s||"").replace(new RegExp("^\\s*(wi-?fi\\s*)?(" + w + ")\\s*[:\\-]\\s*", "i"), "").trim();
+  let rows = [];
+  try{
+    const C = window.MM_CONFIG, sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true } });
+    const { data: s } = await sb.auth.getSession(); if(!s.session) return;
+    const { data, error } = await sb.rpc("home_quick"); if(error) throw error;
+    rows = (data || []).filter(r => r.home);
+    document.getElementById("nshomes").innerHTML = rows.map(r => `<option value="${esc(r.home)}">`).join("");
+    box.textContent = "Type the home code to load its Wi-Fi.";
+  }catch(e){ box.textContent = "Couldn't load the Wi-Fi list (" + (e.message || e) + "). Type it in by hand."; return; }
+  const copy = async (t, b) => { try{ await navigator.clipboard.writeText(t); b.textContent = "Copied ✓"; setTimeout(() => b.textContent = "📋 Copy", 1500); }catch(e){} };
+  const show = () => {
+    const v = inp.value.trim().toUpperCase().replace(/\s+/g, " ");
+    const r = rows.find(x => x.home.toUpperCase() === v);
+    if(!r){ box.textContent = v ? "Keep typing the home code…" : "Type the home code to load its Wi-Fi."; return; }
+    const n = clean(r.wifi_name, "name|network|ssid"), p = clean(r.wifi_pass, "password|pass|pw");
+    if(!n){ box.innerHTML = `<b>${esc(r.home)}</b>: no Wi-Fi on file in Track. Ask the office, or read it off the router.`; return; }
+    box.innerHTML = `<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--ink)">
+      <div><b>${esc(r.home)} Wi-Fi</b> <span class="muted">(from Track)</span></div>
+      <div style="margin-top:6px">Network: <b>${esc(n)}</b> <button class="go" style="padding:6px 12px;font-size:14px" data-c="${esc(n)}">📋 Copy</button></div>
+      <div style="margin-top:6px">Password: <b>${esc(p || "none on file")}</b> ${p ? `<button class="go" style="padding:6px 12px;font-size:14px" data-c="${esc(p)}">📋 Copy</button>` : ""}</div>
+      ${r.wifi_note ? `<div class="muted" style="margin-top:6px">${esc(r.wifi_note)}</div>` : ""}</div>`;
+    box.querySelectorAll("[data-c]").forEach(b => b.onclick = () => copy(b.dataset.c, b));
+  };
+  inp.oninput = show;
+  const pre = new URLSearchParams(location.search).get("home"); if(pre){ inp.value = pre; show(); }
+})();
+</script>
+</body></html>
