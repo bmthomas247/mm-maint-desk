@@ -1144,7 +1144,7 @@ async function loadSetRates() {
   SR.ours_n = {}; for (const r of ns.data || []) SR.ours_n[r.night] = r;    // id order: the latest row for a night wins
   SR.track = {}; for (const r of tr.data || []) SR.track[r.night] = r;
   SR.trackAt = (tr.data || []).map(r => r.captured_at).sort().pop();
-  SR.pushes = ps.data || []; SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {};
+  SR.pushes = ps.data || []; SR.bey = {}; try { const bq = await sb.from("rates_set_pushes").select("before").eq("code", SR.code).eq("status", "sent").order("id", { ascending: true }).limit(3); for (const p of bq.data || []) for (const [d, b] of Object.entries(p.before || {})) if (!(d in SR.bey) && b && b.rate != null) SR.bey[d] = +b.rate; } catch (e) {} SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {};
   { const pre = (h.comp_id || "").match(/^[a-z]+-/)?.[0], tests = (SR.homes || []).map(x => x.comp_id).filter(Boolean);
     SR.grpPre = (h.code || "").split(" ")[0]; SR.grp = [];
     SR.compName = {}; SR.compKd = []; if (comp?.set_id) { const cn = await sb.from("comps").select("id,label:label_public,tier,active").eq("set_id", comp.set_id); for (const c of cn.data || []) SR.compName[c.id] = c.label;
@@ -2087,7 +2087,7 @@ function srWire(R) {
       let mn = Math.max(gapMin == null && mr?.one ? 1 : srMinLo(Y), gapMin ?? min ?? 2);
       { const lmv = out <= 3 && Y.minLm3 !== "" && Y.minLm3 != null ? +Y.minLm3 : out <= 7 && Y.minLm7 !== "" && Y.minLm7 != null ? +Y.minLm7 : null;
         if (lmv && lmv < mn) { mn = Math.max(srMinLo(Y), lmv); why.push(`last minute: min stay ${mn}`); } }
-      built.push({ r, v, why, ct, clo, ly: !!far, hol: !!hol, gap: gapMin != null, dw, min: mn /* 2+ nights unless the home allows 1 (Brandon 2026-11-09) */ }); n++; }
+      built.push({ r, v, why, ct, clo, hn: hN, out: out0, ly: !!far, hol: !!hol, gap: gapMin != null, dw, min: mn /* 2+ nights unless the home allows 1 (Brandon 2026-11-09) */ }); n++; }
     // smoothing: no jump bigger than Y.jump% from the night before (holidays left alone)
     for (let i = 1; i < built.length; i++) { const p = built[i - 1], x = built[i]; if (!Y.jump || x.hol || p.hol || addD(p.r.k, 1) !== x.r.k) continue;
       const hi = p.v * (1 + Y.jump / 100), lo = p.v * (1 - Y.jump / 100); if (x.v > hi || x.v < lo) { x.v = Math.min(hi, Math.max(lo, x.v)); x.why.push(`smoothed (max ${Y.jump}% jump) → ${fmt(x.v)}`); } }
@@ -2116,7 +2116,7 @@ function srWire(R) {
       const wsN = Y.floorStay !== "" && Y.floorStay != null ? +Y.floorStay : (Y.floor !== "" && Y.floor != null ? null : srBedStay()), wsH = Y.floorStayHol !== "" && Y.floorStayHol != null ? +Y.floorStayHol : null;
       const useH = wsH != null && x.hol && !x.gap, ws = useH ? wsH : wsN;
       if (ws != null) { const nf = wa ?? srBedFloor(), fs = ws / (x.min || 2), fn = Math.max(25, fs, nf); if (v < fn) { v = fn; x.why.push(fs >= nf ? `${useH ? "holiday " : ""}walk-away ${fmt(ws)} rent per stay / ${x.min || 2} nights = ${fmt(fn)}` : (wa != null ? `walk-away price ${fmt(fn)}` : `walk-away $${SR_FLOOR_BED} x ${srBeds()} bedroom${srBeds() > 1 ? "s" : ""} = ${fmt(fn)} (more than ${fmt(ws)} a stay / ${x.min || 2} nights)`)); } }
-      else { const fl = wa ?? srBedFloor(); if (v < fl) { v = fl; x.why.push(wa != null ? `walk-away price ${fmt(fl)}` : `walk-away $${SR_FLOOR_BED} x ${srBeds()} bedroom${srBeds() > 1 ? "s" : ""} = ${fmt(fl)}`); } } if (Y.ceil !== "" && v > +Y.ceil) { v = +Y.ceil; x.why.push(`ceiling ${fmt(+Y.ceil)}`); }
+      else { const fl = wa ?? srBedFloor(); if (v < fl) { v = fl; x.why.push(wa != null ? `walk-away price ${fmt(fl)}` : `walk-away $${SR_FLOOR_BED} x ${srBeds()} bedroom${srBeds() > 1 ? "s" : ""} = ${fmt(fl)}`); } } if (x.hn && x.out >= 21) { const ly_ = srLyRate(x.r.k), cand = []; if (ly_) cand.push([ly_.v * 1.2, `last year at ${ly_.who} ${fmt(ly_.v)} + 20%`]); if (SR.bey?.[x.r.k]) cand.push([SR.bey[x.r.k], `Beyond's last price ${fmt(SR.bey[x.r.k])}`]); if (cand.length) { const [hf, hw] = cand.sort((a, b) => b[0] - a[0])[0]; if (v < hf) { v = hf; x.why.push(`holiday floor (${x.out} days out): ${hw} = ${fmt(hf)}`); } } } if (Y.ceil !== "" && v > +Y.ceil) { v = +Y.ceil; x.why.push(`ceiling ${fmt(+Y.ceil)}`); }
       const rate = Math.max(25, rnd(v)); x.why.push(`= ${fmt(rate)}${x.min ? ` · min ${x.min} nights` : ""}`);
       { const sv = SR.ours_n[x.r.k], tk = SR.track?.[x.r.k], bef = sv ? +sv.rate : tk ? +tk.rate : null, bmin = sv ? sv.min_nights ?? null : tk?.min_nights ?? null;
         (SR.diff ||= []).push({ k: x.r.k, before: bef, after: rate, bmin, amin: x.min, src: sv ? "saved" : tk ? "Track" : "", why: x.why }); }
