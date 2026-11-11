@@ -683,6 +683,8 @@ async function installView(){
   await loadBase();
   const ours = S.homes.filter(h=>h.section==="ours");
   shell("install", `<h2>Install</h2>
+    <a class="card" href="hub-setup.html" style="display:block;text-decoration:none;color:inherit"><b>🔧 Getting a new hub ready (office)?</b>
+      <div class="muted">Step by step on your phone: Home Assistant, Z-Wave, Moose Locks, office test, noise sensor + decibel level. →</div></a>
     <div class="card"><h3 style="margin-top:0">Set up a new home</h3>
       <p class="muted" style="margin-top:-4px">Any home in Track. It joins our system and gets its own step-by-step checklist.</p>
       <button class="btn go wide" id="gps">📍 I'm at the home - find it</button>
