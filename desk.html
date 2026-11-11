@@ -668,8 +668,14 @@ function homesFor(j){ if(j._homes) return j._homes; var text=(j.title||"")+" "+(
     if(rx.test(text)) D.homes.forEach(function(p){ if(!p.company && p.code.replace(/^(2H-|L-)/,"").split(" ")[0]===pre) { out[p.code]=1; why[p.code]=(why[p.code]?why[p.code]+" · ":"")+nm; } }); });
   j._homes=Object.keys(out).sort(function(a,b){ return a.localeCompare(b,undefined,{numeric:true}); }).map(function(c){ return {code:c, why:why[c]}; });
   return j._homes; }
+/* Workbench = maintenance only (Brandon 2026-11-11): cleaning-only reports and Freshdesk mail with no home (ads, sign-in codes, orders) stay off */
+var CLEAN_RX=/\b(clean(ed|ing)?|messy|mess|dirty|filthy|pet hair|hair|dust(y)?|stain(s|ed)?|smell(s|y)?|odou?r|trash left|crumbs|sticky|vacuum|wipe|laundry|linens?|towels?|sheets?)\b/i;
+var BROKE_RX=/\b(broke(n)?|break|repair|replace|replacement|leak(s|ing)?|not working|doesn'?t work|won'?t|crack(ed)?|damage(d)?|missing|fix|torn|ripped|loose|burn(ed|t)|clog(ged)?|no hot|no heat|beeping|tripped|flood)/i;
+var NOTMAINT_RX=/\b(log ?in code|sign[- ]?in code|verification|verify|claim your business|chatgpt|amazon(\.com)? order|your order|order #|newsletter|invoice from|receipt from|reservation (cancell?ed|confirmed)|booking (cancell?ed|confirmed)|replace your modem|password)\b/i;
+function cleanOnly(j){ var t=(j.title||"")+" "+(j.desc||j.details||""); return CLEAN_RX.test(j.title||"") && !BROKE_RX.test(t) && !/\b(bbq|grill|gutter|vent|duct|chimney|filter|hot ?tub|drain|hanger|holder|rack|bar|hook)\b/i.test(j.title||""); }
+function notMaint(j){ if(cleanOnly(j)) return true; if(j.src==="freshdesk" && (!j.prop && !homesFor(j).length || NOTMAINT_RX.test(j.title||""))) return true; return NOTMAINT_RX.test(j.title||"") && j.src!=="breezeway"; }
 function bwState(j){ /* "on" | "done" | "queued" | "missing" | "noprop" | "" */
-  if(!D.bwLoaded || j.src==="breezeway" || j.company || j.status==="done" || j.kind==="info" || j.kind==="seasonal" || j.autoDone) return "";
+  if(!D.bwLoaded || notMaint(j) || j.src==="breezeway" || j.company || j.status==="done" || j.kind==="info" || j.kind==="seasonal" || j.autoDone) return "";
   var q=S.bwq[sid(j.id)]; if(j.bw) return j.bw.t.status==="done"?"done":"on";
   if(q && (q.status==="queued"||q.status==="sending")) return "queued";
   if(q && q.status==="created") return "on";
@@ -3274,7 +3280,7 @@ function bwFixes(){
       if(j.auto || j.kind==="recurring") return;
       if(j.due && j.due<t && daysBetween(j.due,t)<=60) out.overdue.push(j);
       if(!(+j.people) && j.due && daysBetween(t,j.due)<=14) out.nobody.push(j);
-      if(!(+j.people) && !j.due && daysBetween(j.created||t,t)<=120) out.backlog.push(j);
+      if(!(+j.people) && !j.due && daysBetween(j.created||t,t)<=30 && !cleanOnly(j)) out.backlog.push(j);  /* last 30 days, no cleaning-only (Brandon 2026-11-11) */
       return; }
     if(daysBetween(j.finished||"2000-01-01",t)>35) return;
     var r=reportOf(j);
@@ -3324,7 +3330,7 @@ function vCheck(){
   h+='</div><div style="display:flex;flex-direction:column;gap:14px" id="c-fix">';
   h+=chkSection("Late — past due, not done",fx.overdue,"Open maintenance tasks whose date has passed. Move the date or finish them.",function(j){ return chkRow(j,"overdue",esc((j.crew||[]).join(", ")||"")+' · '+daysBetween(j.due,t)+'d late'); });
   h+=chkSection("Nobody assigned",fx.nobody,"No one is on these tasks, so no one will show up.",function(j){ return chkRow(j,"nobody",""); });
-  h+='<div id="c-back">'+chkSection("Reported, never scheduled",fx.backlog.sort(function(a,b){ return (a.created||"").localeCompare(b.created||""); }),"Issues reported in Breezeway (cleaners, guests, office) with no date and nobody on them. Give each a date and a tech, or close it in Breezeway.",function(j){ return chkRow(j,"backlog",'reported '+esc(fmtD(j.created))+(j.reportedBy?' by '+esc(j.reportedBy):'')+backlogState(j),backlogBtns(j)); })+'</div>';
+  h+='<div id="c-back">'+chkSection("Reported, never scheduled",fx.backlog.sort(function(a,b){ return (a.created||"").localeCompare(b.created||""); }),"Repairs reported in Breezeway in the last 30 days (cleaners, guests, office) with no date and nobody on them. Cleaning-only notes are left out. Give each a date and a tech, or close it in Breezeway.",function(j){ return chkRow(j,"backlog",'reported '+esc(fmtD(j.created))+(j.reportedBy?' by '+esc(j.reportedBy):'')+backlogState(j),backlogBtns(j)); })+'</div>';
   h+='<div id="c-ts"></div>'+chkSection("Finished with no time",fx.notime,"No time on the clock, so the timesheet and owner bill are short. Add the time in Breezeway.",function(j){ return chkRow(j,"notime",esc((j.crew||[]).join(", "))); });
   h+=chkSection("Timer left running",fx.timer,"Over 12 hours on the clock — fix the time in Breezeway. Left out of the timesheet until then.",function(j){ return chkRow(j,"timer",esc((j.crew||[]).join(", "))+' · '+Math.round(j.minutes/60)+'h'); });
   h+=chkSection("Report left blank",fx.noreport,"The report asks what was done and it was left empty.",function(j){ return chkRow(j,"noreport",esc((j.crew||[]).join(", "))); });
