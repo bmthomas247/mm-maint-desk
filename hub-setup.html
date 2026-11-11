@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -86,7 +86,7 @@ const ago = ts => { if(!ts) return "never"; const m = (Date.now()-new Date(ts))/
 async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
 async function q(t, sel, f){ let x = sb.from(t).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data || []; }
 const MY = (path) => "https://my.home-assistant.io/redirect/" + path;
-const HA = "http://homeassistant.local:8123";
+const HA = "http://homeassistant.local";
 const ZIP = location.origin + "/moose_locks.zip";
 const INSTALL = 'D=/config; [ -d /homeassistant ] && D=/homeassistant; cd /tmp && (curl -fsSL -o ml.zip ' + ZIP + ' || wget -qO ml.zip ' + ZIP + ') && unzip -oq ml.zip -d "$D" && echo "Moose Locks installed - restarting" && ha core restart';
 const OFFICE = "moose-company";
@@ -110,13 +110,13 @@ function makePw(){   // made on this phone only, never saved or sent anywhere
 // ---------- Part 1: get a hub ready ----------
 const STEPS = [
   { k:"parts", t:"Get the parts together", h:() => `
-    <ul><li>Home Assistant Green (the hub)</li><li>Zooz 800 Z-Wave stick + its USB extension cable</li><li>Network cable + the hub's power plug</li></ul>
+    <ul><li>Home Assistant Green (the hub)</li><li>Z-Wave stick (Sonoff / Zooz 800) + its USB extension cable</li><li>Network cable + the hub's power plug</li></ul>
     <div class="tip">Do this at the office. Your phone must be on the <b>office Wi-Fi</b> (not cell data) for every step.</div>` },
   { k:"plug", t:"Plug it in", h:() => `
-    <ol><li>Zooz stick → extension cable → a USB port on the hub.</li><li>Network cable from the hub to the office router.</li><li>Power plug in <b>last</b>.</li></ol>
+    <ol><li>Z-Wave stick → extension cable → a USB port on the hub.</li><li>Network cable from the hub to the office router.</li><li>Power plug in <b>last</b>.</li></ol>
     <div class="muted">The very first start takes up to <b>20 minutes</b>: Home Assistant shows "Preparing Home Assistant" with a progress bar. That's normal. Leave it plugged in until it changes to <b>Welcome</b>.</div>` },
   { k:"account", t:"Open Home Assistant and make the owner account", h:() => `
-    <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a>
+    <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a><div class="muted small">New hubs use <b>http://homeassistant.local</b> (no ":8123"). Older ones need ":8123" on the end.</div>
     <div class="tip">Won't open? Get the <b>Home Assistant</b> app (<a href="https://apps.apple.com/app/home-assistant/id1099568401" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.homeassistant.companion.android" target="_blank" rel="noopener">Android</a>): it finds the hub on the Wi-Fi by itself.</div>
     <ol><li>It opens on <b>Create user</b> (if you see <b>Create my smart home</b> first, tap it).</li><li>Name <b>Moose</b>, username <b>moose</b>. Every hub uses this same Moose account.</li>
       <li>Password: the shared one in LastPass, entry <b>"Moose lock hubs"</b>.</li></ol>
@@ -126,8 +126,8 @@ const STEPS = [
     <ol start="4"><li>Location: Park City. Say no to the analytics questions. Tap <b>Finish</b>.</li></ol>` },
   { k:"zwave", t:"Turn on Z-Wave", h:() => `
     <a class="btn go wide" href="${MY("config_flow_start/?domain=zwave_js")}" target="_blank" rel="noopener">Set up Z-Wave</a>
-    <div class="muted small">The first time, it asks for your hub's address: type <b>${HA}</b> (or the address the app shows) and save.</div>
-    <ol><li>Pick the <b>recommended</b> setup / "use the add-on".</li><li>If it asks which device, pick the one that says <b>Zooz</b> or <b>800</b>.</li>
+    <div class="muted small">The first time, it asks for your hub's address: type <b>${HA}</b> (no ":8123" on new hubs; if that doesn't open, try adding ":8123") and save.</div>
+    <ol><li>Pick the <b>recommended</b> setup / "use the add-on".</li><li>If it asks which device, pick the <b>Z-Wave</b> one (e.g. "SONOFF ZWave Dongle").</li>
       <li>Wait for <b>Success</b> (a few minutes). New security keys are made for this hub. Leave them alone.</li></ol>` },
   { k:"term", t:"Add the Terminal", h:() => `
     <a class="btn go wide" href="${MY("supervisor_addon/?addon=core_ssh")}" target="_blank" rel="noopener">Open Terminal &amp; SSH</a>
