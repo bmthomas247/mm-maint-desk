@@ -264,6 +264,8 @@ body.only-trash header.top{position:static}
 .hfil{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .hfil select{width:auto;min-width:150px;max-width:230px}
 .hql .qvh{margin-bottom:3px} .hql .qrow{margin-bottom:3px} .hql .muted{font-size:13px} .hql .hsrc{font-size:11px;color:var(--muted);margin-top:4px}
 .htmore{font-size:13px;font-weight:800;color:var(--accent-ink);white-space:nowrap}
+.bwfil{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:6px 14px 10px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:14px}.bwfil .bf{display:flex;flex-direction:column;gap:3px}.bwfil .bf>span{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.bwfil select,.bwfil input{height:36px;min-height:36px;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:0 10px;background:var(--surface);font:inherit;font-size:13px;box-shadow:none;outline:none;width:auto;margin:0}.bwfil select:focus,.bwfil input:focus{border-color:var(--accent,#3c5f12);box-shadow:0 0 0 3px rgba(60,95,18,.15)}.bwfil .bfn{align-self:center;font-size:12px;color:var(--muted)}.tbcomb{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);margin-top:12px}.tbcomb label{display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13px}.tbcomb label input{width:auto;height:auto}
+@media (max-width:860px){#hpop .hpbody>div[style*="grid-template-columns"]{grid-template-columns:1fr!important}}
 .hpop{position:fixed;inset:0;z-index:50;background:rgba(8,14,17,.5);overflow-y:auto;padding:24px 16px}
 .hpbox{max-width:1000px;margin:0 auto;background:var(--ground);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
 .hpbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
@@ -2498,11 +2500,11 @@ function vMoney(){
     return bs.k==="home"?(j.prop||""):bs.k==="task"?(j.title||"").toLowerCase():bs.k==="techs"?((j.crew||[]).join(", ")||j.doneByName||""):bs.k==="people"?(+j.people||0):bs.k==="time"?(+j.minutes||0):bs.k==="bill"?(tb&&!tb.ignored?taskBillTotal(j,tb):feeOf(j)||0):(j.finished||""); };
   list=list.slice().sort(function(a,b){ var x=sv(a), y=sv(b); return (typeof x==="number"?x-y:String(x).localeCompare(String(y),undefined,{numeric:true}))*bs.dir; });
   var th=function(k,l,num){ var on=bs.k===k; return '<th'+(num?' class="num"':'')+' data-bwsort="'+k+'" style="cursor:pointer;white-space:nowrap">'+l+(on?(bs.dir>0?' ▲':' ▼'):'')+'</th>'; };
-  var bwFilt='<div class="pad" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:0">'+
-    '<select id="bwf_tech" aria-label="Tech"><option value="">All techs</option>'+Object.keys(techs).sort().map(function(t){ return '<option'+(bf.tech===t?' selected':'')+'>'+esc(t)+'</option>'; }).join("")+'</select>'+
-    '<input id="bwf_home" type="search" placeholder="Home…" value="'+esc(bf.home||"")+'" style="width:130px">'+
-    '<label class="note">From <input id="bwf_from" type="date" value="'+esc(bf.from||"")+'"></label><label class="note">to <input id="bwf_to" type="date" value="'+esc(bf.to||"")+'"></label>'+
-    (bf.tech||bf.home||bf.from||bf.to?'<button class="btn sm ghost" data-act="bwfclear">Clear</button><span class="note">'+list.length+' of '+nAll+'</span>':'')+'</div>';
+  var bwFilt='<div class="bwfil">'+
+    '<label class="bf"><span>Tech</span><select id="bwf_tech" aria-label="Tech"><option value="">All techs</option>'+Object.keys(techs).sort().map(function(t){ return '<option'+(bf.tech===t?' selected':'')+'>'+esc(t)+'</option>'; }).join("")+'</select></label>'+
+    '<label class="bf"><span>Home</span><input id="bwf_home" type="search" placeholder="e.g. BHV 5482" value="'+esc(bf.home||"")+'" style="width:150px"></label>'+
+    '<label class="bf"><span>Done from</span><input id="bwf_from" type="date" value="'+esc(bf.from||"")+'"></label><label class="bf"><span>to</span><input id="bwf_to" type="date" value="'+esc(bf.to||"")+'"></label>'+
+    (bf.tech||bf.home||bf.from||bf.to?'<button class="btn sm ghost" data-act="bwfclear" style="height:36px">Clear</button><span class="bfn">'+list.length+' of '+nAll+'</span>':'<span class="bfn">'+nAll+' tasks</span>')+'</div>';
   if(!D.bwLoaded) G.bw+='<div class="empty">Breezeway isn\'t loaded yet.</div>';
   else {
     G.bw+='<div class="pad" style="padding-bottom:6px"><label class="toggle"><input type="checkbox" id="bwall"'+(showAll?' checked':'')+'> Include routine inspections and repeating tasks</label>'+(ignN?' <label class="toggle"><input type="checkbox" id="bwign"'+(S.ui.showIgn?' checked':'')+'> Show '+ignN+' ignored</label>':'')+
@@ -2511,12 +2513,19 @@ function vMoney(){
     G.bw+=bwFilt;
     G.bw+='<div class="appl" style="border:0;border-radius:0;max-height:560px;overflow-y:auto"><table class="t"><thead><tr>'+th("done","Done")+th("home","Home")+th("task","Task")+th("techs","Techs")+th("people","People",1)+th("time","Time",1)+th("bill","Bill",1)+'</tr></thead><tbody>'+
       list.slice(0,300).map(function(j){ var f=fees[j.id.slice(3)], fa=feeOf(j), tid=j.id.slice(3), tb=S.taskbill[tid], open=!!(S.ui.openTask||{})[tid];
-        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="mono"><span class="caret" style="display:inline-block;margin-right:6px;transform:rotate('+(open?45:-45)+'deg)"></span>'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>'+(j.auto||j.kind==="inspection"?' <span class="muted">· routine</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
-          '<td class="num">'+(tb&&tb.ignored?'<span class="pill">Ignored</span>':tb?'<b>'+money2(taskBillTotal(j,tb))+'</b>'+(function(){ var st=tbState(tid); return st?' <span class="pill '+st.k+'">'+st.t+'</span>':''; })():fa?'<span title="'+esc(f.fees.map(function(x){ return money2(x.amount)+" "+x.what+" ("+x.src+")"; }).join("\n"))+'"><b>'+money2(fa)+'</b></span>':(f&&f.checked?'<span class="muted">none</span>':''))+'</td></tr>'+
-          (open?taskBillRow(j,f,tb):''); }).join("")+
+        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="mono">'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>'+(j.auto||j.kind==="inspection"?' <span class="muted">· routine</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
+          '<td class="num">'+(tb&&tb.ignored?'<span class="pill">Ignored</span>':tb?'<b>'+money2(taskBillTotal(j,tb))+'</b>'+(function(){ var st=tbState(tid); return st?' <span class="pill '+st.k+'">'+st.t+'</span>':''; })():fa?'<span title="'+esc(f.fees.map(function(x){ return money2(x.amount)+" "+x.what+" ("+x.src+")"; }).join("\n"))+'"><b>'+money2(fa)+'</b></span>':(f&&f.checked?'<span class="muted">none</span>':''))+(tb&&tb.mergedInto?' <span class="pill" title="Billed together with task #'+esc(tb.mergedInto)+'">Combined</span>':'')+'</td></tr>'; }).join("")+
       '</tbody></table></div>'+(list.length>300?'<div class="pad note">Showing the newest 300.</div>':'');
   }
   G.bw+='</section>';
+  /* 2026-11-11 (Brandon): a task opens in a pop-up window (edits + combine with other jobs) instead of a drop-down row */
+  var otid=Object.keys(S.ui.openTask||{})[0], oj=otid&&D.byId["bw-"+otid];
+  if(oj){ var oi=list.map(function(j){ return j.id.slice(3); }).indexOf(otid), prv=oi>0?list[oi-1].id.slice(3):"", nxt=oi>-1&&oi<list.length-1?list[oi+1].id.slice(3):"";
+    G.bw+='<div class="hpop" id="hpop" role="dialog" aria-modal="true" aria-label="task '+esc(otid)+'"><div class="hpbox" style="max-width:1100px"><div class="hpbar">'+
+      '<div style="display:flex;gap:6px;align-items:center;min-width:0"><button class="btn sm" data-act="tbclose">← All tasks</button>'+(prv?'<button class="btn sm ghost" data-tbgo="'+esc(prv)+'" title="Task above">‹</button>':'')+(nxt?'<button class="btn sm ghost" data-tbgo="'+esc(nxt)+'" title="Task below">›</button>':'')+
+      '<b style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(oj.prop||"")+' · '+esc(oj.title||"")+' <span class="muted" style="font-weight:500">· done '+esc(fmtD(oj.finished))+'</span></b></div>'+
+      '<button class="mx" data-act="tbclose" aria-label="Close" title="Close">✕</button></div><div class="hpbody" style="padding:16px">'+
+      taskBillRow(oj,fees[otid],S.taskbill[otid]).replace(/^<tr class="xrow"><td colspan="7" style="[^"]*">/,"").replace(/<\/td><\/tr>$/,"").replace('grid-template-columns:repeat(auto-fit,minmax(300px,1fr))','grid-template-columns:repeat(auto-fit,minmax(0,1fr));grid-template-columns:minmax(240px,.75fr) minmax(0,1.6fr)')+tbCombineBox(oj)+'</div></div></div>'; }
   G.crew+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Breezeway work by tech</h3></div><div class="pad"><div class="bars">'+Object.keys(bwBy).sort(function(a,b){ return bwBy[b].n-bwBy[a].n; }).map(function(w){ var mx=Math.max.apply(null,Object.keys(bwBy).map(function(k){return bwBy[k].n;})); var x=bwBy[w];
       return '<div class="brow"><span>'+esc(w)+'</span><span class="btrack"><i style="width:'+(x.n/mx*100)+'%"></i></span><span class="v">'+x.n+'</span></div><div class="note" style="margin:-4px 0 4px 140px">'+x.oneoff+' one-off jobs, '+(x.n-x.oneoff)+' routine · '+(x.min/60).toFixed(1)+' h on the clock · '+Object.keys(x.homes).length+' homes</div>'; }).join("")+'</div>'+
     (stuck.length?'<div class="warnbox" style="margin-top:10px">'+stuck.length+' task'+(stuck.length===1?' has':'s have')+' a timer left running (over 12 hours) — left out of the hours: '+stuck.slice(0,6).map(function(j){ return '<a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.prop||"")+' '+esc(j.title.slice(0,30))+'</a>'; }).join(" · ")+'</div>':'')+
@@ -2679,7 +2688,24 @@ function taskParts(j){ var out=[];
     if(e.splits&&e.splits.length){ e.splits.forEach(function(x,i){ if(x.jobId===j.id || (e.jobId===j.id && (!x.jobId) && x.prop===j.prop)) out.push({id:k+"#"+i, what:(e.vendor||"Parts")+(e.note?" — "+e.note.replace(/ · from Breezeway$/,""):""), amount:+x.amount||0, split:true}); }); }
     else if(e.jobId===j.id) out.push({id:k, what:(e.vendor||"Parts")+(e.note?" — "+e.note.replace(/ · from Breezeway$/,""):""), amount:+e.amount||0}); });
   return out; }
-function taskBillParts(j,tb){ var sk=(tb&&tb.skipParts)||[]; return taskParts(j).filter(function(p){ return sk.indexOf(p.id)<0; }); }
+function taskBillParts(j,tb){ var sk=(tb&&tb.skipParts)||[], ps=taskParts(j);
+  ((tb&&tb.combined)||[]).forEach(function(t2){ var j2=D.byId["bw-"+t2]; if(j2) ps=ps.concat(taskParts(j2)); });
+  return ps.filter(function(p){ return sk.indexOf(p.id)<0; }); }
+/* 2026-11-11 (Brandon: "combine with other jobs"): other finished tasks at the same home bill as ONE job on the owner statement.
+   The main task's bill row takes their hours, fees and receipts; each combined task is set to "nothing to bill" with mergedInto = the main task. */
+function tbCombinable(j){ var tid=j.id.slice(3), tb=S.taskbill[tid]||{}, f0=(j.finished||"").slice(0,10), lo=new Date(Date.parse(f0)-45*864e5).toISOString().slice(0,10), hi=new Date(Date.parse(f0)+45*864e5).toISOString().slice(0,10);
+  return D.jobs.filter(function(x){ if(x.src!=="breezeway"||x.status!=="done"||x.prop!==j.prop||x.id===j.id) return false; var t2=x.id.slice(3), b2=S.taskbill[t2]||{}, d2=(x.finished||"").slice(0,10);
+    if((tb.combined||[]).indexOf(t2)>-1) return false; if(b2.mergedInto||b2.combined&&b2.combined.length||b2.ready) return false; var st=tbState(t2); if(st&&(st.k==="waiting"||st.k==="done")) return false; return d2>=lo&&d2<=hi; })
+    .sort(function(a,b){ return (b.finished||"").localeCompare(a.finished||""); }); }
+function tbCombineBox(j){ var tid=j.id.slice(3), tb=S.taskbill[tid]||{}, st=tbState(tid), locked=st&&(st.k==="waiting"||st.k==="done");
+  if(tb.mergedInto){ var mj=D.byId["bw-"+tb.mergedInto]; return '<div class="tbcomb"><div class="lbl">Combined</div><div class="note">This task is billed together with <a href="#" data-tbgo="'+esc(tb.mergedInto)+'">'+esc(mj?fmtD(mj.finished)+" · "+mj.title:"task #"+tb.mergedInto)+'</a>. Its time and receipts are on that one.</div>'+(locked?'':'<button class="btn sm ghost" data-tbsplit="'+esc(tid)+'" style="margin-top:6px">Bill it on its own again</button>')+'</div>'; }
+  var have=(tb.combined||[]).map(function(t2){ var x=D.byId["bw-"+t2]; return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line)"><span style="flex:1">'+esc(x?fmtD(x.finished)+" · "+x.title:"task #"+t2)+' <span class="muted">· '+(+((tb.combinedHrs||{})[t2]||0))+' h</span></span>'+(locked?'':'<button class="btn sm ghost" data-tbsplit="'+esc(t2)+'">Take out</button>')+'</div>'; }).join("");
+  var can=locked?[]:tbCombinable(j);
+  return '<div class="tbcomb"><div class="lbl">Combine with other jobs at '+esc(j.prop||"")+'</div>'+
+    '<div class="note">Bill several Breezeway tasks as one job on the owner\'s statement. Their hours, fees and receipts move onto this one; the others are marked combined.</div>'+have+
+    (can.length?'<div style="max-height:220px;overflow-y:auto;margin-top:6px">'+can.map(function(x){ return '<label><input type="checkbox" data-tbcomb="'+esc(x.id.slice(3))+'"> '+esc(fmtD(x.finished))+' · '+esc(x.title)+' <span class="muted">· '+esc((x.crew||[]).join(", "))+(x.minutes&&+x.minutes<=720?' · '+x.minutes+' min':'')+'</span></label>'; }).join("")+'</div>'+
+      '<button class="btn sm pri" data-tbcombgo="'+esc(tid)+'" style="margin-top:8px">Combine ticked jobs into this one</button>':
+      (have?'':'<div class="note" style="margin-top:6px">'+(locked?'Already sent — can\'t combine now.':'No other finished tasks at this home within 45 days.')+'</div>'))+'</div>'; }
 function taskBillTotal(j,tb){ if(tb.billTo==="none"||tb.billTo==="moose") return 0; if(tb.billTo==="courtesy") return 1; var s=(+tb.hours||0)*(+tb.rate||0); (tb.lines||[]).forEach(function(l){ s+=(+l.amount||0); });
   taskBillParts(j,tb).forEach(function(p){ s+=p.amount; }); return s; }
 /* 2026-11-10 (Brandon: "breezeway to the hub, the hub to track"): owner charges go to Track owner statements from the hub
@@ -5084,7 +5110,22 @@ document.addEventListener("click",function(ev){
   if(d.chip){ var g=S.ui[d.chip]; if(g[d.k]) delete g[d.k]; else g[d.k]=1; S.ui.sel=""; return render(); }
   if(d.rwin){ S.ui.rwin=+d.rwin; return render(); }
   if(d.bwf){ S.ui.bwf=S.ui.bwf==="missing"?"":"missing"; S.ui.sel=""; return render(); }
-  if(t.closest && t.closest("tr.xtr") && !ev.target.closest("a")){ var xt=t.closest("tr.xtr").dataset.xtask; var wasO=!!(S.ui.openTask||{})[xt]; S.ui.openTask={}; if(!wasO) S.ui.openTask[xt]=1; render(); var te=document.querySelector('tr.xtr[data-xtask="'+xt+'"]'); if(te&&te.scrollIntoView) te.scrollIntoView({block:"nearest"}); return; }
+  if(t.closest && t.closest("tr.xtr") && !ev.target.closest("a")){ var xt=t.closest("tr.xtr").dataset.xtask; S.ui.openTask={}; S.ui.openTask[xt]=1; var hp0=$("hpop"); if(hp0) hp0.scrollTop=0; return render(); }
+  if(d.tbgo){ ev.preventDefault(); S.ui.openTask={}; S.ui.openTask[d.tbgo]=1; render(); var hp1=$("hpop"); if(hp1) hp1.scrollTop=0; return; }
+  if(d.tbcombgo){ if(!need()) return; var mt=d.tbcombgo, mj=D.byId["bw-"+mt], picks=Array.prototype.slice.call(document.querySelectorAll("[data-tbcomb]:checked")).map(function(x){ return x.getAttribute("data-tbcomb"); });
+    if(!picks.length) return toast("Tick the jobs to combine first");
+    var mb=S.taskbill[mt]||taskBillDefaults(mj,(((S.feeds["bw-fees"]||{}).tasks)||{})[mt]), hrs=+mb.hours||0, ch=Object.assign({},mb.combinedHrs||{}), ln=(mb.lines||[]).slice();
+    picks.forEach(function(t2){ var x=D.byId["bw-"+t2]||{}, b2=S.taskbill[t2], h2=b2?(+b2.hours||0):billHours(+x.minutes>720?0:+x.minutes||0)*Math.max(1,(x.crew||[]).length); ch[t2]=h2; hrs+=h2;
+      ((b2&&b2.lines)||[]).forEach(function(l){ ln.push({what:l.what, amount:l.amount, from:t2}); }); });
+    var main=Object.assign({},mb,{hours:hrs,combined:(mb.combined||[]).concat(picks),combinedHrs:ch,lines:ln,prop:mj.prop,month:(mj.finished||"").slice(0,7)});
+    return put("taskbill",mt,main,S.taskbill[mt]).then(function(){ return picks.reduce(function(p,t2){ return p.then(function(){ var x=D.byId["bw-"+t2]||{};
+        return put("taskbill",t2,{mergedInto:mt,billTo:"none",ready:false,prop:x.prop||mj.prop,month:(x.finished||"").slice(0,7)},S.taskbill[t2]); }); },Promise.resolve()); })
+      .then(function(){ toast(picks.length+" job"+(picks.length===1?"":"s")+" combined into this one"); render(); }); }
+  if(d.tbsplit){ if(!need()) return; var st2=d.tbsplit, b3=S.taskbill[st2]||{}, mt2=b3.mergedInto, mb2=mt2&&S.taskbill[mt2];
+    if(!mt2||!mb2) return put("taskbill",st2,{mergedInto:null},b3).then(render);
+    var h3=+((mb2.combinedHrs||{})[st2]||0), ch2=Object.assign({},mb2.combinedHrs||{}); delete ch2[st2];
+    return put("taskbill",mt2,{hours:Math.max(0,(+mb2.hours||0)-h3),combined:(mb2.combined||[]).filter(function(x){ return x!==st2; }),combinedHrs:ch2,lines:(mb2.lines||[]).filter(function(l){ return l.from!==st2; })},mb2)
+      .then(function(){ return put("taskbill",st2,{mergedInto:null,billTo:"owner",ready:false},S.taskbill[st2]); }).then(function(){ toast("Billed on its own again"); render(); }); }
   if(d.tbign||d.tbunign){ var it=d.tbign||d.tbunign; if(!need()) return; var jx=D.byId["bw-"+it];
     return put("taskbill",it,{ignored:!!d.tbign,ready:false,prop:jx?jx.prop:"",month:jx?(jx.finished||"").slice(0,7):""},S.taskbill[it]).then(function(){ if(d.tbign&&S.ui.openTask) delete S.ui.openTask[it]; toast(d.tbign?"Ignored — hidden from the list":"Back on the list"); render(); }); }
   if(d.occancel){ return ocCancel(+d.occancel); }
@@ -5147,8 +5188,7 @@ document.addEventListener("click",function(ev){
   if(d.meetnote){ if(!need()) return; var P2=projects().filter(function(x){ return x.id===d.meetnote; })[0]; var tx2=fv("mn_"+sid(d.meetnote)); if(!P2||!tx2) return; var pk2=sid(P2.id), cur2=S.projedits[pk2]||{};
     return put("projedits",pk2,{notes:(cur2.notes||[]).concat([{by:S.me,at:Date.now(),text:"Monday meeting "+fmtD(S.ui.meetDay||mondayOf())+": "+tx2}])},cur2).then(function(){ if(S.ui.mnDraft) delete S.ui.mnDraft["mn_"+sid(d.meetnote)]; toast("Added to the project"); }); }
   if(d.copen){ S.ui.cOpen=S.ui.cOpen||{}; if(S.ui.cOpen[d.copen]) delete S.ui.cOpen[d.copen]; else S.ui.cOpen[d.copen]=1; return render(); }
-  if(d.rdyopen){ S.ui.openTask=S.ui.openTask||{}; S.ui.openTask[d.rdyopen]=1; S.ui.bwAll=S.ui.bwAll||!!(D.byId["bw-"+d.rdyopen]&&(D.byId["bw-"+d.rdyopen].auto||D.byId["bw-"+d.rdyopen].kind==="inspection")); render();
-    var tr=document.querySelector('tr.xtr[data-xtask="'+d.rdyopen+'"]'); if(tr) tr.scrollIntoView({block:"center",behavior:"smooth"}); return; }
+  if(d.rdyopen){ S.ui.openTask=S.ui.openTask||{}; S.ui.openTask[d.rdyopen]=1; S.ui.bwAll=S.ui.bwAll||!!(D.byId["bw-"+d.rdyopen]&&(D.byId["bw-"+d.rdyopen].auto||D.byId["bw-"+d.rdyopen].kind==="inspection")); return render(); }
   if(d.rdyoff){ if(!need()) return; return put("taskbill",d.rdyoff,{ready:false},S.taskbill[d.rdyoff]).then(function(){ toast("Taken off the ready list"); }); }
   if(d.rcall){ ev.preventDefault(); S.ui.rcAll=S.ui.rcAll||{}; S.ui.rcAll[d.rcall]=!S.ui.rcAll[d.rcall]; return render(); }
   if(d.rczoom){ var I=rcImgs()[d.rczoom], ex=S.expenses[d.rczexp]||{}, rot=+ex.rot||0; if(!I) return;
@@ -5253,6 +5293,7 @@ document.addEventListener("click",function(ev){
     case "vback": S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return;
     case "newhome": return mNewHome();
     case "hclose": S.ui.home=""; return render();
+    case "tbclose": S.ui.openTask={}; return render();
     case "hhood": S.ui.hhOpen=(S.ui.hhOpen===d.c?"":d.c); render(); if(S.ui.hhOpen){ var hb=[].slice.call(document.querySelectorAll(".hhacc")).filter(function(x){ return x.dataset.c===S.ui.hhOpen; })[0]; if(hb) hb.scrollIntoView({block:"start"}); } return;
     case "editquick": return mQuick(d.code);
     case "ownerview": return ownerView(d.code);
@@ -5380,9 +5421,9 @@ document.addEventListener("input",function(ev){
   if(m){ S.ui.rvr[m]=t.value; clearTimeout(t._d); t._d=setTimeout(render,250); }
 });
 document.addEventListener("keydown",function(ev){ if(ev.key==="Escape" && $("scrim").classList.contains("open")) closeModal();
-  else if(ev.key==="Escape" && $("hpop")){ S.ui.home=""; S.ui.proj=""; render(); }   /* Property Details home pop-up */
+  else if(ev.key==="Escape" && $("hpop")){ S.ui.home=""; S.ui.proj=""; S.ui.openTask={}; render(); }   /* Property Details home pop-up */
   else if((ev.key==="Enter"||ev.key===" ") && ev.target.classList && ev.target.classList.contains("htile")){ ev.preventDefault(); ev.target.click(); } });
-document.addEventListener("click",function(ev){ if(ev.target && ev.target.id==="hpop"){ S.ui.home=""; S.ui.proj=""; render(); } });
+document.addEventListener("click",function(ev){ if(ev.target && ev.target.id==="hpop"){ S.ui.home=""; S.ui.proj=""; S.ui.openTask={}; render(); } });
 $("scrim").addEventListener("click",function(ev){ if(ev.target===$("scrim")) closeModal(); });
 
 /* ================= boot ================= */
