@@ -2680,38 +2680,64 @@ var OC_GUESS=[[/bulb|\bled\b/i,27],[/extinguish/i,28],[/smoke|carbon|\bco\b|dete
   [/keurig/i,37],[/coffee/i,36],[/mattress.*twin/i,39],[/mattress/i,38],[/fire ?stick/i,40],[/shovel/i,41],[/melt|ice salt/i,42],[/propane/i,22],[/\btv\b|television/i,73]];
 function ocHas(id){ return OC.items.some(function(x){ return x.id===id; }); }
 function ocGuess(w){ for(var i=0;i<OC_GUESS.length;i++) if(OC_GUESS[i][0].test(w||"")&&ocHas(OC_GUESS[i][1])) return OC_GUESS[i][1]; return 8; }
-function ocPlan(tid){ var tb=S.taskbill[tid]||{}, j=D.byId["bw-"+tid]||{id:"bw-"+tid,prop:tb.prop,title:"Task "+tid,finished:""}, lines=[], kind=tb.billTo||"none";
-  var hrs=+tb.hours||0, rate=+tb.rate||0, ot=ownerText(j,tb), title=ot.newTitle||j.title||"", sum=ot.summary||(typeof draftSummary==="function"?draftSummary(j):"")||"";
-  if(kind==="courtesy") lines.push({item:ocHas(9)?9:8, what:"Courtesy - no charge", amount:1});
-  else if(kind==="owner"||kind==="tenant"){
-    if(hrs*rate>0) lines.push({item:8, what:"Labor "+hrs+" h x "+money2(rate)+"/h", amount:+(hrs*rate).toFixed(2)});
-    taskBillParts(j,tb).forEach(function(p){ lines.push({item:ocGuess(p.what), what:"Parts: "+p.what, amount:+(+p.amount).toFixed(2)}); });
-    (tb.lines||[]).forEach(function(l){ lines.push({item:8, what:"Fee: "+l.what, amount:+(+l.amount).toFixed(2)}); }); }
+function ocParts(){ var it=OC.items.filter(function(x){ return /part/i.test(x.name)&&/material/i.test(x.name); })[0]; return it?it.id:null; }
+function ocPlan(tid){ var tb=S.taskbill[tid]||{}, j=D.byId["bw-"+tid]||{id:"bw-"+tid,prop:tb.prop,title:"Task "+tid,finished:""}, kind=tb.billTo||"none";
+  var hrs=+tb.hours||0, rate=+tb.rate||0, ot=ownerText(j,tb), title=(ot.newTitle||j.title||"").trim(), sum=(ot.summary||(typeof draftSummary==="function"?draftSummary(j):"")||"").trim();
+  var fees=(tb.lines||[]), feeT=fees.reduce(function(a,l){ return a+(+l.amount||0); },0), partT=taskBillParts(j,tb).reduce(function(a,p){ return a+(+p.amount||0); },0);
+  var labor=+(hrs*rate+feeT).toFixed(2), parts=+partT.toFixed(2);
   return {tid:tid, j:j, home:tb.prop||j.prop||"", kind:kind==="moose"?"moose":kind==="none"?"skip":kind, date:(j.finished||"").slice(0,10)||ymd(Date.now()),
-    /* Track shows only the item name on each line (descriptions are dropped - tested 2026-11-10), so the note carries the breakdown */
-    memo:((title+(sum?". "+sum:"")).replace(/\.\.+/g,".")+(kind==="courtesy"?" Courtesy - no charge for our time.":lines.length?" ("+lines.map(function(l){ return l.what.replace(/^(Parts|Fee): /,"")+(/^Labor/.test(l.what)?"":" "+money2(l.amount)); }).join("; ")+")":"")).slice(0,600), lines:lines, detail:{hours:hrs, rate:rate, billTo:kind, plan:planOf(tb.prop||j.prop)}}; }
+    title:title, sum:sum, hrs:hrs, fees:fees.map(function(l){ return l.what; }), labor:kind==="courtesy"?1:labor, parts:kind==="courtesy"?0:parts,
+    detail:{hours:hrs, rate:rate, fees:fees, parts:taskBillParts(j,tb).map(function(p){ return {what:p.what, amount:p.amount}; }), billTo:kind, plan:planOf(tb.prop||j.prop)}}; }
+/* what the owner reads: what we did, then one short line with the two amounts */
+function ocMemo(p,labor,parts){ var did=(p.title+(p.sum&&p.sum.toLowerCase()!==p.title.toLowerCase()?". "+p.sum:"")).replace(/\s+/g," ").replace(/\.\.+/g,".").trim();
+  if(did&&!/[.!?]$/.test(did)) did+=".";
+  if(p.kind==="courtesy") return (did+" We took care of this at no charge.").trim().slice(0,600);
+  var bits=[]; if(labor>0) bits.push("Labor"+(p.hrs?" ("+(+p.hrs)+" h"+(p.fees.length?" + "+p.fees.join(", ").toLowerCase():"")+")":"")+" "+money2(labor)); if(parts>0) bits.push("Parts & materials "+money2(parts));
+  return (did+(bits.length?" "+bits.join(" · ")+".":"")).trim().slice(0,600); }
 function ocReview(tids){ if(!OC.items.length) return toast("Track's item list isn't loaded yet — try again in a moment");
-  var P=tids.map(ocPlan), opt=function(sel){ return OC.items.map(function(x){ return '<option value="'+x.id+'"'+(x.id===sel?' selected':'')+'>'+esc(x.name)+'</option>'; }).join(""); };
-  var h='<div class="note">Each task goes to its owner\'s Track statement as one charge. The note is what the owner reads; each line shows as the Track item you pick. Change anything before you post.</div>'+
-    P.map(function(p,i){ var dup=bwBilled(p.tid);
-      return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px"><div style="display:flex;gap:8px;align-items:baseline"><b style="flex:1">'+esc(p.home)+' · '+esc(p.j.title||"")+'</b>'+
-        '<span class="pill'+(p.kind==="courtesy"?' scheduled':'')+'">'+esc(p.kind==="courtesy"?"$1 courtesy":p.kind==="skip"?"Skip":p.kind==="moose"?"Moose pays":p.kind==="tenant"?"Tenant":"Owner")+'</span></div>'+
+  var P=tids.map(ocPlan), PI=ocParts();
+  var h='<div class="note">Each task goes to its owner\'s Track statement as one charge: <b>Labor</b> and <b>Parts &amp; materials</b>, with a short note saying what we did. Change the amounts or the note before you post.</div>'+
+    (PI?'':'<div class="warnbox" style="margin-top:8px">Track doesn\'t have a <b>Parts &amp; materials</b> item yet, so tasks with parts can\'t be posted. Ask Kim to add one in Track (Maintenance to/from Management); the hub finds it by name.</div>')+
+    P.map(function(p,i){ var dup=bwBilled(p.tid), cz=p.kind==="courtesy", no=p.kind==="skip"||p.kind==="moose";
+      return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px"><div style="display:flex;gap:8px;align-items:baseline"><b style="flex:1">'+esc(p.home)+' · '+esc(p.j.title||"")+'</b>'+
+        '<span class="pill'+(cz?' scheduled':'')+'">'+esc(cz?"$1 courtesy":p.kind==="skip"?"Skip":p.kind==="moose"?"Moose pays":p.kind==="tenant"?"Tenant":"Owner")+'</span></div>'+
         (dup?'<div class="warnbox" style="margin-top:6px">Breezeway\'s Cost tab already bills the owner '+money2(dup)+' for this task. Posting here too would bill twice — take it off in Breezeway first, or skip it here.</div>':'')+
-        (p.lines.length?'<label class="f" style="margin-top:6px"><span>What the owner reads</span><textarea id="oc_m_'+i+'" maxlength="600" style="min-height:56px">'+esc(p.memo)+'</textarea></label>'+
-          '<table class="t" style="margin-top:6px"><tbody>'+p.lines.map(function(l,k){ return '<tr><td style="width:44%">'+esc(l.what)+'</td><td><select id="oc_i_'+i+'_'+k+'">'+opt(l.item)+'</select></td><td class="num"><input id="oc_a_'+i+'_'+k+'" type="number" min="0" step="0.01" value="'+l.amount+'" style="width:96px"'+(p.kind==="courtesy"?' disabled':'')+'></td></tr>'; }).join("")+'</tbody></table>':
-          '<div class="note">Nothing goes to Track: it\'s marked '+(p.kind==="moose"?"Moose pays":"skipped")+' so it leaves the list.</div>')+'</div>'; }).join("");
+        (no?'<div class="note">Nothing goes to Track: it\'s marked '+(p.kind==="moose"?"Moose pays":"skipped")+' so it leaves the list.</div>':
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:8px">'+
+          '<label class="f"><span>'+(cz?'Courtesy (no charge)':'Labor')+'</span><input id="oc_l_'+i+'" type="number" min="0" step="0.01" value="'+p.labor+'"'+(cz?' disabled':'')+' data-ocamt="'+i+'"></label>'+
+          '<label class="f"><span>Parts &amp; materials</span><input id="oc_p_'+i+'" type="number" min="0" step="0.01" value="'+p.parts+'"'+(cz?' disabled':'')+' data-ocamt="'+i+'"></label></div>'+
+        '<label class="f" style="margin-top:8px"><span>What the owner reads</span><textarea id="oc_m_'+i+'" maxlength="600" style="min-height:62px">'+esc(ocMemo(p,p.labor,p.parts))+'</textarea></label>'+
+        '<div class="note" id="oc_t_'+i+'"><b>'+money2(cz?1:p.labor+p.parts)+'</b> on the owner statement</div>')+'</div>'; }).join("");
   openModal("Post to Track owner statements ("+P.length+")",h,function(){ var sb=window.MM_SB; if(!sb) return toast("Sign in first");
-    var go=P.map(function(p,i){ return {p:p, lines:p.lines.map(function(l,k){ return {item:+fv("oc_i_"+i+"_"+k), what:l.what, amount:p.kind==="courtesy"?1:+fv("oc_a_"+i+"_"+k)}; }), memo:p.lines.length?fv("oc_m_"+i):""}; });
-    var bad=go.filter(function(g){ return bwBilled(g.p.tid)&&g.p.kind!=="skip"&&g.p.kind!=="moose"; });
-    if(bad.length&&!confirm(bad.length+" of these are already billed on Breezeway's Cost tab. Post them anyway? (The hub will refuse to send those until the Breezeway cost is removed.)")) return;
+    var go=[], err="";
+    P.forEach(function(p,i){ if(p.kind==="skip"||p.kind==="moose"){ go.push({p:p, lines:[], memo:""}); return; }
+      var cz=p.kind==="courtesy", lab=cz?1:+fv("oc_l_"+i)||0, par=cz?0:+fv("oc_p_"+i)||0, lines=[];
+      if(cz) lines.push({item:ocHas(9)?9:8, what:"Courtesy - no charge", amount:1});
+      else { if(lab>0) lines.push({item:8, what:"Labor", amount:+lab.toFixed(2)}); if(par>0){ if(!PI) err=p.home+" has parts but Track has no Parts & materials item yet"; else lines.push({item:PI, what:"Parts & materials", amount:+par.toFixed(2)}); } }
+      if(!cz&&lab+par<=0) err=p.home+": the total is $0 — skip it or set it to Moose pays instead";
+      go.push({p:p, lines:lines, memo:fv("oc_m_"+i)}); });
+    if(err) return toast(err);
+    var bad=go.filter(function(g){ return bwBilled(g.p.tid)&&g.lines.length; });
+    if(bad.length&&!confirm(bad.length+" of these are already billed on Breezeway's Cost tab. Queue them anyway? (The hub won't send those until the Breezeway cost is removed.)")) return;
     return go.reduce(function(pr,g){ return pr.then(function(){ return sb.rpc("owner_charge_queue",{p_task:+g.p.tid,p_home:g.p.home,p_kind:g.p.kind,p_date:g.p.date,p_memo:g.memo,p_lines:g.lines,p_detail:g.p.detail})
       .then(function(r){ if(r.error) throw new Error(g.p.home+": "+r.error.message.replace(/^.*?ERROR:\s*/,"")); }); }); },Promise.resolve())
       .then(function(){ toast(P.length+" charge"+(P.length===1?"":"s")+" queued for Track"); closeModal(); ocLoad(S.ui.month,true); })
-      .catch(function(e){ toast(String(e.message||e)); }); },"Post to Track"); }
+      .catch(function(e){ toast(String(e.message||e)); }); },"Post to Track");
+  /* the note's amounts follow the boxes until someone types in the note */
+  P.forEach(function(p,i){ var m=$("oc_m_"+i); if(!m) return; m.addEventListener("input",function(){ m.dataset.typed="1"; });
+    ["oc_l_"+i,"oc_p_"+i].forEach(function(id){ var el=$(id); if(el) el.addEventListener("input",function(){ var lab=+fv("oc_l_"+i)||0, par=+fv("oc_p_"+i)||0;
+      if(!m.dataset.typed) m.value=ocMemo(p,lab,par); var t=$("oc_t_"+i); if(t) t.innerHTML="<b>"+money2(p.kind==="courtesy"?1:lab+par)+"</b> on the owner statement"; }); }); }); }
+/* Track logo: grey = not on the statement yet, purple = Track has it (same look as the check lists) */
+var OC_TRK='<svg viewBox="0 0 500 354.4" aria-hidden="true"><path fill="currentColor" transform="translate(-303 2197)" d="M674.3-2197h-248c-68.5,0.4-123.7,56.2-123.3,124.7c0.4,67.9,55.4,122.9,123.3,123.3h85.8v-62h-85.8c-32.7,0-57.2-29.6-57.2-62c-0.7-30.9,23.8-56.5,54.7-57.2c0.8,0,1.6,0,2.5,0h248c30.9-0.7,56.6,23.9,57.2,54.8c0,0.8,0,1.6,0,2.4c0,32.4-24.5,62-57.2,62h-85.8v157.4l52.5-95.4h33.4c69.6,0,128.8-55.1,128.8-124C803-2141.9,743.9-2197,674.3-2197z"/></svg>';
+(function(){ try{ var st=document.createElement("style"); st.textContent=".trk{display:inline-flex;flex:none;color:#b9b9bf;vertical-align:-3px} .trk.on{color:#411064} .trk svg{width:22px;height:16px;display:block}"+
+  "@media (prefers-color-scheme: dark){ :root:not([data-theme=light]) .trk{color:#55555c} :root:not([data-theme=light]) .trk.on{color:#b98be0} } .ocst{display:inline-flex;gap:6px;align-items:center;font-size:12.5px}"; document.head.appendChild(st); }catch(e){} })();
+function ocWhen(t){ if(!t) return ""; var d=new Date(t); return d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+", "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); }
+function ocBadge(oc){ var on=oc.status==="posted", t=on?"On the owner statement · sent "+ocWhen(oc.sent):oc.status==="failed"?"Didn't reach Track · "+ocWhen(oc.sent||oc.at):oc.status==="skipped"?(oc.kind==="moose"?"Moose pays":"Skipped")+" · "+ocWhen(oc.at):"Waiting to send · queued "+ocWhen(oc.at);
+  return '<span class="ocst"><span class="trk'+(on?' on':'')+'" title="'+esc(on?"Track has it":"Not in Track yet")+'">'+OC_TRK+'</span><span>'+esc(t)+(oc.by?' <span class="muted">by '+esc(String(oc.by).split(" ")[0])+'</span>':'')+'</span></span>'; }
 function ocCancel(id){ var sb=window.MM_SB; if(!sb||!confirm("Cancel this charge? (Only one that hasn't reached Track yet.)")) return;
   sb.rpc("owner_charge_cancel",{p_id:id,p_note:""}).then(function(r){ if(r.error) return toast(r.error.message); toast("Cancelled"); ocLoad(S.ui.month,true); }); }
 function tbState(tid){ var oc=ocOf(tid);
-  if(oc){ if(oc.status==="posted") return {k:"done",t:"On the owner statement"}; if(oc.status==="failed") return {k:"stop",t:"Failed",e:oc.result,oc:oc};
+  if(oc){ if(oc.status==="posted") return {k:"done",t:"On the owner statement",oc:oc}; if(oc.status==="failed") return {k:"stop",t:"Failed",e:oc.result,oc:oc};
     if(oc.status==="queued"||oc.status==="sending") return {k:"waiting",t:"Waiting to send to Track",oc:oc}; if(oc.status==="skipped") return {k:"done",t:oc.kind==="moose"?"Moose pays":"Skipped",oc:oc}; }
   var tb=S.taskbill[tid]||{}, q=S.bwq[sid("tbill_"+tid)];
   if(q&&q.status==="created") return {k:"done",t:q.manual?"Entered in Breezeway":"In Breezeway"}; if(q&&q.status==="failed") return {k:"stop",t:"Failed",e:q.error};
@@ -2774,7 +2800,7 @@ function readyPanel(m){
     rows.map(function(r){ var pushed=r.st&&(r.st.k==="done"||r.st.k==="waiting");
       return '<tr><td>'+propLink(r.j.prop)+'</td><td><a href="'+esc(r.j.srcUrl)+'" target="_blank" rel="noopener">'+esc(r.j.title)+'</a><div class="muted">'+esc(fmtD(r.j.finished||""))+' · '+(+r.tb.hours||0)+' h @ '+money2(r.tb.rate)+'</div></td><td>'+(r.tb.billTo==="owner"?"Owner":r.tb.billTo==="tenant"?"Tenant":r.tb.billTo==="courtesy"?'<span class="pill scheduled">Courtesy $1</span><div class="muted">worth '+money2(r.labor+r.fees+r.parts)+'</div>':r.tb.billTo==="moose"?"Moose":"—")+'</td>'+
         '<td class="num">'+money2(r.labor)+'</td><td class="num">'+(r.parts?money2(r.parts):'')+'</td><td class="num">'+(r.fees?money2(r.fees):'')+'</td><td class="num"><b>'+money2(r.tot)+'</b></td>'+
-        '<td>'+(r.st?'<span class="pill '+r.st.k+'"'+(r.st.e?' title="'+esc(r.st.e)+'"':'')+'>'+r.st.t+'</span>'+(r.st.e?'<div class="note" style="color:var(--stop)">'+esc(r.st.e)+'</div>':'')+(r.st.oc&&(r.st.oc.status==="queued"||r.st.oc.status==="skipped"||r.st.oc.status==="failed")?' <button class="btn sm ghost" data-occancel="'+r.st.oc.id+'">Cancel</button>':''):'')+(bwBilled(r.tid)?'<div class="note" style="color:var(--wait)">Breezeway Cost tab: '+money2(bwBilled(r.tid))+'</div>':'')+'</td>'+
+        '<td>'+(r.st&&r.st.oc?ocBadge(r.st.oc):r.st?'<span class="pill '+r.st.k+'"'+(r.st.e?' title="'+esc(r.st.e)+'"':'')+'>'+r.st.t+'</span>':'')+(r.st?''+(r.st.e?'<div class="note" style="color:var(--stop)">'+esc(r.st.e)+'</div>':'')+(r.st.oc&&(r.st.oc.status==="queued"||r.st.oc.status==="skipped"||r.st.oc.status==="failed")?' <button class="btn sm ghost" data-occancel="'+r.st.oc.id+'">Cancel</button>':''):'')+(bwBilled(r.tid)?'<div class="note" style="color:var(--wait)">Breezeway Cost tab: '+money2(bwBilled(r.tid))+'</div>':'')+'</td>'+
         '<td style="white-space:nowrap"><button class="btn sm ghost" data-rdyopen="'+esc(r.tid)+'">Edit</button>'+(pushed?'':'<button class="btn sm ghost" data-rdyoff="'+esc(r.tid)+'">Not ready</button>')+'</td></tr>'; }).join("")+
     '<tr><td colspan="6" style="text-align:right"><b>Waiting to push</b></td><td class="num"><b>'+money2(waitT)+'</b></td><td colspan="2"></td></tr></tbody></table></div>'+
     '<div class="pad note">The hub posts each ready task to its owner\'s Track statement as one charge (labor, parts and fees as Track items, with your note for the owner). Don\'t also add these on Breezeway\'s Cost tab or use Export to Partner for them — that bills the owner twice. A charge that hasn\'t reached Track yet can be cancelled here; one on the statement is changed in Track.</div></section>';
