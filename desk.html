@@ -673,7 +673,7 @@ var CLEAN_RX=/\b(clean(ed|ing)?|messy|mess|dirty|filthy|pet hair|hair|dust(y)?|s
 var BROKE_RX=/\b(broke(n)?|break|repair|replace|replacement|leak(s|ing)?|not working|doesn'?t work|won'?t|crack(ed)?|damage(d)?|missing|fix|torn|ripped|loose|burn(ed|t)|clog(ged)?|no hot|no heat|beeping|tripped|flood)/i;
 var NOTMAINT_RX=/\b(log ?in code|sign[- ]?in code|verification|verify|claim your business|chatgpt|amazon(\.com)? order|your order|order #|newsletter|invoice from|receipt from|reservation (cancell?ed|confirmed)|booking (cancell?ed|confirmed)|replace your modem|password)\b/i;
 function cleanOnly(j){ var t=(j.title||"")+" "+(j.desc||j.details||""); return CLEAN_RX.test(j.title||"") && !BROKE_RX.test(t) && !/\b(bbq|grill|gutter|vent|duct|chimney|filter|hot ?tub|drain|hanger|holder|rack|bar|hook)\b/i.test(j.title||""); }
-function notMaint(j){ if(cleanOnly(j)) return true; if(j.src==="freshdesk" && (!j.prop && !homesFor(j).length || NOTMAINT_RX.test(j.title||""))) return true; return NOTMAINT_RX.test(j.title||"") && j.src!=="breezeway"; }
+function notMaint(j){ if(cleanOnly(j)) return true; if(/\bamazon(\.com)? order of\b/i.test(j.title||"")) return false;  /* Amazon order that names the item stays (Brandon 2026-11-11) */ if(j.src==="freshdesk" && (!j.prop && !homesFor(j).length || NOTMAINT_RX.test(j.title||""))) return true; return NOTMAINT_RX.test(j.title||"") && j.src!=="breezeway"; }
 function bwState(j){ /* "on" | "done" | "queued" | "missing" | "noprop" | "" */
   if(!D.bwLoaded || notMaint(j) || j.src==="breezeway" || j.company || j.status==="done" || j.kind==="info" || j.kind==="seasonal" || j.autoDone) return "";
   var q=S.bwq[sid(j.id)]; if(j.bw) return j.bw.t.status==="done"?"done":"on";
