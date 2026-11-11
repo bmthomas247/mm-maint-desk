@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Lock Hub Setup</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Locks ▸ Hub setup (Brandon 2026-11-11: "so simple to set up from the hub on our phone", "test out a few hubs here", "set up the decible level").
+     Part 1 = get a Home Assistant Green lock hub ready, one numbered step at a time, with copy buttons and My Home Assistant links;
+     the last step finds the hub, then puts it on "Moose company" for an office test or straight on a home.
+     Part 2 = noise sensor: add it, calibrate it against a phone sound meter (lock_noise_calibrate), set the home's decibel limit (lock_home_rules).
+     Server: locks/supabase/locks_hub_setup.sql + locks_hub_release.sql. Nothing about passwords is saved anywhere. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e; --pine:#4f7a18;
+  --ground:#f5f7f0; --card:#fff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --shadow:0 1px 2px rgba(20,40,25,.06),0 4px 14px rgba(20,40,25,.06);
+  font-family:Manrope,system-ui,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{ --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*{box-sizing:border-box} body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;padding-bottom:40px}
+a{color:var(--pine)}
+header{color:#fff;background:linear-gradient(135deg,var(--forest),var(--forest-2));padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px))}
+header .in{max-width:720px;margin:0 auto} header h1{margin:0;font-size:21px} header p{margin:4px 0 0;opacity:.9;font-size:14px}
+.tabs{max-width:720px;margin:12px auto 0;display:flex;gap:8px;padding:0 16px}
+.tabs button{flex:1;border:1px solid var(--line);border-radius:999px;padding:10px;font:inherit;font-weight:700;background:var(--card);color:var(--ink-2);box-shadow:var(--shadow)}
+.tabs button.on{background:var(--forest);border-color:var(--forest);color:#fff}
+body.inhub header{display:none}
+main{max-width:720px;margin:0 auto;padding:12px 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-top:12px;box-shadow:var(--shadow)}
+.muted{color:var(--muted);font-size:14px} .small{font-size:13px}
+.step{display:flex;gap:12px;align-items:flex-start}
+.num{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:var(--moose-soft);color:var(--moose-ink)}
+.step.done .num{background:var(--moose);color:#16220a}
+.step.done .body h3{color:var(--muted)} .step .body{flex:1;min-width:0}
+.step h3{margin:4px 0 6px;font-size:17px}
+.step.closed .detail{display:none}
+.step.cur{outline:2px solid var(--moose);outline-offset:-1px}
+ol,ul{margin:6px 0;padding-left:20px} li{margin:4px 0;line-height:1.4}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:46px;padding:10px 16px;border-radius:14px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);font:inherit;font-weight:700;text-decoration:none;cursor:pointer;margin:6px 6px 0 0}
+.btn.go{background:var(--forest);border-color:var(--forest);color:#fff} .btn.wide{width:100%}
+.btn.ok{background:var(--moose);border-color:var(--moose);color:#16220a}
+.btn:disabled{opacity:.55}
+.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;background:var(--ground);border:1px solid var(--line);border-radius:12px;padding:10px;word-break:break-all;margin-top:8px}
+.big{font-size:30px;font-weight:800;letter-spacing:.04em}
+.pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800}
+.pill.g{background:var(--moose-soft);color:var(--moose-ink)} .pill.a{background:var(--amber-soft);color:var(--amber)} .pill.r{background:var(--red-soft);color:var(--red)}
+.note{border-left:4px solid var(--amber);background:var(--amber-soft);padding:10px 12px;border-radius:10px;margin-top:8px;font-size:14px}
+.tip{border-left:4px solid var(--blue);background:var(--blue-soft);padding:10px 12px;border-radius:10px;margin-top:8px;font-size:14px}
+input,select{font:inherit;padding:11px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
+label{display:block;font-weight:700;font-size:14px;margin-top:10px}
+.row{display:flex;gap:10px} .row>*{flex:1}
+.meter{font-size:44px;font-weight:800;line-height:1}
+.prog{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px}.prog i{display:block;height:100%;background:var(--moose)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#15201a;color:#fff;padding:12px 16px;border-radius:12px;z-index:9;max-width:90vw}
+</style>
+</head>
+<body>
+<header><div class="in"><h1>🔧 Lock hub setup</h1><p>Get a hub ready, test it here, then send it to a home.</p></div></header>
+<div class="tabs"><button data-tab="hub">🧰 Get a hub ready</button><button data-tab="noise">🔊 Noise &amp; dB</button></div>
+<main id="app"><div class="card muted">Loading…</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="idle.js"></script>
+<script>
+(function(){
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+if(window.MMIDLE) MMIDLE.watch(sb);
+if(window.top !== window) document.body.classList.add("inhub");
+const app = document.getElementById("app");
+const $ = (s, el=document) => el.querySelector(s), $$ = (s, el=document) => [...el.querySelectorAll(s)];
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const toast = m => { const t = document.createElement("div"); t.className = "toast"; t.textContent = m; document.body.appendChild(t); setTimeout(()=>t.remove(), 3000); };
+const fail = e => { console.error(e); toast("Didn't work: " + ((e && e.message) || e)); };
+const ago = ts => { if(!ts) return "never"; const m = (Date.now()-new Date(ts))/6e4; return m < 1 ? "just now" : m < 60 ? Math.round(m)+" min ago" : m < 1440 ? Math.round(m/60)+" h ago" : Math.round(m/1440)+" d ago"; };
+async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
+async function q(t, sel, f){ let x = sb.from(t).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data || []; }
+const MY = (path) => "https://my.home-assistant.io/redirect/" + path;
+const HA = "http://homeassistant.local:8123";
+const ZIP = location.origin + "/moose_locks.zip";
+const INSTALL = 'D=/config; [ -d /homeassistant ] && D=/homeassistant; cd /tmp && (curl -fsSL -o ml.zip ' + ZIP + ' || wget -qO ml.zip ' + ZIP + ') && unzip -oq ml.zip -d "$D" && echo "Moose Locks installed - restarting" && ha core restart';
+const OFFICE = "moose-company";
+let TAB = (() => { try { return localStorage.getItem("mm_hubsetup_tab") || "hub"; } catch(e) { return "hub"; } })();
+let DONE = (() => { try { return JSON.parse(localStorage.getItem("mm_hubsetup_done") || "{}"); } catch(e) { return {}; } })();
+const saveDone = () => { try { localStorage.setItem("mm_hubsetup_done", JSON.stringify(DONE)); } catch(e) {} };
+let timer = null, PW = "";
+
+async function copy(text, btn){
+  try { await navigator.clipboard.writeText(text); }
+  catch(e){ const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch(_) {} t.remove(); }
+  if(btn){ const o = btn.textContent; btn.textContent = "Copied ✓"; setTimeout(()=>btn.textContent = o, 1600); }
+}
+function makePw(){   // made on this phone only, never saved or sent anywhere
+  const a = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", sym = "!@#$%*?";
+  const r = new Uint32Array(20); crypto.getRandomValues(r);
+  let p = [...r].slice(0, 18).map(n => a[n % a.length]).join("");
+  return p.slice(0, 6) + sym[r[18] % sym.length] + p.slice(6, 12) + "-" + p.slice(12) + (r[19] % 10);
+}
+
+// ---------- Part 1: get a hub ready ----------
+const STEPS = [
+  { k:"parts", t:"Get the parts together", h:() => `
+    <ul><li>Home Assistant Green (the hub)</li><li>Zooz 800 Z-Wave stick + its USB extension cable</li><li>Network cable + the hub's power plug</li></ul>
+    <div class="tip">Do this at the office. Your phone must be on the <b>office Wi-Fi</b> (not cell data) for every step.</div>` },
+  { k:"plug", t:"Plug it in", h:() => `
+    <ol><li>Zooz stick → extension cable → a USB port on the hub.</li><li>Network cable from the hub to the office router.</li><li>Power plug in <b>last</b>.</li></ol>
+    <div class="muted">Give it about 5 minutes to start the first time.</div>` },
+  { k:"account", t:"Open Home Assistant and make the owner account", h:() => `
+    <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a>
+    <div class="tip">Won't open? Get the <b>Home Assistant</b> app (<a href="https://apps.apple.com/app/home-assistant/id1099568401" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.homeassistant.companion.android" target="_blank" rel="noopener">Android</a>): it finds the hub on the Wi-Fi by itself.</div>
+    <ol><li>Tap <b>Create my smart home</b>.</li><li>Name <b>Moose</b>, username <b>moose</b>.</li>
+      <li>Password: tap below, then <b>save it in LastPass first</b> as "Lock hub &lt;number on its sticker&gt;".</li></ol>
+    <button class="btn" id="mkpw">🔑 Make a strong password</button>
+    <div id="pwbox"></div>
+    <ol start="4"><li>Location: Park City. Say no to the analytics questions. Tap <b>Finish</b>.</li></ol>` },
+  { k:"zwave", t:"Turn on Z-Wave", h:() => `
+    <a class="btn go wide" href="${MY("config_flow_start/?domain=zwave_js")}" target="_blank" rel="noopener">Set up Z-Wave</a>
+    <div class="muted small">The first time, it asks for your hub's address: type <b>${HA}</b> (or the address the app shows) and save.</div>
+    <ol><li>Pick the <b>recommended</b> setup / "use the add-on".</li><li>If it asks which device, pick the one that says <b>Zooz</b> or <b>800</b>.</li>
+      <li>Wait for <b>Success</b> (a few minutes). New security keys are made for this hub. Leave them alone.</li></ol>` },
+  { k:"term", t:"Add the Terminal", h:() => `
+    <a class="btn go wide" href="${MY("supervisor_addon/?addon=core_ssh")}" target="_blank" rel="noopener">Open Terminal &amp; SSH</a>
+    <ol><li>Tap <b>Install</b>, wait, then <b>Start</b>.</li><li>Tap <b>Open Web UI</b>. A black screen with a blinking cursor opens.</li></ol>` },
+  { k:"install", t:"Install Moose Locks (copy, paste, Enter)", h:() => `
+    <button class="btn go wide" id="cpinstall">📋 Copy the install line</button>
+    <div class="code">${esc(INSTALL)}</div>
+    <ol><li>In the Terminal, press and hold → <b>Paste</b> → Enter.</li><li>Wait for <b>Moose Locks installed - restarting</b>. Home Assistant restarts (about 1 minute).</li></ol>
+    <div class="muted small">After this, the hub keeps Moose Locks up to date by itself at night.</div>` },
+  { k:"add", t:"Add Moose Locks to the hub", h:() => `
+    <a class="btn go wide" href="${MY("config_flow_start/?domain=moose_locks")}" target="_blank" rel="noopener">Add Moose Locks</a>
+    <ol><li>Tap <b>Submit</b>. That's it, no questions.</li><li>"Not found"? Home Assistant is still restarting. Wait 1 minute and tap again.</li></ol>` },
+  { k:"find", t:"Check the hub is talking to us", h:() => `<div id="findbox"><div class="muted">Looking for new hubs…</div></div>` },
+];
+
+function hubView(){
+  const cur = STEPS.findIndex(s => !DONE[s.k]);
+  const n = STEPS.filter(s => DONE[s.k]).length;
+  app.innerHTML = `
+    <div class="card"><b>${n === STEPS.length ? "This hub is ready ✓" : `Step ${Math.min(n+1, STEPS.length)} of ${STEPS.length}`}</b>
+      <div class="prog"><i style="width:${Math.round(n/STEPS.length*100)}%"></i></div>
+      <div class="muted small" style="margin-top:8px">One hub at a time. When it's done, tap <b>Start the next hub</b> at the bottom.</div></div>
+    ${STEPS.map((s, i) => `<div class="card step ${DONE[s.k]?"done":""} ${DONE[s.k] && s.k!=="find"?"closed":""} ${i===cur?"cur":""} ${i>cur && cur>=0?"closed":""}" data-s="${s.k}">
+      <div class="num">${DONE[s.k] ? "✓" : i+1}</div>
+      <div class="body"><h3 data-open="${s.k}">${esc(s.t)}</h3><div class="detail">${s.h()}
+        ${s.k === "find" ? "" : `<button class="btn ${DONE[s.k]?"":"ok"} wide" data-done="${s.k}">${DONE[s.k] ? "Not done yet" : "✓ Done, next step"}</button>`}</div></div></div>`).join("")}
+    <div class="card"><button class="btn wide" id="next">🔁 Start the next hub</button>
+      <div class="muted small">Clears the ticks on this phone. Hubs already set up stay in the list in step ${STEPS.length}.</div></div>`;
+  $$("[data-done]").forEach(b => b.onclick = () => { DONE[b.dataset.done] = !DONE[b.dataset.done]; saveDone(); hubView();
+    const nx = $(".step.cur"); if(nx) nx.scrollIntoView({ behavior:"smooth", block:"start" }); });
+  $$("[data-open]").forEach(h => h.onclick = () => h.closest(".step").classList.toggle("closed"));
+  $("#next").onclick = () => { if(confirm("Start fresh for the next hub?")){ DONE = {}; PW = ""; saveDone(); hubView(); window.scrollTo(0,0); } };
+  const mk = $("#mkpw"); if(mk) mk.onclick = () => { PW = makePw(); drawPw(); };
+  drawPw();
+  const ci = $("#cpinstall"); if(ci) ci.onclick = () => copy(INSTALL, ci);
+  findHubs();
+}
+function drawPw(){
+  const b = $("#pwbox"); if(!b) return;
+  b.innerHTML = PW ? `<div class="code big" style="font-size:20px">${esc(PW)}</div><button class="btn" id="cppw">📋 Copy password</button>
+    <div class="note">Save it in LastPass <b>now</b>. This page forgets it when you leave.</div>` : "";
+  const c = $("#cppw"); if(c) c.onclick = () => copy(PW, c);
+}
+
+let HOMES = null;
+async function homes(){
+  if(HOMES) return HOMES;
+  const hs = await q("lock_homes", "property_id,section", x => x.eq("section","ours"));
+  const hubs = await q("lock_hubs", "property_id", x => x.eq("active", true).not("property_id","is",null));
+  const taken = new Set(hubs.map(h => h.property_id));
+  const ids = [...new Set(hs.map(h => h.property_id).concat([OFFICE]))];
+  const ps = await q("properties", "id,code", x => x.in("id", ids));
+  const code = Object.fromEntries(ps.map(p => [p.id, p.code]));
+  HOMES = ids.filter(id => id !== OFFICE).map(id => ({ id, code: code[id] || id, taken: taken.has(id) })).sort((a,b) => a.code.localeCompare(b.code));
+  return HOMES;
+}
+async function findHubs(){
+  const box = $("#findbox"); if(!box) return;
+  clearTimeout(timer);
+  try{
+    const [wait, office] = await Promise.all([ rpc("lock_hubs_waiting"),
+      q("lock_hubs", "id,name,last_seen,version,claimed_at", x => x.eq("property_id", OFFICE).eq("active", true)) ]);
+    const hs = await homes();
+    const opts = hs.map(h => `<option value="${esc(h.id)}">${esc(h.code)}${h.taken ? " (has a hub, this replaces it)" : ""}</option>`).join("");
+    const live = ts => ts && (Date.now()-new Date(ts)) < 5*6e4;
+    box.innerHTML = `
+      ${wait.length ? wait.map(h => `<div class="card" style="margin-top:8px">
+          <div><span class="pill ${live(h.last_seen)?"g":"a"}">${live(h.last_seen) ? "Talking to us ✓" : "Last heard "+ago(h.last_seen)}</span>
+            ${h.here ? '<span class="pill g">on this Wi-Fi</span>' : ""}</div>
+          <div class="muted small" style="margin-top:6px">Pair code (write it on the hub's sticker)</div><div class="big">${esc(h.pair_code||"")}</div>
+          <div class="muted small">Moose Locks ${esc(h.version||"")}</div>
+          <button class="btn go wide" data-office="${h.id}">🧪 Test it here at the office</button>
+          <label>…or send it straight to a home</label><select data-home="${h.id}"><option value="">Pick the home</option>${opts}</select>
+          <button class="btn wide" data-claim="${h.id}">Add it to that home</button></div>`).join("")
+        : `<p class="muted">No new hub yet. Finished step ${STEPS.length-1}? Give it 1–2 minutes after the restart; this checks every 10 seconds.</p>`}
+      ${office.length ? `<div class="card" style="margin-top:8px"><b>🧪 On the office test bench</b>
+          ${office.map(h => `<div style="margin-top:8px"><span class="pill ${live(h.last_seen)?"g":"r"}">${live(h.last_seen) ? "Online" : "Offline · "+ago(h.last_seen)}</span> ${esc(h.name||"Hub")}
+            <div class="muted small">Pair a lock, thermostat or noise sensor to test it in <a href="locks.html#/install/${OFFICE}" target="_top">Locks · Field ▸ Moose company</a>.
+              Before it leaves: remove the test devices from it there (Option 1 / remove mode), then:</div>
+            <label>Send it to</label><select data-move-home="${h.id}"><option value="">Pick the home</option>${opts}</select>
+            <button class="btn wide" data-move="${h.id}">📦 Done testing: send to that home</button></div>`).join("")}</div>` : ""}`;
+    $$("[data-office]").forEach(b => b.onclick = () => claim(b.dataset.office, OFFICE, "Office test hub"));
+    $$("[data-claim]").forEach(b => b.onclick = () => { const s = $(`[data-home="${b.dataset.claim}"]`); if(!s.value) return toast("Pick the home first");
+      const c = (HOMES.find(h => h.id === s.value) || {}).code; claim(b.dataset.claim, s.value, "Hub " + c); });
+    $$("[data-move]").forEach(b => b.onclick = async () => { const s = $(`[data-move-home="${b.dataset.move}"]`); if(!s.value) return toast("Pick the home first");
+      const c = (HOMES.find(h => h.id === s.value) || {}).code;
+      if(!confirm(`Send this hub to ${c}? The office test devices are switched off in our list (nothing is deleted).`)) return;
+      try{ const pc = await rpc("lock_hub_release", { p_hub: b.dataset.move, p_note: "office test done" });
+        await rpc("lock_claim_hub", { p_hub: null, p_pair: pc, p_property: s.value, p_name: "Hub " + c });
+        HOMES = null; toast(`Hub moved to ${c} ✓`); DONE.find = true; saveDone(); hubView(); }catch(e){ fail(e); } });
+    if(wait.some(h => live(h.last_seen))) { /* keep checking so the pill stays honest */ }
+  }catch(e){ box.innerHTML = `<p class="muted">Couldn't check: ${esc(e.message||e)}</p>`; }
+  timer = setTimeout(() => { if(TAB === "hub" && $("#findbox") && !document.activeElement.closest?.("#findbox select")) findHubs(); }, 10000);
+}
+async function claim(hub, pid, name){
+  try{ await rpc("lock_claim_hub", { p_hub: hub, p_pair: null, p_property: pid, p_name: name }); }
+  catch(e){ // not on the same internet as the hub: use its pair code instead
+    try{ const w = (await rpc("lock_hubs_waiting")).find(h => h.id === hub); if(!w) throw e;
+      await rpc("lock_claim_hub", { p_hub: null, p_pair: w.pair_code, p_property: pid, p_name: name }); }catch(e2){ return fail(e2); } }
+  HOMES = null; DONE.find = true; saveDone(); toast(pid === OFFICE ? "On the office test bench ✓" : "Added ✓"); hubView();
+}
+
+// ---------- Part 2: noise sensor + decibel level ----------
+let NZ = { pid: null };
+async function noiseView(){
+  clearTimeout(timer);
+  let sensors = [], props = {};
+  try{
+    sensors = await q("sensors", "id,name,property_id,value,last_seen,db_offset,online", x => x.eq("kind","noise").eq("active", true));
+    const ids = [...new Set(sensors.map(s => s.property_id).filter(Boolean))];
+    if(ids.length) (await q("properties","id,code", x => x.in("id", ids))).forEach(p => props[p.id] = p.code);
+  }catch(e){ app.innerHTML = `<div class="card">Couldn't load: ${esc(e.message||e)}</div>`; return; }
+  const pids = [...new Set(sensors.map(s => s.property_id).filter(Boolean))];
+  if(!NZ.pid || !pids.includes(NZ.pid)) NZ.pid = pids[0] || null;
+  let home = null;
+  if(NZ.pid){ try{ home = (await q("lock_homes","property_id,noise_limit,noise_minutes,quiet_from,quiet_to", x => x.eq("property_id", NZ.pid)))[0]; }catch(e){} }
+  const mine = sensors.filter(s => s.property_id === NZ.pid);
+  const fresh = s => s.last_seen && (Date.now()-new Date(s.last_seen)) < 5*6e4;
+  const hm = t => (t || "").slice(0,5);
+  app.innerHTML = `
+    <div class="card"><h3 style="margin-top:0">1 · Get the sensor on the hub</h3>
+      <ol><li><b>On a computer</b> (Chrome) with a USB-C <i>data</i> cable: open <a href="noise-setup.html" target="_blank">Noise sensor setup</a>, load our firmware and join the Wi-Fi of the place it will live (the office Wi-Fi for a test).</li>
+        <li>On your phone: <a class="btn" href="${MY("integrations/")}" target="_blank" rel="noopener">Open devices</a> → under <b>Discovered</b> you'll see <b>Noise</b> → <b>Add</b> → Submit.</li>
+        <li>About a minute later it shows below with a live dB number.</li></ol>
+      <div class="muted small">The sensor only sends one number (how loud it is). No sound is recorded or sent.</div></div>
+    <div class="card"><h3 style="margin-top:0">2 · Set the decibel level</h3>
+      ${pids.length ? `<label>Where is it?</label><select id="nzhome">${pids.map(p => `<option value="${esc(p)}" ${p===NZ.pid?"selected":""}>${esc(props[p]||p)}</option>`).join("")}</select>` : `<p class="muted">No noise sensor has reported yet. Do step 1 first.</p>`}
+      ${mine.map(s => `<div class="card" style="margin-top:10px">
+        <b>${esc(s.name)}</b> <span class="pill ${fresh(s)?"g":"r"}">${fresh(s) ? "Live" : "Not heard "+ago(s.last_seen)}</span>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span class="meter">${s.value!=null ? Math.round(s.value) : "–"}</span><span class="muted">dB · 1-minute average · updates every 30 s</span></div>
+        <div class="muted small">Calibration: ${Number(s.db_offset) ? (s.db_offset > 0 ? "+" : "") + s.db_offset + " dB" : "not done yet"}</div>
+        <ol class="small"><li>Get a free sound-meter app (iPhone: <b>NIOSH SLM</b>; Android: any "Sound Meter").</li>
+          <li>Hold the phone right next to the sensor. Play something <b>steady</b> (TV or music at one volume) for a full minute.</li>
+          <li>Type what the phone shows:</li></ol>
+        <div class="row"><input type="number" inputmode="decimal" min="20" max="130" placeholder="Phone says… dB" data-cal-in="${s.id}"><button class="btn go" data-cal="${s.id}" style="flex:none">Match it</button></div></div>`).join("")}
+      ${home ? `<div class="card" style="margin-top:10px"><b>Alert when it's this loud</b>
+        <div class="row"><div><label>Louder than (dB)</label><input type="number" id="nzlimit" min="40" max="120" value="${home.noise_limit}"></div>
+          <div><label>For (minutes, quiet hours)</label><input type="number" id="nzmin" min="1" max="120" value="${home.noise_minutes}"></div></div>
+        <div class="row"><div><label>Quiet hours from</label><input type="time" id="nzfrom" value="${hm(home.quiet_from)}"></div><div><label>to</label><input type="time" id="nzto" value="${hm(home.quiet_to)}"></div></div>
+        <div class="muted small">During the day it waits 3× as long before alerting.</div>
+        <button class="btn go wide" id="nzsave">Save for ${esc(props[NZ.pid]||"")}</button></div>` : ""}
+    </div>`;
+  const sel = $("#nzhome"); if(sel) sel.onchange = () => { NZ.pid = sel.value; noiseView(); };
+  $$("[data-cal]").forEach(b => b.onclick = async () => { const v = Number($(`[data-cal-in="${b.dataset.cal}"]`).value);
+    if(!v) return toast("Type the phone's number first");
+    try{ const o = await rpc("lock_noise_calibrate", { p_sensor: b.dataset.cal, p_phone_db: v }); toast(`Matched ✓ (${o > 0 ? "+" : ""}${o} dB)`); noiseView(); }catch(e){ fail(e); } });
+  const sv = $("#nzsave"); if(sv) sv.onclick = async () => {
+    const r = { noise_limit: Number($("#nzlimit").value), noise_minutes: Number($("#nzmin").value), quiet_from: $("#nzfrom").value, quiet_to: $("#nzto").value };
+    if(!(r.noise_limit >= 40 && r.noise_limit <= 120)) return toast("Limit between 40 and 120 dB");
+    try{ await rpc("lock_home_rules", { p_property: NZ.pid, r }); toast("Saved ✓"); }catch(e){ fail(e); } };
+  timer = setTimeout(() => { if(TAB === "noise" && !(document.activeElement && /INPUT|SELECT/.test(document.activeElement.tagName))) noiseView(); }, 15000);
+}
+
+function draw(){
+  $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
+  if(TAB === "noise") noiseView(); else hubView();
+}
+$$(".tabs button").forEach(b => b.onclick = () => { TAB = b.dataset.tab; try { localStorage.setItem("mm_hubsetup_tab", TAB); } catch(e) {} draw(); });
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if(!data.session){ app.innerHTML = `<div class="card"><b>Sign in first</b><p class="muted">Open the Moose Hub, sign in, then come back here.</p><a class="btn go" href="./#/locks_setup" target="_top">Open the Moose Hub</a></div>`; return; }
+  draw();
+})();
+})();
+</script>
+</body>
+</html>
