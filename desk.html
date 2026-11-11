@@ -2692,8 +2692,7 @@ function ocPlan(tid){ var tb=S.taskbill[tid]||{}, j=D.byId["bw-"+tid]||{id:"bw-"
 function ocMemo(p,labor,parts){ var did=(p.title+(p.sum&&p.sum.toLowerCase()!==p.title.toLowerCase()?". "+p.sum:"")).replace(/\s+/g," ").replace(/\.\.+/g,".").trim();
   if(did&&!/[.!?]$/.test(did)) did+=".";
   if(p.kind==="courtesy") return (did+" We took care of this at no charge.").trim().slice(0,600);
-  if(p.quick) did+=" Our tech also checked the home over after the repair.";
-  var bits=[]; if(labor>0) bits.push("Labor"+(p.hrs?" ("+(+p.hrs)+" h"+(p.hrs===1?"":"")+")":"")+" "+money2(labor)); if(parts>0) bits.push("Parts & materials "+money2(parts));
+  var bits=[]; if(labor>0) bits.push("Labor"+(p.hrs?" ("+(+p.hrs)+" h"+(p.quick?" + home inspection":"")+")":"")+" "+money2(labor)); if(parts>0) bits.push("Parts & materials "+money2(parts));
   return (did+(bits.length?" "+bits.join(" · ")+".":"")).trim().slice(0,600); }
 function ocReview(tids){ if(!OC.items.length) return toast("Track's item list isn't loaded yet — try again in a moment");
   var P=tids.map(ocPlan), PI=ocParts();
