@@ -2485,7 +2485,7 @@ function vMoney(){
     '<div class="empty">No time logged this month.</div>';
   G.crew+='<div class="pad note">Time comes from "+ Time on site" on a job or here. Clocked hours come from hub clock-ins (Hubstaff before Nov 11). '+
     'Jobs closed = tasks finished in Breezeway that month plus jobs marked done on this desk.</div></section>';
-  var showAll=!!S.ui.bwAll, isIgn=function(j){ var t=S.taskbill[j.id.slice(3)]; return !!(t&&t.ignored); }, ignN=bwDone.filter(isIgn).length, movedN=0, list=bwDone.filter(function(j){ var st=tbState(j.id.slice(3)); if(st && st.k!=="stop"){ movedN++; return false; } return (showAll || (!j.auto && j.kind!=="inspection")) && (S.ui.showIgn || !isIgn(j)); });
+  var showAll=!!S.ui.bwAll, isIgn=function(j){ var t=S.taskbill[j.id.slice(3)]; return !!(t&&t.ignored); }, ignN=bwDone.filter(isIgn).length, movedN=0, list=bwDone.filter(function(j){ var st=tbState(j.id.slice(3)); if(st && st.k!=="stop"){ movedN++; return false; } return (showAll || !isInsp(j)) && (S.ui.showIgn || !isIgn(j)); });
   var fees=((S.feeds["bw-fees"]||{}).tasks)||{}, feeOf=function(j){ var f=fees[j.id.slice(3)]; return f&&f.fees?f.fees.reduce(function(a,x){ return a+(+x.amount||0); },0):0; };
   var feeTot=bwDone.reduce(function(a,j){ return a+feeOf(j); },0);
   G.bw+='<section class="panel"><div class="ph"><h3>Completed in Breezeway</h3><span class="ct">'+bwDone.length+' tasks'+(feeTot?' · '+money(feeTot)+' in fees found':'')+'</span>'+(function(){ var rp=readyToPush(m), sum=rp.reduce(function(a,tid){ var j=D.byId["bw-"+tid]; return a+(j?taskBillTotal(j,S.taskbill[tid]):0); },0);
@@ -2507,13 +2507,13 @@ function vMoney(){
     (bf.tech||bf.home||bf.from||bf.to?'<button class="btn sm ghost" data-act="bwfclear" style="height:36px">Clear</button><span class="bfn">'+list.length+' of '+nAll+'</span>':'<span class="bfn">'+nAll+' tasks</span>')+'</div>';
   if(!D.bwLoaded) G.bw+='<div class="empty">Breezeway isn\'t loaded yet.</div>';
   else {
-    G.bw+='<div class="pad" style="padding-bottom:6px"><label class="toggle"><input type="checkbox" id="bwall"'+(showAll?' checked':'')+'> Include routine inspections and repeating tasks</label>'+(ignN?' <label class="toggle"><input type="checkbox" id="bwign"'+(S.ui.showIgn?' checked':'')+'> Show '+ignN+' ignored</label>':'')+
+    G.bw+='<div class="pad" style="padding-bottom:6px"><label class="toggle"><input type="checkbox" id="bwall"'+(showAll?' checked':'')+'> Show inspections and repeating tasks <span class="muted">(we do not bill these — open one only if you want to charge it)</span></label>'+(ignN?' <label class="toggle"><input type="checkbox" id="bwign"'+(S.ui.showIgn?' checked':'')+'> Show '+ignN+' ignored</label>':'')+
       ' <span class="note">'+(function(){ var lo=D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && (j.finished||"").slice(0,7)===m && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.vendorVisit||j.schedNote||j.officeOnly); }), v=lo.filter(function(j){return j.vendorVisit;}).length, n=lo.filter(function(j){return j.schedNote;}).length, o=lo.length-v-n;
         return lo.length?'Left out: '+[v?v+' vendor visit'+(v===1?'':'s'):'',n?n+' scheduling note'+(n===1?'':'s'):'',o?o+' office-only task'+(o===1?'':'s')+' (no tech on them)':''].filter(Boolean).join(', ')+' — <a href="#" data-vmode="used">Vendors used</a>. ':''; })()+(movedN?'<b>'+movedN+' marked ready or pushed</b> — they\'re under Ready for Breezeway. ':'')+'Fees = $ amounts, trip charges or fees found in the task\'s notes, comments or messages (read up to Oct 9 — check newer tasks yourself). Open a task, check its costs and press ✓ Ready for Track. Receipts the crew post in Breezeway are read into Expenses every hour.</span></div>';
     G.bw+=bwFilt;
     G.bw+='<div class="appl" style="border:0;border-radius:0;max-height:560px;overflow-y:auto"><table class="t"><thead><tr>'+th("done","Done")+th("home","Home")+th("task","Task")+th("techs","Techs")+th("people","People",1)+th("time","Time",1)+th("bill","Bill",1)+'</tr></thead><tbody>'+
       list.slice(0,300).map(function(j){ var f=fees[j.id.slice(3)], fa=feeOf(j), tid=j.id.slice(3), tb=S.taskbill[tid], open=!!(S.ui.openTask||{})[tid];
-        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="mono">'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>'+(j.auto||j.kind==="inspection"?' <span class="muted">· routine</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
+        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="mono">'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>'+(isInsp(j)?' <span class="muted">· inspection / routine — not billed</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
           '<td class="num">'+(tb&&tb.ignored?'<span class="pill">Ignored</span>':tb?'<b>'+money2(taskBillTotal(j,tb))+'</b>'+(function(){ var st=tbState(tid); return st?' <span class="pill '+st.k+'">'+st.t+'</span>':''; })():fa?'<span title="'+esc(f.fees.map(function(x){ return money2(x.amount)+" "+x.what+" ("+x.src+")"; }).join("\n"))+'"><b>'+money2(fa)+'</b></span>':(f&&f.checked?'<span class="muted">none</span>':''))+(tb&&tb.mergedInto?' <span class="pill" title="Billed together with task #'+esc(tb.mergedInto)+'">Combined</span>':'')+'</td></tr>'; }).join("")+
       '</tbody></table></div>'+(list.length>300?'<div class="pad note">Showing the newest 300.</div>':'');
   }
@@ -2678,7 +2678,7 @@ function billingPanel(m,bwDone){
 /* billing: first hour is a full hour, then in half hours (43 min → 1 h, 1 h 10 → 1.5 h) — per tech */
 function billHours(mins){ mins=+mins||0; if(mins<=0) return 0; var h=mins/60; return h<=1?1:Math.ceil(h*2-1e-9)/2; }
 function taskBillDefaults(j,f){ var pl=PLANS[planOf(j.prop)]||PLANS.prime, mins=(+j.minutes>720?0:+j.minutes||0), crew=Math.max(1,(j.crew||[]).length);
-  return {hours:billHours(mins)*crew, rate:pl.rate, billTo:(j.prop&&j.prop!=="Moose company")?"owner":"none",
+  return {hours:billHours(mins)*crew, rate:pl.rate, billTo:(j.prop&&j.prop!=="Moose company"&&!isInsp(j))?"owner":"none",
     lines:((f&&f.fees)||[]).map(function(x){ return {what:x.what, amount:+x.amount}; }), skipParts:[]}; }
 /* parts = receipts linked to this task (a split receipt counts only this task's share) */
 function taskParts(j){ var out=[];
@@ -2688,13 +2688,15 @@ function taskParts(j){ var out=[];
     if(e.splits&&e.splits.length){ e.splits.forEach(function(x,i){ if(x.jobId===j.id || (e.jobId===j.id && (!x.jobId) && x.prop===j.prop)) out.push({id:k+"#"+i, what:(e.vendor||"Parts")+(e.note?" — "+e.note.replace(/ · from Breezeway$/,""):""), amount:+x.amount||0, split:true}); }); }
     else if(e.jobId===j.id) out.push({id:k, what:(e.vendor||"Parts")+(e.note?" — "+e.note.replace(/ · from Breezeway$/,""):""), amount:+e.amount||0}); });
   return out; }
+/* 2026-11-11 (Brandon): we never charge owners for inspections or repeating tasks; they stay off the list unless Chris shows them, and open as "Nothing to bill" */
+function isInsp(j){ return !!(j && (j.auto || j.kind==="inspection" || /inspection/i.test(j.title||""))); }
 function taskBillParts(j,tb){ var sk=(tb&&tb.skipParts)||[], ps=taskParts(j);
   ((tb&&tb.combined)||[]).forEach(function(t2){ var j2=D.byId["bw-"+t2]; if(j2) ps=ps.concat(taskParts(j2)); });
   return ps.filter(function(p){ return sk.indexOf(p.id)<0; }); }
 /* 2026-11-11 (Brandon: "combine with other jobs"): other finished tasks at the same home bill as ONE job on the owner statement.
    The main task's bill row takes their hours, fees and receipts; each combined task is set to "nothing to bill" with mergedInto = the main task. */
 function tbCombinable(j){ var tid=j.id.slice(3), tb=S.taskbill[tid]||{}, f0=(j.finished||"").slice(0,10), lo=new Date(Date.parse(f0)-45*864e5).toISOString().slice(0,10), hi=new Date(Date.parse(f0)+45*864e5).toISOString().slice(0,10);
-  return D.jobs.filter(function(x){ if(x.src!=="breezeway"||x.status!=="done"||x.prop!==j.prop||x.id===j.id) return false; var t2=x.id.slice(3), b2=S.taskbill[t2]||{}, d2=(x.finished||"").slice(0,10);
+  return D.jobs.filter(function(x){ if(x.src!=="breezeway"||x.status!=="done"||x.prop!==j.prop||x.id===j.id||isInsp(x)) return false; var t2=x.id.slice(3), b2=S.taskbill[t2]||{}, d2=(x.finished||"").slice(0,10);
     if((tb.combined||[]).indexOf(t2)>-1) return false; if(b2.mergedInto||b2.combined&&b2.combined.length||b2.ready) return false; var st=tbState(t2); if(st&&(st.k==="waiting"||st.k==="done")) return false; return d2>=lo&&d2<=hi; })
     .sort(function(a,b){ return (b.finished||"").localeCompare(a.finished||""); }); }
 function tbCombineBox(j){ var tid=j.id.slice(3), tb=S.taskbill[tid]||{}, st=tbState(tid), locked=st&&(st.k==="waiting"||st.k==="done");
