@@ -2683,16 +2683,17 @@ function ocGuess(w){ for(var i=0;i<OC_GUESS.length;i++) if(OC_GUESS[i][0].test(w
 function ocParts(){ var it=OC.items.filter(function(x){ return /part/i.test(x.name)&&/material/i.test(x.name); })[0]; return it?it.id:null; }
 function ocPlan(tid){ var tb=S.taskbill[tid]||{}, j=D.byId["bw-"+tid]||{id:"bw-"+tid,prop:tb.prop,title:"Task "+tid,finished:""}, kind=tb.billTo||"none";
   var hrs=+tb.hours||0, rate=+tb.rate||0, ot=ownerText(j,tb), title=(ot.newTitle||j.title||"").trim(), sum=(ot.summary||(typeof draftSummary==="function"?draftSummary(j):"")||"").trim();
-  var fees=(tb.lines||[]), feeT=fees.reduce(function(a,l){ return a+(+l.amount||0); },0), partT=taskBillParts(j,tb).reduce(function(a,p){ return a+(+p.amount||0); },0);
+  var fees=(tb.lines||[]).filter(function(l){ return !/trip|call[ -]?out|service call/i.test(l.what||""); }), feeT=fees.reduce(function(a,l){ return a+(+l.amount||0); },0), partT=taskBillParts(j,tb).reduce(function(a,p){ return a+(+p.amount||0); },0);
   var labor=+(hrs*rate+feeT).toFixed(2), parts=+partT.toFixed(2);
   return {tid:tid, j:j, home:tb.prop||j.prop||"", kind:kind==="moose"?"moose":kind==="none"?"skip":kind, date:(j.finished||"").slice(0,10)||ymd(Date.now()),
-    title:title, sum:sum, hrs:hrs, fees:fees.map(function(l){ return l.what; }), labor:kind==="courtesy"?1:labor, parts:kind==="courtesy"?0:parts,
+    title:title, sum:sum, hrs:hrs, fees:fees.map(function(l){ return l.what; }), quick:hrs>=1&&(+j.minutes||0)>0&&(+j.minutes||0)<50, labor:kind==="courtesy"?1:labor, parts:kind==="courtesy"?0:parts,
     detail:{hours:hrs, rate:rate, fees:fees, parts:taskBillParts(j,tb).map(function(p){ return {what:p.what, amount:p.amount}; }), billTo:kind, plan:planOf(tb.prop||j.prop)}}; }
 /* what the owner reads: what we did, then one short line with the two amounts */
 function ocMemo(p,labor,parts){ var did=(p.title+(p.sum&&p.sum.toLowerCase()!==p.title.toLowerCase()?". "+p.sum:"")).replace(/\s+/g," ").replace(/\.\.+/g,".").trim();
   if(did&&!/[.!?]$/.test(did)) did+=".";
   if(p.kind==="courtesy") return (did+" We took care of this at no charge.").trim().slice(0,600);
-  var bits=[]; if(labor>0) bits.push("Labor"+(p.hrs?" ("+(+p.hrs)+" h"+(p.fees.length?" + "+p.fees.join(", ").toLowerCase():"")+")":"")+" "+money2(labor)); if(parts>0) bits.push("Parts & materials "+money2(parts));
+  if(p.quick) did+=" Our tech also checked the home over after the repair.";
+  var bits=[]; if(labor>0) bits.push("Labor"+(p.hrs?" ("+(+p.hrs)+" h"+(p.hrs===1?"":"")+")":"")+" "+money2(labor)); if(parts>0) bits.push("Parts & materials "+money2(parts));
   return (did+(bits.length?" "+bits.join(" · ")+".":"")).trim().slice(0,600); }
 function ocReview(tids){ if(!OC.items.length) return toast("Track's item list isn't loaded yet — try again in a moment");
   var P=tids.map(ocPlan), PI=ocParts();
