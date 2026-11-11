@@ -1398,7 +1398,7 @@ function srFeeModel(rows, cid) {
     const mult = med(rs.map(r => { let rack = 0; for (let i = 0; i < r.nights; i++) { const t = SR.track[addD(r.check_in, i)]; if (!t) return null; rack += +t.rate; } return rack ? r.rent / rack : null; }));
     const feeR = med(rs.map(r => (+r.fees || 0) / r.rent)), clean = med(rs.map(r => r.cleaning != null ? +r.cleaning : null));
     const taxR = med(rs.map(r => r.pre_tax ? AIRBNB_TAX : (r.rent + (+r.cleaning || 0) + (+r.fees || 0)) ? r.total / (r.rent + (+r.cleaning || 0) + (+r.fees || 0)) - 1 : null));
-    if (rs.length) out[ch] = { mult: mult ?? 1, feeR: feeR ?? 0, clean: clean ?? 0, taxR: taxR ?? 0, n: rs.length, pre: rs[0].pre_tax };
+    if (rs.length) out[ch] = { mult: ({ Airbnb: 1.17, VRBO: 1.15, Direct: 1.0 })[ch] ?? 1, feeR: feeR ?? 0, clean: clean ?? 0, taxR: taxR ?? 0, n: rs.length, pre: rs[0].pre_tax };
   }
   return out;
 }
