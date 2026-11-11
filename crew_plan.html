@@ -102,6 +102,12 @@ dialog textarea{min-height:60px;resize:vertical}
 .desc{font-size:13px;color:var(--ink-2);white-space:pre-wrap;background:var(--ground);border-radius:10px;padding:8px 10px;margin:8px 0}
 @media (max-width:900px){ .layout{grid-template-columns:1fr} .side{position:static;max-height:360px} }
 body.inhub .wrap{padding-top:10px}
+/* fill-in inspections (hub_crew_fill.sql) */
+.chip.fill{border-left-color:var(--violet);background:var(--violet-soft)} .chip.fill.given{opacity:.6}
+.tg.fill{background:var(--violet-soft);color:var(--violet)} .tg.near{background:var(--moose-soft);color:var(--moose-ink)} .tg.soon{background:var(--blue-soft);color:var(--blue)}
+.nearbtn{display:block;width:100%;margin-top:3px;border:1px dashed var(--violet);background:transparent;color:var(--violet);border-radius:8px;font:inherit;font-size:11px;font-weight:800;padding:2px 5px;cursor:pointer;text-align:left}
+.fl table{width:100%;border-collapse:collapse;font-size:13px} .fl td,.fl th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}
+.fl input[type=number]{width:70px;display:inline-block;padding:3px 6px;margin:0} .fl input[type=checkbox]{width:auto;display:inline-block;margin:0}
 </style>
 </head>
 <body>
@@ -131,9 +137,9 @@ try { S.view = localStorage.getItem("mm_cp_view") === "home" ? "home" : "tech"; 
 
 async function load(quiet){
   const to = addDays(S.start, S.days - 1);
-  const r = await sb.rpc("crew_plan", { p_from: S.start, p_to: to });
+  const [r, f] = await Promise.all([sb.rpc("crew_plan", { p_from: S.start, p_to: to }), sb.rpc("crew_fill_list", { p_day: TODAY })]);
   if(r.error){ S.err = errText(r.error); if(!quiet) render(); return; }
-  S.B = r.data; S.err = ""; canonWho();
+  S.B = r.data; S.err = ""; S.F = f.error ? null : f.data; canonWho();
   // a sent change is "pending" until Breezeway's answer is back in the copy
   (S.B.actions || []).forEach(a => { if(a.status === "failed") S.pend[a.task] = { fail: a.result || "Breezeway refused it" }; });
   Object.keys(S.pend).forEach(id => { const p = S.pend[id], t = task(+id); if(!t || p.fail) return;
@@ -177,6 +183,86 @@ function routeMi(homes){
   return (tot + d(at, OFFICE)) * 1.3;
 }
 
+/* ---------- fill-in inspections (crew_fill_list; Brandon 2026-11-10) ----------
+   Bi-Weekly + Utility Room inspections a tech does while at a home, or when their day ends early. Due = last done + every N days. */
+const NEAR_MI = 0.3;                   // "next door": same building / complex
+const miles = (a, b) => { const R = 3958.8, r = x => x * Math.PI / 180, dl = r(b[0] - a[0]), dn = r(b[1] - a[1]);
+  const h = Math.sin(dl / 2) ** 2 + Math.cos(r(a[0])) * Math.cos(r(b[0])) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const fillTpls = () => new Set(((S.F && S.F.kinds) || []).map(k => +k.template_id));
+const isFillTask = t => fillTpls().has(+t.tpl);
+const fills = () => (S.F && S.F.homes) || [];
+const fkey = f => f.home + "|" + f.kind;
+function fStayOn(f, day){ return (f.stays || []).find(s => s[0] <= day && day < s[1]); }
+function fGiven(f){ return f.given && f.given.day >= TODAY ? f.given : null; }
+function fDue(f, day = TODAY){ return f.due <= addDays(day, 7); }        // due, past due, or within a week
+const WHAT = { housekeeping:"a cleaning", maintenance:"a maintenance job", inspection:"an inspection", vendors:"a vendor job", office:"an office task", guest:"a guest stay", owner:"the owner staying", tenant:"a tenant" };
+const fLast = f => f.last ? (f.lastWhat && f.lastWhat !== "inspection" || (f.kind === "biweekly") ? `Last someone was in: ${dLabel(f.last)} (${WHAT[f.lastWhat] || f.lastWhat})` : `Last done ${dLabel(f.last)}`) : "No visit on record";
+const kindShort = k => (((S.F && S.F.kinds) || []).find(x => x.key === k) || {}).short || k;
+const fDo = f => f.kind === "biweekly" && f.pick ? f.pick : f.kind;     // the inspection to actually do on a two-week visit (rotation)
+const fWhen = f => f.over > 0 ? `${f.over} day${f.over === 1 ? "" : "s"} past due` : f.over === 0 ? "due today" : `due in ${-f.over} day${f.over === -1 ? "" : "s"}`;
+/* fill-ins next to a tech's homes that day (free that day, not handed out) */
+function nearFor(c, day){
+  const P = S.B.places || {}, hs = [...new Set((S.B.tasks || []).filter(t => t.date === day && (t.who || []).includes(c.bwName)).map(t => t.home).filter(h => h && h !== "Moose company"))];
+  const pts = hs.map(h => [h, P[h]]).filter(x => x[1]);
+  if(!pts.length) return [];
+  return fills().filter(f => !fGiven(f) && fDue(f, day) && !fStayOn(f, day) && f.pt && (hs.includes(f.home) || pts.some(p => miles(p[1], f.pt) <= NEAR_MI)))
+    .map(f => { const p = pts.find(p => p[0] === f.home) || pts.slice().sort((x, y) => miles(x[1], f.pt) - miles(y[1], f.pt))[0];
+      return Object.assign({ next: p[0] === f.home ? "this home" : p[0], mi: p[0] === f.home ? 0 : miles(p[1], f.pt) }, f); })
+    .sort((a, b) => a.mi - b.mi || b.over - a.over);
+}
+function fchip(f, near){
+  const g = fGiven(f), st = fStayOn(f, TODAY);
+  return `<button class="chip fill${g ? " given" : ""}" draggable="${g || !(S.F && S.F.canAct) ? "false" : "true"}" data-f="${esc(fkey(f))}" title="${esc(f.home + " · " + f.name)}">
+    <b>${esc(f.home)}</b> <span class="tg fill">${esc(f.short)}${fDo(f) !== f.kind ? " → " + esc(kindShort(fDo(f))) : ""}</span>${f.over > 0 ? `<span class="tg late">${f.over}d late</span>` : f.over < 0 ? `<span class="tg soon">in ${-f.over}d</span>` : `<span class="tg late">today</span>`}
+    ${st ? `<span class="tg stay">${esc(st[2])} in</span>` : ""}${near ? `<span class="tg near">${near === "this home" ? "at a home they're at" : "next to " + esc(near)}</span>` : ""}
+    <span class="nm">${g ? `${esc(kindShort(g.kind || f.kind))} given to ${esc(g.who.split(" ")[0])} for ${esc(dLabel(g.day))}${g.how !== "manual" ? " (automatic)" : ""}` : esc(fLast(f))}</span></button>`;
+}
+async function giveFill(f, c, day, kind){
+  if(!S.F || !S.F.canAct){ alert("Handing out is switched off right now."); return; }
+  const st = fStayOn(f, day);
+  if(st){ alert(`${st[2] === "owner" ? "The owner is" : st[2] === "tenant" ? "A tenant is" : "A guest is"} staying at ${f.home} on ${dLabel(day)}. Pick another day.`); return; }
+  const r = await sb.rpc("crew_fill_give", { p_code: f.home, p_kind: kind || fDo(f), p_user: c.uid, p_day: day });
+  if(r.error){ alert(errText(r.error)); return; }
+  f.given = { who: c.bwName || c.name, day, how: "manual", kind: kind || fDo(f) }; render();
+  setTimeout(() => load(true), 20000); setTimeout(() => load(true), 75000);
+}
+function openFill(f){
+  const d = $("#dlg"), techs = crewRows().techs.filter(c => c.bw), g = fGiven(f);
+  d.innerHTML = `<div class="dbody"><h3>${esc(f.home)} · ${esc(f.name)}</h3>
+    <div class="muted">Fill-in inspection · ${f.kind === "biweekly" ? "no one in for " + f.every + "+ days" : "every " + f.every + " days"} · ${esc(fWhen(f))} · about ${f.min} min</div>
+    <div class="desc">${esc(fLast(f))}.${f.kind === "biweekly" ? " Our promise: someone is in every home at least once every 2 weeks (cleaning, maintenance, vendor, inspection or a stay)." : ""}${f.open ? ` Breezeway already has one ${f.open.date ? "on " + esc(dLabel(f.open.date)) : "with no date"}${(f.open.who || []).length ? " (" + esc(f.open.who.join(", ")) + ")" : " (no one on it)"}: handing it out moves that one instead of making a second.` : " Handing it out makes a new Breezeway task from the same template."}${(f.stays || []).length ? "\nStays: " + f.stays.slice(0, 4).map(s => `${s[2]} ${dLabel(s[0])} → ${dLabel(s[1])}`).join(" · ") : ""}</div>
+    ${g ? `<div class="note">Given to ${esc(g.who)} for ${esc(dLabel(g.day))}${g.by ? " by " + esc(g.by) : ""}.</div>` : ""}
+    ${f.rot ? `<label>Which inspection (they rotate; the most overdue one for this home is picked)<select id="g_k">
+      <option value="biweekly"${fDo(f) === "biweekly" ? " selected" : ""}>Bi-Weekly Inspection</option>
+      ${f.rot.map(r => `<option value="${esc(r.kind)}"${fDo(f) === r.kind ? " selected" : ""}>${esc(r.short)} · ${r.last ? "last " + esc(dLabel(r.last)) : "none on record"} · every ${r.every} days</option>`).join("")}</select></label>` : ""}
+    ${S.F.canAct ? `<div class="two"><label>Tech<select id="g_c">${techs.map(c => `<option value="${esc(c.uid)}">${esc(c.first)}</option>`).join("")}</select></label>
+      <label>Day<input type="date" id="g_d" value="${esc(TODAY)}" min="${esc(TODAY)}"></label></div>` : `<div class="muted">Managers hand these out.</div>`}
+    <div class="err" id="g_err"></div></div>
+    <div class="dfoot">${f.open ? `<a class="btn ghost" href="https://app.breezeway.io/task/${f.open.id}" target="_blank" rel="noopener">Open in Breezeway ↗</a>` : ""}
+      ${g && S.F.canEdit ? `<button class="btn danger" data-act="fundo" data-g="${g.id || ""}">Not given after all</button>` : ""}
+      <button class="btn" data-act="x">Close</button>${S.F.canAct && !g ? `<button class="btn primary" data-act="fgive">Give it</button>` : ""}</div>`;
+  d.dataset.f = fkey(f); d.showModal();
+}
+function openFillList(){
+  const d = $("#dlg"), F = S.F; if(!F) return;
+  const q = (S.fq || "").toLowerCase();
+  const rows = fills().filter(f => !q || f.home.toLowerCase().includes(q)).slice(0, 400);
+  d.innerHTML = `<div class="dbody fl"><h3>Fill-in inspection list</h3>
+    <div class="muted">Replaces Breezeway's own repeats. Two-week check: due when no one has been in the home for that many days (any cleaning, maintenance, vendor job, inspection or stay). Utility Room: due that many days after the last one.</div>
+    <table><tr><th>Kind</th><th>Every (days)</th><th>Minutes</th><th></th></tr>${(F.kinds || []).map(k => `<tr><td><b>${esc(k.short)}</b>${k.off ? ' <span class="tg late">off</span>' : ""}${k.season_from ? ` <span class="tg soon">${esc(k.season_from)} to ${esc(k.season_to)}</span>` : ""}<div class="muted">${esc(k.name)}${k.rotation ? " · in the two-week rotation" : ""}${k.off && !k.template_id ? " · needs its Breezeway template number" : ""}</div></td>
+      <td><input type="number" min="7" max="365" data-ke="${esc(k.key)}" value="${k.every_days}"></td><td><input type="number" min="5" max="240" data-km="${esc(k.key)}" value="${k.minutes}"></td>
+      <td>${F.canEdit ? `<button class="btn sm" data-act="ksave" data-k="${esc(k.key)}">Save</button>` : ""}</td></tr>`).join("")}</table>
+    <input type="search" id="fq" placeholder="Find a home…" value="${esc(S.fq || "")}" style="margin:12px 0 6px">
+    <table><tr><th>Home</th><th>Kind</th><th>On</th><th>Every</th><th>Last done</th><th></th></tr>${rows.map(f => `<tr><td>${esc(f.home)}</td><td>${esc(f.short)}</td>
+      <td><input type="checkbox" checked data-fon="${esc(fkey(f))}"></td><td><input type="number" min="7" max="365" value="${f.every}" data-fev="${esc(fkey(f))}"></td>
+      <td>${f.last ? esc(dLabel(f.last)) + (f.lastWhat && f.lastWhat !== "inspection" ? " · " + esc(f.lastWhat) : "") : "—"}</td><td>${F.canEdit ? `<button class="btn sm" data-act="fsave" data-k="${esc(fkey(f))}">Save</button>` : ""}</td></tr>`).join("")}</table>
+    <div class="muted" style="margin-top:6px">Unticking a home takes it off the list (kept, never deleted). Homes taken off don't show here.</div>
+    <div class="err" id="fl_err"></div></div><div class="dfoot"><button class="btn" data-act="x">Close</button></div>`;
+  if(!F.canEdit) $$("input:not(#fq)", d).forEach(x => x.disabled = true);
+  if(!d.open) d.showModal();
+  const fq = $("#fq", d); if(fq && S._fqf){ fq.focus(); fq.setSelectionRange(fq.value.length, fq.value.length); }
+}
+
 function shiftOf(c, day){ const s = (S.B.shifts || []).filter(x => x.uid === c.uid && x.day === day);
   if(!s.length) return null; return s.map(x => x.s + "–" + x.e).join(", "); }
 function shiftHrs(c, day){ return (S.B.shifts || []).filter(x => x.uid === c.uid && x.day === day).reduce((a, x) => {
@@ -207,9 +293,14 @@ function render(){
   const days = [...Array(S.days)].map((_, i) => addDays(S.start, i)), to = days[days.length - 1];
   const { techs } = crewRows(), all = S.B.tasks || [], open = all.filter(isOpen);
   const inWin = t => t.date && t.date >= S.start && t.date <= to;
-  const notOut = open.filter(t => !handedOut(t)), late = open.filter(t => t.date && t.date < TODAY), undated = open.filter(t => !t.date);
+  const notOut = open.filter(t => !handedOut(t) && !isFillTask(t)), late = open.filter(t => t.date && t.date < TODAY && !isFillTask(t)), undated = open.filter(t => !t.date && !isFillTask(t));
   const weekOpen = open.filter(inWin);
   const handList = notOut.filter(t => t.date && t.date <= to);
+  const fillAll = fills().filter(f => fDue(f) || fGiven(f));
+  const fillDue = fillAll.filter(f => !fGiven(f) && f.over >= 0);
+  const fillList = (S.fnear ? S.fnear.list : fillAll.filter(f => !S.fkind || f.kind === S.fkind))
+    .filter(f => !S.q || f.home.toLowerCase().includes(S.q.toLowerCase()))
+    .sort((a, b) => S.fnear ? 0 : (!!fGiven(a) - !!fGiven(b)) || (!!fStayOn(a, TODAY) - !!fStayOn(b, TODAY)) || b.over - a.over || a.home.localeCompare(b.home, undefined, { numeric:true }));
   const sideList = (S.side === "hand" ? handList : S.side === "late" ? late : S.side === "nodate" ? undated : weekOpen)
     .filter(t => !S.q || (t.home + " " + t.name).toLowerCase().includes(S.q.toLowerCase()))
     .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || (a.home || "").localeCompare(b.home || "", undefined, { numeric:true }));
@@ -223,6 +314,7 @@ function render(){
     <div class="tiles">
       <button class="tile${S.side === "hand" ? " on" : ""}" data-side="hand"><b>${handList.length}</b><span>Not handed out yet</span></button>
       <button class="tile${S.side === "week" ? " on" : ""}" data-side="week"><b>${weekOpen.length}</b><span>Open tasks this ${S.days === 7 ? "week" : "2 weeks"}</span></button>
+      <button class="tile${S.side === "fill" ? " on" : ""}" data-side="fill"><b>${fillDue.length}</b><span>Fill-in inspections due</span></button>
       <button class="tile${S.side === "late" ? " on" : ""}" data-side="late"><b>${late.length}</b><span>Past due</span></button>
       <button class="tile${S.side === "nodate" ? " on" : ""}" data-side="nodate"><b>${undated.length}</b><span>No date</span></button>
       <div class="tile" style="cursor:default"><b>${all.filter(t => t.stage === "finished" && inWin(t)).length}</b><span>Done in these days</span></div>
@@ -230,11 +322,12 @@ function render(){
   if(!S.B.canEdit) h += `<div class="note">You can see the crew's plan here. Managers hand out and move tasks.</div>`;
   else if(!S.B.canAct) h += `<div class="warn">Changes to Breezeway are switched off right now, so the board is look-only.</div>`;
   if(!scheduled) h += `<div class="note">No crew shifts are set in the hub for these days. Set them in Staffing ▸ Schedule and each tech's hours show here, with a warning when a day is planned past their shift.</div>`;
-  h += `<div class="layout"><aside class="side" id="side"><header><b>${{ hand:"Not handed out yet", week:"Open tasks in these days", late:"Past due", nodate:"No date" }[S.side]}</b>
-      <div class="muted">${S.side === "hand" ? "Dated tasks only on Chris or no one (past due included). Drag onto a tech's day." : "Drag onto a tech's day to plan it."} Drop a task here to take it back.</div>
-      <div class="pills">${["hand","week","late","nodate"].map(k => `<button class="pt${S.side === k ? " on" : ""}" data-side="${k}">${{ hand:"To hand out", week:"These days", late:"Past due", nodate:"No date" }[k]}</button>`).join("")}</div>
+  h += `<div class="layout"><aside class="side" id="side"><header><b>${S.side === "fill" && S.fnear ? esc(S.fnear.label) : { hand:"Not handed out yet", week:"Open tasks in these days", late:"Past due", nodate:"No date", fill:"Fill-in inspections" }[S.side]}</b>
+      <div class="muted">${S.side === "fill" ? "Homes no one has been in for 2 weeks (Bi-Weekly Inspection) and Utility Room checks: things a tech can do while at a home or when their day ends early. Drag one onto a tech's day, or tap it." + (S.F && S.F.canEdit ? ` <a href="#" data-act="flist">Fill-in list</a>` : "") : S.side === "hand" ? "Dated tasks only on Chris or no one (past due included). Drag onto a tech's day. Drop a task here to take it back." : "Drag onto a tech's day to plan it. Drop a task here to take it back."}</div>
+      <div class="pills">${["hand","fill","week","late","nodate"].map(k => `<button class="pt${S.side === k ? " on" : ""}" data-side="${k}">${{ hand:"To hand out", fill:"Fill-ins", week:"These days", late:"Past due", nodate:"No date" }[k]}</button>`).join("")}</div>
+      ${S.side === "fill" ? (S.fnear ? `<div class="pills"><button class="pt on" data-act="fnearx">✕ Show all fill-ins</button></div>` : `<div class="pills">${[["", "All"], ...((S.F && S.F.kinds) || []).map(k => [k.key, k.short])].map(([k, l]) => `<button class="pt${(S.fkind || "") === k ? " on" : ""}" data-fk="${esc(k)}">${esc(l)}</button>`).join("")}</div>`) : ""}
       <input type="search" id="q" placeholder="Find a home or task…" value="${esc(S.q)}"></header>
-    <div class="list">${sideList.length ? sideList.slice(0, 250).map(t => chip(t) + (t.date ? "" : "")).join("") : `<div class="empty">Nothing here.</div>`}${sideList.length > 250 ? `<div class="muted">Showing 250 of ${sideList.length}. Search to narrow it.</div>` : ""}</div></aside>
+    <div class="list">${S.side === "fill" ? (S.F ? (fillList.length ? fillList.slice(0, 250).map(f => fchip(f, f.next)).join("") : `<div class="empty">Nothing due.</div>`) + (S.F.auto === "on" ? `<div class="muted">Handing out automatically is on.</div>` : "") : `<div class="empty">Couldn't load the fill-in list.</div>`) : sideList.length ? sideList.slice(0, 250).map(t => chip(t) + (t.date ? "" : "")).join("") : `<div class="empty">Nothing here.</div>`}${sideList.length > 250 ? `<div class="muted">Showing 250 of ${sideList.length}. Search to narrow it.</div>` : ""}</div></aside>
     <div class="board"><table class="g"><thead><tr><th class="who">${S.view === "home" ? "Home" : "Tech"}</th>${days.map(d => `<th class="${d === TODAY ? "today" : ""}">${esc(dLabel(d))}</th>`).join("")}</tr></thead><tbody>`;
   if(S.view === "home"){
     const ql = S.q.toLowerCase();
@@ -258,6 +351,7 @@ function render(){
       h += `<td class="${d === TODAY ? "today" : ""}${off ? " off" : ""}" data-cell="${c.uid}|${d}" ${canGet ? "" : "data-nodrop=1"}>
         <div class="shift"><span>${off ? "Time off" : sh ? esc(sh) : '<span title="No hub shift set">—</span>'}</span>${ts.length ? `<span class="load${over ? " over" : ""}" title="Planned time (finished tasks of the same kind; ${DEF_MIN} min when unknown)">${(mins / 60).toFixed(1)} h${shH ? " / " + shH.toFixed(0) : ""}</span>` : ""}</div>
         ${ts.map(t => chip(t, { tech: c.bwName })).join("")}
+        ${d >= TODAY && canGet && !off ? (n => n.length ? `<button class="nearbtn" data-near="${esc(c.uid)}|${d}" title="Fill-in inspections at or next to this tech's homes that day">+ ${n.length} fill-in${n.length === 1 ? "" : "s"} nearby</button>` : "")(nearFor(c, d)) : ""}
         ${mi != null && ts.length ? `<div class="mi" title="Straight line from the office through each home, x1.3 for roads - an estimate">≈ ${Math.round(mi)} mi · ${new Set(ts.map(t => t.home)).size} home${new Set(ts.map(t => t.home)).size === 1 ? "" : "s"}</div>` : ""}</td>`;
     });
     h += `</tr>`;
@@ -295,7 +389,9 @@ function moveWho(t, fromTech, toTech){
 }
 
 let DRAG = null;
+const fillOf = k => fills().find(f => fkey(f) === k);
 document.addEventListener("dragstart", e => { const c = e.target.closest && e.target.closest(".chip"); if(!c) return;
+  if(c.dataset.f){ DRAG = { fill: fillOf(c.dataset.f) }; c.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", c.dataset.f); return; }
   const cell = c.closest("td[data-cell]"), t = task(+c.dataset.t);
   const c0 = cell && (S.B.crew || []).find(x => x.uid === cell.dataset.cell.split("|")[0]);
   DRAG = { t, from: c0 ? c0.bwName : null }; c.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(t.id)); });
@@ -304,6 +400,11 @@ document.addEventListener("dragover", e => { if(!DRAG) return; const td = e.targ
   if(!td || td.dataset.nodrop) return; e.preventDefault(); $$(".drop").forEach(x => x !== td && x.classList.remove("drop")); td.classList.add("drop"); });
 document.addEventListener("drop", e => { if(!DRAG) return; const td = e.target.closest && (e.target.closest("td[data-cell]") || e.target.closest("#side")); const D = DRAG; DRAG = null;
   $$(".drop").forEach(x => x.classList.remove("drop")); if(!td || td.dataset.nodrop) return; e.preventDefault();
+  if(D.fill){ if(td.id === "side" || td.dataset.cell.startsWith("home|")) return;
+    const [uid2, day3] = td.dataset.cell.split("|"), c2 = (S.B.crew || []).find(x => x.uid === uid2);
+    if(!c2 || !c2.bw){ alert("That tech isn't linked to Breezeway yet."); return; }
+    if(day3 < TODAY){ alert("Pick today or a later day."); return; }
+    giveFill(D.fill, c2, day3); return; }
   if(td.id === "side"){ if(D.from) send(D.t, { who: moveWho(D.t, D.from, null) }); return; }
   if(td.dataset.cell.startsWith("home|")){ const [, hm, day2] = td.dataset.cell.split("|");
     if((D.t.home || "") !== hm){ alert("That task is at " + (D.t.home || "no home") + ". Drop it in its own home's row, or switch to By tech to hand it out."); return; }
@@ -332,14 +433,30 @@ function open(t){
 }
 document.addEventListener("click", async e => {
   const b = e.target.closest("button,[data-nav]"); if(!b) return;
+  if(b.classList.contains("chip") && b.dataset.f){ const f = fillOf(b.dataset.f); if(f) openFill(f); return; }
+  if(b.dataset.near){ const [uid, day] = b.dataset.near.split("|"), c = (S.B.crew || []).find(x => x.uid === uid);
+    S.side = "fill"; S.fnear = { label: `Fill-ins near ${c.first}'s homes ${day === TODAY ? "today" : dLabel(day)}`, list: nearFor(c, day), uid, day }; render(); return; }
+  if(b.dataset.fk != null){ S.fkind = b.dataset.fk; render(); return; }
   if(b.classList.contains("chip")){ if(b.closest("td[data-cell]") || b.closest("#side")) open(task(+b.dataset.t)); return; }
   if(b.dataset.nav != null){ const n = +b.dataset.nav; S.start = n ? addDays(S.start, n) : sunday(TODAY); S.B = S.B && Object.assign({}, S.B); load(); return; }
   if(b.dataset.view){ S.view = b.dataset.view; try { localStorage.setItem("mm_cp_view", S.view); } catch(_){} render(); return; }
   if(b.dataset.days){ S.days = +b.dataset.days; load(); return; }
-  if(b.dataset.side){ S.side = b.dataset.side; render(); return; }
+  if(b.dataset.side){ S.side = b.dataset.side; S.fnear = null; render(); return; }
   const a = b.dataset.act, d = $("#dlg");
   if(a === "reload") return load();
   if(a === "x") return d.close();
+  if(a === "fnearx"){ S.fnear = null; render(); return; }
+  if(a === "fgive"){ const f = fillOf(d.dataset.f), c = (S.B.crew || []).find(x => x.uid === $("#g_c").value), day = $("#g_d").value;
+    if(!f || !c || !day){ $("#g_err").textContent = "Pick a tech and a day"; return; }
+    if(day < TODAY){ $("#g_err").textContent = "Pick today or a later day"; return; }
+    const gk = $("#g_k"); d.close(); return giveFill(f, c, day, gk ? gk.value : fDo(f)); }
+  if(a === "fundo"){ if(!confirm("Mark this as not given? (The Breezeway task stays: move or close it there if it was already sent.)")) return;
+    const r = await sb.rpc("crew_fill_undo", { p_id: +b.dataset.g }); if(r.error){ $("#g_err").textContent = errText(r.error); return; } d.close(); return load(); }
+  if(a === "ksave"){ const k = b.dataset.k, r = await sb.rpc("crew_fill_kind_set", { p_kind: k, p_every: +$(`[data-ke="${k}"]`, d).value, p_minutes: +$(`[data-km="${k}"]`, d).value });
+    if(r.error){ $("#fl_err").textContent = errText(r.error); return; } await load(true); return openFillList(); }
+  if(a === "fsave"){ const k = b.dataset.k, [code, kind] = k.split("|");
+    const r = await sb.rpc("crew_fill_set", { p_code: code, p_kind: kind, p_on: $(`[data-fon="${k}"]`, d).checked, p_every: +$(`[data-fev="${k}"]`, d).value, p_note: null });
+    if(r.error){ $("#fl_err").textContent = errText(r.error); return; } await load(true); return openFillList(); }
   if(a === "close" || a === "save"){
     const t = task(+d.dataset.t); if(!t) return d.close();
     try {
@@ -353,7 +470,9 @@ document.addEventListener("click", async e => {
     } catch(err){ $("#f_err").textContent = errText(err); }
   }
 });
-document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; S._qf = true; render(); S._qf = false; } });
+document.addEventListener("click", e => { const a = e.target.closest && e.target.closest('[data-act="flist"]'); if(a){ e.preventDefault(); openFillList(); } });
+document.addEventListener("input", e => { if(e.target.id === "fq"){ S.fq = e.target.value; S._fqf = true; openFillList(); S._fqf = false; return; }
+  if(e.target.id === "q"){ S.q = e.target.value; S._qf = true; render(); S._qf = false; } });
 document.addEventListener("click", e => { const d = $("#dlg"); if(e.target === d) d.close(); });
 setInterval(() => { if(S.B && !document.hidden && !$("#dlg").open && !DRAG && (document.activeElement || {}).id !== "q") load(true); }, 60000);
 
