@@ -319,7 +319,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="calendar.js?v=20261110wide"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
-<script src="staffing.js?v=20261109mtstart"></script>
+<script src="staffing.js?v=20261111gps"></script>
 <script src="perks.js"></script>
 <script src="calls.js"></script>
 <script src="market_watch.js"></script>
@@ -2037,6 +2037,30 @@ async function loadBirthdays(){
     ${month.length ? `<details class="acc2" ${today.length || week.length ? "" : "open"}><summary><b>🎉 ${MONTHS[mo - 1]} birthdays</b><span class="pill green">${month.length}</span></summary>${month.map(b => `<div class="bdrow"><b>${esc(b.name)}</b><span class="muted" style="margin-left:auto">${when(b)}</span></div>`).join("")}</details>` : ""}
   </div>`;
 }
+// 2026-11-11 (Brandon: "not collect data unless they are on the clock"): after a clock in/out on a phone, people on the phone GPS list
+// get Traccar Client started / stopped (org.traccar.client://action/start|stop, intent:// on Android; no prompt in the app).
+// The browser may need a tap, so a bar with the button stays up for a minute too. window.gpsAfterPunch is used by staffing.js.
+async function gpsAfterPunch(kind){
+  try{
+    const ua = navigator.userAgent, isAnd = /Android/.test(ua), isIos = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    if(!isAnd && !isIos) return;
+    const f = (await sb.rpc("field_gps_me")).data;
+    if(!f || !f.on_list || !(f.devices || []).some(d => d.user_id === f.me && !d.off && !d.test)) return;
+    const act = kind === "in" ? "start" : "stop";
+    const link = isAnd ? `intent://action/${act}#Intent;scheme=org.traccar.client;package=org.traccar.client;end` : `org.traccar.client://action/${act}`;
+    let bar = document.getElementById("gpsbar");
+    if(!bar){ bar = document.createElement("div"); bar.id = "gpsbar";
+      bar.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:9999;background:#2f4a14;color:#fff;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 6px 24px rgba(0,0,0,.3)";
+      document.body.appendChild(bar); }
+    bar.innerHTML = `<span style="flex:1;min-width:160px">${kind === "in" ? "Clocked in. Turn on your GPS:" : "Clocked out. Turn off your GPS:"}</span>
+      <a href="${link}" style="background:#fff;color:#2f4a14;font-weight:800;border-radius:10px;padding:10px 14px;text-decoration:none">${kind === "in" ? "▶ Start GPS" : "■ Stop GPS"}</a>
+      <button type="button" style="background:none;border:0;color:#fff;font-size:20px;cursor:pointer" aria-label="Close">✕</button>`;
+    bar.querySelector("button").onclick = () => bar.remove();
+    clearTimeout(gpsAfterPunch.t); gpsAfterPunch.t = setTimeout(() => bar.remove(), 60000);
+    try{ location.href = link; }catch(e){}
+  }catch(e){}
+}
+window.gpsAfterPunch = gpsAfterPunch;
 // 2026-11-06 (Brandon): "a clock in button on the home hub page ... quick and easy". Same clock_punch as Staffing ▸ Clock In / Clock Out.
 // Shows only for people on the hub time clock (clock_people is_me). One location pin per tap, like the Staffing page.
 async function homeClock(el){
@@ -2059,6 +2083,7 @@ async function homeClock(el){
     b.onclick = () => { b.disabled = true; b.textContent = "Getting your location…";
       const go = (lat, lng, acc) => sb.rpc("clock_punch", { p_kind:b.dataset.k, p_lat:lat, p_lng:lng, p_acc:acc }).then(r => {
         if(r.error) alert(/failed to fetch|networkerror|load failed/i.test(r.error.message || "") ? "No signal right now. Try again when you have service (a missed clock-in can be added on Staffing)." : (window.niceErr ? niceErr(r.error) : r.error.message));
+        else gpsAfterPunch(b.dataset.k);
         homeClock(el); }, () => { alert("No signal right now. Try again when you have service."); homeClock(el); });
       if(!navigator.geolocation) return go(null, null, null);
       navigator.geolocation.getCurrentPosition(p => go(p.coords.latitude, p.coords.longitude, Math.round(p.coords.accuracy)), () => go(null, null, null), { enableHighAccuracy:true, timeout:10000, maximumAge:60000 }); };
