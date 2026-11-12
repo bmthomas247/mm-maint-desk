@@ -4617,6 +4617,8 @@ function fireFields(code){ var f=fireInfo(code), l=licInfo(code), pe=pedit(code)
     '<label class="f"><span>License #</span><input id="h_ln" value="'+esc(l.no)+'"></label>'+
     '<label class="f"><span>License expires</span><input id="h_le" type="date" value="'+esc(l.exp)+'"><span class="hint">'+(l.exp?dueState(l.exp).t:'')+'</span></label></div>'; }
 /* Haylee 2026-11-04: Wasatch County is two licenses from two offices (her 2 Dropbox sheets), so Licensing shows them as 2 "counties" */
+/* 2026-11-11 (Haylee, Bugs & upgrades #38): combo listings are licensed as their separate units, so they stay off the licensing lists */
+var LIC_SKIP={"ST 14":1,"UM 3013":1};
 var WASATCH_SPLIT=[{name:"Wasatch Clerk",rx:/clerk/i},{name:"Wasatch Health Department",rx:/health/i}];
 function licOfKind(l,w){ var o={no:"",exp:"",why:[],county:w.name,summit:false};
   if(!l.lic){ o.no=l.no; o.exp=l.exp; return o; }
@@ -4625,7 +4627,7 @@ function licOfKind(l,w){ var o={no:"",exp:"",why:[],county:w.name,summit:false};
   o.exp=ok.map(function(e){ return e.exp; }).sort()[0]||""; o.no=ok.map(function(e){ return e.no; }).filter(Boolean).join(" / ");
   if(pend.length) o.pending=pend.map(function(e){ return e.kind.replace(/ (business )?(license|permit)$/,"")+": "+e.note; }).join(" · ");
   o.notes=ok.filter(function(e){ return e.note; }).map(function(e){ return e.note; }).join(" · "); return o; }
-function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(function(h){ return !h.company; });
+function vFire(){ var u=S.ui, flt=u.fireF||"due", homes=(D.homes||[]).filter(function(h){ return !h.company && !LIC_SKIP[h.code]; });
   if(u.licCounty==="Wasatch") u.licCounty="";
   var rows0=[]; homes.forEach(function(h){ var f=fireInfo(h.code), l=licInfo(h.code), r={code:h.code,f:f,l:l,fs:dueState(f.exp),ls:licState(l),county:countyOf(h.code)||"County not set",hood:(h.community||"").trim()||"Neighborhood not set"};
     if(r.county!=="Wasatch") return rows0.push(r);
