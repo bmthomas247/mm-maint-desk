@@ -85,8 +85,10 @@ const fail = e => { console.error(e); toast("Didn't work: " + ((e && e.message) 
 const ago = ts => { if(!ts) return "never"; const m = (Date.now()-new Date(ts))/6e4; return m < 1 ? "just now" : m < 60 ? Math.round(m)+" min ago" : m < 1440 ? Math.round(m/60)+" h ago" : Math.round(m/1440)+" d ago"; };
 async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, args); if(error) throw error; return data; }
 async function q(t, sel, f){ let x = sb.from(t).select(sel); if(f) x = f(x); const { data, error } = await x; if(error) throw error; return data || []; }
-const MY = (path) => "https://my.home-assistant.io/redirect/" + path;
 const HA = "http://homeassistant.local";
+// Straight to the hub (2026-11-11): my.home-assistant.io remembers an address per browser, and an old ":8123" broke new hubs (port 80).
+const MY = (path) => { const m = /^config_flow_start\/?\?domain=(\w+)/.exec(path);
+  return m ? `${HA}/config/integrations/dashboard/add?domain=${m[1]}` : path.startsWith("integrations") ? `${HA}/config/integrations/dashboard` : `${HA}/`; };
 const ZIP = location.origin + "/moose_locks.zip";
 const INSTALL = 'D=/config; [ -d /homeassistant ] && D=/homeassistant; cd /tmp && (curl -fsSL -o ml.zip ' + ZIP + ' || wget -qO ml.zip ' + ZIP + ') && unzip -oq ml.zip -d "$D" && echo "Moose Locks installed - restarting" && ha core restart';
 const OFFICE = "moose-company";
@@ -129,7 +131,7 @@ const STEPS = [
     <ol start="4"><li>Location: Park City. Say no to the analytics questions. Tap <b>Finish</b>.</li></ol>` },
   { k:"zwave", t:"Turn on Z-Wave", h:() => `
     <a class="btn go wide" href="${MY("config_flow_start/?domain=zwave_js")}" target="_blank" rel="noopener">Set up Z-Wave</a>
-    <div class="muted small">The first time, it asks for your hub's address: type <b>${HA}</b> (no ":8123" on new hubs; if that doesn't open, try adding ":8123") and save.</div>
+    <div class="muted small">Opens the hub at <b>${HA}</b>. Won't open? Make sure this is the only hub plugged into the router.</div>
     <ol><li>Pick the <b>recommended</b> setup / "use the add-on".</li><li>If it asks which device, pick the <b>Z-Wave</b> one (e.g. "SONOFF ZWave Dongle").</li>
       <li>Wait for <b>Success</b> (a few minutes). New security keys are made for this hub. Leave them alone.</li></ol>` },
   { k:"term", t:"Add the Terminal", h:() => `
