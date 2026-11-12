@@ -173,16 +173,17 @@ function drawPw(){
   const c = $("#cppw"); if(c) c.onclick = () => copy(PW, c);
 }
 
-let HOMES = null;
+let HOMES = null, MOVED = null;
 async function homes(){
   if(HOMES) return HOMES;
+  // Every active home can be picked (Brandon 2026-11-11: Chris does it all from here). A home not on our lock system yet is added when the hub goes to it.
   const hs = await q("lock_homes", "property_id,section", x => x.eq("section","ours"));
+  const ours = new Set(hs.map(h => h.property_id));
   const hubs = await q("lock_hubs", "property_id", x => x.eq("active", true).not("property_id","is",null));
   const taken = new Set(hubs.map(h => h.property_id));
-  const ids = [...new Set(hs.map(h => h.property_id).concat([OFFICE]))];
-  const ps = await q("properties", "id,code", x => x.in("id", ids));
-  const code = Object.fromEntries(ps.map(p => [p.id, p.code]));
-  HOMES = ids.filter(id => id !== OFFICE).map(id => ({ id, code: code[id] || id, taken: taken.has(id) })).sort((a,b) => a.code.localeCompare(b.code));
+  const ps = await q("properties", "id,code,active", x => x.eq("active", true));
+  HOMES = ps.filter(p => p.id !== OFFICE && p.code).map(p => ({ id: p.id, code: p.code, ours: ours.has(p.id), taken: taken.has(p.id) }))
+    .sort((a,b) => a.code.localeCompare(b.code, undefined, { numeric:true }));
   return HOMES;
 }
 async function findHubs(){
@@ -206,28 +207,43 @@ async function findHubs(){
         : `<p class="muted">No new hub yet. Finished step ${STEPS.length-1}? Give it 1–2 minutes after the restart; this checks every 10 seconds.</p>`}
       ${office.length ? `<div class="card" style="margin-top:8px"><b>🧪 On the office test bench</b>
           ${office.map(h => `<div style="margin-top:8px"><span class="pill ${live(h.last_seen)?"g":"r"}">${live(h.last_seen) ? "Online" : "Offline · "+ago(h.last_seen)}</span> ${esc(h.name||"Hub")}
-            <div class="muted small">Pair a lock, thermostat or noise sensor to test it in <a href="locks.html#/install/${OFFICE}" target="_top">Locks · Field ▸ Moose company</a>.
-              Before it leaves: remove the test devices from it there (Option 1 / remove mode), then:</div>
+            <div class="muted small">Want to test a lock first? Pair it in <a href="locks.html#/install/${OFFICE}" target="_top">Locks · Field ▸ Moose company</a>, then remove it there before the hub leaves.</div>
+            <div class="tip" style="margin-top:8px"><b>Taking this hub to a home</b>
+              <ol style="margin:6px 0 0 18px;padding:0"><li>Pick the home below and tap <b>Send to this home</b>.</li>
+                <li>Write the home code on the hub with a marker.</li>
+                <li>At the home: network cable into the internet router, Z-Wave stick still on, then power. Wait about 2 minutes.</li>
+                <li>Open <b>Locks ▸ Field ▸ that home ▸ Install</b> and follow the checklist (it shows "Hub online").</li></ol></div>
             <label>Send it to</label><select data-move-home="${h.id}"><option value="">Pick the home</option>${opts}</select>
-            <button class="btn wide" data-move="${h.id}">📦 Done testing: send to that home</button></div>`).join("")}</div>` : ""}`;
+            <button class="btn go wide" data-move="${h.id}">📦 Send to this home</button></div>`).join("")}</div>` : ""}
+      ${MOVED ? `<div class="card ok" style="margin-top:8px"><b>✓ Hub is now on ${esc(MOVED.code)}</b><div class="muted small">Write "${esc(MOVED.code)}" on it, plug it in at the home, then:</div>
+          <a class="btn go wide" href="locks.html#/install/${esc(MOVED.id)}" target="_top">Open ${esc(MOVED.code)} ▸ Install</a></div>` : ""}`;
     $$("[data-office]").forEach(b => b.onclick = () => claim(b.dataset.office, OFFICE, "Office test hub"));
     $$("[data-claim]").forEach(b => b.onclick = () => { const s = $(`[data-home="${b.dataset.claim}"]`); if(!s.value) return toast("Pick the home first");
       const c = (HOMES.find(h => h.id === s.value) || {}).code; claim(b.dataset.claim, s.value, "Hub " + c); });
     $$("[data-move]").forEach(b => b.onclick = async () => { const s = $(`[data-move-home="${b.dataset.move}"]`); if(!s.value) return toast("Pick the home first");
       const c = (HOMES.find(h => h.id === s.value) || {}).code;
-      if(!confirm(`Send this hub to ${c}? The office test devices are switched off in our list (nothing is deleted).`)) return;
-      try{ const pc = await rpc("lock_hub_release", { p_hub: b.dataset.move, p_note: "office test done" });
+      if(!confirm(`Send this hub to ${c}? Anything you tested with it at the office is switched off in our list (nothing is deleted).`)) return;
+      try{ await addHome(s.value); const pc = await rpc("lock_hub_release", { p_hub: b.dataset.move, p_note: "office test done" });
         await rpc("lock_claim_hub", { p_hub: null, p_pair: pc, p_property: s.value, p_name: "Hub " + c });
-        HOMES = null; toast(`Hub moved to ${c} ✓`); DONE.find = true; saveDone(); hubView(); }catch(e){ fail(e); } });
+        MOVED = { id: s.value, code: c }; HOMES = null; toast(`Hub moved to ${c} ✓`); DONE.find = true; saveDone(); hubView(); }catch(e){ fail(e); } });
     if(wait.some(h => live(h.last_seen))) { /* keep checking so the pill stays honest */ }
   }catch(e){ box.innerHTML = `<p class="muted">Couldn't check: ${esc(e.message||e)}</p>`; }
   timer = setTimeout(() => { if(TAB === "hub" && $("#findbox") && !document.activeElement.closest?.("#findbox select")) findHubs(); }, 10000);
 }
+// Puts a home on our lock system (Locks managers/admins) when it isn't yet, so its Install checklist + guest codes start.
+async function addHome(pid){
+  if(pid === OFFICE) return;
+  const h = (HOMES || []).find(x => x.id === pid);
+  if(h && h.ours) return;
+  await rpc("lock_home_set", { p_property: pid, p_section: "ours", p_enabled: true });
+}
 async function claim(hub, pid, name){
+  try{ await addHome(pid); }catch(e){ return fail(e); }
   try{ await rpc("lock_claim_hub", { p_hub: hub, p_pair: null, p_property: pid, p_name: name }); }
   catch(e){ // not on the same internet as the hub: use its pair code instead
     try{ const w = (await rpc("lock_hubs_waiting")).find(h => h.id === hub); if(!w) throw e;
       await rpc("lock_claim_hub", { p_hub: null, p_pair: w.pair_code, p_property: pid, p_name: name }); }catch(e2){ return fail(e2); } }
+  if(pid !== OFFICE) MOVED = { id: pid, code: ((HOMES||[]).find(h => h.id === pid) || {}).code || pid };
   HOMES = null; DONE.find = true; saveDone(); toast(pid === OFFICE ? "On the office test bench ✓" : "Added ✓"); hubView();
 }
 
