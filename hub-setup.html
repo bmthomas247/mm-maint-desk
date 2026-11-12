@@ -119,8 +119,10 @@ const STEPS = [
     <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a><div class="muted small">New hubs use <b>http://homeassistant.local</b> (no ":8123"). Older ones need ":8123" on the end.</div>
     <div class="tip">Won't open? Get the <b>Home Assistant</b> app (<a href="https://apps.apple.com/app/home-assistant/id1099568401" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.homeassistant.companion.android" target="_blank" rel="noopener">Android</a>): it finds the hub on the Wi-Fi by itself.</div>
     <ol><li>It opens on <b>Create user</b> (if you see <b>Create my smart home</b> first, tap it).</li><li>Name <b>Moose</b>, username <b>moose</b>. Every hub uses this same Moose account.</li>
-      <li>Password: the shared one in LastPass, entry <b>"Moose lock hubs"</b>. With the LastPass app or extension on your phone/computer, tap the box and LastPass fills it in. Don't have it? Ask Brandon or Kim to share the entry with you.</li></ol>
+      <li>Password: tap <b>Copy the hub password</b> below, then paste it in both password boxes.</li></ol>
+    <div id="hubpw"><div class="muted small">Loading the hub password…</div></div>
     <a class="btn wide" href="https://lastpass.com/vault/" target="_blank" rel="noopener">🔐 Open LastPass</a>
+    <div class="muted small">It's also in LastPass, entry <b>"Moose lock hubs"</b>.</div>
     <div class="muted small">Very first hub, or the password needs changing (someone who knew it left)? Make one here and save it in LastPass as "Moose lock hubs" <b>before</b> you use it.</div>
     <button class="btn" id="mkpw">🔑 Make the shared password</button>
     <div id="pwbox"></div>
@@ -163,9 +165,27 @@ function hubView(){
   $$("[data-open]").forEach(h => h.onclick = () => h.closest(".step").classList.toggle("closed"));
   $("#next").onclick = () => { if(confirm("Start fresh for the next hub?")){ DONE = {}; PW = ""; saveDone(); hubView(); window.scrollTo(0,0); } };
   const mk = $("#mkpw"); if(mk) mk.onclick = () => { PW = makePw(); drawPw(); };
-  drawPw();
+  drawPw(); hubPw();
   const ci = $("#cpinstall"); if(ci) ci.onclick = () => copy(INSTALL, ci);
   findHubs();
+}
+// Shared hub owner password: hub_office_codes slot "lock_hub_pw" (office_codes(): maint teams + admins only).
+// Never shown on screen, only copied. Admins type it in / change it here (office_code_set; the log keeps no value).
+async function hubPw(){
+  const box = $("#hubpw"); if(!box) return;
+  let row = null, adm = false;
+  try{ [row, adm] = await Promise.all([ rpc("office_codes").then(r => (r||[]).find(x => x.key === "lock_hub_pw") || null), rpc("hub_is_admin") ]); }
+  catch(e){ box.innerHTML = `<div class="muted small">Couldn't load the hub password (${esc(e.message||e)}). Use LastPass.</div>`; return; }
+  const has = !!(row && row.code);
+  box.innerHTML = `${has ? `<button class="btn go wide" id="cphubpw">📋 Copy the hub password</button>`
+      : row ? `<div class="muted small">The hub password isn't saved in the hub yet${adm ? "" : ". Ask Brandon or Kim, or use LastPass"}.</div>` : `<div class="muted small">Use LastPass for the password.</div>`}
+    ${adm ? `<details style="margin-top:6px"><summary class="small">${has ? "Change" : "Save"} the hub password (admins)</summary>
+      <input id="hubpwin" type="password" autocomplete="new-password" placeholder="Paste the password from LastPass" style="width:100%;margin-top:6px">
+      <button class="btn wide" id="hubpwsave" style="margin-top:6px">🔒 Save it in the hub</button>
+      <div class="muted small">Only maintenance managers, the field crew and admins can copy it. Nobody sees it on screen.</div></details>` : ""}`;
+  const c = $("#cphubpw"); if(c) c.onclick = () => copy(row.code, c);
+  const s = $("#hubpwsave"); if(s) s.onclick = async () => { const v = $("#hubpwin").value.trim(); if(!v) return toast("Paste the password first");
+    try{ await rpc("office_code_set", { p_key: "lock_hub_pw", p_code: v, p_teams: null, p_note: null }); toast("Saved ✓"); hubPw(); }catch(e){ fail(e); } };
 }
 function drawPw(){
   const b = $("#pwbox"); if(!b) return;
