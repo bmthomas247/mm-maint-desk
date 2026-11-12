@@ -17,5 +17,5 @@ fi
 V=$(grep -o '"version"[^,]*' "$D/custom_components/moose_locks/manifest.json" | head -1)
 echo "== Moose Locks installed ($V) =="
 echo "== Restarting Home Assistant. This page will drop out for about a minute. =="
-echo "== Then go back to the Hub setup page and do step 7 (Add Moose Locks). =="
+echo "== Then go back to the Hub setup page and tap Add Moose Locks, then Submit. =="
 ha core restart
