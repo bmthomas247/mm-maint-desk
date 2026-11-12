@@ -90,7 +90,8 @@ const HA = "http://homeassistant.local";
 const MY = (path) => { const m = /^config_flow_start\/?\?domain=(\w+)/.exec(path);
   return m ? `${HA}/config/integrations/dashboard/add?domain=${m[1]}` : path.startsWith("integrations") ? `${HA}/config/integrations/dashboard` : `${HA}/`; };
 const ZIP = location.origin + "/moose_locks.zip";
-const INSTALL = 'D=/config; [ -d /homeassistant ] && D=/homeassistant; cd /tmp && (curl -fsSL -o ml.zip ' + ZIP + ' || wget -qO ml.zip ' + ZIP + ') && unzip -oq ml.zip -d "$D" && echo "Moose Locks installed - restarting" && ha core restart';
+// One short line (2026-11-11): the long version kept losing its start in the hub's Terminal. hub.sh does the work.
+const INSTALL = 'curl -fsSL crew.moosemanagement.com/hub.sh|bash';
 const OFFICE = "moose-company";
 let TAB = (() => { try { return localStorage.getItem("mm_hubsetup_tab") || "hub"; } catch(e) { return "hub"; } })();
 let DONE = (() => { try { return JSON.parse(localStorage.getItem("mm_hubsetup_done") || "{}"); } catch(e) { return {}; } })();
@@ -140,8 +141,10 @@ const STEPS = [
     <ol><li>Tap <b>Install</b>, wait, then <b>Start</b>.</li><li>Tap <b>Open Web UI</b>. A black screen with a blinking cursor opens.</li></ol>` },
   { k:"install", t:"Install Moose Locks (copy, paste, Enter)", h:() => `
     <button class="btn go wide" id="cpinstall">📋 Copy the install line</button>
-    <div class="code">${esc(INSTALL)}</div>
-    <ol><li>In the Terminal, press and hold → <b>Paste</b> → Enter.</li><li>Wait for <b>Moose Locks installed - restarting</b>. Home Assistant restarts (about 1 minute).</li></ol>
+    <div class="code big" style="font-size:17px">${esc(INSTALL)}</div>
+    <ol><li>Wait until the Terminal shows the green <b>[core-ssh ~]$</b> line, then click in it.</li>
+      <li>Paste (Ctrl+V, or press and hold → <b>Paste</b>), or just type the line above. Press <b>Enter</b>.</li>
+      <li>Wait for <b>Moose Locks installed</b>. Home Assistant restarts (about 1 minute).</li></ol>
     <div class="muted small">After this, the hub keeps Moose Locks up to date by itself at night.</div>` },
   { k:"add", t:"Add Moose Locks to the hub", h:() => `
     <a class="btn go wide" href="${MY("config_flow_start/?domain=moose_locks")}" target="_blank" rel="noopener">Add Moose Locks</a>
