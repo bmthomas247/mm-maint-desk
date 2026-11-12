@@ -65,7 +65,7 @@ label{display:block;font-weight:700;font-size:14px;margin-top:10px}
 </head>
 <body>
 <header><div class="in"><h1>🔧 Lock hub setup</h1><p>Get a hub ready, test it here, then send it to a home.</p></div></header>
-<div class="tabs"><button data-tab="hub">🧰 Get a hub ready</button><button data-tab="noise">🔊 Noise &amp; dB</button></div>
+<div class="tabs"><button data-tab="hub">🧰 Get a hub ready</button><button data-tab="hubs">📦 Our hubs</button><button data-tab="noise">🔊 Noise &amp; dB</button></div>
 <main id="app"><div class="card muted">Loading…</div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
@@ -281,6 +281,48 @@ async function claim(hub, pid, name){
   HOMES = null; DONE.find = true; saveDone(); toast(pid === OFFICE ? "On the office test bench ✓" : "Added ✓"); hubView();
 }
 
+// ---------- Our hubs: every hub, its home, online, and "move it to another home" (Brandon 2026-11-11) ----------
+// Move = lock_hub_release (managers/admins; the old home's devices on this hub are switched off in our list, nothing deleted)
+// + lock_claim_hub by the new pair code; a home not on our lock system yet is added first (addHome).
+async function hubsView(){
+  clearTimeout(timer);
+  let hubs = [], codes = {}, hs = [], locks = [];
+  try{
+    [hubs, hs] = await Promise.all([ q("lock_hubs", "id,name,property_id,last_seen,version,claimed_at", x => x.eq("active", true).not("property_id","is",null)), homes() ]);
+    const ids = [...new Set(hubs.map(h => h.property_id))];
+    if(ids.length){ (await q("properties","id,code", x => x.in("id", ids))).forEach(p => codes[p.id] = p.code);
+      locks = await q("locks","hub_id,property_id", x => x.in("property_id", ids).eq("active", true)); }
+  }catch(e){ app.innerHTML = `<div class="card">Couldn't load the hubs: ${esc(e.message||e)}</div>`; return; }
+  const live = ts => ts && (Date.now()-new Date(ts)) < 5*6e4;
+  const nm = pid => pid === OFFICE ? "Moose office (test bench)" : (codes[pid] || pid);
+  hubs.sort((a,b) => nm(a.property_id).localeCompare(nm(b.property_id), undefined, { numeric:true }));
+  const opts = hs.map(h => `<option value="${esc(h.id)}">${esc(h.code)}${h.taken ? " (has a hub, this replaces it)" : ""}</option>`).join("");
+  app.innerHTML = `
+    <div class="card"><b>Our hubs · ${hubs.length}</b>
+      <div class="muted small" style="margin-top:6px">Every hub and the home it belongs to. Picked the wrong home, or a hub is going somewhere else? Change it here, then take the hub there and plug it in.</div></div>
+    ${hubs.length ? hubs.map(h => { const n = locks.filter(l => l.hub_id === h.id || (!l.hub_id && l.property_id === h.property_id)).length;
+      return `<div class="card" style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b style="font-size:18px">${esc(nm(h.property_id))}</b>
+          <div class="muted small">${esc(h.name||"Hub")} · Moose Locks ${esc(h.version||"")}</div></div>
+          <span class="pill ${live(h.last_seen)?"g":"a"}">${live(h.last_seen) ? "Online" : "Offline · " + ago(h.last_seen)}</span></div>
+        ${n ? `<div class="note" style="margin-top:8px">${n} lock${n===1?"":"s"} paired on this hub. Moving it switches them off here (nothing deleted); re-pair them at the new home.</div>` : ""}
+        <details style="margin-top:8px"><summary><b>Change its home</b></summary>
+          <label>Move it to</label><select data-mv-home="${h.id}"><option value="">Pick the home</option>${opts}</select>
+          <button class="btn go wide" data-mv="${h.id}" data-from="${esc(nm(h.property_id))}" data-n="${n}" style="margin-top:8px">📦 Move this hub</button>
+          ${h.property_id !== OFFICE ? `<button class="btn wide" data-mv-office="${h.id}" data-from="${esc(nm(h.property_id))}" data-n="${n}" style="margin-top:6px">🧪 Back to the office test bench</button>` : ""}</details>
+        ${h.property_id !== OFFICE ? `<a class="btn wide" href="locks.html#/install/${esc(h.property_id)}" target="_top" style="margin-top:8px">Open ${esc(nm(h.property_id))} ▸ Install</a>` : ""}
+      </div>`; }).join("") : `<div class="card muted" style="margin-top:8px">No hubs yet. Set one up in "Get a hub ready".</div>`}`;
+  const move = async (hub, pid, from, n) => {
+    const to = pid === OFFICE ? "the office test bench" : ((HOMES||[]).find(h => h.id === pid) || {}).code || pid;
+    if(!confirm(`Move this hub from ${from} to ${to}?${+n ? `\n\n${n} paired lock(s) will be switched off at ${from} (nothing is deleted).` : ""}`)) return;
+    try{ await addHome(pid); const pc = await rpc("lock_hub_release", { p_hub: hub, p_note: `moved from ${from} on Hub setup` });
+      await rpc("lock_claim_hub", { p_hub: null, p_pair: pc, p_property: pid, p_name: pid === OFFICE ? "Office test hub" : "Hub " + to });
+      HOMES = null; toast(`Hub moved to ${to} ✓ Write "${to}" on it.`); hubsView(); }catch(e){ fail(e); } };
+  $$("[data-mv]").forEach(b => b.onclick = () => { const s = $(`[data-mv-home="${b.dataset.mv}"]`); if(!s.value) return toast("Pick the home first"); move(b.dataset.mv, s.value, b.dataset.from, b.dataset.n); });
+  $$("[data-mv-office]").forEach(b => b.onclick = () => move(b.dataset.mvOffice, OFFICE, b.dataset.from, b.dataset.n));
+  timer = setTimeout(() => { if(TAB === "hubs" && !(document.activeElement && /SELECT/.test(document.activeElement.tagName)) && !$("details[open]")) hubsView(); }, 30000);
+}
+
 // ---------- Part 2: noise sensor + decibel level ----------
 let NZ = { pid: null };
 async function noiseView(){
@@ -334,7 +376,7 @@ async function noiseView(){
 
 function draw(){
   $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
-  if(TAB === "noise") noiseView(); else hubView();
+  if(TAB === "noise") noiseView(); else if(TAB === "hubs") hubsView(); else hubView();
 }
 $$(".tabs button").forEach(b => b.onclick = () => { TAB = b.dataset.tab; try { localStorage.setItem("mm_hubsetup_tab", TAB); } catch(e) {} draw(); });
 
