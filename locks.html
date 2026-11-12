@@ -929,14 +929,18 @@ async function installHome(pid){
           'Lock already has a different master code? Type the old one, ⚙, <b>1</b> (= "Master PIN code setting"), ⚙, then follow the voice to enter the new one.')}</details>` : ""}
       ${newMasterBtn}${mark(STEPS[0])}`,
     hub: (hub ? `<span class="pill ${online(hub)?"green":"red"}">${online(hub)?"Hub online":"Hub offline"}</span>${netPill(hub)} <span class="muted">checked in ${ago(hub.last_seen)}</span>`
-      : `<div class="muted">Put the hub in the owner closet or utility room by the router. Ethernet cable from the router, stick on the extension cable placed up high, then power. It takes about 5 minutes to warm up.</div>
+      : `<div class="card" style="margin-bottom:8px;border-color:var(--moose)"><b>Hub got ready at the office?</b>
+           <ol style="margin:6px 0 0 18px;padding:0"><li>Before you leave the office: <a href="hub-setup.html" target="_top">Locks ▸ Hub setup</a> ▸ step 8 ▸ pick <b>${esc((p||{}).code||"this home")}</b> ▸ <b>Send to this home</b>.</li>
+             <li>Here: network cable into the internet router, Z-Wave stick still on, then power.</li>
+             <li>Wait about 2 minutes. This step turns green ("Hub online") by itself.</li></ol></div>
+         <div class="muted">Put the hub in the owner closet or utility room by the router. Ethernet cable from the router, stick on the extension cable placed up high, then power. It takes about 5 minutes to warm up.</div>
          <div class="card" style="margin-top:8px;border-color:var(--amber)"><b>⏳ Hub warming up? Do these meanwhile:</b>
            <ul style="margin:6px 0 0 18px;padding:0">${isNewHome
              ? "<li>Install the lock hardware on each door (fresh batteries in)</li><li>Hang the key box with the spare key (code "+KB_DEFAULT+")</li><li>Photo where the hub is</li>"
              : "<li>Take the locks, thermostats and sensors off Brivo (next step) - Brivo hub stays plugged in until they're all off</li><li>Fresh batteries in each lock</li><li>Hang the key box with the spare key (code "+KB_DEFAULT+")</li><li>Photo where the hub is</li>"}</ul></div>
          <button class="btn go wide" id="find" style="margin-top:10px">Find hub</button><div id="found"></div>
          <details style="margin-top:8px"><summary>Doesn't show up? Type the 6-digit code</summary><div class="row"><input id="pc" inputmode="numeric" maxlength="6" class="grow"><button class="btn primary" id="claim">Add</button></div>
-         <p class="muted">The code is on the hub's Home Assistant page (http://homeassistant.local:8123 → Notifications).</p></details>`)
+         <p class="muted">The code is on the hub's sticker, or in Locks ▸ Hub setup ▸ step 8 (or http://homeassistant.local → Notifications).</p></details>`)
       + `<div style="margin-top:10px"><b>Where is the hub?</b> <span class="muted">So the next tech can find it.</span>${spotForm("hub", {where:"Where is it? (short)", ph:"Owner closet by the router, top shelf", picks:["Owner closet","Furnace room","Utility room"]})}</div>`,
     brivo: `<div class="muted">Every lock, thermostat and sensor is still "married" to Brivo's old hub. They must leave Brivo before they can join ours. <b>Do this while the new hub warms up.</b></div>
       <div class="card" style="margin-top:8px;border-color:var(--moose)"><b style="font-size:16px">Option 1 - Brivo dashboard (best, keeps the master code)</b>
