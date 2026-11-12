@@ -122,16 +122,19 @@ const STEPS = [
     <ol><li>Z-Wave stick → extension cable → a USB port on the hub.</li><li>Network cable from the hub to the office router.</li><li>Power plug in <b>last</b>.</li></ol>
     <div class="muted">Give it <b>about 6 minutes</b> after you plug in power (our first hub took 6; it can take up to 20). It may show "Preparing Home Assistant" with a progress bar. That's normal. Leave it plugged in.</div>` },
   { k:"account", t:"Open Home Assistant and make the owner account", h:() => `
-    <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a><div class="muted small">New hubs use <b>http://homeassistant.local</b> (no ":8123"). Older ones need ":8123" on the end.</div>
+    <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a>
+    <div class="muted small">Says "refused to connect"? The hub is still getting ready. Use this one until it's done:</div>
+    <a class="btn wide" href="${HA}:8123" target="_blank" rel="noopener">Open Home Assistant (while it's starting)</a>
     <div class="tip">Won't open? Get the <b>Home Assistant</b> app (<a href="https://apps.apple.com/app/home-assistant/id1099568401" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.homeassistant.companion.android" target="_blank" rel="noopener">Android</a>): it finds the hub on the Wi-Fi by itself.</div>
     <ol><li>It opens on <b>Create user</b> (if you see <b>Create my smart home</b> first, tap it).</li><li>Name <b>Moose</b>, username <b>moose</b>. Every hub uses this same Moose account.</li>
       <li>Password: tap <b>Copy the hub password</b> below, then paste it in both password boxes.</li></ol>
     <div id="hubpw"><div class="muted small">Loading the hub password…</div></div>
     <a class="btn wide" href="https://lastpass.com/vault/" target="_blank" rel="noopener">🔐 Open LastPass</a>
     <div class="muted small">It's also in LastPass, entry <b>"Moose lock hubs"</b>.</div>
-    <div class="muted small">Very first hub, or the password needs changing (someone who knew it left)? Make one here and save it in LastPass as "Moose lock hubs" <b>before</b> you use it.</div>
-    <button class="btn" id="mkpw">🔑 Make the shared password</button>
-    <div id="pwbox"></div>
+    <details style="margin-top:6px"><summary class="small">Changing the shared password? (Brandon / Kim only, rare)</summary>
+      <div class="muted small">Only when someone who knew it left. Every hub then needs the new one. Make it, save it in LastPass as "Moose lock hubs", then save it in the hub above.</div>
+      <button class="btn" id="mkpw">🔑 Make a new shared password</button>
+      <div id="pwbox"></div></details>
     <ol start="4"><li>Location: Park City. Say no to the analytics questions. Tap <b>Finish</b>.</li></ol>` },
   { k:"zwave", t:"Turn on Z-Wave", h:() => `
     <a class="btn go wide" href="${MY("config_flow_start/?domain=zwave_js")}" target="_blank" rel="noopener">Set up Z-Wave</a>
