@@ -588,7 +588,11 @@ function toolsCard(hub, devices){
     <table style="margin-top:10px"><tr><th>Device</th><th>Signal</th><th>Dropped</th><th></th></tr>
       ${devices.map(d=>`<tr><td><b>${esc(d.name)}</b><div class="muted" style="font-size:12px">node ${d.node_id}${d.online===false?' · <span style="color:var(--red)">not answering</span>':""}</div></td>
         <td>${signal(d.rssi)}</td><td>${d.dropped??"-"}</td>
-        <td style="text-align:right"><button class="btn small" data-ping="${d.node_id}">Ping</button></td></tr>`).join("") || '<tr><td colspan="4" class="muted">No devices paired yet.</td></tr>'}
+        <td style="text-align:right"><button class="btn small" data-ping="${d.node_id}">Ping</button></td></tr>`).join("")}
+      ${(st.pending||[]).map(d=>`<tr><td><b>${esc(d.model||"Device")}</b><div class="muted" style="font-size:12px">node ${d.node_id} · <span style="color:var(--amber,#b5770a)">${d.ready?"paired - not a lock, thermostat or sensor we know":"paired - identifying…"}</span>${d.status==="dead"?' · <span style="color:var(--red)">not answering</span>':d.status==="asleep"?" · asleep - wake it":""}</div></td>
+        <td colspan="2" class="muted" style="font-size:12px">Reached the hub. Wake it (tap its screen / button), then Read again.</td>
+        <td style="text-align:right"><button class="btn small" data-reread="${d.node_id}">Read again</button></td></tr>`).join("")}
+      ${devices.length || (st.pending||[]).length ? "" : '<tr><td colspan="4" class="muted">No devices paired yet.</td></tr>'}
     </table>
     <p class="muted" style="font-size:12.5px">Weak signal (1 bar, or lots of dropped)? Move the stick higher / closer on its cable, or add a Z-Wave repeater between the hub and that door, then Rebuild routes.</p>
     <div class="grid3"><button class="btn small" id="t_heal">Rebuild routes</button><button class="btn small" id="t_add">Add mode</button><button class="btn small" id="t_remove">Remove mode</button></div>
@@ -625,6 +629,8 @@ function wireTools(hub, after){
       out(r ? ((r.ok?"✓ ":"✗ ") + ((r.result||{}).msg || (r.ok?"done":"failed"))) : "No answer from the hub yet."); if(after) setTimeout(after, 1500);
     }catch(e){ fail(e); } };
   $$("[data-ping]").forEach(b=>b.onclick=()=>run("ping", null, {node:+b.dataset.ping}, "Pinging node "+b.dataset.ping));
+  // Read again (hub 1.5.4+): re-identify a device that paired but isn't showing as a lock / thermostat / sensor
+  $$("[data-reread]").forEach(b=>b.onclick=()=>run("ping", null, {node:+b.dataset.reread, reinterview:true}, "Reading node "+b.dataset.reread+" again - wake the device now"));
   $("#t_heal").onclick = () => { if(confirm("Rebuild Z-Wave routes? Takes a few minutes; locks keep working.")) run("heal", null, {}, "Rebuilding routes"); };
   $("#t_add").onclick = () => run("include", null, {}, "Add mode on for 5 minutes - put the device in join mode");
   $("#t_remove").onclick = () => run("exclude", null, {}, "Remove mode on for 5 minutes - put the device in remove mode");
