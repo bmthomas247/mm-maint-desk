@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -114,7 +114,7 @@ const STEPS = [
     <div class="tip">Do this at the office. Your phone must be on the <b>office Wi-Fi</b> (not cell data) for every step.</div>` },
   { k:"plug", t:"Plug it in", h:() => `
     <ol><li>Z-Wave stick → extension cable → a USB port on the hub.</li><li>Network cable from the hub to the office router.</li><li>Power plug in <b>last</b>.</li></ol>
-    <div class="muted">The very first start takes up to <b>20 minutes</b>: Home Assistant shows "Preparing Home Assistant" with a progress bar. That's normal. Leave it plugged in until it changes to <b>Welcome</b>.</div>` },
+    <div class="muted">Give it <b>about 6 minutes</b> after you plug in power (our first hub took 6; it can take up to 20). It may show "Preparing Home Assistant" with a progress bar. That's normal. Leave it plugged in.</div>` },
   { k:"account", t:"Open Home Assistant and make the owner account", h:() => `
     <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a><div class="muted small">New hubs use <b>http://homeassistant.local</b> (no ":8123"). Older ones need ":8123" on the end.</div>
     <div class="tip">Won't open? Get the <b>Home Assistant</b> app (<a href="https://apps.apple.com/app/home-assistant/id1099568401" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.homeassistant.companion.android" target="_blank" rel="noopener">Android</a>): it finds the hub on the Wi-Fi by itself.</div>
@@ -130,7 +130,8 @@ const STEPS = [
     <ol><li>Pick the <b>recommended</b> setup / "use the add-on".</li><li>If it asks which device, pick the <b>Z-Wave</b> one (e.g. "SONOFF ZWave Dongle").</li>
       <li>Wait for <b>Success</b> (a few minutes). New security keys are made for this hub. Leave them alone.</li></ol>` },
   { k:"term", t:"Add the Terminal", h:() => `
-    <a class="btn go wide" href="${MY("supervisor_addon/?addon=core_ssh")}" target="_blank" rel="noopener">Open Terminal &amp; SSH</a>
+    <a class="btn go wide" href="${HA}/config/app/core_ssh/info" target="_blank" rel="noopener">Open Terminal &amp; SSH</a>
+    <div class="muted small">Link won't open? In Home Assistant go to <b>Settings ▸ Apps ▸ Install app</b> and pick <b>Terminal &amp; SSH</b>. (Home Assistant now calls add-ons "Apps".)</div>
     <ol><li>Tap <b>Install</b>, wait, then <b>Start</b>.</li><li>Tap <b>Open Web UI</b>. A black screen with a blinking cursor opens.</li></ol>` },
   { k:"install", t:"Install Moose Locks (copy, paste, Enter)", h:() => `
     <button class="btn go wide" id="cpinstall">📋 Copy the install line</button>
