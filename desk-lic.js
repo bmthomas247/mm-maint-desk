@@ -44,7 +44,9 @@ window.MM_LIC = function(A){
     if(fs.k === "late" || fs.k === "none") return '<div class="note" style="color:var(--stop)">🔥 Fire system tag '+(fs.k === "none" ? "has no date" : "is out")+' — the license can\'t be renewed until it\'s current</div>';
     if(lateBy) return '<div class="note">🔥 Fire tag runs out '+esc(A.fmtD(f.exp))+', before this license</div>';
     return ""; }
-  function vFireSys(){ var u = S.ui, flt = u.fsF || "due", hs = (D.homes || []).filter(function(h){ return !h.company; });
+  /* 2026-11-11 (Haylee #38): combo listings (ST 14 = ST 1 + ST 4, UM 3013 = UM 301 + UM 303) are licensed as their separate units */
+  var LIC_SKIP = {"ST 14":1, "UM 3013":1};
+  function vFireSys(){ var u = S.ui, flt = u.fsF || "due", hs = (D.homes || []).filter(function(h){ return !h.company && !LIC_SKIP[h.code]; });
     var rows = hs.map(function(h){ var f = A.fireInfo(h.code); return { code:h.code, f:f, fs:A.dueState(f.exp), ls:A.licState(A.licInfo(h.code)), need:A.needsLicense(h.code) }; });
     var has = rows.filter(function(r){ return r.f.has === true; }), maybe = rows.filter(function(r){ return r.f.has == null && r.f.bwListed; });
     var unsaved = has.filter(function(r){ return !S.licFire[r.code]; }).map(function(r){ return r.code; });
@@ -103,7 +105,7 @@ window.MM_LIC = function(A){
   function stepName(k){ return (STEPS.filter(function(s){ return s[0] === k; })[0] || [k, k])[1]; }
   function newSection(){ var cut = A.addDays(A.today(), -NEW_DAYS), man = S.licNew, mc = {};
     man.forEach(function(n){ mc[n.code] = 1; });
-    var fresh = (S.hubHomes || []).filter(function(h){ return h.active && h.kind === "nightly" && h.track_created && h.track_created >= cut && !mc[h.code]; })
+    var fresh = (S.hubHomes || []).filter(function(h){ return h.active && !LIC_SKIP[h.code] && h.kind === "nightly" && h.track_created && h.track_created >= cut && !mc[h.code]; })
       .sort(function(a, b){ return b.track_created.localeCompare(a.track_created); });
     var h = '<div class="sechead"><h2>New properties</h2><p>Licensing starts while a home is still in Property Set Up, often before it\'s in Track. Add it here; homes Track added in the last '+NEW_DAYS+' days show below on their own.</p>'+
       '<button class="btn sm pri" data-newadd="1">+ Add a home in set up</button></div>';
