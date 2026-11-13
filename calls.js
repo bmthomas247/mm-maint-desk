@@ -297,12 +297,77 @@ window.followupsView = async function(v){
 // ---------- Owners ▸ Communication (Brandon 2026-11-01): "owner communication comes into there ... so the owner relations team can monitor the
 // transcripts or listen to the call to determine if they need to reach out or not". Calls with track_calls.owner_kind (hub_owner_calls.sql).
 // Homes = owner_call_homes() (the call's number vs the Track owners list, home codes only). Marks go in track_call_followups (followup_set).
-let O = { tab:"reach", from: iso(new Date(Date.now() - 59 * 864e5)), to: iso(new Date()), q:"", agent:"" };
+// Look (Jeff 2026-11-10: make it look like the Owner Relations meeting page, meetings.js): header + tools, 4 tiles, progress bar,
+// pill filters + search, small sideways rows grouped by day, tap a row = side panel (Overview · Transcript · History). Same data + RPCs as before.
+let O = { tab:"reach", from: iso(new Date(Date.now() - 59 * 864e5)), to: iso(new Date()), q:"", agent:"", open:null, ptab:"ov", trc:{} };
+const OCSS = `.page.occ{max-width:1800px;padding:20px 28px}
+.occ .ochead{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between;margin:0 0 12px}
+.occ .ochead h2{margin:0;font-size:22px} .occ .ochead p{margin:4px 0 0}
+.occ .octools{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .occ .octools input,.occ .octools select{width:auto}
+.occ .octiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:4px 0 8px}
+.occ .octile{background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.occ .octile b{display:block;font-size:22px;line-height:1.1} .occ .octile span{font-size:12.5px;color:var(--muted)}
+.occ .octile i{font-style:normal;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:#eef3e6;color:#3c5f12;font-size:13px}
+.occ .octile.g b{color:#3c5f12} .occ .octile.r b{color:#b42318}
+.occ .ocprog{height:5px;border-radius:9px;background:var(--line);margin-top:6px;overflow:hidden} .occ .ocprog i{display:block;height:100%;background:var(--moose,#2f5d3a)}
+.occ .ocbar{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin:12px 0 4px} .occ .ocbar #oq{max-width:260px;width:100%}
+.occ .ocfts{display:inline-flex;gap:2px;background:var(--bg-2,#eef0ea);border-radius:10px;padding:3px;flex-wrap:wrap}
+.ocft{border:0;background:transparent;padding:5px 10px;border-radius:8px;font:inherit;font-size:13px;color:var(--ink-2,#444);cursor:pointer}
+.ocft span{color:var(--muted);font-size:12px} .ocft.on{background:var(--card,#fff);box-shadow:0 1px 2px rgba(0,0,0,.1);color:var(--ink,#111);font-weight:700}
+.occ h3.ocg{margin:18px 0 8px;font-size:15px} .occ h3.ocg .muted{font-weight:400}
+.occ .ocl{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(460px,100%),1fr));column-gap:18px;padding:6px 8px}
+.ocr{display:flex;gap:12px;align-items:center;padding:7px 8px;border-radius:10px;cursor:pointer;border-bottom:1px solid var(--line)}
+.ocr:hover,.ocr:focus{background:#f6f7f2;outline:none} .ocr.cov{opacity:.62}
+.ocr>i{font-style:normal;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:14px;font-weight:800;flex:0 0 auto;color:#fff}
+.ocm{flex:1;min-width:0} .oct{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:14px}
+.oct>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ocm small{font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ocrc{display:inline-flex;gap:4px;align-items:center;flex:0 0 auto} .ocrc .btn{padding:1px 8px;font-size:12px;min-height:0}
+.octm{font-size:12px;color:var(--muted);white-space:nowrap}
+.ocp{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:7px;background:#f1f2ee;color:#555;white-space:nowrap}
+.ocp.ok{background:#e7f4e1;color:#2f6b1d} .ocp.wait{background:#fdf1dc;color:#8a5a00} .ocp.todo{background:#eef0f5;color:#3d4a66} .ocp.bad{background:#fde8e6;color:#b42318}
+.ocpov{position:fixed;inset:0;background:rgba(15,25,15,.35);z-index:900;display:flex;justify-content:flex-end}
+.ocpanel{background:var(--bg,#f7f8f4);width:min(560px,100%);height:100%;overflow:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ocph{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:16px 18px 10px;background:var(--card,#fff);border-bottom:1px solid var(--line)}
+.ocph h3{margin:6px 0 2px;font-size:18px} .ocown{display:block;font-size:13px;color:var(--ink-2,#444);font-weight:600}
+.ocptabs{display:flex;gap:4px;padding:8px 18px;background:var(--card,#fff);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1}
+.ocptabs button{border:0;background:transparent;padding:6px 12px;border-radius:8px;font:inherit;font-size:13.5px;cursor:pointer;color:var(--ink-2,#444)}
+.ocptabs button span{background:#eef0ea;border-radius:6px;padding:0 6px;font-size:12px;margin-left:3px} .ocptabs button.on{background:#eef3e6;color:#24452c;font-weight:700}
+.ocpb{padding:14px 18px 30px;display:grid;gap:12px;align-content:start}
+.ocsig{display:flex;gap:10px;background:#eef3e6;border-radius:12px;padding:11px 13px;font-size:14px;font-weight:600;color:#24452c}
+.ocsig i{font-style:normal;width:26px;height:26px;border-radius:8px;background:#fff;display:grid;place-items:center;flex:0 0 auto} .ocsig small{display:block;font-size:11.5px;color:var(--muted)}
+.ocsig.red{background:#fde8e6;color:#8a1c12}
+.ocbox{background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 13px;font-size:14px} .ocbox>b{display:block;font-size:13.5px;margin-bottom:6px}
+.ocbox textarea{width:100%;min-height:60px;font-size:14px} .ocln{margin-top:4px}
+.ocdl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13.5px;margin:0} .ocdl dt{color:var(--muted)} .ocdl dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.ocacts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.ocsrc{font-size:12px;color:var(--muted);margin:0}
+.ocai{display:flex;gap:10px;padding:8px 0;font-size:13.5px;position:relative}
+.ocai>i{font-style:normal;width:24px;height:24px;border-radius:50%;background:#eef3e6;display:grid;place-items:center;font-size:12px;flex:0 0 auto;z-index:1}
+.ocai:not(:last-child)::before{content:"";position:absolute;left:11px;top:30px;bottom:-6px;border-left:1px solid var(--line)}
+.ocab{color:var(--ink-2,#444);white-space:pre-wrap;margin-top:2px}
+@media (max-width:760px){ .occ .octiles{grid-template-columns:1fr 1fr} .page.occ{padding:14px 12px} .ocpanel{width:100%} }
+@media print{ .ocpov,.ocbar,.octools{display:none!important} }`;
+function ocCss(){ if(document.getElementById("occss")) return; const s = document.createElement("style"); s.id = "occss"; s.textContent = OCSS; document.head.appendChild(s); }
+const cut = (s, n) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+const tmf = a => { try { return new Date(a).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }); } catch(e){ return ""; } };
+if(!window._ocNav){ window._ocNav = 1;   // the side panel sits on <body>: close it on Esc and when the page changes
+  window.addEventListener("hashchange", () => { if(!/^#\/owner_calls/.test(location.hash)){ O.open = null; document.getElementById("ocpov")?.remove(); } });
+  document.addEventListener("keydown", e => { if(e.key === "Escape" && document.getElementById("ocpov")){ O.open = null; document.getElementById("ocpov").remove(); } }); }
 window.ownerCallsView = async function(v){
-  css(); $("#ttl").textContent = $("#utl").textContent = "Owner communication";
-  v.innerHTML = `<div class="page wide calls"><h2 style="margin:0 0 4px">Owner communication</h2>
-    <p class="muted">Phone calls with our owners and with people asking about management, from Track Pulse. Penny reads each transcript (machine-made, so double-check names and numbers) and suggests a next step. Homes are matched by phone number to the Track owners list. Source: Pulse Recent Calls export + Track API (transcripts).</p>
-    <div class="flt" id="oflt"></div><div class="bdsel" id="otabs" style="margin:4px 0 10px"></div><div id="obody"><p class="muted">Loading…</p></div></div>`;
+  css(); ocCss(); $("#ttl").textContent = $("#utl").textContent = "Owner communication";
+  document.getElementById("ocpov")?.remove(); O.open = null;
+  v.innerHTML = `<div class="page occ"><div class="ochead"><div><h2>Owner communication</h2>
+      <p class="muted">Phone calls with our owners and with people asking about management · ${esc(dayf(O.from))} – ${esc(dayf(O.to))}</p></div>
+      <div class="octools"><input type="date" id="ofrom" value="${O.from}" aria-label="From"><span class="muted">to</span><input type="date" id="oto" value="${O.to}" aria-label="To">
+        <select id="oag" aria-label="Agent"><option value="">All agents</option></select><button class="btn small" id="oref" title="Load again">↻</button></div></div>
+    <div class="octiles" id="octiles"></div><div class="ocprog" id="ocprog"></div>
+    <div class="ocbar"><div class="ocfts" id="ocfts"></div><input type="search" id="oq" placeholder="🔍 Name, phone or home" value="${esc(O.q)}" aria-label="Search"></div>
+    <div id="obody"><p class="muted">Loading…</p></div>
+    <p class="muted" style="font-size:12px;margin-top:14px">From Track Pulse (Recent Calls export + transcripts through the Track API). Penny reads each transcript and suggests a next step; she's machine-made, so double-check names and numbers. Homes are matched by phone number to the Track owners list.</p></div>`;
+  const me = v.querySelector(".page.occ");
+  $("#ofrom").onchange = $("#oto").onchange = () => { O.from = $("#ofrom").value || O.from; O.to = $("#oto").value || O.to; ownerCallsView(v); };
+  $("#oref").onclick = () => ownerCallsView(v);
   let calls, trs, mts, nts, fus; const hm = {};
   try {
     calls = await all(() => sb.from("track_calls").select("call_id,call_at,call_day,direction,duration_s,agents,queues,call_result,routing_result,caller_name,caller_city,caller_state,outside_number,owner_kind")
@@ -311,58 +376,123 @@ window.ownerCallsView = async function(v){
     [trs, mts, nts, fus] = await Promise.all([
       all(() => sb.from("track_call_transcripts").select("call_id,status,words").gte("call_id", lo)),
       all(() => sb.from("track_call_match").select("call_id,party,contact_name").gte("call_id", lo)),
-      all(() => sb.from("track_call_notes").select("call_id,summary,caller_type,outcome,follow_up,follow_up_what,follow_up_team,data").gte("call_id", lo)),
+      all(() => sb.from("track_call_notes").select("call_id,summary,caller_type,outcome,celebration,celebration_detail,follow_up,follow_up_what,follow_up_team,data").gte("call_id", lo)),
       all(() => sb.from("track_call_followups").select("call_id,status,note,by_name,at").gte("call_id", lo).order("at", { ascending:false }))]);
     const ids = calls.map(c => c.call_id);
     for(let i = 0; i < ids.length; i += 500){ const r = await sb.rpc("owner_call_homes", { p_ids: ids.slice(i, i + 500) }); if(r.error) throw r.error; (r.data || []).forEach(x => hm[x.call_id] = x.homes); }
-  } catch(e){ return $("#obody").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(e.message)}</p></div>`; }
-  const T = Object.fromEntries(trs.map(t => [t.call_id, t])), MT = Object.fromEntries(mts.map(m => [m.call_id, m])), N = Object.fromEntries(nts.map(n => [n.call_id, n])), FU = {};
-  fus.forEach(f => { if(!FU[f.call_id]) FU[f.call_id] = f; });
+  } catch(e){ if(me.isConnected) $("#obody").innerHTML = `<div class="card"><p class="muted" style="margin:0">Couldn't load: ${esc(window.niceErr ? niceErr(e) : e.message)}</p></div>`; return; }
+  if(!me.isConnected) return;   // the person moved on (or changed the dates) while this was loading
+  const T = Object.fromEntries(trs.map(t => [t.call_id, t])), MT = Object.fromEntries(mts.map(m => [m.call_id, m])), N = Object.fromEntries(nts.map(n => [n.call_id, n])), FU = {}, FUH = {};
+  fus.forEach(f => { if(!FU[f.call_id]) FU[f.call_id] = f; (FUH[f.call_id] = FUH[f.call_id] || []).push(f); });   // newest first
   const has = c => T[c.call_id] && T[c.call_id].status === "ok";
   const who = c => { const m = MT[c.call_id] || {}, n = N[c.call_id]; return m.contact_name || (n && n.data && n.data.guest_name ? n.data.guest_name + " (said on call)" : c.caller_name || "Caller"); };
   const open = c => !FU[c.call_id] || FU[c.call_id].status === "open";
+  const flagged = c => !!(N[c.call_id] && N[c.call_id].follow_up);
+  const reach = c => c.owner_kind === "owner" && open(c) && flagged(c);
+  const homes = c => hm[c.call_id] || [];
+  const dayOf = c => c.call_day || String(c.call_at || "").slice(0, 10);
+  const stOf = c => !open(c) ? "done" : reach(c) ? "reach" : c.owner_kind === "prospect" ? "pros" : "call";
+  const pill = c => { const s = stOf(c), f = FU[c.call_id];
+    return s === "done" ? `<span class="ocp ok">${f.status === "not_needed" ? "No need" : "✓ Reached out"}</span>` : s === "reach" ? `<span class="ocp bad">Penny says reach out</span>`
+      : s === "pros" ? `<span class="ocp wait">Possible owner</span>` : `<span class="ocp todo">Owner call</span>`; };
+  const icon = c => { const s = stOf(c); return s === "done" ? ["#3c7d1e", "✓"] : s === "reach" ? ["#b42318", "!"] : s === "pros" ? ["#c98a16", "★"] : ["#5b6b84", /^out/i.test(c.direction || "") ? "↗" : "↙"]; };
+  const meta = c => [timef(c.call_at), dirName(c.direction), c.agents || "no agent", dur(c.duration_s) || "0:00"].filter(Boolean).join(" · ");
+  const noSum = c => has(c) ? "Penny hasn't read this one yet." : T[c.call_id] ? "No transcript (short calls, voicemail and calls that weren't recorded usually don't get one)." : "Transcript not pulled yet.";
   const agents = [...new Set(calls.flatMap(c => (c.agents || "").split(",").map(x => x.trim())).filter(Boolean))].sort();
-  $("#oflt").innerHTML = `<div><label>Search</label><br><input type="search" id="oq" placeholder="Name, phone or home" value="${esc(O.q)}" style="width:200px"></div>
-    <div><label>From</label><br><input type="date" id="ofrom" value="${O.from}"></div><div><label>To</label><br><input type="date" id="oto" value="${O.to}"></div>
-    <div><label>Agent</label><br><select id="oag"><option value="">All</option>${agents.map(a => `<option ${a === O.agent ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></div>`;
-  $("#ofrom").onchange = $("#oto").onchange = () => { O.from = $("#ofrom").value; O.to = $("#oto").value; ownerCallsView(v); };
+  if(O.agent && !agents.includes(O.agent)) O.agent = "";
+  $("#oag").innerHTML = `<option value="">All agents</option>` + agents.map(a => `<option ${a === O.agent ? "selected" : ""}>${esc(a)}</option>`).join("");
   $("#oag").onchange = () => { O.agent = $("#oag").value; draw(); };
-  let qt; $("#oq").oninput = () => { clearTimeout(qt); qt = setTimeout(() => { O.q = $("#oq").value.trim(); draw(); }, 250); };
+  let qt; $("#oq").oninput = () => { clearTimeout(qt); qt = setTimeout(() => { O.q = $("#oq").value.trim(); draw(); }, 200); };
+  async function mark(id, s, note, btn){
+    if(btn) btn.disabled = true;
+    const r = await sb.rpc("followup_set", { p_call:id, p_status:s, p_note:note || "" });
+    if(r.error){ if(btn) btn.disabled = false; alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); return false; }
+    const f = { call_id:id, status:s, note:note || "", by_name:(ME && ME.name) || "", at:new Date().toISOString() };
+    FU[id] = f; (FUH[id] = FUH[id] || []).unshift(f); return true;
+  }
   function draw(){
+    if(!me.isConnected) return;
     const ql = O.q.toLowerCase(), qd = digits(O.q);
     const hit = c => (!O.agent || (c.agents || "").split(",").map(x => x.trim()).includes(O.agent)) && (!ql || who(c).toLowerCase().includes(ql)
-      || (hm[c.call_id] || []).join(" ").toLowerCase().includes(ql) || (qd.length >= 3 && digits(c.outside_number).includes(qd)));
+      || homes(c).join(" ").toLowerCase().includes(ql) || (qd.length >= 3 && digits(c.outside_number).includes(qd)));
     const base = calls.filter(hit), own = base.filter(c => c.owner_kind === "owner");
-    const L = { reach: own.filter(c => open(c) && N[c.call_id] && N[c.call_id].follow_up), all: own, pros: base.filter(c => c.owner_kind === "prospect"), done: base.filter(c => !open(c)) };
+    const L = { reach: own.filter(reach), all: own, pros: base.filter(c => c.owner_kind === "prospect"), done: base.filter(c => !open(c)) };
+    const fl = own.filter(flagged), fdone = fl.filter(c => !open(c)).length;
+    const tile = (n, l, ic, cls) => `<div class="octile${cls ? " " + cls : ""}"><div><b>${n}</b><span>${l}</span></div><i>${ic}</i></div>`;
+    $("#octiles").innerHTML = tile(L.reach.length, "Penny says reach out", "📞", L.reach.length ? "r" : "") + tile(L.all.length, "Owner calls", "☎") + tile(L.pros.length, "Possible new owners", "🏡")
+      + tile(fdone + " / " + fl.length, "Reach-outs handled", "✓", "g");
+    $("#ocprog").innerHTML = `<i style="width:${fl.length ? fdone / fl.length * 100 : 0}%"></i>`;
+    $("#ocprog").title = `${fdone} of ${fl.length} calls Penny said to reach out on are handled`;
     const tabs = [["reach", "Penny says reach out"], ["all", "All owner calls"], ["pros", "Possible new owners"], ["done", "Handled"]];
-    $("#otabs").innerHTML = tabs.map(([k, l]) => `<button class="btn small ${O.tab === k ? "primary" : ""}" data-t="${k}">${l} <span class="pill" style="margin-left:4px">${L[k].length}</span></button>`).join("");
-    $("#otabs").querySelectorAll("[data-t]").forEach(b => b.onclick = () => { O.tab = b.dataset.t; draw(); });
-    const card = c => { const n = N[c.call_id] || {}, f = FU[c.call_id];
-      return `<div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:16px">${esc(who(c))}</b>
-          <span class="pill ${c.owner_kind === "owner" ? "green" : "amber"}">${c.owner_kind === "owner" ? "Owner" : "Possible owner"}</span>
-          ${(hm[c.call_id] || []).map(h => `<span class="pill">${esc(h)}</span>`).join("")}
-          ${n.outcome ? `<span class="pill ${/issue_open|not_booked/.test(n.outcome) ? "red" : ""}">${esc(nice(n.outcome))}</span>` : ""}
-          <span class="muted" style="margin-left:auto">${esc(dayf(c.call_at || c.call_day))} ${esc(timef(c.call_at))} · ${esc(dirName(c.direction))} · ${esc(c.agents || "no agent")} · ${dur(c.duration_s) || "0:00"}</span></div>
-        <div class="muted" style="font-size:13px;margin-top:2px">${[c.outside_number && esc(phonef(c.outside_number)), (c.caller_city || c.caller_state) && esc([c.caller_city, c.caller_state].filter(Boolean).join(", ")), c.call_result && esc(c.call_result), c.queues && esc(c.queues)].filter(Boolean).join(" · ")}</div>
-        ${n.summary ? `<p style="margin:8px 0">${esc(n.summary)}</p>` : `<p class="muted" style="margin:8px 0">${has(c) ? "Penny hasn't read this one yet." : T[c.call_id] ? "No transcript (short calls, voicemail and calls that weren't recorded usually don't get one)." : "Transcript not pulled yet."}</p>`}
-        ${n.follow_up && n.follow_up_what ? `<div><b>Next step${n.follow_up_team && TEAM[n.follow_up_team] ? " · " + esc(TEAM[n.follow_up_team]) : ""}:</b> ${esc(n.follow_up_what)}</div>` : ""}
-        ${f ? `<div class="muted" style="margin-top:6px">${f.status === "done" ? "✓ Reached out" : f.status === "not_needed" ? "No need" : "Re-opened"} · ${esc((f.by_name || "").split(" ")[0])} ${esc(new Date(f.at).toLocaleDateString())}${f.note ? ": " + esc(f.note) : ""}</div>` : ""}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-          ${open(c) ? `<button class="btn small primary" data-fu="${c.call_id}" data-s="done">✓ Reached out</button><button class="btn small" data-fu="${c.call_id}" data-s="not_needed">No need</button>`
-            : `<button class="btn small" data-fu="${c.call_id}" data-s="open">Re-open</button>`}
-          ${has(c) ? `<button class="btn small" data-call="${c.call_id}">Read the call (${T[c.call_id].words} words)</button>` : ""}
-          <a class="btn small" href="${TRACK}/pulse/calls/view/?id=${c.call_id}" target="_blank" rel="noopener" title="Opens the call in Track Pulse, where the recording plays (Track sign-in)">▶ Listen in Track</a></div></div>`; };
-    const list = L[O.tab], empty = { reach:"No owner calls waiting on a reach-out for these dates.", all:"No owner calls for these dates.", pros:"No calls from possible owners for these dates.", done:"Nothing marked yet." }[O.tab];
-    $("#obody").innerHTML = list.length ? list.slice(0, 200).map(card).join("") + (list.length > 200 ? `<p class="muted">Showing the newest 200 of ${list.length}. Narrow the dates or search to see the rest.</p>` : "")
-      : `<div class="card"><p class="muted">${empty}</p></div>`;
-    $("#obody").querySelectorAll("[data-call]").forEach(b => b.onclick = () => { const c = calls.find(x => x.call_id === +b.dataset.call); showCall(c, T[c.call_id]); });
-    $("#obody").querySelectorAll("[data-fu]").forEach(b => b.onclick = async () => {
-      const note = b.dataset.s === "open" ? "" : prompt(b.dataset.s === "done" ? "How did you reach out? (optional)" : "Why isn't a reach-out needed? (optional)", "");
-      if(note === null) return;
-      b.disabled = true;
-      const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
-      if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
-      FU[+b.dataset.fu] = { status:b.dataset.s, note, by_name:(ME && ME.name) || "", at:new Date().toISOString() }; draw(); });
+    $("#ocfts").innerHTML = tabs.map(([k, l]) => `<button class="ocft${O.tab === k ? " on" : ""}" data-t="${k}">${l} <span>${L[k].length}</span></button>`).join("");
+    $("#ocfts").querySelectorAll("[data-t]").forEach(b => b.onclick = () => { O.tab = b.dataset.t; draw(); });
+    const list = L[O.tab], MAX = 300;
+    if(!list.length) return $("#obody").innerHTML = `<div class="card"><p class="muted" style="margin:0">${{ reach:"No owner calls waiting on a reach-out for these dates.", all:"No owner calls for these dates.", pros:"No calls from possible owners for these dates.", done:"Nothing marked yet." }[O.tab]}</p></div>`;
+    const row = c => { const n = N[c.call_id] || {}, [bg, ic] = icon(c), hs = homes(c), s = stOf(c);
+      const desc = s === "reach" && n.follow_up_what ? "Next: " + n.follow_up_what : n.summary || noSum(c);
+      return `<div class="ocr${s === "done" ? " cov" : ""}" data-open="${c.call_id}" tabindex="0" role="button"><i style="background:${bg}">${ic}</i>
+        <div class="ocm"><div class="oct"><span><b>${esc(who(c))}</b>${hs.length ? `<span class="muted"> · 🏠 ${esc(hs.join(", "))}</span>` : c.owner_kind === "prospect" ? `<span class="muted"> · possible owner</span>` : ""}</span>
+          <span class="ocrc">${n.outcome && /issue_open|not_booked/.test(n.outcome) ? `<span class="ocp bad">${esc(nice(n.outcome))}</span>` : ""}${has(c) ? `<span class="ocp" title="Words in the transcript">📝 ${T[c.call_id].words}</span>` : ""}<span class="octm">${esc(timef(c.call_at))}</span>${open(c) ? `<button class="btn small" data-quick="${c.call_id}" title="Mark reached out (open the call to add a note)">✓</button>` : ""}</span></div>
+          <small class="muted">${esc([dirName(c.direction), c.agents || "no agent", dur(c.duration_s) || "0:00"].join(" · "))} · ${esc(cut(desc, 170))}</small></div></div>`; };
+    const grp = {}; list.slice(0, MAX).forEach(c => (grp[dayOf(c)] = grp[dayOf(c)] || []).push(c));
+    const tdy = iso(new Date()), yd = yday();
+    $("#obody").innerHTML = Object.keys(grp).map(d => `<h3 class="ocg">${d === tdy ? "Today" : d === yd ? "Yesterday" : esc(dayf(d))} <span class="muted">${grp[d].length}</span></h3><div class="card ocl">${grp[d].map(row).join("")}</div>`).join("")
+      + (list.length > MAX ? `<p class="muted">Showing the newest ${MAX} of ${list.length}. Narrow the dates or search to see the rest.</p>` : "");
+    $("#obody").querySelectorAll("[data-open]").forEach(r => { const go = e => { if(e.target.closest("[data-quick]")) return; O.open = +r.dataset.open; O.ptab = "ov"; panel(); };
+      r.onclick = go; r.onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); go(e); } }; });
+    $("#obody").querySelectorAll("[data-quick]").forEach(b => b.onclick = async e => { e.stopPropagation(); if(await mark(+b.dataset.quick, "done", "", b)) draw(); });
+  }
+  /* ---------- the side panel (same look as a meeting topic) ---------- */
+  function panel(){
+    document.getElementById("ocpov")?.remove();
+    const c = calls.find(x => x.call_id === O.open); if(!c || !me.isConnected) return;
+    const n = N[c.call_id] || {}, d = n.data || {}, hs = homes(c), hist = FUH[c.call_id] || [], s = stOf(c), f = FU[c.call_id];
+    const num = digits(c.outside_number).slice(-10), others = num.length === 10 ? calls.filter(x => x.call_id !== c.call_id && digits(x.outside_number).slice(-10) === num) : [];
+    const tabs = [["ov", "Overview", ""], ["tr", "Transcript", ""], ["hi", "History", hist.length + others.length + 1]];
+    let b = "";
+    if(O.ptab === "ov"){
+      const line = (l, x) => x ? `<div class="ocln"><b>${l}:</b> ${esc(x)}</div>` : "";
+      const facts = [["When", dayf(dayOf(c)) + (timef(c.call_at) ? " · " + timef(c.call_at) : "")], ["Phone", c.outside_number && phonef(c.outside_number)], ["Homes", hs.join(", ")],
+        ["From", [c.caller_city, c.caller_state].filter(Boolean).join(", ")], ["Agent", c.agents], ["Direction", dirName(c.direction)], ["Talk", dur(c.duration_s)],
+        ["Result", [c.call_result, c.routing_result].filter(Boolean).join(" · ")], ["Line", c.queues]].filter(x => x[1]);
+      b = `${n.follow_up && n.follow_up_what ? `<div class="ocsig${s === "reach" ? " red" : ""}"><i>✦</i><div><small>Penny's next step${n.follow_up_team && TEAM[n.follow_up_team] ? " · " + esc(TEAM[n.follow_up_team]) : ""}</small>${esc(n.follow_up_what)}</div></div>` : ""}
+        <div class="ocbox"><b>Penny's summary</b>${n.summary ? `<div class="ocacts" style="margin:0 0 6px">${CT[n.caller_type] ? `<span class="ocp">${esc(CT[n.caller_type])}</span>` : n.caller_type ? `<span class="ocp">${esc(nice(n.caller_type))}</span>` : ""}${n.outcome ? `<span class="ocp${/issue_open|not_booked/.test(n.outcome) ? " bad" : ""}">${esc(nice(n.outcome))}</span>` : ""}${n.celebration && n.celebration !== "none" ? `<span class="ocp wait">🎉 ${esc(n.celebration_detail || nice(n.celebration))}</span>` : ""}</div>
+          <div>${esc(n.summary)}</div>${line("Wants", (d.wants || []).join(", "))}${line("Concerns", (d.concerns || []).join(", "))}${line("For the stay", (d.stay_notes || []).join(" · "))}
+          <p class="ocsrc" style="margin-top:6px">Machine-made from the transcript, so check names and numbers.</p>` : `<p class="muted" style="margin:0">${esc(noSum(c))}</p>`}</div>
+        <div class="ocbox"><b>${open(c) ? "Did we reach out?" : f.status === "not_needed" ? "No reach-out needed" : "✓ Reached out"}</b>
+          ${open(c) ? `<textarea id="ocnote" placeholder="How did you reach out, or why isn't it needed? (optional)"></textarea><div class="ocacts"><button class="btn small primary" data-mk="done">✓ Reached out</button><button class="btn small" data-mk="not_needed">No need</button></div>`
+            : `<div>${esc((f.by_name || "").split(" ")[0] || "Someone")} · ${esc(new Date(f.at).toLocaleDateString())}${f.note ? ": " + esc(f.note) : ""}</div><div class="ocacts"><button class="btn small" data-mk="open">Re-open</button></div>`}</div>
+        <div class="ocbox"><b>The call</b><dl class="ocdl">${facts.map(([k, x]) => `<dt>${k}</dt><dd>${esc(x)}</dd>`).join("")}</dl>
+          <div class="ocacts">${has(c) ? `<button class="btn small" data-ptab="tr">📝 Read the call (${T[c.call_id].words} words)</button>` : ""}<a class="btn small" href="${TRACK}/pulse/calls/view/?id=${c.call_id}" target="_blank" rel="noopener" title="Opens the call in Track Pulse, where the recording plays (Track sign-in)">▶ Listen in Track</a></div></div>
+        <p class="ocsrc">Source: Track Pulse call #${c.call_id}${hs.length ? " · homes matched by phone number to the Track owners list" : ""}</p>`;
+    } else if(O.ptab === "tr"){
+      const t = O.trc[c.call_id];
+      b = !has(c) ? `<p class="muted">${esc(noSum(c))}</p>` : !t ? `<p class="muted">Loading the transcript…</p>` : t.err ? `<p class="muted">Couldn't load: ${esc(t.err)}</p>`
+        : `<p class="ocsrc">Transcript by Track Pulse (${esc(t.engine || "speech to text")}${t.coverage != null ? ", " + t.coverage + "% of the call" : ""}, ${t.words} words). Machine-made, so names and numbers can be off. Codes and card numbers are hidden.</p>
+          <div class="ocbox">${(t.lines || []).map(l => `<div class="trl ${esc(l.s || "")}"><div class="who">${esc(l.s === "agent" ? (c.agents || "Agent").split(",")[0] : l.s === "customer" ? "Caller" : l.s || "")}<small>${ms(l.a)}</small></div><div>${esc(l.t)}</div></div>`).join("")}</div>`;
+      if(has(c) && !t) sb.from("track_call_transcripts").select("lines,engine,coverage,language,words").eq("call_id", c.call_id).maybeSingle().then(r => {
+        O.trc[c.call_id] = r.error || !r.data ? { err: r.error ? (window.niceErr ? niceErr(r.error) : r.error.message) : "not found" } : r.data;
+        if(O.open === c.call_id && O.ptab === "tr" && document.getElementById("ocpov")) panel(); });
+    } else {
+      const act = [{ at:c.call_at, ic:"📞", h:`<b>${esc(dirName(c.direction) || "Phone")} call</b>${c.agents ? " with " + esc(c.agents) : ""} · ${esc(dur(c.duration_s) || "0:00")}`, b:"" }];
+      hist.forEach(x => act.push({ at:x.at, ic:x.status === "done" ? "✓" : x.status === "not_needed" ? "–" : "↺",
+        h:`<b>${esc(x.by_name || "Someone")}</b> ${x.status === "done" ? "marked it reached out" : x.status === "not_needed" ? "marked no reach-out needed" : "re-opened it"}`, b:esc(x.note || "") }));
+      act.sort((a, z) => new Date(z.at) - new Date(a.at));
+      b = `<div>${act.map(a => `<div class="ocai"><i>${a.ic}</i><div><div>${a.h}<span class="muted"> · ${esc(tmf(a.at))}</span></div>${a.b ? `<div class="ocab">${a.b}</div>` : ""}</div></div>`).join("")}</div>
+        ${others.length ? `<div class="ocbox"><b>Other calls from this number <span class="muted" style="font-weight:400">(these dates)</span></b>${others.map(x => { const [bg, ic] = icon(x);
+          return `<div class="ocr${open(x) ? "" : " cov"}" data-go="${x.call_id}" tabindex="0" role="button"><i style="background:${bg}">${ic}</i><div class="ocm"><div class="oct"><span><b>${esc(dayf(dayOf(x)))}</b><span class="muted"> · ${esc(meta(x))}</span></span></div><small class="muted">${esc(cut((N[x.call_id] || {}).summary || noSum(x), 120))}</small></div></div>`; }).join("")}</div>` : ""}`;
+    }
+    const o = document.createElement("div"); o.id = "ocpov"; o.className = "ocpov";
+    o.innerHTML = `<div class="ocpanel" role="dialog" aria-label="${esc(who(c))}"><div class="ocph"><div>${pill(c)}<h3>${esc(who(c))}</h3>${hs.length ? `<span class="ocown">🏠 ${esc(hs.join(", "))}</span>` : ""}<span class="muted" style="font-size:13px">${esc(dayf(dayOf(c)))} · ${esc(meta(c))}</span></div><button class="btn small" data-pclose aria-label="Close">✕</button></div>
+      <div class="ocptabs">${tabs.map(([k, l, nn]) => `<button class="${O.ptab === k ? "on" : ""}" data-ptab="${k}">${l}${nn !== "" ? ` <span>${nn}</span>` : ""}</button>`).join("")}</div><div class="ocpb">${b}</div></div>`;
+    document.body.appendChild(o);
+    const close = () => { O.open = null; o.remove(); };
+    o.onclick = e => { if(e.target === o) close(); };
+    o.querySelector("[data-pclose]").onclick = close;
+    o.querySelectorAll("[data-ptab]").forEach(x => x.onclick = () => { O.ptab = x.dataset.ptab; panel(); });
+    o.querySelectorAll("[data-mk]").forEach(x => x.onclick = async () => { const nt = x.dataset.mk === "open" ? "" : ((o.querySelector("#ocnote") || {}).value || "").trim();
+      if(await mark(c.call_id, x.dataset.mk, nt, x)){ draw(); panel(); } });
+    o.querySelectorAll("[data-go]").forEach(x => { const go = () => { O.open = +x.dataset.go; O.ptab = "ov"; panel(); }; x.onclick = go; x.onkeydown = e => { if(e.key === "Enter") go(); }; });
   }
   draw();
 };
