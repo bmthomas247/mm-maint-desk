@@ -514,7 +514,7 @@ async function evCal(v, key, fresh){
   const draw = () => {
     const sel = ST.sel[key], day = items(sel).sort((x, y) => (x.start || "").localeCompare(y.start || ""));
     const olBtn = !isMe ? "" : ost && ost.connected ? `<button class="btn small" data-olsync title="Outlook${ost.email ? " (" + esc(ost.email) + ")" : ""}${ost.last_sync ? " · last read " + esc(new Date(ost.last_sync).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) : ""}">✓ Outlook · Refresh</button>`
-      : `<button class="btn small" data-olgo>🔗 Connect my Outlook</button>`;
+      : "";   // Brandon 2026-11-13: "i just want us to pull this not have people push theirs" -> only the office Outlook is connected
     const addBtns = isMe ? olBtn + `<button class="btn small primary" data-add="event">+ Event</button><button class="btn small" data-sched>📅 Schedule a meeting</button><button class="btn small" data-blinks>🔗 Booking links</button>`
       : isOff ? (ost && ost.connected ? `<button class="btn small${ost.unsorted ? " primary" : ""}" data-osort title="Office Outlook${ost.email ? " (" + esc(ost.email) + ")" : ""}${ost.last_sync ? " · last read " + esc(new Date(ost.last_sync).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) : ""}">📥 Sort Outlook meetings${ost.unsorted ? " (" + ost.unsorted + ")" : " ✓"}</button>`
           : ost && ost.admin ? `<button class="btn small" data-ogo>🔗 Connect the office Outlook</button>` : "")
