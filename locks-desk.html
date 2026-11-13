@@ -487,6 +487,10 @@ function guestLinkPop(s){
   const close = () => { d.remove(); S.dirty = false; };
   d.onclick = e => { if(e.target === d) close(); };
   $("[data-x]", d).onclick = close;
+  // fill the guest's phone + email from Track (lock_guest_contact: same people who see them on the hub Home)
+  if(s.res_id) rpc("lock_guest_contact",{p_res:String(s.res_id)}).then(c => { if(!c) return;
+    const ph = $("#gl_ph", d), em = $("#gl_em", d);
+    if(c.phone && ph && !ph.value) ph.value = c.phone; if(c.email && em && !em.value) em.value = c.email; }).catch(()=>{});
   $$("[data-gl]", d).forEach(b => b.onclick = async () => {
     const m = $("#gl_msg", d).value, k = b.dataset.gl;
     if(k==="copy"){ try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } return; }
