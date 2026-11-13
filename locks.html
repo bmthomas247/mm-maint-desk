@@ -451,6 +451,53 @@ document.addEventListener("input", e => { if(e.target.closest && e.target.closes
 document.addEventListener("change", e => { if(e.target.closest && e.target.closest("#newform,.step")) S.dirty = true; }, true);
 window.addEventListener("hashchange", () => { S.dirty = false; });
 function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("locks_"+k); localStorage.setItem("locks_"+k, v); }catch(e){ return null; } }
+/* 2026-11-13 (Brandon): "Set a door code" - quick form on the Locks front page and on each home's page so the
+   front desk can give a vendor / owner / housekeeper a code in a few taps. Saves through lock_staff_code (same as Access codes). */
+function openSetCode(pid){
+  const homes = (S.homes||[]).filter(h=>h.section==="ours").sort((a,b)=>String(a.properties.code).localeCompare(String(b.properties.code),undefined,{numeric:true}));
+  const pad = n => String(n).padStart(2,"0"), loc = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const now = new Date(); now.setMinutes(0,0,0); const end = new Date(now.getTime()+864e5);
+  const TYPES = [["vendor","Vendor"],["owner","Owner"],["housekeeping","Housekeeper"],["employee","Employee"],["hoa","HOA"],["county","County"]];
+  const d = document.createElement("div"); d.className = "modal";
+  d.innerHTML = `<div class="card" style="max-width:480px;margin:6vh auto;padding:20px">
+    <div class="row"><b class="grow" style="font-size:18px">🔑 Set a door code</b><button class="btn small" data-x>✕</button></div>
+    ${pid ? `<div class="muted" style="margin:4px 0 10px">${esc(dc(((homes.find(h=>h.property_id===pid)||{}).properties||{}).code||pid))}</div>`
+      : `<label class="field"><span>Home</span><select id="sc_home"><option value="">Pick a home…</option>${homes.map(h=>`<option value="${esc(h.property_id)}">${esc(dc(h.properties.code))} · ${esc(h.properties.name||"")}</option>`).join("")}</select></label>`}
+    <div class="chips" style="margin:6px 0 10px">${TYPES.map(([k,t],i)=>`<span class="chip ${i?"":"on"}" data-sctype="${k}">${t}</span>`).join("")}</div>
+    <div class="grid2"><label class="field"><span>Who is it for?</span><input id="sc_person" placeholder="Name"></label>
+      <label class="field"><span>Company <span class="muted">(optional)</span></span><input id="sc_company" placeholder="ABC Plumbing"></label></div>
+    <label class="field"><span>Code <span class="muted">(4 to 8 numbers)</span></span><div class="row" style="gap:8px"><input id="sc_code" inputmode="numeric" maxlength="8" class="grow" style="font-size:22px;letter-spacing:4px;padding:10px">
+      <button class="btn" id="sc_make">🎲 Make one</button></div></label>
+    <div class="grid2"><label class="field"><span>Starts</span><input type="datetime-local" id="sc_from" value="${loc(now)}"></label>
+      <label class="field"><span>Ends</span><input type="datetime-local" id="sc_to" value="${loc(end)}"></label></div>
+    <div class="chips" style="margin:-2px 0 8px"><span class="chip" data-scfor="1">1 day</span><span class="chip" data-scfor="3">3 days</span><span class="chip" data-scfor="7">1 week</span><span class="chip" data-scfor="0">No end date</span></div>
+    <label class="field"><span>Note <span class="muted">(optional)</span></span><input id="sc_note" placeholder="Water heater repair"></label>
+    <button class="btn go wide" id="sc_save" style="margin-top:6px">Save - put it on the door${pid?"":"s"}</button>
+    <div class="muted" style="font-size:12.5px;margin-top:6px">It goes on every door at this home within a minute or two and only works between those times. See or change all codes in Access codes.</div></div>`;
+  document.body.appendChild(d); S.dirty = true;
+  const close = () => { d.remove(); S.dirty = false; };
+  d.onclick = e => { if(e.target === d) close(); };
+  $("[data-x]", d).onclick = close;
+  let kind = "vendor";
+  $$("[data-sctype]", d).forEach(c=>c.onclick=()=>{ kind = c.dataset.sctype; $$("[data-sctype]", d).forEach(x=>x.classList.toggle("on", x===c)); });
+  $("#sc_make", d).onclick = () => { $("#sc_code", d).value = String(Math.floor(1000 + Math.random()*9000)); };
+  $$("[data-scfor]", d).forEach(c=>c.onclick=()=>{ const n = +c.dataset.scfor; $$("[data-scfor]", d).forEach(x=>x.classList.toggle("on", x===c));
+    if(!n){ $("#sc_to", d).value = ""; return; } const f = $("#sc_from", d).value ? new Date($("#sc_from", d).value) : new Date(); $("#sc_to", d).value = loc(new Date(f.getTime()+n*864e5)); });
+  $("#sc_save", d).onclick = async () => {
+    const home = pid || ($("#sc_home", d)||{}).value; if(!home) return toast("Pick the home");
+    const person = $("#sc_person", d).value.trim(), company = $("#sc_company", d).value.trim(), code = $("#sc_code", d).value.trim();
+    if(!person && !company) return toast("Add a name or a company");
+    if(!/^[0-9]{4,8}$/.test(code)) return toast("The code is 4 to 8 numbers - or tap Make one");
+    const f = $("#sc_from", d).value, t = $("#sc_to", d).value;
+    if(f && t && new Date(t) <= new Date(f)) return toast("The end has to be after the start");
+    const r = { kind, person, company, note: $("#sc_note", d).value.trim(), code, property_ids:[home], areas:[], days:[],
+      label: [person, company?"("+company+")":""].filter(Boolean).join(" "),
+      starts_at: f ? new Date(f).toISOString() : null, ends_at: t ? new Date(t).toISOString() : null, time_from:null, time_to:null, active:true };
+    const b = $("#sc_save", d); b.disabled = true;
+    try{ await rpc("lock_staff_code",{r}); toast("Saved - code "+code+" is going on the door"+(pid?"":"s")+" now"); close(); route(); }
+    catch(e){ b.disabled = false; fail(e); } };
+}
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-setcode]"); if(!b) return; e.preventDefault(); openSetCode(b.dataset.setcode || null); });
 async function homesView(){
   await loadBase();
   const [hubs, locks, thermos, alerts, assigns] = await Promise.all([
@@ -510,6 +557,7 @@ async function homesView(){
       <div class="stat ${ourAlerts?"warn":""}"><div class="n">${ourAlerts}</div><div class="l">Open alerts</div></div>
       ${DESK?`<a class="stat" href="#/stays" style="text-decoration:none;color:inherit"><div class="n">${arrivals}</div><div class="l">Arrivals next 7 days</div></a>`:""}
     </div>
+    <div class="card row" style="gap:10px;align-items:center"><div class="grow"><b>🔑 Set a door code</b><div class="muted">Give a vendor, owner or housekeeper a code for a home, for just the dates they need.</div></div><button class="btn go" data-setcode="">Set a door code</button></div>
     ${bar}
     ${true ? `<div class="card row" style="gap:12px">
         <label class="field" style="margin:0;flex:1;min-width:200px"><span>Neighborhood</span><select id="hood"><option value="">All neighborhoods</option>
@@ -1304,6 +1352,7 @@ async function homeView(pid){
     ${alerts.map(a=>`<div class="card" style="border-color:var(--red)"><b style="color:var(--red)">${esc(a.kind.replace(/_/g," "))}</b><div>${esc(a.detail||"")}</div>${a.bw_task&&a.bw_task.startsWith("http")?`<a href="${esc(a.bw_task)}">Breezeway task</a>`:""}</div>`).join("")}
     ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
     ${h.section==="ours" ? statusLights({hub, locks, thermos, sensors, tvs, codes:{ on: myAssign.filter(a=>a.wanted&&a.state==="verified").length, total: myAssign.filter(a=>a.wanted).length }}) : ""}
+    ${h.section==="ours" && locks.length ? `<div class="card row" style="gap:10px;align-items:center"><div class="grow"><b>🔑 Set a door code</b><div class="muted">For a vendor, owner or housekeeper at ${esc(dc(p.code))}, just for the dates they need.</div></div><button class="btn go" data-setcode="${esc(pid)}">Set a door code</button></div>` : ""}
     <div class="${DESK?"cols":""}"><div>
     ${(locks.length||thermos.length) && hub ? `<div class="card" id="whole"><h3 style="margin-top:0">Whole home</h3>
       ${locks.length?`<div class="muted" style="margin-bottom:8px">${locks.length} door${locks.length>1?"s":""} · ${locks.every(l=>l.state==="locked")?"all locked":locks.filter(l=>l.state!=="locked").map(l=>esc(l.name)+" "+esc(l.state||"?")).join(", ")}
