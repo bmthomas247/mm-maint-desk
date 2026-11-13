@@ -560,7 +560,7 @@ function hxDraw(){
   b.title = left.length ? "Not on the hub clock yet: " + left.join(", ") : "";
   b.querySelector("[data-hxdone]").onclick = async e => { e.preventDefault();
     if(!confirm("Confirm we've moved off Hubstaff? The warning stops for you and Kim/Brandon.")) return;
-    const r = await sb.rpc("hubstaff_exit_set", { p_done:true, p_note:null }); if(r.error) return alert(r.error.message); hxBanner(true); };
+    const r = await sb.rpc("hubstaff_exit_set", { p_done:true, p_note:null }); if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); hxBanner(true); };
   bxAdd(b, "hx", hxSig); v.parentNode.insertBefore(b, v);
 }
 window.hxBanner = async function(force){
@@ -597,7 +597,7 @@ function otPlanBox(x, b, done){
     const k = f.querySelector("[name=otk]:checked").value, tv = f.querySelector("[data-t]").value;
     const r = await sb.rpc("overtime_plan", { p_user:x.user_id, p_kind:k, p_out_at: k === "clock_out" && tv ? new Date(tv).toISOString() : null,
       p_up_to: k === "approved" ? +f.querySelector("[data-u]").value : null, p_note: f.querySelector("[data-n]").value || null });
-    if(r.error) return alert(r.error.message); f.remove(); await otBanner(true); if(done) done(); };
+    if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); f.remove(); await otBanner(true); if(done) done(); };
   b.after(f);
 }
 // Brandon 2026-11-06: "we can turn overtime banners into just bell notifications". otDraw no longer puts a banner on the page; it builds
@@ -613,7 +613,7 @@ function otMeHtml(){
 }
 document.addEventListener("click", async e => { const a = e.target.closest && e.target.closest("[data-otask]"); if(!a) return; e.preventDefault();
   const n = prompt("Why do you need overtime this week? (your manager sees this)"); if(n === null) return;
-  const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert(r.error.message); await otBanner(true);
+  const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); await otBanner(true);
   if(location.hash.startsWith("#/staffing") && window.staffingView) staffingView(document.getElementById("view")); });
 function otDraw(){
   document.querySelectorAll(".otbanner").forEach(x => x.remove());   // old banners from a cached page
