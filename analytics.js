@@ -5,7 +5,7 @@
    Round 3 (2026-10-28, hub_analytics_3.sql): #/an/worst · #/an/worst/<comp id> */
 (function(){
 const CSS = `
-.anbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px} .anbar select,.anbar input{width:auto;min-width:150px} .anbar input{flex:1}
+.anbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px} .anbar select,.anbar input{width:auto;min-width:150px} .anbar input{flex:1} .anbar textarea.angrow{flex:1;min-width:150px;min-height:40px;height:40px;resize:vertical;overflow-y:hidden;line-height:1.4}
 .anwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .antbl{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
 .antbl th,.antbl td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
@@ -865,7 +865,7 @@ async function revMore(el, tab, ctx){
           · ${x.open_jobs ? `<a class="anlink" href="#/maintenance">${x.open_jobs} open job${x.open_jobs === 1 ? "" : "s"}</a>` : `<span class="muted">no open jobs</span>`}
           · ${x.replied ? "we replied" : x.text ? `<b>no reply from us yet</b>` : "no public text"}</p>
         ${x.mark_by ? `<p class="muted" style="margin:4px 0 0;font-size:13px">${esc(x.mark_by)}, ${esc(dt(x.mark_at))}${x.mark_note ? ": " + esc(x.mark_note) : ""}</p>` : ""}
-        ${edit ? `<div class="anbar" style="margin:8px 0 0"><input data-n placeholder="What was done / why no action">
+        ${edit ? `<div class="anbar" style="margin:8px 0 0"><textarea class="angrow" rows="1" data-n placeholder="What was done / why no action"></textarea>
           ${x.status === "open" ? `<button class="btn small primary" data-m="handled">✓ Handled</button><button class="btn small" data-m="not_needed">No action needed</button>` : `<button class="btn small" data-m="open">Reopen</button>`}<span class="muted" data-msg></span></div>` : ""}</div>`; }).join("")
         : `<div class="card"><p class="muted">${s === "open" ? "No open alerts — nothing bad in these days still needs handling." : "Nothing here."}</p></div>`;
       el.querySelectorAll("[data-m]").forEach(b => b.onclick = async () => { const c = b.closest("[data-rv]"), m = c.querySelector("[data-msg]");
@@ -943,7 +943,7 @@ async function revMore(el, tab, ctx){
         ${x.caution ? `<p style="margin:6px 0 2px;padding:6px 10px;border-radius:8px;background:#fff4dc;color:#5a4300;font-size:13.5px">⚠ ${esc(x.caution)}${(x.caution_ids || []).length ? ` <a class="anlink" href="#" data-ids="${x.caution_ids.join(",")}">read them →</a>` : ""}</p>` : ""}
         <p class="muted" style="margin:4px 0 0;font-size:12.5px"><a class="anlink" href="#" data-ids="${x.review_ids.join(",")}">Read the ${x.review_ids.length} review${x.review_ids.length === 1 ? "" : "s"} →</a>${x.status_by ? ` · ${esc(x.status_by)}, ${esc(dt(x.status_at))}${x.note ? ": " + esc(x.note) : ""}` : ""}</p>
         ${edit ? `<div class="anbar" style="margin:6px 0 0"><select data-st>${Object.entries(ST).map(([k, t]) => `<option value="${k}"${k === x.status ? " selected" : ""}>${t}</option>`).join("")}</select>
-          <input data-no placeholder="Note (where it was added, when)"><button class="btn small" data-save>Save</button><span class="muted" data-msg></span></div>` : ""}</div>`).join("")}</div>`).join("")
+          <textarea class="angrow" rows="1" data-no placeholder="Note (where it was added, when)"></textarea><button class="btn small" data-save>Save</button><span class="muted" data-msg></span></div>` : ""}</div>`).join("")}</div>`).join("")
       : `<div class="card"><p class="muted">${L.length ? "Nothing matches." : "The first read is still running — homes appear here as they're read."}</p></div>`;
     el.querySelectorAll("[data-ids]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showIds(a.dataset.ids.split(",").map(Number)); });
     el.querySelectorAll("[data-home]").forEach(a => a.onclick = e => { e.preventDefault(); ctx.showHome(a.dataset.home); });
@@ -1148,3 +1148,6 @@ function gpsCheck(rows, pc){
   draw(rows.slice().sort((a, b) => (b.metrics.no_gps_days + b.metrics.low_gps_days) - (a.metrics.no_gps_days + a.metrics.low_gps_days))[0].person, false);
 }
 })();
+
+/* 2026-11-13 (Kim, Bugs #45): note boxes grow as you type and can be dragged bigger */
+document.addEventListener("input", e => { const t = e.target; if(t && t.classList && t.classList.contains("angrow")){ t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight + 2, 400) + "px"; } });
