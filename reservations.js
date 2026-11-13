@@ -245,7 +245,7 @@ function conds(s){
   const easy = rl.length > 0 && rl.every(r => UNDER25_OK.test(r)) && s.beds != null && s.beds <= 2;   // same rule as res_tick()
   return { pets:(occ.pets || 0) > 0, pl:u.startsWith("PL "), wg:u.startsWith("WG "), pv:u.startsWith("PV "), wp:u.startsWith("WP "),
     // combo homes (Brandon 2026-11-06): only UM 3013 (301 + 303) and ST 14 (ST 1 + ST 4); BHV 5604 is no longer a parent/child
-    thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "UM 3013", gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
+    thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "UM 3013", split:u === "ST 14", /* 2026-11-13 (Janae, Bugs #41): UM 3013 is one owner, so no split into two reservations */ gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
     extend:!!(s.list && s.list.extending), cancel:cx, cxlate:cx && !!s.cancelledAt && s.cancelledAt.slice(0, 10) >= s.arrive,
     // Cancel the stay button (2026-11-06): who is cancelling. Cancelled in Track with nobody picking = the guest path
     cxus:cx && !!(s.list && s.list.cancelBy === "us"), cxguest:cx && !(s.list && s.list.cancelBy === "us"),
