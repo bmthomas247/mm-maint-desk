@@ -147,7 +147,7 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;
 .scf .sc2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .scf .scrow{display:flex;gap:8px;margin-top:5px} .scf .scrow .sccode{margin-top:0;flex:1;font-size:22px;letter-spacing:4px;font-weight:800}
 .scf .scrow .btn{flex:none;white-space:nowrap}
-.scf input[type=datetime-local]{font-size:14px;padding:10px 8px} .scf .scsave{margin-top:4px} .scf .scfoot{font-size:12.5px;margin-top:8px}
+.scf input[type=datetime-local]{font-size:14px;padding:10px 8px} .scf .scsave{margin-top:4px} .scf .sc3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px} .scf textarea{box-sizing:border-box;font-family:inherit} .scf .scfoot{font-size:12.5px;margin-top:8px}
 @media (max-width:420px){ .scf .sc2{grid-template-columns:1fr;gap:0} }
 .step{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
 .step:first-child{border-top:0;padding-top:4px}
@@ -467,6 +467,35 @@ window.addEventListener("hashchange", () => { S.dirty = false; });
 function pref(k, v){ try{ if(v===undefined) return localStorage.getItem("locks_"+k); localStorage.setItem("locks_"+k, v); }catch(e){ return null; } }
 /* 2026-11-13 (Brandon): "Set a door code" - quick form on the Locks front page and on each home's page so the
    front desk can give a vendor / owner / housekeeper a code in a few taps. Saves through lock_staff_code (same as Access codes). */
+/* 2026-11-13 (Brandon): Guest link = pop-up to Text, Email or Copy it. Text / Email open the phone's own Messages or
+   mail app with the message filled in; the staff member taps send there. Nothing is sent by the hub. */
+function guestLinkPop(s){
+  const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
+  const first = String(s.guest||"").trim().split(/\s+/)[0] || "there";
+  const home = (S.homes||[]).find(h=>h.property_id===s.property_id), hc = home ? dc(home.properties.code) : "";
+  const msg = `Hi ${first}, here's your Moose Management stay page${hc?" for "+hc:""}: ${u}\nIt has your door code, Wi-Fi and check-in details.`;
+  const d = document.createElement("div"); d.className = "modal";
+  d.innerHTML = `<div class="card scf">
+    <div class="sch"><b>🔗 Guest link${s.guest?" · "+esc(s.guest):""}</b><button class="btn small" data-x aria-label="Close">✕</button></div>
+    ${s.starts_at?`<div class="schome">${esc(hc)} · ${esc(when(s.starts_at))} → ${esc(when(s.ends_at))}</div>`:""}
+    <label class="scl">Message<textarea id="gl_msg" rows="4" style="display:block;width:100%;margin-top:5px;font-size:15px;padding:10px 12px">${esc(msg)}</textarea></label>
+    <div class="sc2"><label class="scl">Guest's phone<input id="gl_ph" type="tel" inputmode="tel" placeholder="(435) 555-1234" autocomplete="off" data-lpignore="true" data-1p-ignore></label>
+      <label class="scl">Guest's email<input id="gl_em" type="email" placeholder="name@email.com" autocomplete="off" data-lpignore="true" data-1p-ignore></label></div>
+    <div class="sc3"><button class="btn go" data-gl="sms">💬 Text</button><button class="btn go" data-gl="mail">✉️ Email</button><button class="btn" data-gl="copy">📋 Copy link</button></div>
+    <div class="muted scfoot">Text and Email open your Messages or mail app with this filled in - you tap send there.</div></div>`;
+  document.body.appendChild(d); S.dirty = true;
+  const close = () => { d.remove(); S.dirty = false; };
+  d.onclick = e => { if(e.target === d) close(); };
+  $("[data-x]", d).onclick = close;
+  $$("[data-gl]", d).forEach(b => b.onclick = async () => {
+    const m = $("#gl_msg", d).value, k = b.dataset.gl;
+    if(k==="copy"){ try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } return; }
+    if(k==="sms"){ const ph = $("#gl_ph", d).value.replace(/[^\d+]/g,"");
+      location.href = "sms:" + ph + (/iPhone|iPad|Mac/.test(navigator.userAgent) ? "&" : "?") + "body=" + encodeURIComponent(m); return; }
+    if(k==="mail"){ const em = $("#gl_em", d).value.trim();
+      location.href = "mailto:" + encodeURIComponent(em).replace(/%40/g,"@") + "?subject=" + encodeURIComponent("Your stay"+(hc?" at "+hc:"")+" - Moose Management") + "&body=" + encodeURIComponent(m); }
+  });
+}
 function openSetCode(pid){
   const homes = (S.homes||[]).filter(h=>h.section==="ours").sort((a,b)=>String(a.properties.code).localeCompare(String(b.properties.code),undefined,{numeric:true}));
   const pad = n => String(n).padStart(2,"0"), loc = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -1475,8 +1504,7 @@ async function homeView(pid){
   // stays
   $$(".reveal").forEach(x => x.onclick = ev => { ev.stopPropagation(); x.outerHTML = `<div class="big" style="font-size:20px">${esc(x.dataset.c)}</div>`; });
   $$("[data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = stays.find(x=>x.res_id===row.dataset.res);
-    if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
-      try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
+    if(b.dataset.act==="link"){ guestLinkPop({...s, property_id: s.property_id || pid}); }
     if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
       try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); homeView(pid); }catch(e){ fail(e); } }
     if(b.dataset.act==="backup") showBackup(s); });
@@ -1544,8 +1572,7 @@ async function staysView(){
       <td style="white-space:nowrap;text-align:right">${folioLink(s)}${past?"":` <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button> <button class="btn small" data-act="backup" title="Emergency code already on the lock for this stay's dates">🆘 Backup${s.backup_used_at?" (used)":s.backup_given_at?" (given)":""}</button>`}</td></tr>`; }).join("")
       || `<tr><td colspan="8" class="muted">${t||hd||hm?"No stays match.":"No upcoming stays from Track."}</td></tr>`}</table>`;
     $$("#stable [data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = all.find(x=>x.res_id===row.dataset.res);
-      if(b.dataset.act==="link"){ const u = location.origin + location.pathname.replace(/locks(-desk)?\.html$/,"") + "stay.html#t=" + s.portal_token;
-        try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } }
+      if(b.dataset.act==="link"){ guestLinkPop(s); }
       if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
         try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); staysView(); }catch(e){ fail(e); } }
       if(b.dataset.act==="backup") showBackup(s); });
