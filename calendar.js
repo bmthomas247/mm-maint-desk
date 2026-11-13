@@ -986,7 +986,7 @@ function whoPanel(ppl, evs, sel, ox, fn){
       <p class="muted" style="margin:4px 0 6px;font-size:13px">${inn.length} working${out.length ? ` · ${out.length} out` : ""}</p>
       ${out.length ? `<div style="font-size:13.5px;margin-bottom:4px"><b>Out:</b> ${out.map(p => esc(p.name)).join(", ")}</div>` : ""}
       ${inn.length ? `<div style="font-size:13.5px"><b>Working:</b> ${inn.map(p => esc(p.name)).join(", ")}</div>` : ""}
-      <p class="muted" style="font-size:11.5px;margin:6px 0 0">Working = on the schedule, clocked in today in Hubstaff ("On the clock"), or marked working here. Out = approved Hubstaff time off or marked out here.</p></div>
+      <p class="muted" style="font-size:11.5px;margin:6px 0 0">Working = on the schedule, clocked in on the hub ("On the clock"), or marked working here. Out = approved time off or marked out here.</p></div>
     <div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px;flex:1">How to reach someone</b></div>
       <input id="ppq" type="search" placeholder="Search name, title or team" style="margin:6px 0">
       ${ppl.filter(p => p.mgr || inn.includes(p)).map(person).join("") || `<p class="muted" style="margin:4px 0">Nobody working.</p>`}
@@ -1080,10 +1080,7 @@ const balOf = b => b.calc_hours != null ? +b.calc_hours : +b.hours;   // the hub
 const hrs = x => x == null ? "—" : (Math.round(x * 100) / 100) + " h";
 const whenR = r => (r.day === r.end_day ? fday(r.day) : fday(r.day) + " – " + fday(r.end_day)) + (r.all_day ? "" : ", " + ftime(r.start_time.slice(0, 5)) + "–" + ftime(r.end_time.slice(0, 5)));
 const stPill = r => r.status === "approved" ? `<span class="pill green">Approved</span>` : r.status === "denied" ? `<span class="pill red">Not approved</span>` : r.status === "cancelled" ? `<span class="pill">Cancelled</span>` : `<span class="pill amber">Waiting</span>`;
-const hsPill = r => r.status !== "approved" ? "" : r.hs_status === "sent" ? ` <span class="pill green">In Hubstaff</span>`
-  : r.hs_status === "failed" || r.hs_status === "sending" ? ` <span class="pill red" title="${esc(r.hs_error || "Stopped while sending; check Hubstaff")}">Hubstaff: not sent</span>`
-  : r.hs_status === "skipped" && /no longer used/.test(r.hs_error || "") ? ""
-  : r.hs_status === "skipped" ? ` <span class="pill amber" title="${esc(r.hs_error || "")}">Add in Hubstaff by hand</span>` : ` <span class="pill">Going to Hubstaff</span>`;
+const hsPill = r => "";   // 2026-11-13: Hubstaff cancelled; approved time off is kept in the hub
 /* PTO you'll have by a date: hours-worked policies earn hours_per for every hours_worked, at your pace this year, up to the max (estimate) */
 function ptoBy(b, pol, by){
   const c = pol.config || {}; if(pol.policy_type !== "hours_worked" || !c.hours_worked || b.worked_ytd == null) return null;
@@ -1107,7 +1104,7 @@ async function timeOff(v){
   const by = ST.ptoBy || (new Date().getFullYear() + "-12-31");
   const balCard = b => { const p = pol(b.policy_id), f = ptoBy(b, p, by), c = p.config || {};
     return `<div class="card"><div class="muted" style="font-size:12.5px">${esc(polName(p))}</div><b class="n">${hrs(balOf(b))}</b>
-      ${b.calc_hours != null ? `<div class="muted" style="font-size:11.5px">Worked out by the hub: ${esc(b.calc_note || "")} Hubstaff shows ${hrs(b.hours)}.</div>` : ""}
+      ${b.calc_hours != null ? `<div class="muted" style="font-size:11.5px">Worked out by the hub: ${esc(b.calc_note || "")}</div>` : ""}
       <div style="font-size:12.5px">${p.policy_type === "hours_worked" ? `Earns ${esc(c.hours_per)} h for every ${esc(c.hours_worked)} h worked${c.maximum_to_accrue ? `, up to ${esc(c.maximum_to_accrue)} h saved` : ""}. It rolls over and never expires${c.maximum_to_accrue && balOf(b) >= +c.maximum_to_accrue ? `; you're at the max, so you keep all of it and start earning again once you use some` : ""}.`
         : p.policy_type === "annual" ? `${esc(c.hours_per_year)} h a year.` : p.policy_type === "joined_date" ? `${esc(c.hours_per_year)} h a year from your start date.` : ""}</div>
       ${f ? `<div style="font-size:13px;margin-top:6px">By ${esc(fday(by))}: <b>about ${hrs(f.h)}</b>${f.capped ? ` (the ${f.cap} h max)` : ""}<div class="muted" style="font-size:11.5px">Estimate at your pace this year (${Math.round(f.perWk)} h a week worked), if you don't use any.</div></div>` : ""}</div>`; };
@@ -1117,7 +1114,7 @@ async function timeOff(v){
       <td style="white-space:nowrap">${act === "mine" && r.status === "pending" ? `<button class="btn small" data-cancel="${r.id}">Cancel</button>` : ""}
         ${act === "wait" ? `<button class="btn small primary" data-ok="${r.id}">Approve</button> <button class="btn small" data-no="${r.id}">Deny</button>` : ""}
         ${act === "admin" && r.status === "approved" ? `<button class="btn small" data-no="${r.id}">Change to not approved</button>` : act === "admin" && r.status === "denied" ? `<button class="btn small" data-ok="${r.id}">Change to approved</button>` : ""}
-        ${ME.admin && r.status === "approved" && (r.hs_status === "failed" || r.hs_status === "sending") ? `<button class="btn small" data-resend="${r.id}">Send again</button>` : ""}</td></tr>`;
+        </td></tr>`;
   const table = (rows, act) => rows.length ? `<div class="tow"><table class="to"><tr><th>When</th><th>Hours</th><th>Status</th><th></th></tr>${rows.map(r => reqRow(r, act)).join("")}</table></div>` : `<p class="muted" style="margin:4px 0 0">None.</p>`;
   const teamB = bals.filter(b => b.user_id !== myId), teamIds = [...new Set(teamB.map(b => b.user_id))].sort((x, y) => who(x).localeCompare(who(y)));
   const flagged = teamB.concat(ME.admin ? myB : []).filter(b => b.check_flag);
@@ -1131,16 +1128,16 @@ async function timeOff(v){
     <div class="card"><b style="font-size:16px">Your balances</b>
       ${myB.length ? `<div style="margin:8px 0;font-size:13px">See what you'll have by <input type="date" id="ptoby" value="${esc(by)}" style="width:auto;display:inline-block;min-height:32px"></div>
         <div class="bal">${myOrder.map(balCard).join("")}</div>`
-      : `<p class="muted" style="margin:6px 0 0">You're not set up in Hubstaff time off yet, so there's no balance to show. You can still ask for time off; your manager will see it.</p>`}</div>
+      : `<p class="muted" style="margin:6px 0 0">You don't have a time-off balance in the hub yet. You can still ask for time off; your manager will see it.</p>`}</div>
     <p class="muted" style="font-size:12.5px;margin:-4px 0 10px">Paid time off is <b>40 hours at most at one time</b> (requests next to each other, or with only a weekend between, add up). ${(hw => hw ? `Hourly PTO counts from ${esc(new Date(hw.config.hub_from + "T12:00").toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" }))}, saves up to ${esc(hw.config.maximum_to_accrue)} hours and never expires.` : "PTO rolls over and never expires.")(pols.find(p => p.policy_type === "hours_worked" && (p.config || {}).hub_from))}</p>
     <div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px;flex:1">Blackout dates</b>${ME.admin ? `<button class="btn small" id="boadd">+ Add a blackout</button>` : ""}</div>
       ${blk.length ? `<div class="tow"><table class="to"><tr><th>When</th><th>What</th><th>Blocks</th>${ME.admin ? "<th></th>" : ""}</tr>${blk.map(b => `<tr><td>${esc(boDays(b))}</td><td><b>${esc(b.name)}</b>${b.note ? `<div class="muted" style="font-size:12px">${esc(b.note)}</div>` : ""}</td>
         <td>${b.blocks === "pto" ? `<span class="pill amber">Paid time off</span>` : `<span class="pill red">All time off</span>`}</td>${ME.admin ? `<td style="white-space:nowrap"><button class="btn small" data-boed="${b.id}">Edit</button> <button class="btn small" data-booff="${b.id}">Turn off</button></td>` : ""}</tr>`).join("")}</table></div>`
       : `<p class="muted" style="margin:4px 0 0">No blackout dates coming up.</p>`}</div>
     <div class="card"><b style="font-size:16px">Your requests</b>${table(mine, "mine")}</div>
-    ${ME.admin ? (dec => dec.length ? `<div class="card"><b style="font-size:16px">Decided requests</b><p class="muted" style="font-size:12.5px;margin:2px 0 0">You can change anyone's approval or denial. The person gets a Slack DM; if it was already added to Hubstaff, remove it there by hand.</p>${table(dec, "admin")}</div>` : "")(others.filter(r => (r.status === "approved" || r.status === "denied") && r.end_day >= addD(today(), -14)).slice(0, 40))
+    ${ME.admin ? (dec => dec.length ? `<div class="card"><b style="font-size:16px">Decided requests</b><p class="muted" style="font-size:12.5px;margin:2px 0 0">You can change anyone's approval or denial. The person gets a Slack DM.</p>${table(dec, "admin")}</div>` : "")(others.filter(r => (r.status === "approved" || r.status === "denied") && r.end_day >= addD(today(), -14)).slice(0, 40))
       : approver && others.some(r => r.status !== "pending") ? `<div class="card"><b style="font-size:16px">Requests you approved or denied</b>${table(others.filter(r => r.status !== "pending" && r.decided_by === ME.name).slice(0, 30), "team")}</div>` : ""}
-    <p class="muted" style="font-size:12px">Balances: worked out by the hub from hours worked (hub clock-ins from Nov 1, 2026; Hubstaff tracked hours before) (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")}). Approved requests are added to Hubstaff by the hub (paid time off under your PTO policy). Your reason is seen only by you, the person who approves, and Brandon or Kim.</p>
+    <p class="muted" style="font-size:12px">Balances: worked out by the hub from hours worked (hub clock-ins from Nov 1, 2026; Hubstaff tracked hours before) (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")}). Approved time off is kept here in the hub and taken off your balance. Your reason is seen only by you, the person who approves, and Brandon or Kim.</p>
     <div class="modal" id="tom"><div class="card" id="tocard"></div></div></div>`;
   const reload = () => timeOff(v), act = async (fnm, args) => { const r = await sb.rpc(fnm, args); if(r.error) alert(r.error.message); else reload(); };
   const pd = v.querySelector("#ptoby"); if(pd) pd.onchange = () => { ST.ptoBy = pd.value || null; reload(); };
@@ -1218,7 +1215,7 @@ window.ptoReport = async function(v, sub){
   const scope = ME.admin ? "Everyone" : "Your team";
   const head = `<div style="padding:0 0 8px"><a href="#/reports">← All reports</a></div><div class="chead"><h2>${chk ? "PTO: check Hubstaff's math" : "PTO balances"}</h2>
     <a class="btn small" href="${chk ? "#/pto" : "#/pto/check"}">${chk ? "PTO balances" : "Check Hubstaff's math"}</a></div>
-    <p class="muted" style="margin:0 0 10px">${scope}${ME.admin ? "" : " (and you)"} · source: Hubstaff (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")})</p>`;
+    <p class="muted" style="margin:0 0 10px">${scope}${ME.admin ? "" : " (and you)"} · source: the Moose Hub (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")})</p>`;
   if(chk){
     const f = bals.filter(b => b.check_flag), pto = bals.filter(b => pol(b.policy_id).policy_type === "hours_worked");
     v.innerHTML = `<div class="page cal wide">${head}
@@ -1232,7 +1229,7 @@ window.ptoReport = async function(v, sub){
   const yr = String(new Date().getFullYear());
   const row = id => { const bs = bals.filter(b => b.user_id === id).sort((x, y) => (pol(x.policy_id).kind === "pto" ? 0 : 1) - (pol(y.policy_id).kind === "pto" ? 0 : 1));
     const rs = reqs.filter(r => r.user_id === id), wait = rs.filter(r => r.status === "pending").length, taken = rs.filter(r => r.status === "approved" && r.day.slice(0, 4) === yr);
-    return `<tr><td><b>${esc(who(id))}</b></td><td>${bs.map(b => `${esc(polName(pol(b.policy_id)))}: <b>${hrs(balOf(b))}</b>${b.calc_hours != null ? ` <span class="muted">(Hubstaff ${hrs(b.hours)})</span>` : ""}${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}`).join("<br>") || `<span class="muted">Not in Hubstaff time off</span>`}</td>
+    return `<tr><td><b>${esc(who(id))}</b></td><td>${bs.map(b => `${esc(polName(pol(b.policy_id)))}: <b>${hrs(balOf(b))}</b>${b.check_flag ? ` <span class="pill amber">Check</span>` : ""}`).join("<br>") || `<span class="muted">Not in Hubstaff time off</span>`}</td>
       <td>${bs.filter(b => pol(b.policy_id).policy_type === "hours_worked").map(b => hrs(b.worked_ytd)).join("<br>")}</td>
       <td>${[...new Set(taken.map(kl))].map(l => `${esc(l)}: ${hrs(taken.filter(r => kl(r) === l).reduce((a, r) => a + +r.hours, 0))}`).join("<br>") || "—"}</td>
       <td>${wait ? `<a href="#/cal_off" class="pill amber" style="text-decoration:none">${wait} waiting</a>` : "—"}</td></tr>`; };
