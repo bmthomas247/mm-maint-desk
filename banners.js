@@ -105,7 +105,7 @@ window.gatewayView = async function(v){
     ${done.length ? `<h3 style="margin:18px 0 8px">Last 14 days</h3>${done.map(card).join("")}` : ""}`;
   if(!many) v.querySelectorAll("[data-gwk]").forEach(x => x.remove());
   const go = async (id, act, due) => { const pp = v.querySelector(`[data-gwp="${id}"]`);
-    const r = await sb.rpc("gateway_alert_act", { p_id:id, p_act:act, p_due:due || null, p_person:pp && pp.value ? +pp.value : null }); if(r.error) alert(r.error.message.replace(/^.*?: /, "")); };
+    const r = await sb.rpc("gateway_alert_act", { p_id:id, p_act:act, p_due:due || null, p_person:pp && pp.value ? +pp.value : null }); if(r.error) alert((window.niceErr ? niceErr(r.error) : r.error.message).replace(/^.*?: /, "")); };
   window.mmChipWire(v, "gwc2", "data-gwd");
   v.querySelectorAll("[data-gws]").forEach(x => x.onclick = async () => { const d = v.querySelector(`[data-gwd="${x.dataset.gws}"]`); x.disabled = true; await go(+x.dataset.gws, "schedule", d && d.value); gatewayView(v); });
   v.querySelectorAll("[data-gwc]").forEach(x => x.onclick = async () => { x.disabled = true; await go(+x.dataset.gwc, "clear"); gatewayView(v); });
@@ -165,7 +165,7 @@ window.bannersCard = async function(box){
     if(q("#bnnew")) q("#bnnew").onclick = () => { ed = blank(); msg = ""; paint(); };
     box.querySelectorAll("[data-bne]").forEach(b => b.onclick = () => { const x = list.find(y => y.id === +b.dataset.bne); ed = Object.assign({}, x, { teams:x.teams.filter(k => teams.includes(k)) }); msg = ""; paint(); });
     box.querySelectorAll("[data-bno]").forEach(b => b.onclick = async () => { const x = list.find(y => y.id === +b.dataset.bno); b.disabled = true;
-      const r = await save(Object.assign({}, x, { off:!x.off })); msg = r.error ? "Didn't save: " + r.error.message : (x.off ? "Turned back on." : "Turned off."); await load(); paint(); customBanners(true); });
+      const r = await save(Object.assign({}, x, { off:!x.off })); msg = r.error ? "Didn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message) : (x.off ? "Turned back on." : "Turned off."); await load(); paint(); customBanners(true); });
     if(!ed) return;
     if(q("#bnall")) q("#bnall").onchange = () => box.querySelectorAll("[data-bnt]").forEach(c => c.disabled = q("#bnall").checked);
     q("#bncancel").onclick = () => { ed = null; paint(); };
@@ -178,7 +178,7 @@ window.bannersCard = async function(box){
       if(bad) return q("#bnmsg2").textContent = bad;
       q("#bnsave").disabled = true;
       const r = await save(x);
-      if(r.error){ q("#bnsave").disabled = false; return q("#bnmsg2").textContent = "Didn't save: " + r.error.message; }
+      if(r.error){ q("#bnsave").disabled = false; return q("#bnmsg2").textContent = "Didn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message); }
       msg = x.id ? "Saved." : "Posted. It shows for those people within 5 minutes, or when they open a page."; ed = null; await load(); paint(); customBanners(true); };
   };
   const save = x => sb.rpc("hub_banner_save", { p_id:x.id, p_msg:x.msg, p_level:x.level, p_link:x.link || null, p_all:!!x.for_all, p_teams:x.for_all ? [] : x.teams,
