@@ -898,6 +898,19 @@ async function installHome(pid){
     ;
   const na = s => s.must || s.k==="prep" || s.k==="track" || isDone(s) ? "" : `<button class="btn small" data-skip="${s.k}" style="margin-top:8px">N/A${s.skip?" - "+esc(s.skip):" - not needed here"} → next</button>`;
   const keyHow = (keys, what) => `<ol class="how">${keys.map(([k,m])=>`<li><span class="key">${k}</span><span>${m}</span></li>`).join("")}</ol>${what?`<div class="muted">${what}</div>`:""}`;
+  // 2026-11-13 (Brandon): techs pair in the Home Assistant app. The Moose Hub picks the device up, names it, and keeps the codes.
+  const HA_ZW = "/config/integrations/integration/zwave_js";
+  const haCard = (devKeys) => `<div class="card" style="border-color:var(--moose);margin:6px 0">
+      <b style="font-size:16px">📱 Pair it in the Home Assistant app</b>
+      <div class="row" style="gap:8px;margin:8px 0;flex-wrap:wrap"><a class="btn go grow" href="homeassistant://navigate${HA_ZW}">Open the Home Assistant app</a>
+        <button class="btn grow" data-hapw>📋 Copy the hub password</button></div>
+      ${keyHow([["1","On this home's Wi-Fi, open the <b>Home Assistant</b> app. First time at this home: it finds the hub - sign in as <b>moose</b> and paste the hub password."],
+        ["2","Tap <b>Settings ▸ Devices &amp; services ▸ Z-Wave ▸ Add device</b>."], ...devKeys,
+        ["🏷️","It asks for a name and a room. Type anything (\"front\", \"garage\", \"upstairs\") or skip it. The Moose Hub names it for you, and the front desk can change it later."],
+        ["✓","Wait about a minute - it shows up here and this step ticks itself."]])}
+      <div class="muted" style="font-size:12.5px">Never set or change door codes in Home Assistant, and never delete a device there. Codes only come from the Moose Hub. Stuck? Call Chris or Brandon.</div>
+      <div class="muted" style="font-size:12.5px">App won't open? <a href="http://homeassistant.local${HA_ZW}" target="_blank">Open Home Assistant in the browser</a> (on this home's Wi-Fi).</div></div>`;
+  const backupPair = (inner) => `<details style="margin-top:6px"><summary class="muted">Backup: pair from the Moose Hub instead</summary>${inner}</details>`;
   const homeMaster = h.master_code;
   const isNewHome = /never on Brivo/.test(((h.install||{}).brivo||{}).by||"") || (!brivoM.length && !h.track_unit_id);   // never on Brivo: the app owns the master code
   const newMasterBtn = isNewHome && homeMaster ? `<button class="btn wide" data-newmaster style="margin-top:8px">🔄 Make a new master code</button>` : "";
@@ -965,17 +978,19 @@ async function installHome(pid){
       <div class="muted" style="margin-top:6px">If 7 does nothing, the wireless module is loose or the lock has no master code yet. This step ticks itself once the doors pair in the next step.</div>
       ${mark(STEPS.find(x=>x.k==="brivo"))}`,
     locks: `${isNewHome ? (homeMaster ? `<div class="master" style="margin:0 0 6px">Master code: <b>${esc(homeMaster)}</b></div>${newMasterBtn}`
-        : `<button class="btn primary wide" data-newmaster style="margin-bottom:8px">Make a master code for this home</button>`) : ""}<label class="field"><span>5-digit PIN from the sticker on the lock's wireless (Z-Wave) module</span><input id="pin" inputmode="numeric" maxlength="5" style="font-size:20px;padding:12px;letter-spacing:4px"></label>
+        : `<button class="btn primary wide" data-newmaster style="margin-bottom:8px">Make a master code for this home</button>`) : ""}${haCard([["3","Scan the <b>QR code</b> on the sticker on the lock's wireless module (battery cover off, above the batteries). No QR? Tap <b>Enter code manually</b> and type the <b>first 5 digits</b> under it."],["🔒","At the lock: type the <b>master code</b>, ⚙, <b>7</b>, ⚙, <b>1</b>, ⚙. It beeps and joins."]])}<div class="muted">One door at a time, closest door to the hub first.</div>${backupPair(`<label class="field"><span>5-digit PIN from the sticker on the lock's wireless (Z-Wave) module</span><input id="pin" inputmode="numeric" maxlength="5" style="font-size:20px;padding:12px;letter-spacing:4px"></label>
       <details style="margin:-4px 0 8px"><summary><b>📍 Where's the sticker?</b></summary>
         <div class="muted">Take the battery cover off the inside of the lock. The wireless module sits above the batteries. Its sticker has a QR code and a long number (the DSK). The PIN is the <b>first 5 digits</b> - usually underlined.</div>${STICKER_SVG}</details>
       <button class="btn go wide" id="pair" ${hub?"":"disabled"}>Start pairing</button>
       ${keyHow([["📱","Type the 5-digit PIN from the sticker on the lock's wireless module, then tap <b>Start pairing</b> above. The hub listens for 5 minutes."],["master","At the lock, type the master code."],["⚙","Opens the lock's settings menu."],["7","Picks <b>Network module</b> - the lock's wireless (Z-Wave) part."],["⚙","Confirm."],["1","Picks <b>Join network</b> - joins our hub."],["⚙","Confirm. Wait about a minute - the door shows up below."]],
-        'One door at a time, closest door to the hub first. Then tap the door name that matches (Front, Garage…).')}<div id="pairmsg"></div>
-      ${locks.map(l=>`<div class="row" style="margin-top:10px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
-        <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>`).join("")}${locks.length?`<div class="muted" style="margin-top:8px">Last door paired? Rebuild routes is the next step after thermostats.</div>`:""}`,
+        'One door at a time, closest door to the hub first. Then tap the door name that matches (Front, Garage…).')}<div id="pairmsg"></div>`)}
+      ${locks.map(l=>`<div style="margin-top:10px"><b>🔒 ${esc(l.name)}</b> <span class="pill ${l.online===false?"red":"green"}">${l.online===false?"not answering":"on the hub"}</span>
+        <details><summary class="muted" style="font-size:12.5px">Change name (optional)</summary><div class="row" style="margin-top:6px" data-lock="${l.id}"><input data-f="name" value="${esc(l.name)}" class="grow"><button class="btn small" data-act="name">Save name</button></div>
+        <div class="chips" style="margin-top:6px" data-for="${l.id}">${DOOR_NAMES.map(n=>`<span class="chip" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div></details></div>`).join("")}${locks.length?`<div class="muted" style="margin-top:8px">Last door paired? Rebuild routes is the next step after thermostats.</div>`:""}`,
     thermo: `<div class="muted" style="margin-bottom:6px">Thermostat won't pair? It may still be on Brivo - factory reset it from its own menu (step 3, Option 2), then try again.</div><div style="margin-bottom:6px;padding:8px 10px;border-radius:10px;background:var(--red-soft);color:var(--red);font-weight:800">⚡ Replacing a thermostat? Turn OFF the power to the HVAC system first (furnace / air-handler switch or breaker), make sure the old thermostat's screen is dead, and photo the wiring before you disconnect it.</div>
-      ${keyHow([["📱","Tap <b>Start pairing (no PIN)</b> below. The hub listens for 5 minutes."],["🌡️","On the thermostat, open its Z-Wave menu and choose <b>Include</b> (sometimes called Add or Join) - check the thermostat's paper guide for where that menu is."],["⏳","Wait about a minute - it shows up below."]])}
-      <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>
+      ${haCard([["3","If it asks for a QR code, tap <b>Add without a QR code</b>."],["🌡️","On the thermostat, open its Z-Wave menu and choose <b>Include</b> (sometimes Add or Join) - its paper guide says where that menu is."]])}
+      ${backupPair(`${keyHow([["📱","Tap <b>Start pairing (no PIN)</b> below. The hub listens for 5 minutes."],["🌡️","On the thermostat, choose <b>Include</b> in its Z-Wave menu."],["⏳","Wait about a minute - it shows up below."]])}
+      <button class="btn wide" id="pair2" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg2"></div>`)}
       ${thermos.length?`<div class="muted" style="margin-top:8px">Found: ${thermos.map(t=>esc(t.name)+(t.temp!=null?` ${Math.round(t.temp)}°`:"")).join(" · ")}</div>`:""}<div class="muted" style="margin-top:6px">${thermos.length?"✓ Ticks itself once a thermostat shows up.":"Every home needs its thermostat(s) on the system - this ticks itself once one shows up."}</div>`,
     noise: `<div class="muted"><b>Optional.</b> We're not putting noise sensors in homes yet - tap <b>No noise sensor in this home</b> unless Brandon says this one gets one.</div>${keyHow([["🏢","At the office first: plug the sensor into a computer with its USB cable and open the <a href=\"noise-setup.html\" target=\"_blank\">noise sensor setup page</a> in Chrome. Pick this home's Wi-Fi."],["🔌","At the home: plug it in in the living area, chest height, 6 ft+ from TVs, speakers, the fridge and vents."],["⏳","Wait a few minutes - it shows up here by itself and this step ticks."]])}
       ${sensors.some(x=>x.kind==="noise")?`<div class="muted" style="margin-top:8px">Found: ${sensors.filter(x=>x.kind==="noise").map(x=>esc(x.name)+(x.value!=null?" "+Math.round(x.value)+" dB":"")).join(" · ")}</div>`:""}${mark(STEPS.find(x=>x.k==="noise"))}`,
@@ -996,9 +1011,10 @@ async function installHome(pid){
                 <button class="btn grow" data-heat="fail" style="font-size:17px;padding:14px;border-color:var(--red);color:var(--red)">No heat</button></div></div>`); })(),
     doors: (()=>{ const cs = sensors.filter(x=>x.kind==="contact");
       return `<div class="muted"><b>Optional.</b> Only if this home gets door/window sensors - otherwise tap <b>No door/window sensors here</b>. Sensors go on the outside doors, sliders and easy-to-reach windows. They warn us when a door opens at an empty home, is left open, or is open while the heat runs.</div>
-      ${keyHow([["🧲","Stick the sensor on the frame and the magnet on the door / window, lined up, no more than ¼ inch apart when closed."],["📱","Tap <b>Start pairing (no PIN)</b> below. The hub listens for 5 minutes."],["🔘","Put the sensor in pairing mode. <b>Aeotec Door Window Sensor 8:</b> pull the battery tab, open the cover, <b>tap the button twice quickly</b>. Other brands: check the paper guide."],["🏷️","It shows up below - tap the name that matches (Front door, Slider…)."],["🚪","Test: open the door - it should say <b>OPEN</b> here within a few seconds, then <b>CLOSED</b>."]],
-        'Won\'t pair? Move it closer to the hub, tap <b>Start pairing</b> again and double-tap its button. Still nothing? It may still be paired to another hub - call Brandon.')}
-      <button class="btn wide" id="pair3" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg3"></div>
+      <div class="muted" style="margin-top:6px">🧲 Stick the sensor on the frame and the magnet on the door / window, lined up, no more than ¼ inch apart when closed.</div>
+      ${haCard([["3","Scan the <b>QR code</b> on the sensor or its box (or tap <b>Add without a QR code</b>)."],["🔘","<b>Aeotec Door Window Sensor 8:</b> pull the battery tab, open the cover, <b>tap the button twice quickly</b>. Other brands: check the paper guide."]])}
+      <div class="muted">🚪 Test: open the door - it should say <b>OPEN</b> below within a few seconds, then <b>CLOSED</b>. Won't pair? Move it closer to the hub and try again. Still nothing? Call Brandon.</div>
+      ${backupPair(`<button class="btn wide" id="pair3" style="margin-top:8px" ${hub?"":"disabled"}>Start pairing (no PIN)</button><div id="pairmsg3"></div>`)}
       ${cs.map(x=>`<div style="margin-top:10px" data-sens="${x.id}"><div class="row"><input data-f="name" value="${esc(x.name)}" class="grow"><span class="pill ${x.state==="open"?"amber":x.state==="closed"?"green":"grey"}" style="font-size:14px">${x.state==="open"?"OPEN":x.state==="closed"?"CLOSED":"?"}</span><button class="btn small" data-act="sname">Save</button></div>
         <div class="chips" style="margin-top:6px">${SENSOR_NAMES.map(n=>`<span class="chip" data-sn="${esc(n)}">${esc(n)}</span>`).join("")}</div>
         <div class="muted" style="font-size:12.5px">${x.temp!=null?Math.round(x.temp)+"°F":""}${x.humidity!=null?" · "+Math.round(x.humidity)+"% humidity":""}${x.battery!=null?" · 🔋 "+x.battery+"%":""} · ${signal(x.rssi)}</div></div>`).join("")}`; })(),
@@ -1137,6 +1153,9 @@ async function installHome(pid){
       m.innerHTML = r ? (r.ok? '<p class="pill green">Added</p>' : `<p class="pill red">${esc((r.result||{}).msg||"Didn't pair")}</p>`) : '<p class="muted">No answer yet - check again in a minute.</p>';
       again(); }catch(e){ fail(e); } btn.disabled = false; }; };
   pairBtn($("#pair"), "#pairmsg", true); pairBtn($("#pair2"), "#pairmsg2", false); pairBtn($("#pair3"), "#pairmsg3", false);
+  $$("[data-hapw]").forEach(b=>b.onclick=async()=>{ try{ const r = ((await rpc("office_codes"))||[]).find(x=>x.key==="lock_hub_pw");
+      if(!r || !r.code) return toast("The hub password isn't in the Moose Hub yet - use LastPass or call Brandon");
+      await navigator.clipboard.writeText(r.code); toast("Hub password copied - paste it in the app"); }catch(e){ toast("Couldn't copy - use LastPass or call Brandon"); } });
   $$("[data-sens]").forEach(r=>{ $$("[data-sn]",r).forEach(c=>c.onclick=()=>{ $('[data-f="name"]',r).value = c.dataset.sn; S.dirty = true; });
     $('[data-act="sname"]',r).onclick = async () => { try{ await rpc("lock_sensor_update",{p_sensor:r.dataset.sens,p_name:$('[data-f="name"]',r).value}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
   $$("[data-for]").forEach(box=>$$(".chip",box).forEach(c=>c.onclick=()=>{ $(`[data-lock="${box.dataset.for}"] input`).value = c.dataset.name; }));
