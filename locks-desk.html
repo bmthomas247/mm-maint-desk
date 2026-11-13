@@ -134,11 +134,11 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;
 .hp-row:hover,.hp-row:active{background:var(--pine-soft)}.hp-row .muted{font-size:13px}.hp-new b{color:var(--pine)}
 .pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.pic{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:10px;border:1px solid #dfe5da;border-radius:14px;background:var(--card,#fff)}.pic b{font-size:14px}.pic span{font-size:12.5px;color:#5b6656;line-height:1.3}
 .step.flash{background:var(--pine-soft);border-radius:12px;transition:background .4s}
-.step{scroll-margin-top:80px}
+.step{scroll-margin-top:80px} html.inhub header.top{display:none}
 .step{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
 .step:first-child{border-top:0;padding-top:4px}
 .step .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--line);color:var(--ink-2);display:grid;place-items:center;font-weight:800;font-size:14px}
-.step.done .n{background:var(--moose);color:#16220a}
+.step.done .n{background:#d5d9d2;color:#5c6358} .step.done{opacity:.7} .step.done .t{font-weight:700} /* 2026-11-13: finished steps fold + go grey */
 .step.now .n{background:var(--forest-2);color:#fff;box-shadow:0 0 0 4px var(--pine-soft)}
 .step .t{font-weight:800}
 .step.done .t{color:var(--muted)}
@@ -184,6 +184,11 @@ details.sect{margin:18px 0 6px} details.sect>summary{padding:6px 2px;border-bott
 .dot.ok{background:#3fb24a;box-shadow:0 0 0 3px #3fb24a33} .dot.wait{background:#e0a106;box-shadow:0 0 0 3px #e0a10633;animation:pulse 1.4s infinite} .dot.bad{background:var(--red);box-shadow:0 0 0 3px #c8382b33}
 @keyframes pulse{50%{opacity:.35}}
 .status.allok{border-color:#3fb24a} .status.anybad{border-color:var(--red)}
+/* 2026-11-13 (Brandon): status card folds; closed it shows one line of dots */
+details.status>summary{list-style:none;cursor:pointer;display:block;position:relative;padding-right:22px} details.status>summary::-webkit-details-marker{display:none}
+details.status>summary .chev{transition:transform .15s;color:var(--muted,#6b7280);font-size:13px} details.status[open]>summary .chev{transform:rotate(90deg)}
+.sdots{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px} .sdots span{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted,#6b7280);white-space:nowrap}
+details.status>summary::after{position:absolute;right:4px;top:12px} details.status[open] .sdots{display:none} details.status[open]>summary{margin-bottom:6px}
 .reveal{cursor:pointer;border:1px dashed var(--line-2);border-radius:9px;padding:3px 9px;font-weight:800;color:var(--ink-2);background:var(--ground)}
 .pwwrap{position:relative;display:block}
 .pwwrap input{width:100%;padding-right:52px !important;box-sizing:border-box}
@@ -293,9 +298,12 @@ function statusLights(o){
   if(o.codes) L.push(o.codes.total ? [o.codes.on===o.codes.total ? "ok" : "wait", "Codes on the doors", `${o.codes.on} of ${o.codes.total} confirmed`] : ["off","Codes on the doors","none yet"]);
   const needed = L.filter(x=>x[0]!=="off"), allOk = needed.length && needed.every(x=>x[0]==="ok") && hub;
   const anyBad = L.some(x=>x[0]==="bad");
-  return `<div class="card status ${allOk?"allok":anyBad?"anybad":""}">
-    <div class="row" style="margin-bottom:6px"><b class="grow" style="font-size:16px">${allOk ? "🟢 Everything is connected" : anyBad ? "🔴 Something isn't connected" : "🟡 Still connecting…"}</b><span class="muted" style="font-size:12px">updates every 15 s</span></div>
-    ${L.map(([st,l,d])=>`<div class="sl"><i class="dot ${st}"></i><b>${esc(l)}</b><span class="muted grow">${esc(d)}</span>${o.go&&o.go[l]?`<button class="btn small" data-goto="${o.go[l]}">${st==="ok"?"View":"Fix it"} ↓</button>`:""}</div>`).join("")}</div>`;
+  const SHORT = {"Your phone":"Phone","Hub internet":"Internet","Z-Wave stick":"Z-Wave","Door & window sensors":"Door sensors","Noise sensor (Wi-Fi)":"Noise","TVs (Wi-Fi)":"TVs","Codes on the doors":"Codes","Leak sensors":"Leak"};
+  let open = false; try{ open = localStorage.getItem("mm_status_open") === "1"; }catch(e){}
+  return `<details class="card status ${allOk?"allok":anyBad?"anybad":""}" ${open?"open":""} ontoggle="try{localStorage.setItem('mm_status_open',this.open?'1':'0')}catch(e){}">
+    <summary><div class="row"><b class="grow" style="font-size:16px">${allOk ? "🟢 Everything is connected" : anyBad ? "🔴 Something isn't connected" : "🟡 Still connecting…"}</b><span class="muted" style="font-size:12px">updates every 15 s</span></div>
+      <div class="sdots">${L.map(([st,l,d])=>`<span title="${esc(l+": "+d)}"><i class="dot ${st}"></i>${esc(SHORT[l]||l)}</span>`).join("")}</div></summary>
+    ${L.map(([st,l,d])=>`<div class="sl"><i class="dot ${st}"></i><b>${esc(l)}</b><span class="muted grow">${esc(d)}</span>${o.go&&o.go[l]?`<button class="btn small" data-goto="${o.go[l]}">${st==="ok"?"View":"Fix it"} ↓</button>`:""}</div>`).join("")}</details>`;
 }
 
 /* whole-home controls: every door at once, every thermostat at once */
@@ -346,6 +354,8 @@ const ICON = {
   hub:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="7" width="18" height="10" rx="3"/><path d="M7 12h.01M11 12h.01"/></svg>'
 };
 const batt = b => b==null ? "" : `<span class="batt ${b<=30?"low":""}"><i style="width:${Math.max(8,Math.min(100,b))*0.17}px"></i></span>`;
+// 2026-11-13 (Brandon): inside the Moose Hub the hub's own green banner is enough
+try{ if(window.self !== window.top) document.documentElement.classList.add("inhub"); }catch(e){ document.documentElement.classList.add("inhub"); }
 function shell(active, inner, title, sub){
   app.innerHTML = `<header class="top"><div class="bar">
       <div class="logo"><img src="moose-logo.png" alt="Moose Management"><span class="lk">${ICON.lock}</span></div>
@@ -917,7 +927,7 @@ async function installHome(pid){
   const spotForm = (k, o) => { const v = sp(k) || {}, its = v.items || [];
     return `<div class="spot" data-spot="${k}">
       <label class="field" style="margin-top:8px"><span>📷 Photo <span class="muted">(needed)</span></span>
-        ${v.photo?`<img src="${v.photo}" alt="" style="width:100%;max-width:360px;border-radius:12px;display:block;margin:6px 0">`:""}
+        ${(((S.spotPhoto||{})[k])||v.photo)?`<img data-prev src="${((S.spotPhoto||{})[k])||v.photo}" alt="" style="width:100%;max-width:360px;border-radius:12px;display:block;margin:6px 0">`:`<img data-prev alt="" style="display:none;width:100%;max-width:360px;border-radius:12px;margin:6px 0">`}${(S.spotPhoto||{})[k]?`<div class="muted" style="font-size:12.5px">📷 New photo ready - tap Save</div>`:""}
         <input type="file" data-photo accept="image/*" capture="environment"></label>
       <label class="field"><span>${o.where}</span><input data-sp="spot" value="${esc(v.spot||"")}" placeholder="${o.ph?"Example: "+esc(o.ph):""}"></label>
       ${o.picks?`<div class="chips" style="margin:-2px 0 6px">${o.picks.map(x=>`<span class="chip" data-pickspot="${esc(x)}">${esc(x)}</span>`).join("")}</div>`:""}
@@ -1099,10 +1109,12 @@ async function installHome(pid){
     const d = $("details", el); if(d && !$(".body", el).offsetParent) d.open = true;
     el.scrollIntoView({behavior:"smooth", block:"start"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"), 1600); });
   $$("[data-undo]").forEach(a2=>a2.onclick=async e=>{ e.preventDefault(); try{ await rpc("lock_install_step",{p_property:pid,p_step:a2.dataset.undo,p_done:false}); await loadBase(); again(); }catch(er){ fail(er); } });
-  $$("[data-spot]").forEach(box => { const k = box.dataset.spot; let photo = (sp(k)||{}).photo || null;
+  $$("[data-spot]").forEach(box => { const k = box.dataset.spot; S.spotPhoto = S.spotPhoto || {}; let photo = S.spotPhoto[k] || (sp(k)||{}).photo || null;
+    // 2026-11-13: the camera takes the page away; the 15 s refresh redrew the form and the photo was lost. Hold the refresh from the tap.
+    $("[data-photo]", box).onclick = () => { S.dirty = true; };
     $$("[data-item]", box).forEach(c=>c.onclick=()=>{ c.classList.toggle("on"); S.dirty = true; if(c.dataset.item==="Other") $("[data-otherw]",box).style.display = c.classList.contains("on") ? "" : "none"; });
     $$("[data-pickspot]", box).forEach(c=>c.onclick=()=>{ $('[data-sp="spot"]',box).value = c.dataset.pickspot; S.dirty = true; });
-    $("[data-photo]", box).onchange = async e => { const f = e.target.files[0]; if(!f) return; try{ photo = await shrinkPhoto(f); toast("Photo ready - tap Save"); }catch(er){ toast("Couldn't read that photo - try again"); } };
+    $("[data-photo]", box).onchange = async e => { const f = e.target.files[0]; if(!f) return; try{ photo = await shrinkPhoto(f); S.spotPhoto[k] = photo; S.dirty = true; const pv = $("[data-prev]", box); if(pv){ pv.src = photo; pv.style.display = "block"; } toast("Photo ready - tap Save"); }catch(er){ toast("Couldn't read that photo - try again"); } };
     $("[data-spotsave]", box).onclick = async () => {
       const val = n => { const i = $(`[data-sp="${n}"]`, box); return i ? i.value.trim() : ""; };
       const items = $$("[data-item].on", box).map(c=>c.dataset.item), r = { spot:val("spot"), code:val("code"), other:val("other"), items, photo };
@@ -1110,7 +1122,7 @@ async function installHome(pid){
       if(k==="keybox" && !r.code) return toast("Type the key box code");
       if($("[data-item]", box) && !items.length) return toast("Tap what's in there");
       if(items.includes("Other") && !r.other) return toast("Say what the Other item is");
-      try{ await rpc("lock_spot_save",{p_property:pid,p_kind:k,r}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
+      try{ await rpc("lock_spot_save",{p_property:pid,p_kind:k,r}); delete S.spotPhoto[k]; S.dirty = false; toast("Saved ✓"); await loadBase(); again(); }catch(e){ fail(e); } }; });
   $$("[data-newmaster]").forEach(b=>b.onclick=async()=>{
     if(homeMaster && !confirm("Make a NEW master code for "+dc(p.code)+"?\n\nThe old one ("+homeMaster+") stops being the one on file. If you already typed the old one into a lock, change it on that lock too: old code ⚙ 1 ⚙, then the new code.")) return;
     try{ const c = await rpc("lock_master_new",{p_property:pid,p_replace:!!homeMaster}); await loadBase(); toast("New master code: "+c); again(); }catch(e){ fail(e); } });
@@ -2029,7 +2041,7 @@ async function route(){
     else if(h==="rules" && DESK) await rulesView();
     else await homesView();
   }catch(e){ fail(e, "Couldn't load"); }
-  if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!S.dirty && !document.querySelector("input:focus,details[open]:not(.guide):not(.sect)")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
+  if(h.startsWith("home/") || h==="" || h.startsWith("install/")) S.timer = setTimeout(()=>{ if(!S.dirty && !document.querySelector("input:focus,details[open]:not(.guide):not(.sect):not(.status)")) route(); }, h.startsWith("install/") || h.startsWith("home/") ? 15000 : 30000);
 }
 window.addEventListener("hashchange", route);
 sb.auth.onAuthStateChange(ev => { if(ev==="SIGNED_OUT") S.lastPw = null; if(ev==="SIGNED_IN"||ev==="SIGNED_OUT") route(); });
