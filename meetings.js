@@ -58,6 +58,13 @@ const MCSS = `.mtg .mplus{font-size:20px;line-height:1;min-width:38px;padding:0 
 .macts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px} .mtg .mcardx .macts{margin-top:auto}
 .mtg .mcardx .macts .btn:first-child{flex:1}
 .mred{color:#b42318;font-weight:700} .mamb{color:#8a5a00;font-weight:700}
+.mfiles{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}.mfile{display:inline-flex;align-items:center;gap:6px;background:#eef3e6;border-radius:8px;padding:4px 8px;font-size:13px}.mfile a{color:#24452c;font-weight:700;text-decoration:none}.mfile small{color:var(--muted)}.mfile button{border:0;background:none;cursor:pointer;color:#b42318;padding:0 2px}
+.tk .tked{flex:0 0 auto;padding:2px 8px}
+.mtdov{position:fixed;inset:0;background:rgba(15,25,15,.4);z-index:950;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 12px}
+.mtd{background:var(--card,#fff);border-radius:16px;width:min(560px,100%);padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.25);display:grid;gap:10px}
+.mtd h3{margin:0;font-size:17px}.mtd label{display:grid;gap:4px;font-size:13px;font-weight:700}.mtd .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mtd textarea,.mtd select,.mtd input{width:100%;box-sizing:border-box}.mtd textarea{min-height:60px}.mtd .sec{border-top:1px solid var(--line);padding-top:10px}.mtd .sec b{font-size:14px}.mtd .tn{font-size:13.5px;margin:6px 0;border-left:3px solid #7ea04a;padding-left:8px;white-space:pre-wrap}
+@media (max-width:560px){.mtd .row2{grid-template-columns:1fr}}
 .mpov{position:fixed;inset:0;background:rgba(15,25,15,.35);z-index:900;display:flex;justify-content:flex-end}
 .mpanel{background:var(--bg,#f7f8f4);width:min(560px,100%);height:100%;overflow:auto;box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column}
 .mph{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:16px 18px 10px;background:var(--card,#fff);border-bottom:1px solid var(--line)}
@@ -133,6 +140,7 @@ async function load(v, key){
   try { const t = await sb.rpc("meeting_topics", { p_meet:key });
     (t.data || []).forEach(x => (r.data.items = r.data.items || []).push({ grp:x.grp || "Added topics", key:"own:" + x.id, title:x.title, lines:x.note ? [x.note] : [],
       src:"Added by " + (x.by || "someone") + ", " + new Date(x.at).toLocaleDateString(undefined, { month:"short", day:"numeric" }), own:x.id })); } catch(e){}
+  try { const x = await sb.rpc("meeting_extras", { p_meet:key }); r.data.ex = (x && x.data) || {}; } catch(e){ r.data.ex = {}; }   // hub_meeting_task_edit.sql
   ST.data[key] = r.data; return r.data;
 }
 window.meetView = async function(v, key){
@@ -341,6 +349,12 @@ function suggest(it){
   return out.slice(0, 4);
 }
 function render(v, key, data, ppl){
+  // 2026-11-13 (Pyper + Kim): files on notes and tasks, notes on tasks, edit a task (hub_meeting_task_edit.sql)
+  const EX = data.ex || {}, tNotes = id => (EX.task_notes || []).filter(n => n.task === id), tFiles = id => (EX.files || []).filter(f => f.task === id),
+    iFiles = k => (EX.files || []).filter(f => !f.task && f.item === k && f.day === ST.day[key]),
+    kb = n => n == null ? "" : n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB",
+    filesHtml = fl => fl.length ? `<div class="mfiles">${fl.map(f => `<span class="mfile"><a href="#" data-mfile="${esc(f.path)}" title="Open">📎 ${esc(f.name)}</a><small>${esc(f.by || "")}${f.size ? " · " + kb(f.size) : ""}</small>${f.mine || data.admin ? `<button data-mfoff="${f.id}" title="Take this file off">✕</button>` : ""}</span>`).join("")}</div>` : "",
+    tExtra = t => { const a = tNotes(t.id).length, b = tFiles(t.id).length; return (a ? " · 💬 " + a : "") + (b ? " · 📎 " + b : ""); };
   const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
   // every saved note is its own line in the topic's feed (hub_meeting_notes_feed.sql); an older note a person later extended is hidden
   const notesOf = (d, k) => { const a = notes.filter(n => (d == null || n.day === d) && n.item === k && n.text).sort((x, y) => String(x.at).localeCompare(String(y.at)));
@@ -359,7 +373,7 @@ function render(v, key, data, ppl){
   const dueTxt = t => !t.due ? "" : t.due < T ? `<span class="mred">Overdue · ${esc(fmt(t.due))}</span>` : t.due === T ? `<span class="mamb">Due today</span>` : "Due " + esc(fmt(t.due));
   const taskRow = t => `<div class="tk${t.done_at ? " done" : ""}"><input type="checkbox" data-tdone="${t.id}" ${t.done_at ? "checked" : ""} aria-label="Done">
       <div style="flex:1"><span class="tx">${esc(t.text)}</span><small>${[t.who ? "👤 " + esc(t.who) : "No one yet", dueTxt(t), t.item_title && !MX.open ? esc(short(t.item_title, 60)) : "",
-        t.done_at ? "Done" + (t.done_by ? " by " + esc(t.done_by) : "") : "Added " + esc(fmt(t.day)) + (t.created_by ? " by " + esc(t.created_by) : "")].filter(Boolean).join(" · ")}</small></div></div>`;
+        t.done_at ? "Done" + (t.done_by ? " by " + esc(t.done_by) : "") : "Added " + esc(fmt(t.day)) + (t.created_by ? " by " + esc(t.created_by) : "")].filter(Boolean).join(" · ")}${tExtra(t)}</small></div><button class="btn small tked" data-tedit="${t.id}" title="Edit, notes and files">✎</button></div>`;
   const pplOpts = sel => `<option value="">Who?</option>` + (MX.tp[key] || []).map(p => `<option value="${esc(p.id)}"${sel === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("");
   const taskForm = (k, title, pre) => `<div class="mtask" data-tform="${esc(k)}" data-ttitle="${esc(title || "")}"><input placeholder="New task: what needs to happen" data-tf="text" value="${esc(pre ? pre.text : "")}">
       <select data-tf="who" aria-label="Who">${pplOpts(pre && pre.who)}</select><input type="date" data-tf="due" value="${esc(pre && pre.due || "")}"><button class="btn small primary" data-tadd="${esc(k)}">+ Add task</button></div>`;
@@ -410,11 +424,11 @@ function render(v, key, data, ppl){
       ${done.length ? `<details><summary class="muted" style="cursor:pointer;padding:6px 0">Done in the last 3 weeks (${done.length})</summary>${done.map(taskRow).join("")}</details>` : ""}
       ${taskForm("", "")}</div>`;
   const gdv = ST.drafts[key + "|_notes"];
-  h += `<h3 class="mg">Anything else</h3><div class="card">${feedHtml(notesOf(day, "_notes"))}<textarea data-note="_notes" style="width:100%;min-height:90px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">Add note</button></div>
+  h += `<h3 class="mg">Anything else</h3><div class="card">${feedHtml(notesOf(day, "_notes"), "_notes")}<textarea data-note="_notes" style="width:100%;min-height:90px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">Add note</button><button class="btn small" data-nattach="_notes" title="Attach a photo, PDF or document">📎 Attach</button></div>
       ${past.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Past meetings: ${past.slice(0, 12).map(d => `<a href="#" data-mday="${esc(d)}">${esc(fmt(d))}</a>`).join(" · ")}</p>` : ""}</div>
     <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each topic shows where it came from.</p></div>`;
-  function feedHtml(a){ return a.length ? `<div class="mfeed">${a.map(n => `<div class="mfn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("")}</div>` : ""; }
+  function feedHtml(a, k){ return (a.length ? `<div class="mfeed">${a.map(n => `<div class="mfn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("")}</div>` : "") + (k == null ? "" : filesHtml(iFiles(k))); }
   v.innerHTML = h;
 
   /* ---------- the panel ---------- */
@@ -444,9 +458,9 @@ function render(v, key, data, ppl){
           <label class="msale1">Note<input id="msn" value="${esc(I.note || "")}" placeholder="e.g. owner wants us to keep renting until closing"></label>
           <div class="macts"><button class="btn small primary" id="mss">Save listing info</button><span class="muted" id="msmsg" style="font-size:13px"></span></div></div>
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Ask everyone</small>${esc(it.ask)}</div></div>` : ""}
-        <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key))}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(ST.drafts[key + "|" + it.key] || "")}</textarea>
+        <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key), it.key)}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(ST.drafts[key + "|" + it.key] || "")}</textarea>
           <div class="macts"><select data-nstate="${esc(it.key)}" aria-label="Where it stands" style="width:auto">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
-          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button></div></div>
+          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button><button class="btn small" data-nattach="${esc(it.key)}" title="Attach a photo, PDF or document">📎 Attach</button></div></div>
         <p class="msrc">Source: ${esc(it.src || "")} · Showings and open houses from Breezeway tasks</p>`;
     } else if(MX.tab === "ov" && isPsu(it)){
       const P = psuInfo(it), lg = MX.psu[String(it.key).split(":")[1]] || [], dv2 = ST.drafts[key + "|" + it.key];
@@ -456,7 +470,7 @@ function render(v, key, data, ppl){
           ${P.next.length ? `<div style="margin-top:8px"><b style="font-size:13px">Next up</b><ul class="mlines">${P.next.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>` : ""}</div>
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Ask everyone</small>${esc(it.ask)}</div></div>` : ""}
         <div class="mbox"><b>📝 Note for Launch Pad</b><p class="muted" style="font-size:12px;margin:0 0 6px">Saved on this home's meeting notes in Property Set Up (and here).</p>
-          ${feedHtml(notesOf(day, it.key))}<textarea id="mpsun" placeholder="What did we say? Who does what?">${esc(dv2 != null ? dv2 : "")}</textarea>
+          ${feedHtml(notesOf(day, it.key), it.key)}<textarea id="mpsun" placeholder="What did we say? Who does what?">${esc(dv2 != null ? dv2 : "")}</textarea>
           <div class="macts"><button class="btn small primary" id="mpsus">Save to Launch Pad</button><span class="muted" id="mpsum" style="font-size:13px"></span></div></div>
         ${lg.length ? `<div class="mbox"><b>Earlier meeting notes (Launch Pad)</b>${lg.map(e => `<div class="mfn" style="margin-top:6px"><b>${esc(fmt(e.day))}</b><span class="muted"> · ${esc(e.src || e.by || "")}</span><div style="white-space:pre-wrap;font-size:13.5px">${esc(e.text)}</div></div>`).join("")}</div>` : ""}
         <div class="macts"><a class="btn small primary" href="#/property_setup">🚀 Open in Property Set Up</a></div>
@@ -472,9 +486,9 @@ function render(v, key, data, ppl){
           <div class="macts"><button class="btn small primary" id="mofbs">Save the owner's answer</button><span class="muted" style="font-size:13px">or follow up again on</span><input type="date" id="mofbd" value="${esc(addDays(T, 7))}" style="width:auto"><button class="btn small" id="mofbm">Move follow-up</button></div></div>` : ""}
         ${bwBox(it)}
         ${msgBox(it)}
-        <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key))}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(dv != null ? dv : "")}</textarea>
+        <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key), it.key)}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(dv != null ? dv : "")}</textarea>
           <div class="macts"><select data-nstate="${esc(it.key)}" aria-label="Where it stands" style="width:auto">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
-          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button></div></div>`;
+          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button><button class="btn small" data-nattach="${esc(it.key)}" title="Attach a photo, PDF or document">📎 Attach</button></div></div>`;
     } else if(MX.tab === "nx"){
       const ovd = tko.filter(t => t.due && t.due < T);
       b = `${ovd.length ? `<div class="msig red"><i>!</i><div><small>Next action</small>${ovd.length} overdue task${ovd.length > 1 ? "s" : ""}</div></div>` : ""}
@@ -604,7 +618,61 @@ function render(v, key, data, ppl){
   if(!window._mxEsc){ window._mxEsc = 1; document.addEventListener("keydown", e => { if(e.key === "Escape" && document.getElementById("mpov")){ MX.open = null; document.getElementById("mpov").remove(); } }); }
   const redraw = async () => { const sy = window.scrollY; const d = await load(v, key); if(d){ render(v, key, d, ppl); window.scrollTo(0, sy); } };
   /* buttons shared by the page and the panel */
+  async function mfUp(k, task, tday, files){   // files go to meeting-files/<meeting>/<day>/notes/… then get recorded
+    for(const f of files){
+      if(f.size > 50 * 1048576){ alert(f.name + " is over 50 MB."); continue; }
+      const safe = f.name.replace(/[^\w.\-]+/g, "_").slice(-80), path = `${key}/${tday || day}/notes/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+      const u = await sb.storage.from("meeting-files").upload(path, f, { contentType:f.type || "application/octet-stream" });
+      if(u.error){ alert("Couldn't upload " + f.name + ": " + (window.niceErr ? niceErr(u.error) : u.error.message)); continue; }
+      const r = await sb.rpc("meeting_file_add", { p_meet:key, p_day:tday || day, p_item:k || null, p_task:task || null, p_path:path, p_name:f.name, p_size:f.size, p_mime:f.type || null });
+      if(r.error) alert("Couldn't save " + f.name + ": " + (window.niceErr ? niceErr(r.error) : r.error.message));
+    } }
+  function pick(cb){ const i = document.createElement("input"); i.type = "file"; i.multiple = true; i.style.display = "none"; document.body.appendChild(i);
+    i.onchange = () => { const fs = [...i.files]; i.remove(); if(fs.length) cb(fs); }; i.click(); }
+  async function taskDlg(t){
+    MX.tdlg = t.id; document.getElementById("mtdov")?.remove();
+    await taskPeople(key);
+    const L = (EX.task_log || []).filter(x => x.task === t.id), N = tNotes(t.id), F = tFiles(t.id), MS = EX.meetings || [{ key, name:m.name }];
+    const o = document.createElement("div"); o.id = "mtdov"; o.className = "mtdov";
+    o.innerHTML = `<div class="mtd" role="dialog" aria-label="Task"><div style="display:flex;justify-content:space-between;gap:10px"><h3>Task</h3><button class="btn small" data-x aria-label="Close">✕</button></div>
+      <label>What needs to happen<textarea id="tdt">${esc(t.text)}</textarea></label>
+      <div class="row2"><label>Who<select id="tdw">${pplOpts(t.who_id)}</select></label><label>Due<input type="date" id="tdd" value="${esc(t.due || "")}"></label></div>
+      <div class="row2"><label>Meeting<select id="tdm">${MS.map(x => `<option value="${esc(x.key)}"${x.key === key ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+        <label>Meeting day<input type="date" id="tdy" value="${esc(t.day || day)}"></label></div>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn small primary" id="tds">Save changes</button><span class="muted" id="tdmsg" style="font-size:13px"></span></div>
+      ${L.length ? `<div class="sec"><b>Changes</b>${L.map(x => `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(x.by || "Someone")} changed ${esc((x.fields || []).join(", "))} · ${esc(tm(x.at))}</div>`).join("")}</div>` : ""}
+      <div class="sec"><b>Notes</b>${N.map(n => `<div class="tn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("") || `<p class="muted" style="margin:6px 0">No notes yet.</p>`}
+        <textarea id="tdn" placeholder="Add a note or comment"></textarea><div style="margin-top:6px"><button class="btn small primary" id="tdna">Add note</button></div></div>
+      <div class="sec"><b>Files</b>${filesHtml(F) || `<p class="muted" style="margin:6px 0">No files yet.</p>`}<button class="btn small" id="tdf">📎 Attach a file</button></div></div>`;
+    document.body.appendChild(o);
+    const shut = () => { MX.tdlg = null; o.remove(); };
+    o.onclick = e => { if(e.target === o) shut(); }; o.querySelector("[data-x]").onclick = shut;
+    o.addEventListener("keydown", e => { if(e.key === "Escape"){ e.stopPropagation(); shut(); } });
+    fileWire(o);
+    const msg = o.querySelector("#tdmsg");
+    o.querySelector("#tds").onclick = async () => {
+      const nm = o.querySelector("#tdm").value, b = o.querySelector("#tds"); b.disabled = true; msg.textContent = "Saving…";
+      const r = await sb.rpc("meeting_task_edit", { p_id:t.id, p_text:o.querySelector("#tdt").value, p_who:o.querySelector("#tdw").value || null,
+        p_due:o.querySelector("#tdd").value || null, p_meet:nm, p_day:o.querySelector("#tdy").value || null });
+      b.disabled = false;
+      if(r.error){ msg.textContent = ""; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      if(nm !== key){ const to = MS.find(x => x.key === nm); shut(); alert("Moved to " + (to ? to.name : "the other meeting") + "."); }
+      redraw(); };
+    o.querySelector("#tdna").onclick = async () => { const tx = o.querySelector("#tdn").value.trim(); if(!tx) return o.querySelector("#tdn").focus();
+      const r = await sb.rpc("meeting_task_note_add", { p_task:t.id, p_text:tx }); if(r.error) return alert("Couldn't save: " + r.error.message); redraw(); };
+    o.querySelector("#tdf").onclick = () => pick(async fs => { msg.textContent = "Uploading…"; await mfUp(t.item_key, t.id, t.day, fs); redraw(); });
+  }
+  function fileWire(root){
+    root.querySelectorAll("[data-mfile]").forEach(a => a.onclick = async e => { e.preventDefault(); e.stopPropagation();
+      const w = window.open("", "_blank"); const r = await sb.storage.from("meeting-files").createSignedUrl(a.dataset.mfile, 600);
+      if(r.error || !r.data){ if(w) w.close(); return alert("Couldn't open the file."); } if(w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl; });
+    root.querySelectorAll("[data-mfoff]").forEach(b => b.onclick = async e => { e.stopPropagation(); if(!confirm("Take this file off? It stays saved, it just won't show here.")) return;
+      const r = await sb.rpc("meeting_file_off", { p_id:+b.dataset.mfoff }); if(r.error) return alert("Couldn't: " + r.error.message); redraw(); });
+  }
   function wire(root){
+    fileWire(root);
+    root.querySelectorAll("[data-nattach]").forEach(b => b.onclick = e => { e.stopPropagation(); pick(async fs => { b.disabled = true; b.textContent = "Uploading…"; await mfUp(b.dataset.nattach, null, day, fs); redraw(); }); });
+    root.querySelectorAll("[data-tedit]").forEach(b => b.onclick = e => { e.stopPropagation(); const t = tasks.find(x => x.id === +b.dataset.tedit); if(t) taskDlg(t); });
     root.querySelectorAll("textarea[data-note]").forEach(t => t.oninput = () => ST.drafts[key + "|" + t.dataset.note] = t.value);
     root.querySelectorAll("[data-tform] input[data-tf=text]").forEach(i => i.oninput = () => { const k = i.closest(".mtask").dataset.tform; if(k) MX.sug[k] = Object.assign(MX.sug[k] || {}, { text:i.value }); });
     root.querySelectorAll("[data-nsave]").forEach(b => b.onclick = async () => {
@@ -626,6 +694,7 @@ function render(v, key, data, ppl){
   }
   wire(v);
   if(MX.open) panel();
+  if(MX.tdlg){ const t0 = tasks.find(x => x.id === MX.tdlg); if(t0) taskDlg(t0); else MX.tdlg = null; }
   v.querySelectorAll("[data-open]").forEach(c => { const go = e => { if(e.target.closest("[data-quick]")) return; e.stopPropagation(); MX.open = c.dataset.open; MX.tab = "ov"; MX.tf = "all"; MX.bwopen = false; MX.chg = null; panel(); };
     c.onclick = go; c.onkeydown = e => { if(e.key === "Enter") go(e); }; });
   v.querySelectorAll("[data-quick]").forEach(b => b.onclick = async e => { e.stopPropagation(); b.disabled = true;
