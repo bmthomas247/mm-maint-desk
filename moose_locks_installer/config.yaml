@@ -1,5 +1,5 @@
 name: Moose Locks installer
-version: "1.0.0"
+version: "1.0.1"
 slug: moose_locks_installer
 description: Installs or updates Moose Locks on this hub, restarts it, and adds Moose Locks. Tap Start once.
 url: https://crew.moosemanagement.com/hub-setup.html
