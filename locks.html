@@ -1282,6 +1282,15 @@ async function installHome(pid){
 }
 
 /* ------------------------------------------------ one home */
+/* the lock's own auto-relock (2026-11-13): what the home wants vs what the lock reports (hub 1.5.7+) */
+function relockPill(l, h){
+  const want = h && h.relock_sec, r = l.relock;
+  const t = sec => sec >= 60 ? (sec % 60 ? Math.floor(sec/60)+" min "+(sec%60)+" s" : (sec/60)+" min") : sec+" s";
+  if(!r) return want ? `<span class="pill grey plain" title="The hub turns this on after its next update">🔁 Auto-relock: setting up</span>` : "";
+  const ok = want ? (r.on && (r.sec==null || Math.abs(r.sec - Math.min(Math.max(want, r.min||0), r.max||want)) <= 1)) : !r.on;
+  const txt = r.on ? "on · " + (r.sec!=null ? t(r.sec) : "") : "off";
+  return `<span class="pill ${ok?"green":"amber"} plain" title="${ok?"The lock bolts itself again after this long":"Waiting for the lock to take the new setting"}">🔁 Auto-relock ${esc(txt)}</span>`;
+}
 async function homeView(pid){
   if(!S.homes.length) await loadBase();
   const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("homes","<p>Home not found.</p>");
@@ -1314,7 +1323,7 @@ async function homeView(pid){
     return `<div class="card" data-lock="${l.id}">
       <div class="row"><div class="grow" style="min-width:170px"><b>${esc(l.name)}</b><div class="muted">${esc(l.model||"")} · node ${l.node_id}${l.installed_on?` · ${ageTxt(l.installed_on)} old`:""}</div></div>
         <span class="pill ${l.online===false?"red":l.state==="unlocked"?"amber":"green"}">${l.online===false?"Not answering":esc(l.state||"?")}</span>
-        <span class="pill ${l.battery!=null&&l.battery<=30?"red":"grey"}">🔋 ${l.battery??"?"}%</span><span class="pill grey plain">${signal(l.rssi)}</span>${l.slots_used!=null?`<span class="pill ${l.slots&&l.slots_used/l.slots>.9?"red":"grey"} plain" title="Codes on this lock right now, out of how many it can hold">🔑 ${l.slots_used}/${l.slots||"?"} used</span>`:""}</div>
+        <span class="pill ${l.battery!=null&&l.battery<=30?"red":"grey"}">🔋 ${l.battery??"?"}%</span><span class="pill grey plain">${signal(l.rssi)}</span>${l.slots_used!=null?`<span class="pill ${l.slots&&l.slots_used/l.slots>.9?"red":"grey"} plain" title="Codes on this lock right now, out of how many it can hold">🔑 ${l.slots_used}/${l.slots||"?"} used</span>`:""}${relockPill(l, h)}</div>
       <div class="grid2" style="margin-top:10px"><button class="btn primary" data-act="unlock">Unlock</button><button class="btn" data-act="lock">Lock</button></div>
       <details style="margin-top:8px"><summary>Name, master code, test</summary>
         <div class="chips" style="margin:6px 0">${DOOR_NAMES.map(n=>`<span class="chip ${n===l.name?"on":""}" data-name="${esc(n)}">${esc(n)}</span>`).join("")}</div>
@@ -1372,6 +1381,7 @@ async function homeView(pid){
       <label class="field"><span>After-hours from</span><input type="time" data-r="after_hours_from" value="${String(h.after_hours_from).slice(0,5)}"></label>
       <label class="field"><span>After-hours to</span><input type="time" data-r="after_hours_to" value="${String(h.after_hours_to).slice(0,5)}"></label>
       <label class="field"><span>Auto-lock empty home after (min, blank = off)</span><input data-r="auto_lock_min" inputmode="numeric" value="${h.auto_lock_min??""}"></label>
+      <label class="field"><span>Doors relock themselves after (seconds, blank = off)</span><input data-r="relock_sec" inputmode="numeric" value="${h.relock_sec??""}"></label>
       <label class="field"><span>Noise alert above (dB)</span><input data-r="noise_limit" inputmode="numeric" value="${h.noise_limit??80}"></label>
       <label class="field"><span>…for this many minutes (quiet hours)</span><input data-r="noise_minutes" inputmode="numeric" value="${h.noise_minutes??10}"></label>
       <label class="field"><span>Quiet hours from</span><input type="time" data-r="quiet_from" value="${String(h.quiet_from||"22:00").slice(0,5)}"></label>
