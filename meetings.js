@@ -60,6 +60,9 @@ const MCSS = `.mtg .mplus{font-size:20px;line-height:1;min-width:38px;padding:0 
 .mred{color:#b42318;font-weight:700} .mamb{color:#8a5a00;font-weight:700}
 .mfiles{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}.mfile{display:inline-flex;align-items:center;gap:6px;background:#eef3e6;border-radius:8px;padding:4px 8px;font-size:13px}.mfile a{color:#24452c;font-weight:700;text-decoration:none}.mfile small{color:var(--muted)}.mfile button{border:0;background:none;cursor:pointer;color:#b42318;padding:0 2px}
 .tk .tked{flex:0 0 auto;padding:2px 8px}
+.tk[data-trow]{cursor:pointer}.tk[data-trow]:hover .tx{text-decoration:underline}
+.mtd .tdq{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font-size:13px}.mtd .tdq button{border:1px solid var(--line);background:#f3f6ee;border-radius:999px;padding:4px 11px;font-size:12.5px;cursor:pointer}
+.mtd .tdsch{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.mtd .tdbox{display:grid;gap:8px;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fafcf6}
 .mtdov{position:fixed;inset:0;background:rgba(15,25,15,.4);z-index:950;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 12px}
 .mtd{background:var(--card,#fff);border-radius:16px;width:min(560px,100%);padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.25);display:grid;gap:10px}
 .mtd h3{margin:0;font-size:17px}.mtd label{display:grid;gap:4px;font-size:13px;font-weight:700}.mtd .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -371,7 +374,7 @@ function render(v, key, data, ppl){
   const waiting = items.filter(it => /^(waiting|scheduled)$/.test(stItem(it))).length;
   const pill = st => st === "covered" ? `<span class="mpill ok">✓ Covered</span>` : st === "waiting" ? `<span class="mpill wait">⏳ Waiting on owner</span>` : st === "scheduled" ? `<span class="mpill wait">🗓 Scheduled</span>` : `<span class="mpill todo">To cover</span>`;
   const dueTxt = t => !t.due ? "" : t.due < T ? `<span class="mred">Overdue · ${esc(fmt(t.due))}</span>` : t.due === T ? `<span class="mamb">Due today</span>` : "Due " + esc(fmt(t.due));
-  const taskRow = t => `<div class="tk${t.done_at ? " done" : ""}"><input type="checkbox" data-tdone="${t.id}" ${t.done_at ? "checked" : ""} aria-label="Done">
+  const taskRow = t => `<div class="tk${t.done_at ? " done" : ""}" data-trow="${t.id}" title="Open: notes, files and scheduling"><input type="checkbox" data-tdone="${t.id}" ${t.done_at ? "checked" : ""} aria-label="Done">
       <div style="flex:1"><span class="tx">${esc(t.text)}</span><small>${[t.who ? "👤 " + esc(t.who) : "No one yet", dueTxt(t), t.item_title && !MX.open ? esc(short(t.item_title, 60)) : "",
         t.done_at ? "Done" + (t.done_by ? " by " + esc(t.done_by) : "") : "Added " + esc(fmt(t.day)) + (t.created_by ? " by " + esc(t.created_by) : "")].filter(Boolean).join(" · ")}${tExtra(t)}</small></div><button class="btn small tked" data-tedit="${t.id}" title="Edit, notes and files">✎</button></div>`;
   const pplOpts = sel => `<option value="">Who?</option>` + (MX.tp[key] || []).map(p => `<option value="${esc(p.id)}"${sel === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("");
@@ -640,6 +643,19 @@ function render(v, key, data, ppl){
       <div class="row2"><label>Meeting<select id="tdm">${MS.map(x => `<option value="${esc(x.key)}"${x.key === key ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
         <label>Meeting day<input type="date" id="tdy" value="${esc(t.day || day)}"></label></div>
       <div style="display:flex;gap:8px;align-items:center"><button class="btn small primary" id="tds">Save changes</button><span class="muted" id="tdmsg" style="font-size:13px"></span></div>
+      <div class="sec"><b>Schedule it</b>
+        <div class="tdq">Due: <button data-dq="0">Today</button><button data-dq="1">Tomorrow</button><button data-dq="mon">Next Monday</button><button data-dq="7">In a week</button><button data-dq="14">In 2 weeks</button></div>
+        <div class="tdsch"><button class="btn small" id="tdcal">🗓 Put it on the calendar</button><button class="btn small" id="tdbw">🛠 Send to Breezeway</button></div>
+        <div class="tdbox" id="tdcalf" hidden><div class="row2"><label>Day<input type="date" id="tcd"></label><label>Starts<input type="time" id="tct" value="09:00"></label></div>
+          <div class="row2"><label>How long<select id="tcl"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">1 hour</option><option value="90">1½ hours</option><option value="120">2 hours</option><option value="240">Half day</option></select></label>
+          <label>Show on<select id="tcc"><option value="office">Office calendar (who it's for + you)</option><option value="personal">Only my calendar</option></select></label></div>
+          <div style="display:flex;gap:8px;align-items:center"><button class="btn small primary" id="tcgo">Add to the calendar</button><span class="muted" id="tcm" style="font-size:13px"></span></div></div>
+        <div class="tdbox" id="tdbwf" hidden><label>Home(s)<input id="tbh" placeholder="e.g. BHL 1206, PL 406"></label><label>Task name in Breezeway<input id="tbt"></label>
+          <label>Notes for the tech<textarea id="tbn"></textarea></label>
+          <div class="row2"><label>Date<input type="date" id="tbd"></label><label>Who<select id="tbw"></select></label></div>
+          <label>Type<select id="tbk"><option value="maintenance">Maintenance</option><option value="inspection">Inspection</option></select></label>
+          <div style="display:flex;gap:8px;align-items:center"><button class="btn small primary" id="tbgo">Send to Breezeway</button><span class="muted" id="tbm" style="font-size:13px"></span></div></div>
+      </div>
       ${L.length ? `<div class="sec"><b>Changes</b>${L.map(x => `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(x.by || "Someone")} changed ${esc((x.fields || []).join(", "))} · ${esc(tm(x.at))}</div>`).join("")}</div>` : ""}
       <div class="sec"><b>Notes</b>${N.map(n => `<div class="tn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("") || `<p class="muted" style="margin:6px 0">No notes yet.</p>`}
         <textarea id="tdn" placeholder="Add a note or comment"></textarea><div style="margin-top:6px"><button class="btn small primary" id="tdna">Add note</button></div></div>
@@ -658,6 +674,46 @@ function render(v, key, data, ppl){
       if(r.error){ msg.textContent = ""; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       if(nm !== key){ const to = MS.find(x => x.key === nm); shut(); alert("Moved to " + (to ? to.name : "the other meeting") + "."); }
       redraw(); };
+    const pc = () => new Date(new Date().toLocaleString("en-US", { timeZone:"America/Denver" }));
+    const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const plus = n => { const d = pc(); d.setDate(d.getDate() + n); return iso(d); };
+    const today = plus(0), soon = t.due && t.due >= today ? t.due : plus(1);
+    o.querySelectorAll("[data-dq]").forEach(b => b.onclick = () => { const q = b.dataset.dq; let v;
+      if(q === "mon"){ const d = pc(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); v = iso(d); } else v = plus(+q);
+      o.querySelector("#tdd").value = v; o.querySelector("#tds").click(); });
+    const tnote = async tx => { await sb.rpc("meeting_task_note_add", { p_task:t.id, p_text:tx }); };
+    const nice = e => window.niceErr ? niceErr(e) : e.message;
+    const fmtD = v => new Date(v + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
+    o.querySelector("#tdcal").onclick = () => { const f = o.querySelector("#tdcalf"); f.hidden = !f.hidden; o.querySelector("#tdbwf").hidden = true; if(!o.querySelector("#tcd").value) o.querySelector("#tcd").value = soon; };
+    o.querySelector("#tcgo").onclick = async () => { const m2 = o.querySelector("#tcm"), d0 = o.querySelector("#tcd").value, st = o.querySelector("#tct").value, len = +o.querySelector("#tcl").value;
+      if(!d0) return m2.textContent = "Pick a day."; if(!st) return m2.textContent = "Pick a start time.";
+      const [hh, mm] = st.split(":").map(Number), em = Math.min(hh * 60 + mm + len, 23 * 60 + 59), en = String(Math.floor(em / 60)).padStart(2, "0") + ":" + String(em % 60).padStart(2, "0");
+      const who = o.querySelector("#tdw").value || t.who_id || null, args = cal => ({ p_id:null, p_cal:cal, p_kind:"event", p_person:null, p_title:"Task: " + short(o.querySelector("#tdt").value || t.text, 120),
+        p_day:d0, p_end_day:d0, p_start:st, p_end:en, p_location:null, p_notes:"From the " + m.name + " meeting" + (t.item_title ? " · " + t.item_title : "") + (t.who ? " · for " + t.who : ""),
+        p_off:false, p_attendees:cal === "office" && who ? [who] : null, p_virtual:false, p_link:null });
+      const b = o.querySelector("#tcgo"); b.disabled = true; m2.textContent = "Saving…";
+      let cal = o.querySelector("#tcc").value, r = await sb.rpc("cal_event_save4", args(cal)), fell = false;
+      if(r.error && cal === "office" && /not allowed/i.test(r.error.message || "")){ cal = "personal"; fell = true; r = await sb.rpc("cal_event_save4", args(cal)); }
+      b.disabled = false; if(r.error) return m2.textContent = "Couldn't save: " + nice(r.error);
+      const h12 = (hh % 12 || 12) + ":" + String(mm).padStart(2, "0") + (hh < 12 ? " am" : " pm");
+      await tnote("🗓 On the " + (cal === "office" ? "Office" : "my") + " calendar: " + fmtD(d0) + ", " + h12 + " (" + o.querySelector("#tcl").selectedOptions[0].text + ")");
+      if(fell) alert("Saved on your own calendar. Only managers can add to the Office calendar.");
+      redraw(); };
+    o.querySelector("#tdbw").onclick = async () => { const f = o.querySelector("#tdbwf"); f.hidden = !f.hidden; o.querySelector("#tdcalf").hidden = true; if(f.hidden) return;
+      if(!o.querySelector("#tbt").value) o.querySelector("#tbt").value = short(t.text, 200);
+      if(!o.querySelector("#tbd").value) o.querySelector("#tbd").value = soon;
+      if(!o.querySelector("#tbh").value){ const mh = ((t.text || "") + " " + (t.item_title || "")).match(/\b(?:[A-Z]{1,4}H?-?)?[A-Z]{1,4} ?\d{2,5}[A-Z]?\d?\b/g); if(mh) o.querySelector("#tbh").value = [...new Set(mh)].join(", "); }
+      const sel = o.querySelector("#tbw"); if(!sel.options.length){ sel.innerHTML = `<option value="">Loading…</option>`; await bwLoad(key);
+        sel.innerHTML = `<option value="">Chris (default)</option>` + (MX.bwp[key] || []).map(p => `<option>${esc(p.name)}</option>`).join(""); } };
+    o.querySelector("#tbgo").onclick = async () => { const m2 = o.querySelector("#tbm"), homes = o.querySelector("#tbh").value.split(/[,;\n]+/).map(v => v.trim()).filter(Boolean);
+      if(!homes.length) return m2.textContent = "Add at least one home.";
+      const b = o.querySelector("#tbgo"); b.disabled = true; m2.textContent = "Sending…";
+      const d0 = o.querySelector("#tbd").value || null, who = o.querySelector("#tbw").value || null;
+      const r = await sb.rpc("meeting_bw_send", { p_meet:key, p_day:t.day || day, p_item:t.item_key || "_notes", p_item_title:t.item_title || "Anything else", p_homes:homes, p_title:o.querySelector("#tbt").value,
+        p_note:o.querySelector("#tbn").value, p_due:d0, p_who:who, p_dept:o.querySelector("#tbk").value, p_template:"627" });
+      b.disabled = false; if(r.error) return m2.textContent = nice(r.error);
+      await tnote("🛠 Sent to Breezeway: " + o.querySelector("#tbt").value.trim() + " · " + homes.join(", ") + " · " + fmtD(d0) + (who ? " · " + who : ""));
+      await bwLoad(key); redraw(); bwPoll(); };
     o.querySelector("#tdna").onclick = async () => { const tx = o.querySelector("#tdn").value.trim(); if(!tx) return o.querySelector("#tdn").focus();
       const r = await sb.rpc("meeting_task_note_add", { p_task:t.id, p_text:tx }); if(r.error) return alert("Couldn't save: " + r.error.message); redraw(); };
     o.querySelector("#tdf").onclick = () => pick(async fs => { msg.textContent = "Uploading…"; await mfUp(t.item_key, t.id, t.day, fs); redraw(); });
@@ -672,6 +728,7 @@ function render(v, key, data, ppl){
   function wire(root){
     fileWire(root);
     root.querySelectorAll("[data-nattach]").forEach(b => b.onclick = e => { e.stopPropagation(); pick(async fs => { b.disabled = true; b.textContent = "Uploading…"; await mfUp(b.dataset.nattach, null, day, fs); redraw(); }); });
+    root.querySelectorAll("[data-trow]").forEach(r => r.onclick = e => { if(e.target.closest("input,button,a,select,textarea,label")) return; e.stopPropagation(); const t = tasks.find(x => x.id === +r.dataset.trow); if(t) taskDlg(t); });
     root.querySelectorAll("[data-tedit]").forEach(b => b.onclick = e => { e.stopPropagation(); const t = tasks.find(x => x.id === +b.dataset.tedit); if(t) taskDlg(t); });
     root.querySelectorAll("textarea[data-note]").forEach(t => t.oninput = () => ST.drafts[key + "|" + t.dataset.note] = t.value);
     root.querySelectorAll("[data-tform] input[data-tf=text]").forEach(i => i.oninput = () => { const k = i.closest(".mtask").dataset.tform; if(k) MX.sug[k] = Object.assign(MX.sug[k] || {}, { text:i.value }); });
