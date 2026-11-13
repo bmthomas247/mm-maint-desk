@@ -341,7 +341,7 @@ async function setHomeTemp(ts, mode, heat, cool){
 }
 /* stays: Track links + what the lock pill means */
 const TRACK = "https://moosemanagement.trackhs.com";
-const folioLink = s => `<a class="btn small" href="${TRACK}/pms/guest-folio/view/?id=${encodeURIComponent(s.res_id)}" target="_blank" rel="noopener" title="Open this stay's folio in Track">Folio ↗</a>`;
+const folioLink = s => `<a class="btn small" href="${TRACK}/pms/reservations/view/${encodeURIComponent(s.res_id)}/" target="_blank" rel="noopener" title="Open this reservation in Track">Reservation ↗</a>`;
 const resLink = s => `${TRACK}/pms/reservations/view/${encodeURIComponent(s.res_id)}`;
 function stayPill(s, state, home){
   const pre = (home && home.preload_days) || 3, goes = new Date(new Date(s.starts_at) - pre*864e5);
