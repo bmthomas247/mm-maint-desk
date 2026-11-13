@@ -436,7 +436,7 @@ async function evCal(v, key, fresh){
   const isRes = key === "cal_res", isOff = key === "cal_office", isMe = key === "cal_me";
   if(fresh) ST.cache = {};   // something changed: every saved week is old now
   { const m = location.hash.match(/\/outlook_(\w+)/); if(m){ history.replaceState(null, "", "#/" + key); ST.cache = {};
-    setTimeout(() => alert({ ok:"✓ Outlook is connected. Your Outlook meetings show on your calendar, and invites can be answered here.", cancelled:"Outlook wasn't connected (you cancelled).", expired:"That took too long. Press Connect my Outlook again.", failed:"Microsoft didn't let the hub in. Press Connect my Outlook again, or tell Brandon." }[m[1]] || "Outlook: " + m[1]), 300); } }
+    setTimeout(() => alert({ office:"✓ The office Outlook is connected. Its meetings are on the Office calendar; use 📥 Sort Outlook meetings to say who's going.", ok:"✓ Outlook is connected. Your Outlook meetings show on your calendar, and invites can be answered here.", cancelled:"Outlook wasn't connected (you cancelled).", expired:"That took too long. Press Connect my Outlook again.", failed:"Microsoft didn't let the hub in. Press Connect my Outlook again, or tell Brandon." }[m[1]] || "Outlook: " + m[1]), 300); } }
   const [a, b] = curRange(key);
   // Faster (Brandon 2026-11-13: "slow to update"): weeks you've already seen draw at once from memory and refresh behind; while
   // loading, the calendar you're looking at stays on screen (no blank "Loading…"); links + outside people load together.
@@ -450,7 +450,7 @@ async function evCal(v, key, fresh){
     const [evs, ms, ppl, sr, orr, tor, hm, olr, ost] = await Promise.all([isRes ? [] : events(a, b), (isMe && layerOn("meet")) || isOff ? meetings() : [], isRes ? [] : people(),
       wantStays ? sb.rpc("cal_stays", { p_from:a, p_to:b }) : null, isOff ? sb.rpc("cal_office", { p_from:a, p_to:b }) : null, isOff ? sb.rpc("timeoff_calendar", { p_from:a, p_to:b }) : null,
       isMe ? sb.rpc("meet_mine", { p_from:a, p_to:b }) : null,
-      isMe && layerOn("outlook") ? sb.rpc("ms_cal_mine", { p_from:a, p_to:b }) : null, isMe ? sb.rpc("ms_cal_status") : null]);
+      isMe && layerOn("outlook") ? sb.rpc("ms_cal_mine", { p_from:a, p_to:b }) : null, isMe ? sb.rpc("ms_cal_status") : isOff ? sb.rpc("ms_office_status") : null]);
     const vids = evs.filter(e => e.virtual).map(e => e.id), eids = evs.filter(e => (e.kind || "event") === "event").map(e => e.id);
     const [lr, gr] = await Promise.all([vids.length ? sb.rpc("cal_links", { p_ids:vids }) : null, eids.length ? sb.rpc("cal_guests", { p_ids:eids }) : null]);
     const links = {}, guests = {};
@@ -476,7 +476,7 @@ async function evCal(v, key, fresh){
   const mt = []; ms.forEach(m => occurs(m, a, b).forEach(s => { const w = mAt(m, s); mt.push({ meet:m.meet, day:s, start:w.start, minutes:w.minutes }); }));
   const myId = (ppl.find(p => p.name === ME.name) || {}).id;
   const canEdit = e => e.cal === "personal" || boss || (e.kind !== "event" && e.person_id === myId);
-  const evItem = e => { const k = e.kind || "event", nm = k === "event" ? e.title : (k === "out" ? "Out" : "Working") + " · " + who(e.person_id) + (e.title && !/^(out|working)$/i.test(e.title) ? " · " + e.title : "");
+  const evItem = e => { const k = e.kind || "event", nm = k === "event" ? (e.src === "outlook" && !e.sorted && boss ? "📥 " : "") + e.title : (k === "out" ? "Out" : "Working") + " · " + who(e.person_id) + (e.title && !/^(out|working)$/i.test(e.title) ? " · " + e.title : "");
     return { start:e.start_time, end:e.end_time, title:nm, sub:[e.virtual ? "💻 Virtual" : "", e.location, (e.attendees || []).map(fn).join(", "), (guests[e.id] || []).length ? "with " + guests[e.id].map(g => g.name + (g.company ? " (" + g.company + ")" : "")).join(", ") : ""].filter(Boolean).join(" · "), join:links[e.id], cls:k === "out" ? "outp" : k === "working" ? "work" : isMe ? "" : "of", ev:e.id, drag:canEdit(e) }; };
   const mLink = k => (ms.find(m => m.meet === k) || {}).link || null;   // staff meeting join link (cal_meetings: only meetings you can open)
   const nt = t => (t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -516,7 +516,9 @@ async function evCal(v, key, fresh){
     const olBtn = !isMe ? "" : ost && ost.connected ? `<button class="btn small" data-olsync title="Outlook${ost.email ? " (" + esc(ost.email) + ")" : ""}${ost.last_sync ? " · last read " + esc(new Date(ost.last_sync).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) : ""}">✓ Outlook · Refresh</button>`
       : `<button class="btn small" data-olgo>🔗 Connect my Outlook</button>`;
     const addBtns = isMe ? olBtn + `<button class="btn small primary" data-add="event">+ Event</button><button class="btn small" data-sched>📅 Schedule a meeting</button><button class="btn small" data-blinks>🔗 Booking links</button>`
-      : isOff ? (boss ? `<button class="btn small primary" data-add="event">+ Work event</button>` : "") + `<a class="btn small" href="#/cal_off" data-askoff>🗓 Schedule adjustment</a><button class="btn small" data-add="out">I'm out</button><button class="btn small" data-add="working">I'm working</button>` : "";
+      : isOff ? (ost && ost.connected ? `<button class="btn small${ost.unsorted ? " primary" : ""}" data-osort title="Office Outlook${ost.email ? " (" + esc(ost.email) + ")" : ""}${ost.last_sync ? " · last read " + esc(new Date(ost.last_sync).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })) : ""}">📥 Sort Outlook meetings${ost.unsorted ? " (" + ost.unsorted + ")" : " ✓"}</button>`
+          : ost && ost.admin ? `<button class="btn small" data-ogo>🔗 Connect the office Outlook</button>` : "")
+        + (boss ? `<button class="btn small primary" data-add="event">+ Work event</button>` : "") + `<a class="btn small" href="#/cal_off" data-askoff>🗓 Schedule adjustment</a><button class="btn small" data-add="out">I'm out</button><button class="btn small" data-add="working">I'm working</button>` : "";
     const detail = isRes ? resDetail(stays, sel) : `<div class="card list"><b style="font-size:16px">${esc(fday(sel))}</b>${day.length ? day.map(x => `<div class="it"><span class="d">${x.start ? ftime(x.start.slice(0, 5)) + (x.end ? "–" + ftime(x.end.slice(0, 5)) : "") : "All day"}</span><span style="flex:1"><a ${attrs(Object.assign({}, x, { drag:false }))}><b>${esc(x.title)}</b></a>${x.sub ? ` <span class="muted">· ${esc(x.sub)}</span>` : ""}</span>${x.join ? `<a class="btn small primary" href="${esc(x.join)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}</div>`).join("") : `<p class="muted" style="margin:6px 0 0">Nothing on this day.</p>`}</div>`;
     const qaOk = isMe || (isOff && boss);   // quick add: Personal = your own event; Office = a work event (managers + admins)
     const qa = qaOk ? `<div class="qadd"><input id="qa" placeholder="${isMe ? "Quick add: Dentist Tue 3pm 1h" : "Quick add: Lunch with BHL 1403 owner Thu 12:30pm 1h"}" autocomplete="off" enterkeyhint="done" aria-label="Quick add"><button class="btn primary" id="qa_go">Add</button><button class="btn" id="qa_more" title="Who's going, outside people, link, notes…">More…</button></div><div class="qprev" id="qa_p">Type what, when and how long. Press Enter to add it${isOff ? " to the Office calendar" : ""}.</div>` : "";
@@ -547,6 +549,9 @@ async function evCal(v, key, fresh){
     if(keepY != null){ const w = v.querySelector(".wkb"); if(w) w.scrollTop = keepY; }
     if(qaOk) wireQuick();
     v.querySelectorAll("[data-olgo]").forEach(bt => bt.onclick = () => olConnect(bt));
+    v.querySelectorAll("[data-ogo]").forEach(bt => bt.onclick = async () => { bt.disabled = true; bt.textContent = "Opening Microsoft…";
+      const r = await olCall({ action:"start", office:true }); if(!r.ok){ bt.disabled = false; bt.textContent = "🔗 Connect the office Outlook"; return alert(r.error); } location.href = r.url; });
+    v.querySelectorAll("[data-osort]").forEach(bt => bt.onclick = () => sortBox());
     v.querySelectorAll("[data-olsync]").forEach(bt => bt.onclick = async () => { bt.disabled = true; bt.textContent = "Reading Outlook…";
       const r = await olCall({ action:"sync" }); if(!r.ok) alert("Couldn't read Outlook: " + r.error); evCal(v, key, true); });
     v.querySelectorAll("[data-olans]").forEach(bt => bt.onclick = () => olAnswer(bt.dataset.oid, bt.dataset.olans, bt));
@@ -590,6 +595,32 @@ async function evCal(v, key, fresh){
       ${others.length ? `<p class="muted" style="margin:6px 0">With ${esc(others.slice(0, 12).map(x => x.name || x.email).join(", "))}${others.length > 12 ? " +" + (others.length - 12) : ""}</p>` : ""}
       <div class="evft" style="display:flex;gap:8px;flex-wrap:wrap">${o.is_organizer || o.cancelled ? "" : `<button class="btn ${o.response === "accepted" ? "" : "primary"}" data-pa="accept">✓ Accept</button><button class="btn" data-pa="tentativelyAccept">Maybe</button><button class="btn" data-pa="decline">✕ Decline</button>`}${o.web_link ? `<a class="btn" href="${esc(o.web_link)}" target="_blank" rel="noopener noreferrer">Open in Outlook</a>` : ""}</div>` });
     $("#evcard").querySelectorAll("[data-pa]").forEach(b2 => b2.onclick = () => olAnswer(o.ms_id, b2.dataset.pa, b2));
+  }
+  // ---- Sort the office Outlook's meetings (hub_ms_office.sql): who's going + keep, or not needed ----
+  async function sortBox(){
+    modal({ h:"📥 Sort Outlook meetings", b:`<p class="muted">Loading…</p>` });
+    const r = await sb.from("hub_cal_events").select("id,title,day,end_day,start_time,end_time,attendees,notes,virtual").eq("src", "outlook").eq("sorted", false).eq("off", false)
+      .gte("day", addD(today(), -1)).order("day").order("start_time", { nullsFirst:true }).limit(150);
+    const L = (r && r.data) || [];
+    const sel = {}; L.forEach(e => sel[e.id] = new Set(e.attendees || []));
+    const row = e => `<div class="srow" data-sid="${e.id}" style="padding:10px 0;border-top:1px solid var(--line)">
+      <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap"><span style="flex:1;min-width:200px"><b>${esc(e.title)}</b><br><span class="muted">${esc(fday(e.day))}${e.start_time ? " · " + esc(ftime(e.start_time.slice(0, 5)) + (e.end_time ? "–" + ftime(e.end_time.slice(0, 5)) : "")) : " · all day"}${e.virtual ? " · 💻" : ""}${(e.notes || "").includes("organizer") ? " · " + esc(e.notes.replace(/^.*organizer /, "organizer ").replace(/\.$/, "")) : ""}</span></span>
+        <span style="display:flex;gap:6px"><button class="btn small primary" data-skeep="${e.id}">✓ Keep</button><button class="btn small" data-sdrop="${e.id}">Not needed</button></span></div>
+      <div class="attp" style="max-height:none">${ppl.map(pp => `<label class="lyr"><input type="checkbox" data-sp="${e.id}|${pp.id}" ${sel[e.id].has(pp.id) ? "checked" : ""}>${esc(pp.name.split(" ")[0])}</label>`).join("")}</div></div>`;
+    modal({ h:`📥 Sort Outlook meetings (${L.length})`, b:L.length ? `<p class="muted" style="margin:4px 0 6px">From the office Outlook. Tick who from Moose is going (it shows on their Personal calendar), then ✓ Keep. "Not needed" takes it off the hub calendar (Outlook isn't changed).</p>
+      <div style="display:flex;gap:8px;margin:6px 0"><button class="btn small" id="s_all">✓ Keep all as they are</button></div>${L.map(row).join("")}`
+      : `<p>Nothing to sort. ✓</p><p class="muted">New meetings from the office Outlook show up here within 10 minutes.</p>` });
+    const box = $("#evcard");
+    box.querySelectorAll("[data-sp]").forEach(c => c.onchange = () => { const [id, u] = c.dataset.sp.split("|"); if(c.checked) sel[id].add(u); else sel[id].delete(u); });
+    const done = async (id, keep, btn) => { if(btn){ btn.disabled = true; btn.textContent = "…"; }
+      const x = await sb.rpc("cal_event_sort", { p_id:+id, p_attendees:[...sel[id]], p_keep:keep });
+      if(x.error){ if(btn) btn.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(x.error) : x.error.message)); }
+      const el = box.querySelector(`[data-sid="${id}"]`); if(el) el.remove(); ST.cache = {}; };
+    box.querySelectorAll("[data-skeep]").forEach(bt => bt.onclick = () => done(bt.dataset.skeep, true, bt));
+    box.querySelectorAll("[data-sdrop]").forEach(bt => bt.onclick = () => done(bt.dataset.sdrop, false, bt));
+    const all = $("#s_all"); if(all) all.onclick = async () => { all.disabled = true; all.textContent = "Saving…"; for(const e of L) if(box.querySelector(`[data-sid="${e.id}"]`)) await done(e.id, true); all.textContent = "✓ Done"; };
+    $("#evx").onclick = () => { $("#evm").classList.remove("on"); evCal(v, key, true); };
+    $("#evm").onclick = x2 => { if(x2.target === $("#evm")){ $("#evm").classList.remove("on"); evCal(v, key, true); } };
   }
   // ---- Quick add (one line) ----
   function wireQuick(){
@@ -704,7 +735,7 @@ async function evCal(v, key, fresh){
     const k = e.kind || "event", ok = canEdit(e), lk = links[e.id], gs = guests[e.id] || [];
     const when = fday(e.day) + (e.end_day && e.end_day !== e.day ? " – " + fday(e.end_day) : "") + (e.start_time ? " · " + ftime(e.start_time.slice(0, 5)) + (e.end_time ? "–" + ftime(e.end_time.slice(0, 5)) : "") : " · all day");
     const ttl = k === "event" ? e.title : (k === "out" ? "Out" : "Working") + " · " + who(e.person_id);
-    modal({ h:esc(ttl), b:`<p style="margin:6px 0"><b>${esc(when)}</b><br><span class="muted">${e.src === "email" ? "✉ Added from an email invite · " : ""}${e.cal === "office" ? "Office calendar" : "Only you see this"}${e.virtual ? " · 💻 Virtual" : e.location ? " · " + esc(e.location) : ""}</span></p>
+    modal({ h:esc(ttl), b:`<p style="margin:6px 0"><b>${esc(when)}</b><br><span class="muted">${e.src === "email" ? "✉ Added from an email invite · " : e.src === "outlook" ? "📥 From the office Outlook" + (e.sorted ? "" : " (not sorted yet)") + " · " : ""}${e.cal === "office" ? "Office calendar" : "Only you see this"}${e.virtual ? " · 💻 Virtual" : e.location ? " · " + esc(e.location) : ""}</span></p>
       ${lk ? `<a class="btn primary" href="${esc(lk)}" target="_blank" rel="noopener noreferrer">💻 Join the meeting</a>` : ""}
       ${(e.attendees || []).length ? `<p style="margin:8px 0 2px"><b>From Moose:</b> ${esc(e.attendees.map(who).join(", "))}</p>` : ""}
       ${gs.length ? `<p style="margin:8px 0 2px"><b>From outside Moose:</b></p>${gs.map(g => `<div style="margin:2px 0 2px 8px">${esc(g.name)}${g.company ? ` <span class="muted">· ${esc(g.company)}</span>` : ""}${g.email ? ` · <a href="mailto:${esc(g.email)}">${esc(g.email)}</a>` : ""}${g.phone ? ` · <a href="tel:${esc(g.phone.replace(/[^0-9+]/g, ""))}">${esc(g.phone)}</a>` : ""}</div>`).join("")}` : ""}
