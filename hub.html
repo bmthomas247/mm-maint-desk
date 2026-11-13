@@ -315,7 +315,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="idle.js"></script>
 <script src="reservations.js"></script>
 <script src="analytics.js?v=20261110hkimpr"></script>
-<script src="meetings.js?v=20261110plus"></script>
+<script src="meetings.js?v=20261113tasks"></script>
 <script src="calendar.js?v=20261110wide"></script>
 <script src="checks.js"></script>
 <script src="banners.js"></script>
@@ -2758,12 +2758,49 @@ async function pennyChecksView(v){
       await sb.from("penny_check_runs").insert({ run_id:run, check_id:x.id, by_name:ME.name, answer:ans.slice(0, 4000), pass:!missing.length && !!r.data?.ok, missing }); }
     b.disabled = false; b.textContent = "▶ Run all checks"; checks = await load(); };
 }
+/* Reports > Ask Patrick & Penny > Penny — add to her knowledge (#/penny/know), also linked from Configuration (2026-11-13, Kim + Brandon).
+   Admins type what Penny should know; saved as penny_docs kind 'taught' (penny_know_save, hub_penny_know.sql) with their name as the source. */
+async function pennyKnowView(v){
+  v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a> · <a href="#/config">Configuration</a></p><h2>Penny — add to her knowledge</h2>
+    <p class="muted">Type in anything Penny should know: a new rule, how we do something, a change from Airbnb or Vrbo. She uses it on the next question, with your name as the source. Don't put door codes, passwords or Wi-Fi here.</p>
+    <div class="card" id="pkform"></div><div id="pklist"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
+  const r = await sb.rpc("penny_know_list"); const D = r.data || { notes:[], desks:[] };
+  if(r.error){ $("#pklist").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(niceErr(r.error))}</p></div>`; return; }
+  const dname = k => { const x = (D.desks || []).find(d => d.key === k); return x ? x.label : k; };
+  const form = x => { x = x || {};
+    $("#pkform").innerHTML = `<b style="font-size:16px">${x.id ? "Change this note" : "＋ New note for Penny"}</b>
+      <label style="display:block;margin-top:8px">Title<input id="pkt" value="${esc(x.title || "")}" placeholder="e.g. Airbnb pet fees from Nov 20"></label>
+      <label style="display:block;margin-top:8px">What Penny should know<textarea id="pkb" style="min-height:160px" placeholder="Write it the way you'd explain it to a new team member.">${esc(x.body || "")}</textarea></label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px">
+        <label>Who can see it<select id="pkd"><option value="">Everyone</option>${(D.desks || []).map(d => `<option value="${esc(d.key)}"${x.desk === d.key ? " selected" : ""}>Only people with ${esc(d.label)}</option>`).join("")}</select></label>
+        <label>Where it came from<input id="pks" placeholder="e.g. Airbnb email, Nov 10" value=""></label>
+        <label>Link (optional)<input id="pku" placeholder="https://…" value="${esc(x.url || "")}"></label></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px"><button class="btn primary" id="pksave">${x.id ? "Save changes" : "Add to Penny"}</button>${x.id ? `<button class="btn" id="pkcancel">Cancel</button>` : ""}<span class="muted" id="pkmsg"></span></div>`;
+    $("#pksave").onclick = async () => { const b = $("#pksave"); b.disabled = true; $("#pkmsg").textContent = "Saving…";
+      const w = await sb.rpc("penny_know_save", { p_id:x.id || null, p_title:$("#pkt").value, p_body:$("#pkb").value, p_desk:$("#pkd").value || null, p_source:$("#pks").value || null, p_url:$("#pku").value || null });
+      b.disabled = false; if(w.error){ $("#pkmsg").textContent = ""; return alert("Couldn't save: " + niceErr(w.error)); }
+      pennyKnowView(v); };
+    if($("#pkcancel")) $("#pkcancel").onclick = () => form(); };
+  form();
+  const mine = (D.notes || []).filter(n => n.mine), taught = (D.notes || []).filter(n => !n.mine && !n.off);
+  const card = n => `<div class="card"${n.off ? ` style="opacity:.6"` : ""}><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(n.title || "")}</b>
+      <span class="muted" style="font-size:12.5px">${n.desk ? "Only " + esc(dname(n.desk)) : "Everyone"}${n.off ? " · taken out" : ""}</span></div>
+      <div style="white-space:pre-wrap;margin:6px 0;font-size:14px">${esc(n.body || "")}</div>
+      <p class="muted" style="font-size:12.5px;margin:0">${esc(n.source || "")}${n.url ? ` · <a href="${esc(n.url)}" target="_blank" rel="noopener">link ↗</a>` : ""}</p>
+      ${n.mine ? `<div style="display:flex;gap:8px;margin-top:8px"><button class="btn small" data-pke="${n.id}">✎ Change</button><button class="btn small" data-pko="${n.id}" data-off="${n.off ? 0 : 1}">${n.off ? "Put back" : "Take out"}</button></div>` : ""}</div>`;
+  $("#pklist").innerHTML = `<h3>Notes added here <span class="muted">${mine.length}</span></h3>${mine.map(card).join("") || `<div class="card"><p class="muted">Nothing yet.</p></div>`}
+    ${taught.length ? `<details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Taught from Penny's past answers (${taught.length})</summary>${taught.map(card).join("")}</details>` : ""}`;
+  $("#pklist").querySelectorAll("[data-pke]").forEach(b => b.onclick = () => { form((D.notes || []).find(n => n.id === +b.dataset.pke)); window.scrollTo(0, 0); });
+  $("#pklist").querySelectorAll("[data-pko]").forEach(b => b.onclick = async () => {
+    const w = await sb.rpc("penny_know_off", { p_id:+b.dataset.pko, p_off:b.dataset.off === "1" }); if(w.error) return alert("Couldn't: " + niceErr(w.error)); pennyKnowView(v); });
+}
 /* admins: what staff asked Penny + edit what she knows (#/penny) */
 async function pennyView(v){
   if(!ME.admin){ location.hash = "#/home"; return; }
   if(hashArg().startsWith("checks")) return pennyChecksView(v);
   if(hashArg() === "cleanup") return pennyCleanupView(v);
   if(hashArg() === "teach") return pennyTeachView(v);
+  if(hashArg() === "know") return pennyKnowView(v);
   if(hashArg() === "patterns") return pennyPatternsView(v);
   const missedOnly = hashArg() === "missed";
   v.innerHTML = `<div class="page wide"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Ask Penny</h2><p class="muted">What staff asked, Penny's answers, 👍/👎 and cost. Questions she missed or got 👎 are on top — tap <b>🎓 Teach Penny</b>, write the right answer, save, and she uses it from then on for everyone who can see that desk.</p>
