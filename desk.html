@@ -975,8 +975,8 @@ function jobDetail(j){
   var tm=Object.keys(S.time).map(function(k){return S.time[k];}).filter(function(e){ return e.jobId===j.id && !e.deleted; });
   if(ex.length||tm.length){ var tot=ex.reduce(function(a,e){return a+(+e.amount||0);},0), mins=tm.reduce(function(a,e){return a+(+e.minutes||0);},0);
     h+='<div class="block"><h4>Spent on this job</h4><div class="note">'+money2(tot)+' in expenses · '+(mins/60).toFixed(1)+' h on site across '+tm.length+' visit'+(tm.length===1?'':'s')+'</div></div>'; }
-  h+='<div class="block"><h4>Notes</h4><div class="addline"><textarea id="e_note" placeholder="What happened, who you talked to, what\'s next"></textarea><button class="btn sm" data-act="notejob">Add</button></div>'+
-    '<div class="log" style="margin-top:10px">'+allNotes(j).map(function(n){ return '<div class="logrow"><div class="logmeta">'+esc(nameFor(n.by))+' · '+esc(new Date(n.at).toLocaleString())+(n.from?' · <span class="muted">from '+esc(n.from)+'</span>':'')+'</div><div class="logtxt">'+esc(n.text)+'</div></div>'; }).join("")+'</div></div>';
+  h+='<div class="block"><h4>Notes</h4><div class="addline"><textarea id="e_note" placeholder="What happened, who you talked to, what\'s next"></textarea>'+npBtn("job|"+npRef(sid(j.id)))+'<button class="btn sm" data-act="notejob">Add</button></div>'+npPend("job|"+npRef(sid(j.id)))+
+    '<div class="log" style="margin-top:10px">'+allNotes(j).map(function(n){ return '<div class="logrow"><div class="logmeta">'+esc(nameFor(n.by))+' · '+esc(new Date(n.at).toLocaleString())+(n.from?' · <span class="muted">from '+esc(n.from)+'</span>':'')+'</div><div class="logtxt">'+esc(n.text)+npShow(n.photos)+'</div></div>'; }).join("")+'</div></div>';
   if(j.src==="desk") h+='<div><button class="btn sm warn" data-act="deljob">Remove this desk job</button></div>';
   if(j.src==="freshdesk") h+=fdDraftBox(j);
   if(EMB) h+='<div class="pad"><button class="btn sm ghost" data-act="askpenny">💬 Ask Penny about this job</button> <span class="note">She can see which job you have open.</span></div>';   // 2026-11-03: the old "Ask Claude" box never got answers
@@ -2009,17 +2009,60 @@ function tnOut(c,id,out){ if(out&&!confirm("Mark this tenant as moved out? They 
   sb.rpc("home_tenant_out",{p_id:Number(id),p_out:!!out,p_day:out?today():null}).then(function(r){ if(r.error){ alert("Couldn't change it."); return; } tnLoad(c,true); D._tnAsk=0; D._tnt=null; tnBoot(); }); }
 function tnNone(c,on){ var sb=window.MM_SB; if(!sb) return;
   sb.rpc("home_tenant_none_set",{p_home:c,p_none:!!on}).then(function(r){ if(r.error){ alert("Couldn't change it."); return; } tnLoad(c,true); D._tnAsk=0; D._tnt=null; tnBoot(); }); }
+/* Photos on notes (Brandon 2026-11-13): 📷 on Property Details notes, job notes and project updates. PRIVATE bucket note-photos,
+   path <kind>/<ref>/<auth uid>/<file>, shrunk to ≤1600 px JPEG in the browser; who sees/adds = who sees/adds that note
+   (note_photo_ok in hub_note_photos.sql). Nothing is ever deleted. Pending photos live in NP.pend[key] so redraws keep them. */
+var NP={pend:{},url:{},q:[],qt:0,uid:""};
+function npRef(s){ return String(s||"").replace(/[^A-Za-z0-9_-]/g,"_").slice(0,120)||"_"; }
+function npBtn(key){ return '<button type="button" class="btn sm npbtn" data-npbtn="'+esc(key)+'" title="Add photos">📷</button><input type="file" accept="image/*" multiple data-np="'+esc(key)+'" style="display:none">'; }
+function npPend(key){ var a=NP.pend[key]||[]; return '<div class="nppend" data-nppend="'+esc(key)+'">'+a.map(function(x,i){ return '<span class="npth">'+(x.busy||!x.blob?'<span class="npbusy">…</span>':'<img src="'+x.blob+'" alt="">')+'<button type="button" data-npx="'+esc(key)+'|'+i+'" title="Leave this photo off">✕</button></span>'; }).join("")+'</div>'; }
+function npTake(key){ return (NP.pend[key]||[]).filter(function(x){ return x.path&&!x.busy; }).map(function(x){ return x.path; }); }
+function npBusy(key){ return (NP.pend[key]||[]).some(function(x){ return x.busy; }); }
+function npClear(key){ delete NP.pend[key]; npRepaint(key); }
+function npRepaint(key){ [].slice.call(document.querySelectorAll("[data-nppend]")).forEach(function(el){ if(el.getAttribute("data-nppend")===key) el.outerHTML=npPend(key); }); }
+function npU(p){ var x=NP.url[p]; return x&&(Date.now()-x.t<45*60000)?x.u:""; }
+function npShow(paths){ if(!paths||!paths.length) return ""; var us=paths.map(npU), all=us.every(Boolean);
+  if(!all) npQueue(paths);
+  return '<div class="npshow">'+paths.map(function(p,i){ return '<img data-npimg="'+esc(p)+'" alt="Photo"'+(us[i]?' src="'+us[i]+'"':'')+(all?' data-imgzoom="'+esc(us.join("|"))+'|'+i+'"':'')+' data-npgrp="'+esc(paths.join("|"))+'" data-npi="'+i+'">'; }).join("")+'</div>'; }
+function npQueue(paths){ paths.forEach(function(p){ if(!npU(p)&&NP.q.indexOf(p)<0) NP.q.push(p); }); clearTimeout(NP.qt); NP.qt=setTimeout(npFetch,60); }
+function npFetch(){ var sb=window.MM_SB, q=NP.q.splice(0,100); if(!sb||!q.length) return;
+  sb.storage.from("note-photos").createSignedUrls(q,3600).then(function(r){ (r.data||[]).forEach(function(x){ if(x.signedUrl) NP.url[x.path]={u:x.signedUrl,t:Date.now()}; }); npPaint(); if(NP.q.length) npFetch(); }); }
+function npPaint(){ [].slice.call(document.querySelectorAll("img[data-npimg]")).forEach(function(im){ var u=npU(im.getAttribute("data-npimg")); if(u&&im.getAttribute("src")!==u) im.setAttribute("src",u);
+    var g=(im.getAttribute("data-npgrp")||"").split("|"), us=g.map(npU); if(us.every(Boolean)) im.setAttribute("data-imgzoom",us.join("|")+"|"+im.getAttribute("data-npi")); }); }
+function npShrink(f){ return new Promise(function(res,rej){ var img=new Image(), u=URL.createObjectURL(f);
+  img.onload=function(){ var k=Math.min(1,1600/Math.max(img.width,img.height)), c=document.createElement("canvas"); c.width=Math.max(1,Math.round(img.width*k)); c.height=Math.max(1,Math.round(img.height*k));
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(u); c.toBlob(function(b){ b?res(b):rej(new Error("photo")); },"image/jpeg",0.85); };
+  img.onerror=function(){ URL.revokeObjectURL(u); rej(new Error("That file isn't a photo this browser can read.")); }; img.src=u; }); }
+async function npAdd(key,files){ var sb=window.MM_SB; if(!sb||!files.length) return;
+  if(!NP.uid){ try{ var ss=await sb.auth.getSession(); NP.uid=(ss.data.session&&ss.data.session.user&&ss.data.session.user.id)||""; }catch(e){} }
+  if(!NP.uid) return toast("Sign in again to add photos");
+  var a=NP.pend[key]=NP.pend[key]||[]; var room=6-a.length; if(files.length>room) toast("Up to 6 photos on one note"); files=files.slice(0,Math.max(0,room));
+  var kr=key.split("|");
+  for(var i=0;i<files.length;i++){ var it={busy:1,blob:""}; a.push(it); npRepaint(key);
+    try{ var b=await npShrink(files[i]); it.blob=URL.createObjectURL(b);
+      var path=kr[0]+"/"+kr[1]+"/"+NP.uid+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+".jpg";
+      var r=await sb.storage.from("note-photos").upload(path,b,{contentType:"image/jpeg",upsert:false}); if(r.error) throw r.error;
+      it.path=path; NP.url[path]={u:it.blob,t:Date.now()+36e5*12}; }
+    catch(e){ a.splice(a.indexOf(it),1); toast(/fetch|network/i.test(String(e&&e.message))?"No signal - the photo didn't upload":"Couldn't add that photo"); }
+    it.busy=0; npRepaint(key); } }
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-npbtn],[data-npx]"); if(!b) return; ev.preventDefault(); ev.stopPropagation();
+  if(b.hasAttribute("data-npbtn")){ var k=b.getAttribute("data-npbtn"), inp=b.parentNode.querySelector('input[data-np]'); [].slice.call(document.querySelectorAll("input[data-np]")).forEach(function(x){ if(x.getAttribute("data-np")===k) inp=x; }); if(inp) inp.click(); return; }
+  var p=b.getAttribute("data-npx").split("|"), i=+p.pop(), key=p.join("|"), a=NP.pend[key]||[]; if(a[i]&&!a[i].busy){ a.splice(i,1); npRepaint(key); } },true);
+document.addEventListener("change",function(ev){ var inp=ev.target; if(!inp||!inp.matches||!inp.matches("input[data-np]")) return; var fs=[].slice.call(inp.files||[]); inp.value=""; npAdd(inp.getAttribute("data-np"),fs); },true);
+(function(){ var st=document.createElement("style"); st.textContent=".npshow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}.npshow img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line-2,#ddd);cursor:zoom-in;background:#f3f3f0}"+
+  ".nppend{display:flex;flex-wrap:wrap;gap:6px;width:100%}.nppend:empty{display:none}.npth{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid var(--line-2,#ddd);background:#f3f3f0;display:grid;place-items:center}"+
+  ".npth img{width:100%;height:100%;object-fit:cover}.npth button{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:11px;line-height:20px;cursor:pointer}.npbusy{color:#888}.npbtn{flex:0 0 auto}"; document.head.appendChild(st); })();
 function hnLoad(code,force){ var sb=window.MM_SB; D._hn=D._hn||{}; if(!sb||(D._hn[code]&&!force)) return; if(!D._hn[code]) D._hn[code]={loading:1,rows:[]};
   sb.rpc("home_notes",{p_home:code}).then(function(r){ D._hn[code]={rows:r.error?[]:(r.data||[]),err:r.error?"Couldn't load notes.":""}; render(); }); }
 function hnCard(code){ hnLoad(code); var n=(D._hn||{})[code]||{rows:[]};
   return '<div class="qv hnotes" style="grid-column:1/-1;margin-top:10px"><div class="qvh">Notes</div>'+
-    (n.rows.length?n.rows.map(function(x){ return '<div class="hnrow"><div>'+esc(x.note)+'<div class="muted" style="font-size:12px">'+esc(x.by_name||"")+' \u00b7 '+esc(fmtD(ymd(x.at)))+'</div></div>'+
+    (n.rows.length?n.rows.map(function(x){ return '<div class="hnrow"><div>'+esc(x.note)+npShow(x.photos)+'<div class="muted" style="font-size:12px">'+esc(x.by_name||"")+' \u00b7 '+esc(fmtD(ymd(x.at)))+'</div></div>'+
       (x.can_off?'<button class="btn sm ghost" data-act="hnoff" data-id="'+x.id+'" data-code="'+esc(code)+'" title="Take this note off">\u2715</button>':'')+'</div>'; }).join(""):(n.loading?'':'<div class="muted">No notes yet.</div>'))+
     (n.err?'<div class="hint">'+esc(n.err)+'</div>':'')+
-    '<div class="hnadd"><input id="hn_txt" maxlength="500" placeholder="Add a quick note for everyone (no codes)"><button class="btn sm pri" data-act="hnadd" data-code="'+esc(code)+'">Add</button></div>'+
-    '<style>.hnrow{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line-2)}.hnadd{display:flex;gap:8px;margin-top:8px}.hnadd input{flex:1;min-width:0}</style></div>'; }
-function hnAdd(code){ var el=document.getElementById("hn_txt"), v=el?el.value.trim():""; if(!v) return; var sb=window.MM_SB; if(!sb) return;
-  sb.rpc("home_note_add",{p_home:code,p_note:v}).then(function(r){ if(r.error){ alert((r.error.message||"Couldn't save").replace(/^.*?:\s*/,"")); return; } hnLoad(code,true); }); }
+    '<div class="hnadd"><input id="hn_txt" maxlength="500" placeholder="Add a quick note for everyone (no codes)">'+npBtn("home|"+npRef(code))+'<button class="btn sm pri" data-act="hnadd" data-code="'+esc(code)+'">Add</button></div>'+npPend("home|"+npRef(code))+
+    '<style>.hnrow{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line-2)}.hnadd{display:flex;gap:8px;margin-top:8px}.hnotes .nppend{margin-top:6px}.hnadd input{flex:1;min-width:0}</style></div>'; }
+function hnAdd(code){ var el=document.getElementById("hn_txt"), v=el?el.value.trim():"", nk="home|"+npRef(code); if(npBusy(nk)) return toast("A photo is still uploading"); var ph=npTake(nk); if(!v&&!ph.length) return; var sb=window.MM_SB; if(!sb) return;
+  sb.rpc("home_note_add",{p_home:code,p_note:v,p_photos:ph}).then(function(r){ if(r.error){ alert((r.error.message||"Couldn't save").replace(/^.*?:\s*/,"")); return; } npClear(nk); hnLoad(code,true); }); }
 function hnOff(code,id){ if(!confirm("Take this note off?")) return; var sb=window.MM_SB; if(!sb) return;
   sb.rpc("home_note_off",{p_id:Number(id)}).then(function(r){ if(r.error){ alert("Couldn't take it off."); return; } hnLoad(code,true); }); }
 /* field crew: owner lockout lines are masked; "View" opens them and the database pings Chris + the admins (home_owner_reveal) */
@@ -3100,9 +3143,9 @@ function projDetail(p){ if(!p) return '<div class="empty">Pick a project.</div>'
   // updates timeline (Breezeway moved to the bottom, Brandon 2026-11-09)
   var ups=(p.updates||[]).slice().reverse();
   var sr=projSlackReplies(p); if(sr.length) h+='<div class="block"><h4>Replies in Slack</h4><div class="log">'+sr.map(function(r){ return '<div class="logrow"><div class="logmeta">'+esc(r.by||"")+' · '+esc(r.at?new Date(r.at).toLocaleString():"")+'</div><div class="logtxt">'+esc(r.text||"")+'</div></div>'; }).join("")+'</div></div>';
-  h+='<div class="block"><h4>Updates <span class="note" style="font-weight:400">· also shows on the Monday maintenance meeting</span></h4><div class="addline" style="flex-wrap:wrap"><input id="p_tk" data-tkfill="p_note" placeholder="Ticket #" inputmode="numeric" style="width:110px" title="Type a Freshdesk ticket number: what the ticket says is filled into the note" value="'+esc(pjDraft("p_tk"))+'"><textarea id="p_note" placeholder="What happened, who is doing what, by when" style="flex:2;min-width:200px">'+esc(pjDraft("p_note"))+'</textarea><textarea id="p_nnext" placeholder="What needs to happen next" style="flex:1;min-width:160px">'+esc(pjDraft("p_nnext"))+'</textarea><button class="btn sm" data-act="projnote">Add</button></div><div class="note" id="tki_p_tk" style="margin-top:4px"></div>'+
+  h+='<div class="block"><h4>Updates <span class="note" style="font-weight:400">· also shows on the Monday maintenance meeting</span></h4><div class="addline" style="flex-wrap:wrap"><input id="p_tk" data-tkfill="p_note" placeholder="Ticket #" inputmode="numeric" style="width:110px" title="Type a Freshdesk ticket number: what the ticket says is filled into the note" value="'+esc(pjDraft("p_tk"))+'"><textarea id="p_note" placeholder="What happened, who is doing what, by when" style="flex:2;min-width:200px">'+esc(pjDraft("p_note"))+'</textarea><textarea id="p_nnext" placeholder="What needs to happen next" style="flex:1;min-width:160px">'+esc(pjDraft("p_nnext"))+'</textarea>'+npBtn("project|"+npRef(sid(p.id)))+'<button class="btn sm" data-act="projnote">Add</button></div>'+npPend("project|"+npRef(sid(p.id)))+'<div class="note" id="tki_p_tk" style="margin-top:4px"></div>'+
     ((p.edit.tickets||[]).length?'<div class="mc-tk" style="margin-top:8px">🎫 Tickets: '+p.edit.tickets.map(function(n){ return '<a href="https://moosemanagement.freshdesk.com/a/tickets/'+esc(n)+'" target="_blank" rel="noopener">#'+esc(n)+' ↗</a>'; }).join("")+'</div>':'')+
-    '<div class="log" style="margin-top:10px">'+p.notesD.slice().reverse().map(function(n){ return '<div class="logrow"><div class="logmeta">'+esc(nameFor(n.by))+' · '+esc(new Date(n.at).toLocaleString())+'</div><div class="logtxt">'+linkify(n.text)+(n.next?'<div style="color:#3c5f12;font-weight:600;margin-top:3px">➜ Next: '+linkify(n.next)+'</div>':'')+'</div></div>'; }).join("")+'</div></div>';
+    '<div class="log" style="margin-top:10px">'+p.notesD.slice().reverse().map(function(n){ return '<div class="logrow"><div class="logmeta">'+esc(nameFor(n.by))+' · '+esc(new Date(n.at).toLocaleString())+'</div><div class="logtxt">'+linkify(n.text)+npShow(n.photos)+(n.next?'<div style="color:#3c5f12;font-weight:600;margin-top:3px">➜ Next: '+linkify(n.next)+'</div>':'')+'</div></div>'; }).join("")+'</div></div>';
   h+='<div class="block"><h4>Earlier updates (from Asana)</h4>'+(ups.length?'<div class="log">'+ups.map(function(x){ return '<div class="logrow"><div class="logmeta">'+esc(x.date?fmtD(x.date):"")+(x.head&&x.head!=="Start"&&!/^\\d/.test(x.head)?' · '+esc(x.head.slice(0,60)):'')+'</div><div class="logtxt">'+esc(x.text)+'</div></div>'; }).join("")+'</div>':'<div class="note">No dated updates.</div>')+'</div>';
   h+=bwH;
   return h+'</div>';
@@ -5341,8 +5384,9 @@ document.addEventListener("click",function(ev){
     case "bqundo": { if(!j||!need()) return; var bc2=S.edits[sid(j.id)]||{};
       return editJob(j,{brivoQuiet:null,notes:(bc2.notes||[]).concat([{by:S.me,at:Date.now(),text:"Brivo alerts back on (the 'got it' was undone)"}])}).then(function(){ toast("Alerts back on — new ones make a job again"); }); }
     case "donejob": if(!j) return; return editJob(j,{status:"done",doneBy:S.me,doneAt:Date.now()}).then(function(){ toast(j.src==="breezeway"||(S.bwq[sid(j.id)]||{}).status==="created"?"Marked done — the hub closes it in Breezeway within a minute":"Marked done — close it in "+(SRCNAME[j.src]||"its app")+" too"); });
-    case "notejob": if(!j) return; var tx=fv("e_note"); if(!tx) return; var cur=S.edits[sid(j.id)]||{};
-      return editJob(j,{notes:(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:tx}])}).then(function(){ toast("Note added"); });
+    case "notejob": if(!j) return; var jnk="job|"+npRef(sid(j.id)); if(npBusy(jnk)) return toast("A photo is still uploading"); var jph=npTake(jnk); var tx=fv("e_note"); if(!tx&&!jph.length) return; var cur=S.edits[sid(j.id)]||{};
+      var jn={by:S.me,at:Date.now(),text:tx||""}; if(jph.length) jn.photos=jph;
+      return editJob(j,{notes:(cur.notes||[]).concat([jn])}).then(function(){ npClear(jnk); toast("Note added"); });
     case "expjob": if(!j) return; return mExpense(null,{jobId:j.id,prop:j.prop,vendor:j.vendor});
     case "timejob": if(!j) return; return mTime(null,{jobId:j.id,prop:j.prop,who:j.who});
     case "bwq": if(!j||!need()) return; return S.db.doc("bwq/"+sid(j.id)).set(bwqDoc(j)).then(function(){ toast("Queued for Breezeway"); });
@@ -5371,11 +5415,11 @@ document.addEventListener("click",function(ev){
       if(d.act==="projslack"){ var ppl2=[P.who].concat(P.followers||[]).filter(Boolean).filter(function(n,i,a){ return a.indexOf(n)===i; }); if(!ppl2.length) return toast("Pick who owns it (and any followers) and Save first");
         return slackEditor(sid("pu_"+P.id+"_"+Date.now().toString(36)),{kind:"projupdate",projectId:P.id,title:P.title,text:"Project update — "+projMsg(P),to:ppl2,channel:"",status:"queued",by:S.me,at:Date.now()}); }
       if(d.act==="projhide") return put("projedits",pk,{hidden:true},cur).then(function(){ S.ui.proj=""; toast("Hidden from the desk"); });
-      if(d.act==="projnote"){ var tx=fv("p_note"), pnx=fv("p_nnext"), ptk=meetTkNums(fv("p_tk")); if(!tx && !pnx && !ptk.length) return; var pp={};
-        if(tx||pnx) pp.notes=(cur.notes||[]).concat([{by:S.me,at:Date.now(),text:tx||"(next step only)",next:pnx||"",tickets:ptk}]);
+      if(d.act==="projnote"){ var pnk="project|"+npRef(pk); if(npBusy(pnk)) return toast("A photo is still uploading"); var pph=npTake(pnk); var tx=fv("p_note"), pnx=fv("p_nnext"), ptk=meetTkNums(fv("p_tk")); if(!tx && !pnx && !ptk.length && !pph.length) return; var pp={};
+        if(tx||pnx||pph.length){ var pno={by:S.me,at:Date.now(),text:tx||(pnx?"(next step only)":""),next:pnx||"",tickets:ptk}; if(pph.length) pno.photos=pph; pp.notes=(cur.notes||[]).concat([pno]); }
         if(pnx){ pp.next=pnx; pp.nextBy=S.me; pp.nextAt=Date.now(); }
         if(ptk.length){ var phv=(cur.tickets||[]).map(String); pp.tickets=phv.concat(ptk.filter(function(n){ return phv.indexOf(n)<0; })); }
-        return put("projedits",pk,pp,cur).then(function(){ ["p_note","p_nnext","p_tk"].forEach(function(f){ if(S.ui.pjDraft) delete S.ui.pjDraft[f+"|"+S.ui.proj]; }); render(); savedPop(ptk.length?"Note saved · ticket"+(ptk.length>1?"s":"")+" #"+ptk.join(", #")+" linked":"Note saved"); }); }
+        return put("projedits",pk,pp,cur).then(function(){ npClear(pnk); ["p_note","p_nnext","p_tk"].forEach(function(f){ if(S.ui.pjDraft) delete S.ui.pjDraft[f+"|"+S.ui.proj]; }); render(); savedPop(ptk.length?"Note saved · ticket"+(ptk.length>1?"s":"")+" #"+ptk.join(", #")+" linked":"Note saved"); }); }
       return mNewJob({prop:P.homes[0]||"",title:P.title}); }
     case "deljob": if(!j) return; return put("deskjobs",j.id,{deleted:true},S.deskjobs[j.id]).then(function(){ S.ui.sel=""; toast("Removed"); });
     case "newroutine": return mRoutine();
