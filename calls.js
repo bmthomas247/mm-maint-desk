@@ -309,6 +309,11 @@ const OCSS = `.page.occ{max-width:1800px;padding:20px 28px}
 .occ .octile b{display:block;font-size:22px;line-height:1.1} .occ .octile span{font-size:12.5px;color:var(--muted)}
 .occ .octile i{font-style:normal;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:#eef3e6;color:#3c5f12;font-size:13px}
 .occ .octile.g b{color:#3c5f12} .occ .octile.r b{color:#b42318}
+.occ button.octile{font:inherit;color:inherit;text-align:left;width:100%;margin:0;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.occ button.octile:hover{border-color:#9bbf6a}
+.occ button.octile.on{border-color:#3c5f12;box-shadow:0 0 0 2px rgba(60,95,18,.18)}
+.occ button.octile:focus-visible{outline:2px solid #3c5f12;outline-offset:2px}
+.occ .octile .ocv{display:block;font-size:inherit;color:inherit}
 .occ .ocprog{height:5px;border-radius:9px;background:var(--line);margin-top:6px;overflow:hidden} .occ .ocprog i{display:block;height:100%;background:var(--moose,#2f5d3a)}
 .occ .ocbar{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin:12px 0 4px} .occ .ocbar #oq{max-width:260px;width:100%}
 .occ .ocfts{display:inline-flex;gap:2px;background:var(--bg-2,#eef0ea);border-radius:10px;padding:3px;flex-wrap:wrap}
@@ -418,14 +423,15 @@ window.ownerCallsView = async function(v){
     const base = calls.filter(hit), own = base.filter(c => c.owner_kind === "owner");
     const L = { reach: own.filter(reach), all: own, pros: base.filter(c => c.owner_kind === "prospect"), done: base.filter(c => !open(c)) };
     const fl = own.filter(flagged), fdone = fl.filter(c => !open(c)).length;
-    const tile = (n, l, ic, cls) => `<div class="octile${cls ? " " + cls : ""}"><div><b>${n}</b><span>${l}</span></div><i>${ic}</i></div>`;
-    $("#octiles").innerHTML = tile(L.reach.length, "Penny says reach out", "📞", L.reach.length ? "r" : "") + tile(L.all.length, "Owner calls", "☎") + tile(L.pros.length, "Possible new owners", "🏡")
-      + tile(fdone + " / " + fl.length, "Reach-outs handled", "✓", "g");
+    const tile = (n, l, ic, cls, t) => `<button type="button" class="octile${cls ? " " + cls : ""}${O.tab === t ? " on" : ""}" data-t="${t}" title="Show these calls"><span class="ocv"><b>${n}</b><span>${l}</span></span><i>${ic}</i></button>`;
+    $("#octiles").innerHTML = tile(L.reach.length, "Penny says reach out", "📞", L.reach.length ? "r" : "", "reach") + tile(L.all.length, "Owner calls", "☎", "", "all") + tile(L.pros.length, "Possible new owners", "🏡", "", "pros")
+      + tile(fdone + " / " + fl.length, "Reach-outs handled", "✓", "g", "done");
     $("#ocprog").innerHTML = `<i style="width:${fl.length ? fdone / fl.length * 100 : 0}%"></i>`;
     $("#ocprog").title = `${fdone} of ${fl.length} calls Penny said to reach out on are handled`;
     const tabs = [["reach", "Penny says reach out"], ["all", "All owner calls"], ["pros", "Possible new owners"], ["done", "Handled"]];
     $("#ocfts").innerHTML = tabs.map(([k, l]) => `<button class="ocft${O.tab === k ? " on" : ""}" data-t="${k}">${l} <span>${L[k].length}</span></button>`).join("");
     $("#ocfts").querySelectorAll("[data-t]").forEach(b => b.onclick = () => { O.tab = b.dataset.t; draw(); });
+    $("#octiles").querySelectorAll("[data-t]").forEach(b => b.onclick = () => { O.tab = b.dataset.t; draw(); });
     const list = L[O.tab], MAX = 300;
     if(!list.length) return $("#obody").innerHTML = `<div class="card"><p class="muted" style="margin:0">${{ reach:"No owner calls waiting on a reach-out for these dates.", all:"No owner calls for these dates.", pros:"No calls from possible owners for these dates.", done:"Nothing marked yet." }[O.tab]}</p></div>`;
     const row = c => { const n = N[c.call_id] || {}, [bg, ic] = icon(c), hs = homes(c), s = stOf(c);
