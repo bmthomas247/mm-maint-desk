@@ -13,6 +13,17 @@ mkdir -p "$D/custom_components"
 unzip -oq ml.zip -d "$D" || { say "!! Could not unpack it. Call Brandon."; exit 1; }
 [ -f "$D/custom_components/moose_locks/manifest.json" ] || { say "!! Moose Locks files not found after install. Call Brandon."; exit 1; }
 say "Installed $(jq -r .version "$D/custom_components/moose_locks/manifest.json" 2>/dev/null)."
+# Block a device after 5 wrong Home Assistant passwords (Brandon 2026-11-13: guests on the home Wi-Fi can reach the
+# login page; every tech has the shared login). Only added when configuration.yaml has no http: section of its own.
+C="$D/configuration.yaml"
+if [ -f "$C" ] && ! grep -q "ip_ban_enabled" "$C"; then
+  if grep -qE "^http:" "$C"; then say "(configuration.yaml already has an http: section - wrong-password block not added; tell Brandon)";
+  else printf '
+http:
+  ip_ban_enabled: true
+  login_attempts_threshold: 5
+' >> "$C"; say "Wrong-password block turned on (5 tries)."; fi
+fi
 say "Restarting Home Assistant (about 1 minute)..."
 curl -fsS -X POST -H "$H" "$API/core/restart" >/dev/null || say "(restart call did not answer; waiting anyway)"
 sleep 20
