@@ -2447,8 +2447,10 @@ function vRemovedList(){ var r=D.vendorsRemoved||[]; if(!r.length) return ""; va
 /* ================= REPEATS ================= */
 /* portable AC on at check-in / off for the season is routine (billed to the owner), not a repeat problem */
 function portableAcRoutine(t){ t=String(t||""); return /(portable|wall|window)\s*(wall\s*)?a\/?c|a\/?c\s*units?/i.test(t) && /(turn(ed)? on|set ?up|install|remov|take out|store|put away|check|bring (in|out)|pick ?up|drop ?off)/i.test(t) && !/(troubleshoot|broken|not working|leak|repair|fix|noise|not cooling|won.?t)/i.test(t); }
+/* package / supply deliveries and pick-ups are errands, never a repeat problem (Brandon 2026-11-13) */
+function deliveryRoutine(t){ return /\b(deliver(y|ies|ed|ing)?|package|parcel|amazon|fedex|ups|usps)\b/i.test(String(t||"")); }
 function repeats(win){
-  var t=today(), work=D.jobs.filter(function(j){ return j.cat && !portableAcRoutine(j.title) && j.kind!=="info" && j.kind!=="seasonal" && j.kind!=="recurring" && j.kind!=="inspection" && !j.auto && j.prop &&
+  var t=today(), work=D.jobs.filter(function(j){ return j.cat && !portableAcRoutine(j.title) && !deliveryRoutine(j.title) && j.kind!=="info" && j.kind!=="seasonal" && j.kind!=="recurring" && j.kind!=="inspection" && !j.auto && j.prop &&
     (j.created||j.when) && daysBetween(j.created||j.when,t)<=win; });
   var g={}; work.forEach(function(j){ var k=j.prop+"||"+j.cat; (g[k]=g[k]||[]).push(j); });
   var same=Object.keys(g).map(function(k){ var p=k.split("||"), jobs=g[k].sort(function(a,b){ return (b.created||b.when).localeCompare(a.created||a.when); });
