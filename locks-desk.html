@@ -135,6 +135,20 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;
 .pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.pic{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:10px;border:1px solid #dfe5da;border-radius:14px;background:var(--card,#fff)}.pic b{font-size:14px}.pic span{font-size:12.5px;color:#5b6656;line-height:1.3}
 .step.flash{background:var(--pine-soft);border-radius:12px;transition:background .4s}
 .step{scroll-margin-top:80px} html.inhub header.top{display:none} html.inhub .desk nav.tabs{top:0}
+/* Set a door code form (2026-11-13) */
+.scf{max-width:520px;margin:5vh auto;padding:18px 20px 16px;box-sizing:border-box}
+.scf *{box-sizing:border-box}
+.scf .sch{display:flex;align-items:center;gap:10px;margin-bottom:12px} .scf .sch b{flex:1;font-size:18px}
+.scf .schome{font-weight:800;font-size:15px;margin:-4px 0 12px;color:var(--pine,#2f4a12)}
+.scf .scl{display:block;font-weight:700;font-size:13px;margin:0 0 12px;min-width:0} .scf .scl small{font-weight:400;color:var(--muted)}
+.scf .scl input,.scf .scl select{display:block;width:100%;min-width:0;margin-top:5px;font-size:15px;padding:10px 12px}
+.scf div.scl{margin-bottom:6px}
+.scf .sct{margin:0 0 12px;gap:6px} .scf .scq{margin:-4px 0 12px;gap:6px}
+.scf .sc2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.scf .scrow{display:flex;gap:8px;margin-top:5px} .scf .scrow .sccode{margin-top:0;flex:1;font-size:22px;letter-spacing:4px;font-weight:800}
+.scf .scrow .btn{flex:none;white-space:nowrap}
+.scf input[type=datetime-local]{font-size:14px;padding:10px 8px} .scf .scsave{margin-top:4px} .scf .scfoot{font-size:12.5px;margin-top:8px}
+@media (max-width:420px){ .scf .sc2{grid-template-columns:1fr;gap:0} }
 .step{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
 .step:first-child{border-top:0;padding-top:4px}
 .step .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--line);color:var(--ink-2);display:grid;place-items:center;font-weight:800;font-size:14px}
@@ -459,21 +473,21 @@ function openSetCode(pid){
   const now = new Date(); now.setMinutes(0,0,0); const end = new Date(now.getTime()+864e5);
   const TYPES = [["vendor","Vendor"],["owner","Owner"],["housekeeping","Housekeeper"],["employee","Employee"],["hoa","HOA"],["county","County"]];
   const d = document.createElement("div"); d.className = "modal";
-  d.innerHTML = `<div class="card" style="max-width:480px;margin:6vh auto;padding:20px">
-    <div class="row"><b class="grow" style="font-size:18px">🔑 Set a door code</b><button class="btn small" data-x>✕</button></div>
-    ${pid ? `<div class="muted" style="margin:4px 0 10px">${esc(dc(((homes.find(h=>h.property_id===pid)||{}).properties||{}).code||pid))}</div>`
-      : `<label class="field"><span>Home</span><select id="sc_home"><option value="">Pick a home…</option>${homes.map(h=>`<option value="${esc(h.property_id)}">${esc(dc(h.properties.code))} · ${esc(h.properties.name||"")}</option>`).join("")}</select></label>`}
-    <div class="chips" style="margin:6px 0 10px">${TYPES.map(([k,t],i)=>`<span class="chip ${i?"":"on"}" data-sctype="${k}">${t}</span>`).join("")}</div>
-    <div class="grid2"><label class="field"><span>Who is it for?</span><input id="sc_person" placeholder="Name"></label>
-      <label class="field"><span>Company <span class="muted">(optional)</span></span><input id="sc_company" placeholder="ABC Plumbing"></label></div>
-    <label class="field"><span>Code <span class="muted">(4 to 8 numbers)</span></span><div class="row" style="gap:8px"><input id="sc_code" inputmode="numeric" maxlength="8" class="grow" style="font-size:22px;letter-spacing:4px;padding:10px">
-      <button class="btn" id="sc_make">🎲 Make one</button></div></label>
-    <div class="grid2"><label class="field"><span>Starts</span><input type="datetime-local" id="sc_from" value="${loc(now)}"></label>
-      <label class="field"><span>Ends</span><input type="datetime-local" id="sc_to" value="${loc(end)}"></label></div>
-    <div class="chips" style="margin:-2px 0 8px"><span class="chip" data-scfor="1">1 day</span><span class="chip" data-scfor="3">3 days</span><span class="chip" data-scfor="7">1 week</span><span class="chip" data-scfor="0">No end date</span></div>
-    <label class="field"><span>Note <span class="muted">(optional)</span></span><input id="sc_note" placeholder="Water heater repair"></label>
-    <button class="btn go wide" id="sc_save" style="margin-top:6px">Save - put it on the door${pid?"":"s"}</button>
-    <div class="muted" style="font-size:12.5px;margin-top:6px">It goes on every door at this home within a minute or two and only works between those times. See or change all codes in Access codes.</div></div>`;
+  d.innerHTML = `<div class="card scf">
+    <div class="sch"><b>🔑 Set a door code</b><button class="btn small" data-x aria-label="Close">✕</button></div>
+    ${pid ? `<div class="schome">${esc(dc(((homes.find(h=>h.property_id===pid)||{}).properties||{}).code||pid))}</div>`
+      : `<label class="scl">Home<select id="sc_home"><option value="">Pick a home…</option>${homes.map(h=>`<option value="${esc(h.property_id)}">${esc(dc(h.properties.code))} · ${esc(h.properties.name||"")}</option>`).join("")}</select></label>`}
+    <div class="scl">Who is it for?</div>
+    <div class="chips sct">${TYPES.map(([k,t],i)=>`<span class="chip ${i?"":"on"}" data-sctype="${k}">${t}</span>`).join("")}</div>
+    <div class="sc2"><label class="scl">Name<input id="sc_person" placeholder="Jake Smith" autocomplete="off" data-lpignore="true" data-1p-ignore></label>
+      <label class="scl">Company<input id="sc_company" placeholder="Optional" autocomplete="off" data-lpignore="true" data-1p-ignore></label></div>
+    <label class="scl">Code <small>4 to 8 numbers</small><div class="scrow"><input id="sc_code" inputmode="numeric" maxlength="8" autocomplete="off" data-lpignore="true" data-1p-ignore class="sccode"><button class="btn" id="sc_make" type="button">🎲 Make one</button></div></label>
+    <div class="sc2"><label class="scl">Starts<input type="datetime-local" id="sc_from" value="${loc(now)}"></label>
+      <label class="scl">Ends<input type="datetime-local" id="sc_to" value="${loc(end)}"></label></div>
+    <div class="chips scq"><span class="chip on" data-scfor="1">1 day</span><span class="chip" data-scfor="3">3 days</span><span class="chip" data-scfor="7">1 week</span><span class="chip" data-scfor="0">No end date</span></div>
+    <label class="scl">Note<input id="sc_note" placeholder="Optional - e.g. water heater repair" autocomplete="off" data-lpignore="true" data-1p-ignore></label>
+    <button class="btn go wide scsave" id="sc_save">Save - put it on the door${pid?"":"s"}</button>
+    <div class="muted scfoot">Goes on every door at the home within a minute or two and only works between those times. Change or turn it off in Access codes.</div></div>`;
   document.body.appendChild(d); S.dirty = true;
   const close = () => { d.remove(); S.dirty = false; };
   d.onclick = e => { if(e.target === d) close(); };
