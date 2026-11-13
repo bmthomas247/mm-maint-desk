@@ -63,7 +63,7 @@ function head(){
   const last = (CG.rows || []).reduce((m, x) => x.updated_at > m ? x.updated_at : m, "");
   return `<div class="card"><h2 style="margin:0 0 6px">How the Moose Hub is built, and how to keep it going</h2>
     <p class="muted" style="margin:0 0 10px">Written so Moose keeps running if Brandon, or Claude, isn't around. Part 1 is for Kim and the team in plain words. Part 2 is for a developer, or Claude, picking up the work. Only admins see this page (and anyone an admin gives it to in My settings ▸ Who sees which desk). Last changed ${fday(last)}.</p>
-    <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="cgprint">🖨 Print this part</button><button class="btn small" id="cgdl">⬇ Download the whole guide</button></div>
+    <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="cgprint">🖨 Print this part</button><button class="btn small" id="cgdl">⬇ Download the whole guide</button>${typeof ME !== "undefined" && ME && ME.admin ? `<a class="btn small primary" href="#/penny/know">🎓 Add to Penny's knowledge</a>` : ""}</div>
     <p class="muted noprint" style="font-size:12.5px;margin:8px 0 0">A copy is also saved every day on the office computer as <code>hub_site\\CONFIGURATION_GUIDE_live.md</code> and copied to Dropbox each night, so it can be read even if the hub is down.</p></div>`;
 }
 function guide(part){
