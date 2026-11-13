@@ -460,6 +460,7 @@ function render(v, key, data, ppl){
           <label>Agent phone<input id="msp" value="${esc(I.agent_phone || "")}"></label><label>Agent email<input id="mse" value="${esc(I.agent_email || "")}"></label></div>
           <label class="msale1">Note<input id="msn" value="${esc(I.note || "")}" placeholder="e.g. owner wants us to keep renting until closing"></label>
           <div class="macts"><button class="btn small primary" id="mss">Save listing info</button><span class="muted" id="msmsg" style="font-size:13px"></span></div></div>
+        ${onBox(it)}
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Ask everyone</small>${esc(it.ask)}</div></div>` : ""}
         <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key), it.key)}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(ST.drafts[key + "|" + it.key] || "")}</textarea>
           <div class="macts"><select data-nstate="${esc(it.key)}" aria-label="Where it stands" style="width:auto">${[["covered","Covered"],["waiting","Waiting on owner"],["scheduled","Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
@@ -475,6 +476,7 @@ function render(v, key, data, ppl){
         <div class="mbox"><b>📝 Note for Launch Pad</b><p class="muted" style="font-size:12px;margin:0 0 6px">Saved on this home's meeting notes in Property Set Up (and here).</p>
           ${feedHtml(notesOf(day, it.key), it.key)}<textarea id="mpsun" placeholder="What did we say? Who does what?">${esc(dv2 != null ? dv2 : "")}</textarea>
           <div class="macts"><button class="btn small primary" id="mpsus">Save to Launch Pad</button><span class="muted" id="mpsum" style="font-size:13px"></span></div></div>
+        ${onBox(it)}
         ${lg.length ? `<div class="mbox"><b>Earlier meeting notes (Launch Pad)</b>${lg.map(e => `<div class="mfn" style="margin-top:6px"><b>${esc(fmt(e.day))}</b><span class="muted"> · ${esc(e.src || e.by || "")}</span><div style="white-space:pre-wrap;font-size:13.5px">${esc(e.text)}</div></div>`).join("")}</div>` : ""}
         <div class="macts"><a class="btn small primary" href="#/property_setup">🚀 Open in Property Set Up</a></div>
         <p class="msrc">Source: ${esc(it.src || "")}</p>`;
@@ -487,6 +489,7 @@ function render(v, key, data, ppl){
           ${/^(ofb|behind|omb|pf|rule)$/.test(kindOf(it)) ? `<a class="btn small" href="#/rates_set">📈 Open Set rates</a>` : ""}</div>
         ${isOfb ? `<div class="mbox"><b>Owner follow-up</b><textarea id="mofbr" placeholder="What did the owner say? (closes this follow-up on the Rates desk)"></textarea>
           <div class="macts"><button class="btn small primary" id="mofbs">Save the owner's answer</button><span class="muted" style="font-size:13px">or follow up again on</span><input type="date" id="mofbd" value="${esc(addDays(T, 7))}" style="width:auto"><button class="btn small" id="mofbm">Move follow-up</button></div></div>` : ""}
+        ${onBox(it)}
         ${bwBox(it)}
         ${msgBox(it)}
         <div class="mbox"><b>Add a note</b>${feedHtml(notesOf(day, it.key), it.key)}<textarea data-note="${esc(it.key)}" placeholder="What was decided, who is doing it, by when">${esc(dv != null ? dv : "")}</textarea>
@@ -513,7 +516,7 @@ function render(v, key, data, ppl){
     o.querySelectorAll("[data-tf2]").forEach(x => x.onclick = () => { MX.tf = x.dataset.tf2; panel(); });
     o.querySelectorAll("[data-sug]").forEach(x => x.onclick = () => { const s = sg[+x.dataset.sug]; MX.sug[it.key] = { text:s.text, due:addDays(T, s.days) }; panel();
       const i = o.querySelector('[data-tf="who"]'); if(i) i.focus(); });
-    wire(o); msgWire(o, it); bwWire(o, it);
+    wire(o); msgWire(o, it); bwWire(o, it); onWire(o, it);
     const toff = o.querySelector("#mtoff");
     if(toff) toff.onclick = async () => { if(!confirm("Remove \"" + it.title + "\" from this meeting? (Its notes stay.)")) return;
       const r = await sb.rpc("meeting_topic_off", { p_id:it.own }); if(r.error) return alert("Couldn't remove: " + r.error.message); close(); redraw(); };
@@ -535,6 +538,12 @@ function render(v, key, data, ppl){
   }
   /* message / alert a person or the topic's team: Slack from the hub bot ("From <you> (from the <meeting> meeting on the Moose Hub)"),
      sent only when the person taps Send; "Give them a task" = a meeting task per person (Home + bell + DM when that's on) */
+  /* Owner notes (owner_notes.js + hub_owner_notes.sql, build list jg2 = Jeff's test log G2 + A5, 2026-11-13): Owner Relations cards about a
+     home show its latest owner notes + "What did the owner say?" (saved on the home's page; a next step = a task on this meeting).
+     Owner follow-up cards keep their own box above; the answer saved there lands on the home's owner notes too (database trigger). */
+  function onBox(it){ return key === "meet_or" && window.OwnerNotes ? `<div class="mbox" id="mown"></div>` : ""; }
+  function onWire(o, it){ const el = o.querySelector("#mown"); if(!el) return;
+    OwnerNotes.meetBox(el, { home:isPsu(it) ? psuInfo(it).home : homeOf(it), text:it.title, meet:key, day, item:it.key, title:it.title, ofb:kindOf(it) === "ofb", redraw }); }
   function msgBox(it){
     const tm2 = TEAMFOR[kindOf(it)], ppl2 = MX.tp[key] || [], mem = tm2 ? ppl2.filter(p => (p.teams || []).includes(tm2[0])) : [];
     const draft = [it.title, ...(it.lines || []).filter(Boolean).slice(0, 15).map(l => "• " + l), it.ask ? "\n" + it.ask : "", it.link ? "\n" + absLink(it.link) : ""].filter(Boolean).join("\n");
