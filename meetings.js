@@ -144,6 +144,7 @@ async function load(v, key){
     (t.data || []).forEach(x => (r.data.items = r.data.items || []).push({ grp:x.grp || "Added topics", key:"own:" + x.id, title:x.title, lines:x.note ? [x.note] : [],
       src:"Added by " + (x.by || "someone") + ", " + new Date(x.at).toLocaleDateString(undefined, { month:"short", day:"numeric" }), own:x.id })); } catch(e){}
   try { const x = await sb.rpc("meeting_extras", { p_meet:key }); r.data.ex = (x && x.data) || {}; } catch(e){ r.data.ex = {}; }   // hub_meeting_task_edit.sql
+  if(key === "meet_or"){ try { const s = await sb.rpc("meeting_or_state", { p_meet:key, p_day:ST.day[key] }); r.data.or = s && !s.error && s.data ? Object.assign(s.data, { _day:ST.day[key] }) : { _day:ST.day[key] }; } catch(e){ r.data.or = { _day:ST.day[key] }; } }   // hub_meeting_prep.sql (Jeff 2026-11-16)
   ST.data[key] = r.data; return r.data;
 }
 window.meetView = async function(v, key){
@@ -278,7 +279,7 @@ function upShow(res, from, key, items, redraw){
    Next steps = suggested tasks built from the topic (one tap fills the task form) + the topic's tasks (All / Today / This week / Overdue).
    Tasks go to a person (meeting_task_add2, hub_meeting_actions.sql): they see it on Home + the bell, and get a Slack DM when that's on.
    Owner follow-ups close from the panel (meeting_ofb_set). Wrap up = what was decided + who does what, to copy. */
-const MX = { tp:{}, filt:"all", q:"", open:null, tab:"ov", tf:"all", sug:{}, bw:{}, bwp:{}, bwopen:false, chg:null, psu:{}, psuAt:0 };
+const MX = { tp:{}, filt:"all", q:"", open:null, tab:"ov", tf:"all", sug:{}, bw:{}, bwp:{}, bwopen:false, chg:null, psu:{}, psuAt:0, orh:{}, orf:{}, orsnap:{}, prep:false };
 async function psuLoad(){ try { const r = await sb.from("psu_progress").select("job_id,log"); (r.data || []).forEach(x => MX.psu[x.job_id] = x.log || []); MX.psuAt = Date.now(); } catch(e){} }
 /* Breezeway from the meeting (hub_meeting_breezeway.sql): tasks this meeting sent + the Breezeway people list */
 async function bwLoad(key){ try { const [a, b] = await Promise.all([sb.rpc("meeting_bw_list", { p_meet:key }), MX.bwp[key] ? null : sb.rpc("meeting_bw_people", { p_meet:key })]);
@@ -351,6 +352,56 @@ function suggest(it){
   if(it.ask) add(it.ask.replace(/\?$/, ""), 3);
   return out.slice(0, 4);
 }
+﻿/* Owner Relations layout (Jeff 2026-11-16: "make the meeting efficient, no more than an hour ... this meeting is strictly mine").
+   His picks: Property Set Up first (20 min), Owner problems 10, Behind comps 10, Owners coming 5, For sale 5, Last week's tasks 5,
+   Anything else + wrap up 5; Licenses off; topics with nothing new since the last meeting fold away; Monday prep marks
+   (★ Must talk / ⏭ Skip, hub_meeting_prep.sql); Monday-maintenance style cards (Next up + history). Only meet_or uses this. */
+const OR_DROP = new Set(["lic"]);
+const OR_BLOCKS = [
+  { t:"Property Set Up", min:20, kinds:["psu", "new"] },
+  { t:"Owner problems", min:10, kinds:["big", "off", "ofb"] },
+  { t:"Homes behind their comps", min:10, kinds:["behind"] },
+  { t:"Owners coming to town", min:5, kinds:["ownerstays"] },
+  { t:"Homes for sale", min:5, kinds:["sale"] }];
+const OR_ALWAYS = new Set(["ownerstays", "ofb", "off"]);   // weekly list, follow-ups that are due, homes leaving us: always talked about
+const orHash = s => { let h = 5381; for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+/* a topic's fingerprint: its facts, minus "(48 days)" style counters that change every day */
+const orSig = it => { const z = (it.sale && it.sale.zillow) || {};
+  return orHash([it.title, ...(it.lines || []).filter(l => l && !/\(\d+ days?\)/.test(l))].join("|") + "|" +
+    (it.sale ? [z.price, z.price_change, z.price_change_date, (it.sale.shows || []).map(x => x.day).join(",")].join(";") : "")); };
+const ORCSS = `
+.orsum{font-size:13.5px;margin:6px 0 2px;color:var(--ink-2,#444)} .orfirst{font-size:12.5px;margin:2px 0 6px}
+.mtg .orhd{display:flex;align-items:center;gap:10px;margin-top:24px;flex-wrap:wrap} .ornum{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#3c5f12;color:#fff;font-size:13px;font-weight:800;flex:0 0 auto}
+.orhm{font-size:13px;font-weight:500}
+.orgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:14px} @media(max-width:760px){.orgrid{grid-template-columns:1fr}}
+.orc{background:var(--card,#fff);border:1px solid var(--line);border-left:4px solid #6f9a3a;border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:9px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:0}
+.orc.must{border-left-color:#c2410c}
+.orch{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.orct{display:flex;gap:10px;align-items:flex-start;min-width:0;flex:1 1 240px} .ortt{font-size:16.5px} .orown{font-size:13px;color:var(--muted)}
+.oric{font-style:normal;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:17px;flex:0 0 auto;background:#eef3e6}
+.ortags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.ortag{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:7px;background:#eef3e6;color:#24452c;white-space:nowrap}
+.ortag.must{background:#fde7d9;color:#9a3412} .ortag.new{background:#e0ecff;color:#1e429f} .ortag.chg,.ortag.wait{background:#fff4d6;color:#8a5a00}
+.ortag.due{background:#fde2e1;color:#b42318} .ortag.sale{background:#ffedd5;color:#9a3412}
+.orcb{display:flex;gap:6px;flex-wrap:wrap} .mtg .orpb.on{background:#c2410c;color:#fff;border-color:#c2410c}
+.orpct{display:flex;align-items:center;gap:10px} .orpct .mpsub{flex:1;margin:0}
+.orlines{margin:0;padding-left:18px;font-size:13.5px} .orlines li{margin:1px 0}
+.ornx{background:#fbf3e3;border:1px solid #efdcb5;border-radius:10px;padding:8px 11px;font-size:13.5px}
+.orprepn{background:#fde7d9;border-radius:8px;padding:6px 10px;font-size:13px}
+.orhist{border-top:1px solid var(--line);padding-top:6px} .orhh{font-size:11.5px;font-weight:800;letter-spacing:.04em;color:var(--muted);text-transform:uppercase;margin-bottom:2px}
+.orhr{display:grid;grid-template-columns:54px 1fr;gap:8px;padding:5px 0;border-top:1px solid #efefea;font-size:13.5px} .orhr:first-of-type{border-top:0} .orhdt{color:var(--muted);font-size:12.5px}
+.orhr div div{white-space:pre-wrap;overflow-wrap:anywhere}
+.orhall{border:0;background:none;color:#3c5f12;font-weight:700;cursor:pointer;padding:4px 0;font-size:13px}
+.ornote textarea{width:100%;min-height:44px;box-sizing:border-box} .ornote .macts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.ornote select{width:auto} .ortask summary{cursor:pointer;color:#3c5f12;font-weight:700;font-size:13px} .ortask .mtask{margin-top:6px}
+.orfold{margin-top:10px;background:#f6f7f2;border:1px dashed var(--line);border-radius:12px;padding:8px 12px} .orfold summary{cursor:pointer;font-weight:700;font-size:13.5px;color:var(--ink-2,#444)}
+.orrow{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 4px;border-top:1px solid var(--line);cursor:pointer} .orrow:first-child{border-top:0}
+.orrow small{display:block} .orrow:hover{background:#fff} .orrb{display:flex;gap:6px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
+.orprep{background:#fbf3e3;border:1px solid #efdcb5} .orprep p{margin:4px 0 0;font-size:13.5px}
+.ornone{font-size:13px;margin:4px 0 0}
+@media print{ .orcb,.orrb,.ornote,.orhall{display:none!important} .orc{break-inside:avoid;box-shadow:none} .orfold{display:none} }`;
+let orCssDone = false;
+const orCss = () => { if(orCssDone) return; orCssDone = true; const s = document.createElement("style"); s.textContent = ORCSS; document.head.appendChild(s); };
 function render(v, key, data, ppl){
   // 2026-11-13 (Pyper + Kim): files on notes and tasks, notes on tasks, edit a task (hub_meeting_task_edit.sql)
   const EX = data.ex || {}, tNotes = id => (EX.task_notes || []).filter(n => n.task === id), tFiles = id => (EX.files || []).filter(f => f.task === id),
@@ -358,7 +409,7 @@ function render(v, key, data, ppl){
     kb = n => n == null ? "" : n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB",
     filesHtml = fl => fl.length ? `<div class="mfiles">${fl.map(f => `<span class="mfile"><a href="#" data-mfile="${esc(f.path)}" title="Open">📎 ${esc(f.name)}</a><small>${esc(f.by || "")}${f.size ? " · " + kb(f.size) : ""}</small>${f.mine || data.admin ? `<button data-mfoff="${f.id}" title="Take this file off">✕</button>` : ""}</span>`).join("")}</div>` : "",
     tExtra = t => { const a = tNotes(t.id).length, b = tFiles(t.id).length; return (a ? " · 💬 " + a : "") + (b ? " · 📎 " + b : ""); };
-  const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = data.items || [], notes = data.notes || [], tasks = data.tasks || [];
+  const m = Object.assign({}, MEET[key], schedWhen(key)), day = ST.day[key], items = (data.items || []).filter(it => !(key === "meet_or" && OR_DROP.has(kindOf(it)))), notes = data.notes || [], tasks = data.tasks || [];
   // every saved note is its own line in the topic's feed (hub_meeting_notes_feed.sql); an older note a person later extended is hidden
   const notesOf = (d, k) => { const a = notes.filter(n => (d == null || n.day === d) && n.item === k && n.text).sort((x, y) => String(x.at).localeCompare(String(y.at)));
     return a.filter((n, i) => !a.slice(i + 1).some(q => (q.by || "") === (n.by || "") && q.day === n.day && q.text !== n.text && q.text.startsWith(n.text.trim()))); };
@@ -386,15 +437,160 @@ function render(v, key, data, ppl){
     if(MX.filt === "tasks" && !open.some(t => t.item_key === it.key)) return false;
     return !q || [it.title, it.grp, (it.lines || []).join(" "), it.ask].join(" ").toLowerCase().includes(q); });
   const fbtn = (k, l, n) => `<button class="mft${MX.filt === k ? " on" : ""}" data-filt="${k}">${l} <span>${n}</span></button>`;
+﻿  /* ---------- Owner Relations layout (Jeff 2026-11-16; see OR_BLOCKS above) ---------- */
+  let orNum = 6;
+  const orPrep = () => ((data.or || {}).prep || {});
+  const dshort2 = d => d ? new Date(String(d).slice(0, 10) + "T12:00").toLocaleDateString(undefined, { month:"short", day:"numeric" }) : "";
+  /* why a topic is up this week; nothing in tags = it folds into "Nothing new since <last meeting>" */
+  function orWhy(it, OR){
+    const k = kindOf(it), p = orPrep()[it.key], st = stItem(it), tags = [], tk = open.filter(t => t.item_key === it.key);
+    const prevDay = OR.prev_day || past[0] || null, since = prevDay || addDays(day, -7), until = addDays(day, 7);
+    if(p && p.mark === "must") tags.push(["must", "★ Must talk"]);
+    if(/^(waiting|scheduled)$/.test(st)) tags.push(["wait", st === "waiting" ? "⏳ Waiting on owner" : "🗓 Scheduled"]);
+    if(tk.some(t => t.due && t.due <= day)) tags.push(["due", "☐ Task due"]);
+    else if(tk.some(t => t.created_at && String(t.created_at).slice(0, 10) > since)) tags.push(["chg", "☐ New task"]);
+    if(notesOf(day, it.key).length) tags.push(["chg", "📝 Note this week"]);
+    if(k === "sale"){ const x = it.sale || {}, z = x.zillow || {};
+      if(z.listed_on && String(z.listed_on).slice(0, 10) > since) tags.push(["sale", "🆕 Just listed"]);
+      if(z.price_change && z.price_change_date && String(z.price_change_date).slice(0, 10) > since) tags.push(["sale", z.price_change < 0 ? "▼ Price cut" : "▲ Price up"]);
+      (x.shows || []).forEach(sh => { const d0 = String(sh.day || "").slice(0, 10); if(d0 > since && d0 <= until) tags.push(["sale", (/open house/i.test(sh.name || "") ? "🏠 Open house " : "👀 Showing ") + dshort2(d0)]); });
+      let oh = z.open_house; if(typeof oh === "string"){ try { oh = JSON.parse(oh); } catch(e){ oh = null; } }
+      const od = oh && String(oh.start_date || "").slice(0, 10); if(od && od > since && od <= until) tags.push(["sale", "🏠 Open house " + dshort2(od)]); }
+    if(OR.prev_day){ if(!(it.key in (OR.prev_sigs || {}))) tags.push(["new", "🆕 New"]);
+      else if(OR.prev_sigs[it.key] !== orSig(it)) tags.push(["chg", "✏️ Changed since " + dshort2(OR.prev_day)]); }
+    else if(k !== "sale" && (!prevDay || !notesOf(prevDay, it.key).length)) tags.push(["new", prevDay ? "Not covered " + dshort2(prevDay) : "🆕 New"]);
+    const seen = new Set(), t2 = tags.filter(([, l]) => !seen.has(l) && seen.add(l));
+    return { tags:t2, must:!!(p && p.mark === "must"), skip:!!(p && p.mark === "skip"), show:t2.length > 0 || OR_ALWAYS.has(k) };
+  }
+  function orNextUp(it, tk, P){
+    tk = tk.slice().sort((a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999")));
+    if(tk.length){ const t = tk[0]; return `<b>${esc(t.text)}</b><span class="muted"> · ${esc(t.who || "No one yet")}${t.due ? " · " : ""}</span>${dueTxt(t)}${tk.length > 1 ? `<span class="muted"> · +${tk.length - 1} more task${tk.length > 2 ? "s" : ""}</span>` : ""}`; }
+    if(P && P.next[0]) return esc(P.next[0]) + `<span class="muted"> (Launch Pad)</span>`;
+    const ln = (it.lines || []).find(l => /^Next: /.test(l || "")); if(ln) return esc(ln.slice(6));
+    const sx = it.sale && it.sale.setup; if(sx && sx.next) return esc(sx.next) + `<span class="muted"> (Launch Pad)</span>`;
+    return "";
+  }
+  function orHist(it){
+    const AUTO = /^(Covered in the meeting\.?|Brought back to the agenda\.?)$/i, all = notesOf(null, it.key);
+    const cov = [...new Set(all.filter(n => n.state === "covered").map(n => n.day))].sort().reverse()[0] || null;
+    let rows = all.filter(n => !AUTO.test(String(n.text || "").trim())).map(n => ({ d:n.day, by:n.by || "Someone", tx:n.text, src:"" }));
+    if(isPsu(it)) (MX.psu[String(it.key).split(":")[1]] || []).forEach(e => rows.push({ d:e.day, by:e.by || e.src || "Launch Pad", tx:e.text, src:"Launch Pad" }));
+    rows = rows.filter((r, i) => rows.findIndex(q => q.d === r.d && String(q.tx).replace(/\s*\([^)]*\)\s*$/, "") === String(r.tx).replace(/\s*\([^)]*\)\s*$/, "")) === i)
+      .sort((a, b) => String(b.d).localeCompare(String(a.d)));
+    const full = !!MX.orh[it.key], vis = full ? rows : rows.slice(0, 3);
+    return `<div class="orhist"><div class="orhh">History · ${rows.length} note${rows.length === 1 ? "" : "s"}${cov ? " · last covered " + esc(dshort2(cov)) : ""}</div>
+      ${vis.map(r => `<div class="orhr"><span class="orhdt">${esc(dshort2(r.d))}</span><div><b>${esc(r.by)}</b>${r.src ? `<span class="muted"> · ${esc(r.src)}</span>` : ""}<div>${esc(short(r.tx, 420))}</div></div></div>`).join("") || `<p class="muted ornone">No notes yet.</p>`}
+      ${rows.length > 3 ? `<button class="orhall" data-orh="${esc(it.key)}">${full ? "Show less" : "Show all " + rows.length}</button>` : ""}</div>`;
+  }
+  function orCard(it, W){
+    const k = kindOf(it), st = stItem(it), tk = open.filter(t => t.item_key === it.key), P = isPsu(it) ? psuInfo(it) : null, S = k === "sale" ? saleOf(it) : null;
+    const own = P ? P.owner : ownerOf(it), title = P ? P.home : S ? S.home : it.title, pp = orPrep()[it.key];
+    const ic = P ? psuIcon(it) : S ? "🏷️" : { behind:"📉", big:"🛠", ofb:"📞", ownerstays:"🧳", new:"🆕" }[k] || "•";
+    const tags = [...W.tags];
+    const nh = P && items.find(x => kindOf(x) === "new" && homeOf(x) === P.home);
+    if(nh){ const m0 = ((nh.lines || [])[0] || "").match(/\((\d+) days\)/); tags.push(["new", "🆕 New home" + (m0 ? " · " + m0[1] + " days in Track" : "")]); }
+    let facts = "";
+    if(P) facts = `<div class="orpct"><div class="mpsub"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div><b>${P.pct}%</b></div><small class="muted">${esc([P.kind, P.done != null ? P.done + " of " + P.total + " steps" : ""].filter(Boolean).join(" · "))}</small>`;
+    else if(S) facts = `<div><b class="mprice">${esc(S.price || "Not on Zillow")}</b> <span class="muted">${esc(S.listed)}</span></div>${S.pills.length ? `<div class="mhl">${S.pills.join("")}</div>` : ""}<small class="muted">${esc([S.mls ? "MLS # " + S.mls : "", S.agent || S.broker || "", S.setup].filter(Boolean).join(" · "))}</small>`;
+    else { const L = (it.lines || []).filter(l => l && !/^Owner: /.test(l) && !/^Next: /.test(l));
+      facts = L.length ? `<ul class="orlines">${L.slice(0, 4).map(l => `<li>${esc(short(l, 170))}</li>`).join("")}${L.length > 4 ? `<li class="muted">+${L.length - 4} more (Open)</li>` : ""}</ul>` : ""; }
+    const nx = orNextUp(it, tk, P), dv = ST.drafts[key + "|" + it.key];
+    return `<div class="orc${W.must ? " must" : ""}">
+      <div class="orch"><div class="orct"><i class="oric">${ic}</i><div style="min-width:0"><b class="ortt">${esc(title)}</b>${own ? `<div class="orown">👤 ${esc(own)}</div>` : ""}
+        <div class="ortags">${st ? pill(st) : ""}${tags.map(([c, l]) => `<span class="ortag ${c}">${esc(l)}</span>`).join("")}</div></div></div>
+        <div class="orcb"><button class="btn small orpb${W.must ? " on" : ""}" data-prep="must" data-pk="${esc(it.key)}" title="Bring it up first in its section">★ Must talk</button>
+          <button class="btn small" data-prep="skip" data-pk="${esc(it.key)}" title="Fold it away for this week">⏭ Skip</button>
+          ${st !== "covered" ? `<button class="btn small" data-quick="${esc(it.key)}" title="Mark covered (adds a note)">✓ Covered</button>` : ""}
+          <button class="btn small primary" data-open="${esc(it.key)}" title="Everything: owner notes, tasks, Breezeway, message the team">⤢ Open</button></div></div>
+      ${facts}
+      ${pp && pp.note ? `<div class="orprepn">📌 ${esc(pp.note)}<span class="muted"> · ${esc(pp.by || "")}</span></div>` : ""}
+      <div class="ornx">👉 <b>Next up:</b> ${nx || `<span class="muted">Nothing written yet. Add a next step below.</span>`}</div>
+      ${orHist(it)}
+      <div class="ornote"><textarea data-note="${esc(it.key)}" placeholder="What did we decide?">${esc(dv != null ? dv : "")}</textarea>
+        <div class="macts"><select data-nstate="${esc(it.key)}" aria-label="Where it stands">${[["covered", "Covered"], ["waiting", "Waiting on owner"], ["scheduled", "Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
+          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button>
+          <details class="ortask"><summary>+ Next step (task)</summary>${taskForm(it.key, it.title, MX.sug[it.key])}</details></div></div></div>`;
+  }
+  function orRow(it, W, mode){
+    const P = isPsu(it) ? psuInfo(it) : null, S = kindOf(it) === "sale" ? saleOf(it) : null, pp = orPrep()[it.key];
+    const t = P ? P.home + (P.owner ? " · " + P.owner : "") : it.title + (ownerOf(it) ? " · " + ownerOf(it) : "");
+    const sub = P ? P.pct + "% · Next: " + (P.next[0] || "-") : S ? [S.price || "Not on Zillow", S.listed].filter(Boolean).join(" · ") : (it.lines || []).filter(l => l && !/^Owner: /.test(l))[0] || "";
+    const tg = mode === "prep" ? (W.tags.length ? W.tags.map(([c, l]) => `<span class="ortag ${c}">${esc(l)}</span>`).join(" ") : `<span class="muted" style="font-size:12px">Nothing new</span>`) : "";
+    const btns = mode === "skip" ? `<button class="btn small" data-prep="none" data-pk="${esc(it.key)}">Undo skip</button>`
+      : `<button class="btn small orpb${W.must ? " on" : ""}" data-prep="must" data-pk="${esc(it.key)}">★ Must talk</button>` +
+        (mode === "prep" ? `<button class="btn small orpb${W.skip ? " on" : ""}" data-prep="skip" data-pk="${esc(it.key)}">⏭ Skip</button><button class="btn small" data-prepnote="${esc(it.key)}" title="A reminder that shows on the card">📌${pp && pp.note ? " ✓" : ""}</button>` : "");
+    return `<div class="orrow" data-open="${esc(it.key)}" tabindex="0" role="button"><div style="min-width:0"><b>${esc(t)}</b>${tg ? " " + tg : ""}<small class="muted">${esc(short(sub, 150))}${pp && pp.note ? " · 📌 " + esc(short(pp.note, 80)) : ""}</small></div><span class="orrb">${btns}</span></div>`;
+  }
+  function orBody(){
+    orCss();
+    const OR = data.or || {};
+    if(OR._day && OR._day !== day && !MX.orLoading){ MX.orLoading = 1; orState().then(() => { MX.orLoading = 0; render(v, key, data, ppl); }); }
+    const prevDay = OR.prev_day || past[0] || null, noFold = !!MX.q.trim() || MX.filt !== "all";
+    const psuHomes = new Set(shown.filter(isPsu).map(it => psuInfo(it).home));
+    const blocks = OR_BLOCKS.map(b => Object.assign({ items:[] }, b)).concat([{ t:"Other topics", min:0, kinds:null, items:[] }]);
+    shown.forEach(it => { const k = kindOf(it);
+      if(k === "new" && psuHomes.has(homeOf(it))) return;   // already a Property Set Up card: shows there as a "New home" tag
+      (blocks.find(b => b.kinds && b.kinds.includes(k)) || blocks[blocks.length - 1]).items.push(it); });
+    const used = blocks.filter(b => b.items.length || (b.kinds && !noFold));
+    let nTalk = 0, nFold = 0, nMust = 0, nSkip = 0, out = "", n = 0;
+    const head = b => `<h3 class="mg orhd"><span class="ornum">${++n}</span>${esc(b.t)}<span class="muted orhm">${b.min ? b.min + " min · " : ""}${b.items.length} topic${b.items.length === 1 ? "" : "s"}</span>${b.kinds && b.kinds.includes("psu") ? `<a class="muted" href="#/property_setup" style="font-size:12.5px;font-weight:400">Open Launch Pad ↗</a>` : ""}</h3>`;
+    if(MX.prep){
+      out += `<div class="card orprep"><b>📋 Monday prep for ${esc(fmt(day))}</b><p>Go down the list. <b>★ Must talk</b> puts a topic first in its section. <b>⏭ Skip</b> folds it away for this week. <b>📌</b> adds a reminder that shows on the card. Tap a row to open it. When you're done, tap <b>✓ Done prepping</b> at the top.</p></div>`;
+      used.forEach(b => { out += head(b); out += b.items.length ? `<div class="card" style="padding:4px 14px">${b.items.map(it => orRow(it, orWhy(it, OR), "prep")).join("")}</div>` : `<p class="muted ornone">Nothing this week.</p>`; });
+      orNum = n + 1; return out;
+    }
+    let body = "";
+    used.forEach((b, bi) => {
+      const W = b.items.map(it => ({ it, W:orWhy(it, OR) })), id = "b" + bi;
+      const skip = noFold ? [] : W.filter(x => x.W.skip && !x.W.must), rest = W.filter(x => !skip.includes(x));
+      const talk = noFold ? rest : rest.filter(x => x.W.show), fold = noFold ? [] : rest.filter(x => !x.W.show);
+      talk.sort((a, c) => (c.W.must ? 1 : 0) - (a.W.must ? 1 : 0));
+      nTalk += talk.length; nFold += fold.length; nMust += W.filter(x => x.W.must).length; nSkip += skip.length;
+      body += head(b);
+      body += talk.length ? `<div class="orgrid">${talk.map(x => orCard(x.it, x.W)).join("")}</div>` : `<p class="muted ornone">${b.items.length ? "Nothing new here this week." : "Nothing this week."}</p>`;
+      if(fold.length) body += `<details class="orfold" data-orfold="${id}"${MX.orf[id] ? " open" : ""}><summary>Nothing new since ${esc(prevDay ? fmt(prevDay) : "last week")} (${fold.length})</summary><div>${fold.map(x => orRow(x.it, x.W, "fold")).join("")}</div></details>`;
+      if(skip.length) body += `<details class="orfold" data-orfold="${id}s"${MX.orf[id + "s"] ? " open" : ""}><summary>⏭ Skipped this week (${skip.length})</summary><div>${skip.map(x => orRow(x.it, x.W, "skip")).join("")}</div></details>`;
+    });
+    const plan = used.reduce((s, b) => s + (b.min || 0), 0) + 10;
+    out += `<div class="orsum">${prevDay ? "Last meeting " + esc(fmt(prevDay)) : "First meeting with this layout"} · <b>${nTalk}</b> to talk about${nFold ? ` · ${nFold} with nothing new (folded)` : ""}${nMust ? ` · ★ ${nMust} must talk` : ""}${nSkip ? ` · ⏭ ${nSkip} skipped` : ""} · planned ${plan} min</div>`;
+    if(!OR.prev_day && prevDay && !noFold) out += `<p class="muted orfirst">This week: topics covered on ${esc(fmt(prevDay))} with no new note or task are folded. From next week the hub also checks each topic's facts against last Tuesday's.</p>`;
+    orNum = n + 1;
+    return out + body;
+  }
+  async function orState(){ try { const s = await sb.rpc("meeting_or_state", { p_meet:key, p_day:day }); if(!s.error) data.or = Object.assign(s.data || {}, { _day:day }); } catch(e){} }
+  function orSnap(){
+    if(day < T || !items.length || !data.or || !("prep" in data.or)) return;   // only for the coming meeting, and only once the prep table exists
+    const sigs = {}; items.forEach(it => sigs[it.key] = orSig(it));
+    const all = JSON.stringify(sigs), mk = key + "|" + day; if(MX.orsnap[mk] === all) return; MX.orsnap[mk] = all;
+    sb.rpc("meeting_snap_save", { p_meet:key, p_day:day, p_sigs:sigs }).then(() => {}, () => {});
+  }
+  function orWire(){
+    v.querySelectorAll("[data-prep]").forEach(b => b.onclick = async e => { e.stopPropagation(); e.preventDefault();
+      const k = b.dataset.pk, cur = orPrep()[k], want = b.dataset.prep, mark = cur && cur.mark === want ? "none" : want;
+      b.disabled = true;
+      const r = await sb.rpc("meeting_prep_set", { p_meet:key, p_day:day, p_item:k, p_mark:mark, p_note:cur && mark !== "none" ? cur.note : null });
+      if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      await orState(); render(v, key, data, ppl); });
+    v.querySelectorAll("[data-prepnote]").forEach(b => b.onclick = async e => { e.stopPropagation(); e.preventDefault();
+      const k = b.dataset.prepnote, cur = orPrep()[k], t = prompt("Reminder for the meeting (shows on the card):", (cur && cur.note) || ""); if(t == null) return;
+      const r = await sb.rpc("meeting_prep_set", { p_meet:key, p_day:day, p_item:k, p_mark:cur && cur.mark === "skip" ? "skip" : "must", p_note:t.trim() || null });
+      if(r.error) return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message));
+      await orState(); render(v, key, data, ppl); });
+    v.querySelectorAll("[data-orh]").forEach(b => b.onclick = e => { e.stopPropagation(); MX.orh[b.dataset.orh] = !MX.orh[b.dataset.orh]; render(v, key, data, ppl); });
+    v.querySelectorAll("details[data-orfold]").forEach(d => d.ontoggle = () => { MX.orf[d.dataset.orfold] = d.open; });
+    const pb = $("#mprep"); if(pb) pb.onclick = () => { MX.prep = !MX.prep; render(v, key, data, ppl); window.scrollTo(0, 0); };
+    orSnap();
+  }
   const tile = (n, l, ic, cls) => `<div class="mtile${cls ? " " + cls : ""}"><div><b>${n}</b><span>${l}</span></div><i>${ic}</i></div>`;
   let h = `<div class="page mtg"><div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
       <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}</p></div>
-    <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻</button><button class="btn small" id="mup">⬆ Upload recording / notes</button><button class="btn small" id="mprint">Print</button><button class="btn small primary" id="mwrap">✅ Wrap up</button><button class="btn small primary mplus" id="mplus" title="Add a topic or bring back a covered one" aria-label="Add or bring back a topic">+</button></div></div>
+    <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻</button><button class="btn small" id="mup">⬆ Upload recording / notes</button>${key === "meet_or" ? `<button class="btn small${MX.prep ? " primary" : ""}" id="mprep">${MX.prep ? "✓ Done prepping" : "📋 Monday prep"}</button>` : ""}<button class="btn small" id="mprint">Print</button><button class="btn small primary" id="mwrap">✅ Wrap up</button><button class="btn small primary mplus" id="mplus" title="Add a topic or bring back a covered one" aria-label="Add or bring back a topic">+</button></div></div>
     <div class="mtiles">${tile(items.length, "Topics", "📋")}${tile(covered + " / " + items.length, "Covered", "✓", "g")}${tile(waiting, "Waiting / scheduled", "⏳")}${tile(open.length, overdue.length ? `Open tasks · <em>${overdue.length} overdue</em>` : "Open tasks", "☐", overdue.length ? "r" : "")}</div>
     <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div>
     <div class="mbar"><div class="mfts">${fbtn("all", "All", items.length)}${fbtn("todo", "To cover", items.length - covered - waiting)}${fbtn("wait", "Waiting", waiting)}${fbtn("tasks", "Has tasks", items.filter(it => open.some(t => t.item_key === it.key)).length)}</div>
       <input id="mq" placeholder="🔍 Search topics" value="${esc(MX.q)}"></div>`;
   if(!items.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing came up from the data this week. Use "Anything else" below.</p></div>`;
+  if(key === "meet_or") h += orBody(); else {
   const grps = {}; shown.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
   Object.keys(grps).forEach(g => {
     if(grps[g].every(isPsu)){
@@ -420,14 +616,14 @@ function render(v, key, data, ppl){
         <div class="mpsum"><div class="mpsut"><span><b>${esc(it.title)}</b>${ownerOf(it) ? `<span class="muted"> · 👤 ${esc(ownerOf(it))}</span>` : ""}</span>
           <span class="mrc">${nt ? `<span class="mpill">📝 ${nt}</span>` : ""}${tk.length ? `<span class="mpill${od ? " bad" : ""}">☐ ${tk.length}</span>` : ""}${st !== "covered" ? `<button class="btn small" data-quick="${esc(it.key)}" title="Mark covered (adds a note)">✓</button>` : ""}</span></div>
           <small class="muted">${esc(short(desc, 150))}</small></div></div>`; });
-    h += `</div>`; });
+    h += `</div>`; }); }
   if(items.length && !shown.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing matches.</p></div>`;
-  h += `<h3 class="mg">All open tasks <span class="muted">${open.length}</span></h3><div class="card" style="padding:8px 14px">
+  h += `<h3 class="mg${key === "meet_or" ? " orhd" : ""}">${key === "meet_or" ? `<span class="ornum">${orNum}</span>Last week's tasks <span class="muted orhm">5 min ·</span>` : "All open tasks"} <span class="muted">${open.length}</span></h3><div class="card" style="padding:8px 14px">
       ${open.length ? open.map(taskRow).join("") : `<p class="muted" style="margin:6px 0">No open tasks.</p>`}
       ${done.length ? `<details><summary class="muted" style="cursor:pointer;padding:6px 0">Done in the last 3 weeks (${done.length})</summary>${done.map(taskRow).join("")}</details>` : ""}
       ${taskForm("", "")}</div>`;
   const gdv = ST.drafts[key + "|_notes"];
-  h += `<h3 class="mg">Anything else</h3><div class="card">${feedHtml(notesOf(day, "_notes"), "_notes")}<textarea data-note="_notes" style="width:100%;min-height:90px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
+  h += `<h3 class="mg${key === "meet_or" ? " orhd" : ""}">${key === "meet_or" ? `<span class="ornum">${orNum + 1}</span>Anything else + wrap up <span class="muted orhm">5 min</span>` : "Anything else"}</h3><div class="card">${feedHtml(notesOf(day, "_notes"), "_notes")}<textarea data-note="_notes" style="width:100%;min-height:90px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">Add note</button><button class="btn small" data-nattach="_notes" title="Attach a photo, PDF or document">📎 Attach</button></div>
       ${past.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Past meetings: ${past.slice(0, 12).map(d => `<a href="#" data-mday="${esc(d)}">${esc(fmt(d))}</a>`).join(" · ")}</p>` : ""}</div>
     <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each topic shows where it came from.</p></div>`;
@@ -759,6 +955,7 @@ function render(v, key, data, ppl){
       redraw(); });
   }
   wire(v);
+  if(key === "meet_or") orWire();
   if(MX.open) panel();
   if(MX.tdlg){ const t0 = tasks.find(x => x.id === MX.tdlg); if(t0) taskDlg(t0); else MX.tdlg = null; }
   v.querySelectorAll("[data-open]").forEach(c => { const go = e => { if(e.target.closest("[data-quick]")) return; e.stopPropagation(); MX.open = c.dataset.open; MX.tab = "ov"; MX.tf = "all"; MX.bwopen = false; MX.chg = null; panel(); };
@@ -815,7 +1012,7 @@ function render(v, key, data, ppl){
   };
   v.querySelectorAll("[data-mday]").forEach(a => a.onclick = e => { e.preventDefault(); ST.day[key] = a.dataset.mday; ST.drafts = {}; render(v, key, data, ppl); window.scrollTo(0, 0); });
   if(!MX.tp[key]) taskPeople(key).then(() => render(v, key, data, ppl));
-  if(items.some(isPsu) && Date.now() - MX.psuAt > 120000) psuLoad().then(() => { if(MX.open && document.getElementById("mpov")) panel(); });
+  if(items.some(isPsu) && Date.now() - MX.psuAt > 120000) psuLoad().then(() => { if(key === "meet_or" && MX.psuAt && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("textarea,input,select"))) render(v, key, data, ppl); else if(MX.open && document.getElementById("mpov")) panel(); });
   if(!MX.bw[key]) bwLoad(key).then(() => { if(MX.open && document.getElementById("mpov")) panel(); });
 }
 /* Home + bell (2026-11-10): tasks people were given in a meeting (my_meeting_tasks, hub_meeting_actions.sql). Tick done right here.
