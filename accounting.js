@@ -7,7 +7,7 @@
 (function(){
 const TABS = [["payroll", "Payroll hours"], ["maint", "Maintenance spending"], ["bookings", "Bookings & payouts"], ["owner", "Owner charges"]];
 const PAY_ANCHOR = "2026-11-02";   // first pay period (Mon); every other Monday after (Brandon 2026-10-29)
-const A = { tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"" };
+const A = { tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const H = s => esc(s == null ? "" : String(s));
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -117,10 +117,12 @@ function payroll(x){
     if(p.pending) chk.push(`<b>${H(p.name)}</b>: ${p.pending} missed punch${p.pending > 1 ? "es" : ""} waiting for a manager's OK (not counted below).`);
     if(p.open) chk.push(`<b>${H(p.name)}</b>: ${p.open} clock-in${p.open > 1 ? "s" : ""} with no clock-out yet.`);
     (p.weeks || []).forEach(w => { if(w.ot_h > 0) chk.push(`<b>${H(p.name)}</b>: <span class="bad">${hh(w.ot_h)} h overtime</span> in the week of ${fday(w.start)}${w.partial ? " (week runs past these dates)" : ""}.`); });
-    if(p.hs_h != null && Math.abs((p.hub_h || 0) - (p.hs_h || 0)) >= 1 && !p.no_clock)
+    if(p.hs_h != null && (p.hs_h || 0) - (p.hub_h || 0) >= 1 && !p.no_clock)   // Hubstaff stopped Nov 11-13, 2026: only flag when it has MORE than the hub
       chk.push(`<b>${H(p.name)}</b>: hub clock ${hh(p.hub_h)} h vs Hubstaff ${hh(p.hs_h)} h. Ask which is right before paying.`);
     if(p.edited) chk.push(`<b>${H(p.name)}</b>: ${p.edited} shift${p.edited > 1 ? "s" : ""} edited by hand (reason shown in the detail).`);
+    (p.shifts || []).filter(s => s.hours > 12).forEach(s => chk.push(`<b>${H(p.name)}</b>: <span class="bad">${hh(s.hours)} h shift</span> on ${fday(s.day)} (${ftime(s.in)} – ${ftime(s.out)}). Likely a missed clock-out; check with their manager before paying.`));
   });
+  const pto = p => (p.pto || []).map(b => `${hh(b.hours)} h`).join(" + ");
   CSV.pay_sum = () => ["payroll_summary", [["Name", "Teams", "Pay type", "Hub clock hours", "Hubstaff hours", "Overtime hours (over 40/week)", "Paid time off hours", "Unpaid time off hours", "Missed punches waiting"],
     ...P.map(p => [p.name, (p.teams || []).join("; "), p.salaried ? "Salaried" : "Hourly", hh(p.hub_h), p.hs_h == null ? "" : hh(p.hs_h),
       p.salaried ? "" : hh(sum(p.weeks || [], w => w.ot_h)), hh(p.paid_off_h), hh(p.unpaid_off_h), p.pending || 0])]];
@@ -128,27 +130,30 @@ function payroll(x){
     ...P.flatMap(p => (p.days || []).filter(d => d.hub_h || d.hs_h).map(d => [p.name, d.day, hh(d.hub_h), d.hs_h == null ? "" : hh(d.hs_h)]))]];
   CSV.pay_shifts = () => ["payroll_punches", [["Name", "Date", "Clock in", "Clock out", "Hours", "Edited", "Edit reason", "Added by hand"],
     ...P.flatMap(p => (p.shifts || []).map(s => [p.name, s.day, ftime(s.in), s.out ? ftime(s.out) : "still in", s.hours == null ? "" : hh(s.hours), s.edited ? "yes" : "", s.note || "", s.added ? "yes" : ""]))]];
+  CSV.pay_pto = () => ["payroll_pto_balances", [["Name", "Policy", "Hours left", "As of"],
+    ...P.flatMap(p => (p.pto || []).map(b => [p.name, b.policy || "", hh(b.hours), b.as_of ? new Date(b.as_of).toLocaleDateString() : ""]))]];
   CSV.pay_off = () => ["payroll_time_off", [["Name", "From", "To", "Hours", "Kind", "Policy", "Paid", "Approved by"],
     ...P.flatMap(p => (p.timeoff || []).map(t => [p.name, t.from, t.to, hh(t.hours), t.kind, t.policy || "", t.paid ? "yes" : "no", t.approved_by || ""]))]];
   const rows = P.map((p, n) => {
     const otp = p.salaried ? 0 : sum(p.weeks || [], w => w.ot_h), op = A.open["p" + n];
     return `<tr class="click" data-open="p${n}"><td><b>${H(p.name)}</b> ${p.salaried ? `<span class="pill b">Salaried</span>` : ""}${p.no_clock ? `<span class="pill o">Doesn't clock in</span>` : ""}<br><span class="note">${H((p.teams || []).join(", "))}</span></td>
       <td class="n"><b>${hh(p.hub_h)}</b></td><td class="n">${p.hs_h == null ? "–" : hh(p.hs_h)}</td>
-      <td class="n">${otp ? `<span class="bad">${hh(otp)}</span>` : "–"}</td><td class="n">${p.paid_off_h ? hh(p.paid_off_h) : "–"}</td><td class="n">${p.unpaid_off_h ? hh(p.unpaid_off_h) : "–"}</td>
-      <td class="noprint">${op ? "▴" : "▾"}</td></tr>` + (op ? `<tr class="sub"><td colspan="7">${payDetail(p)}</td></tr>` : "");
+      <td class="n">${otp ? `<span class="bad">${hh(otp)}</span>` : "–"}</td><td class="n">${p.paid_off_h ? hh(p.paid_off_h) : "–"}</td><td class="n">${p.unpaid_off_h ? hh(p.unpaid_off_h) : "–"}</td><td class="n">${pto(p) || "–"}</td>
+      <td class="noprint">${op ? "▴" : "▾"}</td></tr>` + (op ? `<tr class="sub"><td colspan="8">${payDetail(p)}</td></tr>` : "");
   }).join("");
   return `<div class="tiles">${tile(hh(sum(P, p => p.hub_h)), "Hub clock hours", `${P.length} people`)}
       ${tile(hh(sum(P, p => p.hs_h)), "Hubstaff hours", "while both are used")}
       ${tile(hh(ot), "Overtime hours", `over 40 in a ${H(x.week_start)}–start workweek`)}
       ${tile(hh(sum(P, p => p.paid_off_h)), "Paid time off hours", `${hh(sum(P, p => p.unpaid_off_h))} h unpaid`)}</div>
     ${checks(chk)}
-    <div class="card"><h3 style="margin-top:0">Hours by person <span class="noprint">${csvBtn("pay_sum")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")}</span></h3>
-      <div class="tw"><table><thead><tr><th>Person</th><th class="n">Hub clock</th><th class="n">Hubstaff</th><th class="n">Overtime</th><th class="n">Paid off</th><th class="n">Unpaid off</th><th class="noprint"></th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="7" class="note">No hours in these dates.</td></tr>`}
-      ${P.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(P, p => p.hub_h))}</td><td class="n">${hh(sum(P, p => p.hs_h))}</td><td class="n">${hh(ot)}</td><td class="n">${hh(sum(P, p => p.paid_off_h))}</td><td class="n">${hh(sum(P, p => p.unpaid_off_h))}</td><td class="noprint"></td></tr>` : ""}</tbody></table></div>
+    <div class="card"><h3 style="margin-top:0">Hours by person <span class="noprint">${csvBtn("pay_sum")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")} ${csvBtn("pay_pto", "PTO balances CSV")}</span></h3>
+      ${x.scope === "team" ? `<p class="note" style="margin:0 2px 8px">Showing the people you look after.</p>` : ""}
+      <div class="tw"><table><thead><tr><th>Person</th><th class="n">Hub clock</th><th class="n">Hubstaff</th><th class="n">Overtime</th><th class="n">Paid off</th><th class="n">Unpaid off</th><th class="n">PTO left</th><th class="noprint"></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="8" class="note">No hours in these dates.</td></tr>`}
+      ${P.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(P, p => p.hub_h))}</td><td class="n">${hh(sum(P, p => p.hs_h))}</td><td class="n">${hh(ot)}</td><td class="n">${hh(sum(P, p => p.paid_off_h))}</td><td class="n">${hh(sum(P, p => p.unpaid_off_h))}</td><td></td><td class="noprint"></td></tr>` : ""}</tbody></table></div>
       <p class="note noprint" style="margin:8px 2px 0">Tap a person to see each day, every clock-in and clock-out, and any time off.</p>
       ${idle ? `<p class="note" style="margin:6px 2px 0">${idle} more ${idle > 1 ? "people" : "person"} on the hub clock had no hours in these dates.</p>` : ""}
-      <p class="src">From: hub clock-ins (Staffing ▸ Clock In / Clock Out; only punches that count, missed punches waiting for a manager are left out), Hubstaff tracked time per day, approved time-off requests. Hours only: the hub keeps no pay rates. Overtime = hours over 40 in a workweek starting ${H(x.week_start)}, hourly people only, using the larger of hub clock and Hubstaff for that week (same as the hub's overtime warnings).</p></div>`;
+      <p class="src">From: hub clock-ins (Staffing ▸ Clock In / Clock Out; only punches that count, missed punches waiting for a manager are left out), Hubstaff tracked time per day, approved time-off requests, PTO balances as the hub works them out (Staffing ▸ Request Time Off). Hours only: the hub keeps no pay rates. Overtime = hours over 40 in a workweek starting ${H(x.week_start)}, hourly people only, using the larger of hub clock and Hubstaff for that week (same as the hub's overtime warnings).</p></div>`;
 }
 function payDetail(p){
   const days = (p.days || []).filter(d => d.hub_h || d.hs_h);
@@ -273,8 +278,9 @@ async function draw(v){
       <span class="sp"></span><label class="note">From <input type="date" id="acf" value="${A.from}"></label><label class="note">To <input type="date" id="act" value="${A.to}"></label>
       <button type="button" class="btn2" id="acprint">🖨 Print</button></div>
       <div class="range">${fdate(A.from)} – ${fdate(A.to)}</div></div>`;
-  v.innerHTML = `<div class="page acct"><div class="head"><h2>Accounting</h2><p>Weekly reports for our accountant. Pick the dates, read the summary, open the detail, download a CSV.</p></div>
-    <div class="tabs noprint">${TABS.map(([k, l]) => `<button type="button" class="${A.tab === k ? "on" : ""}" data-tab="${k}">${l}</button>`).join("")}</div>
+  const pay = A.mode === "pay";
+  v.innerHTML = `<div class="page acct"><div class="head">${pay ? `<h2>Payroll</h2><p>Hours, overtime, time off and PTO for each pay period. Pick the dates, check the list, download the CSVs.</p>` : `<h2>Accounting</h2><p>Weekly reports for our accountant. Pick the dates, read the summary, open the detail, download a CSV.</p>`}</div>
+    <div class="tabs noprint" ${pay ? `style="display:none"` : ""}>${TABS.map(([k, l]) => `<button type="button" class="${A.tab === k ? "on" : ""}" data-tab="${k}">${l}</button>`).join("")}</div>
     ${dates}<div id="acbody"><div class="card note">Loading…</div></div></div>`;
   v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { location.hash = "#/accounting/" + b.dataset.tab; });
   v.querySelectorAll("[data-pre]").forEach(b => b.onclick = () => { setPreset(b.dataset.pre); A.open = {}; draw(v); });
@@ -292,7 +298,13 @@ async function draw(v){
   body.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { A.sub = b.dataset.sub; A.tf = ""; draw(v); });
   body.querySelectorAll("[data-tf]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.tf; A.tf = (A.tf === k ? "" : k); if(A.tf && BSUB[A.tf]) A.sub = BSUB[A.tf]; const y = window.scrollY; draw(v).then(() => window.scrollTo(0, y)); });
 }
+window.payrollView = function(v){   // Staffing ▸ Payroll: accountant, admins, managers (desk payroll; acct_payroll limits managers to their people)
+  A.mode = "pay"; A.tab = "payroll";
+  if(!A.payInit){ A.payInit = true; if(A.preset !== "payperiod" && A.preset !== "lastpay") setPreset("lastpay"); }
+  return draw(v);
+};
 window.accountingView = function(v, arg){
+  A.mode = "acct";
   const t = String(arg || "").split("/")[0];
   const was = A.tab;
   if(TABS.some(([k]) => k === t)) A.tab = t; else if(!arg) A.tab = A.tab || "payroll";
