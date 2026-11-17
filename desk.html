@@ -118,6 +118,7 @@ button.row:hover{background:var(--surface-2)}
 .ph{padding:10px 12px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:8px}
 .ph h3{font-size:13px;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
 .ph .ct{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted)}
+button.ctb{appearance:none;font:inherit;color:inherit;background:none;border:1px solid var(--line);border-radius:999px;padding:1px 8px;cursor:pointer}button.ctb:hover{border-color:var(--muted)}button.ctb.on{border-color:currentColor;color:var(--ink);box-shadow:0 0 0 2px var(--bg,#fff) inset}.pfnote{font-size:12.5px;padding:6px 14px 0;margin:0}
 .empty{padding:22px 16px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.55}
 
 .tag{font-family:Archivo;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--sunk);color:var(--ink-2);flex:none;white-space:nowrap}
@@ -833,14 +834,17 @@ function vToday(){
   if(closed.length) h+='<section class="panel"><div class="ph"><h3>Closed from Breezeway (last 3 days)</h3><span class="ct">'+closed.length+'</span></div><div class="pad note" style="padding-bottom:0">Done in Breezeway, so the desk replied in the Slack thread and closed them. Wrong match? Open it and set the status back.</div>'+
     closed.slice(0,20).map(function(j){ var q=S.slackq[sid("close_"+j.id)]||{}; return '<div class="row" style="display:flex;gap:8px;align-items:center;padding:7px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap">'+propLink(j.prop)+'<a href="#" data-job="'+esc(j.id)+'" style="flex:1">'+esc(j.title)+'</a><span class="pill '+(q.status==="sent"?'done':'waiting')+'">'+(q.status==="sent"?'Replied in Slack':'Slack reply going out')+'</span></div>'; }).join("")+'</section>';
   h+='</div><div style="display:flex;flex-direction:column;gap:14px">';
-  h+='<section class="panel"><div class="ph"><h3>Routines due</h3><span class="ct">'+due.filter(function(r){return !r.doneNow;}).length+' left</span></div>'+
-    (due.length?due.map(routineRow).join(""):'<div class="empty">No routines due.</div>')+'</section>';
+  var dLeft=due.filter(function(r){return !r.doneNow;}), dShow=pfOn("rdue")?dLeft:due;
+  h+='<section class="panel"><div class="ph"><h3>Routines due</h3><span class="ct">'+pfBtn("rdue","left",dLeft.length+' left')+'</span></div>'+pfNote("rdue",dLeft.length,"not done yet",due.length)+
+    (dShow.length?dShow.map(routineRow).join(""):'<div class="empty">'+(due.length?'All done.':'No routines due.')+'</div>')+'</section>';
   // owners in homes now
   var os=(S.feeds["owner-stays"]||{}).units||{}, inNow=[], soon=[];
   Object.keys(os).forEach(function(k){ var s=ownerStay(k); if(!s) return;
     k=canon(k); if(s.in<=t) inNow.push([k,s]); else if(daysBetween(t,s.in)<=10) soon.push([k,s]); });
-  var abc=function(a,b){ return a[0].localeCompare(b[0],undefined,{numeric:true}); }; inNow.sort(abc); soon.sort(abc);
-  h+='<section class="panel"><div class="ph"><h3>Owner in the home</h3><span class="ct">'+inNow.length+' now · '+soon.length+' arriving</span></div>';
+  var abc=function(a,b){ return a[0].localeCompare(b[0],undefined,{numeric:true}); }; inNow.sort(abc); soon.sort(abc); var nNow=inNow.length, nSoon=soon.length;
+  var oF=pfOn("own"); if(oF==="now") soon=[]; else if(oF==="soon") inNow=[];
+  h+='<section class="panel"><div class="ph"><h3>Owner in the home</h3><span class="ct">'+pfBtn("own","now",(oF==="soon"?nNow:inNow.length)+' now')+' · '+pfBtn("own","soon",(oF==="now"?nSoon:soon.length)+' arriving')+'</span></div>'+
+    pfNote("own",oF==="now"?inNow.length:soon.length,oF==="now"?"in the home now":"arriving in 10 days",nNow+nSoon);
   if(!S.feeds["owner-stays"]) h+='<div class="empty">Owner stays come from Track each morning. Not loaded yet.</div>';
   else {
     h+='<div class="pad" style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">'+
@@ -852,6 +856,10 @@ function vToday(){
   h+='</div></div>';
   return h;
 }
+/* count pills that filter the list under them (Brandon 2026-11-17): tap = only those, tap again = all */
+function pfOn(k){ return (S.ui.pf||{})[k]||""; }
+function pfBtn(k,v,txt){ var on=pfOn(k)===v; return '<button type="button" class="ctb'+(on?' on':'')+'" data-pfk="'+k+'" data-pf="'+v+'" title="'+(on?'Show everything':'Show only these (tap again for all)')+'">'+txt+'</button>'; }
+function pfNote(k,n,what,all){ return pfOn(k)?'<p class="muted pfnote">Showing '+n+' '+esc(what)+' · <a href="#" data-pfk="'+k+'" data-pf="">show all'+(all!=null?' '+all:'')+'</a></p>':''; }
 function stat(tab,n,label,ui,cls){ return '<button class="stat '+(cls||"")+'" data-go="'+tab+'" data-ui=\''+esc(JSON.stringify(ui||{}))+'\'><b>'+n+'</b><span>'+esc(label)+'</span></button>'; }
 function listPanel(title,rows,emptyMsg){
   return '<section class="panel"><div class="ph"><h3>'+esc(title)+'</h3><span class="ct">'+rows.length+'</span></div><div class="rows">'+
@@ -1102,15 +1110,16 @@ function vRoutines(){
     'Trash is on its own Trash page and other weekly routines show on Today; filters, BBQ cleans and other repeat care are on Home care.</p><button class="btn pri" data-act="newroutine">+ Routine</button>'+(vemMode()?' <button class="btn" data-rvem="">✉ Vendor email</button>':'')+'</div><div class="rcols" style="grid-template-columns:minmax(0,1fr)">';
   cols.forEach(function(c){ var list=rs.filter(function(r){ return r.cadence===c[0]; }).map(function(r){ r._next=nextWhen(r.when); return r; })
       .sort(function(a,b){ return (a._next||"9999").localeCompare(b._next||"9999"); });
-    var left=list.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
+    var isLeft=function(r){ var l=rlogFor(r); return !(l&&!l.undone); }, left=list.filter(isLeft).length, rOn=!!pfOn("rseas");
     var card=function(r){ var n=r._next, dd=n?daysBetween(today(),n):null;
         return '<div class="rcard">'+wxTag(r)+'<div class="note" style="padding:0 0 4px;'+(dd!=null&&dd<=45?'color:var(--wait);font-weight:600':'')+'">'+(n?'Next: '+esc(fmtD(n))+(dd<=0?' — now':' · in '+dd+' days'):'No date set')+'</div>'+routineRow(r)+'</div>'; };
     var mOrd=function(r,st){ var mi=whenMonth(r.when); return mi<0?99:(mi-st+12)%12; };
     var groups=seasonOrder().map(function(x,i){ return {k:x[0],t:x[1],m:x[2],now:i===0,st:x[3]}; }).concat([{k:"any",t:"Any time of year",m:"no month set",st:0}]);
-    h+='<section class="panel rcol"><div class="ph"><h3>'+c[1]+'<span>'+c[2]+'</span></h3><span class="ct">'+left+' / '+list.length+'</span></div>'+
-      (list.length?groups.map(function(g){ var gl=list.filter(function(r){ return routineSeason(r)===g.k; })
+    h+='<section class="panel rcol"><div class="ph"><h3>'+c[1]+'<span>'+c[2]+'</span></h3><span class="ct">'+pfBtn("rseas","left",left+' left')+' / '+list.length+'</span></div>'+pfNote("rseas",left,"not done yet",list.length)+
+      (rOn&&!left&&list.length?'<div class="empty">All done.</div>':'')+
+      (list.length?groups.map(function(g){ var gl=list.filter(function(r){ return routineSeason(r)===g.k && (!rOn||isLeft(r)); })
           .sort(function(a,b){ return (mOrd(a,g.st)-mOrd(b,g.st))||(a._next||"9999").localeCompare(b._next||"9999"); });
-        if(!gl.length) return g.k==="any"?"":'<div class="seasgrp"><div class="seashd'+(g.now?' now':'')+'"><b>'+esc(g.t)+'</b><span>'+esc(g.m)+'</span></div><div class="empty" style="padding:4px 14px 10px">Nothing set for '+esc(g.t.toLowerCase())+' yet.</div></div>';
+        if(!gl.length) return (g.k==="any"||rOn)?"":'<div class="seasgrp"><div class="seashd'+(g.now?' now':'')+'"><b>'+esc(g.t)+'</b><span>'+esc(g.m)+'</span></div><div class="empty" style="padding:4px 14px 10px">Nothing set for '+esc(g.t.toLowerCase())+' yet.</div></div>';
         var gleft=gl.filter(function(r){ var l=rlogFor(r); return !(l&&!l.undone); }).length;
         return '<div class="seasgrp"><div class="seashd'+(g.now?' now':'')+'"><b>'+esc(g.t)+'</b><span>'+esc(g.m)+'</span>'+(g.now?'<span class="pill waiting">Now</span>':'')+'<span class="ct">'+gleft+' / '+gl.length+'</span></div>'+
           '<div class="rgrid">'+gl.map(card).join("")+'</div></div>'; }).join(""):'<div class="empty">None yet.</div>');
@@ -4914,9 +4923,9 @@ function mHandoff(jid){ var j=D.byId[jid]; if(!j) return; var vs=(D.vendors||[])
       if(slack) slackEditor(sid("ho_"+j.id+"_"+Date.now().toString(36)),{kind:"followup",topic:"vendor",jobId:j.id,prop:j.prop||"",title:"Vendor hand-off — "+j.title,
         text:"Handed off to "+v+": "+(j.prop?j.prop+" — ":"")+j.title+(ho.note?"\n"+ho.note:"")+"\nPlease follow up with "+v+" on "+fmtD(ho.follow)+" and add a note on the Maintenance Desk.\n"+(j.srcUrl||""),to:[ho.who],channel:"",status:"queued",by:S.me,at:Date.now()}); }); },"Hand off"); }
 function vendorFollowPanel(){ var t=today(), rows=D.jobs.map(function(j){ var h=handoffOf(j); return h?{j:j,h:h}:null; }).filter(Boolean).sort(function(a,b){ return a.h.follow.localeCompare(b.h.follow); });
-  if(!rows.length) return ""; var due=rows.filter(function(r){ return r.h.follow<=t; });
-  return '<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>Vendor follow-ups</h3><span class="ct">'+due.length+' due · '+rows.length+' with vendors</span></div><div class="rows">'+
-    rows.slice(0,40).map(function(r){ var late=r.h.follow<=t;
+  if(!rows.length) return ""; var due=rows.filter(function(r){ return r.h.follow<=t; }), allN=rows.length; if(pfOn("vfu")) rows=due;
+  return '<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>Vendor follow-ups</h3><span class="ct">'+pfBtn("vfu","due",due.length+' due')+' · '+allN+' with vendors</span></div>'+pfNote("vfu",due.length,"due now",allN)+'<div class="rows">'+
+    (rows.length?'':'<div class="empty">Nothing due yet.</div>')+rows.slice(0,40).map(function(r){ var late=r.h.follow<=t;
       return '<div class="row" style="display:flex;gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap"><span class="mono note" style="min-width:52px'+(late?';color:var(--bad,#b42318);font-weight:600':'')+'">'+esc(fmtD(r.h.follow))+'</span>'+propLink(r.j.prop)+
         '<span style="flex:1;min-width:180px"><a href="#" data-job="'+esc(r.j.id)+'">'+esc(r.j.title)+'</a> <span class="note">· '+esc(r.h.vendor)+' · '+esc(r.h.who||"")+(r.h.note?' · '+esc(r.h.note.slice(0,80)):'')+'</span></span>'+
         '<button class="btn sm" data-hodone="'+esc(r.j.id)+'">Vendor finished</button><button class="btn sm ghost" data-hobump="'+esc(r.j.id)+'">Still waiting +3 days</button><button class="btn sm ghost" data-hoback="'+esc(r.j.id)+'">Take it back</button></div>'; }).join("")+'</div></section>'; }
@@ -5224,6 +5233,7 @@ document.addEventListener("click",function(ev){
   if(d.licall){ return mLicMsg(d.licall.split(",")); }
   if(d.vmode){ ev.preventDefault(); S.ui.vmode=d.vmode; if(S.tab!=="vendors") return go("vendors"); return render(); }
   if(d.firef){ S.ui.fireF=d.firef; return render(); }
+  if(d.pfk){ ev.preventDefault(); var pfm=S.ui.pf=S.ui.pf||{}; pfm[d.pfk]=(pfm[d.pfk]===d.pf?"":(d.pf||"")); return render(); }
   if(d.qinfo){ ev.preventDefault(); var rx=new RegExp(d.qinfo,"i"), hit=[].slice.call(document.querySelectorAll("details.infocat")).filter(function(x){ var sm=x.querySelector("summary"); return sm&&rx.test(sm.textContent); });
     if(hit.length){ hit.forEach(function(x){ x.open=true; }); hit[0].scrollIntoView({behavior:"smooth",block:"start"}); } else { var hb=[].slice.call(document.querySelectorAll(".block h4")).filter(function(h){ return /Home information/.test(h.textContent); })[0]; if(hb) hb.scrollIntoView({behavior:"smooth"}); } return; }
   if(d.licf){ ev.preventDefault(); ev.stopPropagation(); S.ui.fireF=d.licf==="fire"?"due":d.licf;
