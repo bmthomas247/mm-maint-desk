@@ -117,9 +117,10 @@ function makePw(){   // made on this phone only, never saved or sent anywhere
 const STEPS = [
   { k:"parts", t:"Get the parts together", h:() => `
     <ul><li>Home Assistant Green (the hub)</li><li>Z-Wave stick (Sonoff / Zooz 800) + its USB extension cable</li><li>Network cable + the hub's power plug</li></ul>
-    <div class="tip">Do this at the office. Your phone must be on the <b>office Wi-Fi</b> (not cell data) for every step.</div>` },
+    <div class="tip">Do this at the office. Your phone must be on the <b>office Wi-Fi</b> (not cell data) for every step. We have new office internet: join the network below.</div>
+    <div id="offwifi"><div class="muted small">Loading the office Wi-Fi…</div></div>` },
   { k:"plug", t:"Plug it in", h:() => `
-    <ol><li>Z-Wave stick → extension cable → a USB port on the hub.</li><li>Network cable from the hub to the office router.</li><li>Power plug in <b>last</b>.</li></ol>
+    <ol><li>Z-Wave stick → extension cable → a USB port on the hub.</li><li>Network cable from the hub to the <b>new office internet router</b> (the one the office Wi-Fi comes from).</li><li>Power plug in <b>last</b>.</li></ol>
     <div class="muted">Give it <b>about 6 minutes</b> after you plug in power (our first hub took 6; it can take up to 20). It may show "Preparing Home Assistant" with a progress bar. That's normal. Leave it plugged in.</div>` },
   { k:"account", t:"Open Home Assistant and make the owner account", h:() => `
     <a class="btn go wide" href="${HA}" target="_blank" rel="noopener">Open Home Assistant</a>
@@ -178,7 +179,7 @@ function hubView(){
   $$("[data-open]").forEach(h => h.onclick = () => h.closest(".step").classList.toggle("closed"));
   $("#next").onclick = () => { if(confirm("Start fresh for the next hub?")){ DONE = {}; PW = ""; saveDone(); hubView(); window.scrollTo(0,0); } };
   const mk = $("#mkpw"); if(mk) mk.onclick = () => { PW = makePw(); drawPw(); };
-  drawPw(); hubPw();
+  drawPw(); hubPw(); offWifi();
   const ci = $("#cpinstall"); if(ci) ci.onclick = () => copy(INSTALL, ci);
   findHubs();
 }
@@ -195,10 +196,37 @@ async function hubPw(){
     ${adm ? `<details style="margin-top:6px"><summary class="small">${has ? "Change" : "Save"} the hub password (admins)</summary>
       <input id="hubpwin" type="password" autocomplete="new-password" placeholder="Paste the password from LastPass" style="width:100%;margin-top:6px">
       <button class="btn wide" id="hubpwsave" style="margin-top:6px">🔒 Save it in the hub</button>
-      <div class="muted small">Only maintenance managers, the field crew and admins can copy it. Nobody sees it on screen.</div></details>` : ""}`;
+      <div class="muted small">Everyone on the team can copy it. Nobody sees it on screen.</div></details>` : ""}`;
   const c = $("#cphubpw"); if(c) c.onclick = () => copy(row.code, c);
   const s = $("#hubpwsave"); if(s) s.onclick = async () => { const v = $("#hubpwin").value.trim(); if(!v) return toast("Paste the password first");
     try{ await rpc("office_code_set", { p_key: "lock_hub_pw", p_code: v, p_teams: null, p_note: null }); toast("Saved ✓"); hubPw(); }catch(e){ fail(e); } };
+}
+// Office Wi-Fi (new office internet, Nov 2026): hub_office_codes "office_wifi_name" + "office_wifi_pw".
+// Everyone on the team can copy them; admins save / change them here (office_code_set).
+async function offWifi(){
+  const box = $("#offwifi"); if(!box) return;
+  let rows = [], adm = false;
+  try{ [rows, adm] = await Promise.all([ rpc("office_codes").then(r => (r||[]).filter(x => x.key === "office_wifi_name" || x.key === "office_wifi_pw")), rpc("hub_is_admin") ]); }
+  catch(e){ box.innerHTML = `<div class="muted small">Couldn't load the office Wi-Fi (${esc(e.message||e)}). Ask Brandon or Kim.</div>`; return; }
+  const nm = rows.find(x => x.key === "office_wifi_name"), pw = rows.find(x => x.key === "office_wifi_pw");
+  const has = !!(nm && nm.code);
+  box.innerHTML = `${has ? `<div style="margin-top:6px">Office Wi-Fi: <b>${esc(nm.code)}</b></div>
+      <button class="btn wide" id="cpwifin">📋 Copy the Wi-Fi name</button>
+      ${pw && pw.code ? `<button class="btn go wide" id="cpwifip" style="margin-top:6px">📋 Copy the Wi-Fi password</button>` : ""}`
+    : `<div class="muted small">The new office Wi-Fi isn't saved in the hub yet${adm ? "" : ". Ask Brandon or Kim"}.</div>`}
+    ${adm ? `<details style="margin-top:6px"><summary class="small">${has ? "Change" : "Save"} the office Wi-Fi (admins)</summary>
+      <input id="wifinin" placeholder="Wi-Fi network name" style="width:100%;margin-top:6px" value="${esc((nm && nm.code) || "")}">
+      <input id="wifipin" type="password" autocomplete="new-password" placeholder="Wi-Fi password" style="width:100%;margin-top:6px">
+      <button class="btn wide" id="wifisave" style="margin-top:6px">🔒 Save it in the hub</button>
+      <div class="muted small">Everyone on the team can copy it. It also shows on Property Details ▸ Moose Office. Leave the password box empty to keep the saved one.</div></details>` : ""}`;
+  const a = $("#cpwifin"); if(a) a.onclick = () => copy(nm.code, a);
+  const b = $("#cpwifip"); if(b) b.onclick = () => copy(pw.code, b);
+  const s = $("#wifisave"); if(s) s.onclick = async () => {
+    const n = $("#wifinin").value.trim(), p = $("#wifipin").value.trim();
+    if(!n) return toast("Type the Wi-Fi name first");
+    try{ await rpc("office_code_set", { p_key: "office_wifi_name", p_code: n, p_teams: null, p_note: null });
+      if(p) await rpc("office_code_set", { p_key: "office_wifi_pw", p_code: p, p_teams: null, p_note: null });
+      toast("Saved ✓"); offWifi(); }catch(e){ fail(e); } };
 }
 function drawPw(){
   const b = $("#pwbox"); if(!b) return;
