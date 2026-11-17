@@ -36,6 +36,8 @@ function css(){
   const s = document.createElement("style"); s.id = "callcss";
   s.textContent = `.calls .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
 .calls .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px} .calls .kpi b{display:block;font-size:22px}
+.calls button.kpi{font:inherit;color:inherit;text-align:left;width:auto;min-height:0;margin:0;cursor:pointer} .calls button.kpi:hover{border-color:var(--forest-2)} .calls button.kpi.on{border-color:var(--forest-2);box-shadow:0 0 0 2px var(--forest-2) inset}
+.calls .tfnote{font-size:13px;margin:0 0 8px}
 .calls .flt{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:12px} .calls .flt label{font-size:12px;color:var(--muted);font-weight:700}
 .calls .flt select,.calls .flt input{width:auto;min-height:40px;font-size:14px}
 .calls table{width:100%;border-collapse:collapse;font-size:13.5px} .calls td,.calls th{padding:7px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
@@ -189,10 +191,11 @@ window.callsView = async function(v){
       o.n++; dirName(c.direction) === "Inbound" ? o.i++ : o.o++; o.t += c.duration_s || 0; if(has(c)) o.tr++; }));
     $("#cbody").innerHTML = `<div class="kpis">
         <div class="kpi"><span class="muted">Calls</span><b>${list.length}</b></div>
-        <div class="kpi"><span class="muted">Inbound</span><b>${inb.length}</b></div>
+        <button type="button" class="kpi${S.dir === "Inbound" ? " on" : ""}" data-kf="in" title="Show only inbound calls (tap again for all)"><span class="muted">Inbound</span><b>${inb.length}</b></button>
         <div class="kpi"><span class="muted">Inbound answered</span><b>${inb.length ? Math.round(100 * inb.filter(answered).length / inb.length) + "%" : "–"}</b></div>
         <div class="kpi"><span class="muted">Avg talk time</span><b>${avg != null ? dur(avg) : "–"}</b></div>
-        <div class="kpi"><span class="muted">With transcript</span><b>${list.filter(has).length}</b></div></div>
+        <button type="button" class="kpi${S.tr === "y" ? " on" : ""}" data-kf="tr" title="Show only calls with a transcript (tap again for all)"><span class="muted">With transcript</span><b>${list.filter(has).length}</b></button></div>
+      ${S.dir === "Inbound" || S.tr === "y" ? `<p class="muted tfnote">Showing ${list.length} ${S.dir === "Inbound" && S.tr === "y" ? "inbound calls with a transcript" : S.dir === "Inbound" ? "inbound calls" : "calls with a transcript"} · <a href="#" data-kf="">show all</a></p>` : ""}
       <div class="card" style="overflow-x:auto"><b>By agent</b><table><tr><th>Agent</th><th>Calls</th><th>Inbound</th><th>Outbound</th><th>Avg talk</th><th>Transcripts</th></tr>
         ${Object.entries(ag).sort((a, b) => b[1].n - a[1].n).map(([a, o]) => `<tr class="cl${S.agent === a ? " on" : ""}" data-ag="${esc(a)}" title="${S.agent === a ? "Show every agent" : "Show only " + esc(a) + "'s calls"}"><td>${S.agent === a ? "✓ " : ""}<u>${esc(a)}</u></td><td>${o.n}</td><td>${o.i}</td><td>${o.o}</td><td>${dur(Math.round(o.t / o.n))}</td><td>${o.tr}</td></tr>`).join("")}</table></div>
       <div class="card" style="overflow-x:auto"><b>Calls</b> <span class="muted">· click a call for its transcript${S.q ? ` · searching ${esc(dayf(S.from))} to ${esc(dayf(S.to))}, set From earlier to search older calls` : ""}</span><table><tr><th>When</th><th>Direction</th><th>Agent</th><th class="hide-s">Caller</th><th>Result</th><th class="hide-s">Queue</th><th>Talk</th><th>Transcript</th></tr>
@@ -202,6 +205,10 @@ window.callsView = async function(v){
           <td>${has(c) ? `<span class="pill green">${T[c.call_id].words} words</span>` : T[c.call_id] ? `<span class="pill">none</span>` : `<span class="pill amber">pending</span>`}</td></tr>`).join("")}</table>
         ${list.length > 500 ? `<p class="muted">Showing the newest 500 of ${list.length}. Narrow the dates or filters to see the rest.</p>` : ""}</div>`;
     $("#cbody").querySelectorAll("tr.cl[data-id]").forEach(tr => tr.onclick = () => { const c = calls.find(x => x.call_id === +tr.dataset.id); showCall(c, T[c.call_id]); });
+    // tap Inbound / With transcript = show only those calls; tap the lit one again (or "show all") = every call (Brandon 2026-11-17)
+    $("#cbody").querySelectorAll("[data-kf]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.kf;
+      if(k === "in") S.dir = S.dir === "Inbound" ? "" : "Inbound"; else if(k === "tr") S.tr = S.tr === "y" ? "" : "y"; else { if(S.dir === "Inbound") S.dir = ""; if(S.tr === "y") S.tr = ""; }
+      if($("#cdir")) $("#cdir").value = S.dir; if($("#ctr")) $("#ctr").value = S.tr; draw(); });
     // click an agent in By agent = filter the calls to them (Brandon 2026-11-03); click again = everyone
     $("#cbody").querySelectorAll("tr[data-ag]").forEach(tr => tr.onclick = () => { const a = tr.dataset.ag; S.agent = S.agent === a ? "" : a;
       const sel = $("#cag"); if(sel){ if(S.agent && ![...sel.options].some(o => o.value === S.agent)) sel.insertAdjacentHTML("beforeend", `<option>${esc(S.agent)}</option>`); sel.value = S.agent; }
