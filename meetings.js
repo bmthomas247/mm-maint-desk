@@ -404,10 +404,19 @@ const ORCSS = `
 .orib:hover{background:#eef3e6} .orib.on{background:#c2410c;color:#fff;border-color:#c2410c}
 .mtg .mpsur.orl.must{background:#fff6ef} .mtg .orbar{height:5px;margin:4px 0 2px} .orls{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ornav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end} .ornav .muted{font-size:12.5px}
+.orsplit{display:grid;grid-template-columns:minmax(330px,2fr) minmax(0,3fr);gap:18px;align-items:start} .orleft,.orright{min-width:0}
+.orright{position:sticky;top:0} #ordock{overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--bg,#f7f8f4)}
+.mpovd .mpanel{width:auto;height:auto;box-shadow:none;overflow:visible;background:transparent} .mpovd [data-pclose]{display:none}
+.mpovd .mph{position:sticky;top:0;z-index:2} .mpovd .mptabs{position:static}
+.mtg .orleft .mpsul{grid-template-columns:1fr} .orleft .orl>i{display:none} .orleft .orl .ortag.new,.orleft .orl .ortag.chg{display:none}
+.orleft .orl .orib{visibility:hidden} .orleft .orl:hover .orib,.orleft .orl.on .orib,.orleft .orl:focus-within .orib{visibility:visible}
+.mtg .mpsur.orl.on,.mtg .orrow.on{background:#e7f0da;box-shadow:inset 3px 0 0 #3c7d1e}
+@media(max-width:1099px){.orsplit{display:block} .orright{display:none}}
 @media print{ .orcb,.orrb,.ornote,.orhall{display:none!important} .orc{break-inside:avoid;box-shadow:none} .orfold{display:none} }`;
 let orCssDone = false;
 const orCss = () => { if(orCssDone) return; orCssDone = true; const s = document.createElement("style"); s.textContent = ORCSS; document.head.appendChild(s); };
 function render(v, key, data, ppl){
+  const orKeep = key === "meet_or" && v.querySelector(".page") ? v.querySelector(".page").scrollTop : 0;   // the split view keeps its place on redraws
   // 2026-11-13 (Pyper + Kim): files on notes and tasks, notes on tasks, edit a task (hub_meeting_task_edit.sql)
   const EX = data.ex || {}, tNotes = id => (EX.task_notes || []).filter(n => n.task === id), tFiles = id => (EX.files || []).filter(f => f.task === id),
     iFiles = k => (EX.files || []).filter(f => !f.task && f.item === k && f.day === ST.day[key]),
@@ -547,7 +556,7 @@ function render(v, key, data, ppl){
       MX.open = nx; MX.tab = "ov"; MX.tf = "all"; MX.bwopen = false; MX.chg = null;
       if(!nx) document.getElementById("mpov")?.remove();
       redraw(); };
-    if(!window._orKeys){ window._orKeys = 1; document.addEventListener("keydown", e => { const p = document.getElementById("mpov"); if(!p || !p.querySelector("[data-ornav]")) return;
+    if(!window._orKeys){ window._orKeys = 1; document.addEventListener("keydown", e => { const p = document.getElementById("mpov") || document.getElementById("mpovd"); if(!p || !p.querySelector("[data-ornav]")) return;
       if(e.target && e.target.closest && e.target.closest("input,textarea,select")) return;
       if(e.key === "ArrowRight") p.querySelector('[data-ornav="1"]:not([disabled])')?.click(); if(e.key === "ArrowLeft") p.querySelector('[data-ornav="-1"]:not([disabled])')?.click(); }); }
   }
@@ -621,9 +630,17 @@ function render(v, key, data, ppl){
       await orState(); render(v, key, data, ppl); });
     v.querySelectorAll("[data-orh]").forEach(b => b.onclick = e => { e.stopPropagation(); MX.orh[b.dataset.orh] = !MX.orh[b.dataset.orh]; render(v, key, data, ppl); });
     v.querySelectorAll("details[data-orfold]").forEach(d => d.ontoggle = () => { MX.orf[d.dataset.orfold] = d.open; });
-    const pb = $("#mprep"); if(pb) pb.onclick = () => { MX.prep = !MX.prep; render(v, key, data, ppl); window.scrollTo(0, 0); };
+    const pb = $("#mprep"); if(pb) pb.onclick = () => { MX.prep = !MX.prep; MX.open = null; document.getElementById("mpov")?.remove(); render(v, key, data, ppl); const pg = v.querySelector(".page"); if(pg) pg.scrollTop = 0; };
+    /* split view (Jeff 2026-11-16 picked "list on the left, the topic always open on the right"): pick the first topic when none is open */
+    const dk = document.getElementById("ordock");
+    if(dk && dk.offsetParent && !MX.prep){
+      if(!MX.open || !items.some(x => x.key === MX.open)) MX.open = MX.orOrder[0] || MX.orAll[0] || null;
+      if(!MX.open) dk.innerHTML = `<p class="muted" style="padding:20px;margin:0">Pick a topic on the left.</p>`;
+      orDockFit(); window._orFitFn = orDockFit;
+      if(!window._orFit){ window._orFit = 1; addEventListener("resize", () => window._orFitFn && window._orFitFn()); } }
     orSnap();
   }
+  function orDockFit(){ const pg = v.querySelector(".page"), dk = document.getElementById("ordock"); if(pg && dk) dk.style.maxHeight = Math.max(320, pg.clientHeight - 16) + "px"; }
   const tile = (n, l, ic, cls) => `<div class="mtile${cls ? " " + cls : ""}"><div><b>${n}</b><span>${l}</span></div><i>${ic}</i></div>`;
   let h = `<div class="page mtg"><div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
       <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}</p></div>
@@ -633,7 +650,7 @@ function render(v, key, data, ppl){
     <div class="mbar"><div class="mfts">${fbtn("all", "All", items.length)}${fbtn("todo", "To cover", items.length - covered - waiting)}${fbtn("wait", "Waiting", waiting)}${fbtn("tasks", "Has tasks", items.filter(it => open.some(t => t.item_key === it.key)).length)}</div>
       <input id="mq" placeholder="🔍 Search topics" value="${esc(MX.q)}"></div>`;
   if(!items.length) h += `<div class="card"><p class="muted" style="margin:0">Nothing came up from the data this week. Use "Anything else" below.</p></div>`;
-  if(key === "meet_or") h += orBody(); else {
+  if(key === "meet_or") h += (MX.prep ? "" : `<div class="orsplit"><div class="orleft">`) + orBody(); else {
   const grps = {}; shown.forEach(it => (grps[it.grp] = grps[it.grp] || []).push(it));
   Object.keys(grps).forEach(g => {
     if(grps[g].every(isPsu)){
@@ -669,9 +686,10 @@ function render(v, key, data, ppl){
   h += `<h3 class="mg${key === "meet_or" ? " orhd" : ""}">${key === "meet_or" ? `<span class="ornum">${orNum + 1}</span>Anything else + wrap up <span class="muted orhm">5 min</span>` : "Anything else"}</h3><div class="card">${feedHtml(notesOf(day, "_notes"), "_notes")}<textarea data-note="_notes" style="width:100%;min-height:90px" placeholder="Add a note: other topics, ideas, decisions">${esc(gdv != null ? gdv : "")}</textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small primary" data-nsave="_notes">Add note</button><button class="btn small" data-nattach="_notes" title="Attach a photo, PDF or document">📎 Attach</button></div>
       ${past.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Past meetings: ${past.slice(0, 12).map(d => `<a href="#" data-mday="${esc(d)}">${esc(fmt(d))}</a>`).join(" · ")}</p>` : ""}</div>
-    <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each topic shows where it came from.</p></div>`;
+    <p class="muted" style="font-size:12px">Agenda built ${esc(new Date(data.built).toLocaleString())} from hub data. Each topic shows where it came from.</p>${key === "meet_or" && !MX.prep ? `</div><aside class="orright"><div id="ordock"></div></aside></div>` : ""}</div>`;
   function feedHtml(a, k){ return (a.length ? `<div class="mfeed">${a.map(n => `<div class="mfn"><b>${esc(n.by || "Someone")}${n.mine ? " (you)" : ""}</b><span class="muted"> · ${esc(tm(n.at))}</span><div>${esc(n.text)}</div></div>`).join("")}</div>` : "") + (k == null ? "" : filesHtml(iFiles(k))); }
   v.innerHTML = h;
+  if(orKeep){ const pg1 = v.querySelector(".page"); if(pg1) pg1.scrollTop = orKeep; }
 
   /* ---------- the panel ---------- */
   function panel(){
@@ -746,11 +764,14 @@ function render(v, key, data, ppl){
         <div class="mact">${act.map(a => `<div class="maci"><i>${a.ic}</i><div><div>${a.h}<span class="muted"> · ${esc(tm(a.at))}</span></div><div class="mab">${a.b}</div></div></div>`).join("") || `<p class="muted">Nothing yet.</p>`}</div>`;
     }
     if(key === "meet_or" && MX.tab === "ov") b = orPanelTop(it) + b;   // Next up + history (Jeff 2026-11-16)
-    const o = document.createElement("div"); o.id = "mpov"; o.className = "mpov";
+    const dock = key === "meet_or" && !MX.prep ? document.getElementById("ordock") : null, docked = !!(dock && dock.offsetParent);
+    const o = document.createElement("div"); o.id = docked ? "mpovd" : "mpov"; o.className = docked ? "mpovd" : "mpov";
     o.innerHTML = `<div class="mpanel" role="dialog" aria-label="${esc(it.title)}"><div class="mph"><div>${pill(st)}<h3>${esc(it.title)}</h3>${ownerOf(it) ? `<div class="mown">👤 ${esc(ownerOf(it))}</div>` : ""}<span class="muted">${esc(it.grp)}</span></div><div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end">${key === "meet_or" ? orNav(it) : ""}<button class="btn small" data-pclose aria-label="Close">✕</button></div></div>
       <div class="mptabs">${tabs.map(([k2, l, n]) => `<button class="${MX.tab === k2 ? "on" : ""}" data-ptab="${k2}">${l}${n !== "" ? ` <span>${n}</span>` : ""}</button>`).join("")}</div><div class="mpb">${b}</div></div>`;
-    document.body.appendChild(o);
-    o.onclick = e => { if(e.target === o) close(); };
+    if(docked){ dock.innerHTML = ""; dock.appendChild(o); dock.scrollTop = 0; orDockFit();
+      v.querySelectorAll(".orl[data-open], .orrow[data-open]").forEach(r => r.classList.toggle("on", r.dataset.open === MX.open)); }
+    else document.body.appendChild(o);
+    if(!docked) o.onclick = e => { if(e.target === o) close(); };
     o.querySelector("[data-pclose]").onclick = close;
     o.querySelectorAll("[data-ptab]").forEach(x => x.onclick = () => { MX.tab = x.dataset.ptab; panel(); });
     o.querySelectorAll("[data-tf2]").forEach(x => x.onclick = () => { MX.tf = x.dataset.tf2; panel(); });
@@ -866,7 +887,7 @@ function render(v, key, data, ppl){
   }
   // the hub sends queued Breezeway work within about a minute: check back a few times so the panel shows "In Breezeway"
   function bwPoll(){ let n = 0; const t = setInterval(async () => { n++; await bwLoad(key);
-    if(MX.open && document.getElementById("mpov")) panel(); if(n > 8 || !(MX.bw[key] || []).some(j => j.status === "queued" || j.status === "sending")) clearInterval(t); }, 20000); }
+    if(MX.open && (document.getElementById("mpov") || document.getElementById("mpovd"))) panel(); if(n > 8 || !(MX.bw[key] || []).some(j => j.status === "queued" || j.status === "sending")) clearInterval(t); }, 20000); }
   function close(){ MX.open = null; document.getElementById("mpov")?.remove(); }
   if(!window._mxEsc){ window._mxEsc = 1; document.addEventListener("keydown", e => { if(e.key === "Escape" && document.getElementById("mpov")){ MX.open = null; document.getElementById("mpov").remove(); } }); }
   const redraw = async () => { const sy = window.scrollY; const d = await load(v, key); if(d){ render(v, key, d, ppl); window.scrollTo(0, sy); } };
@@ -1057,8 +1078,8 @@ function render(v, key, data, ppl){
   };
   v.querySelectorAll("[data-mday]").forEach(a => a.onclick = e => { e.preventDefault(); ST.day[key] = a.dataset.mday; ST.drafts = {}; render(v, key, data, ppl); window.scrollTo(0, 0); });
   if(!MX.tp[key]) taskPeople(key).then(() => render(v, key, data, ppl));
-  if(items.some(isPsu) && Date.now() - MX.psuAt > 120000) psuLoad().then(() => { if(key === "meet_or" && MX.psuAt && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("textarea,input,select"))) render(v, key, data, ppl); else if(MX.open && document.getElementById("mpov")) panel(); });
-  if(!MX.bw[key]) bwLoad(key).then(() => { if(MX.open && document.getElementById("mpov")) panel(); });
+  if(items.some(isPsu) && Date.now() - MX.psuAt > 120000) psuLoad().then(() => { if(key === "meet_or" && MX.psuAt && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("textarea,input,select"))) render(v, key, data, ppl); else if(MX.open && (document.getElementById("mpov") || document.getElementById("mpovd"))) panel(); });
+  if(!MX.bw[key]) bwLoad(key).then(() => { if(MX.open && (document.getElementById("mpov") || document.getElementById("mpovd"))) panel(); });
 }
 /* Home + bell (2026-11-10): tasks people were given in a meeting (my_meeting_tasks, hub_meeting_actions.sql). Tick done right here.
    Meeting name + topic only show when the person can open that meeting (rule 3). */
