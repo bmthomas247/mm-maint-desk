@@ -102,6 +102,8 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:9px 4px;
 .stat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1}
 .stat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px}
 .stat.warn .n{color:var(--red)}
+button.stat{font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%} button.stat:hover{border-color:var(--forest-2)}
+button.stat.on{border-color:var(--forest-2);box-shadow:0 0 0 2px var(--forest-2) inset} .tfnote{font-size:12.5px;margin:0 0 10px}
 /* home cards */
 .home{display:block;text-decoration:none;color:inherit;position:relative;overflow:hidden;padding-left:20px}
 .home::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--line-2)}
@@ -599,9 +601,9 @@ async function homesView(){
   const bar = await syncBar();
   shell("homes", `
     <div class="stats">
-      <div class="stat"><div class="n">${hubOn}<span class="muted" style="font-size:15px">/${sec.ours.length}</span></div><div class="l">Hubs online</div></div>
+      <button type="button" class="stat ${S.hf==="on"?"on":""}" data-hf="on" title="Show only homes with the hub online"><div class="n">${hubOn}<span class="muted" style="font-size:15px">/${sec.ours.length}</span></div><div class="l">Hubs online</div></button>
       <div class="stat"><div class="n">${codesOn}</div><div class="l">Codes on locks</div></div>
-      <div class="stat ${ourAlerts?"warn":""}"><div class="n">${ourAlerts}</div><div class="l">Open alerts</div></div>
+      <button type="button" class="stat ${ourAlerts?"warn":""} ${S.hf==="alerts"?"on":""}" data-hf="alerts" title="Show only homes with open alerts"><div class="n">${ourAlerts}</div><div class="l">Open alerts</div></button>
       ${DESK?`<a class="stat" href="#/stays" style="text-decoration:none;color:inherit"><div class="n">${arrivals}</div><div class="l">Arrivals next 7 days</div></a>`:""}
     </div>
     <div class="card row" style="gap:10px;align-items:center"><div class="grow"><b>🔑 Set a door code</b><div class="muted">Give a vendor, owner or housekeeper a code for a home, for just the dates they need.</div></div><button class="btn go" data-setcode="">Set a door code</button></div>
@@ -639,19 +641,27 @@ async function homesView(){
       pref("hood", hood); pref("sort", srt);
       const cmp = (a,b) => srt==="attn" ? (score(b)-score(a)) || ck(a.properties.code).localeCompare(ck(b.properties.code), undefined, {numeric:true})
         : (srt==="za" ? -1 : 1) * ck(a.properties.code).localeCompare(ck(b.properties.code), undefined, {numeric:true});
-      const list = sec.ours.filter(h => (!hood || hoodOf(h)===hood) && (!t || (h.properties.code+" "+h.properties.name).toLowerCase().includes(t)));
+      const hubOk = h => { const hub = hubs.find(x=>x.property_id===h.property_id && x.claimed_at); return !!(hub && online(hub)); };
+      const hasAl = h => alerts.some(x=>x.property_id===h.property_id);
+      const list = sec.ours.filter(h => (!hood || hoodOf(h)===hood) && (!t || (h.properties.code+" "+h.properties.name).toLowerCase().includes(t))
+        && (!S.hf || (S.hf==="on" ? hubOk(h) : hasAl(h))));
+      $$("[data-hf]").forEach(x=>x.classList.toggle("on", x.dataset.hf===S.hf));
       const groups = [...new Set(list.map(hoodOf))].sort((a,b)=>(srt==="za"?-1:1)*hoodName(a).localeCompare(hoodName(b)));
       $("#hoodlist").innerHTML = groups.map(g => { const hs = list.filter(h=>hoodOf(h)===g).sort(cmp);
           const shut = (pref("hoodsclosed")||"").split(",").includes(g);
           return `<details class="sect" data-hood="${esc(g)}" ${shut?"":"open"}><summary><h3 style="margin:0">${esc(hoodName(g))} <span style="opacity:.7">· ${esc(g)} · ${hs.length} home${hs.length>1?"s":""}</span></h3></summary><div class="tile-grid">${hs.map(card).join("")}</div></details>`; }).join("")
         || '<div class="empty">No homes match.</div>';
+      if(S.hf) $("#hoodlist").insertAdjacentHTML("afterbegin", `<p class="muted tfnote">Showing ${list.length} home${list.length===1?"":"s"} ${S.hf==="on"?"with the hub online":"with open alerts"} · <a href="#" data-hfclear>show all</a></p>`);
       $$("#hoodlist details.sect").forEach(d => d.addEventListener("toggle", () => {
         const c = new Set((pref("hoodsclosed")||"").split(",").filter(Boolean)); d.open ? c.delete(d.dataset.hood) : c.add(d.dataset.hood); pref("hoodsclosed", [...c].join(",")); }));
     };
     const ph = pref("hood"), ps = pref("sort");
     if(ph && [...$("#hood").options].some(o=>o.value===ph)) $("#hood").value = ph;
     if(ps) $("#hsort").value = ps;
-    $("#hood").onchange = draw; $("#hsort").onchange = draw; $("#hfind").oninput = draw; draw();
+    $("#hood").onchange = draw; $("#hsort").onchange = draw; $("#hfind").oninput = draw;
+    $$("[data-hf]").forEach(x => x.onclick = () => { S.hf = S.hf===x.dataset.hf ? "" : x.dataset.hf; draw(); });
+    $("#hoodlist").addEventListener("click", ev => { if(!ev.target.closest("[data-hfclear]")) return; ev.preventDefault(); S.hf = ""; draw(); });
+    draw();
   }
   const b = $("#addh"); if(b) b.onclick = async () => {
     try{ const typed = $("#nh").value.trim().toLowerCase(); const p = (S.allProps||[]).find(x=>x.code.toLowerCase()===typed); if(!p) return toast("No home with that code - pick one from the list");
@@ -1572,20 +1582,25 @@ async function staysView(){
     const stays = all.filter(s => new Date(s.ends_at) >= from && (!to || new Date(s.starts_at) <= to)
       && (!hd || hoodOf(S.homes.find(h=>h.property_id===s.property_id)||{properties:{}})===hd) && (!hm || s.property_id===hm)
       && (!t || [s.guest, s.res_id, s.code].join(" ").toLowerCase().includes(t)));
-    const up = stays, inHouse = up.filter(s=>new Date(s.starts_at)<=now && !s.out_at).length;
-    $("#sstats").innerHTML = `<div class="stats"><div class="stat"><div class="n">${up.length}</div><div class="l">${$("#sfrom").value||$("#sto").value?"Stays in these dates":"Upcoming stays"}</div></div>
-      <div class="stat"><div class="n">${inHouse}</div><div class="l">In the home now</div></div>
-      <div class="stat ${up.some(s=>!cleared(s))?"warn":""}"><div class="n">${up.filter(s=>!cleared(s)).length}</div><div class="l">Agreement not back</div></div>
-      <div class="stat"><div class="n">${up.filter(s=>onLock(s)==="on").length}</div><div class="l">Codes on the lock</div></div></div>`;
+    const up = stays, isIn = s => new Date(s.starts_at)<=now && !s.out_at, inHouse = up.filter(isIn).length;
+    const SF = {in:[isIn, "in the home now"], agr:[s=>!cleared(s), "with the agreement not back"], lock:[s=>onLock(s)==="on", "with codes on the lock"]};
+    if(S.sf && !SF[S.sf]) S.sf = "";
+    const shown = S.sf ? up.filter(SF[S.sf][0]) : up;
+    const sb = (k, cls, inner, tip) => `<button type="button" class="stat ${cls} ${S.sf===k&&k?"on":""}" data-sf="${k}" title="${tip}">${inner}</button>`;
+    $("#sstats").innerHTML = `<div class="stats">${sb("", "", `<div class="n">${up.length}</div><div class="l">${$("#sfrom").value||$("#sto").value?"Stays in these dates":"Upcoming stays"}</div>`, "Show every stay")}
+      ${sb("in", "", `<div class="n">${inHouse}</div><div class="l">In the home now</div>`, "Show only guests in the home now")}
+      ${sb("agr", up.some(s=>!cleared(s))?"warn":"", `<div class="n">${up.filter(s=>!cleared(s)).length}</div><div class="l">Agreement not back</div>`, "Show only stays with the agreement not back")}
+      ${sb("lock", "", `<div class="n">${up.filter(s=>onLock(s)==="on").length}</div><div class="l">Codes on the lock</div>`, "Show only stays with the code on the lock")}</div>
+      ${S.sf ? `<p class="muted tfnote">Showing ${shown.length} stay${shown.length===1?"":"s"} ${SF[S.sf][1]} · <a href="#" data-sf="">show all ${up.length}</a></p>` : ""}`;
     $("#stable").innerHTML = `<table class="tbl"><tr><th>Home</th><th>Guest</th><th>Check-in</th><th>Check-out</th><th>Agreement</th><th>Code</th><th>Lock</th><th></th></tr>
-    ${stays.map(s=>{ const ol = onLock(s), past = new Date(s.ends_at) < now; return `<tr data-res="${esc(s.res_id)}" style="${past?"opacity:.6":""}"><td><a href="#/home/${encodeURIComponent(s.property_id)}"><b>${esc((S.props[s.property_id]||{}).code||"")}</b></a></td>
+    ${shown.map(s=>{ const ol = onLock(s), past = new Date(s.ends_at) < now; return `<tr data-res="${esc(s.res_id)}" style="${past?"opacity:.6":""}"><td><a href="#/home/${encodeURIComponent(s.property_id)}"><b>${esc((S.props[s.property_id]||{}).code||"")}</b></a></td>
       <td><b><a href="${resLink(s)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.guest||"Guest")}</a></b><div class="muted" style="font-size:12px">${esc(s.kind)} · ${esc(s.res_id)}</div></td>
       <td>${when(s.starts_at)}</td><td>${when(s.ends_at)}${s.out_at?`<div class="muted" style="font-size:12px">left ${when(s.out_at)}</div>`:""}</td>
       <td>${cleared(s)?'<span class="pill green">OK</span>':`<span class="pill red">${esc(s.agreement||"not sent")}</span>`}</td>
       <td><span class="code-chip">${esc(s.code)}</span><div class="muted" style="font-size:12px">${s.code_source==="phone"?"last 4 of phone":esc(s.code_source)}</div></td>
       <td>${past?'<span class="pill grey">over</span>':stayPill(s, ol, S.homes.find(x=>x.property_id===s.property_id))}</td>
       <td style="white-space:nowrap;text-align:right">${folioLink(s)}${past?"":` <button class="btn small" data-act="link">Guest link</button> <button class="btn small" data-act="code">Change</button> <button class="btn small" data-act="backup" title="Emergency code already on the lock for this stay's dates">🆘 Backup${s.backup_used_at?" (used)":s.backup_given_at?" (given)":""}</button>`}</td></tr>`; }).join("")
-      || `<tr><td colspan="8" class="muted">${t||hd||hm?"No stays match.":"No upcoming stays from Track."}</td></tr>`}</table>`;
+      || `<tr><td colspan="8" class="muted">${t||hd||hm||S.sf?"No stays match.":"No upcoming stays from Track."}</td></tr>`}</table>`;
     $$("#stable [data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = all.find(x=>x.res_id===row.dataset.res);
       if(b.dataset.act==="link"){ guestLinkPop(s); }
       if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
@@ -1594,6 +1609,7 @@ async function staysView(){
   };
   const ph = pref("shood"); if(ph && hoods.includes(ph)) $("#shood").value = ph;
   homeOpts(); const pm = pref("shome"); if(pm && [...$("#shome").options].some(o=>o.value===pm)) $("#shome").value = pm;
+  $("#sstats").onclick = ev => { const b = ev.target.closest("[data-sf]"); if(!b) return; ev.preventDefault(); const k = b.dataset.sf; S.sf = S.sf===k ? "" : k; draw(); };
   $("#shood").onchange = () => { homeOpts(); draw(); }; $("#shome").onchange = draw; $("#sfrom").onchange = draw; $("#sto").onchange = draw; $("#sfind").oninput = draw;
   draw();
 }
