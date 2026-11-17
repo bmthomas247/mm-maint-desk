@@ -46,6 +46,7 @@ h2{font-size:17px;margin:26px 0 8px;font-weight:800}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr));gap:10px;margin:12px 0}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
 .kpi small{display:block;color:var(--muted);font-size:12px;font-weight:700} .kpi b{display:block;font-size:24px;font-weight:800;line-height:1.2}
+button.kpi{font:inherit;color:inherit;text-align:left;width:100%;cursor:pointer} button.kpi:hover{border-color:var(--forest-2)} button.kpi.on{outline:2px solid var(--forest-2);outline-offset:-1px} .tfnote{font-size:12.5px;margin:0 0 6px}
 .box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
@@ -145,7 +146,7 @@ async function load(){
 
 function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`, `<div id="mstats">${statsHtml()}${pullLine()}</div>`];
-  if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(top, campsHtml(), "<h2>Guests</h2>" + list); }   // campaigns above the long guest list
+  if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(top, campsHtml(), `<h2 id="gst">Guests</h2>` + list); }   // campaigns above the long guest list
   else if(TAB === "owners") h.push(ownersHtml(), campsHtml());
   else if(TAB === "general") h.push(placesHtml(), campsHtml());
   else h.push(campsHtml());
@@ -163,6 +164,13 @@ function guestRows(){
     && (S.f.eng === "all" || (S.f.eng === "clicked" ? x.email_clicks > 0 : S.f.eng === "opened" ? x.email_opens > 0 : x.email_sent > 0 && !x.email_opens))   // Brevo opens/clicks per guest (2026-10-30)
     && (!q || [x.guest, x.home, x.channel].some(v => String(v || "").toLowerCase().includes(q))));
 }
+// tiles above the guest list = filter presets (Brandon 2026-11-17: tap a count to see those rows)
+const GK = { all:["guests", { when:"all", brevo:"all", back:"all", eng:"all" }], due:["guests to email in the next 30 days", { when:"30", brevo:"not", back:"no", eng:"all" }],
+  inb:["guests in a Brevo batch", { when:"all", brevo:"in", back:"all", eng:"all" }], uns:["unsubscribed guests", { when:"all", brevo:"unsub", back:"all", eng:"all" }],
+  back:["guests who booked again", { when:"all", brevo:"all", back:"yes", eng:"all" }], open:["guests who opened our emails", { when:"all", brevo:"all", back:"all", eng:"opened" }],
+  mail:["guests who booked after our email", { when:"all", brevo:"all", back:"email", eng:"all" }] };
+const gkOn = () => !S.f.q && Object.keys(GK).find(k => Object.entries(GK[k][1]).every(([f, v]) => S.f[f] === v)) || "";
+const gkb = (k, inner) => `<button type="button" class="kpi${gkOn() === k ? " on" : ""}" data-gk="${k}" title="${k === "all" ? "Show every guest" : "Show only " + GK[k][0] + " (tap again for all)"}">${inner}</button>`;
 function guestHtml(){
   const sm = (S.run && S.run.summary) || {}, ok = S.rr.filter(x => !x.excluded), t = today();
   const in30 = new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
@@ -173,13 +181,13 @@ function guestHtml(){
   return `<p class="muted">⭐ <b>5-star return renters.</b> Guests who gave us a 5-star Airbnb or Vrbo review, with the day to email them: just before they usually book, aimed at the anniversary of their stay.
     ${S.run ? `Rebuilt ${esc(fmtDT(S.run.ran_at))}.` : "Not built yet."}</p>
   <div class="kpis">
-    <div class="kpi"><small>Guests on the list</small><b>${ok.length.toLocaleString()}</b><small>${(S.rr.length - ok.length)} left out (Do Not Rent)</small></div>
-    <div class="kpi"><small>To email in the next 30 days</small><b>${due.length.toLocaleString()}</b><small>not in Brevo yet, not booked again</small></div>
-    <div class="kpi"><small>Already in a Brevo batch</small><b>${inB.length.toLocaleString()}</b><small>${esc(Object.keys(sm.brevo_lists || {}).length)} "Return Renters" lists</small></div>
-    <div class="kpi"><small>Unsubscribed in Brevo</small><b>${uns.length.toLocaleString()}</b><small>${inB.length ? Math.round(uns.length / inB.length * 100) + "% of those in a batch" : ""}</small></div>
-    <div class="kpi"><small>Booked with us again</small><b>${back.length.toLocaleString()}</b><small>${back.filter(x => x.brevo_list).length} of them were in a Brevo batch</small></div>
-    <div class="kpi"><small>Opened our emails</small><b>${ok.filter(x => x.email_opens > 0).length}</b><small>${ok.filter(x => x.email_clicks > 0).length} clicked · of ${ok.filter(x => x.email_sent > 0).length} sent one (Brevo; opens are a floor)</small></div>
-    <div class="kpi"><small>Booked after our email</small><b>${ok.filter(x => x.email_booked).length}</b><small>of ${ok.filter(x => x.emailed_id).length} guests we emailed</small></div>
+    ${gkb("all", `<small>Guests on the list</small><b>${ok.length.toLocaleString()}</b><small>${(S.rr.length - ok.length)} left out (Do Not Rent)</small>`)}
+    ${gkb("due", `<small>To email in the next 30 days</small><b>${due.length.toLocaleString()}</b><small>not in Brevo yet, not booked again</small>`)}
+    ${gkb("inb", `<small>Already in a Brevo batch</small><b>${inB.length.toLocaleString()}</b><small>${esc(Object.keys(sm.brevo_lists || {}).length)} "Return Renters" lists</small>`)}
+    ${gkb("uns", `<small>Unsubscribed in Brevo</small><b>${uns.length.toLocaleString()}</b><small>${inB.length ? Math.round(uns.length / inB.length * 100) + "% of those in a batch" : ""}</small>`)}
+    ${gkb("back", `<small>Booked with us again</small><b>${back.length.toLocaleString()}</b><small>${back.filter(x => x.brevo_list).length} of them were in a Brevo batch</small>`)}
+    ${gkb("open", `<small>Opened our emails</small><b>${ok.filter(x => x.email_opens > 0).length}</b><small>${ok.filter(x => x.email_clicks > 0).length} clicked · of ${ok.filter(x => x.email_sent > 0).length} sent one (Brevo; opens are a floor)</small>`)}
+    ${gkb("mail", `<small>Booked after our email</small><b>${ok.filter(x => x.email_booked).length}</b><small>of ${ok.filter(x => x.emailed_id).length} guests we emailed</small>`)}
   </div>
   ${(sm.by_campaign || []).length ? `<h2>Did the emails bring bookings?</h2>
   <div class="box"><table><thead><tr><th>Return-renter email</th><th>Sent</th><th class="n">Guests emailed</th><th class="n">Booked since</th><th class="n">Booked direct</th><th class="n">Rate</th></tr></thead><tbody>
@@ -197,6 +205,7 @@ function guestHtml(){
     <label>Find <input data-f="q" placeholder="guest, home, channel" value="${esc(S.f.q)}"></label>
     <button class="btn small" id="csv">⬇ Download CSV</button><span class="muted">${rows.length.toLocaleString()} guests</span>
   </div>
+  ${gkOn() && gkOn() !== "all" ? `<p class="muted tfnote">Showing ${rows.length.toLocaleString()} ${esc(GK[gkOn()][0])} · <a href="#" data-gk="all">show all</a></p>` : ""}
   <div class="box"><table><thead><tr><th>Guest</th><th>Channel</th><th>Home</th><th>Last 5★ stay</th><th class="n">5★</th><th class="n">Stays</th><th class="n">Books ahead</th><th>Target stay</th><th>Email on</th><th>Brevo</th><th>Booked again</th><th>What they wrote</th></tr></thead>
   <tbody>${rows.slice(0, 300).map(x => `<tr><td><b>${esc(x.guest)}</b></td><td>${esc(x.channel)}</td><td>${esc(x.home)}</td><td>${esc(fmtD(x.last_five_in))}</td>
     <td class="n">${x.five_reviews}</td><td class="n">${x.stays}</td><td class="n">${x.typical_lead} d</td><td>${esc(fmtD(x.target_stay))}</td>
@@ -812,6 +821,8 @@ document.addEventListener("click", e => {
   if(e.target.closest("[data-new]")) return ideaDialog(null);
   const it = e.target.closest(".it[data-id]"); if(it) return ideaDialog(S.ideas.find(x => x.id == it.dataset.id));
   if(e.target.id === "csv") csv();
+  const gk = e.target.closest("[data-gk]"); if(gk){ e.preventDefault(); const k = gkOn() === gk.dataset.gk ? "all" : gk.dataset.gk;
+    Object.assign(S.f, GK[k][1], { q:"" }); render(); restoreFilters(); const g = document.getElementById("gst"); if(g && gk.classList.contains("kpi")) g.scrollIntoView({ block:"start", behavior:"smooth" }); return; }
   const pv = e.target.closest("[data-pv]"); if(pv) return preview(pv.dataset.pv);
   const ds = e.target.closest("[data-design]"); if(ds) return design(ds.dataset.design);
   const cp = e.target.closest("[data-copy]"); if(cp) return (async () => { const c = S.camps.find(x => x.brevo_id == cp.dataset.copy);
