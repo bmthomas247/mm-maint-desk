@@ -15,6 +15,8 @@ const CSS = `
 .anup{color:var(--green,#2f7a3a);font-weight:700} .andn{color:var(--red,#b3261e);font-weight:700}
 .ankpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 12px}
 .ankpi .card{margin:0;padding:12px 14px} .ankpi b{display:block;font-size:22px} .ankpi small{color:var(--muted)}
+.ankpi button.card{font:inherit;color:inherit;text-align:left;width:auto;min-height:0;background:var(--card);border:1px solid var(--line);cursor:pointer} .ankpi button.card:hover{border-color:var(--forest-2,#5b8a1e)} .ankpi button.card.on{border-color:var(--forest-2,#5b8a1e);box-shadow:0 0 0 2px var(--forest-2,#5b8a1e) inset}
+.antfn{font-size:13px;color:var(--muted);margin:-4px 2px 10px}
 .ansrc{font-size:12.5px;color:var(--muted);margin:8px 0 0}
 .anch{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:10px 12px 6px;margin:0 0 12px}
 .anch h4{margin:0 0 4px;font-size:14px} .anch svg{display:block;width:100%;height:auto;overflow:visible}
@@ -488,12 +490,19 @@ async function worst(v){
   v.innerHTML = `<div class="page wide">${back}<h2>Worst performers — what to fix</h2>
     <p class="muted">Our homes earning less per available night than the comps in their rate set, measured the same way on both sides (Key Data), ${esc(dt(W.win_from + "T12:00"))} – ${esc(dt(W.win_to + "T12:00"))}. Open a home for the reasons, what to fix, and a draft note for the owner.</p>
     <div class="ankpi"><div class="card"><small>Homes behind their comps</small><b>${B.length}</b><small>of ${H.filter(x => x.kd).length} compared</small></div>
-      <div class="card"><small>More than 25% behind</small><b>${B.filter(x => x.gap <= -.25).length}</b><small>revenue per available night</small></div>
-      <div class="card"><small>With a reviews gap</small><b>${B.filter(x => x.recs.some(r => r.source.startsWith("Key Data listing details") && /scores|rating|reviews/.test(r.text))).length}</b><small>a category below the comps</small></div></div>
+      <button type="button" class="card" data-wf="far" title="Show only these homes (tap again for all)"><small>More than 25% behind</small><b>${B.filter(x => x.gap <= -.25).length}</b><small>revenue per available night</small></button>
+      <button type="button" class="card" data-wf="rv" title="Show only these homes (tap again for all)"><small>With a reviews gap</small><b>${B.filter(x => x.recs.some(r => r.source.startsWith("Key Data listing details") && /scores|rating|reviews/.test(r.text))).length}</b><small>a category below the comps</small></button></div>
+    <p class="antfn" id="wfn" hidden></p>
     <div class="anbar"><input id="wq" type="search" placeholder="Search homes, owners or rate sets"><select id="wa"><option value="">All areas</option>${[...new Set(B.map(x => x.area).filter(Boolean))].sort().map(a => `<option>${esc(a)}</option>`).join("")}</select></div>
     <div id="wt"></div>
     <p class="ansrc">Sources: Key Data listing KPIs and listing details (captured ${esc(dt(W.kd_captured))}) for our Airbnb listing and the Primary comps; Track stays; Rates desk checks; owner rules from the Kolleen workbook.</p></div>`;
+  // tiles filter the table (Brandon 2026-11-17): tap = only those homes, tap again or "show all" = every home behind
+  let wf = ""; const WF = { far:[x => x.gap <= -.25, "homes more than 25% behind"], rv:[x => x.recs.some(r => r.source.startsWith("Key Data listing details") && /scores|rating|reviews/.test(r.text)), "homes with a reviews gap"] };
   const draw = () => { const q = $("#wq").value.toLowerCase(), a = $("#wa").value;
+    v.querySelectorAll("[data-wf]").forEach(b => b.classList.toggle("on", b.dataset.wf === wf));
+    const WL = B.filter(x => (!wf || WF[wf][0](x)) && (!q || [x.home, x.set_name].join(" ").toLowerCase().includes(q)) && (!a || x.area === a)), fn = $("#wfn");
+    fn.hidden = !wf; fn.innerHTML = wf ? `Showing ${WL.length} ${WF[wf][1]} · <a class="anlink" href="#" id="wfall">show all</a>` : "";
+    if($("#wfall")) $("#wfall").onclick = e => { e.preventDefault(); wf = ""; draw(); };
     table($("#wt"), [
       { k:"home", t:"Home", l:1, f:r => `<a class="anlink" href="#/an/worst/${encodeURIComponent(r.home_id)}">${esc(r.home)}</a>` }, { k:"area", t:"Area", l:1 }, { k:"bedrooms", t:"Beds" },
       { k:"gap", t:"RevPAR vs. comps", f:r => r.kd_occ ? `<span class="andn">${Math.round(r.gap * 100)}%</span>` : `<span class="pill amber" title="Key Data saw no Airbnb bookings — check the listing">no Airbnb bookings seen</span>` },
@@ -501,7 +510,8 @@ async function worst(v){
       { k:"rating", t:"Airbnb rating", v:r => r.rv.r_overall == null ? null : +r.rv.r_overall, f:r => r.rv.r_overall == null ? "—" : `${(+r.rv.r_overall).toFixed(2)} <span class="muted">vs ${r.rc.r_overall == null ? "—" : (+r.rc.r_overall).toFixed(2)}</span>` },
       { k:"nrec", t:"Things to fix", v:r => r.recs.length, f:r => `${r.recs.length}${r.recs.some(x => x.owner) ? ` <span class="pill">owner</span>` : ""}` },
       { k:"our_rent", t:"Track guest rent", f:r => usd(r.our_rent) }
-    ], B.filter(x => (!q || [x.home, x.set_name].join(" ").toLowerCase().includes(q)) && (!a || x.area === a)), "gap", null, 1); };
+    ], WL, "gap", null, 1); };
+  v.querySelectorAll("[data-wf]").forEach(b => b.onclick = () => { wf = wf === b.dataset.wf ? "" : b.dataset.wf; draw(); });
   $("#wq").oninput = $("#wa").onchange = draw; draw();
 }
 async function worstOne(v, id){
@@ -604,6 +614,7 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
   const TABS = { alerts:"alerts", respond:"respond", research:"list", patterns:"patterns", improvements:"improve", listing:"listing" };
   let tab = TABS[String(pre || "").toLowerCase()] || "list"; if(TABS[String(pre || "").toLowerCase()]) pre = "";
   let only = null;   // review ids picked from an improvement ("Read the N reviews")
+  let cplt = false;  // "With a complaint" tile tapped (Brandon 2026-11-17)
   v.innerHTML = `<div class="page wide">${bk}<h2>${h2}</h2>
     <div class="anbar" id="rvtabs" style="gap:6px">${[["alerts", "Alerts"], ["respond", "Respond"], ["list", "Research"], ["patterns", "Patterns"], ["improve", "Improvements"], ["listing", "Listing ideas"]].map(([k, t]) =>
       `<button class="btn small" data-tab="${k}">${t}</button>`).join("")}</div>
@@ -635,13 +646,17 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
     if($("#rvoff")) $("#rvoff").onclick = e => { e.preventDefault(); only = null; shown = 30; draw(); };
     const base = A.filter(x => (!only || only.has(+x.id)) && (!h || x.hood === h) && (!u || String(x.code).toLowerCase() === u || String(x.name).toLowerCase().includes(u)) && (!ch || x.channel === ch) && (!ab || (x.about || "home") === ab)
       && (!rs || (rs === "p" ? !!x.private : rs === "n" ? !!x.text && !x.response : x.overall != null && +x.overall <= +rs)) && (!q || [x.text, x.private].join(" ").toLowerCase().includes(q)));
-    cur = base.filter(x => !t || has(x, t));
+    cur = base.filter(x => !t || has(x, t)); if(cplt) cur = cur.filter(x => x.tc.size);
     const rated = cur.filter(x => x.overall != null), avg = rated.length ? rated.reduce((a, x) => a + +x.overall, 0) / rated.length : null;
     $("#rvk").innerHTML = `<div class="ankpi"><div class="card"><small>Reviews</small><b>${cur.length.toLocaleString()}</b><small>${new Set(cur.map(x => x.code)).size} homes</small></div>
       <div class="card"><small>Average stars</small><b>${avg == null ? "—" : avg.toFixed(2)}</b><small>${rated.length} rated</small></div>
       <div class="card"><small>5-star share</small><b>${rated.length ? Math.round(rated.filter(x => +x.overall >= 5).length / rated.length * 100) + "%" : "—"}</b><small>of rated reviews</small></div>
-      <div class="card"><small>With a complaint</small><b>${cur.filter(x => x.tc.size).length}</b><small>${cur.filter(x => x.private).length} private notes</small></div>
-      <div class="card"><small>No reply from us</small><b>${cur.filter(x => x.text && !x.response).length}</b><small>public reviews</small></div></div>`;
+      <button type="button" class="card${cplt ? " on" : ""}" data-rk="c" title="Show only reviews with a complaint (tap again for all)"><small>With a complaint</small><b>${cur.filter(x => x.tc.size).length}</b><small>${cur.filter(x => x.private).length} private notes</small></button>
+      <button type="button" class="card${rs === "n" ? " on" : ""}" data-rk="n" title="Show only reviews with no reply from us (tap again for all)"><small>No reply from us</small><b>${cur.filter(x => x.text && !x.response).length}</b><small>public reviews</small></button></div>`
+      + (cplt || rs === "n" ? `<p class="antfn">Showing ${cur.length} review${cur.length === 1 ? "" : "s"} ${[cplt && "with a complaint", rs === "n" && "with no reply from us"].filter(Boolean).join(" and ")} · <a class="anlink" href="#" data-rk="">show all</a></p>` : "");
+    $("#rvk").querySelectorAll("[data-rk]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.rk;
+      if(k === "c") cplt = !cplt; else if(k === "n") $("#rvr").value = $("#rvr").value === "n" ? "" : "n"; else { cplt = false; if($("#rvr").value === "n") $("#rvr").value = ""; }
+      shown = 30; draw(); });
     // highlights (Brandon 2026-10-29): team named as great (review_kudos) + the best line from recent 5-star reviews, both following the home/neighborhood/channel filters
     const HL = /\b(amazing|awesome|wonderful|fantastic|excellent|incredible|outstanding|perfect|beautiful|loved|love|spotless|immaculate|cozy|stunning|best|highly recommend|would (?:definitely )?(?:stay|come back|return))\b/i;
     const inF = x => (!h || x.hood === h) && (!u || String(x.code || x.home).toLowerCase() === u || String(x.name || "").toLowerCase().includes(u)) && (!ch || (x.channel === ch || (ch === "Homeaway" && x.channel === "Vrbo")));
@@ -691,7 +706,7 @@ async function reviews(v, pre, desk){   // desk = the Reservations / Guest ▸ R
        [...r.tc].map(k => TN[k]).join("; "), r.text, r.private, r.res]));
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + rows.map(r => r.map(cell).join(",")).join("\r\n")], { type:"text/csv" }));
     a.download = `guest-reviews-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
-  const clear = () => { ["rvh", "rvt", "rvr", "rvc", "rva"].forEach(i => $("#" + i).value = ""); $("#rvu").value = $("#rvq").value = ""; shown = 30; };
+  const clear = () => { ["rvh", "rvt", "rvr", "rvc", "rva"].forEach(i => $("#" + i).value = ""); $("#rvu").value = $("#rvq").value = ""; cplt = false; shown = 30; };
   const setTab = t => { tab = t; v.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("primary", b.dataset.tab === t));
     $("#rvmain").hidden = t !== "list"; $("#rvins").hidden = t === "list";
     if(t === "alerts" || t === "respond" || t === "listing") revMore($("#rvins"), t, ctx); else if(t !== "list") insights($("#rvins"), t, ctx); };
@@ -1012,7 +1027,9 @@ window.goodReviewsView = async function(v){ css();
       && (!ch || x.channel === ch) && (!tm || (x.team || []).length) && (!q || String(x.text).toLowerCase().includes(q)));
     $("#gdk").innerHTML = `<div class="ankpi"><div class="card"><small>Good reviews</small><b>${cur.length.toLocaleString()}</b><small>${new Set(cur.map(x => x.code)).size} homes</small></div>
       <div class="card"><small>5 stars</small><b>${cur.length ? Math.round(cur.filter(x => +x.overall >= 5).length / cur.length * 100) + "%" : "—"}</b><small>of these reviews</small></div>
-      <div class="card"><small>Name our team</small><b>${cur.filter(x => (x.team || []).length).length}</b><small>${[...new Set(cur.flatMap(x => x.team || []))].map(esc).join(", ") || "no one yet"}</small></div></div>`;
+      <button type="button" class="card${tm ? " on" : ""}" data-gk="t" title="Show only reviews that name our team (tap again for all)"><small>Name our team</small><b>${cur.filter(x => (x.team || []).length).length}</b><small>${[...new Set(cur.flatMap(x => x.team || []))].map(esc).join(", ") || "no one yet"}</small></button></div>`
+      + (tm ? `<p class="antfn">Showing ${cur.length} review${cur.length === 1 ? "" : "s"} that name our team · <a class="anlink" href="#" data-gk="">show all</a></p>` : "");
+    $("#gdk").querySelectorAll("[data-gk]").forEach(b => b.onclick = e => { e.preventDefault(); $("#gdt").checked = b.dataset.gk ? !$("#gdt").checked : false; shown = 30; draw(); });
     const by = {}; cur.forEach(x => { const b = by[x.code] || (by[x.code] = { code:x.code, hood:x.hood, n:0, five:0, last:"" }); b.n++; if(+x.overall >= 5) b.five++; if((x.check_in || "") > b.last) b.last = x.check_in; });
     table($("#gdht"), [{ k:"code", t:"Home", l:1, f:r => `<a class="anlink" href="#" data-u="${esc(r.code)}">${esc(r.code)}</a>` }, { k:"hood", t:"Neighborhood", l:1 },
       { k:"n", t:"Good reviews" }, { k:"five", t:"5 stars" }, { k:"last", t:"Latest stay", f:r => r.last ? esc(dt(r.last + "T12:00")) : "—" }], Object.values(by), "n");
@@ -1106,13 +1123,18 @@ window.peopleScoresView = async function(v){ css();
   $("#psp").value = per; $("#psp").onchange = () => { try { localStorage.setItem("ps_per", $("#psp").value); } catch(e){} peopleScoresView(v); };
   if(g === "gps") return gpsCheck(rows, pc);
   const rated =rows.filter(x => x.score != null), above = rated.filter(x => x.score >= 110).length, below = rated.filter(x => x.score < 90).length;
-  $("#psk").innerHTML = `<div class="ankpi"><div class="card"><small>Rated</small><b>${rated.length}</b><small>of ${rows.length} with any data</small></div>
-    <div class="card"><small>Above the group (110+)</small><b>${above}</b></div><div class="card"><small>Below the group (under 90)</small><b>${below}</b></div></div>`;
+  // Above / Below tiles filter the table (Brandon 2026-11-17); tap again or "show all" = everyone
+  let pf = ""; const PF = { up:[x => x.score != null && x.score >= 110, "above the group"], dn:[x => x.score != null && x.score < 90, "below the group"] };
+  const kpis = () => { $("#psk").innerHTML = `<div class="ankpi"><div class="card"><small>Rated</small><b>${rated.length}</b><small>of ${rows.length} with any data</small></div>
+    <button type="button" class="card${pf === "up" ? " on" : ""}" data-pf="up" title="Show only these people (tap again for all)"><small>Above the group (110+)</small><b>${above}</b></button><button type="button" class="card${pf === "dn" ? " on" : ""}" data-pf="dn" title="Show only these people (tap again for all)"><small>Below the group (under 90)</small><b>${below}</b></button></div>`
+    + (pf ? `<p class="antfn">Showing ${rows.filter(PF[pf][0]).length} ${rows.filter(PF[pf][0]).length === 1 ? "person" : "people"} ${PF[pf][1]} · <a class="anlink" href="#" data-pf="">show all</a></p>` : "");
+    $("#psk").querySelectorAll("[data-pf]").forEach(b => b.onclick = e => { e.preventDefault(); pf = b.dataset.pf && pf !== b.dataset.pf ? b.dataset.pf : ""; kpis(); drawT(); }); };
   const pill = s => s == null ? `<span class="muted">not enough data</span>` : `<b>${s}</b> <span class="pill ${s >= 110 ? "green" : s < 90 ? "amber" : ""}">${s >= 110 ? "Above" : s < 90 ? "Below" : "On par"}</span>`;
   const GRC = { "A+":"green", A:"green", B:"", C:"amber", D:"red" };
-  table($("#pst"), [{ k:"rank", t:"#", v:x => x.rank ?? 999, f:x => x.rank ?? "—" }, { k:"person", t:"Name", l:1 }, { k:"score", t:"Score", v:x => x.score ?? -1, f:x => pill(x.score) },
+  const drawT = () => table($("#pst"), [{ k:"rank", t:"#", v:x => x.rank ?? 999, f:x => x.rank ?? "—" }, { k:"person", t:"Name", l:1 }, { k:"score", t:"Score", v:x => x.score ?? -1, f:x => pill(x.score) },
     { k:"grade", t:"Grade", v:x => x.rank ?? 999, f:x => { const gr = (x.metrics || {}).grade; return gr ? `<span class="pill ${GRC[gr]}" style="font-weight:800" title="A+ top 10% · A top 25% · B top half · C · D bottom 25% of the rated people in this group">${esc(gr)}</span>` : "—"; } }]
-    .concat(D.cols.map(c => ({ k:c.k, t:c.t, v:x => (x.metrics || {})[c.k] ?? null, f:c.f || (x => n1((x.metrics || {})[c.k])) }))), rows, "score");
+    .concat(D.cols.map(c => ({ k:c.k, t:c.t, v:x => (x.metrics || {})[c.k] ?? null, f:c.f || (x => n1((x.metrics || {})[c.k])) }))), pf ? rows.filter(PF[pf][0]) : rows, "score");
+  kpis(); drawT();
   if(!rows.length) $("#pst").innerHTML = `<div class="card"><p class="muted">${g === "vendor"
     ? "No vendor data to rate yet: none of our recent jobs record which vendor did the work (the only vendor names are on old, open Asana jobs). Vendors will show here once jobs carry the vendor."
     : "Nothing to rate in this period yet."}</p></div>`;
