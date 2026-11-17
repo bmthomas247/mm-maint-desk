@@ -279,7 +279,7 @@ function upShow(res, from, key, items, redraw){
    Next steps = suggested tasks built from the topic (one tap fills the task form) + the topic's tasks (All / Today / This week / Overdue).
    Tasks go to a person (meeting_task_add2, hub_meeting_actions.sql): they see it on Home + the bell, and get a Slack DM when that's on.
    Owner follow-ups close from the panel (meeting_ofb_set). Wrap up = what was decided + who does what, to copy. */
-const MX = { tp:{}, filt:"all", q:"", open:null, tab:"ov", tf:"all", sug:{}, bw:{}, bwp:{}, bwopen:false, chg:null, psu:{}, psuAt:0, orh:{}, orf:{}, orsnap:{}, prep:false };
+const MX = { tp:{}, filt:"all", q:"", open:null, tab:"ov", tf:"all", sug:{}, bw:{}, bwp:{}, bwopen:false, chg:null, psu:{}, psuAt:0, orh:{}, orf:{}, orsnap:{}, prep:false, orOrder:[], orAll:[] };
 async function psuLoad(){ try { const r = await sb.from("psu_progress").select("job_id,log"); (r.data || []).forEach(x => MX.psu[x.job_id] = x.log || []); MX.psuAt = Date.now(); } catch(e){} }
 /* Breezeway from the meeting (hub_meeting_breezeway.sql): tasks this meeting sent + the Breezeway people list */
 async function bwLoad(key){ try { const [a, b] = await Promise.all([sb.rpc("meeting_bw_list", { p_meet:key }), MX.bwp[key] ? null : sb.rpc("meeting_bw_people", { p_meet:key })]);
@@ -399,6 +399,11 @@ const ORCSS = `
 .orrow small{display:block} .orrow:hover{background:#fff} .orrb{display:flex;gap:6px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
 .orprep{background:#fbf3e3;border:1px solid #efdcb5} .orprep p{margin:4px 0 0;font-size:13.5px}
 .ornone{font-size:13px;margin:4px 0 0}
+.orl .orlt{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;min-width:0} .orl .ortag{font-size:11px;padding:1px 6px}
+.orib{border:1px solid var(--line);background:var(--card,#fff);border-radius:7px;padding:1px 7px;font-size:12.5px;line-height:1.6;cursor:pointer;color:var(--ink-2,#444)}
+.orib:hover{background:#eef3e6} .orib.on{background:#c2410c;color:#fff;border-color:#c2410c}
+.mtg .mpsur.orl.must{background:#fff6ef} .mtg .orbar{height:5px;margin:4px 0 2px} .orls{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ornav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end} .ornav .muted{font-size:12.5px}
 @media print{ .orcb,.orrb,.ornote,.orhall{display:none!important} .orc{break-inside:avoid;box-shadow:none} .orfold{display:none} }`;
 let orCssDone = false;
 const orCss = () => { if(orCssDone) return; orCssDone = true; const s = document.createElement("style"); s.textContent = ORCSS; document.head.appendChild(s); };
@@ -482,34 +487,69 @@ function render(v, key, data, ppl){
       ${vis.map(r => `<div class="orhr"><span class="orhdt">${esc(dshort2(r.d))}</span><div><b>${esc(r.by)}</b>${r.src ? `<span class="muted"> · ${esc(r.src)}</span>` : ""}<div>${esc(short(r.tx, 420))}</div></div></div>`).join("") || `<p class="muted ornone">No notes yet.</p>`}
       ${rows.length > 3 ? `<button class="orhall" data-orh="${esc(it.key)}">${full ? "Show less" : "Show all " + rows.length}</button>` : ""}</div>`;
   }
-  function orCard(it, W){
+  /* compact row (Jeff 2026-11-16: "a lot of scrolling ... i like the expanding window"): one line + a "next" line; tap = side window */
+  function orTags(it, W){
+    const P = isPsu(it) ? psuInfo(it) : null, tags = [...W.tags];
+    const nh = P && items.find(x => kindOf(x) === "new" && homeOf(x) === P.home);
+    if(nh){ const m0 = ((nh.lines || [])[0] || "").match(/\((\d+) days\)/); tags.push(["new", "🆕 New home" + (m0 ? " · " + m0[1] + " days" : "")]); }
+    return tags;
+  }
+  function orLine(it, W){
     const k = kindOf(it), st = stItem(it), tk = open.filter(t => t.item_key === it.key), P = isPsu(it) ? psuInfo(it) : null, S = k === "sale" ? saleOf(it) : null;
     const own = P ? P.owner : ownerOf(it), title = P ? P.home : S ? S.home : it.title, pp = orPrep()[it.key];
     const ic = P ? psuIcon(it) : S ? "🏷️" : { behind:"📉", big:"🛠", ofb:"📞", ownerstays:"🧳", new:"🆕" }[k] || "•";
-    const tags = [...W.tags];
-    const nh = P && items.find(x => kindOf(x) === "new" && homeOf(x) === P.home);
-    if(nh){ const m0 = ((nh.lines || [])[0] || "").match(/\((\d+) days\)/); tags.push(["new", "🆕 New home" + (m0 ? " · " + m0[1] + " days in Track" : "")]); }
-    let facts = "";
-    if(P) facts = `<div class="orpct"><div class="mpsub"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div><b>${P.pct}%</b></div><small class="muted">${esc([P.kind, P.done != null ? P.done + " of " + P.total + " steps" : ""].filter(Boolean).join(" · "))}</small>`;
-    else if(S) facts = `<div><b class="mprice">${esc(S.price || "Not on Zillow")}</b> <span class="muted">${esc(S.listed)}</span></div>${S.pills.length ? `<div class="mhl">${S.pills.join("")}</div>` : ""}<small class="muted">${esc([S.mls ? "MLS # " + S.mls : "", S.agent || S.broker || "", S.setup].filter(Boolean).join(" · "))}</small>`;
-    else { const L = (it.lines || []).filter(l => l && !/^Owner: /.test(l) && !/^Next: /.test(l));
-      facts = L.length ? `<ul class="orlines">${L.slice(0, 4).map(l => `<li>${esc(short(l, 170))}</li>`).join("")}${L.length > 4 ? `<li class="muted">+${L.length - 4} more (Open)</li>` : ""}</ul>` : ""; }
-    const nx = orNextUp(it, tk, P), dv = ST.drafts[key + "|" + it.key];
-    return `<div class="orc${W.must ? " must" : ""}">
-      <div class="orch"><div class="orct"><i class="oric">${ic}</i><div style="min-width:0"><b class="ortt">${esc(title)}</b>${own ? `<div class="orown">👤 ${esc(own)}</div>` : ""}
-        <div class="ortags">${st ? pill(st) : ""}${tags.map(([c, l]) => `<span class="ortag ${c}">${esc(l)}</span>`).join("")}</div></div></div>
-        <div class="orcb"><button class="btn small orpb${W.must ? " on" : ""}" data-prep="must" data-pk="${esc(it.key)}" title="Bring it up first in its section">★ Must talk</button>
-          <button class="btn small" data-prep="skip" data-pk="${esc(it.key)}" title="Fold it away for this week">⏭ Skip</button>
-          ${st !== "covered" ? `<button class="btn small" data-quick="${esc(it.key)}" title="Mark covered (adds a note)">✓ Covered</button>` : ""}
-          <button class="btn small primary" data-open="${esc(it.key)}" title="Everything: owner notes, tasks, Breezeway, message the team">⤢ Open</button></div></div>
-      ${facts}
-      ${pp && pp.note ? `<div class="orprepn">📌 ${esc(pp.note)}<span class="muted"> · ${esc(pp.by || "")}</span></div>` : ""}
-      <div class="ornx">👉 <b>Next up:</b> ${nx || `<span class="muted">Nothing written yet. Add a next step below.</span>`}</div>
-      ${orHist(it)}
-      <div class="ornote"><textarea data-note="${esc(it.key)}" placeholder="What did we decide?">${esc(dv != null ? dv : "")}</textarea>
-        <div class="macts"><select data-nstate="${esc(it.key)}" aria-label="Where it stands">${[["covered", "Covered"], ["waiting", "Waiting on owner"], ["scheduled", "Scheduled"]].map(([v2, l]) => `<option value="${v2}"${(st || "covered") === v2 ? " selected" : ""}>${l}</option>`).join("")}</select>
-          <button class="btn small primary" data-nsave="${esc(it.key)}">Add note</button>
-          <details class="ortask"><summary>+ Next step (task)</summary>${taskForm(it.key, it.title, MX.sug[it.key])}</details></div></div></div>`;
+    const bg = W.must ? "#c2410c" : P ? psuColor(P.pct) : S ? (S.hot ? "#c2410c" : "#3c5f12") : /^(waiting|scheduled)$/.test(st) ? "#c98a16" : "#5b6b84";
+    const tags = orTags(it, W).slice(0, 2).map(([c, l]) => `<span class="ortag ${c}">${esc(l)}</span>`).join("");
+    const nt = tk.slice().sort((a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999")))[0];
+    const ln = (it.lines || []).find(l => /^Next: /.test(l || "")), fact = (it.lines || []).filter(l => l && !/^Owner: /.test(l) && !/^Next: /.test(l))[0] || "";
+    const sub = pp && pp.note ? "📌 " + esc(short(pp.note, 120))
+      : nt ? "👉 " + esc(short(nt.text, 110)) + `<span class="muted"> · ${esc(nt.who || "No one yet")}${nt.due ? " · " + esc(fmt(nt.due)) : ""}</span>`
+      : P ? (P.next[0] ? "👉 " + esc(short(P.next[0], 120)) : esc(P.kind))
+      : S ? esc([S.listed, S.mls ? "MLS # " + S.mls : "", S.agent || S.broker || ""].filter(Boolean).join(" · "))
+      : ln ? "👉 " + esc(short(ln.slice(6), 120)) : esc(short(fact, 130));
+    const right = P ? `<b>${P.pct}%</b>` : S && S.price ? `<span class="mprice">${esc(S.price)}</span>` : "";
+    return `<div class="mpsur orl${W.must ? " must" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button"><i style="background:${bg}">${ic}</i>
+      <div class="mpsum"><div class="mpsut"><span class="orlt"><b>${esc(title)}</b>${own ? `<span class="muted"> · ${esc(own)}</span>` : ""}${st ? " " + pill(st) : ""}${tags}</span>
+        <span class="mrc">${right}<button class="orib${W.must ? " on" : ""}" data-prep="must" data-pk="${esc(it.key)}" title="Must talk">★</button><button class="orib" data-prep="skip" data-pk="${esc(it.key)}" title="Skip this week">⏭</button>${st !== "covered" ? `<button class="orib" data-quick="${esc(it.key)}" title="Mark covered">✓</button>` : ""}</span></div>
+        ${P ? `<div class="mpsub orbar"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div>` : S && S.pills.length ? `<div class="mhl">${S.pills.join("")}</div>` : ""}
+        <small class="muted orls">${sub}</small></div></div>`;
+  }
+  /* top of the side window's Overview: why it's up, prep note, Next up, history (what the big cards showed) */
+  function orPanelTop(it){
+    const W = orWhy(it, data.or || {}), tk = tasks.filter(t => t.item_key === it.key && !t.off && !t.done_at), P = isPsu(it) ? psuInfo(it) : null, pp = orPrep()[it.key], nx = orNextUp(it, tk, P);
+    const tags = orTags(it, W);
+    return `${tags.length ? `<div class="ortags" style="margin:0 0 8px">${tags.map(([c, l]) => `<span class="ortag ${c}">${esc(l)}</span>`).join("")}</div>` : ""}
+      ${pp && pp.note ? `<div class="orprepn" style="margin-bottom:8px">📌 ${esc(pp.note)}<span class="muted"> · ${esc(pp.by || "")}</span></div>` : ""}
+      <div class="ornx" style="margin-bottom:10px">👉 <b>Next up:</b> ${nx || `<span class="muted">Nothing written yet. Add a task on Next steps.</span>`}</div>
+      <div class="mbox">${orHist(it)}</div>`;
+  }
+  /* ‹ Prev · n of N · Next › and "✓ Covered → next" in the side window header (Jeff 2026-11-16) */
+  function orNav(it){
+    const list = MX.orOrder.includes(it.key) ? MX.orOrder : MX.orAll, i = list.indexOf(it.key);
+    if(i < 0) return "";
+    return `<div class="ornav"><button class="btn small" data-ornav="-1"${i ? "" : " disabled"} title="Previous topic (←)">‹ Prev</button><span class="muted">${i + 1} of ${list.length}</span>
+      <button class="btn small" data-ornav="1"${i < list.length - 1 ? "" : " disabled"} title="Next topic (→)">Next ›</button>${stItem(it) !== "covered" ? `<button class="btn small primary" data-orcov title="Saves what's typed in the note box (or 'Covered'), then opens the next topic">✓ Covered → next</button>` : ""}</div>`;
+  }
+  function orPanelWire(o, it){
+    const list = MX.orOrder.includes(it.key) ? MX.orOrder : MX.orAll, i = list.indexOf(it.key);
+    const go = k => { if(!k) return; MX.open = k; MX.tab = "ov"; MX.tf = "all"; MX.bwopen = false; MX.chg = null; panel(); };
+    o.querySelectorAll("[data-ornav]").forEach(b => b.onclick = () => go(list[i + +b.dataset.ornav]));
+    o.querySelectorAll("[data-orh]").forEach(b => b.onclick = e => { e.stopPropagation(); MX.orh[b.dataset.orh] = !MX.orh[b.dataset.orh]; panel(); });
+    const cv = o.querySelector("[data-orcov]");
+    if(cv) cv.onclick = async () => { cv.disabled = true; cv.textContent = "Saving…";
+      const ta = o.querySelector(`textarea[data-note="${CSS.escape(it.key)}"]`), pn = o.querySelector("#mpsun");
+      let r = null;
+      if(pn && pn.value.trim()) r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:pn.value.trim() });
+      if(!r || !r.error) r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:it.key, p_text:(ta && ta.value.trim()) || "Covered in the meeting.", p_state:"covered" });
+      if(r.error){ cv.disabled = false; cv.textContent = "✓ Covered → next"; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      delete ST.drafts[key + "|" + it.key];
+      const nx = list[i + 1] || (i > 0 ? list[i - 1] : null);
+      MX.open = nx; MX.tab = "ov"; MX.tf = "all"; MX.bwopen = false; MX.chg = null;
+      if(!nx) document.getElementById("mpov")?.remove();
+      redraw(); };
+    if(!window._orKeys){ window._orKeys = 1; document.addEventListener("keydown", e => { const p = document.getElementById("mpov"); if(!p || !p.querySelector("[data-ornav]")) return;
+      if(e.target && e.target.closest && e.target.closest("input,textarea,select")) return;
+      if(e.key === "ArrowRight") p.querySelector('[data-ornav="1"]:not([disabled])')?.click(); if(e.key === "ArrowLeft") p.querySelector('[data-ornav="-1"]:not([disabled])')?.click(); }); }
   }
   function orRow(it, W, mode){
     const P = isPsu(it) ? psuInfo(it) : null, S = kindOf(it) === "sale" ? saleOf(it) : null, pp = orPrep()[it.key];
@@ -536,10 +576,11 @@ function render(v, key, data, ppl){
     const head = b => `<h3 class="mg orhd"><span class="ornum">${++n}</span>${esc(b.t)}<span class="muted orhm">${b.min ? b.min + " min · " : ""}${b.items.length} topic${b.items.length === 1 ? "" : "s"}</span>${b.kinds && b.kinds.includes("psu") ? `<a class="muted" href="#/property_setup" style="font-size:12.5px;font-weight:400">Open Launch Pad ↗</a>` : ""}</h3>`;
     if(MX.prep){
       out += `<div class="card orprep"><b>📋 Monday prep for ${esc(fmt(day))}</b><p>Go down the list. <b>★ Must talk</b> puts a topic first in its section. <b>⏭ Skip</b> folds it away for this week. <b>📌</b> adds a reminder that shows on the card. Tap a row to open it. When you're done, tap <b>✓ Done prepping</b> at the top.</p></div>`;
+      MX.orOrder = MX.orAll = used.flatMap(b => b.items.map(it => it.key));
       used.forEach(b => { out += head(b); out += b.items.length ? `<div class="card" style="padding:4px 14px">${b.items.map(it => orRow(it, orWhy(it, OR), "prep")).join("")}</div>` : `<p class="muted ornone">Nothing this week.</p>`; });
       orNum = n + 1; return out;
     }
-    let body = "";
+    let body = ""; const ord = [], allK = [];
     used.forEach((b, bi) => {
       const W = b.items.map(it => ({ it, W:orWhy(it, OR) })), id = "b" + bi;
       const skip = noFold ? [] : W.filter(x => x.W.skip && !x.W.must), rest = W.filter(x => !skip.includes(x));
@@ -547,10 +588,12 @@ function render(v, key, data, ppl){
       talk.sort((a, c) => (c.W.must ? 1 : 0) - (a.W.must ? 1 : 0));
       nTalk += talk.length; nFold += fold.length; nMust += W.filter(x => x.W.must).length; nSkip += skip.length;
       body += head(b);
-      body += talk.length ? `<div class="orgrid">${talk.map(x => orCard(x.it, x.W)).join("")}</div>` : `<p class="muted ornone">${b.items.length ? "Nothing new here this week." : "Nothing this week."}</p>`;
+      ord.push(...talk.map(x => x.it.key)); allK.push(...talk.map(x => x.it.key), ...fold.map(x => x.it.key), ...skip.map(x => x.it.key));
+      body += talk.length ? `<div class="card mpsul orlist">${talk.map(x => orLine(x.it, x.W)).join("")}</div>` : `<p class="muted ornone">${b.items.length ? "Nothing new here this week." : "Nothing this week."}</p>`;
       if(fold.length) body += `<details class="orfold" data-orfold="${id}"${MX.orf[id] ? " open" : ""}><summary>Nothing new since ${esc(prevDay ? fmt(prevDay) : "last week")} (${fold.length})</summary><div>${fold.map(x => orRow(x.it, x.W, "fold")).join("")}</div></details>`;
       if(skip.length) body += `<details class="orfold" data-orfold="${id}s"${MX.orf[id + "s"] ? " open" : ""}><summary>⏭ Skipped this week (${skip.length})</summary><div>${skip.map(x => orRow(x.it, x.W, "skip")).join("")}</div></details>`;
     });
+    MX.orOrder = ord; MX.orAll = allK;
     const plan = used.reduce((s, b) => s + (b.min || 0), 0) + 10;
     out += `<div class="orsum">${prevDay ? "Last meeting " + esc(fmt(prevDay)) : "First meeting with this layout"} · <b>${nTalk}</b> to talk about${nFold ? ` · ${nFold} with nothing new (folded)` : ""}${nMust ? ` · ★ ${nMust} must talk` : ""}${nSkip ? ` · ⏭ ${nSkip} skipped` : ""} · planned ${plan} min</div>`;
     if(!OR.prev_day && prevDay && !noFold) out += `<p class="muted orfirst">This week: topics covered on ${esc(fmt(prevDay))} with no new note or task are folded. From next week the hub also checks each topic's facts against last Tuesday's.</p>`;
@@ -702,8 +745,9 @@ function render(v, key, data, ppl){
       b = `<div class="mtiles two">${`<div class="mtile"><div><b>${act.length}</b><span>Total activity</span></div></div><div class="mtile g"><div><b>${notesOf(null, it.key).length}</b><span>Notes</span></div></div>`}</div>
         <div class="mact">${act.map(a => `<div class="maci"><i>${a.ic}</i><div><div>${a.h}<span class="muted"> · ${esc(tm(a.at))}</span></div><div class="mab">${a.b}</div></div></div>`).join("") || `<p class="muted">Nothing yet.</p>`}</div>`;
     }
+    if(key === "meet_or" && MX.tab === "ov") b = orPanelTop(it) + b;   // Next up + history (Jeff 2026-11-16)
     const o = document.createElement("div"); o.id = "mpov"; o.className = "mpov";
-    o.innerHTML = `<div class="mpanel" role="dialog" aria-label="${esc(it.title)}"><div class="mph"><div>${pill(st)}<h3>${esc(it.title)}</h3>${ownerOf(it) ? `<div class="mown">👤 ${esc(ownerOf(it))}</div>` : ""}<span class="muted">${esc(it.grp)}</span></div><button class="btn small" data-pclose aria-label="Close">✕</button></div>
+    o.innerHTML = `<div class="mpanel" role="dialog" aria-label="${esc(it.title)}"><div class="mph"><div>${pill(st)}<h3>${esc(it.title)}</h3>${ownerOf(it) ? `<div class="mown">👤 ${esc(ownerOf(it))}</div>` : ""}<span class="muted">${esc(it.grp)}</span></div><div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end">${key === "meet_or" ? orNav(it) : ""}<button class="btn small" data-pclose aria-label="Close">✕</button></div></div>
       <div class="mptabs">${tabs.map(([k2, l, n]) => `<button class="${MX.tab === k2 ? "on" : ""}" data-ptab="${k2}">${l}${n !== "" ? ` <span>${n}</span>` : ""}</button>`).join("")}</div><div class="mpb">${b}</div></div>`;
     document.body.appendChild(o);
     o.onclick = e => { if(e.target === o) close(); };
@@ -713,6 +757,7 @@ function render(v, key, data, ppl){
     o.querySelectorAll("[data-sug]").forEach(x => x.onclick = () => { const s = sg[+x.dataset.sug]; MX.sug[it.key] = { text:s.text, due:addDays(T, s.days) }; panel();
       const i = o.querySelector('[data-tf="who"]'); if(i) i.focus(); });
     wire(o); msgWire(o, it); bwWire(o, it); onWire(o, it);
+    if(key === "meet_or") orPanelWire(o, it);
     const toff = o.querySelector("#mtoff");
     if(toff) toff.onclick = async () => { if(!confirm("Remove \"" + it.title + "\" from this meeting? (Its notes stay.)")) return;
       const r = await sb.rpc("meeting_topic_off", { p_id:it.own }); if(r.error) return alert("Couldn't remove: " + r.error.message); close(); redraw(); };
