@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Guest books</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Tools ▸ Guest books (build list n-guestbook, 2026-11-16, Claude Code for Jeff; hub_guest_book.sql). Replaces Touch Stay (paused 2026-11-01).
+     Everyone with Property Details sees the list, the preview and the QR code. The office (home_insp_can_add: admins, managers, front desk,
+     licensing) changes or hides sections, publishes a home's book, makes a new link, and writes local tips. Text comes from Track's
+     guest fields (read every 2 hours by guest-book-sync); hub text wins and is never written back to Track (Jeff: "Hub only for now").
+     Opened from Property Details with localStorage gb_home = the home code. -->
+<style>
+:root{--forest:#3c5f12;--moose:#88B535;--soft:#eef5e0;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;
+  --red:#b42318;--amber:#9a5b00;--radius:18px;--shadow:0 1px 2px rgba(20,40,20,.06),0 6px 20px rgba(20,40,20,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;--soft:#1e2a10}}
+:root[data-theme="dark"]{--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;--soft:#1e2a10}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);line-height:1.5}
+.wrap{max-width:1500px;margin:0 auto;padding:16px 16px 50px}
+.head{background:linear-gradient(135deg,#2c4a0c,#3c5f12 55%,#5a8a1e);color:#fff;border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+.head h1{margin:0;font-size:22px}.head p{margin:4px 0 0;opacity:.92;font-size:14px;max-width:860px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px}
+.tab{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 16px;font:inherit;font-weight:800;cursor:pointer}
+.tab.on{background:var(--forest);border-color:var(--forest);color:#fff}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:14px 0}
+.tile{appearance:none;text-align:left;border:1px solid var(--line);background:var(--card);border-radius:16px;padding:12px 14px;font:inherit;color:var(--ink);cursor:pointer;box-shadow:var(--shadow)}
+.tile b{display:block;font-size:24px}.tile span{color:var(--muted);font-size:13px;font-weight:700}.tile.on{outline:3px solid var(--moose)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.filters label{display:flex;flex-direction:column;font-size:12px;font-weight:800;color:var(--ink-2);gap:4px;flex:1;min-width:150px}
+input,select,textarea{font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:9px 11px;background:var(--card);color:var(--ink);width:100%}
+textarea{min-height:120px;resize:vertical;line-height:1.45}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:38px;padding:0 14px;font:inherit;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn.warn{color:var(--red)}.btn:disabled{opacity:.5;cursor:default}.btn.sm{min-height:32px;padding:0 10px;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.home{appearance:none;text-align:left;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-left:5px solid var(--line-2);border-radius:16px;padding:12px 14px;cursor:pointer;box-shadow:var(--shadow)}
+.home.live{border-left-color:var(--moose)}.home.thin{border-left-color:#e8b24a}
+.home b{font-size:17px}.home .nm{color:var(--ink-2);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.home .meta{color:var(--muted);font-size:12.5px;margin-top:4px}
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:800;background:var(--soft);color:#2f4710;margin-left:6px;vertical-align:middle}
+.pill.off{background:#f1f3ee;color:var(--muted)}.pill.warn{background:#fff3dc;color:var(--amber)}.pill.red{background:#fde8e6;color:var(--red)}
+@media (prefers-color-scheme:dark){.pill{color:#cfe79a}.pill.off{background:#223028;color:#a8b7ad}}
+.muted{color:var(--muted)}.small{font-size:13px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;align-items:start}
+@media (max-width:1000px){.cols{grid-template-columns:1fr}}
+.side{position:sticky;top:10px}
+.phone{border:10px solid #1d241f;border-radius:34px;overflow:hidden;height:640px;background:#f5f7f0;box-shadow:var(--shadow)}
+.phone .scr{height:100%;overflow:auto}
+.sec{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;background:var(--card)}
+.sec.hid{opacity:.62}.sec h3{margin:0;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.src{font-size:12.5px;color:var(--muted);margin:4px 0 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.ro{white-space:pre-wrap;background:var(--ground);border-radius:10px;padding:10px;font-size:14px;color:var(--ink-2);max-height:260px;overflow:auto}
+details.fold>summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--ink-2);margin-top:6px}
+.qr{text-align:center}.qr canvas{width:180px;height:180px;image-rendering:pixelated;background:#fff;border-radius:8px}
+.link{word-break:break-all;font-size:13px;background:var(--ground);border-radius:10px;padding:8px 10px;margin:8px 0}
+.err{color:var(--red);font-weight:700}.ok{color:#2f6b12;font-weight:700}
+.toast{position:fixed;right:16px;bottom:16px;background:#15201a;color:#fff;border-radius:12px;padding:10px 14px;font-weight:700;z-index:50;box-shadow:var(--shadow)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips label{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line-2);border-radius:999px;padding:4px 10px;font-size:13px;font-weight:700;cursor:pointer}
+.chips input{width:auto}
+@media print{body *{visibility:hidden}#printcard,#printcard *{visibility:visible}#printcard{position:absolute;left:0;top:0;width:100%;text-align:center;padding-top:.6in}}
+#printcard{display:none}@media print{#printcard{display:block}}
+</style>
+<style id="gbcss"></style>
+</head><body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<div id="printcard"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="config.js"></script>
+<script src="guest_book_render.js?v=20261116"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG, GB = window.GuestBook, esc = GB.esc;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = s => document.querySelector(s);
+document.getElementById("gbcss").textContent = GB.css;
+const S = { view:"homes", L:null, home:null, cur:null, q:"", area:"", status:"", tiles:"", tips:null, tipEdit:null, err:"" };
+const CATS = { eat:"Eat & drink", ski:"Ski & ride", outdoors:"Outdoors", groceries:"Groceries & errands", family:"Family fun", events:"Events", other:"More ideas" };
+const EVERY = [["welcome", "Welcome message", "Shows at the top of every home's guest book (a home's own welcome replaces it)."],
+               ["rules", "Extra house rules", "Shown under each home's own rules from Track (most guests, smoking, parties, age, pets)."]];
+
+function toast(t, bad){ const d = document.createElement("div"); d.className = "toast"; if(bad) d.style.background = "#b42318"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), bad ? 6000 : 2400); }
+const errText = e => { const m = String((e && (e.message || e.error_description)) || e || ""); if(/Failed to fetch|NetworkError/i.test(m)) return "No connection. Check your signal and try again."; if(/JWT|expired/i.test(m)) return "Your sign-in ran out. Reload the page."; return m || "Something went wrong."; };
+async function rpc(fn, args){ const r = await sb.rpc(fn, args || {}); if(r.error) throw r.error; return r.data; }
+const when = d => { if(!d) return ""; const x = new Date(d); return isNaN(+x) ? "" : x.toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit", timeZone:"America/Denver" }); };
+const linkOf = t => new URL("guest.html?g=" + t, location.href).href.replace(/\?_v=[^#]*/, "");
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<div class="card"><h2>Please sign in</h2><p><a href="hub.html#/tools_guestbook" target="_top">Go to the Moose Hub →</a></p></div>`; return; }
+  try { S.L = await rpc("guest_book_list"); }
+  catch(e){ if(/Not allowed/.test(errText(e))){ location.replace("hub.html#/home"); return; } $("#app").innerHTML = `<div class="card err">${esc(errText(e))}</div>`; return; }
+  let want = new URLSearchParams(location.search).get("h");
+  try { want = want || localStorage.getItem("gb_home"); localStorage.removeItem("gb_home"); } catch(e){}
+  if(want && S.L.homes.some(h => h.home === want)) await openHome(want); else draw();
+}
+
+function draw(){
+  const L = S.L;
+  const head = `<div class="head"><h1>📖 Guest books</h1><p>One page per home for guests: Wi-Fi, check-in, parking, trash, house rules, local tips and more. Built from Track's guest text, read every 2 hours. The office can change or hide any part here. Codes are never shown: guests get them in their check-in message.</p></div>
+    <div class="tabs"><button class="tab ${S.view === "homes" || S.view === "home" ? "on" : ""}" data-view="homes">🏠 Homes</button>
+      <button class="tab ${S.view === "tips" ? "on" : ""}" data-view="tips">⭐ Local tips</button>
+      <button class="tab ${S.view === "every" ? "on" : ""}" data-view="every">🌐 Text for every home</button></div>`;
+  let body = "";
+  if(S.view === "homes") body = homesView();
+  else if(S.view === "home") body = homeView();
+  else if(S.view === "tips") body = tipsView();
+  else if(S.view === "every") body = everyView();
+  $("#app").innerHTML = head + body;
+  if(S.view === "home") afterHome();
+}
+
+// ------------------------------------------------------------------ homes list
+function homesView(){
+  const H = S.L.homes;
+  const live = H.filter(h => h.published), ready = H.filter(h => !h.published && h.sections >= 3), thin = H.filter(h => h.sections < 3);
+  const views = H.reduce((a, h) => a + (h.views30 || 0), 0);
+  const q = S.q.toLowerCase();
+  let list = H.filter(h => (!q || (h.home + " " + (h.name || "") + " " + (h.area || "") + " " + (h.community || "")).toLowerCase().includes(q)) && (!S.area || h.area === S.area));
+  if(S.tiles === "live") list = list.filter(h => h.published); else if(S.tiles === "ready") list = list.filter(h => !h.published && h.sections >= 3); else if(S.tiles === "thin") list = list.filter(h => h.sections < 3);
+  const run = S.L.last_run;
+  return `<div class="tiles">
+      <button class="tile ${S.tiles === "live" ? "on" : ""}" data-tile="live"><b>${live.length}</b><span>Live for guests</span></button>
+      <button class="tile ${S.tiles === "ready" ? "on" : ""}" data-tile="ready"><b>${ready.length}</b><span>Ready to publish</span></button>
+      <button class="tile ${S.tiles === "thin" ? "on" : ""}" data-tile="thin"><b>${thin.length}</b><span>Little or no Track text</span></button>
+      <div class="tile" style="cursor:default"><b>${views}</b><span>Times opened, last 30 days</span></div></div>
+    <div class="card filters"><label>Find a home<input id="q" value="${esc(S.q)}" placeholder="Code, name or area"></label>
+      <label>Area<select id="area"><option value="">Every area</option>${(S.L.areas || []).sort().map(a => `<option ${a === S.area ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></label>
+      <div class="small muted" style="flex-basis:100%">Track last read ${run ? esc(when(run.at)) + (run.error ? ` <span class="err">— ${esc(run.error)}</span>` : ` · ${run.saved} homes`) : "not yet"}.${S.L.can_edit ? "" : " You can look; the office makes changes."}</div></div>
+    <div class="grid">${list.map(h => `<button class="home ${h.published ? "live" : h.sections < 3 ? "thin" : ""}" data-open="${esc(h.home)}">
+        <b>${esc(h.home)}</b>${h.published ? `<span class="pill">Live</span>` : h.sections < 3 ? `<span class="pill warn">Little text</span>` : `<span class="pill off">Not published</span>`}
+        <div class="nm">${esc(h.name || "")}</div>
+        <div class="meta">${esc(h.area || "No area")} · ${h.sections} sections${h.wifi ? " · Wi-Fi" : ""}${h.edits ? ` · ${h.edits} hub changes` : ""}${h.views30 ? ` · opened ${h.views30}×` : ""}</div></button>`).join("") || `<p class="muted">No homes match.</p>`}</div>`;
+}
+
+// ------------------------------------------------------------------ one home
+async function openHome(code){
+  S.home = code; S.view = "home"; S.cur = null; S.err = "";
+  draw();
+  try { S.cur = await rpc("guest_book_staff", { p_home:code }); } catch(e){ S.err = errText(e); }
+  draw();
+}
+const guestSecs = cur => (cur.sections || []).filter(s => !s.hidden && (s.body || (s.key === "rules" && (s.rules || []).length) || (s.key === "tips" && (s.tips || []).length) || (s.key === "wifi" && s.wifi)));
+function homeView(){
+  const c = S.cur, ed = S.L.can_edit;
+  if(S.err) return `<div class="card err">${esc(S.err)} <button class="btn sm" data-back>Back</button></div>`;
+  if(!c) return `<div class="card muted">Loading ${esc(S.home)}…</div>`;
+  const link = c.token ? linkOf(c.token) : "";
+  const views = (c.views || []).reduce((a, v) => a + v.n, 0);
+  const secs = (c.sections || []).map(s => secEditor(s, ed)).join("");
+  return `<div class="row" style="margin:12px 0"><button class="btn sm" data-back>← All homes</button></div>
+    <div class="cols"><div>
+      <div class="card"><h2 style="margin:0 0 2px">${esc(c.home)} <span class="muted" style="font-weight:600">${esc(c.name || "")}</span>
+        ${c.published ? `<span class="pill">Live for guests</span>` : `<span class="pill off">Not published</span>`}</h2>
+        <div class="small muted">Track's text read ${esc(when(c.read_at)) || "not yet"}${c.published_at ? ` · published ${esc(when(c.published_at))} by ${esc(c.published_by || "")}` : ""}${views ? ` · opened ${views}× in 30 days` : ""}</div>
+        ${ed ? `<div class="row">${c.published ? `<button class="btn warn" data-pub="0">Take it down</button>` : `<button class="btn pri" data-pub="1">Publish for guests</button>`}
+          <button class="btn" data-refresh>↻ Read Track again</button>${c.token ? `<button class="btn" data-newlink>New link</button>` : ""}</div>` : ""}
+        <p class="small muted" style="margin:10px 0 0">Each part starts with Track's text. Change it here and the hub's text wins (Track isn't changed, so arrival emails that use Track's text stay as they are). Codes are refused.</p></div>
+      ${secs}
+      ${(c.log || []).length ? `<div class="card"><h3 style="margin:0 0 6px">History</h3>${c.log.map(l => `<div class="small">${esc(when(l.at))} · ${esc(l.by || "")}: ${esc(l.what)}</div>`).join("")}</div>` : ""}
+    </div>
+    <div class="side">
+      ${c.token ? `<div class="card qr"><canvas id="qrc" width="180" height="180"></canvas>
+        <div class="link">${esc(link)}</div>
+        <div class="row" style="justify-content:center"><button class="btn sm" data-copylink>Copy link</button><button class="btn sm" data-qrpng>Download QR</button><button class="btn sm" data-qrprint>Print card</button>
+        ${c.published ? `<a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">Open ↗</a>` : ""}</div>
+        ${c.published ? "" : `<p class="small muted">Not published: the link and QR code show "not available" until it is.</p>`}</div>`
+        : `<div class="card small muted">${ed ? "Publish to get this home's link and QR code." : "No link yet: the office publishes it."}</div>`}
+      <div class="small muted" style="margin:0 0 6px;text-align:center">What guests see</div>
+      <div class="phone"><div class="scr" id="prev"></div></div>
+    </div></div>`;
+}
+function srcLine(s){
+  if(s.key === "wifi") return "From Track's Wi-Fi fields (the same ones Property Details shows). Change Wi-Fi in Track.";
+  if(s.key === "tips") return "From Local tips (tab above), for this home's area and every home.";
+  if(s.hidden) return `Hidden from guests${s.edit ? ` by ${esc(s.edit.by)}, ${esc(when(s.edit.at))}` : s.edit_all ? ` on every home by ${esc(s.edit_all.by)}` : ""}.`;
+  if(s.from === "hub") return `Changed in the hub by ${esc(s.edit.by)}, ${esc(when(s.edit.at))}.`;
+  if(s.from === "hub_all") return `Text for every home, by ${esc(s.edit_all.by)}, ${esc(when(s.edit_all.at))}.`;
+  return s.track ? `From Track${s.masked ? ` · 🔒 ${s.masked} code${s.masked > 1 ? "s" : ""} hidden` : ""}.` : "Nothing in Track for this.";
+}
+function secEditor(s, ed){
+  const t = s.key === "rules" ? "" : (s.body || "");
+  const facts = s.key === "rules" && (s.rules || []).length ? `<ul class="small" style="margin:4px 0 8px">${s.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ul><div class="small muted">From Track's home settings. Extra rules:</div>` : "";
+  const hidBtn = ed ? `<button class="btn sm" data-hide="${esc(s.key)}" data-on="${s.hidden ? 0 : 1}">${s.hidden ? "Show to guests" : "Hide from guests"}</button>` : "";
+  let inner;
+  if(s.key === "wifi"){
+    inner = s.wifi ? `<div class="ro">Network: ${esc(s.wifi.name || "—")}\nPassword: ${esc(s.wifi.pass || "—")}${s.wifi.note ? "\n" + esc(s.wifi.note) : ""}</div>` : `<div class="muted small">No Wi-Fi on file in Track.</div>`;
+    inner += `<div class="row">${hidBtn}</div>`;
+  } else if(s.key === "tips"){
+    inner = `<div class="small">${(s.tips || []).length} tip${(s.tips || []).length === 1 ? "" : "s"} for this home.</div><div class="row"><button class="btn sm" data-view="tips">Edit local tips</button>${hidBtn}</div>`;
+  } else if(ed){
+    const body = s.key === "rules" ? (s.edit && s.edit.body) || (s.edit_all && s.edit_all.body) || "" : t;
+    inner = facts + `<textarea data-ta="${esc(s.key)}" placeholder="${s.key === "rules" ? "Any extra house rules for this home (optional)" : "Nothing yet. Type what guests should know."}">${esc(body)}</textarea>
+      <div class="row"><button class="btn sm pri" data-save="${esc(s.key)}">Save</button>${(s.from === "hub" && s.edit && s.edit.body) ? `<button class="btn sm" data-usetrack="${esc(s.key)}">Go back to Track's text</button>` : ""}${hidBtn}</div>
+      ${s.from !== "track" && s.track ? `<details class="fold"><summary>Track's text</summary><div class="ro">${esc(s.track)}</div></details>` : ""}`;
+  } else {
+    inner = facts + (t ? `<div class="ro">${esc(t)}</div>` : `<div class="muted small">Nothing yet.</div>`);
+  }
+  return `<div class="sec${s.hidden ? " hid" : ""}" id="sec-${esc(s.key)}"><h3>${esc(s.title)}${s.hidden ? `<span class="pill red">Hidden</span>` : ""}</h3><div class="src">${srcLine(s)}</div>${inner}</div>`;
+}
+function qrOf(text){ try { const q = qrcode(0, "M"); q.addData(text, "Byte"); q.make(); return q; } catch(e){ return null; } }
+function paint(cv, q, px){ const n = q.getModuleCount(), m = 4, cell = Math.max(1, Math.floor(px / (n + m * 2))), size = cell * (n + m * 2);
+  cv.width = cv.height = size; const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, size, size); g.fillStyle = "#000";
+  for(let r = 0; r < n; r++) for(let c = 0; c < n; c++) if(q.isDark(r, c)) g.fillRect((c + m) * cell, (r + m) * cell, cell, cell); }
+function afterHome(){
+  const c = S.cur; if(!c) return;
+  const pv = $("#prev"); if(pv){ pv.innerHTML = GB.render(Object.assign({}, c, { sections:guestSecs(c) }), {}); GB.wire(pv); }
+  if(c.token){ const q = qrOf(linkOf(c.token)), cv = $("#qrc"); if(q && cv) paint(cv, q, 540); }
+}
+
+// ------------------------------------------------------------------ tips
+async function loadTips(){ try { S.tips = await rpc("guest_tips_list"); } catch(e){ S.tips = []; toast(errText(e), true); } draw(); }
+function tipsView(){
+  if(!S.tips){ loadTips(); return `<div class="card muted">Loading tips…</div>`; }
+  const ed = S.L.can_edit, t = S.tipEdit;
+  const form = t ? `<div class="card"><h3 style="margin:0 0 8px">${t.id ? "Change a tip" : "Add a tip"}</h3>
+      <div class="filters"><label>Title<input id="tt" value="${esc(t.title || "")}" maxlength="120" placeholder="e.g. Best tacos near Kimball Junction"></label>
+        <label>Kind<select id="tc">${Object.entries(CATS).map(([k, v]) => `<option value="${k}" ${k === (t.category || "eat") ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
+        <label style="max-width:120px">Order<input id="ts" type="number" value="${esc(t.sort ?? 100)}"></label></div>
+      <label class="small" style="display:block;font-weight:800;margin:10px 0 4px">What to say (optional)</label><textarea id="tb" maxlength="1500" style="min-height:80px">${esc(t.body || "")}</textarea>
+      <label class="small" style="display:block;font-weight:800;margin:10px 0 4px">Link (optional, https://…)</label><input id="tl" value="${esc(t.link || "")}" placeholder="https://">
+      <div class="small" style="font-weight:800;margin:10px 0 4px">Which homes? Tick areas, or none for every home.</div>
+      <div class="chips">${(S.L.areas || []).sort().map(a => `<label><input type="checkbox" data-area value="${esc(a)}" ${(t.areas || []).includes(a) ? "checked" : ""}>${esc(a)}</label>`).join("")}</div>
+      <label class="small" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="toff" style="width:auto" ${t.off ? "checked" : ""}> Taken off (guests don't see it)</label>
+      <div class="row"><button class="btn pri" data-tipsave>Save tip</button><button class="btn" data-tipcancel>Cancel</button></div></div>` : "";
+  return `${ed && !t ? `<div class="row"><button class="btn pri" data-tipnew>+ Add a tip</button></div>` : ""}${form}
+    <div class="card">${S.tips.length ? S.tips.map(x => `<div class="sec${x.off ? " hid" : ""}"><h3>${esc(x.title)} <span class="pill">${esc(CATS[x.category] || x.category)}</span>${x.off ? `<span class="pill red">Off</span>` : ""}</h3>
+        <div class="src">${(x.areas || []).length ? esc(x.areas.join(", ")) : "Every home"}${x.link ? ` · <a href="${esc(x.link)}" target="_blank" rel="noopener">link ↗</a>` : ""} · by ${esc(x.updated_by || x.created_by || "")}</div>
+        ${x.body ? `<div class="small">${esc(x.body)}</div>` : ""}${ed ? `<div class="row"><button class="btn sm" data-tipedit="${x.id}">Change</button></div>` : ""}</div>`).join("")
+      : `<p class="muted">No local tips yet.${ed ? " Add restaurants, ski tips, grocery stores and things to do. Each tip can be for every home or only some areas." : ""}</p>`}</div>`;
+}
+
+// ------------------------------------------------------------------ text for every home
+let EV = null;
+async function loadEvery(){ const any = S.L.homes[0]; try { EV = any ? await rpc("guest_book_staff", { p_home:any.home }) : { sections:[] }; } catch(e){ EV = { sections:[] }; toast(errText(e), true); } draw(); }
+function everyView(){
+  if(!EV){ loadEvery(); return `<div class="card muted">Loading…</div>`; }
+  const ed = S.L.can_edit;
+  return EVERY.map(([k, title, help]) => { const s = (EV.sections || []).find(x => x.key === k) || {}; const a = s.edit_all || {};
+    return `<div class="card"><h3 style="margin:0">${esc(title)}</h3><div class="src">${esc(help)}${a.by ? ` Last changed by ${esc(a.by)}, ${esc(when(a.at))}.` : ""}</div>
+      ${ed ? `<textarea data-eta="${k}">${esc(a.body || "")}</textarea><div class="row"><button class="btn sm pri" data-esave="${k}">Save for every home</button></div>`
+           : `<div class="ro">${esc(a.body || "Nothing yet.")}</div>`}</div>`; }).join("");
+}
+
+// ------------------------------------------------------------------ clicks
+document.addEventListener("input", e => {
+  if(e.target.id === "q"){ S.q = e.target.value; const p = e.target.selectionStart; draw(); const n = $("#q"); if(n){ n.focus(); n.setSelectionRange(p, p); } }
+});
+document.addEventListener("change", e => { if(e.target.id === "area"){ S.area = e.target.value; draw(); } });
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button,[data-view]"); if(!b) return;
+  const d = b.dataset;
+  try {
+    if(d.view){ S.view = d.view; S.tipEdit = null; if(d.view === "every") EV = null; draw(); return; }
+    if(d.tile){ S.tiles = S.tiles === d.tile ? "" : d.tile; draw(); return; }
+    if(d.open){ await openHome(d.open); return; }
+    if(b.hasAttribute("data-back")){ S.view = "homes"; S.cur = null; S.L = await rpc("guest_book_list"); draw(); return; }
+    const reload = async (msg) => { if(msg) toast(msg); S.cur = await rpc("guest_book_staff", { p_home:S.home }); const y = window.scrollY; draw(); window.scrollTo(0, y); };
+    if(d.save){ const ta = document.querySelector(`[data-ta="${d.save}"]`), s = S.cur.sections.find(x => x.key === d.save);
+      let v = ta.value.trim(); if(s && s.key !== "rules" && s.track && v === s.track.trim()) v = "";
+      b.disabled = true; await rpc("guest_book_save", { p_home:S.home, p_section:d.save, p_body:v, p_hidden:!!(s && s.hidden) }); await reload("Saved ✓"); return; }
+    if(d.usetrack){ const s = S.cur.sections.find(x => x.key === d.usetrack); await rpc("guest_book_save", { p_home:S.home, p_section:d.usetrack, p_body:"", p_hidden:!!(s && s.hidden) }); await reload("Back to Track's text"); return; }
+    if(d.hide){ const s = S.cur.sections.find(x => x.key === d.hide), keep = s && s.from === "hub" && s.edit ? s.edit.body : "";
+      await rpc("guest_book_save", { p_home:S.home, p_section:d.hide, p_body:keep || "", p_hidden:d.on === "1" }); await reload(d.on === "1" ? "Hidden from guests" : "Shown to guests"); return; }
+    if(d.pub){ if(d.pub === "1" && !confirm(`Publish ${S.home}'s guest book? Anyone with its link or QR code can open it (Wi-Fi included, never codes).`)) return;
+      await rpc("guest_book_publish", { p_home:S.home, p_on:d.pub === "1" }); await reload(d.pub === "1" ? "Published ✓" : "Taken down"); return; }
+    if(b.hasAttribute("data-newlink")){ if(!confirm("Make a new link? The old link and any printed QR code for this home stop working.")) return;
+      await rpc("guest_book_new_link", { p_home:S.home }); await reload("New link made. Print a new QR card."); return; }
+    if(b.hasAttribute("data-refresh")){ const r = await rpc("guest_book_refresh", { p_home:S.home });
+      toast(r && r.started ? "Reading Track… this takes about half a minute" : "Track was read in the last 2 minutes");
+      if(r && r.started){ const was = S.cur.read_at; for(let i = 0; i < 12; i++){ await new Promise(ok => setTimeout(ok, 5000)); const c = await rpc("guest_book_staff", { p_home:S.home }); if(c.read_at !== was){ S.cur = c; draw(); toast("Track's text is up to date ✓"); break; } } }
+      return; }
+    if(b.hasAttribute("data-copylink")){ const l = linkOf(S.cur.token); try { await navigator.clipboard.writeText(l); toast("Link copied ✓"); } catch(_){ prompt("Copy this link:", l); } return; }
+    if(b.hasAttribute("data-qrpng")){ const q = qrOf(linkOf(S.cur.token)), cv = document.createElement("canvas"); paint(cv, q, 1024);
+      cv.toBlob(bl => { const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = "Guest-book-QR-" + S.home.replace(/[^\w-]+/g, "-") + ".png"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }); return; }
+    if(b.hasAttribute("data-qrprint")){ const q = qrOf(linkOf(S.cur.token)), cv = document.createElement("canvas"); paint(cv, q, 900);
+      $("#printcard").innerHTML = `<img src="${cv.toDataURL()}" style="width:4in;height:4in"><div style="font:800 26pt Manrope,sans-serif;margin-top:12px">Scan for your guest book</div>
+        <div style="font:600 15pt Manrope,sans-serif;color:#3d4a42">Wi-Fi · check-in · parking · house rules · local tips</div><div style="font:600 13pt Manrope,sans-serif;color:#6b776f;margin-top:8px">${esc(S.cur.name || S.home)}</div>`;
+      setTimeout(() => window.print(), 150); return; }
+    if(b.hasAttribute("data-tipnew")){ S.tipEdit = { areas:[], category:"eat", sort:100 }; draw(); return; }
+    if(d.tipedit){ S.tipEdit = Object.assign({}, S.tips.find(x => String(x.id) === d.tipedit)); draw(); return; }
+    if(b.hasAttribute("data-tipcancel")){ S.tipEdit = null; draw(); return; }
+    if(b.hasAttribute("data-tipsave")){ b.disabled = true;
+      await rpc("guest_tip_save", { p_id:S.tipEdit.id || null, p_areas:[...document.querySelectorAll("[data-area]:checked")].map(x => x.value), p_category:$("#tc").value,
+        p_title:$("#tt").value, p_body:$("#tb").value, p_link:$("#tl").value, p_sort:+$("#ts").value || 100, p_off:$("#toff").checked });
+      S.tipEdit = null; S.tips = null; toast("Tip saved ✓"); draw(); return; }
+    if(d.esave){ b.disabled = true; await rpc("guest_book_save", { p_home:"*", p_section:d.esave, p_body:document.querySelector(`[data-eta="${d.esave}"]`).value, p_hidden:false });
+      EV = null; toast("Saved for every home ✓"); draw(); return; }
+  } catch(err){ b.disabled = false; toast(errText(err), true); }
+});
+boot().catch(e => { $("#app").innerHTML = `<div class="card err">${esc(errText(e))}</div>`; });
+</script>
+</body></html>
