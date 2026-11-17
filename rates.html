@@ -2037,7 +2037,7 @@ function srWire(R) {
     // pricing counts only events that move our market: key events, within 12 miles, our own notes (Salt Lake arena games left out)
     const locEv = k => { if (typeof mkFor !== "function" || !state.mk?.loaded) return null; const o = mkFor(k);
       const e = o.ev.find(x => x.key || (x.distance_mi != null && +x.distance_mi <= 12)) || o.notes[0]; return e ? e.title : null; };
-    const holOfK = k => (typeof peakOf === "function" && peakOf(k)) || (typeof holOf === "function" && holOf(k)[0]) || (locEv(k) ? "event: " + locEv(k) : "");
+    const holOfK = k => (typeof peakOf === "function" && peakOf(k)) || (typeof holOf === "function" && holOf(k).filter(srPriced)[0]) || (locEv(k) ? "event: " + locEv(k) : "");
     // our calendar: "1" open, "0" booked/blocked
     const oc = SR.ourCal, ourAv = k => { if (!oc) return null; const o = Math.round((new Date(k + "T12:00:00") - new Date(oc.start_date + "T12:00:00")) / 864e5); return oc.avail?.[o] ?? null; };
     const gapLen = k => { if (ourAv(k) !== "1") return null; let a = 0, z = 0; while (a < 30 && ourAv(addD(k, -(a + 1))) === "1") a++; while (z < 30 && ourAv(addD(k, z + 1)) === "1") z++;
@@ -2052,7 +2052,7 @@ function srWire(R) {
     const A = Y.base === "a", L = Math.max(+Y.learnMin || -20, Math.min(lMaxE, +(Y.learn?.lvl || 0))), LP = (+Y.lowPct || 35) / 100, U = +Y.under || 0;
     for (const r of R) { if (SR.bkd?.[r.k]) continue; if (Y.which === "empty" && r.v.set) continue;
       const ct = srCompTot(r.k), clo = A && ct ? srCompLow(r.k, LP) : null, out0 = Math.round((new Date(r.k + "T12:00:00") - new Date(today + "T12:00:00")) / 864e5);
-      const hN = (typeof holOf === "function" && holOf(r.k)[0]) || (typeof peakOf === "function" && peakOf(r.k)) || "", hQ = out0 <= 14 ? 0.75 : 0.9;
+      const hN = (typeof holOf === "function" && holOf(r.k).filter(srPriced)[0]) || (typeof peakOf === "function" && peakOf(r.k)) || "", hQ = out0 <= 14 ? 0.75 : 0.9;
       const hV = A && ct && hN ? srCompLow(r.k, hQ) : null, cv = hV != null && hV > ct.v ? hV : ct?.v;
       // standard = comps' average − $under (holidays: the comps' high end), moved by what bookings taught us; last minute slides toward the cheaper comps (not on holidays)
       const std = ct ? (cv - U) * (1 + L / 100) * (1 + RV / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
@@ -2828,6 +2828,8 @@ const HOLIDAYS = [...PEAKS.map(([a, b, n]) => [a, b, n]), ["2026-10-31", "2026-1
   // Hanukkah: nightfall Dec 4 to nightfall Dec 12, 2026 (Chabad.org, https://www.chabad.org/holidays/chanukah/article_cdo/aid/671899/, read 2026-10-14)
   ["2026-12-04", "2026-12-11", "Hanukkah"]];
 const holOf = k => HOLIDAYS.filter(h => k >= h[0] && k <= h[1]).map(h => h[2]);
+// Brandon 2026-11-17: Hanukkah + other ski areas' opening days show as labels but don't price as holidays
+const srPriced = n => !(/^Hanukkah/.test(n) || (/^Opening day/.test(n) && !/Park City|Deer Valley/.test(n)));
 // Events (Brandon 2026-10-14): show only events that drive OUR market. Default = Ticketmaster events within 12 mi of Park City
 // (Park City, Deer Valley, Kimball Jct, Heber, Kamas) + Salt Lake stadium-size venues, plus our curated key local events below.
 // Ticketmaster has no sales/sell-out data, so "big" = venue size. The checkbox shows everything.
