@@ -1439,6 +1439,9 @@ function tileAddr(p){ var t=(p&&p.track)||{}; if(!t.address) return "";
 function homeAddr(p){ var t=(p&&p.track)||{}; if(!t.address) return "";
   var a=[t.address,[t.city,t.postal?"UT "+t.postal:""].filter(Boolean).join(", ")].filter(Boolean).join(", ");
   return '<div class="dsub haddr">\ud83d\udccd '+esc(a)+' \u00b7 <a class="golink" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a)+'" target="_blank" rel="noopener">Map \u2197</a></div>'; }
+/* Guest book link (build list n-guestbook, 2026-11-16, Jeff): opens Tools \u25b8 Guest books on this home (localStorage gb_home). */
+function gbLink(code){ if(!code||code==="Moose company"||HOME_HIDE[code]) return "";
+  return '<div class="dsub"><a class="golink" href="hub.html#/tools_guestbook" target="_top" data-gbhome="'+esc(code)+'" onclick="try{localStorage.setItem(\'gb_home\',this.getAttribute(\'data-gbhome\'))}catch(e){}">\ud83d\udcd6 Guest book for guests \u2197</a></div>'; }
 function homeDetail(code){
   var p=profile(code); if(!p) return '<div class="empty">No profile for '+esc(code)+'.</div>';
   if(p.company) return companyDetail(code);
@@ -1455,7 +1458,7 @@ function homeDetail(code){
       if(ba) bits.push(esc(+ba)+' bath'+(+ba===1?'':'s'));
       if(pe.sqft||p.sqft||bh.sqft) bits.push(esc(pe.sqft||p.sqft||bh.sqft)+' sq ft');
       bits.push(open.length+' open job'+(open.length===1?'':'s'));
-      return bits.map(function(x,i){ return '<span>'+(i?'· ':'')+x+'</span>'; }).join("")+(tk.bed_config?'<div class="dbeds" style="flex-basis:100%;margin-top:2px">🛏 '+esc(tk.bed_config)+'</div>':''); })()+'</div>'+homeAddr(p)+'</div><div class="dbody">';
+      return bits.map(function(x,i){ return '<span>'+(i?'· ':'')+x+'</span>'; }).join("")+(tk.bed_config?'<div class="dbeds" style="flex-basis:100%;margin-top:2px">🛏 '+esc(tk.bed_config)+'</div>':''); })()+'</div>'+homeAddr(p)+gbLink(code)+'</div><div class="dbody">';
   if(os && os.in<=t) h+='<div class="warnbox"><b>Owner in the home until '+esc(fmtD(os.out))+'.</b></div>';
   else if(os && daysBetween(t,os.in)<=30) h+='<div class="infobox">Owner stay '+esc(fmtD(os.in))+' → '+esc(fmtD(os.out))+'.</div>';
   h+=homeHeads(code);
