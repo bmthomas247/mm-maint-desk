@@ -2825,6 +2825,9 @@ const HOLIDAYS = [...PEAKS.map(([a, b, n]) => [a, b, n]), ["2026-10-31", "2026-1
   // Deer Valley: KPCW 2026-09-16). These move with snow; rechecked each Wednesday.
   ["2026-11-20", "2026-11-20", "Opening day: Park City Mountain, Alta, Solitude"], ["2026-11-27", "2026-11-27", "Opening day: Snowbird, Snowbasin"],
   ["2026-12-05", "2026-12-05", "Opening day: Deer Valley"], ["2026-12-11", "2026-12-11", "Opening day: Powder Mountain"],
+  // Woodward Park City: snow tubing Nov 20, lift access Nov 27 (Park Record 2026-10-16, https://www.parkrecord.com/2026/10/16/woodward-park-city-not-just-for-the-pros/;
+  // KPCW 2026-11-16 says Woodward hasn't announced it yet, so recheck). Nov 27 already sits inside Thanksgiving.
+  ["2026-11-27", "2026-11-27", "Opening day: Woodward (lift access; tubing from Nov 20)"],
   // Hanukkah: nightfall Dec 4 to nightfall Dec 12, 2026 (Chabad.org, https://www.chabad.org/holidays/chanukah/article_cdo/aid/671899/, read 2026-10-14)
   ["2026-12-04", "2026-12-11", "Hanukkah"]];
 const holOf = k => HOLIDAYS.filter(h => k >= h[0] && k <= h[1]).map(h => h[2]);
