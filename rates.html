@@ -2828,8 +2828,8 @@ const HOLIDAYS = [...PEAKS.map(([a, b, n]) => [a, b, n]), ["2026-10-31", "2026-1
   // Hanukkah: nightfall Dec 4 to nightfall Dec 12, 2026 (Chabad.org, https://www.chabad.org/holidays/chanukah/article_cdo/aid/671899/, read 2026-10-14)
   ["2026-12-04", "2026-12-11", "Hanukkah"]];
 const holOf = k => HOLIDAYS.filter(h => k >= h[0] && k <= h[1]).map(h => h[2]);
-// Brandon 2026-11-17: Hanukkah + other ski areas' opening days show as labels but don't price as holidays
-const srPriced = n => !(/^Hanukkah/.test(n) || (/^Opening day/.test(n) && !/Park City|Deer Valley/.test(n)));
+// Brandon 2026-11-17: Hanukkah + opening days other than Park City Mountain, Deer Valley, Woodward show as labels but don't price as holidays
+const srPriced = n => !(/^Hanukkah/.test(n) || (/^Opening day/.test(n) && !/Park City|Deer Valley|Woodward/.test(n)));
 // Events (Brandon 2026-10-14): show only events that drive OUR market. Default = Ticketmaster events within 12 mi of Park City
 // (Park City, Deer Valley, Kimball Jct, Heber, Kamas) + Salt Lake stadium-size venues, plus our curated key local events below.
 // Ticketmaster has no sales/sell-out data, so "big" = venue size. The checkbox shows everything.
