@@ -61,6 +61,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rlk .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
 .rlk .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;box-shadow:var(--shadow)}
 .rlk .stat .n{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1} .rlk .stat .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px} .rlk .stat.warn .n{color:var(--red)}
+.rlk button.stat{font:inherit;color:inherit;text-align:left;width:auto;min-height:0;margin:0;cursor:pointer} .rlk button.stat:hover{border-color:var(--forest-2,#5b8a1e)} .rlk button.stat.on{border-color:var(--forest-2,#5b8a1e);box-shadow:0 0 0 2px var(--forest-2,#5b8a1e) inset}
 .rlk .syncbar{display:flex;align-items:center;gap:12px} .rlk .syncbar .ic{width:40px;height:40px;border-radius:12px;background:var(--moose-soft);color:var(--forest-2);display:grid;place-items:center;flex:none} .rlk .syncbar .ic svg{width:20px;height:20px}
 .rfg{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:end} .rfg .field{display:block;margin:0} .rfg .field>span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:700} .rfg input,.rfg select{width:100%;min-width:0;max-width:100%;box-sizing:border-box} .rfg .field{min-width:0}
 .rgh{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;letter-spacing:.04em;color:var(--muted);margin:16px 2px 8px;cursor:pointer;user-select:none}
@@ -552,7 +553,7 @@ function css(){ if(!document.getElementById("rescss")){ const st = document.crea
 const fresh = () => `<p class="muted" style="margin:4px 0 10px">Source: Track reservations, updated ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost, updated ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway, updated ${esc(when(B.bwUpdated))}` : ""}</p>`;
 
 /* ---------- queue */
-const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"bookedAt", from:"", to:"", group:"date", kind:"" };
+const F = { q:"", chan:"", area:"", stage:"in_progress", held:"", by:"bookedAt", from:"", to:"", group:"date", kind:"", st:"" };
 const RSHUT = new Set();
 // how they booked (Brandon 2026-10-30: a color each); chan "vrbo" = VRBO + direct, split by the Track type
 const KIND = { airbnb:"Airbnb", vrbo:"VRBO", direct:"Direct", thirty:"30+ nights", ota:"Whimstay / Hopper", oguest:"Owner guest", owner:"Owner stay" };
@@ -640,8 +641,11 @@ async function queue(v){
   const stateCls = s => s.state === "Paperwork done" || s.state === "Ready to close" || s.state === "Complete" ? "green" : s.state === "Not started" ? "grey" : s.state === "Cancelling" ? "red" : "amber";
   // groups (like the Locks office neighborhoods): day of the sort date (month for the past lists) or neighborhood
   // Brandon 2026-11-03: Find searches every tab (a stay on Waiting on payment couldn't be found from In progress); results grouped by tab
-  let ALLQ = false;
-  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ) return "@" + s.stage; if(F.by === "res") return "#"; if(F.by === "res_asc") return "#a"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" || F.stage === "abb_pay" ? d : d.slice(0, 7); };
+  let ALLQ = false, STQ = false;   // STQ = a count tile above the tabs was tapped (Brandon 2026-11-17): those stays from every tab
+  const SP = { ip:[s => s.stage === "in_progress", "in progress"], soon:[s => s.status !== "Cancelled" && s.stage !== "closed" && s.arrive >= today && s.arrive <= in7, "arriving in the next 7 days"],
+    left:[s => s.status !== "Cancelled" && s.stage !== "closed" && s.arrive >= today && s.arrive <= in7 && s.got < s.need, "arriving in 7 days with steps left"],
+    held:[s => s.stage === "in_progress" && (s.blockers.length || s.waiting.length), "held up"], act:[s => s.alerts2.some(a => a.lvl === "stop"), "to act on today"] };
+  const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ || STQ) return "@" + s.stage; if(F.by === "res") return "#"; if(F.by === "res_asc") return "#a"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" || F.stage === "abb_pay" ? d : d.slice(0, 7); };
   const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k; if(k[0] === "@") return STAGE[k.slice(1)] || k.slice(1); if(k === "#") return "By reservation #, highest first"; if(k === "#a") return "By reservation #, lowest first";
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
     return (k === today ? "Today · " : "") + new Date(k + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric", year:k.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" }); };
@@ -662,7 +666,7 @@ async function queue(v){
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))}</span></div>
       <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^(Owner Guest|O-Guest)\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
-        ${ALLQ ? `<span class="pill plain">${esc(STAGE[s.stage] || s.stage)}</span>` : ""}<span class="pill plain grey">${s.got} of ${s.need} steps</span>${s.chan === "abnb" && (s.stage === "abb_pay" || s.abb) ? abbPill(s) : ""}${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill ${/^Day 7/.test(b) ? "red" : "amber"}">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
+        ${ALLQ || STQ ? `<span class="pill plain">${esc(STAGE[s.stage] || s.stage)}</span>` : ""}<span class="pill plain grey">${s.got} of ${s.need} steps</span>${s.chan === "abnb" && (s.stage === "abb_pay" || s.abb) ? abbPill(s) : ""}${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill ${/^Day 7/.test(b) ? "red" : "amber"}">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
       ${s.alerts2.some(a => a.lvl === "stop") ? `<div class="rnext stop">⚠ ${esc(s.alerts2.find(a => a.lvl === "stop").t.split(". ")[0])}</div>` : ""}
       ${s.next.length && (s.stage === "in_progress" || s.stage === "waiting_pay") ? `<div class="rnext"><b>Next:</b> ${esc(s.next[0])}</div>` : ""}
       <div class="progress"><i style="width:${pct}%"></i></div>${workers(s)}</a>`; };
@@ -671,8 +675,8 @@ async function queue(v){
     const base = B.stays.filter(s => (!F.kind || kindOf(s) === F.kind) && (!F.chan || s.chan === F.chan) && (!F.area || s.area === F.area) && (!F.q || [s.res, s.unit, s.guest].join(" ").toLowerCase().includes(F.q.toLowerCase()))
       && (!F.from || dk(s) >= F.from) && (!F.to || (dk(s) && dk(s) <= F.to)))
       .sort((x, y) => F.by === "res" ? (Number(y.res) || 0) - (Number(x.res) || 0) : F.by === "res_asc" ? (Number(x.res) || 0) - (Number(y.res) || 0) : F.by === "bookedAt" ? (dk(y) < dk(x) ? -1 : dk(y) > dk(x) ? 1 : (Number(y.res) || 0) - (Number(x.res) || 0)) : (dk(x) < dk(y) ? -1 : dk(x) > dk(y) ? 1 : 0));   // booked: newest first, then highest res #
-    ALLQ = !!String(F.q || "").trim();
-    const inStage = ALLQ ? base : base.filter(s => s.stage === F.stage);
+    ALLQ = !!String(F.q || "").trim(); STQ = !ALLQ && !!SP[F.st];
+    const inStage = ALLQ ? base : STQ ? base.filter(SP[F.st][0]) : base.filter(s => s.stage === F.stage);
     const rows = inStage.filter(s => !F.held || heldHas(s, F.held));
     const cnt = k => base.filter(s => s.stage === k).length;
     const held = {}, sub = {};
@@ -681,23 +685,24 @@ async function queue(v){
     const grpOn = F.held && (Object.values(HELD_GROUP).includes(F.held) ? F.held : HELD_GROUP[F.held]);
     const ip = base.filter(s => s.stage === "in_progress"), soon = base.filter(s => s.status !== "Cancelled" && s.stage !== "closed" && s.arrive >= today && s.arrive <= in7);   // any stage: Asana moves stays to Checkout once booking steps are done
     $("#rq_sub").textContent = `${ip.length} in progress · ${ip.filter(s => s.blockers.length || s.waiting.length).length} held up`;
-    $("#rq_tabs").innerHTML = Object.entries(STAGE).map(([k, l]) => `<button class="${F.stage === k && !ALLQ ? "on" : ""}" data-stage="${k}">${RI[k]}<span>${l}</span><span class="badge">${cnt(k)}</span></button>`).join("");
-    $("#rq_stats").innerHTML = [[ip.length, "In progress"], [soon.length, "Arriving next 7 days"],
-      [soon.filter(s => s.got < s.need).length, "Arriving in 7 days, steps left", true],
-      [ip.filter(s => s.blockers.length || s.waiting.length).length, "Held up", true],
-      [base.filter(s => s.alerts2.some(a => a.lvl === "stop")).length, "Act today (day 7, owner guest 30 days, Safely)", true]]
-      .map(([n, l, w]) => `<div class="stat ${w && n ? "warn" : ""}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
-    const kc = {}; B.stays.filter(s => ALLQ || s.stage === F.stage).forEach(s => kc[kindOf(s)] = (kc[kindOf(s)] || 0) + 1);
+    $("#rq_tabs").innerHTML = Object.entries(STAGE).map(([k, l]) => `<button class="${F.stage === k && !ALLQ && !STQ ? "on" : ""}" data-stage="${k}">${RI[k]}<span>${l}</span><span class="badge">${cnt(k)}</span></button>`).join("");
+    $("#rq_stats").innerHTML = [[ip.length, "In progress", false, "ip"], [soon.length, "Arriving next 7 days", false, "soon"],
+      [soon.filter(s => s.got < s.need).length, "Arriving in 7 days, steps left", true, "left"],
+      [ip.filter(s => s.blockers.length || s.waiting.length).length, "Held up", true, "held"],
+      [base.filter(s => s.alerts2.some(a => a.lvl === "stop")).length, "Act today (day 7, owner guest 30 days, Safely)", true, "act"]]
+      .map(([n, l, w, k]) => `<button type="button" class="stat ${w && n ? "warn" : ""}${STQ && F.st === k ? " on" : ""}" data-st="${k}" title="Show only these stays (tap again for all)"><div class="n">${n}</div><div class="l">${l}</div></button>`).join("");
+    const kc = {}; B.stays.filter(s => ALLQ || (STQ ? SP[F.st][0](s) : s.stage === F.stage)).forEach(s => kc[kindOf(s)] = (kc[kindOf(s)] || 0) + 1);
     $("#rq_kinds").innerHTML = Object.entries(KIND).map(([k, l]) => `<button class="kpill k-${k} ${F.kind === k ? "on" : ""} ${F.kind && F.kind !== k ? "dim" : ""}" data-kind="${k}">${l}<span class="n">${kc[k] || 0}</span></button>`).join("");
     $("#rq_held").innerHTML = Object.keys(held).length ? `<span class="muted" style="align-self:center;font-weight:700;font-size:13px">Held up by</span>${Object.entries(held).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<button class="rchip ${F.held === k || grpOn === k ? "on" : ""}" data-held="${esc(k)}">${esc(k)}${Object.values(HELD_GROUP).includes(k) ? " ▾" : ""}<span class="n">${n}</span></button>`).join("")}`
       + (grpOn ? `<div class="rchips" style="width:100%;margin:6px 0 0;padding-left:12px;border-left:3px solid var(--line-2)"><span class="muted" style="align-self:center;font-size:13px">${esc(grpOn)}:</span>
         ${Object.keys(HELD_GROUP).filter(b => HELD_GROUP[b] === grpOn).map(b => `<button class="rchip ${F.held === b ? "on" : ""}" data-held="${esc(b)}">${esc(b)}<span class="n">${sub[b] || 0}</span></button>`).join("")}</div>` : "") : "";
     const groups = []; rows.forEach(s => { const k = gKey(s), g = groups.find(x => x.k === k); g ? g.s.push(s) : groups.push({ k, s:[s] }); });
     if(F.group === "hood") groups.sort((a, b) => gName(a.k).localeCompare(gName(b.k)));
-    else if(ALLQ){ const so = Object.keys(STAGE); groups.sort((a, b) => so.indexOf(a.k.slice(1)) - so.indexOf(b.k.slice(1))); }
+    else if(ALLQ || STQ){ const so = Object.keys(STAGE); groups.sort((a, b) => so.indexOf(a.k.slice(1)) - so.indexOf(b.k.slice(1))); }
     // Janae, Pyper, Kim 2026-11-03: failed payments stay in Waiting on payment, listed here (daily failed-payments check + no card on file)
-    const fpl = !ALLQ && F.stage === "waiting_pay" ? inStage.filter(s => s.payFlag) : [];
-    $("#rqbody").innerHTML = (!ALLQ && F.stage === "abb_pay" ? abbCard(inStage) : "") + (ALLQ ? `<p class="muted" style="margin:4px 2px 10px">Searching every tab · ${rows.length} ${rows.length === 1 ? "stay" : "stays"} found. Tap a tab to clear the search.</p>` : "")
+    const fpl = !ALLQ && !STQ && F.stage === "waiting_pay" ? inStage.filter(s => s.payFlag) : [];
+    $("#rqbody").innerHTML = (!ALLQ && !STQ && F.stage === "abb_pay" ? abbCard(inStage) : "") + (ALLQ ? `<p class="muted" style="margin:4px 2px 10px">Searching every tab · ${rows.length} ${rows.length === 1 ? "stay" : "stays"} found. Tap a tab to clear the search.</p>` : "")
+      + (STQ ? `<p class="muted" style="margin:4px 2px 10px">Showing ${rows.length} ${rows.length === 1 ? "stay" : "stays"} ${SP[F.st][1]} · <a href="#" data-st="">show all</a></p>` : "")
       + (fpl.length ? `<div class="card" style="border-color:var(--red,#c0392b)"><b>⚠️ ${fpl.length} ${fpl.length === 1 ? "reservation has" : "reservations have"} a payment problem</b> <span class="muted">· declined payments, no card on file, credits, balances inside 14 days or after the stay · Track reports: <a href="https://moosemanagement.trackhs.com/reports/pms-folio-balance/" target="_blank" rel="noopener">Folio balance ↗</a> · <a href="https://moosemanagement.trackhs.com/reports/pms-cancellation-balance/" target="_blank" rel="noopener">Cancellation balance ↗</a></span>
         ${fpl.map(s => `<div style="padding:6px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(s.res)}"><b>${esc(s.unit || "")} · ${esc(s.guest || "#" + s.res)}</b></a> <span class="muted">#${esc(s.res)} · arrives ${esc(dayY(s.arrive))} · ${s.balance < 0 ? "credit " + esc(money(-s.balance)) : esc(money(s.balance)) + " due"}</span><div style="font-size:13px">${esc(s.payFlag)}</div></div>`).join("")}</div>` : "")
       + (rows.length ? groups.map(g => { const shut = RSHUT.has(F.stage + "|" + F.group + "|" + g.k);
@@ -705,7 +710,8 @@ async function queue(v){
       ${shut ? "" : `<div class="rgrid">${g.s.map(tile).join("")}</div>`}`; }).join("")
       : `<div class="card"><p class="muted" style="margin:0">Nothing here${F.q || F.chan || F.held || F.area || F.kind ? " with these filters" : ""}.</p></div>`);
     const abf = $("#rq_abbf"); if(abf) abf.onchange = e => abbUpload(e.target.files && e.target.files[0], async () => { await load(true); draw(); });
-    v.querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; if(ALLQ){ F.q = ""; $("#rq_q").value = ""; } draw(); });
+    v.querySelectorAll("[data-stage]").forEach(b => b.onclick = () => { F.stage = b.dataset.stage; F.held = ""; F.st = ""; if(ALLQ){ F.q = ""; $("#rq_q").value = ""; } draw(); });
+    v.querySelectorAll("[data-st]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.st; F.st = k && F.st !== k ? k : ""; F.held = ""; if(F.st && ALLQ){ F.q = ""; $("#rq_q").value = ""; } draw(); });
     v.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => { F.kind = F.kind === b.dataset.kind ? "" : b.dataset.kind; draw(); });
     v.querySelectorAll("[data-held]").forEach(b => b.onclick = () => { const k = b.dataset.held;
       F.held = F.held === k ? (HELD_GROUP[k] || "") : (grpOn === k && F.held !== k ? "" : k); draw(); });
