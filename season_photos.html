@@ -24,6 +24,7 @@
 .pill.bad{background:var(--red-bg);color:var(--red)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
 .tile{background:var(--ground);border-radius:12px;padding:10px 12px}.tile .l{font-size:12px;color:var(--muted)}.tile .v{font-size:22px;font-weight:800}
+button.tile{border:1px solid transparent;font:inherit;color:inherit;text-align:left;cursor:pointer} button.tile:hover{border-color:var(--line-2)} button.tile.on{outline:2px solid var(--forest-2);outline-offset:-1px} .tfnote{font-size:12.5px;margin:8px 0 0}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:760px){.two{grid-template-columns:1fr}}
 .btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
 .btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn.warn{border-color:var(--red);color:var(--red)}.btn:disabled{opacity:.5;cursor:default}
@@ -49,7 +50,7 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&am
 const fmt = t => t ? new Date(t).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
 const day = t => t ? new Date(t + (String(t).length === 10 ? "T12:00:00" : "")).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
 const nice = e => String(e && (e.message || e) || "Something went wrong").replace(/^.*?ERROR:\s*/, "");
-const S = { st:null, ls:[], open:false, msg:"", timer:null };
+const S = { st:null, ls:[], open:false, msg:"", timer:null, lf:false };
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -97,7 +98,7 @@ function draw(){
         <div class="small muted">The AI winter photos on our listings. Airbnb, Vrbo and our website get them through Track.</div></div>
       <span class="pill ${winter ? "winter" : "summer"}">${winter ? "Winter is on" : "Summer is on"}${winter && st.since ? " since " + day(st.since) : ""}</span></div>
       <div class="tiles">
-        <div class="tile"><div class="l">Listings with winter photos</div><div class="v">${st.listings_on}</div></div>
+        <button type="button" class="tile${S.lf ? " on" : ""}" id="lfbtn" title="${S.lf ? "Show every listing (tap again)" : "Show only these listings"}"><div class="l">Listings with winter photos</div><div class="v">${st.listings_on}</div></button>
         <div class="tile"><div class="l">Winter photos on now</div><div class="v">${st.photos_on}</div></div>
         <div class="tile"><div class="l">In a top-5 spot</div><div class="v">${st.top_spots_on}</div></div>
         <div class="tile"><div class="l">Winter photos off now</div><div class="v">${st.photos_off}</div></div></div>
@@ -114,8 +115,9 @@ function draw(){
       <div class="row"><input type="date" id="rem" value="${esc(st.remind_on || "")}" aria-label="Reminder day"><button class="btn" id="remsave">Save reminder</button>
         <span class="small muted">${st.remind_on ? "Set for " + day(st.remind_on) : "Not set"}</span></div></div>
     <div class="card"><details id="ls" ${S.open ? "open" : ""}><summary>📋 Every listing (${S.ls.length})</summary>
+      ${S.lf ? `<p class="small muted tfnote">Showing ${on.length} listing${on.length === 1 ? "" : "s"} with winter photos on · <a href="#" id="lfall">show all ${S.ls.length}</a></p>` : ""}
       <div style="overflow-x:auto;margin-top:10px"><table><thead><tr><th>Listing</th><th>Winter photos on</th><th>Top spots</th><th>Last switch</th></tr></thead><tbody>
-      ${S.ls.map(l => {
+      ${(S.lf ? on : S.ls).map(l => {
         const d = l.last_detail || {};
         const why = l.last_status === "failed" ? `<span class="err">${esc(d.error || "failed")}</span>`
           : l.last_status === "skipped" ? esc(d.why || "skipped")
@@ -129,6 +131,8 @@ function draw(){
   const sp = $("#stop"); if(sp) sp.onclick = stop;
   $("#remsave").onclick = remind;
   $("#ls").ontoggle = e => { S.open = e.target.open; };
+  $("#lfbtn").onclick = () => { S.lf = !S.lf; if(S.lf) S.open = true; draw(); if(S.lf) $("#ls").scrollIntoView({ block:"start", behavior:"smooth" }); };
+  const la = $("#lfall"); if(la) la.onclick = e => { e.preventDefault(); S.lf = false; draw(); };
 }
 
 function ask(dir, scope){
