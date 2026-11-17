@@ -412,6 +412,11 @@ const ORCSS = `
 .orleft .orl .orib{visibility:hidden} .orleft .orl:hover .orib,.orleft .orl.on .orib,.orleft .orl:focus-within .orib{visibility:visible}
 .mtg .mpsur.orl.on,.mtg .orrow.on{background:#e7f0da;box-shadow:inset 3px 0 0 #3c7d1e}
 @media(max-width:1099px){.orsplit{display:block} .orright{display:none}}
+.page.mtg.orpage{padding:12px 22px} .orpage .mhead{align-items:center;margin:0 0 6px;gap:6px 14px}
+.orpage .mhead h2{font-size:18px} .orpage .mhead p{margin:1px 0 0;font-size:12.5px}
+.orpage .mtools{gap:5px} .orpage .mtools .btn{padding:4px 9px;font-size:12.5px;min-height:0} .orpage .mtools input[type=date]{padding:3px 6px;font-size:12.5px;height:auto;min-height:0}
+.orpage .mtiles{display:none} .orpage .mprog{margin-top:0} .orpage .mbar{margin:6px 0 4px} .orpage .mbar #mq{max-width:200px;padding:5px 9px;height:auto;min-height:0}
+.orpage .mft{padding:4px 9px} .orpage .orsum{margin:2px 0 4px;font-size:13px} .orpage .orhd:first-of-type{margin-top:10px}
 @media print{ .orcb,.orrb,.ornote,.orhall{display:none!important} .orc{break-inside:avoid;box-shadow:none} .orfold{display:none} }`;
 let orCssDone = false;
 const orCss = () => { if(orCssDone) return; orCssDone = true; const s = document.createElement("style"); s.textContent = ORCSS; document.head.appendChild(s); };
@@ -604,8 +609,9 @@ function render(v, key, data, ppl){
     });
     MX.orOrder = ord; MX.orAll = allK;
     const plan = used.reduce((s, b) => s + (b.min || 0), 0) + 10;
-    out += `<div class="orsum">${prevDay ? "Last meeting " + esc(fmt(prevDay)) : "First meeting with this layout"} · <b>${nTalk}</b> to talk about${nFold ? ` · ${nFold} with nothing new (folded)` : ""}${nMust ? ` · ★ ${nMust} must talk` : ""}${nSkip ? ` · ⏭ ${nSkip} skipped` : ""} · planned ${plan} min</div>`;
-    if(!OR.prev_day && prevDay && !noFold) out += `<p class="muted orfirst">This week: topics covered on ${esc(fmt(prevDay))} with no new note or task are folded. From next week the hub also checks each topic's facts against last Tuesday's.</p>`;
+    /* one summary line instead of the 4 tiles (Jeff 2026-11-16: "Yes, shrink it") */
+    const firstNote = !OR.prev_day && prevDay && !noFold ? "This week: topics covered on " + fmt(prevDay) + " with no new note or task are folded. From next week the hub also checks each topic's facts against last Tuesday's." : "";
+    out += `<div class="orsum"${firstNote ? ` title="${esc(firstNote)}"` : ""}><b>${nTalk}</b> to talk about · ${covered} of ${items.length} covered${waiting ? ` · ${waiting} waiting` : ""} · ${open.length} open task${open.length === 1 ? "" : "s"}${nFold ? ` · ${nFold} folded` : ""}${nMust ? ` · ★ ${nMust} must talk` : ""}${nSkip ? ` · ⏭ ${nSkip} skipped` : ""} · ${plan} min${prevDay ? ` · last met ${esc(dshort2(prevDay))}` : ""}${firstNote ? ` <span class="muted" style="cursor:help">ⓘ</span>` : ""}</div>`;
     orNum = n + 1;
     return out + body;
   }
@@ -636,14 +642,18 @@ function render(v, key, data, ppl){
     if(dk && dk.offsetParent && !MX.prep){
       if(!MX.open || !items.some(x => x.key === MX.open)) MX.open = MX.orOrder[0] || MX.orAll[0] || null;
       if(!MX.open) dk.innerHTML = `<p class="muted" style="padding:20px;margin:0">Pick a topic on the left.</p>`;
-      orDockFit(); window._orFitFn = orDockFit;
-      if(!window._orFit){ window._orFit = 1; addEventListener("resize", () => window._orFitFn && window._orFitFn()); } }
+      orDockFit(); }
+    window._orFitFn = orDockFit;   // also when the page loads narrow and the window is widened later
+    if(!window._orFit){ window._orFit = 1; addEventListener("resize", () => window._orFitFn && window._orFitFn()); }
     orSnap();
   }
-  function orDockFit(){ const pg = v.querySelector(".page"), dk = document.getElementById("ordock"); if(pg && dk) dk.style.maxHeight = Math.max(320, pg.clientHeight - 16) + "px"; }
+  function orDockFit(){ const pg = v.querySelector(".page"), dk = document.getElementById("ordock"); if(pg && dk) dk.style.maxHeight = Math.max(320, pg.clientHeight - 16) + "px";
+    if(dk && dk.offsetParent && !dk.children.length && !MX.prep){   // window got wide enough for the split view: fill the right side
+      if(!MX.open || !items.some(x => x.key === MX.open)) MX.open = MX.orOrder[0] || MX.orAll[0] || null;
+      if(MX.open){ document.getElementById("mpov")?.remove(); panel(); } } }
   const tile = (n, l, ic, cls) => `<div class="mtile${cls ? " " + cls : ""}"><div><b>${n}</b><span>${l}</span></div><i>${ic}</i></div>`;
-  let h = `<div class="page mtg"><div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
-      <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(m.when) : ""}</p></div>
+  let h = `<div class="page mtg${key === "meet_or" && !MX.prep ? " orpage" : ""}"><div class="mhead"><div><h2>${esc(m.name)} meeting · ${esc(fmt(day))}</h2>
+      <p class="muted">${esc(m.who)} · ${m.nth ? ["first","second","third","fourth","fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : m.every === 14 ? "every other " + DAYS[m.dow] : "every " + DAYS[m.dow]}${m.when ? ", " + esc(key === "meet_or" ? m.when.replace(/ \(.*\)$/, "") : m.when) : ""}</p></div>
     <div class="mtools">${data.link ? `<a class="btn small primary" href="${esc(data.link.url)}" target="_blank" rel="noopener">▶ Join${data.link.label ? " " + esc(data.link.label) : ""}</a>` : ""}${data.admin ? `<button class="btn small" id="mlink">${data.link ? "Change link" : "+ Join link"}</button>` : ""}<input type="date" id="mday" value="${esc(day)}" aria-label="Meeting date"><button class="btn small" id="mref">↻</button><button class="btn small" id="mup">⬆ Upload recording / notes</button>${key === "meet_or" ? `<button class="btn small${MX.prep ? " primary" : ""}" id="mprep">${MX.prep ? "✓ Done prepping" : "📋 Monday prep"}</button>` : ""}<button class="btn small" id="mprint">Print</button><button class="btn small primary" id="mwrap">✅ Wrap up</button><button class="btn small primary mplus" id="mplus" title="Add a topic or bring back a covered one" aria-label="Add or bring back a topic">+</button></div></div>
     <div class="mtiles">${tile(items.length, "Topics", "📋")}${tile(covered + " / " + items.length, "Covered", "✓", "g")}${tile(waiting, "Waiting / scheduled", "⏳")}${tile(open.length, overdue.length ? `Open tasks · <em>${overdue.length} overdue</em>` : "Open tasks", "☐", overdue.length ? "r" : "")}</div>
     <div class="mprog"><i style="width:${items.length ? covered / items.length * 100 : 0}%"></i></div>
