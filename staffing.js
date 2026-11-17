@@ -2,7 +2,7 @@
    Step 4 of the move-off-Hubstaff plan, for people who clock in the hub instead of Hubstaff (team hub_clock; Victor first).
    Loaded by hub.html; uses its sb / $ / esc / ME. Route #/staffing. Data (hub_staffing.sql): hub_clock (RLS hub_staff_sees: you,
    your manager, admins) · clock_punch(in/out + one location pin) · clock_add (missed punch: yours waits for the manager, a manager's
-   counts) · clock_decide (approve / deny / set off) · hub_clock_weeks + clock_week_ok (manager signs off a Sun-Sat week) · clock_people().
+   counts) · clock_decide (approve / deny / set off) · hub_clock_weeks + clock_week_ok (manager signs off a Sat-Fri week) · clock_people().
    Staffing drop-down (Brandon 2026-10-29): Clock In / Clock Out (#/staffing) · Schedule (#/stf_sched, staffSched) · Request Time Off (#/cal_off, calendar.js) · My performance (#/stf_perf, myPerf).
    Hours: each "in" pairs with the next "out" and counts on the day of the "in" (Park City time). No pay rates here.
    2026-10-30 (Brandon): ✎ on every punch → clock_edit (hub_clock_edit.sql; own or anyone you look after, reason required) · managers get
@@ -13,7 +13,7 @@ const dkey = t => new Date(t).toLocaleDateString("en-CA", { timeZone:TZ });
 const tm = t => new Date(t).toLocaleTimeString([], { timeZone:TZ, hour:"numeric", minute:"2-digit" });
 const dnm = k => new Date(k + "T12:00:00Z").toLocaleDateString([], { timeZone:"UTC", weekday:"short", month:"short", day:"numeric" });
 const addK = (k, n) => new Date(Date.parse(k + "T12:00:00Z") + n * DAY).toISOString().slice(0, 10);
-const wk = k => addK(k, -new Date(k + "T12:00:00Z").getUTCDay());   // Sunday that starts the week
+const wk = k => addK(k, -((new Date(k + "T12:00:00Z").getUTCDay() + 1) % 7));   // Saturday that starts the week (Brandon 2026-11-17: "our pay period is saturday to friday")
 const hm = h => { const m = Math.round(h * 60); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} m`; };
 const SS = { week:null, places:null, open:new Set(), timer:null };
 const CSS = `.stf .big{font-size:20px;padding:14px 28px;border-radius:12px}.stf .clk{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
@@ -334,7 +334,7 @@ window.staffSched = async function(v){
     <div class="card"><div class="row" style="margin:0 0 10px"><button class="btn small" data-w="-7">← Week before</button><b>Week of ${dnm(w)}</b>
       <button class="btn small" data-w="7">Next week →</button>${w !== wk(today) ? ` <button class="btn small" data-w="0">This week</button>` : ""}</div>
     <div id="sedbox"></div>
-    ${over.length ? `<p class="sm" style="margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#fde8e8;color:#7f1d1d">⚠ Scheduled over 40 hours this week (Sun–Sat): ${over.map(p => `<b>${esc(p.name)}</b> ${Math.round(hrs[p.id] * 10) / 10} h`).join(" · ")}. Over 40 is overtime and needs an OK first${anyEdit ? " (Staffing ▸ Clock In / Clock Out ▸ Approve overtime, or change the schedule)" : ""}.</p>` : ""}
+    ${over.length ? `<p class="sm" style="margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#fde8e8;color:#7f1d1d">⚠ Scheduled over 40 hours this week (Sat–Fri): ${over.map(p => `<b>${esc(p.name)}</b> ${Math.round(hrs[p.id] * 10) / 10} h`).join(" · ")}. Over 40 is overtime and needs an OK first${anyEdit ? " (Staffing ▸ Clock In / Clock Out ▸ Approve overtime, or change the schedule)" : ""}.</p>` : ""}
     ${anyEdit ? `<p class="muted sm" style="margin:0 0 8px">✎ Weekly sets someone's regular shifts from a date on. Tap a day to change just that day.</p>` : ""}
     <div class="tow"><table><tr><th>Who</th>${days.map(d => `<th${d === today ? ' style="color:var(--forest,#3c5f12)"' : ""}>${dnm(d)}</th>`).join("")}<th class="r">Hours</th></tr>
       ${rows.map(p => `<tr><td><b>${esc(p.name)}</b>${can.has(p.id) ? `<br><button class="btn small" data-wk="${p.id}">✎ Weekly</button>` : ""}</td>${days.map(d => td(p, d)).join("")}${hcol(p.id)}</tr>`).join("")
@@ -351,7 +351,7 @@ window.staffSched = async function(v){
     box.innerHTML = `<div class="edbox"><b>Weekly schedule for ${esc(name(u))}</b>
       <div class="row" style="margin:6px 0"><label>Starts <input type="date" id="sdfrom" value="${from}"></label><span class="muted sm">${pat ? `Set by ${esc(pat.by || "")} from ${dnm(pat.starts_on)}${pat.note ? " — " + esc(pat.note) : ""}` : "No hub schedule yet."}</span></div>
       ${later.length ? `<p class="sm" style="margin:0 0 6px;color:var(--red,#b3261e)">A schedule set to start ${later.map(x => dnm(x.starts_on)).join(", ")} still takes over from then.</p>` : ""}
-      <table>${DOW.map((n, i) => { const s = cur.filter(x => x.dow === i); return `<tr><td><b>${n}</b></td><td>${pair("a", i, s[0])}</td><td>${pair("b", i, s[1])}</td></tr>`; }).join("")}</table>
+      <table>${[6, 0, 1, 2, 3, 4, 5].map(i => { const n = DOW[i], s = cur.filter(x => x.dow === i); return `<tr><td><b>${n}</b></td><td>${pair("a", i, s[0])}</td><td>${pair("b", i, s[1])}</td></tr>`; }).join("")}</table>
       <p class="muted sm" style="margin:4px 0">Leave a day empty for a day off. Second column = a split shift. An end time earlier than the start runs past midnight.</p>
       <div class="row"><input id="sdnote" placeholder="Note (optional)" style="flex:1;min-width:180px"><button class="btn small primary" id="sdsave">Save weekly schedule</button>
         ${pat && cur.length ? `<button class="btn small" id="sdstop">Stop scheduling from this date</button>` : ""}<button class="btn small" id="sdx">Cancel</button></div></div>`;
@@ -379,7 +379,7 @@ window.staffSched = async function(v){
     box.querySelector("#sdsave").onclick = () => { let sh = []; if(!box.querySelector("#sdoff").checked){ try { sh = readPairs(box, "d", 2).map(x => ({ start:x.start, end:x.end })); } catch(x){ return alert(x.message); }
       if(!sh.length) return alert("Add a start and end time, or tick “Not working this day”."); }
       const tot = Math.round(((hrs[u] || 0) - now.reduce((a, x) => a + shH(x), 0) + sh.reduce((a, x) => a + shH(x), 0)) * 10) / 10;
-      if(tot > 40 && !confirm(`With this change ${name(u)} is scheduled for ${tot} hours this week (Sun–Sat). Over 40 is overtime, which needs an OK first. Save anyway?`)) return;
+      if(tot > 40 && !confirm(`With this change ${name(u)} is scheduled for ${tot} hours this week (Sat–Fri). Over 40 is overtime, which needs an OK first. Save anyway?`)) return;
       send(sh, false); };
     const bk = box.querySelector("#sdback"); if(bk) bk.onclick = () => send([], true);
   };
