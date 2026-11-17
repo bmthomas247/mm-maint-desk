@@ -38,6 +38,8 @@ h2{font-size:17px;margin:26px 0 8px;font-weight:800}
 .btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn:disabled{opacity:.5;cursor:default}
 .pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
 .pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+button.pill{border:2px solid transparent;cursor:pointer;font-family:inherit;line-height:1.5} button.pill:hover{filter:brightness(.95)}
+button.pill.on{border-color:currentColor;box-shadow:0 0 0 2px var(--bg,#fff) inset} .tfnote{font-size:12.5px;margin:0 0 6px}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
 .chip{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:5px 12px;border-radius:999px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
 .chip.on{background:var(--forest);color:#fff;border-color:var(--forest)}
@@ -87,7 +89,7 @@ const dur = s => { if(s == null) return ""; s = Math.round(s / 60); return s < 6
 const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
 
 const OIL_EVERY = 5000, OIL_WARN = 4000;          // Brandon 2026-10-29: change every 5,000 miles, plan it at 4,000
-const S = { days: 7, limit: 75, veh: "", vehicles: [], places: [], oil: {}, trips: [], visits: [] };
+const S = { days: 7, limit: 75, veh: "", tf: "", vehicles: [], places: [], oil: {}, trips: [], visits: [] };
 
 function vname(v){ return [v.year, v.make, v.model].filter(Boolean).join(" ") || v.nickname || ("Tracker " + String(v.imei).slice(-4)); }   // Brandon 2026-11-02: year, make, model on every card
 
@@ -239,17 +241,26 @@ function render(){
   const trips = S.trips.filter(t => Date.parse(t.started_at) >= from && (!S.veh || t.imei === S.veh));
   const fast = trips.filter(t => (t.max_mph || 0) > S.limit), brakes = trips.reduce((s, t) => s + (t.hard_brakes || 0), 0);
   const miles = trips.reduce((s, t) => s + (+t.miles || 0), 0), idle = trips.reduce((s, t) => s + (t.idle_s || 0), 0);
+  // tap a pill = filter the trips table; tap it again = every trip (Brandon 2026-11-17)
+  const TF = { mi: ["longest first", x => [...x].sort((a, b) => (+b.miles || 0) - (+a.miles || 0))],
+    idle: ["trips with idling, most first", x => x.filter(t => (t.idle_s || 0) > 0).sort((a, b) => (b.idle_s || 0) - (a.idle_s || 0))],
+    fast: [`trips over ${S.limit} mph`, x => x.filter(t => (t.max_mph || 0) > S.limit)],
+    brk: ["trips with hard brakes", x => x.filter(t => (t.hard_brakes || 0) > 0).sort((a, b) => (b.hard_brakes || 0) - (a.hard_brakes || 0))] };
+  if(!TF[S.tf]) S.tf = "";
+  const shown = S.tf ? TF[S.tf][1](trips) : trips;
+  const pb = (k, cls, txt) => `<button type="button" class="pill ${cls}${S.tf === k ? " on" : ""}" data-tf="${k}" title="${k ? "Show only " + esc(TF[k][0]) + " (tap again for all)" : "Show every trip"}">${txt}</button>`;
   h += `<h2>Trips · last ${S.days} days</h2>
-    <div class="bar"><span class="pill">${trips.length} trips</span><span class="pill">${mi(miles)} mi</span><span class="pill">${dur(idle)} idling</span>
-      <span class="pill ${fast.length ? "red" : "green"}">${fast.length} over ${S.limit} mph</span><span class="pill ${brakes ? "amber" : "green"}">${brakes} hard brakes</span></div>
-    <div class="box">` + (trips.length ? `<table><thead><tr><th>Started</th><th>Vehicle</th><th class="n">Miles</th><th class="n">Drive time</th><th class="n">Idle</th>
+    <div class="bar">${pb("", "", trips.length + " trips")}${pb("mi", "", mi(miles) + " mi")}${pb("idle", "", dur(idle) + " idling")}
+      ${pb("fast", fast.length ? "red" : "green", fast.length + " over " + S.limit + " mph")}${pb("brk", brakes ? "amber" : "green", brakes + " hard brakes")}</div>
+    ${S.tf ? `<p class="muted tfnote">Showing ${shown.length} ${esc(TF[S.tf][0])} · <a href="#" data-tf="">show all ${trips.length}</a></p>` : ""}
+    <div class="box">` + (shown.length ? `<table><thead><tr><th>Started</th><th>Vehicle</th><th class="n">Miles</th><th class="n">Drive time</th><th class="n">Idle</th>
       <th class="n">Top mph</th><th class="n">Avg mph</th><th class="n">Hard brakes</th><th class="n">Hard accel.</th></tr></thead><tbody>` +
-    trips.slice(0, 500).map(t => `<tr><td>${fmtDT(t.started_at)}</td><td>${esc(byImei[t.imei] ? vname(byImei[t.imei]) : t.imei)}</td><td class="n">${t.miles == null ? "" : (+t.miles).toFixed(1)}</td>
+    shown.slice(0, 500).map(t => `<tr><td>${fmtDT(t.started_at)}</td><td>${esc(byImei[t.imei] ? vname(byImei[t.imei]) : t.imei)}</td><td class="n">${t.miles == null ? "" : (+t.miles).toFixed(1)}</td>
       <td class="n">${dur(t.trip_s)}</td><td class="n">${dur(t.idle_s)}</td>
       <td class="n">${t.max_mph == null ? "" : (t.max_mph > S.limit ? `<span class="pill red">${Math.round(t.max_mph)}</span>` : Math.round(t.max_mph))}</td>
       <td class="n">${t.avg_mph == null ? "" : Math.round(t.avg_mph)}</td>
       <td class="n">${t.hard_brakes ? `<span class="pill amber">${t.hard_brakes}</span>` : (t.hard_brakes ?? "")}</td><td class="n">${t.hard_accels || (t.hard_accels ?? "")}</td></tr>`).join("") +
-    `</tbody></table>` : `<div class="empty">No trips in the last ${S.days} days.</div>`) + `</div>
+    `</tbody></table>` : `<div class="empty">${S.tf ? "None of these in the last " + S.days + " days." : "No trips in the last " + S.days + " days."}</div>`) + `</div>
     <p class="muted">Source: Bouncie trackers (top speed, hard braking and idle time per trip). Who was driving and posted speed limits come next.</p>`;
   $("#app").innerHTML = h;
 }
@@ -450,9 +461,10 @@ async function refresh(){
   catch(e){ $("#app").innerHTML = `<h1>Vehicles</h1><div class="note">Couldn't load: ${esc(errText(e))}</div>`; }
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan],[data-addph]"); if(!b) return;
-  if(b.dataset.file) e.preventDefault();
-  if(b.dataset.days){ S.days = +b.dataset.days; refresh(); }
+  const b = e.target.closest("[data-tf],[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan],[data-addph]"); if(!b) return;
+  if(b.dataset.file || b.dataset.tf != null) e.preventDefault();
+  if(b.dataset.tf != null){ S.tf = (S.tf === b.dataset.tf ? "" : b.dataset.tf); render(); }
+  else if(b.dataset.days){ S.days = +b.dataset.days; refresh(); }
   else if(b.dataset.oil) oilDialog(b.dataset.oil);
   else if(b.dataset.hist) histDialog(b.dataset.hist);
   else if(b.dataset.svc) svcDialog(b.dataset.svc);
