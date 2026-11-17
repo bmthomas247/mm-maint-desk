@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Seasonal photos</title>
+<link rel="icon" href="moose-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Tools ▸ Seasonal photos (hub key season_photos; hub admins only). Jeff 2026-11-16: "a flip of a switch from winter to summer".
+     Reads season_status() / season_listings(); starts a switch with season_request() (one listing first, then all); the work is done
+     by Edge Function season-switch (hub_season_photos.sql). Nothing on this page talks to Track directly. -->
+<style>
+:root{--forest:#3c5f12;--forest-2:#4e7a1a;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--amber:#854f0b;--amber-bg:#faeeda;--red:#c8382b;--red-bg:#fcebeb;--green-bg:#eaf3de;--radius:16px;
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#0d1410;--card:#151f19;--ink:#e8efe9;--ink-2:#b8c6bc;--muted:#8a998f;--line:#223028;--line-2:#2c3c33;
+  --blue:#85b7eb;--blue-bg:#0c2a45;--amber:#ef9f27;--amber-bg:#3a2a10;--red:#f09595;--red-bg:#3a1515;--green-bg:#1c2c12}}
+*{box-sizing:border-box}body{margin:0;background:var(--ground);line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding:18px 16px 40px}h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 4px}
+.muted{color:var(--muted)}.small{font-size:13px}.err{color:var(--red);font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pill{display:inline-block;font-size:12px;font-weight:800;padding:4px 12px;border-radius:999px}
+.pill.winter{background:var(--blue-bg);color:var(--blue)}.pill.summer{background:var(--amber-bg);color:var(--amber)}.pill.ok{background:var(--green-bg);color:var(--forest-2)}
+.pill.bad{background:var(--red-bg);color:var(--red)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
+.tile{background:var(--ground);border-radius:12px;padding:10px 12px}.tile .l{font-size:12px;color:var(--muted)}.tile .v{font-size:22px;font-weight:800}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:760px){.two{grid-template-columns:1fr}}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
+.btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn.warn{border-color:var(--red);color:var(--red)}.btn:disabled{opacity:.5;cursor:default}
+select,input{font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:9px 12px;background:var(--card);color:var(--ink);min-height:42px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.step{font-size:13px;font-weight:800;color:var(--muted);margin-top:14px}
+.bar{height:8px;background:var(--ground);border-radius:4px;margin-top:8px;overflow:hidden}.bar>i{display:block;height:8px;background:var(--forest-2)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted);font-weight:800}
+details>summary{cursor:pointer;font-weight:800;list-style:none}details>summary::-webkit-details-marker{display:none}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.dlg{background:var(--card);border-radius:var(--radius);max-width:520px;width:100%;padding:18px;border:1px solid var(--line)}
+</style>
+</head><body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmt = t => t ? new Date(t).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const day = t => t ? new Date(t + (String(t).length === 10 ? "T12:00:00" : "")).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const nice = e => String(e && (e.message || e) || "Something went wrong").replace(/^.*?ERROR:\s*/, "");
+const S = { st:null, ls:[], open:false, msg:"", timer:null };
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a href="hub.html#/season_photos" target="_top">Go to the Moose Hub →</a></p>`; return; }
+  if(!(await sb.rpc("hub_can", { p_desk:"season_photos" })).data){ (window.top || window).location.replace("hub.html#/home"); return; }
+  await load();
+}
+
+async function load(){
+  const [st, ls] = await Promise.all([sb.rpc("season_status"), sb.rpc("season_listings")]);
+  if(st.error){ $("#app").innerHTML = `<p class="err">Couldn't load. Check your signal and try again.</p>`; return; }
+  S.st = st.data; S.ls = ls.data || [];
+  draw();
+  clearTimeout(S.timer);
+  if(S.st.active) S.timer = setTimeout(load, 5000);        // follow a switch while it runs
+}
+
+function draw(){
+  const st = S.st, a = st.active, last = st.last, winter = st.season === "winter";
+  const on = S.ls.filter(l => l.photos_on > 0), off = S.ls.filter(l => l.photos_on < l.photos);
+  const opt = list => list.map(l => `<option value="${l.unit}">${esc(l.code)}</option>`).join("");
+  const lastLine = last ? `Last switch: <b>${last.direction === "summer" ? "to summer" : "to winter"}</b> ${last.scope === "test" ? "(one listing: " + esc(last.code) + ")" : "(all listings)"} · ${fmt(last.finished_at)} · ${last.done} listing${last.done === 1 ? "" : "s"}` +
+    ` · ${last.problems ? `<span class="pill bad">${last.problems} to look at</span>` : `<span class="pill ok">no problems</span>`}${last.status === "stopped" ? " · stopped" : ""}` : "No switch yet from the hub.";
+  const card = (dir) => {
+    const isS = dir === "summer", list = isS ? on : off, n = list.length;
+    const photos = list.reduce((s, l) => s + (isS ? l.photos_on : l.photos - l.photos_on), 0);
+    const tops = list.reduce((s, l) => s + (l.top_spots || 0), 0);
+    const ok = st.test_ok[dir];
+    return `<div class="card"><h2>${isS ? "☀️ Switch to summer" : "❄️ Switch to winter"}</h2>
+      <p class="small muted" style="margin:0">${isS
+        ? `Takes the winter photos off and puts each summer photo back in its old top spot. Nothing else on a listing moves.`
+        : `Puts the same winter photos back on: into their summer photo's spot (summer goes to the end), the rest after the real photos.`}</p>
+      ${n ? `<p class="small" style="margin:8px 0 0"><b>${photos}</b> photo${photos === 1 ? "" : "s"} on <b>${n}</b> listing${n === 1 ? "" : "s"}${isS && tops ? ` · ${tops} summer photos go back into top spots` : ""}</p>
+      <div class="step">Step 1 · try one listing</div>
+      <div class="row"><select id="u_${dir}" aria-label="Listing to try">${opt(list)}</select>
+        <button class="btn" data-go="${dir}" data-scope="test" ${a ? "disabled" : ""}>Try this listing</button></div>
+      <div class="step">Step 2 · every listing</div>
+      <div class="row"><button class="btn pri" data-go="${dir}" data-scope="all" ${a || !ok ? "disabled" : ""}>Switch ${n} listing${n === 1 ? "" : "s"} to ${dir}</button>
+        <span class="small muted">${ok ? "The one-listing test worked." : "Unlocks after a one-listing test works."}</span></div>`
+      : `<p class="small muted" style="margin:10px 0 0">Nothing to switch: every listing already has its ${dir} photos.</p>`}</div>`;
+  };
+  const pct = a && a.listings ? Math.round(100 * a.done / a.listings) : 0;
+  $("#app").innerHTML = `
+    <div class="card"><div class="head"><div><h1>Seasonal photos</h1>
+        <div class="small muted">The AI winter photos on our listings. Airbnb, Vrbo and our website get them through Track.</div></div>
+      <span class="pill ${winter ? "winter" : "summer"}">${winter ? "Winter is on" : "Summer is on"}${winter && st.since ? " since " + day(st.since) : ""}</span></div>
+      <div class="tiles">
+        <div class="tile"><div class="l">Listings with winter photos</div><div class="v">${st.listings_on}</div></div>
+        <div class="tile"><div class="l">Winter photos on now</div><div class="v">${st.photos_on}</div></div>
+        <div class="tile"><div class="l">In a top-5 spot</div><div class="v">${st.top_spots_on}</div></div>
+        <div class="tile"><div class="l">Winter photos off now</div><div class="v">${st.photos_off}</div></div></div>
+      <p class="small" style="margin:12px 0 0">${lastLine}</p></div>
+    ${a ? `<div class="card"><div class="head"><h2>Switching to ${esc(a.direction)}${a.scope === "test" ? " · " + esc(a.code) : ""}</h2>
+        <button class="btn warn" id="stop">Stop after this listing</button></div>
+      <div class="small muted">${a.status === "queued" ? "Starting in a minute or less…" : `${a.done} of ${a.listings} listings done${a.problems ? ` · <span class="err">${a.problems} to look at</span>` : ""}`}
+        · asked by ${esc(a.asked_by || "?")} at ${fmt(a.asked_at)}. You can close this page; it keeps going.</div>
+      <div class="bar"><i style="width:${pct}%"></i></div></div>` : ""}
+    ${S.msg ? `<p class="${/^✅/.test(S.msg) ? "small" : "err"}">${esc(S.msg)}</p>` : ""}
+    <div class="two">${card("summer")}${card("winter")}</div>
+    <div class="card"><h2>🔔 Reminder</h2>
+      <p class="small muted" style="margin:0">On this day, while winter photos are still on, each hub admin gets a tip on Home and in the bell to switch to summer.</p>
+      <div class="row"><input type="date" id="rem" value="${esc(st.remind_on || "")}" aria-label="Reminder day"><button class="btn" id="remsave">Save reminder</button>
+        <span class="small muted">${st.remind_on ? "Set for " + day(st.remind_on) : "Not set"}</span></div></div>
+    <div class="card"><details id="ls" ${S.open ? "open" : ""}><summary>📋 Every listing (${S.ls.length})</summary>
+      <div style="overflow-x:auto;margin-top:10px"><table><thead><tr><th>Listing</th><th>Winter photos on</th><th>Top spots</th><th>Last switch</th></tr></thead><tbody>
+      ${S.ls.map(l => {
+        const d = l.last_detail || {};
+        const why = l.last_status === "failed" ? `<span class="err">${esc(d.error || "failed")}</span>`
+          : l.last_status === "skipped" ? esc(d.why || "skipped")
+          : l.last_status ? `${d.removed != null ? d.removed + " off" : ""}${d.added != null ? d.added + " on" : ""}${d.order_ok === false ? ' · <span class="err">order needs a look</span>' : ""}${(d.skipped_photos || []).length ? " · " + d.skipped_photos.length + " left off (summer photo gone)" : ""}` : "";
+        return `<tr><td><b>${esc(l.code)}</b></td><td>${l.photos_on} of ${l.photos}</td><td>${l.top_spots || ""}</td>
+          <td class="small">${l.last_status ? esc(l.last_status) + " · " + fmt(l.last_at) + (why ? " · " + why : "") : '<span class="muted">—</span>'}</td></tr>`; }).join("")}
+      </tbody></table></div></details></div>
+    <p class="small muted">Vrbo hides a winter photo that looks almost the same as one already on the listing, so Vrbo shows fewer of them than Airbnb (Vrbo help: integration audit reports).
+      Track can't hide a photo, so switching to summer takes the winter photos off, and switching to winter puts the hub's copies back on.</p>`;
+  document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => ask(b.dataset.go, b.dataset.scope));
+  const sp = $("#stop"); if(sp) sp.onclick = stop;
+  $("#remsave").onclick = remind;
+  $("#ls").ontoggle = e => { S.open = e.target.open; };
+}
+
+function ask(dir, scope){
+  const list = dir === "summer" ? S.ls.filter(l => l.photos_on > 0) : S.ls.filter(l => l.photos_on < l.photos);
+  const unit = scope === "test" ? +$("#u_" + dir).value : null;
+  const pick = unit ? list.filter(l => l.unit === unit) : list;
+  const photos = pick.reduce((s, l) => s + (dir === "summer" ? l.photos_on : l.photos - l.photos_on), 0);
+  const tops = pick.reduce((s, l) => s + (l.top_spots || 0), 0);
+  const what = dir === "summer"
+    ? `${photos} winter photo${photos === 1 ? "" : "s"} come off ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? ` and ${tops} summer photo${tops === 1 ? "" : "s"} go back into ${tops === 1 ? "its" : "their"} old top spot${tops === 1 ? "" : "s"}` : ""}. Nothing else on ${unit ? "the listing" : "the listings"} moves.`
+    : `${photos} winter photo${photos === 1 ? "" : "s"} go back on ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? `, ${tops} of them into a summer photo's top spot` : ""}.`;
+  const div = document.createElement("div"); div.className = "scrim";
+  div.innerHTML = `<div class="dlg" role="dialog" aria-modal="true"><h2>Switch ${unit ? esc(pick[0].code) : "every listing"} to ${dir}?</h2>
+    <p style="margin:6px 0 0">${what}</p>
+    <p class="small muted">${unit ? "Takes a minute or two. Check the listing in Track afterwards." : `About ${Math.max(5, Math.round(pick.length / 6))} minutes. Each listing is checked in Track right after it's done.`}
+      Airbnb and Vrbo pick up the change from Track, Vrbo about once a day.</p>
+    <div class="row" style="justify-content:flex-end"><button class="btn" id="no">Not now</button><button class="btn pri" id="yes">${unit ? "Switch this listing" : "Switch " + pick.length + " listings"}</button></div></div>`;
+  document.body.appendChild(div);
+  const close = () => div.remove();
+  div.onclick = e => { if(e.target === div) close(); };
+  div.querySelector("#no").onclick = close;
+  div.querySelector("#yes").onclick = async () => {
+    div.querySelector("#yes").disabled = true;
+    const r = await sb.rpc("season_request", { p_direction:dir, p_unit:unit });
+    close();
+    S.msg = r.error ? nice(r.error) : `✅ Started. ${unit ? "This listing" : "Every listing"} switches to ${dir} over the next ${unit ? "minute or two" : "few minutes"}.`;
+    load();
+  };
+}
+
+async function stop(){
+  if(!S.st.active) return;
+  const r = await sb.rpc("season_stop", { p_run:S.st.active.id });
+  S.msg = r.error ? nice(r.error) : "✅ Stopping after the listing it's on.";
+  load();
+}
+
+async function remind(){
+  const v = $("#rem").value || null;
+  const r = await sb.rpc("season_remind_set", { p_day:v });
+  S.msg = r.error ? nice(r.error) : (v ? "✅ Reminder saved for " + day(v) + "." : "✅ Reminder cleared.");
+  load();
+}
+
+boot();
+</script>
+</body></html>
