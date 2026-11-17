@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#3c5f12">
+<title>Guest book · Moose Management</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- guest.html (build list n-guestbook, 2026-11-16, Claude Code for Jeff): the digital guest book a guest opens from the QR code in the home.
+     Public, no sign-in: guest.html?g=<the home's random link token>. Data = guest_book_public(token) (hub_guest_book.sql), which answers
+     only for a published book of an active home. Look = guest_book_render.js (same as the office preview on guest_books.html).
+     Replaces Touch Stay (paused 2026-11-01). Never shows door, garage, gate or lock box codes. -->
+<style>
+html,body{margin:0;background:#f5f7f0}
+@media (prefers-color-scheme:dark){html,body{background:#0d1410}}
+.msg{max-width:520px;margin:60px auto;padding:24px;font-family:"Manrope",system-ui,sans-serif;color:#15201a;background:#fff;border:1px solid #e1e7de;border-radius:16px;text-align:center}
+@media (prefers-color-scheme:dark){.msg{background:#151f19;color:#e8efe9;border-color:#26342b}}
+.msg img{width:54px;height:54px;border-radius:50%;background:#fff}
+</style>
+<style id="gbcss"></style>
+</head>
+<body>
+<div id="app"><div class="msg"><img src="moose-logo.png" alt=""><p>Opening your guest book…</p></div></div>
+<script src="config.js"></script>
+<script src="guest_book_render.js?v=20261116"></script>
+<script>
+(async function(){
+  "use strict";
+  const C = window.MM_CONFIG, app = document.getElementById("app"), GB = window.GuestBook;
+  document.getElementById("gbcss").textContent = GB.css;
+  const bad = (t) => { app.innerHTML = `<div class="msg"><img src="moose-logo.png" alt=""><h2 style="margin:10px 0 6px">${GB.esc(t)}</h2>
+    <p style="color:#6b776f">Please use the link or QR code from your booking messages or the one in the home.</p></div>`; };
+  const g = (new URLSearchParams(location.search).get("g") || "").toLowerCase().replace(/[^0-9a-f]/g, "");
+  if(g.length !== 14){ bad("This guest book link isn't complete."); return; }
+  let r;
+  for(let a = 0; a < 3 && !r; a++){
+    try {
+      const res = await fetch(C.url + "/rest/v1/rpc/guest_book_public", { method:"POST",
+        headers:{ "content-type":"application/json", apikey:C.anonKey, authorization:"Bearer " + C.anonKey }, body:JSON.stringify({ p_token:g }) });
+      if(res.ok) r = await res.json(); else await new Promise(ok => setTimeout(ok, 800 * (a + 1)));
+    } catch(e){ await new Promise(ok => setTimeout(ok, 800 * (a + 1))); }
+  }
+  if(!r){ bad("We couldn't load your guest book. Please check your signal and try again."); return; }
+  if(!r.ok || !r.book){ bad("This guest book isn't available."); return; }
+  document.title = (r.book.name || "Your stay") + " · Guest book";
+  app.innerHTML = GB.render(r.book, {});
+  GB.wire(app);
+  if(location.hash && location.hash.startsWith("#gb-")){ const d = document.querySelector(location.hash); if(d){ d.open = true; d.scrollIntoView(); } }
+})();
+</script>
+</body>
+</html>
