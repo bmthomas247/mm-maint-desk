@@ -7,7 +7,7 @@
 (function(){
 const TABS = [["payroll", "Payroll hours"], ["maint", "Maintenance spending"], ["bookings", "Bookings & payouts"], ["owner", "Owner charges"]];
 const PAY_ANCHOR = "2026-11-02";   // first pay period (Mon); every other Monday after (Brandon 2026-10-29)
-const A = { tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart" };
+const A = { tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"" };
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const H = s => esc(s == null ? "" : String(s));
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -72,6 +72,9 @@ function css(){
 .acct .note{font-size:13.5px;color:var(--ink-2)}
 .acct .seg{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px} .acct .seg button{border-radius:11px;min-height:36px;padding:5px 12px;font-weight:700;font-size:13.5px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink);width:auto}
 .acct .seg button.on{background:var(--ac-green);border-color:var(--ac-green);color:#fff}
+.acct button.tile{text-align:left;cursor:pointer;width:auto;font:inherit;color:inherit} .acct button.tile:hover{border-color:var(--ac-green)} .acct button.tile.on{border-color:var(--ac-green);box-shadow:0 0 0 2px var(--ac-green) inset}
+.acct .ckb{background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;width:auto;min-height:0;text-decoration:underline dotted;text-underline-offset:3px} .acct .ckb.on{font-weight:800;text-decoration:underline;color:var(--ac-forest)}
+.acct .tfnote{margin:0 2px 8px}
 @media (max-width:700px){.acct .tile b{font-size:22px} .acct td,.acct th{padding:6px 5px}}
 @media print{body *{visibility:hidden!important} .acct,.acct *{visibility:visible!important} .acct{position:absolute;left:0;top:0;width:100%;max-width:none}
   .acct .noprint{display:none!important} .acct .card,.acct .tile{box-shadow:none} .acct .head{background:none;color:#000;border:1px solid #999} .acct tr.sub{display:table-row!important}}`;
@@ -86,9 +89,13 @@ function csv(name, rows){
 }
 const CSV = {};   // key -> () => [name, rows]
 const csvBtn = (k, label = "Download CSV") => `<button type="button" class="btn2 noprint" data-csv="${k}">⬇ ${label}</button>`;
-const tile = (big, label, small = "") => `<div class="tile"><b>${big}</b><span>${label}</span>${small ? `<small>${small}</small>` : ""}</div>`;
+const tile = (big, label, small = "", k = "") => k ? `<button type="button" class="tile${A.tf === k ? " on" : ""}" data-tf="${k}" title="Show only these (tap again for all)"><b>${big}</b><span>${label}</span>${small ? `<small>${small}</small>` : ""}</button>`
+  : `<div class="tile"><b>${big}</b><span>${label}</span>${small ? `<small>${small}</small>` : ""}</div>`;
+// a check line can be [filter key, html]: tapping it shows only those rows in the table below (tap again for all)
 const checks = items => `<div class="card"><h3 style="margin-top:0">Check these</h3><ul class="checks" style="margin:0;padding-left:20px">${
-  items.length ? items.map(x => `<li>${x}</li>`).join("") : `<li class="ok">Nothing to check. Everything lines up.</li>`}</ul></div>`;
+  items.length ? items.map(x => Array.isArray(x) ? `<li><button type="button" class="ckb${A.tf === x[0] ? " on" : ""}" data-tf="${x[0]}" title="Show only these (tap again for all)">${x[1]}</button></li>` : `<li>${x}</li>`).join("") : `<li class="ok">Nothing to check. Everything lines up.</li>`}</ul></div>`;
+const tfNote = (n, what) => `<p class="note tfnote noprint">Showing ${n} ${n === 1 ? what.replace(/^(stay|cost|service|booking|cancellation)s/, "$1").replace(/ (stays|costs|services|bookings)/, m => m.slice(0, -1)).replace(/^cancellations$/, "cancellation") : what} · <a href="#" data-tf="">show all</a></p>`;
+const BSUB = { b_out:"depart", b_bk:"booked", b_cn:"cancel", b_owed:"depart", b_cnpaid:"cancel" };
 
 async function load(tab){
   const key = `${tab}|${A.from}|${A.to}`;
@@ -159,9 +166,10 @@ function maint(x){
   const B = x.breezeway || [], C = x.hub || [], V = x.vehicles || [];
   const tb = sum(B, i => i.cost), tc = sum(C, i => i.amount), tv = sum(V, i => i.cost), own = sum(B.filter(i => i.bill_to === "owner"), i => i.cost);
   const chk = [];
-  const noRc = C.filter(i => !i.invoice && !i.receipt); if(noRc.length) chk.push(`${noRc.length} hub cost${noRc.length > 1 ? "s" : ""} with no receipt or invoice attached (${$$(sum(noRc, i => i.amount))}).`);
-  const noV = V.filter(i => !i.file && !i.invoice_no); if(noV.length) chk.push(`${noV.length} vehicle service${noV.length > 1 ? "s" : ""} with no invoice (${$$(sum(noV, i => i.cost))}).`);
-  const noHome = B.filter(i => !i.home); if(noHome.length) chk.push(`${noHome.length} Breezeway cost${noHome.length > 1 ? "s" : ""} not matched to a home.`);
+  const noRc = C.filter(i => !i.invoice && !i.receipt); if(noRc.length) chk.push(["m_norc", `${noRc.length} hub cost${noRc.length > 1 ? "s" : ""} with no receipt or invoice attached (${$$(sum(noRc, i => i.amount))}).`]);
+  const noV = V.filter(i => !i.file && !i.invoice_no); if(noV.length) chk.push(["m_nov", `${noV.length} vehicle service${noV.length > 1 ? "s" : ""} with no invoice (${$$(sum(noV, i => i.cost))}).`]);
+  const noHome = B.filter(i => !i.home); if(noHome.length) chk.push(["m_nohome", `${noHome.length} Breezeway cost${noHome.length > 1 ? "s" : ""} not matched to a home.`]);
+  const fB = A.tf === "m_nohome" ? noHome : B, fC = A.tf === "m_norc" ? noRc : C, fV = A.tf === "m_nov" ? noV : V;
   const homes = {}; [...B.map(i => [i.home, i.cost]), ...C.map(i => [i.home, i.amount])].forEach(([h, a]) => { h = h || "(no home)"; homes[h] = (homes[h] || 0) + Number(a || 0); });
   CSV.m_bw = () => ["maintenance_breezeway", [["Finished", "Home", "Department", "Task", "Cost", "Billed to", "Finished by", "Breezeway link"], ...B.map(i => [i.day, i.home, i.dept, i.task, i.cost, i.bill_to, i.by || "", i.link])]];
   CSV.m_hub = () => ["maintenance_hub_costs", [["Date", "Home", "Kind", "Amount", "What", "Vendor", "Job", "Invoice link", "Receipt photo", "Entered by"], ...C.map(i => [i.day, i.home, i.kind, i.amount, i.what || "", i.vendor || "", i.job || "", i.invoice || "", i.receipt ? "yes" : "", i.by || ""])]];
@@ -172,16 +180,16 @@ function maint(x){
       ${tile($$(own), "Billed to owners", "Breezeway, bill to owner")}${tile($$(tb - own + tc), "Company / not billed", "jobs + hub costs")}${tile($$(tv), "Vehicles", `${V.length} services`)}</div>
     ${checks(chk)}
     <div class="card"><h3 style="margin-top:0">Breezeway task costs <span>${$$(tb)} ${csvBtn("m_bw")}</span></h3>
-      ${tbl(`<th>Finished</th><th>Home</th><th>Task</th><th>Billed to</th><th class="n">Cost</th>`, B.map(i => `<tr><td>${fday(i.day)}</td><td>${H(i.home || "–")}</td><td><a href="${H(i.link)}" target="_blank" rel="noopener">${H(i.task)}</a><br><span class="note">${H(i.dept)}${i.by ? " · " + H(i.by) : ""}</span></td><td>${i.bill_to === "owner" ? `<span class="pill o">Owner</span>` : i.bill_to === "guest" ? `<span class="pill b">Guest</span>` : H(i.bill_to)}</td><td class="n">${$$(i.cost)}</td></tr>`).join(""),
-        B.length ? `<tr class="tot"><td colspan="4">Total</td><td class="n">${$$(tb)}</td></tr>` : "")}
+      ${fB !== B ? tfNote(fB.length, "Breezeway costs not matched to a home") : ""}${tbl(`<th>Finished</th><th>Home</th><th>Task</th><th>Billed to</th><th class="n">Cost</th>`, fB.map(i => `<tr><td>${fday(i.day)}</td><td>${H(i.home || "–")}</td><td><a href="${H(i.link)}" target="_blank" rel="noopener">${H(i.task)}</a><br><span class="note">${H(i.dept)}${i.by ? " · " + H(i.by) : ""}</span></td><td>${i.bill_to === "owner" ? `<span class="pill o">Owner</span>` : i.bill_to === "guest" ? `<span class="pill b">Guest</span>` : H(i.bill_to)}</td><td class="n">${$$(i.cost)}</td></tr>`).join(""),
+        B.length && fB === B ? `<tr class="tot"><td colspan="4">Total</td><td class="n">${$$(tb)}</td></tr>` : "")}
       <p class="src">From: Breezeway task costs (labor, supplies and fees on each finished task), copied into the hub every few minutes.</p></div>
     <div class="card"><h3 style="margin-top:0">Costs entered in the hub <span>${$$(tc)} ${csvBtn("m_hub")}</span></h3>
-      ${tbl(`<th>Date</th><th>Home</th><th>What</th><th>Receipt</th><th class="n">Amount</th>`, C.map(i => `<tr><td>${fday(i.day)}</td><td>${H(i.home || "–")}</td><td>${H(i.what || i.kind)}<br><span class="note">${H([i.kind, i.vendor, i.job].filter(Boolean).join(" · "))}</span></td><td>${i.invoice ? `<a href="${H(i.invoice)}" target="_blank" rel="noopener">Invoice ↗</a>` : i.receipt ? "Photo in the hub" : `<span class="warn">none</span>`}</td><td class="n">${$$(i.amount)}</td></tr>`).join(""),
-        C.length ? `<tr class="tot"><td colspan="4">Total</td><td class="n">${$$(tc)}</td></tr>` : "")}
+      ${fC !== C ? tfNote(fC.length, "hub costs with no receipt or invoice") : ""}${tbl(`<th>Date</th><th>Home</th><th>What</th><th>Receipt</th><th class="n">Amount</th>`, fC.map(i => `<tr><td>${fday(i.day)}</td><td>${H(i.home || "–")}</td><td>${H(i.what || i.kind)}<br><span class="note">${H([i.kind, i.vendor, i.job].filter(Boolean).join(" · "))}</span></td><td>${i.invoice ? `<a href="${H(i.invoice)}" target="_blank" rel="noopener">Invoice ↗</a>` : i.receipt ? "Photo in the hub" : `<span class="warn">none</span>`}</td><td class="n">${$$(i.amount)}</td></tr>`).join(""),
+        C.length && fC === C ? `<tr class="tot"><td colspan="4">Total</td><td class="n">${$$(tc)}</td></tr>` : "")}
       <p class="src">From: Maintenance ▸ Expenses & Time (parts, fuel, labor typed in by the crew).</p></div>
     <div class="card"><h3 style="margin-top:0">Vehicle service <span>${$$(tv)} ${csvBtn("m_veh")}</span></h3>
-      ${tbl(`<th>Date</th><th>Vehicle</th><th>What</th><th>Invoice</th><th class="n">Cost</th>`, V.map(i => `<tr><td>${fday(i.day)}</td><td>${H(i.vehicle)}</td><td>${H(i.kind)}<br><span class="note">${H(i.vendor || "")}</span></td><td>${i.invoice_no ? "#" + H(i.invoice_no) : ""}${i.file ? " (file on Vehicles page)" : ""}</td><td class="n">${$$(i.cost)}</td></tr>`).join(""),
-        V.length ? `<tr class="tot"><td colspan="4">Total</td><td class="n">${$$(tv)}</td></tr>` : "")}
+      ${fV !== V ? tfNote(fV.length, "vehicle services with no invoice") : ""}${tbl(`<th>Date</th><th>Vehicle</th><th>What</th><th>Invoice</th><th class="n">Cost</th>`, fV.map(i => `<tr><td>${fday(i.day)}</td><td>${H(i.vehicle)}</td><td>${H(i.kind)}<br><span class="note">${H(i.vendor || "")}</span></td><td>${i.invoice_no ? "#" + H(i.invoice_no) : ""}${i.file ? " (file on Vehicles page)" : ""}</td><td class="n">${$$(i.cost)}</td></tr>`).join(""),
+        V.length && fV === V ? `<tr class="tot"><td colspan="4">Total</td><td class="n">${$$(tv)}</td></tr>` : "")}
       <p class="src">From: Vehicles ▸ Service history.</p></div>
     <div class="card"><h3 style="margin-top:0">By home <span>${csvBtn("m_home")}</span></h3>
       ${tbl(`<th>Home</th><th class="n">Total</th>`, Object.entries(homes).sort((a, b) => b[1] - a[1]).map(([h, a]) => `<tr><td>${H(h)}</td><td class="n">${$$(a)}</td></tr>`).join(""))}</div>`;
@@ -194,9 +202,9 @@ function bookings(x){
   const pick = k => S.filter(s => s["is_" + k]);
   const out = pick("depart").filter(s => !s.owner), bk = pick("booked").filter(s => !s.owner), cn = pick("cancel");
   const chk = [];
-  const owed = out.filter(s => Number(s.balance) > 0.009); if(owed.length) chk.push(`${owed.length} checked-out stay${owed.length > 1 ? "s" : ""} still owe money in Track (${$$(sum(owed, s => s.balance))}).`);
-  const cred = S.filter(s => Number(s.balance) < -0.009); if(cred.length) chk.push(`${cred.length} stay${cred.length > 1 ? "s" : ""} with a credit (overpaid) in Track (${$$(sum(cred, s => s.balance))}).`);
-  const cnPaid = cn.filter(s => Number(s.paid) > 0); if(cnPaid.length) chk.push(`${cnPaid.length} cancelled stay${cnPaid.length > 1 ? "s" : ""} with money paid (${$$(sum(cnPaid, s => s.paid))}): refunded or kept?`);
+  const owed = out.filter(s => Number(s.balance) > 0.009); if(owed.length) chk.push(["b_owed", `${owed.length} checked-out stay${owed.length > 1 ? "s" : ""} still owe money in Track (${$$(sum(owed, s => s.balance))}).`]);
+  const cred = S.filter(s => Number(s.balance) < -0.009); if(cred.length) chk.push(["b_cred", `${cred.length} stay${cred.length > 1 ? "s" : ""} with a credit (overpaid) in Track (${$$(sum(cred, s => s.balance))}).`]);
+  const cnPaid = cn.filter(s => Number(s.paid) > 0); if(cnPaid.length) chk.push(["b_cnpaid", `${cnPaid.length} cancelled stay${cnPaid.length > 1 ? "s" : ""} with money paid (${$$(sum(cnPaid, s => s.paid))}): refunded or kept?`]);
   (x.payout_checks || []).filter(p => p.status !== "ok").forEach(p => chk.push(`Airbnb payout check ${fday(p.day)}: ${H(p.summary)}`));
   const old = x.track_window_from && A.from < x.track_window_from;
   if(old) chk.push(`<span class="warn">The hub's Track copy starts with stays leaving on ${fdate(x.track_window_from)}; earlier stays aren't in this report.</span>`);
@@ -207,11 +215,12 @@ function bookings(x){
   const row = s => [s.res, s.unit, s.guest, s.type, s.channel, s.booked, s.arrive, s.depart, s.nights, s.rent, s.fees, s.taxes, s.other, s.total, s.paid, s.balance, s.cancelled || ""];
   SUBS.forEach(([k, l]) => CSV["b_" + k] = () => ["bookings_" + l.toLowerCase().replace(/ /g, "_"), [cols, ...pick(k).map(row)]]);
   CSV.b_ch = () => ["bookings_checked_out_by_channel", [["Booked as", "Stays", "Nights", "Rent", "Fees", "Taxes", "Discounts / other", "Total", "Paid"], ...Object.entries(byCh).map(([k, o]) => [k, o.n, o.nights, o.rent.toFixed(2), o.fees.toFixed(2), o.taxes.toFixed(2), o.other.toFixed(2), o.total.toFixed(2), o.paid.toFixed(2)])]];
-  const L = pick(A.sub);
-  return `<div class="tiles">${tile(String(out.length), "Guest stays checked out", `${$$(sum(out, s => s.rent))} rent`)}
+  const TF = { b_out:[out, "guest stays checked out"], b_bk:[bk, "new guest bookings"], b_cn:[cn, "cancellations"], b_owed:[owed, "checked-out stays that still owe money"], b_cred:[cred, "stays with a credit"], b_cnpaid:[cnPaid, "cancelled stays with money paid"] };
+  const tf = TF[A.tf], L = tf ? tf[0] : pick(A.sub);
+  return `<div class="tiles">${tile(String(out.length), "Guest stays checked out", `${$$(sum(out, s => s.rent))} rent`, "b_out")}
       ${tile($$(sum(out, s => s.total)), "Checked-out total", `fees ${$$(sum(out, s => s.fees))} · taxes ${$$(sum(out, s => s.taxes))}`)}
-      ${tile(String(bk.length), "New bookings", `${$$(sum(bk, s => s.total))} booked`)}
-      ${tile(String(cn.length), "Cancellations", cn.length ? `${$$(sum(cn, s => s.paid))} had been paid` : "")}</div>
+      ${tile(String(bk.length), "New bookings", `${$$(sum(bk, s => s.total))} booked`, "b_bk")}
+      ${tile(String(cn.length), "Cancellations", cn.length ? `${$$(sum(cn, s => s.paid))} had been paid` : "", "b_cn")}</div>
     ${checks(chk)}
     <div class="card"><h3 style="margin-top:0">Checked out, by how it was booked <span>${csvBtn("b_ch")}</span></h3>
       <div class="tw"><table><thead><tr><th>Booked as</th><th class="n">Stays</th><th class="n">Nights</th><th class="n">Rent</th><th class="n">Fees</th><th class="n">Taxes</th><th class="n">Discounts / other</th><th class="n">Total</th><th class="n">Paid</th></tr></thead><tbody>
@@ -219,7 +228,8 @@ function bookings(x){
       ${out.length ? `<tr class="tot"><td>Total</td><td class="n">${out.length}</td><td class="n">${sum(out, s => s.nights)}</td><td class="n">${$$(sum(out, s => s.rent))}</td><td class="n">${$$(sum(out, s => s.fees))}</td><td class="n">${$$(sum(out, s => s.taxes))}</td><td class="n">${$$(sum(out, s => s.other))}</td><td class="n">${$$(sum(out, s => s.total))}</td><td class="n">${$$(sum(out, s => s.paid))}</td></tr>` : ""}</tbody></table></div>
       <p class="note" style="margin:8px 2px 0">Rent = Track's gross rent. "Discounts / other" = Track's grand total minus rent, fees and taxes (discounts, credits and anything else Track adds), so each row adds up to Track's total. Owner stays are left out of the money totals (they're listed below with $0).</p></div>
     <div class="card"><h3 style="margin-top:0">Every stay <span>${csvBtn("b_" + A.sub)}</span></h3>
-      <div class="seg noprint">${SUBS.map(([k, l]) => `<button type="button" class="${A.sub === k ? "on" : ""}" data-sub="${k}">${l} (${pick(k).length})</button>`).join("")}</div>
+      <div class="seg noprint">${SUBS.map(([k, l]) => `<button type="button" class="${A.sub === k && (!tf || BSUB[A.tf] === k) ? "on" : ""}" data-sub="${k}">${l} (${pick(k).length})</button>`).join("")}</div>
+      ${tf ? tfNote(L.length, tf[1]) : ""}
       <div class="tw"><table><thead><tr><th>Res #</th><th>Home</th><th>Guest</th><th>Booked as</th><th>Dates</th><th class="n">Rent</th><th class="n">Fees</th><th class="n">Taxes</th><th class="n">Total</th><th class="n">Paid</th><th class="n">Balance</th></tr></thead><tbody>
       ${L.map(s => `<tr><td>${H(s.res)}</td><td>${H(s.unit)}</td><td>${H(s.guest)}${s.owner ? ` <span class="pill">Owner</span>` : ""}${s.cancelled ? ` <span class="pill r">Cancelled ${fday(s.cancelled)}</span>` : ""}</td><td>${H(s.type || s.channel)}</td>
         <td>${fday(s.arrive)} – ${fday(s.depart)}<br><span class="note">${s.nights || ""} nights · booked ${fday(s.booked)}</span></td><td class="n">${$$(s.rent)}</td><td class="n">${$$(s.fees)}</td><td class="n">${$$(s.taxes)}</td><td class="n">${$$(s.total)}</td><td class="n">${$$(s.paid)}</td>
@@ -279,11 +289,14 @@ async function draw(v){
     + `<p class="src">Report made ${new Date(x.made_at || Date.now()).toLocaleString()}.</p>`;
   body.querySelectorAll("[data-csv]").forEach(b => b.onclick = e => { e.stopPropagation(); const f = CSV[b.dataset.csv]; if(f){ const [n, r] = f(); csv(n, r); } });
   body.querySelectorAll("[data-open]").forEach(r => r.onclick = e => { if(e.target.closest("a")) return; const k = r.dataset.open; A.open[k] = !A.open[k]; const y = window.scrollY; draw(v).then(() => window.scrollTo(0, y)); });
-  body.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { A.sub = b.dataset.sub; draw(v); });
+  body.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { A.sub = b.dataset.sub; A.tf = ""; draw(v); });
+  body.querySelectorAll("[data-tf]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.tf; A.tf = (A.tf === k ? "" : k); if(A.tf && BSUB[A.tf]) A.sub = BSUB[A.tf]; const y = window.scrollY; draw(v).then(() => window.scrollTo(0, y)); });
 }
 window.accountingView = function(v, arg){
   const t = String(arg || "").split("/")[0];
+  const was = A.tab;
   if(TABS.some(([k]) => k === t)) A.tab = t; else if(!arg) A.tab = A.tab || "payroll";
+  if(A.tab !== was) A.tf = "";
   return draw(v);
 };
 })();
