@@ -123,47 +123,59 @@ function payroll(x){
     (p.shifts || []).filter(s => s.hours > 12).forEach(s => chk.push(`<b>${H(p.name)}</b>: <span class="bad">${hh(s.hours)} h shift</span> on ${fday(s.day)} (${ftime(s.in)} – ${ftime(s.out)}). Likely a missed clock-out; check with their manager before paying.`));
   });
   const pto = p => (p.pto || []).map(b => `${hh(b.hours)} h`).join(" + ");
-  CSV.pay_sum = () => ["payroll_summary", [["Name", "Teams", "Pay type", "Hub clock hours", "Hubstaff hours", "Overtime hours (over 40/week)", "Paid time off hours", "Unpaid time off hours", "Missed punches waiting"],
-    ...P.map(p => [p.name, (p.teams || []).join("; "), p.salaried ? "Salaried" : "Hourly", hh(p.hub_h), p.hs_h == null ? "" : hh(p.hs_h),
-      p.salaried ? "" : hh(sum(p.weeks || [], w => w.ot_h)), hh(p.paid_off_h), hh(p.unpaid_off_h), p.pending || 0])]];
-  CSV.pay_days = () => ["payroll_by_day", [["Name", "Date", "Hub clock hours", "Hubstaff hours"],
-    ...P.flatMap(p => (p.days || []).filter(d => d.hub_h || d.hs_h).map(d => [p.name, d.day, hh(d.hub_h), d.hs_h == null ? "" : hh(d.hs_h)]))]];
+  const tot = p => (Number(p.reg_h) || 0) + (Number(p.hol_h) || 0) + (Number(p.ot_total) || 0) + (Number(p.pto_h) || 0) + (Number(p.other_h) || 0);
+  const ptoLeft = p => (p.pto || []).map(b => `${hh(b.hours)} h`).join(" + ");
+  (x.holidays || []).forEach(h => chk.push(`<b>${H(h.name)}</b> (${fday(h.day)}) is a paid holiday: hours worked that day are in the Holiday column.`));
+  CSV.pay_sum = () => ["payroll_breakdown", [["Name", "Teams", "Pay type", "Regular hours", "Holiday hours (worked)", "Overtime hours", "PTO hours", "Other paid hours", "Total paid hours", "Unpaid time off hours", "PTO balance (hours left)", "Missed punches waiting"],
+    ...P.map(p => [p.name, (p.teams || []).join("; "), p.salaried ? "Salaried" : "Hourly", hh(p.reg_h), hh(p.hol_h), hh(p.ot_total), hh(p.pto_h), hh(p.other_h), hh(tot(p)),
+      hh(p.unpaid_h), (p.pto || []).map(b => hh(b.hours)).join(" + "), p.pending || 0]),
+    ["Total", "", "", hh(sum(P, p => p.reg_h)), hh(sum(P, p => p.hol_h)), hh(sum(P, p => p.ot_total)), hh(sum(P, p => p.pto_h)), hh(sum(P, p => p.other_h)), hh(sum(P, tot)), hh(sum(P, p => p.unpaid_h)), "", ""]]];
+  CSV.pay_days = () => ["payroll_by_day", [["Name", "Date", "Holiday", "Regular", "Holiday hours (worked)", "Overtime", "PTO", "Other paid", "Total paid", "Unpaid off", "Clocked (hub)", "Hubstaff"],
+    ...P.flatMap(p => (p.days || []).filter(d => d.hub_h || d.hs_h || d.pto || d.other || d.unpaid).map(d => [p.name, d.day, d.holiday || "", hh(d.reg), hh(d.hol), hh(d.ot), hh(d.pto), hh(d.other),
+      hh((+d.reg || 0) + (+d.hol || 0) + (+d.ot || 0) + (+d.pto || 0) + (+d.other || 0)), hh(d.unpaid), hh(d.hub_h), d.hs_h == null ? "" : hh(d.hs_h)]))]];
   CSV.pay_shifts = () => ["payroll_punches", [["Name", "Date", "Clock in", "Clock out", "Hours", "Edited", "Edit reason", "Added by hand"],
     ...P.flatMap(p => (p.shifts || []).map(s => [p.name, s.day, ftime(s.in), s.out ? ftime(s.out) : "still in", s.hours == null ? "" : hh(s.hours), s.edited ? "yes" : "", s.note || "", s.added ? "yes" : ""]))]];
   CSV.pay_pto = () => ["payroll_pto_balances", [["Name", "Policy", "Hours left", "As of"],
     ...P.flatMap(p => (p.pto || []).map(b => [p.name, b.policy || "", hh(b.hours), b.as_of ? new Date(b.as_of).toLocaleDateString() : ""]))]];
   CSV.pay_off = () => ["payroll_time_off", [["Name", "From", "To", "Hours", "Kind", "Policy", "Paid", "Approved by"],
     ...P.flatMap(p => (p.timeoff || []).map(t => [p.name, t.from, t.to, hh(t.hours), t.kind, t.policy || "", t.paid ? "yes" : "no", t.approved_by || ""]))]];
+  const z = n => Number(n) ? hh(n) : "–";
   const rows = P.map((p, n) => {
-    const otp = p.salaried ? 0 : sum(p.weeks || [], w => w.ot_h), op = A.open["p" + n];
+    const op = A.open["p" + n];
     return `<tr class="click" data-open="p${n}"><td><b>${H(p.name)}</b> ${p.salaried ? `<span class="pill b">Salaried</span>` : ""}${p.no_clock ? `<span class="pill o">Doesn't clock in</span>` : ""}<br><span class="note">${H((p.teams || []).join(", "))}</span></td>
-      <td class="n"><b>${hh(p.hub_h)}</b></td><td class="n">${p.hs_h == null ? "–" : hh(p.hs_h)}</td>
-      <td class="n">${otp ? `<span class="bad">${hh(otp)}</span>` : "–"}</td><td class="n">${p.paid_off_h ? hh(p.paid_off_h) : "–"}</td><td class="n">${p.unpaid_off_h ? hh(p.unpaid_off_h) : "–"}</td><td class="n">${pto(p) || "–"}</td>
-      <td class="noprint">${op ? "▴" : "▾"}</td></tr>` + (op ? `<tr class="sub"><td colspan="8">${payDetail(p)}</td></tr>` : "");
+      <td class="n">${z(p.reg_h)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${Number(p.ot_total) ? `<span class="bad">${hh(p.ot_total)}</span>` : "–"}</td>
+      <td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td>
+      <td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td>
+      <td class="noprint">${op ? "▴" : "▾"}</td></tr>` + (op ? `<tr class="sub"><td colspan="10">${payDetail(p)}</td></tr>` : "");
   }).join("");
-  return `<div class="tiles">${tile(hh(sum(P, p => p.hub_h)), "Hub clock hours", `${P.length} people`)}
-      ${tile(hh(sum(P, p => p.hs_h)), "Hubstaff hours", "while both are used")}
-      ${tile(hh(ot), "Overtime hours", `over 40 in a ${H(x.week_start)}–start workweek`)}
-      ${tile(hh(sum(P, p => p.paid_off_h)), "Paid time off hours", `${hh(sum(P, p => p.unpaid_off_h))} h unpaid`)}</div>
+  return `<div class="tiles">${tile(hh(sum(P, tot)), "Total paid hours", `${P.length} people`)}
+      ${tile(hh(sum(P, p => p.reg_h)), "Regular hours", "")}
+      ${tile(hh(sum(P, p => p.ot_total)), "Overtime hours", `over 40 in a ${H(x.week_start)}–start workweek`)}
+      ${tile(hh(sum(P, p => p.hol_h)), "Holiday hours", "worked on a paid holiday")}
+      ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}</div>
     ${checks(chk)}
-    <div class="card"><h3 style="margin-top:0">Hours by person <span class="noprint">${csvBtn("pay_sum")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")} ${csvBtn("pay_pto", "PTO balances CSV")}</span></h3>
+    <div class="card"><h3 style="margin-top:0">Hours by person <span class="noprint">${csvBtn("pay_sum", "Breakdown CSV")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")} ${csvBtn("pay_pto", "PTO balances CSV")}</span></h3>
       ${x.scope === "team" ? `<p class="note" style="margin:0 2px 8px">Showing the people you look after.</p>` : ""}
-      <div class="tw"><table><thead><tr><th>Person</th><th class="n">Hub clock</th><th class="n">Hubstaff</th><th class="n">Overtime</th><th class="n">Paid off</th><th class="n">Unpaid off</th><th class="n">PTO left</th><th class="noprint"></th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="8" class="note">No hours in these dates.</td></tr>`}
-      ${P.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(P, p => p.hub_h))}</td><td class="n">${hh(sum(P, p => p.hs_h))}</td><td class="n">${hh(ot)}</td><td class="n">${hh(sum(P, p => p.paid_off_h))}</td><td class="n">${hh(sum(P, p => p.unpaid_off_h))}</td><td></td><td class="noprint"></td></tr>` : ""}</tbody></table></div>
-      <p class="note noprint" style="margin:8px 2px 0">Tap a person to see each day, every clock-in and clock-out, and any time off.</p>
+      <div class="tw"><table><thead><tr><th>Person</th><th class="n">Regular</th><th class="n">Holiday</th><th class="n">Overtime</th><th class="n">PTO</th><th class="n">Other paid</th><th class="n">Total paid</th><th class="n">Unpaid off</th><th class="n">PTO left</th><th class="noprint"></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="10" class="note">No hours in these dates.</td></tr>`}
+      ${P.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(P, p => p.reg_h))}</td><td class="n">${hh(sum(P, p => p.hol_h))}</td><td class="n">${hh(sum(P, p => p.ot_total))}</td><td class="n">${hh(sum(P, p => p.pto_h))}</td><td class="n">${hh(sum(P, p => p.other_h))}</td><td class="n">${hh(sum(P, tot))}</td><td class="n">${hh(sum(P, p => p.unpaid_h))}</td><td></td><td class="noprint"></td></tr>` : ""}</tbody></table></div>
+      <p class="note noprint" style="margin:8px 2px 0">Tap a person to see each day broken down, every clock-in and clock-out, and any time off.</p>
       ${idle ? `<p class="note" style="margin:6px 2px 0">${idle} more ${idle > 1 ? "people" : "person"} on the hub clock had no hours in these dates.</p>` : ""}
-      <p class="src">From: hub clock-ins (Staffing ▸ Clock In / Clock Out; only punches that count, missed punches waiting for a manager are left out), Hubstaff tracked time per day, approved time-off requests, PTO balances as the hub works them out (Staffing ▸ Request Time Off). Hours only: the hub keeps no pay rates. Overtime = hours over 40 in a workweek starting ${H(x.week_start)}, hourly people only, using the larger of hub clock and Hubstaff for that week (same as the hub's overtime warnings).</p></div>`;
+      <p class="src">From: hub clock-ins (Staffing ▸ Clock In / Clock Out; only punches that count; missed punches waiting for a manager are left out), approved time-off requests, PTO balances as the hub works them out (Staffing ▸ Request Time Off), paid holidays New Year's Day, Memorial Day, July 4th, Labor Day, Thanksgiving, Christmas Day (Brandon 2026-11-17). Regular = clocked hours that aren't overtime or holiday. Overtime = clocked hours past 40 in a workweek starting ${H(x.week_start)}, counted on the day they happen, hourly people only. Holiday = hours worked on a paid holiday (overtime that day counts as overtime). PTO = approved paid time off; Other paid = other paid time-off types; Unpaid off isn't in Total paid. Hours only: the hub keeps no pay rates.</p></div>`;
 }
 function payDetail(p){
-  const days = (p.days || []).filter(d => d.hub_h || d.hs_h);
-  return `<div class="tw"><table><thead><tr><th>Day</th><th class="n">Hub clock</th><th class="n">Hubstaff</th><th>Clock in / out</th></tr></thead><tbody>${
+  const days = (p.days || []).filter(d => d.hub_h || d.hs_h || d.pto || d.other || d.unpaid);
+  const z = n => Number(n) ? hh(n) : "–";
+  return `<div class="tw"><table><thead><tr><th>Day</th><th class="n">Regular</th><th class="n">Holiday</th><th class="n">OT</th><th class="n">PTO</th><th class="n">Other</th><th class="n">Total</th><th>Clock in / out</th></tr></thead><tbody>${
     days.map(d => { const sh = (p.shifts || []).filter(s => s.day === d.day);
-      return `<tr><td>${fday(d.day)}</td><td class="n">${hh(d.hub_h)}</td><td class="n">${d.hs_h == null ? "–" : hh(d.hs_h)}</td><td>${
-        sh.map(s => `${ftime(s.in)} – ${s.out ? ftime(s.out) : `<span class="warn">still in</span>`}${s.hours != null ? ` (${hh(s.hours)} h)` : ""}${s.edited ? ` <span class="pill o">edited</span> <span class="note">${H(s.note || "")}</span>` : ""}${s.added ? ` <span class="pill">added by hand</span>` : ""}`).join("<br>") || `<span class="note">Hubstaff only</span>`}</td></tr>`; }).join("")
-    || `<tr><td colspan="4" class="note">No hours.</td></tr>`}</tbody></table></div>
-    ${(p.weeks || []).length ? `<p class="note" style="margin:8px 0 0">${(p.weeks || []).map(w => `Week of ${fday(w.start)}: ${hh(w.hub_h)} h${w.ot_h ? `, <span class="bad">${hh(w.ot_h)} h overtime</span>` : ""}${w.partial ? " (part of the week)" : ""}${w.signed_by ? `, signed off by ${H(w.signed_by)}` : ""}`).join(" · ")}</p>` : ""}
-    ${(p.timeoff || []).length ? `<p class="note" style="margin:6px 0 0"><b>Time off:</b> ${(p.timeoff || []).map(t => `${fday(t.from)}${t.to !== t.from ? " – " + fday(t.to) : ""}: ${hh(t.hours)} h ${t.paid ? "paid" : "unpaid"} (${H(t.policy || t.kind)}${t.approved_by ? `, OK'd by ${H(t.approved_by)}` : ""})`).join(" · ")}</p>` : ""}`;
+      const t = (+d.reg || 0) + (+d.hol || 0) + (+d.ot || 0) + (+d.pto || 0) + (+d.other || 0);
+      return `<tr><td>${fday(d.day)}${d.holiday ? ` <span class="pill b">${H(d.holiday)}</span>` : ""}</td><td class="n">${z(d.reg)}</td><td class="n">${z(d.hol)}</td><td class="n">${Number(d.ot) ? `<span class="bad">${hh(d.ot)}</span>` : "–"}</td><td class="n">${z(d.pto)}</td><td class="n">${z(d.other)}</td><td class="n"><b>${hh(t)}</b></td><td>${
+        sh.map(s => `${ftime(s.in)} – ${s.out ? ftime(s.out) : `<span class="warn">still in</span>`}${s.hours != null ? ` (${hh(s.hours)} h)` : ""}${s.edited ? ` <span class="pill o">edited</span> <span class="note">${H(s.note || "")}</span>` : ""}${s.added ? ` <span class="pill">added by hand</span>` : ""}`).join("<br>")
+        || (d.unpaid ? `<span class="note">${hh(d.unpaid)} h unpaid off</span>` : (d.pto || d.other) ? `<span class="note">time off</span>` : d.hs_h ? `<span class="note">Hubstaff only (${hh(d.hs_h)} h)</span>` : "")}</td></tr>`; }).join("")
+    || `<tr><td colspan="8" class="note">No hours.</td></tr>`}</tbody></table></div>
+    ${(p.weeks || []).length ? `<p class="note" style="margin:8px 0 0">${(p.weeks || []).map(w => `Week of ${fday(w.start)}: ${hh(w.hub_h)} h clocked${Number(w.ot_h) ? ` (<span class="bad">${hh(w.ot_h)} h overtime</span>)` : ""}${w.partial ? ", part of the week" : ""}${w.signed_by ? `, signed off by ${H(w.signed_by)}` : ""}`).join(" · ")}</p>` : ""}
+    ${(p.timeoff || []).length ? `<p class="note" style="margin:6px 0 0"><b>Time off:</b> ${(p.timeoff || []).map(t => `${fday(t.from)}${t.to !== t.from ? " – " + fday(t.to) : ""}: ${hh(t.hours)} h ${t.paid ? "paid" : "unpaid"} (${H(t.policy || t.kind)}${t.approved_by ? `, OK'd by ${H(t.approved_by)}` : ""})`).join(" · ")}</p>` : ""}
+    ${(p.pto || []).length ? `<p class="note" style="margin:6px 0 0"><b>PTO balance:</b> ${(p.pto || []).map(b => `${hh(b.hours)} h left (${H(b.policy || "")})`).join(" · ")}</p>` : ""}`;
 }
 
 // ---------- Maintenance ----------
