@@ -1297,6 +1297,45 @@ function relockPill(l, h, ownerIn){
   const txt = r.on ? "on · " + (r.sec!=null ? t(r.sec) : "") : "off";
   return `<span class="pill ${ok?"green":"amber"} plain" title="${ok?"The lock bolts itself again after this long":"Waiting for the lock to take the new setting"}">🔁 Auto-relock ${esc(txt)}</span>`;
 }
+
+/* 2026-11-18 (Brandon): codes set for this home (vendor, owner, housekeeper, HOA, county) + history, with
+   when each one reached each door. Employee + backup codes stay on Access codes. */
+const HC_KINDS = {vendor:"Vendor", owner:"Owner", housekeeping:"Housekeeper", hoa:"HOA", county:"County"};
+async function homeCodes(pid, locks){
+  let codes = [], asg = [];
+  try{
+    [codes, asg] = await Promise.all([rpc("lock_staff_list").then(r=>r||[]),
+      q("lock_assign","lock_id,ref_id,state,err,created_at,set_at,verified_at,cleared_at",x=>x.eq("ref_kind","staff").in("lock_id",locks.map(l=>l.id))).catch(()=>[])]);
+  }catch(e){ return ""; }
+  codes = codes.filter(c => HC_KINDS[c.kind] && (c.property_ids||[]).includes(pid));
+  if(!codes.length) return "";
+  const now = Date.now(), lname = id => (locks.find(l=>l.id===id)||{}).name || "Door";
+  const who = e => e ? esc(String(e).split("@")[0].replace(/^./, m=>m.toUpperCase())) : "";
+  const dt = v => v ? new Date(v).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "";
+  const ended = c => !c.active || c.removed_at || (c.ends_at && new Date(c.ends_at).getTime() < now);
+  const doors = c => { const mine = asg.filter(a => String(a.ref_id) === String(c.id));
+    if(!mine.length) return ended(c) ? "" : `<span class="pill amber">Waiting for the hub</span>`;
+    return mine.map(a => {
+      const secs = a.verified_at && a.created_at ? Math.max(0, Math.round((new Date(a.verified_at) - new Date(a.created_at))/1000)) : null;
+      const took = secs==null ? "" : secs < 90 ? ` in ${secs}s` : ` in ${Math.round(secs/60)} min`;
+      if(a.state==="cleared") return `<span class="pill">${esc(lname(a.lock_id))}: came off ${dt(a.cleared_at)}</span>`;
+      if(a.state==="verified") return `<span class="pill green" title="On the lock ${dt(a.verified_at)}">✓ ${esc(lname(a.lock_id))}${took}</span>`;
+      if(a.state==="failed") return `<span class="pill red" title="${esc(a.err||"")}">${esc(lname(a.lock_id))}: didn't go on - the hub keeps trying</span>`;
+      return `<span class="pill amber">${esc(lname(a.lock_id))}: going on now</span>`; }).join(" "); };
+  const row = c => `<div style="padding:8px 0;border-top:1px solid var(--line)">
+      <div class="row" style="gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(c.person||c.company||c.label)}</b>
+        <span class="muted">${HC_KINDS[c.kind]}${c.person&&c.company?" · "+esc(c.company):""}</span>
+        <span class="code" style="font-weight:800">${esc(c.code||"")}</span></div>
+      <div class="muted" style="font-size:12.5px">${c.starts_at?dt(c.starts_at):"Now"} → ${c.ends_at?dt(c.ends_at):"no end"}${c.time_from?` · ${c.time_from.slice(0,5)}–${(c.time_to||"").slice(0,5)}`:""}
+        · made${c.added_by?" by "+who(c.added_by):""} ${dt(c.created_at)}${c.removed_at?` · taken off ${dt(c.removed_at)}${c.removed_by?" by "+who(c.removed_by):""}`:""}${c.note?" · "+esc(c.note):""}</div>
+      <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">${doors(c)}</div></div>`;
+  const byNew = (a, b) => new Date(b.created_at||0) - new Date(a.created_at||0);
+  const cur = codes.filter(c=>!ended(c)).sort(byNew), old = codes.filter(ended).sort(byNew);
+  return `<div class="card"><h3 style="margin-top:0">Codes set for this home</h3>
+    <div class="muted" style="font-size:12.5px">A new code usually reaches the doors in under a minute while the hub is online.</div>
+    ${cur.length ? cur.map(row).join("") : `<div class="muted" style="padding-top:6px">None right now.</div>`}
+    ${old.length ? `<details style="margin-top:6px"><summary class="muted">History (${old.length})</summary>${old.map(row).join("")}</details>` : ""}</div>`;
+}
 async function homeView(pid){
   if(!S.homes.length) await loadBase();
   const h = S.homes.find(x=>x.property_id===pid); if(!h) return shell("homes","<p>Home not found.</p>");
@@ -1313,6 +1352,7 @@ async function homeView(pid){
     q("property_access","wifi_name,wifi_password,door_code,gate_code,garage_code",x=>x.eq("property_id",pid)),
     q("lock_links_on","parent_id,child_id")]);
   const tvs = await q("lock_tvs","*",x=>x.eq("property_id",pid).eq("active",true).order("name"));
+  const hcodes = h.section==="ours" && locks.length ? await homeCodes(pid, locks) : "";
   const hub = hubs.find(x=>x.claimed_at);
   await loadUpdates(hub);
   const lockIds = new Set(locks.map(l=>l.id));
@@ -1417,6 +1457,7 @@ async function homeView(pid){
     ${h.section==="ours"? setup : `<div class="card">This home is in the ${h.section==="lynx"?"Lynx":"Brivo"} section. Codes here are handled there.</div>`}
     ${h.section==="ours" ? statusLights({hub, locks, thermos, sensors, tvs, codes:{ on: myAssign.filter(a=>a.wanted&&a.state==="verified").length, total: myAssign.filter(a=>a.wanted).length }}) : ""}
     ${h.section==="ours" && locks.length ? `<div class="card row" style="gap:10px;align-items:center"><div class="grow"><b>🔑 Set a door code</b><div class="muted">For a vendor, owner or housekeeper at ${esc(dc(p.code))}, just for the dates they need.</div></div><button class="btn go" data-setcode="${esc(pid)}">Set a door code</button></div>` : ""}
+    ${hcodes}
     <div class="${DESK?"cols":""}"><div>
     ${(locks.length||thermos.length) && hub ? `<div class="card" id="whole"><h3 style="margin-top:0">Whole home</h3>
       ${locks.length?`<div class="muted" style="margin-bottom:8px">${locks.length} door${locks.length>1?"s":""} · ${locks.every(l=>l.state==="locked")?"all locked":locks.filter(l=>l.state!=="locked").map(l=>esc(l.name)+" "+esc(l.state||"?")).join(", ")}
