@@ -26,7 +26,7 @@
 .pill{display:inline-block;border-radius:99px;padding:2px 10px;font-size:12.5px;font-weight:700;background:var(--moose-soft);color:var(--forest)}
 .pill.off{background:var(--red-soft);color:var(--red)} .pill.warn{background:var(--amber-soft);color:var(--amber)}
 ol.steps{padding-left:22px;margin:8px 0} ol.steps li{margin:8px 0}
-.copy{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}.copy span{flex:none} .copy input{flex:1;min-width:0;font:13px ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink)}
+.copy{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}.copy span{flex:none} .copy input:where(:not([type=checkbox],[type=radio])){flex:1;min-width:0;font:13px ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink)}
 .steps.big li{margin-bottom:14px} .btn.big{display:inline-block;margin-top:6px;padding:12px 16px;font-size:16px} details summary{cursor:pointer;margin-top:6px}
 .qr{background:#fff;border-radius:14px;padding:10px;display:inline-block} .qr svg{width:240px;height:240px;display:block}
 table{display:block;overflow-x:auto;width:100%;border-collapse:collapse;font-size:14px} th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
