@@ -7,7 +7,7 @@
 (function(){
 const TABS = [["payroll", "Payroll hours"], ["maint", "Maintenance spending"], ["bookings", "Bookings & payouts"], ["owner", "Owner charges"]];
 const PAY_ANCHOR = "2026-11-02";   // first pay period (Mon); every other Monday after (Brandon 2026-10-29)
-const A = { stc:{}, tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
+const A = { stc:{}, logged:{}, tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const H = s => esc(s == null ? "" : String(s));
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -84,6 +84,7 @@ function css(){
 .acct .ckl li.info{padding-left:32px}
 .acct .apcard{border-left:5px solid #c9a227} .acct .apcard.allok{border-left-color:var(--ac-green)} .acct .ok{color:#2e7d32;font-weight:700}
 .acct td.apc{white-space:nowrap}
+.acct .pullcard{border-left:5px solid #5b8a1e} .acct .chgbox{margin:6px 2px 0;padding:8px 12px;border-radius:12px;background:#fdf0dc;color:#7a4700} .acct .chgbox ul{margin:4px 0 0;padding-left:18px}
 .acct details.ext summary{cursor:pointer;font-size:15px;padding:2px}
 .acdlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999;display:grid;place-items:center;padding:16px}
 .acdlg .box{background:var(--card,#fff);border-radius:16px;padding:16px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
@@ -190,6 +191,29 @@ function payroll(x){
     ${notOk.length ? `<p class="note" style="margin:0 2px">Still waiting: ${notOk.map(p => `${H(p.name)}${apState(p).s === "changed" ? " (hours changed after approval)" : ""}`).join(", ")}.</p>` : need.length ? `<p class="ok" style="margin:0 2px">✓ Every person's hours have been approved by a manager.</p>` : ""}
     <p class="src">A manager approves the hours of the people they look after (admins approve anyone). Approving isn't required to pay; it shows a manager checked the hours. If hours change after approval, it asks again.</p></div>`;
 
+  // ---- the accountant's pulls (Brandon 2026-11-18: "shows marias last download ... so we know when she pulled hours last")
+  const PL = (PC.st && PC.st.pulls) || {};
+  const WHAT = { pay_qb:"QuickBooks CSV", pay_sum:"Breakdown CSV", pay_days:"By day CSV", pay_shifts:"Punches CSV", pay_off:"Time off CSV", pay_pto:"PTO balances CSV" };
+  const whatL = q => q.kind === "print" ? "printed the report" : q.kind === "open" ? "opened Payroll" : `downloaded the ${WHAT[q.what] || "CSV"}`;
+  const dl = PL.acct_dl, changed = [];
+  if(dl && dl.snap){
+    const LBL = { reg_h:"regular", hol_h:"holiday", ot_total:"overtime", pto_h:"PTO", other_h:"other paid", unpaid_h:"unpaid off" };
+    P.forEach(p => { const was = dl.snap[p.id];
+      const diffs = SNAPK.filter(k => Math.abs((+(was || {})[k] || 0) - (+p[k] || 0)) > 0.009)
+        .map(k => `${LBL[k]} ${hh((was || {})[k] || 0)} → ${hh(p[k])}`);
+      if(diffs.length && (was || tot(p) > 0)) changed.push({ p, txt: was ? diffs.join(", ") : "new on the list since then" }); });
+  }
+  PC.changed = new Set(changed.map(c => c.p.id));
+  const any = PL.acct_any, other = any && !(any.from === x.from && any.to === x.to);
+  const pullCard = `<div class="card pullcard"><h3 style="margin-top:0">Accountant's downloads</h3>
+    <p style="margin:0 2px 4px">${dl ? `✅ <b>${H(dl.by)}</b> ${whatL(dl)} for this pay period on <b>${fwhen(dl.at)}</b>.` : `⏳ The accountant hasn't downloaded this pay period yet.`}</p>
+    ${PL.acct_open ? `<p class="note" style="margin:0 2px 4px">Last opened Payroll for this pay period: ${fwhen(PL.acct_open.at)}.</p>` : ""}
+    ${other ? `<p class="note" style="margin:0 2px 4px">Most recent download of any pay period: ${H(any.by)} ${whatL(any)} for ${fdate(any.from)} – ${fdate(any.to)} on ${fwhen(any.at)}.</p>` : ""}
+    ${changed.length ? `<div class="chgbox"><b>⚠ Changed since that download</b> — re-download before paying so the newest hours are used:<ul>${changed.map(c => `<li><b>${H(c.p.name)}</b>: ${H(c.txt)}</li>`).join("")}</ul></div>`
+      : dl ? `<p class="ok" style="margin:4px 2px 0">Nothing has changed since that download.</p>` : ""}
+    ${(PL.recent || []).length ? `<details class="noprint" style="margin-top:6px"><summary class="note" style="cursor:pointer">Who opened or downloaded this pay period (${PL.recent.length})</summary>
+      <ul style="margin:6px 0 0;padding-left:18px">${PL.recent.map(q => `<li class="note">${fwhen(q.at)} · ${H(q.by || "")}${q.acct ? " (accountant)" : ""} ${whatL(q)}</li>`).join("")}</ul></details>` : ""}
+    <p class="src">Every open, CSV download and print of this report is logged. Downloads keep a copy of each person's hours, so any change made after the accountant pulled shows here.</p></div>`;
   // ---- CSVs (Moose payroll only)
   const apTxt = p => { const { s, a } = apState(p); return s === "ok" ? `${a.by} ${fwhen(a.at)}` : s === "changed" ? `changed after ${a.by} approved` : ""; };
   const QB = P.filter(p => tot(p) > 0 || Number(p.unpaid_h));
@@ -217,7 +241,7 @@ function payroll(x){
       ${QB.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(QB, p => p.reg_h))}</td><td class="n">${hh(sum(QB, p => p.ot_total))}</td><td class="n">${hh(sum(QB, p => p.hol_h))}</td><td class="n">${hh(sum(QB, p => p.pto_h))}</td><td class="n">${hh(sum(QB, p => p.other_h))}</td><td class="n">${hh(sum(QB, tot))}</td><td></td><td></td></tr>` : ""}</tbody></table></div></div>`;
 
   const row = (p, cols, ncol) => { const k = "p" + p.id, op = A.open[k];
-    return `<tr class="click" data-open="${k}"><td><b>${H(p.name)}</b>${p.no_clock && !p.salaried ? `<span class="pill o">Doesn't clock in</span>` : ""}<br><span class="note">${H((p.teams || []).join(", "))}</span></td>${cols}<td class="noprint">${op ? "▴" : "▾"}</td></tr>`
+    return `<tr class="click" data-open="${k}"><td><b>${H(p.name)}</b>${p.no_clock && !p.salaried ? `<span class="pill o">Doesn't clock in</span>` : ""}${PC.changed && PC.changed.has(p.id) ? ` <span class="pill o" title="Hours changed after the accountant's last download">changed since download</span>` : ""}<br><span class="note">${H((p.teams || []).join(", "))}</span></td>${cols}<td class="noprint">${op ? "▴" : "▾"}</td></tr>`
       + (op ? `<tr class="sub"><td colspan="${ncol}">${payDetail(p)}</td></tr>` : ""); };
   const hrRows = HR.map(p => row(p, `<td class="n">${z(p.reg_h)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${Number(p.ot_total) ? `<span class="bad">${hh(p.ot_total)}</span>` : "–"}</td>
       <td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td><td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td><td class="apc">${apPill(p)}</td>`, 11)).join("");
@@ -231,6 +255,7 @@ function payroll(x){
       ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}
       ${tile(`${okN}/${need.length}`, "Approved by a manager", okN === need.length && need.length ? "all approved ✓" : "")}</div>
     ${apCard}
+    ${pullCard}
     ${checkCard}
     ${qbCard}
     <div class="card"><h3 style="margin-top:0">Hourly: hours by person <span class="noprint">${csvBtn("pay_sum", "Breakdown CSV")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")} ${csvBtn("pay_pto", "PTO balances CSV")}</span></h3>
@@ -439,9 +464,13 @@ async function draw(v){
   v.querySelectorAll("[data-pre]").forEach(b => b.onclick = () => { setPreset(b.dataset.pre); A.open = {}; draw(v); });
   const dc = () => { const f = v.querySelector("#acf").value, t = v.querySelector("#act").value; if(f && t){ A.from = f <= t ? f : t; A.to = f <= t ? t : f; A.preset = null; A.open = {}; save(); draw(v); } };
   v.querySelector("#acf").onchange = dc; v.querySelector("#act").onchange = dc;
-  v.querySelector("#acprint").onclick = () => window.print();
+  v.querySelector("#acprint").onclick = () => { window.print(); if(A.tab === "payroll") pullLog(v, "print"); };
   const body = v.querySelector("#acbody");
   await fill(v, body);
+}
+async function pullLog(v, kind, what){   // log a download / print, then redraw so "last download" updates
+  const r = await sb.rpc("pay_pull_log", { p_from:A.from, p_to:A.to, p_kind:kind, p_what:what || null });
+  if(!r.error){ delete A.stc[`${A.from}|${A.to}`]; refresh(v); }
 }
 function scroller(el){
   for(let e = el.parentElement; e; e = e.parentElement){ const o = getComputedStyle(e).overflowY; if((o === "auto" || o === "scroll") && e.scrollHeight > e.clientHeight) return e; }
@@ -466,10 +495,12 @@ async function fill(v, body){
   for(const k in CSV) delete CSV[k];
   body.innerHTML = VIEWS[tab](x)
     + `<p class="src">Report made ${new Date(x.made_at || Date.now()).toLocaleString()}.</p>`;
-  body.querySelectorAll("[data-csv]").forEach(b => b.onclick = e => { e.stopPropagation(); const f = CSV[b.dataset.csv]; if(f){ const [n, r] = f(); csv(n, r); } });
+  body.querySelectorAll("[data-csv]").forEach(b => b.onclick = e => { e.stopPropagation(); const f = CSV[b.dataset.csv]; if(f){ const [n, r] = f(); csv(n, r);
+    if(tab === "payroll" && /^pay_/.test(b.dataset.csv)) pullLog(v, "csv", b.dataset.csv); } });
   body.querySelectorAll("[data-open]").forEach(r => r.onclick = e => { if(e.target.closest("a,button,input,label")) return; const k = r.dataset.open; A.open[k] = !A.open[k]; refresh(v); });
   body.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { A.sub = b.dataset.sub; A.tf = ""; refresh(v); });
   body.querySelectorAll("[data-tf]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.tf; A.tf = (A.tf === k ? "" : k); if(A.tf && BSUB[A.tf]) A.sub = BSUB[A.tf]; refresh(v); });
+  if(tab === "payroll" && !A.logged[`${A.from}|${A.to}`]){ A.logged[`${A.from}|${A.to}`] = 1; sb.rpc("pay_pull_log", { p_from:A.from, p_to:A.to, p_kind:"open", p_what:null }).then(() => {}, () => {}); }
   const rpc = async (fn, args, btn) => { if(btn){ btn.disabled = true; } const r = await sb.rpc(fn, args); if(r.error){ alert("Not saved: " + err(r.error)); if(btn) btn.disabled = false; return false; } return r.data ?? true; };
   body.querySelectorAll("[data-ck]").forEach(c => c.onchange = async () => {
     if(await rpc("pay_check", { p_item:c.dataset.ck, p_from:A.from, p_to:A.to, p_done:c.checked, p_note:null }) === false){ c.checked = !c.checked; return; }
