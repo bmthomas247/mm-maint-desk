@@ -294,10 +294,11 @@ body.hpopen{overflow:hidden}
 .tbtns .tgo{flex:2;background:var(--moose);border-color:var(--moose);color:#16220a}
 .tdid{font-size:13.5px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tfoot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 4px}
-.bwfil.topf{display:contents}.rcwrap{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface);margin-top:10px}
+.bwfil.topf{display:contents}.toolbar .bfsearch{flex:1 1 100%;max-width:none}.toolbar .bfsearch input{width:100%}.rcwrap{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface);margin-top:10px}
 .rcacc{border:1px solid var(--line);border-radius:8px;margin-top:6px;background:var(--surface-2)}.rcacc>summary{cursor:pointer;padding:9px 12px;list-style:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.rcacc>summary::before{content:"▸";color:var(--muted)}.rcacc[open]>summary::before{content:"▾"}.rcacc>*:not(summary){margin:0 10px 10px}
 .tlogo{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:12.5px;text-decoration:none;color:inherit}.tlogo i{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;color:#fff;font-style:normal;font-size:11px;font-weight:800}
 .tlogo.bw i{background:#1aa3a1}.tlogo.trk i{background:#6b4fbb}.tlogo.trk i svg{width:13px;height:13px;fill:#fff}.tlogo.fd i{background:#25c16f}
+.ocard.ohz{display:flex;gap:16px;flex-wrap:wrap;margin:0 0 14px}.ocard.ohz .ob{flex:1 1 150px;min-width:0}.ocard.ohz .ob+.ob{border-left:1px solid var(--line);padding-left:16px}
 .ocard{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface);margin-top:12px}.ocard .orow{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)}.bwfil.topf .bfn{display:none}
 .tall{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px}.tall .cb{flex:none;width:22px!important;height:22px!important;min-width:0!important;min-height:0!important;max-height:22px;padding:0!important;margin:0;align-self:center;border-radius:6px;border-width:2px}.tall .cb:checked::after{left:6px;top:2px;width:5px;height:11px}
 .tskip{padding:12px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);font-size:13.5px;color:var(--muted);line-height:1.5;margin-top:4px}
@@ -396,6 +397,7 @@ table.t .mono{font-size:12px}
 .cbar span{font-size:11.5px;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums}
 i.gain{background:var(--accent)}
 i.cost{background:var(--sunk);box-shadow:inset 0 0 0 1.5px var(--ink-2)}
+.cbar .tl.own{background:none;border-left:3px dotted #c26a00;width:0;opacity:1}.clegend i.tline.own{background:none;border-left:3px dotted #c26a00;width:0}
 .cbar .tl{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink-2);opacity:.7}
 #ctip{position:fixed;z-index:80;pointer-events:none;max-width:280px;background:var(--ink);color:var(--surface);font-size:12px;line-height:1.5;padding:8px 10px;border-radius:8px;white-space:pre-line;box-shadow:0 6px 20px rgba(0,0,0,.25);display:none}
 #ctip b{display:block;font-size:12.5px}
@@ -2528,7 +2530,7 @@ function vMoney(){
   Object.keys(bwBy).forEach(function(w){ closed[w]=(closed[w]||0)+bwBy[w].n; per[w]=per[w]||{min:0,trips:0,miles:0,visits:0,props:{}}; per[w].bwMin=bwBy[w].min; Object.keys(bwBy[w].homes).forEach(function(p){ per[w].props[p]=1; }); });
   Object.keys(closed).forEach(function(w){ per[w]=per[w]||{min:0,trips:0,miles:0,visits:0,props:{}}; });
   var mOpts=[]; var d=new Date(); for(var i=0;i<13;i++){ var dd=new Date(d.getFullYear(),d.getMonth()-i,1); mOpts.push(dd.getFullYear()+"-"+p2(dd.getMonth()+1)); }
-  var h='<div class="toolbar"><select id="mmonth" aria-label="Month">'+mOpts.map(function(x){ return '<option'+(x===m?' selected':'')+' value="'+x+'">'+new Date(x+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"})+'</option>'; }).join("")+'</select>'+
+  var h='<div class="toolbar"><span class="bwfil topf"><label class="bf"><span>Month</span><select id="mmonth" aria-label="Month">'+mOpts.map(function(x){ return '<option'+(x===m?' selected':'')+' value="'+x+'">'+new Date(x+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"})+'</option>'; }).join("")+'</select></label></span>'+
     '<button class="btn sm" data-act="exprefresh" title="Load the newest Breezeway files, receipts, clock-ins and vehicle trips now">↻ Update this page</button><button class="btn sm pri" data-act="newexp">+ Expense</button><button class="btn sm" data-act="newtime">+ Time on site</button><button class="btn sm ghost" data-act="rates">Rates & budget</button></div>';
   // Reports open the full crew tables (?full=gain|eff); the page itself shows them as charts
   var FULL=""; try{ FULL=new URLSearchParams(location.search).get("full")||""; }catch(e){}
@@ -2583,10 +2585,11 @@ function vMoney(){
   list=list.slice().sort(function(a,b){ var x=sv(a), y=sv(b); return (typeof x==="number"?x-y:String(x).localeCompare(String(y),undefined,{numeric:true}))*bs.dir; });
   var th=function(k,l,num){ var on=bs.k===k; return '<th'+(num?' class="num"':'')+' data-bwsort="'+k+'" style="cursor:pointer;white-space:nowrap">'+l+(on?(bs.dir>0?' ▲':' ▼'):'')+'</th>'; };
   var bwFilt='<div class="bwfil">'+
-    '<label class="bf"><span>Tech</span><select id="bwf_tech" aria-label="Tech"><option value="">All techs</option>'+Object.keys(techs).sort().map(function(t){ return '<option'+(bf.tech===t?' selected':'')+'>'+esc(t)+'</option>'; }).join("")+'</select></label>'+
-    '<label class="bf"><span>Search</span><input id="bwf_home" type="search" placeholder="Home, task or tech" value="'+esc(bf.home||"")+'" style="width:170px"></label>'+
+
     '<label class="bf"><span>From</span><input id="bwf_from" type="date" value="'+esc(bf.from||"")+'"></label><label class="bf"><span>To</span><input id="bwf_to" type="date" value="'+esc(bf.to||"")+'"></label>'+
+    '<label class="bf"><span>Tech</span><select id="bwf_tech" aria-label="Tech"><option value="">All techs</option>'+Object.keys(techs).sort().map(function(t){ return '<option'+(bf.tech===t?' selected':'')+'>'+esc(t)+'</option>'; }).join("")+'</select></label>'+
     (bf.tech||bf.home||bf.from||bf.to?'<button class="btn sm ghost" data-act="bwfclear" style="height:36px">Clear</button><span class="bfn">'+list.length+' of '+nAll+'</span>':'<span class="bfn">'+nAll+' tasks</span>')+'</div>';
+  h=h.replace('<div class="toolbar">','<div class="toolbar"><div class="qsearch bfsearch"><span class="mag">⌕</span><input id="bwf_home" type="search" placeholder="Search a home, task or tech…" value="'+esc(bf.home||"")+'" autocomplete="off"></div>');
   h=h.replace('<button class="btn sm" data-act="exprefresh"', bwFilt.replace('<div class="bwfil">','<span class="bwfil topf">').replace(/<\/div>$/,'</span>')+'<button class="btn sm" data-act="exprefresh"');
   if(!D.bwLoaded) G.bw+='<div class="empty">Breezeway isn\'t loaded yet.</div>';
   else {
@@ -2596,11 +2599,13 @@ function vMoney(){
     G.bw+='<div class="pad note" style="padding-top:0">'+(bf.tech||bf.home||bf.from||bf.to?'Showing '+list.length+' of '+nAll+' tasks'+(bf.from||bf.to?' (dates '+(bf.from?fmtD(bf.from):'start')+' – '+(bf.to?fmtD(bf.to):'today')+', any month)':'')+' · <a href="#" data-act="bwfclear">clear</a>':nAll+' tasks')+' · search, tech and dates are in the bar at the top</div>';
     G.bw+='<div class="appl" style="border:0;border-radius:0;max-height:560px;overflow-y:auto"><table class="t"><thead><tr>'+th("done","Done")+th("home","Home")+th("task","Task")+th("techs","Techs")+th("people","People",1)+th("time","Time",1)+th("bill","Bill",1)+'</tr></thead><tbody>'+
       list.slice(0,300).map(function(j){ var f=fees[j.id.slice(3)], fa=feeOf(j), tid=j.id.slice(3), tb=S.taskbill[tid], open=!!(S.ui.openTask||{})[tid];
-        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="mono">'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>'+(isInsp(j)?' <span class="muted">· inspection / routine — not billed</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
+        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="mono">'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><span style="color:var(--accent);font-weight:600">'+esc(j.title)+'</span>'+(isInsp(j)?' <span class="muted">· inspection / routine — not billed</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
           '<td class="num">'+(tb&&tb.ignored?'<span class="pill">Ignored</span>':tb?'<b>'+money2(taskBillTotal(j,tb))+'</b>'+(function(){ var st=tbState(tid); return st?' <span class="pill '+st.k+'">'+st.t+'</span>':''; })():fa?'<span title="'+esc(f.fees.map(function(x){ return money2(x.amount)+" "+x.what+" ("+x.src+")"; }).join("\n"))+'"><b>'+money2(fa)+'</b></span>':(f&&f.checked?'<span class="muted">none</span>':''))+(tb&&tb.mergedInto?' <span class="pill" title="Billed together with task #'+esc(tb.mergedInto)+'">Combined</span>':'')+'</td></tr>'; }).join("")+
       '</tbody></table></div>'+(list.length>300?'<div class="pad note">Showing the newest 300.</div>':'');
   }
   G.bw+='</section>';
+  if(S.ui.home && !Object.keys(S.ui.openTask||{}).length) G.bw+='<div class="hpop" id="hpop" role="dialog" aria-modal="true" aria-label="'+esc(coName(S.ui.home))+'"><div class="hpbox"><div class="hpbar"><button class="btn sm" data-act="hclose">← Back</button><button class="mx" data-act="hclose" aria-label="Close" title="Close">✕</button></div>'+
+    '<div class="hpbody"><section class="panel detail">'+homeDetail(S.ui.home)+'</section></div></div></div>';
   /* 2026-11-11 (Brandon): a task opens in a pop-up window (edits + combine with other jobs) instead of a drop-down row */
   var otid=Object.keys(S.ui.openTask||{})[0], oj=otid&&D.byId["bw-"+otid];
   if(oj){ var oi=list.map(function(j){ return j.id.slice(3); }).indexOf(otid), prv=oi>0?list[oi-1].id.slice(3):"", nxt=oi>-1&&oi<list.length-1?list[oi+1].id.slice(3):"";
@@ -2897,10 +2902,10 @@ function savedPick(it){ var x=savedCosts().filter(function(c){ return (c.what||"
   var tr=x.tax?rcTaxRate():0, pr=x.price==null||x.price===""?null:+x.price;
   return {price:pr==null?null:+(pr*(1+(tr||0))).toFixed(2), desc:pr!=null&&x.tax?(tr?'$'+pr.toFixed(2)+' + '+(tr*100).toFixed(1)+'% tax':'$'+pr.toFixed(2)+' before tax'):''}; }
 function tbCostRow(l,locked){ var dis=locked?' disabled':'';
-  return '<div class="tbc" style="display:grid;grid-template-columns:minmax(120px,1fr) minmax(140px,1.4fr) 110px 70px;gap:6px;margin-bottom:6px">'+
+  return '<div class="tbc" style="display:grid;grid-template-columns:minmax(120px,1fr) minmax(140px,1.3fr) 170px 70px;gap:6px;margin-bottom:6px">'+
     '<input class="tbc-i" list="savedCostList" placeholder="Item — type or pick a saved cost" value="'+esc(l.what||"")+'"'+dis+'>'+
     '<input class="tbc-d" placeholder="Description (if needed)" value="'+esc(l.desc||"")+'"'+dis+'>'+
-    '<input class="tbc-p" type="number" min="0" step="0.01" placeholder="Price $" value="'+(l.amount!=null&&l.amount!==""?esc(l.amount):"")+'"'+dis+'>'+
+    '<span style="display:flex;gap:4px;align-items:center"><input class="tbc-p" type="number" min="0" step="0.01" placeholder="Price $" value="'+(l.amount!=null&&l.amount!==""?esc(l.amount):"")+'"'+dis+'>'+(locked?'':'<label class="note" style="white-space:nowrap;display:flex;gap:3px;align-items:center" title="Adds our usual sales tax to this price when you save"><input type="checkbox" class="tbc-t">+ tax</label>')+'</span>'+
     (locked?'<span></span>':'<span style="display:flex;gap:2px"><button class="btn sm ghost" data-tbcsave="1" title="Save this item and price to saved costs" aria-label="Save to saved costs">💾</button><button class="btn sm ghost" data-tbcdel="1" title="Remove this cost" aria-label="Remove this cost">✕</button></span>')+'</div>'; }
 function tbCostRows(tid,lines,locked){
   if(locked) return '<div class="note">Can\'t change costs once it\'s sent to Track.</div>';
@@ -2909,7 +2914,9 @@ function tbCostRows(tid,lines,locked){
     (locked?(lines.length?'':'<div class="note">None</div>'):'<button class="btn sm" style="align-self:flex-start;width:auto" data-tbcadd="'+esc(tid)+'">+ Add a cost</button>'); }
 function tbCostRead(tid){ var box=$("tbc_"+tid), out=[], bad=false; if(!box) return [];
   [].slice.call(box.querySelectorAll(".tbc")).forEach(function(r){ var w=r.querySelector(".tbc-i").value.trim(), ds=r.querySelector(".tbc-d").value.trim(), p=r.querySelector(".tbc-p").value.trim();
-    if(!w&&!ds&&!p) return; var a=+p.replace(/[$,]/g,""); if(!w||p===""||isNaN(a)){ bad=true; return; } var o={what:w,amount:a}; if(ds) o.desc=ds; out.push(o); });
+    if(!w&&!ds&&!p) return; var a=+p.replace(/[$,]/g,""); if(!w||p===""||isNaN(a)){ bad=true; return; }
+    var tx=r.querySelector(".tbc-t"); if(tx&&tx.checked){ var trr=rcTaxRate()||0; if(trr){ ds=(ds?ds+" · ":"")+"$"+a.toFixed(2)+" + "+(trr*100).toFixed(1)+"% tax"; a=+(a*(1+trr)).toFixed(2); } }
+    var o={what:w,amount:a}; if(ds) o.desc=ds; out.push(o); });
   return bad?null:out; }
 function tbCostBase(tid){ var tb=S.taskbill[tid]; if(tb) return (tb.lines||[]).slice(); var j=D.byId["bw-"+tid]; return j?((taskBillDefaults(j,(((S.feeds["bw-fees"]||{}).tasks)||{})[tid]).lines)||[]).slice():[]; }
 document.addEventListener("click",function(ev){ var x=ev.target.closest&&ev.target.closest("[data-tbcx]"); if(!x) return; ev.preventDefault(); if(!need()) return;
@@ -2932,17 +2939,18 @@ function taskBillRow(j,f,tb){ var tid=j.id.slice(3), d=tb||taskBillDefaults(j,f)
   var line=function(l,v,sub){ return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line)"><span style="flex:1">'+l+(sub?'<div class="note">'+sub+'</div>':'')+'</span><span class="num mono">'+v+'</span></div>'; };
   var costs='<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface)"><div class="lbl">Costs & totals</div>'+
     line('Labor'+(cz?' — courtesy':''),cz?'$1.00':money2(labor),(laborSupply(d)?'Breezeway supply: '+esc(laborSupply(d).supply)+' × '+laborSupply(d).qty+' · ':'<span style="color:var(--wait)">no Breezeway supply at $'+(+d.rate)+'/h — goes in as an itemized cost</span> · ')+(+d.hours||0)+' h × '+money2(d.rate)+'/h · '+esc(pl.name))+
-    (parts.length?parts.map(function(p,i){ var on=sk.indexOf(p.id)<0; return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);align-items:center'+(on?'':';opacity:.5')+'"><label style="flex:1;display:flex;gap:6px;align-items:center"><input type="checkbox" data-tbpart="'+esc(tid)+'" value="'+esc(p.id)+'"'+(on?' checked':'')+(locked?' disabled':'')+'> <span>Parts: '+esc(p.what)+(p.split?' <span class="muted">(this home\'s share)</span>':'')+'</span></label><span class="num mono">'+money2(p.amount)+'</span></div>'; }).join(""):line('<span class="muted">Parts — no receipts linked to this task</span>','$0.00'))+
+    '<div style="display:flex;gap:8px;padding:8px 0 2px;margin-top:4px;border-top:1px solid var(--line)"><b style="flex:1">Supplies &amp; parts</b><b class="num mono">'+(cz?'$0.00':money2(partT+feeT))+'</b></div><div class="note" style="margin-bottom:2px">Receipts already include their tax. Tick "+ tax" on an added cost to add it.</div>'+
+    (parts.length?parts.map(function(p,i){ var on=sk.indexOf(p.id)<0; return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);align-items:center'+(on?'':';opacity:.5')+'"><label style="flex:1;display:flex;gap:6px;align-items:center"><input type="checkbox" data-tbpart="'+esc(tid)+'" value="'+esc(p.id)+'"'+(on?' checked':'')+(locked?' disabled':'')+'> <span><a href="#" data-rcopen="'+esc(String(p.id).split(/[@#]/)[0]+'|'+j.id)+'" title="Open this receipt">'+esc(p.what)+'</a>'+(p.split?' <span class="muted">(this home\'s share)</span>':'')+'</span></label><span class="num mono">'+money2(p.amount)+'</span></div>'; }).join(""):line('<span class="muted">Parts — no receipts linked to this task</span>','$0.00'))+
     ((d.lines||[]).length?(d.lines||[]).map(function(l,i){ return line(esc(l.what)+(l.desc?' <span class="muted">— '+esc(l.desc)+'</span>':''),(cz?'$0.00':money2(l.amount))+(locked?'':' <button data-tbcx="'+esc(tid)+'|'+i+'" title="Remove this cost" aria-label="Remove this cost" style="border:0;background:none;color:#c62828;font-weight:800;font-size:15px;cursor:pointer;padding:0 0 0 8px;line-height:1">✕</button>')); }).join(""):line('<span class="muted">Added costs — none</span>','$0.00'))+
     (+j.cost?line('<span class="muted">Already on the Breezeway Cost tab</span>',money2(j.cost),'not added again'):'')+
     (d.billTo==="courtesy"?'<div style="display:flex;gap:8px;padding:7px 0 2px;align-items:baseline"><b style="flex:1">Courtesy charge to the owner</b><b class="mono" style="font-size:16px">$1.00</b></div>'+
       '<div class="note">Work worth <s>'+money2(labor+feeT+partT)+'</s> — goes on the statement as a $1.00 labor charge ("Labor — courtesy, no charge") so the owner sees we did it.</div></div>':
     '<div style="display:flex;gap:8px;padding:7px 0 2px;align-items:baseline"><b style="flex:1">'+(d.billTo==="owner"?'Total to bill the owner':d.billTo==="tenant"?'Total to bill the tenant':d.billTo==="moose"?'Total (Moose pays — not billed)':'Nothing to bill')+'</b><b class="mono" style="font-size:16px">'+money2(d.billTo==="owner"||d.billTo==="tenant"?labor+feeT+partT:0)+'</b></div>'+
-    '<div class="note">Labor '+money2(labor)+' + parts '+money2(partT)+' + added costs '+money2(feeT)+'</div></div>');
-  return '<tr class="xrow"><td colspan="7" style="background:var(--surface-2)"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+
+    '<div class="note">Labor '+money2(labor)+' + supplies &amp; parts '+money2(partT+feeT)+'</div></div>');
+  return '<tr class="xrow"><td colspan="7" style="background:var(--surface-2)">'+ownerCard(j)+'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+
     '<div>'+taskLinks(j)+'<div class="lbl">What was done</div>'+reportBlock(j)+thumbs(j,4,true,60)+'<div style="height:8px"></div>'+
       '<div class="note"><b>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</b> · '+(+j.minutes>720?'timer left running':(j.minutes||0)+' min on the Breezeway timer')+(d.onsite!=null&&d.onsite!==""?' · <b>'+(+d.onsite)+' h on site (changed)</b>':'')+'</div>'+
-      ((f&&f.fees&&f.fees.length)?'<div class="lbl" style="margin-top:10px">Costs found in notes & comments</div>'+f.fees.map(function(x){ return '<div class="note">'+money2(x.amount)+' — '+esc(x.what)+' ('+esc(x.src)+')</div>'; }).join(""):'')+ownerCard(j)+'</div>'+
+      ((f&&f.fees&&f.fees.length)?'<div class="lbl" style="margin-top:10px">Costs found in notes & comments</div>'+f.fees.map(function(x){ return '<div class="note">'+money2(x.amount)+' — '+esc(x.what)+' ('+esc(x.src)+')</div>'; }).join(""):'')+'</div>'+
     '<div>'+ownerSees(j,d,tid,locked)+costs+(locked?'':maybeReceipts(j))+'<div class="fields" style="margin-top:10px">'+
       '<label class="f"><span>Time on site (h)</span><input id="tb_o_'+tid+'" type="number" min="0" step="0.25" placeholder="'+(+j.minutes&&+j.minutes<=720?(j.minutes/60).toFixed(2):'')+'" value="'+esc(d.onsite!=null?d.onsite:"")+'"'+(locked?' disabled':'')+'><span class="hint">Blank = the Breezeway timer'+(+j.minutes&&+j.minutes<=720?' ('+j.minutes+' min)':'')+'. Counts toward crew hours on tasks.</span></label>'+
       '<label class="f"><span>Bill to</span><select id="tb_to_'+tid+'"'+(locked?' disabled':'')+'><option value="owner"'+(d.billTo!=="tenant"&&d.billTo!=="courtesy"?" selected":"")+'>Owner</option><option value="tenant"'+(d.billTo==="tenant"?" selected":"")+'>Lease tenant</option><option value="courtesy"'+(d.billTo==="courtesy"?" selected":" hidden")+'>$1 courtesy</option></select></label>'+
@@ -3035,9 +3043,10 @@ function rcPic(e,key,hl,w){ var I=rcImgs()[key]; if(!I) return '<a class="note" 
   return '<div style="position:relative;display:inline-block;width:'+(w||170)+'px;line-height:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;cursor:zoom-in" data-rczoom="'+esc(key)+'" data-rczexp="'+esc(e.__id||"")+'">'+
     '<img src="'+I.t+'" data-rot="'+(+e.rot||0)+'" data-rk="'+esc(key)+'" style="width:100%;display:block" alt="Receipt">'+
     it.map(function(x,i){ return (x.y!=null&&hl.indexOf(i)>-1)?'<span style="position:absolute;left:0;right:0;top:'+(x.y*100)+'%;height:'+((x.h||0.04)*100)+'%;background:rgba(255,200,0,.38);outline:2px solid rgba(230,160,0,.9)"></span>':''; }).join("")+'</div>'; }
-function maybeReceipts(j){ var t=j.finished||j.due||"", crew=(j.crew||[]).map(function(x){ return x.toLowerCase(); }), unit=((j.prop||"").match(/(\d[\w-]*)$/)||[])[1]||"", out=[];
+function maybeReceipts(j,only){ var t=j.finished||j.due||"", crew=(j.crew||[]).map(function(x){ return x.toLowerCase(); }), unit=((j.prop||"").match(/(\d[\w-]*)$/)||[])[1]||"", out=[];
   if(!t) return "";
   Object.keys(S.expenses).forEach(function(k){ var e=S.expenses[k]; if(!e||e.deleted||!e.date) return; var dd=daysBetween(t,e.date);
+    if(only){ if(k!==only) return; out.push({k:k,e:e,why:"on this job",sug:[],mine:(e.allocs||[]).some(function(a){ return a.jobId===j.id; }),hit:true}); return; }
     if((e.notFor||[]).indexOf(j.id)>-1) return;
     var mine=(e.allocs||[]).some(function(a){ return a.jobId===j.id; }), sug=(e.suggest||[]).filter(function(s){ return (s.jobId||s)===j.id; });
     if(!mine && (dd<-4||dd>3)) return;
@@ -3060,6 +3069,8 @@ function maybeReceipts(j){ var t=j.finished||j.due||"", crew=(j.crew||[]).map(fu
           '<td class="num"><input type="number" min="0" step="0.5" style="width:62px" data-rcq="'+esc(r.k)+'" data-i="'+i+'" data-each="'+(x.each*tf).toFixed(4)+'" value="'+q+'"></td><td class="num"><input type="number" min="0" step="0.01" style="width:78px" data-rca="'+esc(r.k)+'" data-i="'+i+'" value="'+amt.toFixed(2)+'"></td></tr>'; }).join("")+
       '</tbody></table><div style="display:flex;gap:8px;margin-top:6px;align-items:center"><button class="btn sm pri" data-rcsave="'+esc(r.k+"|"+j.id)+'">'+(r.mine?'Update this job':'Add checked to this job')+'</button>'+(r.mine?'<button class="btn sm ghost" data-rcclear="'+esc(r.k+"|"+j.id)+'">Take off this job</button>':'<button class="btn sm ghost" data-rcnot="'+esc(r.k+"|"+j.id)+'">Not part of this job</button>')+
       '<span class="note">Check the items for this job and how many — the rest stays for the other homes.</span></div></div></div>'; };
+  if(only) return out.length?card(out[0]):'<div class="note">That receipt isn\'t loaded.</div>';
+  out=out.filter(function(r){ return !r.mine; });
   var hit=out.filter(function(r){ return r.hit; }), rest=out.filter(function(r){ return !r.hit; }), op=(S.ui.rcOpen||{})[j.id]; if(op==null) op=hit.length?"m":"";
   var sec=function(key,title,sub,rows,extra){ return '<details class="rcacc" name="rc_'+esc(j.id)+'" data-rcg="'+key+'" data-rcj="'+esc(j.id)+'"'+(op===key?' open':'')+'><summary><b>'+title+'</b> <span class="pill">'+rows.length+'</span>'+(sub?' <span class="note">'+sub+'</span>':'')+'</summary>'+
     (rows.length?rows.slice(0,15).map(card).join(""):'<div class="note" style="padding:6px 0">None.</div>')+(extra||'')+'</details>'; };
@@ -3090,14 +3101,13 @@ function ownerCard(j){ var o=ownerOf(j.prop), pl=PLANS[planOf(j.prop)]||PLANS.pr
   var mn=function(x){ return new Date(x+"-15").toLocaleDateString(undefined,{month:"long"}); };
   var who=o.can&&o.list.length?o.list.slice(0,3).map(function(p){ return '<div style="margin-top:4px"><b>'+esc(p.name||"Owner")+'</b>'+(p.phone?' · '+ocon("tel",p.phone):'')+(p.email?' · '+ocon("mail",p.email):'')+'</div>'; }).join(""):'<div class="note">No owner on file.</div>';
   var row=function(l,x){ return '<div class="orow"><span>'+l+'</span><span class="mono">'+money2(x.bill)+(x.nb?' <span class="muted">('+x.nb+' job'+(x.nb===1?'':'s')+')</span>':'')+(x.exp?' · receipts '+money2(x.exp):'')+'</span></div>'; };
-  return '<div class="ocard"><div class="lbl">Owner · '+esc(j.prop||"")+'</div>'+who+'<div class="note" style="margin-top:4px">'+esc(pl.name)+' plan · $'+pl.rate+'/h</div>'+
-    '<div class="lbl" style="margin-top:10px">Billed to this home</div>'+row(mn(m)+' so far',a)+row(mn(lm),b)+'<div class="note" style="margin-top:4px">Billed = jobs set up on Expenses &amp; Time (owner, tenant or $1). Receipts = expenses logged to this home.</div></div>'; }
+  var blk=function(l,x){ return '<div class="ob"><div class="lbl">'+l+'</div><b class="mono" style="font-size:17px">'+money2(x.bill)+'</b><div class="note">'+(x.nb?x.nb+' job'+(x.nb===1?'':'s')+' billed':'nothing billed')+(x.exp?' · receipts '+money2(x.exp):'')+'</div></div>'; };
+  return '<div class="ocard ohz"><div class="ob" style="flex:2 1 260px"><div class="lbl">Owner · '+esc(j.prop||"")+' · '+esc(pl.name)+' $'+pl.rate+'/h</div>'+who+'</div>'+blk(mn(m)+' so far',a)+blk(mn(lm),b)+'</div>'; }
 function ownerSees(j,d,tid,locked){ var r=reportOf(j), cur=(r&&r.summary)||"";
   return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface);margin-bottom:10px"><div class="lbl">What the owner sees</div><div class="note" style="margin:2px 0 4px">Filled in from Breezeway to start. Change it here: what you type is what goes on the owner&#39;s Track statement.</div>'+
-    (locked?'':'<div style="margin:4px 0 2px"><button class="btn sm" data-tbwrite="'+esc(tid)+'" title="Writes a clear title and a short summary from Breezeway\'s notes and comments">✨ Write a better title + summary</button></div>')+
-    '<label class="f" style="margin-top:6px"><span>Task title</span><input id="tb_t_'+tid+'" value="'+esc(d.newTitle||j.title)+'"'+(locked?' disabled':'')+'></label>'+
-    '<label class="f" style="margin-top:6px"><span>Summary</span><textarea id="tb_s_'+tid+'" style="min-height:70px" placeholder="What was done, in a sentence or two the owner will understand"'+(locked?' disabled':'')+'>'+esc(d.summary!=null?d.summary:draftSummary(j))+'</textarea>'+
-      '<span class="hint">'+(cur?'Breezeway summary now: "'+esc(cur.slice(0,90))+'"':'Breezeway has no summary for this task — write one here for the statement')+'</span></label></div>'; }
+    '<label class="f" style="margin-top:6px"><span style="display:flex;align-items:center;gap:8px">Task title'+(locked?'':' <button class="btn sm ghost" data-tbwrite="'+esc(tid)+'|t" style="margin-left:auto;text-transform:none;letter-spacing:0">✨ Better title</button>')+'</span><input id="tb_t_'+tid+'" value="'+esc(d.newTitle||j.title)+'"'+(locked?' disabled':'')+'></label>'+
+    '<label class="f" style="margin-top:6px"><span style="display:flex;align-items:center;gap:8px">Summary <span class="muted" style="text-transform:none;letter-spacing:0">(optional)</span>'+(locked?'':' <button class="btn sm ghost" data-tbwrite="'+esc(tid)+'|s" style="margin-left:auto;text-transform:none;letter-spacing:0">✨ Write a summary</button>')+'</span><textarea id="tb_s_'+tid+'" style="min-height:60px" placeholder="Only if the title doesn\'t say enough"'+(locked?' disabled':'')+'>'+esc(d.summary!=null?d.summary:draftSummary(j))+'</textarea>'+
+      '<span class="hint">'+(cur?'Breezeway summary now: "'+esc(cur.slice(0,90))+'"':'Leave it blank when the title says it all')+'</span></label></div>'; }
 
 /* Breezeway Supplies for our time (Cost tab → Supplies): $55/h and $75/h services, and the $1 no-charge one */
 var LABOR_SUPPLY={55:".Maintenance & Care Service",75:".Maintenance & Care Service.."}, FREE_SUPPLY=".No Charge - Maintenance & Care Service";
@@ -3507,6 +3517,9 @@ function hsGainPanel(m,chart){ var R=rates(), techs=crewTechs(), per={}, pts=[];
     '<div class="pad note">Cost = clocked hours (hub clock-ins; Hubstaff before Nov 11, the larger of the two each day) × each tech\'s pay cost (Hubstaff pay rate unless Chris or an admin sets one; only the maintenance manager and admins can see it). Gain = labor + fees on the tech\'s finished Breezeway tasks this month: "confirmed" from the billing on Expenses &amp; Time, "estimate" = task time at the home\'s plan rate (rounded the way we bill), split evenly when several techs share a task. Parts are left out — they pass through to the owner. Sources: hub clock-ins + Hubstaff (hs-time feed), Breezeway tasks, task billing.</div></section>'; }
 
 /* Crew efficiency (Brandon 2026-10-28): finished Breezeway tasks per tech vs. their Hubstaff hours. Rating = tasks per clocked hour vs. the team. */
+function effMonth(m,techs){ var o={}; techs.forEach(function(w){ o[w]={n:0,hs:hsMonth(w,m)||0}; });
+  D.jobs.forEach(function(j){ if(!(j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.finished||"").slice(0,7)===m && !j.vendorVisit && !j.schedNote && !j.officeOnly && !isReceiptTask(j))) return;
+    (j.crew||[]).forEach(function(w){ if(o[w]) o[w].n++; }); }); return o; }
 function crewEffPanel(m,chart){ var techs=crewTechs(), per={};
   techs.forEach(function(w){ per[w]={n:0,min:0,days:{},hs:hsMonth(w,m),hsDays:hsDays(w,m).length}; });
   D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.finished||"").slice(0,7)===m && !j.vendorVisit && !j.schedNote && !j.officeOnly && !isReceiptTask(j); })
@@ -3515,21 +3528,27 @@ function crewEffPanel(m,chart){ var techs=crewTechs(), per={};
       return {w:w,n:x.n,hs:x.hs,days:days,perDay:days?x.n/days:null,perHr:x.hs?x.n/x.hs:null,onTask:x.hs?Math.min(1,x.min/60/x.hs):null,avg:x.n?x.min/x.n:null}; })
     .filter(function(r){ return r.n||r.hs; });
   rows.forEach(function(r){ r.grp=RUNNERS[r.w]?"Runners":"Techs"; r.idx=null; });
-  var team=null;
+  var team=null, past=[1,2,3].map(function(k){ var d=new Date(m+"-15"); d.setMonth(d.getMonth()-k); return effMonth(d.getFullYear()+"-"+p2(d.getMonth()+1),techs); });
+  rows.forEach(function(r){ var n=0,h=0; past.forEach(function(p){ if(p[r.w]&&p[r.w].hs>0){ n+=p[r.w].n; h+=p[r.w].hs; } }); r.own=h>=8&&n>0?n/h:null; });
+  var gavg={}; ["Runners","Techs"].forEach(function(g){ var gr=rows.filter(function(r){ return r.grp===g&&r.perHr!=null; }); if(gr.length<2) return;
+    gavg[g]=gr.reduce(function(a,r){ return a+r.n; },0)/gr.reduce(function(a,r){ return a+r.hs; },0); });
   rows.sort(function(a,b){ return (a.grp<b.grp?1:a.grp>b.grp?-1:0) || (b.perHr==null?-1:b.perHr)-(a.perHr==null?-1:a.perHr) || b.n-a.n; });
   var pill=function(i,r){ if(i==null) return '<span class="muted">'+(r&&r.hs?'no tasks yet':'no clock-ins')+'</span>'; var k=i>=110?["done","Above team"]:i>=90?["","On par"]:["waiting","Below team"]; return '<b>'+i+'</b> <span class="pill '+k[0]+'">'+k[1]+'</span>'; };
   /* Chart (Brandon 2026-10-28): rating per tech against the team line at 100; hover for the details, full table in Reports (?full=eff) */
-  if(chart){ var gmax={}; rows.forEach(function(r){ gmax[r.grp]=Math.max(gmax[r.grp]||0,r.perHr||0); }); var lastG="";
+  if(chart){ var gmax={}; rows.forEach(function(r){ gmax[r.grp]=Math.max(gmax[r.grp]||0,r.perHr||0,r.own||0,gavg[r.grp]||0); }); var lastG="";
     return '<section class="panel"><div class="ph"><h3>Crew efficiency</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}))+(team?' · team: '+team.toFixed(2)+' tasks per clocked hour':'')+'</span>'+
       '<a class="golink" href="desk.html?only=money&full=eff" style="margin-left:auto">Full table</a></div>'+
-      (rows.length?'<div class="cchart"><div class="clegend"><span><i class="gain"></i>Tasks per clocked hour</span></div>'+
-        rows.map(function(r){ var head=r.grp!==lastG?'<div class="lbl" style="margin:8px 0 2px">'+esc(r.grp)+(r.grp==="Runners"?' <span class="muted" style="text-transform:none;letter-spacing:0">(lighter jobs; not compared with the techs)</span>':'')+'</div>':''; lastG=r.grp;
+      (rows.length?'<div class="cchart"><div class="clegend"><span><i class="gain"></i>This month (tasks per clocked hour)</span><span><i class="tline own"></i>Their own average, last 3 months</span><span><i class="tline"></i>Runners\' average this month</span></div>'+
+        rows.map(function(r){ var head=r.grp!==lastG?'<div class="lbl" style="margin:8px 0 2px">'+esc(r.grp)+(r.grp==="Runners"?' <span class="muted" style="text-transform:none;letter-spacing:0">(lighter jobs; against each other and themselves'+(gavg.Runners!=null?' · average '+gavg.Runners.toFixed(2):'')+')</span>':' <span class="muted" style="text-transform:none;letter-spacing:0">(against their own average)</span>')+'</div>':''; lastG=r.grp;
           var tip=[r.w,r.grp==="Runners"?"Runner":"Tech","Breezeway tasks done: "+r.n,"Days worked: "+(r.days||"—"),"Tasks / day: "+(r.perDay!=null?r.perDay.toFixed(1):"—"),
-            "Clocked hours: "+(r.hs!=null?r.hs.toFixed(1):"—"),"Tasks / clocked hour: "+(r.perHr!=null?r.perHr.toFixed(2):"—"),"Clock time on tasks: "+(r.onTask!=null?Math.round(r.onTask*100)+"%":"—"),"Avg time / task: "+(r.avg!=null?Math.round(r.avg)+"m":"—")].join("\n");
+            "Clocked hours: "+(r.hs!=null?r.hs.toFixed(1):"—"),"Tasks / clocked hour: "+(r.perHr!=null?r.perHr.toFixed(2):"—"),"Own average, last 3 months: "+(r.own!=null?r.own.toFixed(2):"not enough hours yet"),"Clock time on tasks: "+(r.onTask!=null?Math.round(r.onTask*100)+"%":"—"),"Avg time / task: "+(r.avg!=null?Math.round(r.avg)+"m":"—")].join("\n");
           var hi=(gmax[r.grp]||1)*1.12;
-          return head+'<div class="crow" tabindex="0" data-tip="'+esc(tip)+'"><b class="cn">'+esc(r.w)+'<small>'+(r.perHr==null?(r.hs?'no tasks yet':'no clock-ins'):r.n+(r.n===1?' task':' tasks')+' · '+r.hs.toFixed(1)+' h')+'</small></b>'+
-            '<div class="cbar one"><i class="gain" style="width:'+(r.perHr?r.perHr/hi*100:0)+'%"></i><span>'+(r.perHr==null?'—':r.perHr.toFixed(2))+'</span></div></div>'; }).join("")+
-        '<div class="note" style="margin-top:8px">Finished Breezeway tasks per clocked hour. Runners do lighter jobs, so they are shown on their own and not compared with the techs. Big jobs count the same as quick ones. Hover a name for tasks and hours. Sources: Breezeway tasks, hub clock-ins (Hubstaff before Nov 11).</div></div>'
+          var vs=function(v,l){ if(v==null||!(v>0)||r.perHr==null) return ''; var d=(r.perHr-v)/v*100; return '<span style="color:'+(d>=5?'var(--go)':d<=-5?'var(--stop)':'var(--muted)')+';font-weight:700">'+(d>=0?'▲ ':'▼ ')+Math.abs(Math.round(d))+'%</span> vs '+l; };
+          var cmp=[vs(r.own,'own avg'),r.grp==="Runners"?vs(gavg.Runners,'runners'):''].filter(Boolean).join(' · ');
+          return head+'<div class="crow" tabindex="0" data-tip="'+esc(tip)+'"><b class="cn">'+esc(r.w)+'<small>'+(r.perHr==null?(r.hs?'no tasks yet':'no clock-ins'):r.n+(r.n===1?' task':' tasks')+' · '+r.hs.toFixed(1)+' h')+(cmp?'<br>'+cmp:'')+'</small></b>'+
+            '<div class="cbar one">'+(r.own!=null?'<em class="tl own" style="left:'+(r.own/hi*100)+'%" title="Own average '+r.own.toFixed(2)+'"></em>':'')+(r.grp==="Runners"&&gavg.Runners!=null?'<em class="tl" style="left:'+(gavg.Runners/hi*100)+'%" title="Runners\' average '+gavg.Runners.toFixed(2)+'"></em>':'')+
+            '<i class="gain" style="width:'+(r.perHr?r.perHr/hi*100:0)+'%"></i><span>'+(r.perHr==null?'—':r.perHr.toFixed(2))+'</span></div></div>'; }).join("")+
+        '<div class="note" style="margin-top:8px">Finished Breezeway tasks per clocked hour. Techs are measured against their own average (the 3 months before, 8+ clocked hours); runners against their own average and each other, never against the techs. Big jobs count the same as quick ones. Hover a name for tasks and hours. Sources: Breezeway tasks, hub clock-ins (Hubstaff before Nov 11).</div></div>'
         :'<div class="empty">No finished Breezeway tasks or clocked hours this month.</div>')+'</section>'; }
   return '<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>Crew efficiency</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}))+(team?' · team: '+team.toFixed(2)+' tasks per clocked hour':'')+'</span></div>'+
     (rows.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Tech</th><th class="num">Breezeway tasks done</th><th class="num">Days worked</th><th class="num">Tasks / day</th><th class="num">Clocked hours</th><th class="num">Tasks / clocked hour</th><th class="num">Clock time on tasks</th><th class="num">Avg time / task</th><th>Role</th></tr></thead><tbody>'+
@@ -5314,6 +5333,7 @@ document.addEventListener("click",function(ev){
   if(d.job){ ev.preventDefault(); S.ui.sel=d.job; if(S.tab!=="jobs"){ S.ui.q=""; S.ui.st={}; S.ui.kind={}; S.ui.src={}; S.ui.hideOld=false; S.ui.hideInfo=false; S.ui.who=""; S.ui.vendor=""; return go("jobs"); }
     render(); if(window.innerWidth<=1000){ var el=$("jdetail"); if(el) el.scrollIntoView({behavior:"smooth"}); } return; }
   if(d.home && t.classList.contains("htile") && String(window.getSelection&&getSelection()||"")) return;
+  if(d.home && $("mmonth")){ ev.preventDefault(); S.ui.home=d.home; S.ui.openTask={}; return render(); }
   if(d.home){ ev.preventDefault(); S.ui.home=d.home; S.ui.htype=HT_FIXED||homeType(d.home); if(S.tab!=="homes") return go("homes"); render(); return; }
   if(d.chip){ var g=S.ui[d.chip]; if(g[d.k]) delete g[d.k]; else g[d.k]=1; S.ui.sel=""; return render(); }
   if(d.rwin){ S.ui.rwin=+d.rwin; return render(); }
@@ -5337,11 +5357,13 @@ document.addEventListener("click",function(ev){
   if(d.tbign||d.tbunign){ var it=d.tbign||d.tbunign; if(!need()) return; var jx=D.byId["bw-"+it];
     return put("taskbill",it,{ignored:!!d.tbign,ready:false,prop:jx?jx.prop:"",month:jx?(jx.finished||"").slice(0,7):""},S.taskbill[it]).then(function(){ if(d.tbign&&S.ui.openTask) delete S.ui.openTask[it]; toast(d.tbign?"Nothing to bill — taken off the list":"Back on the list"); render(); }); }
   if(d.occancel){ return ocCancel(+d.occancel); }
-  if(d.tbwrite){ var wb=t.closest("[data-tbwrite]"), wid=d.tbwrite, wsb=window.MM_SB; if(!wsb) return; if(wb){ wb.disabled=true; wb.textContent="✨ Writing…"; }
+  if(d.tbwrite){ var wb=t.closest("[data-tbwrite]"), wpart=d.tbwrite.split("|"), wid=wpart[0], wwhat=wpart[1]||"", wlab=wb?wb.textContent:"", wsb=window.MM_SB; if(!wsb) return; if(wb){ wb.disabled=true; wb.textContent="✨ Writing…"; }
     return wsb.functions.invoke("owner-text",{body:{tasks:[+wid]}}).then(function(r){ var x=((r&&r.data&&r.data.texts)||{})[wid];
-      if(wb){ wb.disabled=false; wb.textContent="✨ Write a better title + summary"; }
+      if(wb){ wb.disabled=false; wb.textContent=wlab; }
       if(!x||(r&&r.error)) return toast("Couldn't write one right now — try again");
-      var ti=$("tb_t_"+wid), su=$("tb_s_"+wid); if(ti&&x.title) ti.value=x.title; if(su&&(x.explain||x.summary)) su.value=x.explain||x.summary; toast("Written — check it, then Save"); }); }
+      var ti=$("tb_t_"+wid), su=$("tb_s_"+wid); if(wwhat!=="s"&&ti&&x.title) ti.value=x.title; if(wwhat!=="t"&&su){ if(x.explain||x.summary) su.value=x.explain||x.summary; else return toast("Nothing more to add — the title covers it"); }
+      toast("Written — check it, then Save"); }); }
+  if(d.rcopen){ ev.preventDefault(); var ro=d.rcopen.split("|"), rj=D.byId[ro[1]]; if(!rj) return; openModal("Receipt on this job",maybeReceipts(rj,ro[0]),null,null); return; }
   if(d.tbfree){ var fsel=$("tb_to_"+d.tbfree); if(fsel) fsel.value="courtesy"; d.tbready=d.tbfree; }
   if(d.tbnorm){ var nsel=$("tb_to_"+d.tbnorm); if(nsel) nsel.value="owner"; d.tbsave=d.tbnorm; }
   if(d.tbsave||d.tbready||d.tbunready){ var tid=d.tbsave||d.tbready||d.tbunready; if(!need()) return; var jj=D.byId["bw-"+tid], old=S.taskbill[tid]||{};
