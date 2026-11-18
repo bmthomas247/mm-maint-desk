@@ -6,8 +6,7 @@
    keeps no pay rates). Loaded by hub.html; uses its sb / $ / esc / niceErr. */
 (function(){
 const TABS = [["payroll", "Payroll hours"], ["maint", "Maintenance spending"], ["bookings", "Bookings & payouts"], ["owner", "Owner charges"]];
-const PAY_ANCHOR = "2026-11-01";   // pay periods = two Sun-Sat weeks; the first one also takes Sat Oct 31 (Brandon 2026-11-18: "oct 31 - nov 14 is this pay period")
-const PAY_FIRST = "2026-10-31";
+const PAY_ANCHOR = "2026-10-31";   // pay periods = 14 days Sat-Fri (Brandon 2026-11-18: "pay period is sat 31-fri 13")
 const A = { stc:{}, logged:{}, tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const H = s => esc(s == null ? "" : String(s));
@@ -22,7 +21,7 @@ const hh = n => n == null || n === "" ? "–" : (Math.round(Number(n) * 100) / 1
 const sum = (a, f) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const today = () => iso(new Date());
 function monday(s){ const d = pd(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d); }
-function payPeriod(s){ if(s < PAY_ANCHOR) return [PAY_FIRST, add(PAY_ANCHOR, 13)]; const n = Math.floor((pd(s) - pd(PAY_ANCHOR)) / 864e5 / 14); const f = add(PAY_ANCHOR, n * 14); return [f === PAY_ANCHOR ? PAY_FIRST : f, add(f, 13)]; }
+function payPeriod(s){ const n = Math.floor((pd(s) - pd(PAY_ANCHOR)) / 864e5 / 14); const f = add(PAY_ANCHOR, n * 14); return [f, add(f, 13)]; }
 const PRESETS = {
   lastweek: ["Last week", () => { const m = add(monday(today()), -7); return [m, add(m, 6)]; }],
   thisweek: ["This week", () => { const m = monday(today()); return [m, add(m, 6)]; }],
