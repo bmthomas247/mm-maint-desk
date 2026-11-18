@@ -1008,7 +1008,7 @@ async function installHome(pid){
   const firstOpen = STEPS.find(s=>!isDone(s));
   const next = stays.find(s=>new Date(s.starts_at) > new Date()) ;
   const inHome = stays.find(s=>new Date(s.starts_at) <= new Date());
-  const mark = s => (s.auto ? "" : `<label class="check"><input type="checkbox" data-step="${s.k}" ${st[s.k]&&!st[s.k].note?"checked":""}> Done</label>`)
+  const mark = s => (!s || s.auto ? "" : `<label class="check"><input type="checkbox" data-step="${s.k}" ${st[s.k]&&!st[s.k].note?"checked":""}> Done</label>`)
     ;
   const na = s => s.must || s.k==="prep" || s.k==="track" || isDone(s) ? "" : `<button class="btn small" data-skip="${s.k}" style="margin-top:8px">N/A${s.skip?" - "+esc(s.skip):" - not needed here"} → next</button>`;
   const keyHow = (keys, what) => `<ol class="how">${keys.map(([k,m])=>`<li><span class="key">${k}</span><span>${m}</span></li>`).join("")}</ol>${what?`<div class="muted">${what}</div>`:""}`;
