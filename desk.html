@@ -451,7 +451,8 @@ var ROSTER=[["Brandon","BT"],["Chris","CM"],["Dave","DV"],["Jordan","JP"],["Vict
   ["Pyper","PB"],["Charmayne","CH"],["Kimberley","KB"],["Haylee","HL"],["Keno","KO"],["Cheree","CE"],
   ["Porsha","PT"],["Sheryl","SM"]];
 if(window.MM_ME && window.MM_ME.initials && !ROSTER.some(function(x){return x[1]===window.MM_ME.initials;})) ROSTER.push([window.MM_ME.name.split(" ")[0],window.MM_ME.initials]);
-var TECHS=["Chris","Dave","Jordan","Victor","Noa","Cory","Clancey","Shelby","Ty","Curtis","Todd","Brandon"];
+var FORMER={Jordan:1};
+var TECHS=["Chris","Dave","Victor","Noa","Cory","Clancey","Shelby","Ty","Curtis","Todd","Brandon"];
 function nameFor(x){ for(var i=0;i<ROSTER.length;i++) if(ROSTER[i][1]===x) return ROSTER[i][0]; return x||""; }
 var STATUS=[["open","Open"],["scheduled","Scheduled"],["waiting","Waiting"],["done","Done"]];
 var KINDS=[["repair","Repair"],["vendor","Vendor job"],["inspection","Inspection"],["project","Project"],
@@ -791,7 +792,7 @@ function mPhoto(jid,i){ var j=D.byId[jid], ps=photosFor(j); if(!ps.length) retur
     (p.u?'<a class="note" href="'+esc(p.u)+'" target="_blank" rel="noopener" style="margin-left:10px">full size ↗</a>':'')+'</div>',null); }
 function bwBadge(j){ var s=bwState(j);
   return s==="missing"?'<span class="pill stop">Not in Breezeway</span>':s==="noprop"?'<span class="pill mute">No home — can\'t check Breezeway</span>':s==="multi"?'<span class="pill waiting">'+homesFor(j).length+' homes</span>':s==="queued"?'<span class="pill waiting">Going to Breezeway</span>':s==="done"?'<span class="pill done">Done in Breezeway</span>':s==="on"?'<span class="pill scheduled">In Breezeway</span>':''; }
-function whoOptions(sel,blank){ var names={}; ROSTER.forEach(function(r){names[r[0]]=1;}); TECHS.forEach(function(t){names[t]=1;});
+function whoOptions(sel,blank){ var names={}; ROSTER.forEach(function(r){ if(!FORMER[r[0]]) names[r[0]]=1;}); TECHS.forEach(function(t){names[t]=1;});
   if(sel) names[sel]=1;
   return (blank?'<option value="">'+esc(blank)+'</option>':'')+Object.keys(names).sort().map(function(n){ return '<option'+(n===sel?' selected':'')+'>'+esc(n)+'</option>'; }).join(""); }
 function unitList(){ return '<datalist id="dl_units">'+D.homes.map(function(p){ return '<option value="'+esc(p.code)+'">'; }).join("")+'</datalist>'+
@@ -2925,6 +2926,9 @@ document.addEventListener("click",function(ev){ var x=ev.target.closest&&ev.targ
   put("taskbill",tid,Object.assign(base,{lines:ln}),cur).then(function(){ render(); toast("Removed "+(gone.what||"the cost")); }); });
 document.addEventListener("input",function(ev){ var t=ev.target; if(!t.classList||!t.classList.contains("tbc-i")) return; var x=savedPick(t.value); if(!x) return; var row=t.closest(".tbc"), pr=row.querySelector(".tbc-p"), ds=row.querySelector(".tbc-d");
   if(x.price!=null && pr && !pr.value) pr.value=x.price.toFixed(2); if(x.desc && ds && !ds.value) ds.value=x.desc; });
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-tcadd],[data-tcdel]"); if(!b) return; ev.preventDefault();
+  if(b.dataset.tcadd){ var box=$("tcrows"); if(box&&window._tcRow){ box.insertAdjacentHTML("beforeend",window._tcRow("","")); box.lastElementChild.querySelector(".tc-n").focus(); } return; }
+  var row=b.closest(".tcrow"); if(row) row.remove(); });
 document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-tbcsave]"); if(!b) return; ev.preventDefault(); var row=b.closest(".tbc"), w=row.querySelector(".tbc-i").value.trim(), pr=row.querySelector(".tbc-p").value.trim();
   if(!w) return toast("Type the item first"); var cur=((S.paycost||{}).savedcosts)||{}, items=(cur.items||[]).filter(function(c){ return (c.what||"").toLowerCase()!==w.toLowerCase(); });
   items.push({what:w, price:pr===""?null:+pr, tax:false, src:"Saved by "+(nameFor(S.me)||S.me||"")+", "+ymd(Date.now())});
@@ -3475,14 +3479,14 @@ function vCheck(){
 }
 
 /* ================= TIMESHEET — per tech, built from Breezeway ================= */
-var TECH_LIST=["Shelby","Klancey","Jordan","Dave","Chris"];   /* Brandon asked to be left off the timesheets */
+var TECH_LIST=["Shelby","Klancey","Dave","Chris"];   /* Brandon asked to be left off the timesheets */
 function isReceiptTask(j){ return /daily receipts?|\breceipts?\b\s*$/i.test(j.title||""); }
 
 /* Hub 2026-10-28 (Brandon): Chris (maintenance manager) + admins — each tech's Hubstaff hours (cost) vs what their Breezeway work bills (gain).
    Pay cost per tech lives in desk_docs paycost/rates (money: maintenance manager + admins only, RLS). */
 var CREW_SKIP={Chris:1}, RUNNERS={Klancey:1,Shelby:1};
 function crewTechs(){ return hsTechs().filter(function(w){ return !CREW_SKIP[w]; }); }
-function hsTechs(){ var o={}; TECH_LIST.forEach(function(w){ o[w]=1; }); Object.keys(((S.feeds["hs-time"]||{}).techs)||{}).forEach(function(w){ o[w]=1; }); return Object.keys(o); }
+function hsTechs(){ var o={}; TECH_LIST.forEach(function(w){ o[w]=1; }); Object.keys(((S.feeds["hs-time"]||{}).techs)||{}).forEach(function(w){ if(!FORMER[w]) o[w]=1; }); return Object.keys(o); }
 function hsGainPanel(m,chart){ var R=rates(), techs=crewTechs(), per={}, pts=[];
   techs.forEach(function(w){ per[w]={hs:hsMonth(w,m), task:0, billed:0, est:0, n:0}; });
   D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.finished||"").slice(0,7)===m && !j.vendorVisit && !j.schedNote && !j.officeOnly; })
@@ -5258,16 +5262,20 @@ function mAppl(code,key){ var a=key?applianceView(code,findAppl(code,key)):{type
     return put("propedits",k,patch,pe).then(function(){ toast("Appliance saved"); closeModal(); }); },"Save"); }
 
 function mRates(){ var R=rates(), r=S.config.rates||{};
-  var tc=Object.keys(R.techCost).map(function(k){ return k+" "+R.techCost[k]; }).join("\n");
+  var tcn={}; crewTechs().forEach(function(w){ tcn[w]=1; }); Object.keys((r.techCost)||{}).forEach(function(w){ if(!FORMER[w]) tcn[w]=1; });
+  var tcRow=function(w,v){ return '<div class="tcrow" style="display:grid;grid-template-columns:minmax(120px,1fr) 120px 34px;gap:6px;margin-bottom:6px"><input class="tc-n" placeholder="Name" value="'+esc(w||"")+'"><input class="tc-v" type="number" min="0" step="0.5" placeholder="$ / hour" value="'+esc(v==null?"":v)+'"><button class="btn sm ghost" data-tcdel="1" title="Take off this list" aria-label="Take off this list">✕</button></div>'; };
+  var tc='<div class="f" style="grid-column:1/-1"><span>Cost per person ($ / hour — wage + burden; blank = the default above)</span><div id="tcrows">'+Object.keys(tcn).sort().map(function(w){ return tcRow(w,((r.techCost)||{})[w]); }).join("")+'</div>'+
+    '<button class="btn sm" data-tcadd="1" style="align-self:flex-start;width:auto">+ Add a person</button></div>';
+  window._tcRow=tcRow;
   openModal("Rates & budget",'<div class="fields">'+fld("m_def","Default crew cost $/h (wage + burden)",R.defaultCost||"","number",'min="0" step="0.5"')+
     fld("m_mile","Mileage $/mi",R.mileage,"number",'min="0" step="0.01"')+fld("m_bill","Bill rate $/h",R.billRate,"number",'min="0" step="1"')+
-    area("m_tc","Cost per person (one per line: Name 32.50)",tc)+
-    '<div class="f" style="grid-column:1/-1"><span>Monthly budget by category</span><div class="fields">'+EXCATS.map(function(c,i){ return fld("m_b"+i,c,R.budget[c]||"","number",'min="0" step="10"'); }).join("")+'</div></div>'+
+    tc+
+    /* monthly budget hidden for now (Brandon 2026-11-18: "we will be working on maintenance budget later"); saved budget is kept */
     '<div class="f" style="grid-column:1/-1"><span>Maintenance rate by owner plan ($/h; the plan comes from the owner\'s name in Track)</span><div class="fields">'+
       Object.keys(plansNow()).map(function(k){ return fld("m_pr_"+k,PLANS[k].name+(PLANS[k].free?" (after "+PLANS[k].free+" free h a month)":""),PLANS[k].rate,"number",'min="0" step="1"'); }).join("")+'</div></div></div>'+
     '<div class="note">Plan rates from Dropbox: Prime $55 (Terms &amp; Conditions 70-30, Jan 2026), Complete + Core $85 (comparison charts, 2026), All Inclusive $45 after 4 free hours, 2nd Home $35 (9am–9pm), 72-28 $65 (new terms, Jan 2027). Lease and plans with no rate on file use Prime. Mileage default is the IRS 2025 rate — change it if yours differs. Crew cost stays on this board.</div>',
-  function(){ var tcm={}; fv("m_tc").split(/\n+/).forEach(function(l){ var m=l.trim().match(/^(.+?)\s+\$?([\d.]+)$/); if(m) tcm[m[1].trim()]=+m[2]; });
-    var b={}; EXCATS.forEach(function(c,i){ var v=+fv("m_b"+i); if(v) b[c]=v; });
+  function(){ var tcm={}; [].slice.call(document.querySelectorAll("#tcrows .tcrow")).forEach(function(row){ var n=row.querySelector(".tc-n").value.trim(), v=row.querySelector(".tc-v").value.trim(); if(n&&v!==""&&!isNaN(+v)) tcm[n]=+v; });
+    var b={}; EXCATS.forEach(function(c,i){ var v=$("m_b"+i)?+fv("m_b"+i):+((r.budget||{})[c]||0); if(v) b[c]=v; });
     return put("config","rates",{defaultCost:+fv("m_def")||0,mileage:+fv("m_mile")||0,billRate:+fv("m_bill")||0,techCost:tcm,budget:b,life:r.life||{},plans:(function(){ var o={}; Object.keys(PLANS_BASE).forEach(function(k){ var v=fv("m_pr_"+k); if(v!==""&&+v!==PLANS_BASE[k].rate) o[k]={rate:+v}; }); return o; })(),defaultPlan:r.defaultPlan},r).then(function(){ toast("Rates saved"); closeModal(); }); },"Save"); }
 
 function mHelp(){ openModal("How the desk works",'<div class="prose" style="font-size:13px">'+
