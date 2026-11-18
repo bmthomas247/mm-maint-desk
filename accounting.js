@@ -349,12 +349,28 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
     <label class="note">Clock out <input type="time" id="sdOut" value="${H(pcHm(o.outAt))}"></label></div>
     <label class="note" style="display:block">Why? (they and the managers see this) <input type="text" id="sdWhy" maxlength="300" style="width:100%" placeholder="e.g. forgot to clock out, left at 5"></label>
     <p class="note" style="margin:6px 0 0">Park City time. A clock-out earlier than the clock-in counts as the next morning.${PC.st && PC.st.paid && PC.st.paid.status === "paid" ? " This pay period is already paid, so this shows as a correction for the next payroll." : ""}</p>
+    ${add ? "" : (() => { const sh = (p.shifts || []).slice().sort((a, b) => new Date(a.in) - new Date(b.in));
+      const nx = o.outAt ? sh.find(s => new Date(s.in) > new Date(o.outAt) && new Date(s.in) - new Date(o.outAt) < 12 * 3600e3) : null;
+      return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #e3e6dd">
+        <button type="button" class="btn2 sm" id="sdDel">🗑 Take off this shift</button>
+        ${nx ? `<button type="button" class="btn2 sm" id="sdJoin" data-in="${H(nx.in_id)}">⇄ Join with the next shift (in ${H(ftime(nx.in))})</button>` : ""}</div>
+        <p class="note" style="margin:4px 0 0">Nothing is deleted: the punches are set off with your reason and still show in their history.</p>`; })()}
     <p id="sdErr" class="bad" style="margin:6px 0 0"></p>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" class="btn2" id="sdNo">Cancel</button><button type="button" class="btn2 pri" id="sdOk">Save</button></div></div>`;
   document.body.appendChild(d);
   const close = () => d.remove();
   d.onclick = e => { if(e.target === d) close(); };
   d.querySelector("#sdNo").onclick = close;
+  // 2026-11-18 (Brandon): take a shift off, or join two shifts (drops the clock-out + clock-in between them)
+  const offAll = async (ids, label) => {
+    const er = d.querySelector("#sdErr"), why = d.querySelector("#sdWhy").value.trim();
+    if(!why){ er.textContent = "Say why in the box above (they and the managers see it)."; return; }
+    if(!confirm(label)) return;
+    try { for(const id of ids.filter(Boolean)){ const r = await sb.rpc("clock_decide", { p_id:Number(id), p_status:"off", p_note:why }); if(r.error) throw r.error; }
+      close(); forget(); refresh(v);
+    } catch(e) { er.textContent = "Not saved: " + err(e); } };
+  const bDel = d.querySelector("#sdDel"); if(bDel) bDel.onclick = () => offAll([o.inId, o.outId], "Take this whole shift off? It won't count for pay.");
+  const bJoin = d.querySelector("#sdJoin"); if(bJoin) bJoin.onclick = () => offAll([o.outId, bJoin.dataset.in], "Join it with the next shift? The clock-out and clock-in between them are taken off, so it counts as one shift.");
   d.querySelector("#sdOk").onclick = async () => {
     const er = d.querySelector("#sdErr"), why = d.querySelector("#sdWhy").value.trim();
     const day = add ? d.querySelector("#sdDay").value : pcDay(o.inAt), tin = d.querySelector("#sdIn").value, tout = d.querySelector("#sdOut").value;
