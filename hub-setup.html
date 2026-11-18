@@ -55,7 +55,7 @@ ol,ul{margin:6px 0;padding-left:20px} li{margin:4px 0;line-height:1.4}
 .pill.g{background:var(--moose-soft);color:var(--moose-ink)} .pill.a{background:var(--amber-soft);color:var(--amber)} .pill.r{background:var(--red-soft);color:var(--red)}
 .note{border-left:4px solid var(--amber);background:var(--amber-soft);padding:10px 12px;border-radius:10px;margin-top:8px;font-size:14px}
 .tip{border-left:4px solid var(--blue);background:var(--blue-soft);padding:10px 12px;border-radius:10px;margin-top:8px;font-size:14px}
-input,select{font:inherit;padding:11px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
+input:where(:not([type=checkbox],[type=radio])),select{font:inherit;padding:11px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
 label{display:block;font-weight:700;font-size:14px;margin-top:10px}
 .row{display:flex;gap:10px} .row>*{flex:1}
 .meter{font-size:44px;font-weight:800;line-height:1}
