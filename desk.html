@@ -1353,6 +1353,7 @@ function infoDocId(p){ var want=p.trackCode||p.code; for(var k in S.profiles) if
 function infoEdit(code,cat,arch,add){ var p=profile(code); if(!p) return toast("Home not found");
   var k=infoDocId(p), lc=String(cat||"").trim().toLowerCase(), el=!cat?null:(p.info||[]).filter(function(i){ return String(i.cat||"").trim().toLowerCase()===lc && !!i.archived===!!arch; })[0]||null;
   var txt=el?String(el.notes||"").replace(/^\[codes\]\s*/,""):"", named=!!cat;
+  if(/^\s*(wifi|wi-fi|stay[- ]?fi)/i.test(cat||"")){ var wt=wifiTrackText(code,el); if(wt) txt=wt; }
   openModal(el?"Edit "+cat:named?"Add "+cat:"Add a note",'<div class="fields">'+(named?'':fld("ie_cat","Name of the note (e.g. TV Info)",""))+area("ie_txt",named?cat:"Note",txt,"")+'</div>'+
     '<div class="note">Saves for everyone who reads this home. Codes typed here stay hidden from field crew. Codes shown as •••• can\'t be changed here; ask a manager.</div>',function(){
     var c=named?cat:fv("ie_cat"), t=$("ie_txt").value; if(!c) return toast("Give the note a name");
@@ -1369,6 +1370,12 @@ document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.targ
 function wifiNoteEl(p){ return ((p&&p.info)||[]).filter(function(i){ return /^\s*(wifi|wi-fi|stay[- ]?fi)/i.test(i.cat||""); }).sort(function(a,b){ return (a.archived?1:0)-(b.archived?1:0); })[0]||null; }
 function wifiTidy(t){ var v=String(t||"").split("\n").filter(function(l){ return !/^\s*wi-?fi\s*info(rmation)?\s*:?\s*$/i.test(l); }).join("\n").trim();
   return (/:\s*\S/.test(v) || (v && v.indexOf(":")<0)) ? v : ""; }
+/* Brandon 2026-11-18: "we can pull from track" = the WIFI Info note shows Track's Wi-Fi until someone edits the note in the hub */
+function wifiTrackText(code,el){ if(el&&el.editedAt) return ""; var t=hqOf(code)||{}; if(!(t.wifi_name||t.wifi_pass)) return "";
+  var ls=[t.wifi_name?"Network: "+wfClean(t.wifi_name):"",t.wifi_pass?"Password: "+wfClean(t.wifi_pass):"",t.wifi_note||""].filter(Boolean);
+  String((el&&el.notes)||"").replace(/^\[codes\]\s*/,"").split("\n").forEach(function(l){ var m=/^\s*([^:]{1,30}):\s*(\S.*)$/.exec(l);
+    if(m && !/^(wi-?fi|name|network|ssid|password|pass|pw|key)\b/i.test(m[1]) && !/stay[- ]?fi/i.test(l)) ls.push(l.trim()); });
+  return ls.join("\n"); }
 function wifiEdited(p){ var e=wifiNoteEl(p); return e&&e.editedAt?wifiTidy(noStayfi(String(e.notes||"").replace(/^\[codes\]\s*/,""))):""; }
 function wfClean(v){ return String(v||"").replace(/^\s*(?:wi-?fi\s*)?(?:network(?:\s*name)?|ssid|name|password|pass(?:word)?|pw|key)\s*[:=-]\s*/i,"").trim(); }
 function kbc(v){ return String(v||"").replace(/\s*\(\s*private\s*\)/ig,"").trim(); }   /* Track key box codes carry "(PRIVATE)" (Brandon 2026-11-03) */
@@ -1565,9 +1572,11 @@ function homeDetail(code){
   if(xh) fo.push(["Fire suppression & license",xh]);
   var tkb=trackBlock(code); if(tkb) fo.push(["From Track",tkb]);
   var gq=homeQuick(code,p); if(gq.garage && gq.src.garage && gq.src.garage!=="Asana") fo.push(["Garage & parking",'<details class="infocat"><summary>Garage &amp; parking</summary><div class="prose">'+esc(parkFix(gq.garage))+'</div></details>']);
-  cats.forEach(function(i){ var codes=/^\[codes\]/.test(i.notes);
+  var wEl=wifiNoteEl(p), wTr=wifiTrackText(code,wEl);
+  if(wTr && !wEl) cats=cats.concat([{cat:"WIFI Info",notes:"",_track:1}]);
+  cats.forEach(function(i){ var codes=/^\[codes\]/.test(i.notes||""), fromTr=wTr&&(i._track||i===wEl);
     fo.push([i.cat||"Note",'<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+infoPen(code,i.cat||"Note",i.archived,"Edit this note")+'</summary>'+
-        '<div class="prose">'+esc(String(i.notes||"").replace(/^\[codes\]\s*/,""))+'</div>'+(i.editedAt?'<div class="hint" style="padding:0 0 10px 13px">Edited in the hub'+(i.editedBy?' by '+esc(i.editedBy):'')+' · '+esc(fmtD(ymd(i.editedAt)))+'</div>':'')+'</details>']); });
+        '<div class="prose">'+esc(fromTr?wTr:String(i.notes||"").replace(/^\[codes\]\s*/,""))+'</div>'+(fromTr?'<div class="hint" style="padding:0 0 10px 13px">Wi-Fi from Track. Edit it here to change it in the hub.</div>':'')+(i.editedAt?'<div class="hint" style="padding:0 0 10px 13px">Edited in the hub'+(i.editedBy?' by '+esc(i.editedBy):'')+' · '+esc(fmtD(ymd(i.editedAt)))+'</div>':'')+'</details>']); });
   var ovf=function(x){ return /^overview$/i.test(String(x[0]).trim())?0:1; }; fo.sort(function(a,b){ return (ovf(a)-ovf(b))||String(a[0]).toLowerCase().localeCompare(String(b[0]).toLowerCase()); });
   h+='<div class="block"><h4>Home information'+(canEntry()?' <button class="btn sm ghost" data-infoadd="'+esc(code)+'" style="float:right">+ Add a note</button>':'')+'</h4>'+fo.map(function(x){ return x[1]; }).join("")+'</div>';
   h+='<details class="block recacc"'+(S.ui.recOpen?' open':'')+'><summary><button type="button" class="recbtn" data-recacc="1"><h4><span class="recchev">'+(S.ui.recOpen?'\u25be':'\u25b8')+'</span>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">'+(jobs.length||recent.length)+' \u00b7 newest first</span></h4></button></summary>'+
