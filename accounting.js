@@ -84,7 +84,7 @@ function css(){
 .acct .ckl li.info{padding-left:32px}
 .acct .apcard{border-left:5px solid #c9a227} .acct .apcard.allok{border-left-color:var(--ac-green)} .acct .ok{color:#2e7d32;font-weight:700}
 .acct td.apc{white-space:nowrap}
-.acct .pullcard{border-left:5px solid #5b8a1e} .acct .lockcard{border-left:5px solid #9aa59a} .acct .lockcard.paid{border-left-color:#3c5f12;background:color-mix(in srgb,#88B535 6%,var(--card))} .acct .chgbox{margin:6px 2px 0;padding:8px 12px;border-radius:12px;background:#fdf0dc;color:#7a4700} .acct .chgbox ul{margin:4px 0 0;padding-left:18px}
+.acct .pullcard{border-left:5px solid #5b8a1e} .acct .lockcard{border-left:5px solid #9aa59a} .acct .signcard{border-left:5px solid #c9a227} .acct .signcard.allok{border-left-color:#3c5f12} .acct .signrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px} .acct .signone{border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:3px;align-items:flex-start} .acct .signone.ok{background:color-mix(in srgb,#88B535 8%,var(--card))} .acct .lockcard.paid{border-left-color:#3c5f12;background:color-mix(in srgb,#88B535 6%,var(--card))} .acct .chgbox{margin:6px 2px 0;padding:8px 12px;border-radius:12px;background:#fdf0dc;color:#7a4700} .acct .chgbox ul{margin:4px 0 0;padding-left:18px}
 .acct details.ext summary{cursor:pointer;font-size:15px;padding:2px}
 .acdlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999;display:grid;place-items:center;padding:16px}
 .acdlg .box{background:var(--card,#fff);border-radius:16px;padding:16px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
@@ -211,8 +211,17 @@ function payroll(x){
     ${isPaid ? `<p style="margin:0 2px 4px"><b>${H(PD.by)}</b> marked ${fdate(x.from)} – ${fdate(x.to)} paid on <b>${fwhen(PD.at)}</b>. Changing these hours now needs a note, and every change shows here and on the next pay period as a correction.</p>`
       : PD && PD.status === "open" ? `<p class="note" style="margin:0 2px 4px">Unlocked by ${H(PD.by)} on ${fwhen(PD.at)}${PD.note ? `: ${H(PD.note)}` : ""}.</p>`
       : `<p class="note" style="margin:0 2px 4px">Not marked paid yet. Once the accountant pays it, she taps <b>Mark this pay period paid</b> and the hours lock.</p>`}
-    ${RD ? `<p class="note" style="margin:0 2px 4px">📣 The accountant was told the hours are ready on ${fwhen(RD.at)}${RD.email_at ? " (bell + email)" : " (bell)"}.</p>` : ""}
+    ${RD ? `<p class="note" style="margin:0 2px 4px">📣 After all three signed off, the accountant was told the hours are ready on ${fwhen(RD.at)}${RD.email_at ? " (bell + email)" : " (bell)"}.</p>` : ""}
     ${sincePaid.length ? `<div class="chgbox"><b>⚠ Changed after it was paid</b> — add these to the next payroll:<ul>${sincePaid.map(c => `<li><b>${H(c.name)}</b>: ${H(c.txt)}</li>`).join("")}</ul></div>` : isPaid ? `<p class="ok" style="margin:4px 2px 0">No changes since it was paid.</p>` : ""}</div>`;
+  // ---- sign-off (Brandon 2026-11-18: "it only goes when brandon, chris and cheree say its ready all three have to check off")
+  const SG = (PC.st && PC.st.signers) || [], myName = (typeof ME !== "undefined" && ME && ME.name) || "";
+  const allSigned = SG.length && SG.every(s => s.ok);
+  const signCard = SG.length ? `<div class="card signcard ${allSigned ? "allok" : ""}"><h3 style="margin-top:0">Ready for the accountant? <span class="note" style="text-transform:none;letter-spacing:0">${SG.filter(s => s.ok).length} of ${SG.length} signed off</span></h3>
+    <div class="signrow">${SG.map(s => { const mine = PC.st.can_signoff && s.name === myName;
+      return `<div class="signone ${s.ok ? "ok" : ""}"><b>${s.ok ? "✅" : "⏳"} ${H(s.name.split(" ")[0])}</b><span class="note">${H(s.covers || "")}</span>
+        <span class="note">${s.ok ? `Signed off ${fwhen(s.at)}` : "Not yet"}</span>
+        ${mine ? (s.ok ? `<button type="button" class="lnk noprint" data-sign="0">Take it back</button>` : `<button type="button" class="btn2 pri sm noprint" data-sign="1">✓ My hours are ready</button>`) : ""}</div>`; }).join("")}</div>
+    <p class="src">${allSigned ? "All three signed off, so the accountant gets a bell and an email (once per pay period)." : "When all three sign off, the accountant gets a bell and an email from hello@. Each person checks their own team's hours first."}</p></div>` : "";
   const PP = PC.st && PC.st.prev_paid, prevChg = PP && PP.snap && PC.prevData ? snapDiff(PP.snap, PC.prevData.people) : [];
   const corrCard = prevChg.length ? `<div class="card"><h3 style="margin-top:0">Corrections from the last paid pay period</h3>
     <p class="note" style="margin:0 2px 6px">${fdate(PP.from)} – ${fdate(PP.to)} was paid on ${fwhen(PP.at)} (${H(PP.by)}). These hours changed after that; add the difference to this payroll.</p>
@@ -280,6 +289,7 @@ function payroll(x){
       ${tile(hh(sum(P, p => p.hol_h)), "Holiday hours", "worked on a paid holiday")}
       ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}
       ${tile(`${okN}/${need.length}`, "Approved by a manager", okN === need.length && need.length ? "all approved ✓" : "")}</div>
+    ${signCard}
     ${lockCard}
     ${corrCard}
     ${apCard}
@@ -551,6 +561,10 @@ async function fill(v, body){
   body.querySelectorAll("[data-pen]").forEach(b => b.onclick = e => { e.stopPropagation(); const [user, inId, outId, inAt, outAt] = b.dataset.pen.split("|");
     shiftDlg(v, { user, inId, outId, inAt, outAt }); });
   body.querySelectorAll("[data-addsh]").forEach(b => b.onclick = e => { e.stopPropagation(); shiftDlg(v, { user:b.dataset.addsh }); });
+  body.querySelectorAll("[data-sign]").forEach(b => b.onclick = async e => { e.stopPropagation(); const ok = b.dataset.sign === "1";
+    if(ok && !confirm(`Sign off that your team's hours for ${fdate(A.from)} – ${fdate(A.to)} are ready? When all three sign off, the accountant is told.`)) return;
+    if(await rpc("pay_signoff", { p_from:A.from, p_to:A.to, p_ok:ok }, b) === false) return;
+    delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
   body.querySelectorAll("[data-paid]").forEach(b => b.onclick = async e => { e.stopPropagation(); const paid = b.dataset.paid === "1";
     let note = null;
     if(paid){ if(!confirm(`Mark ${fdate(A.from)} – ${fdate(A.to)} paid? The hours lock: any change after this needs a note and shows as a correction.`)) return; }
