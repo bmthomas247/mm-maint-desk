@@ -86,7 +86,7 @@ function css(){
 .acct .ckl li.info{padding-left:32px}
 .acct .apcard{border-left:5px solid #c9a227} .acct .apcard.allok{border-left-color:var(--ac-green)} .acct .ok{color:#2e7d32;font-weight:700}
 .acct td.apc{white-space:nowrap}
-.acct .pullcard{border-left:5px solid #5b8a1e} .acct .lockcard{border-left:5px solid #9aa59a} .acct .signcard{border-left:5px solid #c9a227} .acct .signcard.allok{border-left-color:#3c5f12} .acct .signrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px} .acct .signone{border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:3px;align-items:flex-start} .acct .signone.ok{background:color-mix(in srgb,#88B535 8%,var(--card))} .acct .lockcard.paid{border-left-color:#3c5f12;background:color-mix(in srgb,#88B535 6%,var(--card))} .acct .chgbox{margin:6px 2px 0;padding:8px 12px;border-radius:12px;background:#fdf0dc;color:#7a4700} .acct .chgbox ul{margin:4px 0 0;padding-left:18px}
+.acct .pullcard{border-left:5px solid #5b8a1e} .acct .lockcard{border-left:5px solid #9aa59a} .acct .otbox{margin:10px 0 0;padding:9px 11px;border-radius:12px;background:#fdf1e3;border:1px solid #f0c48a;display:flex;flex-direction:column;gap:3px;align-items:flex-start} .acct .otbox.ok{background:color-mix(in srgb,#88B535 10%,#fff);border-color:#b9d48a} .acct .signcard{border-left:5px solid #c9a227} .acct .signcard.allok{border-left-color:#3c5f12} .acct .signrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px} .acct .signone{border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:3px;align-items:flex-start} .acct .signone.ok{background:color-mix(in srgb,#88B535 8%,var(--card))} .acct .lockcard.paid{border-left-color:#3c5f12;background:color-mix(in srgb,#88B535 6%,var(--card))} .acct .chgbox{margin:6px 2px 0;padding:8px 12px;border-radius:12px;background:#fdf0dc;color:#7a4700} .acct .chgbox ul{margin:4px 0 0;padding-left:18px}
 .acct details.ext summary{cursor:pointer;font-size:15px;padding:2px}
 .acdlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999;display:grid;place-items:center;padding:16px}
 .acdlg .box{background:var(--card,#fff);border-radius:16px;padding:16px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
@@ -340,9 +340,20 @@ function pcIso(day, hm){
 }
 const pcHm = s => s ? new Date(s).toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit", hour12:false, timeZone:"America/Denver" }) : "";
 const pcDay = s => s ? new Date(s).toLocaleDateString("en-CA", { timeZone:"America/Denver" }) : "";
+// overtime on Payroll (Brandon 2026-11-18): which workweek a day is in, its hours, and the overtime OK for it
+const wkStartOf = (p, k) => { const w = (p.weeks || []).find(w => k >= w.start && k <= add(w.start, 6)); return w || null; };
+const otPlan = (u, wk) => ((PC.st && PC.st.ot) || []).find(x => x.user_id === u && x.week === wk) || null;
 function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = add a shift
   document.getElementById("acdlg")?.remove();
   const p = PC.byId.get(o.user) || {}, add = !o.inId;
+  const dayK = o.inAt ? pcDay(o.inAt) : null, wk0 = dayK ? wkStartOf(p, dayK) : null, dd0 = dayK ? (p.days || []).find(x => x.day === dayK) : null;
+  const otBox = (() => { if(add || p.salaried || !wk0 || !(+wk0.hub_h > 40.009 || +(dd0 && dd0.ot) > 0)) return "";
+    const pl = otPlan(o.user, wk0.start), need = Math.ceil(+wk0.hub_h * 4) / 4, ok = pl && pl.kind === "approved" && +pl.up_to >= +wk0.hub_h - 0.009;
+    return `<div class="otbox ${ok ? "ok" : ""}"><b>⏱ ${+(dd0 && dd0.ot) > 0 ? `This shift has ${hh(dd0.ot)} h overtime` : "This week has overtime"}</b>
+      <span class="note">Week of ${fday(wk0.start)}: ${hh(wk0.hub_h)} h clocked = ${hh(+wk0.hub_h - 40)} h over 40.</span>
+      <span class="note">${ok ? `✓ Overtime approved by ${H(pl.by)} (up to ${hh(pl.up_to)} h)` : pl && pl.kind === "approved" ? `Approved by ${H(pl.by)} only up to ${hh(pl.up_to)} h` : "Overtime not approved yet."}</span>
+      ${!ok && PC.canA.has(o.user) ? `<button type="button" class="btn2 pri sm" id="sdOt" data-up="${need}">✓ Approve this overtime (up to ${hh(need)} h)</button>` : ""}</div>`; })();
+  const oldH = add ? 0 : +(((p.shifts || []).find(s => String(s.in_id) === String(o.inId)) || {}).hours || 0);
   const d = document.createElement("div"); d.id = "acdlg"; d.className = "acdlg";
   d.innerHTML = `<div class="box acct"><h3 style="margin:0 0 10px">${add ? "Add a missing shift" : "Change a shift"} · ${H(p.name || "")}</h3>
     <label class="note">Day <input type="date" id="sdDay" value="${H(o.inAt ? pcDay(o.inAt) : (A.from || ""))}"></label>${add ? "" : `<span class="note"> change the day to move the shift</span>`}
@@ -350,6 +361,7 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
     <label class="note">Clock out <input type="time" id="sdOut" value="${H(pcHm(o.outAt))}"></label></div>
     <label class="note" style="display:block">Why? (they and the managers see this) <input type="text" id="sdWhy" maxlength="300" style="width:100%" placeholder="e.g. forgot to clock out, left at 5"></label>
     <p class="note" style="margin:6px 0 0">Park City time. A clock-out earlier than the clock-in counts as the next morning.${PC.st && PC.st.paid && PC.st.paid.status === "paid" ? " This pay period is already paid, so this shows as a correction for the next payroll." : ""}</p>
+    ${otBox}
     ${add ? "" : (() => { const sh = (p.shifts || []).slice().sort((a, b) => new Date(a.in) - new Date(b.in));
       const nx = o.outAt ? sh.find(s => new Date(s.in) > new Date(o.outAt) && new Date(s.in) - new Date(o.outAt) < 12 * 3600e3) : null;
       return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #e3e6dd">
@@ -372,6 +384,10 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
     } catch(e) { er.textContent = "Not saved: " + err(e); } };
   const bDel = d.querySelector("#sdDel"); if(bDel) bDel.onclick = () => offAll([o.inId, o.outId], "Take this whole shift off? It won't count for pay.");
   const bJoin = d.querySelector("#sdJoin"); if(bJoin) bJoin.onclick = () => offAll([o.outId, bJoin.dataset.in], "Join it with the next shift? The clock-out and clock-in between them are taken off, so it counts as one shift.");
+  const bOt = d.querySelector("#sdOt"); if(bOt) bOt.onclick = async () => {
+    bOt.disabled = true; const r = await sb.rpc("pay_ot_approve", { p_user:o.user, p_week:wk0.start, p_up_to:Number(bOt.dataset.up), p_note:"Approved on Payroll" });
+    if(r.error){ d.querySelector("#sdErr").textContent = "Not saved: " + err(r.error); bOt.disabled = false; return; }
+    close(); forget(); refresh(v); };
   d.querySelector("#sdOk").onclick = async () => {
     const er = d.querySelector("#sdErr"), why = d.querySelector("#sdWhy").value.trim();
     const day = d.querySelector("#sdDay").value, tin = d.querySelector("#sdIn").value, tout = d.querySelector("#sdOut").value;
@@ -381,6 +397,11 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
     const inIso = pcIso(day, tin);
     let outIso = null;
     if(tout){ outIso = pcIso(tout <= tin ? add_(day, 1) : day, tout); }
+    if(!p.salaried){   // warn when the change pushes a workweek past 40 (Brandon 2026-11-18)
+      const newH = outIso ? (new Date(outIso) - new Date(inIso)) / 36e5 : 0, tw = wkStartOf(p, day);
+      const before = tw ? +tw.hub_h : 0, after = before - (wk0 && tw && wk0.start === tw.start ? oldH : 0) + newH;
+      if(after > 40.009 && after > before + 0.009 && !confirm(`This makes ${tw ? `the week of ${fday(tw.start)}` : "that week"} ${hh(after)} h, which is ${hh(after - 40)} h of overtime${tw && otPlan(o.user, tw.start) && otPlan(o.user, tw.start).kind === "approved" ? ` (approved up to ${hh(otPlan(o.user, tw.start).up_to)} h)` : " that nobody has approved"}. Save anyway?`)) return;
+    }
     const btn = d.querySelector("#sdOk"); btn.disabled = true; btn.textContent = "Saving…"; er.textContent = "";
     try {
       const run = async (fn, args) => { const r = await sb.rpc(fn, args); if(r.error) throw r.error; };
