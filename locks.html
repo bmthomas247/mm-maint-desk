@@ -309,7 +309,7 @@ function statusLights(o){
   const leak = (o.sensors||[]).filter(x=>x.kind!=="noise" && x.kind!=="contact"), noise = (o.sensors||[]).filter(x=>x.kind==="noise"), cont = (o.sensors||[]).filter(x=>x.kind==="contact");
   if(leak.length) grp(leak, "Leak sensors", "", x => hubUp && x.online !== false);
   if(cont.length) grp(cont, "Door & window sensors", "", x => hubUp && x.online !== false);
-  grp(noise, "Noise sensor (Wi-Fi)", "not set up yet", x => hubUp && x.online !== false && age(x.last_seen) < 10);
+  if(false) grp(noise, "Noise sensor (Wi-Fi)", "not set up yet", x => hubUp && x.online !== false && age(x.last_seen) < 10);
   if(o.tvs) grp(o.tvs, "TVs (Wi-Fi)", "none found (optional)", t => hubUp && t.state !== "unavailable" && age(t.last_seen) < 10);
   if(o.codes) L.push(o.codes.total ? [o.codes.on===o.codes.total ? "ok" : "wait", "Codes on the doors", `${o.codes.on} of ${o.codes.total} confirmed`] : ["off","Codes on the doors","none yet"]);
   const needed = L.filter(x=>x[0]!=="off"), allOk = needed.length && needed.every(x=>x[0]==="ok") && hub;
@@ -791,7 +791,6 @@ const STEPS = [
   {k:"locks",  t:"Pair and name each door",  auto:"locks", must:true},
   {k:"thermo", t:"Thermostats",              auto:"thermo", must:true},
   {k:"heat",   t:"Test the heat",            auto:null, must:true},
-  {k:"noise",  t:"Noise sensor",             auto:"noise", skip:"No noise sensor in this home"},
   {k:"doors",  t:"Door & window sensors",    auto:"doors", skip:"No door/window sensors here"},
   {k:"tv",     t:"TVs (coming soon)",        auto:null, skip:"No TVs / skip for now"},
   {k:"routes", t:"Rebuild routes",           auto:"routes", must:true},
@@ -812,7 +811,7 @@ async function installView(){
   const ours = S.homes.filter(h=>h.section==="ours");
   shell("install", `<h2>Install</h2>
     <a class="card" href="hub-setup.html" style="display:block;text-decoration:none;color:inherit"><b>🔧 Getting a new hub ready (office)?</b>
-      <div class="muted">Step by step on your phone: Home Assistant, Z-Wave, Moose Locks, office test, noise sensor + decibel level. →</div></a>
+      <div class="muted">Step by step on your phone: Home Assistant, Z-Wave, Moose Locks, office test. →</div></a>
     <div class="card"><h3 style="margin-top:0">Set up a new home</h3>
       <p class="muted" style="margin-top:-4px">Any home in Track. It joins our system and gets its own step-by-step checklist.</p>
       <button class="btn go wide" id="gps">📍 I'm at the home - find it</button>
@@ -1190,12 +1189,11 @@ async function installHome(pid){
         <div>🔒 <span class="grow"><b>Locks</b>: closest door first. Need <b>3+ bars</b>. More than <b>2 walls or 1 floor</b> away, or 1–2 bars → plug-in repeater halfway, then Rebuild routes.</span></div>
         <div>🌡️ <span class="grow"><b>Thermostats</b> stay on the wall; wired ones help as repeaters - pair them before the far doors.
           <b style="color:var(--red)">⚡ Changing one out? Turn OFF the HVAC power (furnace switch or breaker) first, check the old screen is dead, photo the wiring.</b></span></div>
-        <div>🔊 <span class="grow"><b>Noise sensor</b>: living area, chest height, <b>6 ft+</b> from TVs, speakers, fridge, vents. Good Wi-Fi.</span></div>
         <div>🔥 <span class="grow"><b>Test the heat</b> before you leave - warm air at a vent. No heat = don't leave, call Chris.</span></div>
         <div>✅ <span class="grow">Leave only when the lights say <b>Everything is connected</b>.</span></div>
       </div>
       <details style="margin-top:8px"><summary><b>👀 What each thing looks like</b></summary><p class="muted" style="margin:4px 0 8px">Simple drawings - the real thing may look a little different.</p>
-        <div class="pics">${Object.values(PICS).map(v=>`<div class="pic">${v.svg}<b>${esc(v.t)}</b><span>${esc(v.d)}</span></div>`).join("")}</div></details>
+        <div class="pics">${Object.entries(PICS).filter(([k])=>k!=="noise").map(([,v])=>`<div class="pic">${v.svg}<b>${esc(v.t)}</b><span>${esc(v.d)}</span></div>`).join("")}</div></details>
       <a class="btn small" href="install-guide.html" target="_blank" style="margin-top:8px">Full guide / print</a></details>
     ${statusLights({net, hub, locks, thermos, sensors, tvs:tvsI, go:{"Your phone":"hub","Hub":"hub","Hub internet":"hub","Z-Wave stick":"hub","Doors":"locks","Thermostats":"thermo","Leak sensors":"thermo","Door & window sensors":"doors","Noise sensor (Wi-Fi)":"noise","TVs (Wi-Fi)":"tv"}})}
     <div class="card"><div class="row"><div class="grow"><div class="code" style="font-size:22px;font-weight:800">${esc(dc(p.code))}</div><div class="muted">${esc(p.name)}</div></div>
@@ -1393,10 +1391,10 @@ async function homeView(pid){
       <label class="field"><span>Auto-lock empty home after (min, blank = off)</span><input data-r="auto_lock_min" inputmode="numeric" value="${h.auto_lock_min??""}"></label>
       <label class="field"><span>Doors relock themselves after (seconds, blank = off)</span><input data-r="relock_sec" inputmode="numeric" value="${h.relock_sec??""}"></label>
       <label class="field"><span>…while the owner is staying (seconds, blank = same)</span><input data-r="owner_relock_sec" inputmode="numeric" value="${h.owner_relock_sec??""}"></label>
-      <label class="field"><span>Noise alert above (dB)</span><input data-r="noise_limit" inputmode="numeric" value="${h.noise_limit??80}"></label>
-      <label class="field"><span>…for this many minutes (quiet hours)</span><input data-r="noise_minutes" inputmode="numeric" value="${h.noise_minutes??10}"></label>
-      <label class="field"><span>Quiet hours from</span><input type="time" data-r="quiet_from" value="${String(h.quiet_from||"22:00").slice(0,5)}"></label>
-      <label class="field"><span>Quiet hours to</span><input type="time" data-r="quiet_to" value="${String(h.quiet_to||"08:00").slice(0,5)}"></label>
+      <label class="field" style="display:none"><span>Noise alert above (dB)</span><input data-r="noise_limit" inputmode="numeric" value="${h.noise_limit??80}"></label>
+      <label class="field" style="display:none"><span>…for this many minutes (quiet hours)</span><input data-r="noise_minutes" inputmode="numeric" value="${h.noise_minutes??10}"></label>
+      <label class="field" style="display:none"><span>Quiet hours from</span><input type="time" data-r="quiet_from" value="${String(h.quiet_from||"22:00").slice(0,5)}"></label>
+      <label class="field" style="display:none"><span>Quiet hours to</span><input type="time" data-r="quiet_to" value="${String(h.quiet_to||"08:00").slice(0,5)}"></label>
     </div><label class="field"><span>TouchStay guide link (shown to guests)</span><input data-r="guide_url" value="${esc(h.guide_url||"")}"></label><button class="btn primary wide" id="rsave">Save rules</button></details>`;
   const stayList = `<div class="card"><h3 style="margin-top:0">Next stays</h3>${stays.length?STAY_KEY:""}<div class="list">${stays.map(s=>{
       const as2 = myAssign.filter(a=>a.ref_kind==="stay"&&a.ref_id===s.res_id&&a.wanted);
@@ -1435,7 +1433,7 @@ async function homeView(pid){
     </div>`:""}
     ${locks.length?`<h3>Doors</h3>${locks.map(doorCard).join("")}`:""}
     ${thermos.length?`<h3>Thermostats</h3>${thermos.map(thermoCard).join("")}`:""}
-    ${sensors.length?`<h3>Sensors</h3><div class="card list">${sensors.map(x=>x.kind==="noise"
+    ${sensors.some(x=>x.kind!=="noise")?`<h3>Sensors</h3><div class="card list">${sensors.filter(x=>x.kind!=="noise").map(x=>x.kind==="noise"
         ? `<div><span class="grow">🔊 ${esc(x.name)}<div class="muted" style="font-size:12.5px">limit ${h.noise_limit??80} dB for ${h.noise_minutes??10} min (quiet hours ${String(h.quiet_from||"22:00").slice(0,5)}–${String(h.quiet_to||"08:00").slice(0,5)}; 3× as long in the day)</div></span><span class="pill ${x.value!=null&&x.value>(h.noise_limit??80)?"red":"grey"}">${x.value!=null?Math.round(x.value)+" dB":"?"}</span>${x.online===false?'<span class="pill red">offline</span>':""}</div>`
         : `<div><span class="grow">${x.kind==="contact"?"🚪 ":x.kind==="leak"?"💧 ":""}${esc(x.name)}${x.kind==="contact"&&x.state==="open"&&x.open_since?`<div class="muted" style="font-size:12.5px">open since ${esc(when(x.open_since))}</div>`:""}${x.temp!=null?`<div class="muted" style="font-size:12.5px">${Math.round(x.temp)}°F${x.humidity!=null?" · "+Math.round(x.humidity)+"% humidity":""}</div>`:""}</span><span class="pill ${x.state==="wet"?"red":x.state==="open"?"amber":x.state==="closed"?"green":"grey"}">${esc(x.state==="open"?"OPEN":x.state==="closed"?"closed":x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}${x.online===false?'<span class="pill red">offline</span>':""}</div>`).join("")}</div>`:""}
     ${tvs.length?`<h3>TVs</h3><div class="card" id="tvs"><div class="row" style="margin-bottom:6px"><span class="grow muted">${tvs.filter(t=>!["off","unavailable","standby"].includes(t.state)).length} of ${tvs.length} on · TVs turn off by themselves when the guest leaves</span>
@@ -1843,7 +1841,7 @@ async function rulesView(){
   const admin = ADM();
   shell("rules", `<h2>Company-wide rules</h2>
     <p class="muted">Every home on our system follows these, unless a home has its own rules (set on that home's page).${row?` Last changed ${when(row.updated_at)}${by?" by "+esc(by):""}.`:" Not saved yet - these are today's values."}</p>
-    <div class="card"><div class="grid2">${RULE_FIELDS.map(([k,l,t])=>`<label class="field"><span>${esc(l)}</span><input data-cr="${k}" ${t==="time"?'type="time"':'inputmode="numeric"'} value="${esc(val(k,t))}" ${admin?"":"disabled"}></label>`).join("")}</div>
+    <div class="card"><div class="grid2">${RULE_FIELDS.map(([k,l,t])=>`<label class="field"${/^(noise|quiet)_/.test(k)?' style="display:none"':''}><span>${esc(l)}</span><input data-cr="${k}" ${t==="time"?'type="time"':'inputmode="numeric"'} value="${esc(val(k,t))}" ${admin?"":"disabled"}></label>`).join("")}</div>
       ${admin?`<button class="btn primary wide" id="crsave">Save - apply to ${ours.length-own.length} home${ours.length-own.length===1?"":"s"}</button>
       ${own.length?`<label class="row" style="margin-top:8px"><input type="checkbox" id="creveryone"> <span>Also overwrite the ${own.length} home${own.length>1?"s":""} with their own rules</span></label>`:""}`:'<p class="muted">Only admins can change these.</p>'}</div>
     <div class="card"><b>Homes with their own rules (${own.length})</b>
