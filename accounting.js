@@ -6,7 +6,7 @@
    keeps no pay rates). Loaded by hub.html; uses its sb / $ / esc / niceErr. */
 (function(){
 const TABS = [["payroll", "Payroll hours"], ["maint", "Maintenance spending"], ["bookings", "Bookings & payouts"], ["owner", "Owner charges"]];
-const PAY_ANCHOR = "2026-11-02";   // first pay period (Mon); every other Monday after (Brandon 2026-10-29)
+const PAY_ANCHOR = "2026-10-31";   // first pay period (Sat); every other Saturday after (Brandon 2026-11-18: "it needs to show oct 31st as the first day")
 const A = { stc:{}, logged:{}, tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const H = s => esc(s == null ? "" : String(s));
