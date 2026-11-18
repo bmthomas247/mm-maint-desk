@@ -1563,6 +1563,7 @@ function homeDetail(code){
   /* Brandon 2026-11-06: fold-outs in A-Z order; Track's garage/parking notes get their own fold-out (the Quick view card keeps only the codes) */
   var fo=[]; if(ah) fo.push(["Appliances",ah]); if(pb) fo.push(["Paint colors",'<details class="infocat"><summary>Paint colors</summary>'+pb.replace(/^<div class="block">/,'<div>')+'</details>']);
   if(xh) fo.push(["Fire suppression & license",xh]);
+  var tkb=trackBlock(code); if(tkb) fo.push(["From Track",tkb]);
   var gq=homeQuick(code,p); if(gq.garage && gq.src.garage && gq.src.garage!=="Asana") fo.push(["Garage & parking",'<details class="infocat"><summary>Garage &amp; parking</summary><div class="prose">'+esc(parkFix(gq.garage))+'</div></details>']);
   cats.forEach(function(i){ var codes=/^\[codes\]/.test(i.notes);
     fo.push([i.cat||"Note",'<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+infoPen(code,i.cat||"Note",i.archived,"Edit this note")+'</summary>'+
@@ -4558,6 +4559,27 @@ function inspRow(r,showHome){
 /* Paint colors (Brandon 2026-11-02: "some of the homes have paint samples saved so we have the colors number" -> "Yes, read them").
    home_paint = what Claude read off the paint-can photos from the Breezeway new-property inspection (Edge Function paint-read); latest read per home.
    An estimate: every color shows the photo it came from and how sure the read was. Read = hub_can('homes'). */
+/* Brandon 2026-11-18: "pull home details from track" - hub_home_track (track_home_details.py, every maint_sync run): Track's listing
+   facts, amenity list and guest how-to notes. home_track(code) = hub_can('homes'); codes masked unless the full code level. Read only. */
+function trackLoad(code){ var sb=window.MM_SB; if(!sb) return; D._trk=D._trk||{}; if(D._trk[code]!==undefined) return; D._trk[code]=null;
+  var tries=[code]; if(/^\d/.test(code)) tries.push("CR "+code);
+  (function next(i){ if(i>=tries.length){ D._trk[code]=false; schedule(); return; }
+    sb.rpc("home_track",{p_home:tries[i]}).then(function(r){ if(r&&r.data){ D._trk[code]=r.data; schedule(); } else next(i+1); }); })(0); }
+function trackBlock(code){ trackLoad(code); var t=D._trk&&D._trk[code]; if(!t) return "";
+  var f=t.facts||{}, yn=function(v){ return v===true?"Yes":v===false?"No":""; }, tm=function(v){ if(!v) return ""; var h=+v.slice(0,2), m=v.slice(3,5); return ((h%12)||12)+(m!=="00"?":"+m:"")+(h<12?" am":" pm"); };
+  var baths=[f.full_baths?f.full_baths+" full":"",f.three_quarter_baths?f.three_quarter_baths+" ¾":"",f.half_baths?f.half_baths+" half":""].filter(Boolean).join(", ");
+  var rows=[["Square feet",f.sqft?Number(f.sqft).toLocaleString():""],["Max guests",f.max_guests||""],["Bedrooms",f.bedrooms!=null?f.bedrooms:""],["Bathrooms",baths],
+    ["Floors",f.floors||""],["Check-in",tm(f.checkin)],["Check-out",tm(f.checkout)],["Early check-in",tm(f.early_checkin)],["Late check-out",tm(f.late_checkout)],
+    ["Pets allowed",f.pets_allowed?"Yes"+(f.max_pets?" (up to "+f.max_pets+")":""):yn(f.pets_allowed)],["Minimum age",f.min_age||""],["Children",yn(f.children)],
+    ["Smoking",yn(f.smoking)],["Events",yn(f.events)],["Accessible",yn(f.accessible)],["Security deposit",f.security_deposit&&+f.security_deposit?"$"+f.security_deposit:""]].filter(function(x){ return x[1]!==""&&x[1]!=null; });
+  var am=t.amenities||[], N=t.notes||{}, ks=Object.keys(N);
+  var h='<details class="infocat"><summary>From Track <span class="muted">listing details'+(ks.length?' · '+ks.length+' notes':'')+'</span></summary><div style="padding:0 0 10px 13px">'+
+    (rows.length?'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px;margin:4px 0 10px">'+rows.map(function(x){ return '<div><div class="muted" style="font-size:11px">'+esc(x[0])+'</div><b>'+esc(x[1])+'</b></div>'; }).join("")+'</div>':'')+
+    (am.length?'<details class="infocat"><summary>Amenities <span class="muted">'+am.length+'</span></summary><div class="prose">'+am.map(esc).join(" · ")+'</div></details>':'')+
+    ks.map(function(k){ return '<details class="infocat"><summary>'+esc(N[k].label||k)+'</summary><div class="prose">'+esc(N[k].text||"")+'</div></details>'; }).join("")+
+    '<div class="note" style="margin-top:6px">Read from Track'+(t.synced_at?' '+esc(ago(t.synced_at)):'')+(t.track_updated?' · last changed in Track '+esc(fmtD(String(t.track_updated).slice(0,10))):'')+
+    '. To change these, edit the home in Track for now.'+(t.full?'':' Codes are hidden here.')+'</div></div></details>';
+  return h; }
 function paintLoad(){ var sb=window.MM_SB; if(!sb) return; if(D._paintP) return; D._paintP=sb.from("home_paint").select("home,inspected_on,report_url,photos,colors,notes,read_at")
     .order("read_at",{ascending:false}).limit(2000).then(function(r){ var m={}; ((r&&r.data)||[]).forEach(function(x){ var c=canon(x.home); if(!m[c]) m[c]=x; }); D._paint=m; schedule(); }); }
 function paintCell(code){ paintLoad(); var p=D._paint&&D._paint[canon(code)]; if(!p) return ""; var C=(p.colors||[]).filter(function(c){ return c.code||c.name; });
