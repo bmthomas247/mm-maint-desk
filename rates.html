@@ -4213,7 +4213,7 @@ function pcDraw() {
   const occS = [
     { k: "comp_now", n: "Comps now", c: GOLD }, { k: "comp_then", n: `Comps ${asThen}`, c: GOLD, dash: "6 5", wd: 1.8 },
     { k: "ours_now", n: "Our homes now", c: GREEN }, { k: "ours_then", n: `Our homes ${asThen}`, c: GREEN, dash: "6 5", wd: 1.8 },
-    { k: "mkt_occ", n: `${mk} market (Key Data, all sizes)`, c: GREY, wd: 2 }, { k: "mkt_ly_occ", n: `${mk} market last year`, c: GREY, dash: "2 4", wd: 2 }];
+    { k: "mkt_occ", n: `${mk} market (Key Data, all sizes)`, c: GREY, wd: 2 }, { k: "mkt_ly_occ", n: `${mk} market last year (final)`, c: GREY, dash: "2 4", wd: 2 }];
   const adrS = [
     { k: "comp_adr", n: "Comps: booked nights", c: GOLD }, { k: "comp_ask", n: "Comps: open nights (asking)", c: GOLD, dash: "6 5", wd: 1.8 },
     { k: "ours_adr", n: "Our homes: booked (Track rent)", c: GREEN },
@@ -4223,7 +4223,7 @@ function pcDraw() {
       <div class="pctile"><small>Comps booked (avg week)</small><b>${f(cN)}</b><small>${dif(cN, cT, 1)} vs ${asThen}</small></div>
       <div class="pctile"><small>Our homes booked (avg week)</small><b>${f(oN)}</b><small>${dif(oN, oT, 1)} vs ${asThen}</small></div>
       <div class="pctile"><small>Us vs comps</small><b>${oN == null || cN == null ? "–" : (oN - cN > 0 ? "+" : "") + (oN - cN).toFixed(1) + " pts"}</b><small>booked share, same weeks</small></div>
-      <div class="pctile"><small>${pcEsc(mk)} market (Key Data)</small><b>${f(mN)}</b><small>${dif(mN, mL, 1)} vs last year</small></div>
+      <div class="pctile"><small>${pcEsc(mk)} market (Key Data)</small><b>${f(mN)}</b><small>${dif(mN, mL, 1)} vs last year's final</small></div>
     </div>
     <div class="pccard"><h3>Booked share by week</h3><div class="small muted">Booked nights ÷ nights not blocked (Key Data's "Adj. Paid Occ.").</div>${leg(occS)}${pcLine(W, occS, { pct: 1 })}</div>
     <div class="pccard"><h3>Nightly rate by week</h3><div class="small muted">Key Data's listed nightly rate for comps (Airbnb includes some cleaning); our homes = Track rent ÷ nights on booked stays.</div>${leg(adrS)}${pcLine(W, adrS, {})}</div>
