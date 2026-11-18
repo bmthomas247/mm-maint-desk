@@ -564,7 +564,8 @@ async function homesView(){
   const arrivals = DESK ? (await q("lock_stays","property_id,starts_at",x=>x.gte("starts_at",new Date().toISOString()).lte("starts_at",new Date(Date.now()+7*864e5).toISOString()).neq("status","cancelled")))
     .filter(s=>S.homes.some(h=>h.section==="ours"&&h.property_id===s.property_id)).length : 0;
   const sec = {ours:[],lynx:[],brivo:[]};
-  S.homes.forEach(h=>sec[h.section].push(h));
+  // 2026-11-18 (Brandon): the office test bench (Moose company) only shows while a hub sits on it
+  S.homes.forEach(h=>{ if(h.property_id==="moose-company" && !hubs.some(x=>x.property_id===h.property_id && x.claimed_at)) return; sec[h.section].push(h); });
   const ours = sec.ours.map(h=>h.property_id);
   const hubOn = hubs.filter(x=>ours.includes(x.property_id) && x.claimed_at && online(x)).length;
   const ourLocks = new Set(locks.filter(l=>ours.includes(l.property_id)).map(l=>l.id));
