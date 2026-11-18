@@ -49,7 +49,7 @@ function css(){
 .bl .fr .lab{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .bl .fr:last-child{display:flex} .bl .fr:last-child .lab{width:120px}
 .bl .filt label{display:grid;gap:4px;font-size:13.5px;font-weight:700;color:var(--ink)} .bl .filt label.wide{grid-column:span 2}
-.bl .filt select,.bl .filt input{border-radius:13px;min-height:44px;font-size:15px;padding:0 12px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
+.bl .filt select,.bl .filt input:where(:not([type=checkbox],[type=radio])){border-radius:13px;min-height:44px;font-size:15px;padding:0 12px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
 .bl .seg{display:flex;gap:6px;flex-wrap:wrap} .bl .seg button{flex:0 0 auto;width:auto;white-space:nowrap;border-radius:11px;min-height:38px;padding:6px 14px;font-weight:700;font-size:14px;border:1px solid var(--line-2,#cfd8cb);background:var(--card);color:var(--ink)}
 .bl .seg button.on{background:var(--bl-green);border-color:var(--bl-green);color:#fff;font-weight:800}
 .bl .sech{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:20px 0 8px;padding:0 2px 6px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
@@ -80,7 +80,7 @@ function css(){
 .bl .intro{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 14px;margin:0 0 12px;font-size:14.5px}
 .bl .btn.primary{background:var(--bl-green);border-color:var(--bl-green);color:#fff;font-weight:800}
 .bl .ed{display:grid;gap:8px;margin-top:6px} .bl .ed .r{display:flex;gap:8px;flex-wrap:wrap} .bl .ed .r > *{flex:1;min-width:160px}
-.bl .ed input,.bl .ed select,.bl .ed textarea{border-radius:12px} .bl textarea{width:100%;min-height:80px}
+.bl .ed input:where(:not([type=checkbox],[type=radio])),.bl .ed select,.bl .ed textarea{border-radius:12px} .bl textarea{width:100%;min-height:80px}
 .bl .hist{font-size:12.5px;color:var(--muted)} .bl .hist div{padding:3px 0;border-top:1px solid var(--line)}
 .bl .it{cursor:pointer} .bl .it:hover{box-shadow:0 2px 6px rgba(20,40,25,.10),0 8px 22px rgba(20,40,25,.10)} .bl .it:focus-visible{outline:3px solid var(--bl-moose);outline-offset:2px}
 .blmod{position:fixed;inset:0;z-index:70;background:rgba(10,20,12,.45);overflow:auto;padding:4vh 16px}
@@ -94,9 +94,9 @@ function css(){
 .blmod .addnote{display:flex;gap:8px;align-items:flex-end;margin-top:8px} .blmod .addnote textarea{flex:1;min-height:44px;border-radius:12px;font-size:14.5px}
 .blmod .mf{border-top:1px solid var(--line);margin-top:18px;padding-top:12px}
 .blmod .ed{display:grid;gap:10px;margin-top:10px} .blmod .ed label{display:grid;gap:4px;font-size:13px;font-weight:700} .blmod .ed .r{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
-.blmod .ed input,.blmod .ed select,.blmod .ed textarea{border-radius:12px;font-size:14.5px}
+.blmod .ed input:where(:not([type=checkbox],[type=radio])),.blmod .ed select,.blmod .ed textarea{border-radius:12px;font-size:14.5px}
 .bl .add{margin-top:24px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--bl-shadow);padding:14px 16px;display:grid;gap:8px}
-.bl .add .r{display:flex;gap:8px;flex-wrap:wrap} .bl .add .r > *{flex:1;min-width:160px} .bl .add input,.bl .add select{border-radius:12px;min-height:42px}
+.bl .add .r{display:flex;gap:8px;flex-wrap:wrap} .bl .add .r > *{flex:1;min-width:160px} .bl .add input:where(:not([type=checkbox],[type=radio])),.bl .add select{border-radius:12px;min-height:42px}
 .bl table.done{width:100%;border-collapse:collapse} .bl .done td,.bl .done th{padding:8px;border-top:1px solid var(--line);text-align:left;vertical-align:top;font-size:14px}
 .bl .card.tbl{border-radius:18px;box-shadow:var(--bl-shadow);overflow-x:auto}
 @media (max-width:700px){.bl .grid{grid-template-columns:1fr} .bl .fr{grid-template-columns:1fr}}`;
