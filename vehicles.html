@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#3c5f12">
 <title>Vehicles</title>
 <link rel="icon" href="moose-logo.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -69,12 +70,27 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
 dialog input:where(:not([type=checkbox],[type=radio])){display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
 .err{color:var(--red);font-size:13px;min-height:1em}
+.sec{margin-top:10px;font-size:13px} .sec b{font-size:13.5px}
+.evl{display:flex;gap:6px;align-items:flex-start;justify-content:space-between;border-top:1px dashed var(--line);padding:5px 0}
+.evl:first-of-type{border-top:0} .evl .ea{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.evl .btn{min-height:28px;padding:0 8px;font-size:12px}
+.mil{background:var(--red-soft);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:13px}
+.mil .cd{font-weight:800}
+.lnk{background:none;border:0;padding:0;color:var(--blue);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline}
+#rmap,.tmap{height:430px;border-radius:14px;border:1px solid var(--line);z-index:0}
+.tmap{height:360px}
+.rgrid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px} @media (max-width:820px){.rgrid{grid-template-columns:1fr}}
+.rlist{max-height:430px;overflow:auto}
+.rrow{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
+.rrow:hover,.rrow.on{background:var(--moose-soft)} .rdot{width:12px;height:12px;border-radius:50%;flex:none;margin-top:4px}
+.drv{font-size:13px} .drv .why{color:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="config.js"></script>
 <script>
 "use strict";
@@ -89,7 +105,7 @@ const dur = s => { if(s == null) return ""; s = Math.round(s / 60); return s < 6
 const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
 
 const OIL_EVERY = 5000, OIL_WARN = 4000;          // Brandon 2026-10-29: change every 5,000 miles, plan it at 4,000
-const S = { days: 7, limit: 75, veh: "", tf: "", vehicles: [], places: [], oil: {}, trips: [], visits: [] };
+const S = { days: 7, limit: 75, veh: "", tf: "", vehicles: [], places: [], oil: {}, trips: [], visits: [], events: [], mil: [], drv: {}, rv: "", rday: "", rsel: "" };
 
 function vname(v){ return [v.year, v.make, v.model].filter(Boolean).join(" ") || v.nickname || ("Tracker " + String(v.imei).slice(-4)); }   // Brandon 2026-11-02: year, make, model on every card
 
@@ -161,15 +177,18 @@ function computeVisits(){
 /* ---------- data ---------- */
 async function load(){
   const from = new Date(Date.now() - (S.days + 1) * 86400000).toISOString();
-  const [v, p, o, t, sv, sf, mp] = await Promise.all([
+  const [v, p, o, t, sv, sf, mp, ev, ml] = await Promise.all([
     sb.from("bouncie_vehicles").select("*").order("nickname"),
     sb.from("vehicle_places").select("*").eq("off", false),
     sb.from("vehicle_oil").select("*").order("entered_at", { ascending: false }),
     sb.from("bouncie_trips").select("*").gte("started_at", from).order("started_at", { ascending: false }).limit(2000),
     sb.from("vehicle_service").select("*").eq("off", false).order("done_on", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).limit(2000),
     sb.from("vehicle_service_files").select("id,service_id,path,file_name,mime,uploaded_name,uploaded_at").eq("off", false).limit(5000),
-    sb.from("vehicle_maint_plan").select("*").eq("off", false).order("sort")]);
-  const bad = [v, p, o, t, sv, sf, mp].find(x => x.error); if(bad) throw bad.error;
+    sb.from("vehicle_maint_plan").select("*").eq("off", false).order("sort"),
+    sb.from("vehicle_events").select("*").eq("off", false).gte("day", new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10)).order("day").limit(2000),
+    sb.from("bouncie_events").select("imei,received_at,payload").eq("event_type", "mil").gte("received_at", new Date(Date.now() - 365 * 86400000).toISOString()).order("received_at").limit(10000)]);
+  const bad = [v, p, o, t, sv, sf, mp, ev, ml].find(x => x.error); if(bad) throw bad.error;
+  S.events = ev.data; S.mil = ml.data;
   S.service = sv.data; S.files = sf.data; S.plan = mp.data;
   S.vehicles = v.data; S.places = p.data; S.trips = t.data; S.oil = {};
   for(const r of o.data) if(!S.oil[r.imei]) S.oil[r.imei] = r;   // newest per vehicle
@@ -180,6 +199,7 @@ async function load(){
     if(r.error) throw r.error; S.points.push(...r.data);
   }
   computeVisits();
+  await loadDrivers();
 }
 
 /* ---------- page ---------- */
@@ -200,7 +220,7 @@ function lastAt(imei, kind){
 }
 function render(){
   const vs = S.vehicles;
-  let h = `<div class="vtop"><div><h1>Vehicles</h1><p class="muted">Bouncie trackers · trips, speed, hard braking, idle time, time at places, oil changes</p></div>` +
+  let h = `<div class="vtop"><div><h1>Vehicles</h1><p class="muted">Bouncie trackers · check engine, scheduled visits, routes, possible driver, trips, time at places, oil changes</p></div>` +
     (S.mgr ? `<a class="btn primary" href="https://www.bouncie.app/" target="_blank" rel="noopener">Bouncie log in ↗</a>` : "") + `</div>`;
   if(!vs.length){
     $("#app").innerHTML = h + `<div class="note">Waiting for the trackers. Once they're plugged in, added in the Bouncie app and authorized for the Moose Hub,
@@ -214,13 +234,14 @@ function render(){
     const wash = lastAt(v.imei, "car_wash");
     return `<div class="card"><h3>${esc(vname(v))}</h3>
       <div>${v.is_running ? `<span class="pill green">Driving${v.speed ? " · " + Math.round(v.speed) + " mph" : ""}</span>` : `<span class="pill">Parked</span>`}
-        ${v.mil_on ? `<span class="pill red">Check engine</span>` : ""}${v.battery && !/normal/i.test(v.battery) ? `<span class="pill amber">Battery: ${esc(v.battery)}</span>` : ""}</div>
+        ${milNow(v).on ? `<span class="pill red">Check engine</span>` : ""}${v.battery && !/normal/i.test(v.battery) ? `<span class="pill amber">Battery: ${esc(v.battery)}</span>` : ""}</div>
       <dl class="kv"><dt>Odometer</dt><dd>${v.odometer > 0 ? mi(v.odometer) + " mi" : `<span class="muted">waiting for the tracker</span>`}</dd>
         <dt>Last seen</dt><dd>${fmtDT(v.last_seen)}${v.last_address ? "<br><span class='muted'>" + esc(v.last_address) + "</span>" : ""}</dd>
         <dt>Car wash</dt><dd>${wash ? fmtDT(wash.a) + " · " + dur((wash.b - wash.a) / 1000) : `<span class="muted">none in the last ${S.days} days</span>`}</dd>
-        ${oilBlock(v)}</dl>${maintBlock(v)}
+        ${oilBlock(v)}<dt>Last driver</dt><dd>${lastDriverHtml(v)}</dd></dl>${milBlock(v)}${eventsBlock(v)}${maintBlock(v)}
       <div class="bar" style="margin:10px 0 0"><button class="btn" data-hist="${esc(v.imei)}">📋 Service history (${S.service.filter(s => s.imei === v.imei).length})</button>
-        <button class="btn" data-svc="${esc(v.imei)}">+ Add service / invoice</button></div></div>`;
+        <button class="btn" data-svc="${esc(v.imei)}">+ Add service / invoice</button>
+        <button class="btn" data-route="${esc(v.imei)}">🗺 Routes</button></div></div>`;
   }).join("") + `</div>`;
 
   // time at places
@@ -235,6 +256,8 @@ function render(){
     : `<div class="empty">No visits in the last ${S.days} days.</div>`) + `</div>
     <p class="muted">A visit = parked inside the place's circle between two trips, or moving slower than 10 mph inside it for a minute or more (car wash tunnel).
     The office circle also covers the Lodges at Bear Hollow homes in the same building.</p>`;
+
+  h += routesSection(vs) + driversSection(vs);
 
   // trips
   const from = Date.now() - S.days * 86400000, byImei = Object.fromEntries(vs.map(v => [v.imei, v]));
@@ -254,15 +277,17 @@ function render(){
       ${pb("fast", fast.length ? "red" : "green", fast.length + " over " + S.limit + " mph")}${pb("brk", brakes ? "amber" : "green", brakes + " hard brakes")}</div>
     ${S.tf ? `<p class="muted tfnote">Showing ${shown.length} ${esc(TF[S.tf][0])} · <a href="#" data-tf="">show all ${trips.length}</a></p>` : ""}
     <div class="box">` + (shown.length ? `<table><thead><tr><th>Started</th><th>Vehicle</th><th class="n">Miles</th><th class="n">Drive time</th><th class="n">Idle</th>
-      <th class="n">Top mph</th><th class="n">Avg mph</th><th class="n">Hard brakes</th><th class="n">Hard accel.</th></tr></thead><tbody>` +
+      <th class="n">Top mph</th><th class="n">Avg mph</th><th class="n">Hard brakes</th><th class="n">Hard accel.</th><th>Possible driver</th><th></th></tr></thead><tbody>` +
     shown.slice(0, 500).map(t => `<tr><td>${fmtDT(t.started_at)}</td><td>${esc(byImei[t.imei] ? vname(byImei[t.imei]) : t.imei)}</td><td class="n">${t.miles == null ? "" : (+t.miles).toFixed(1)}</td>
       <td class="n">${dur(t.trip_s)}</td><td class="n">${dur(t.idle_s)}</td>
       <td class="n">${t.max_mph == null ? "" : (t.max_mph > S.limit ? `<span class="pill red">${Math.round(t.max_mph)}</span>` : Math.round(t.max_mph))}</td>
       <td class="n">${t.avg_mph == null ? "" : Math.round(t.avg_mph)}</td>
-      <td class="n">${t.hard_brakes ? `<span class="pill amber">${t.hard_brakes}</span>` : (t.hard_brakes ?? "")}</td><td class="n">${t.hard_accels || (t.hard_accels ?? "")}</td></tr>`).join("") +
+      <td class="n">${t.hard_brakes ? `<span class="pill amber">${t.hard_brakes}</span>` : (t.hard_brakes ?? "")}</td><td class="n">${t.hard_accels || (t.hard_accels ?? "")}</td><td>${drvShort(t)}</td>
+      <td><button class="btn" data-trip="${esc(t.transaction_id)}" style="min-height:28px">🗺 Route</button></td></tr>`).join("") +
     `</tbody></table>` : `<div class="empty">${S.tf ? "None of these in the last " + S.days + " days." : "No trips in the last " + S.days + " days."}</div>`) + `</div>
-    <p class="muted">Source: Bouncie trackers (top speed, hard braking and idle time per trip). Who was driving and posted speed limits come next.</p>`;
+    <p class="muted">Source: Bouncie trackers (top speed, hard braking and idle time per trip). Possible driver = a best guess from clock-ins, Breezeway tasks and crew phones (never proof). Posted speed limits come next.</p>`;
   $("#app").innerHTML = h;
+  drawRoutes();
 }
 
 function oilDialog(imei){
@@ -323,7 +348,8 @@ function maintBlock(v){
   const list = plan.map(p => ({ p, d: dueOf(v, p) })).sort((a, b) => rank[a.d.st] - rank[b.d.st] || a.p.sort - b.p.sort);
   const top = list.filter(x => x.d.st === "due" || x.d.st === "soon").slice(0, 4), none = list.filter(x => x.d.st === "none").length;
   return `<div style="margin-top:10px"><b style="font-size:13.5px">Maker's recommended maintenance</b>
-    ${top.map(x => { const t = dueText(x.p, x.d); return `<div style="font-size:13px;margin-top:3px">${t.pill}${esc(x.p.label)} <span class="muted">· ${esc(t.when)}</span></div>`; }).join("")}
+    ${top.map(x => { const t = dueText(x.p, x.d); return `<div style="font-size:13px;margin-top:3px">${t.pill}${esc(x.p.label)} <span class="muted">· ${esc(t.when)}</span>
+      ${planned(v.imei).some(e => e.title === x.p.label) ? ` <span class="pill blue">scheduled</span>` : ` <button class="lnk" data-evnew="${esc(v.imei)}" data-evtitle="${esc(x.p.label)}">📅 Schedule it</button>`}</div>`; }).join("")}
     ${!top.length && none < list.length ? `<div style="font-size:13px;margin-top:3px"><span class="pill green">OK</span> nothing due soon</div>` : ""}
     ${none ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${none} item${none === 1 ? "" : "s"} with no service record yet</div>` : ""}
     <button class="btn" data-plan="${esc(v.imei)}" style="margin-top:6px">See the full schedule (${plan.length})</button></div>`;
@@ -408,22 +434,23 @@ async function hideSvc(id){
   if(r.error){ alert(errText(r.error)); return; }
   await load(); render(); histDialog(s.imei);
 }
-function svcDialog(imei){
+function svcDialog(imei, pre){
+  pre = pre || {};
   const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg"), plan = planFor(v);
   d.style.maxWidth = "560px";
   d.innerHTML = `<h3 style="margin:0 0 4px">Add service / invoice · ${esc(vname(v))}</h3>
     <p class="muted" style="margin:0">Odometer now: ${v.odometer > 0 ? mi(v.odometer) + " mi" : "not known yet"}. Invoices and photos stay private to the Vehicles desk.</p>
     <label>What was it<select id="sk" style="display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)">${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">
-      <label>Date<input id="sd" type="date" value="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}"></label>
+      <label>Date<input id="sd" type="date" value="${esc(pre.day || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10))}"></label>
       <label>Odometer<input id="so" type="number" inputmode="numeric" min="0" step="1" value="${v.odometer > 0 ? Math.round(v.odometer) : ""}"></label>
-      <label>Shop / dealer<input id="sv" maxlength="120" placeholder="e.g. the dealer"></label>
+      <label>Shop / dealer<input id="sv" maxlength="120" placeholder="e.g. the dealer" value="${esc(pre.place || "")}"></label>
       <label>Cost ($)<input id="sc" type="number" inputmode="decimal" min="0" step="0.01"></label>
       <label>Invoice #<input id="si" maxlength="60"></label>
     </div>
     ${plan.length ? `<div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:10px 0 4px">Items done (from the maker's schedule)</div><div id="sitems" style="columns:2;font-size:13.5px">${plan.map(p =>
       `<div><input type="checkbox" value="${esc(p.item)}" id="it_${esc(p.item)}" style="width:auto;display:inline;margin:0 6px 0 0;padding:0"><label for="it_${esc(p.item)}" style="display:inline;margin:0;font-weight:600">${esc(p.label)}</label></div>`).join("")}</div>` : ""}
-    <label>Note<input id="sn" maxlength="600" placeholder="What was done, parts, warranty…"></label>
+    <label>Note<input id="sn" maxlength="600" placeholder="What was done, parts, warranty…" value="${esc(pre.note || "")}"></label>
     <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:12px 0 4px">Invoice</div>
     <div class="bar" style="margin:0"><button type="button" class="btn primary" id="scam">📷 Take a photo of the invoice</button>
       <button type="button" class="btn" id="spick">📎 Choose a file or photo</button></div>
@@ -432,6 +459,7 @@ function svcDialog(imei){
     <div class="err" id="se"></div>
     <div class="bar"><button class="btn primary" id="ss">Save</button><button class="btn" id="sx">Cancel</button></div>`;
   if(!d.open) d.showModal();
+  if(pre.kind && KIND[pre.kind]) $("#sk", d).value = pre.kind;
   $("#sk", d).onchange = () => { const c = $("#it_oil", d); if(c && $("#sk", d).value === "oil_change") c.checked = true; };
   let picked = [];
   const showPicked = () => { $("#sflist", d).innerHTML = picked.length ? picked.map((f, i) => `📎 ${esc(f.name)} <a href="#" data-unpick="${i}">remove</a>`).join("<br>")
@@ -451,9 +479,238 @@ function svcDialog(imei){
       vendor: $("#sv", d).value.trim(), cost, invoice_no: $("#si", d).value.trim(), note: $("#sn", d).value.trim() }).select("id").single();
     if(r.error){ $("#se", d).textContent = errText(r.error); $("#ss", d).disabled = false; return; }
     const bad = await uploadFiles(imei, r.data.id, files);
+    if(pre.ev){ const e = S.events.find(x => x.id === pre.ev);
+      if(e) await sb.rpc("vehicle_event_save", evArgs(e, { p_status: "done", p_service: r.data.id })); }
     await load(); render(); histDialog(imei);
     if(bad) alert(bad + " file(s) didn't upload. The record is saved; add the file again with a new record.");
   };
+}
+
+
+/* ---------- check engine light: reason (trouble codes) + on/off history from Bouncie's MIL alerts (Brandon 2026-11-18) ---------- */
+// Meanings of the codes our trucks have sent; add more here with a source. Unknown codes get a "look it up" link.
+const DTC_SRC = { ore: ["O'Reilly Auto Parts", "https://www.oreillyauto.com/how-to-hub/check-engine-light-code-p0171-and-p0174-fuel-trim-system-lean"],
+  ym: ["YourMechanic", "https://YourMechanic.com/article/p0011-obd-ii-trouble-code-camshaft-position-a-timing-over-advanced-or-system-performance-bank-1-by-jay-safford"] };
+const DTC = {
+  P0171: ["Engine running too lean (bank 1): too much air or too little fuel", "vacuum leak, dirty or bad airflow (MAF) sensor, weak fuel pump or clogged fuel filter", "ore"],
+  P0174: ["Engine running too lean (bank 2): too much air or too little fuel", "vacuum leak, dirty or bad airflow (MAF) sensor, weak fuel pump or clogged fuel filter", "ore"],
+  P0011: ["Intake camshaft timing more advanced than the engine computer asked for (bank 1)", "low or old engine oil, stuck oil control (valve timing) solenoid, worn cam phaser, wiring at the solenoid", "ym"] };
+function milRows(imei){
+  return S.mil.filter(e => e.imei === imei).map(e => { const m = (e.payload || {}).mil || {};
+    return { t: Date.parse(m.timestamp || e.received_at), on: String(m.value).toUpperCase() === "ON", codes: String(m.codes || "").split(",").map(c => c.trim()).filter(Boolean) }; })
+    .filter(x => x.t).sort((a, b) => a.t - b.t);
+}
+function milStretches(imei){   // Bouncie re-sends the light's state at most engine starts; keep only the changes
+  const out = [];
+  for(const r of milRows(imei)){
+    const last = out[out.length - 1], key = r.on + "|" + r.codes.join(",");
+    if(last && last.key === key){ last.seen = r.t; continue; }
+    if(last) last.to = r.t;
+    out.push({ key, on: r.on, codes: r.codes, from: r.t, seen: r.t, to: null });
+  }
+  return out;
+}
+function milNow(v){
+  const st = milStretches(v.imei), last = st[st.length - 1];
+  const rawT = Date.parse(((((v.raw || {}).stats || {}).mil) || {}).lastUpdated || "") || 0;
+  if(last && last.seen >= rawT) return { on: last.on, codes: last.codes, since: firstOn(st), st };
+  return { on: !!v.mil_on, codes: [], since: null, st };
+}
+function firstOn(st){   // when the light came on for this stretch (codes can change while it stays on)
+  let i = st.length - 1; if(i < 0 || !st[i].on) return null;
+  while(i > 0 && st[i - 1].on) i--; return st[i].from;
+}
+function codeLine(c, v){
+  const d = DTC[c], q = encodeURIComponent(c + " " + [v.year, v.make, v.model].filter(Boolean).join(" ") + " code");
+  if(!d) return `<div><span class="cd">${esc(c)}</span> <a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">look it up ↗</a></div>`;
+  const s = DTC_SRC[d[2]];
+  return `<div><span class="cd">${esc(c)}</span> · ${esc(d[0])}<br><span class="muted">Common causes: ${esc(d[1])} · <a href="${esc(s[1])}" target="_blank" rel="noopener">${esc(s[0])} ↗</a></span></div>`;
+}
+function milBlock(v){
+  const m = milNow(v), n = m.st.filter(x => x.on).length;
+  if(m.on) return `<div class="mil"><b>⚠ Check engine light is ON</b>${m.since ? " since " + fmtDT(m.since) : ""}
+    ${m.codes.length ? m.codes.map(c => codeLine(c, v)).join("") : `<div class="muted">No trouble code sent yet.</div>`}
+    <button class="lnk" data-mil="${esc(v.imei)}">On/off history (${m.st.length})</button></div>`;
+  const lastOn = [...m.st].reverse().find(x => x.on);
+  return `<div class="sec"><b>Check engine</b> <span class="pill green">Off</span>${lastOn ? ` <span class="muted">· last on ${fmtD(new Date(lastOn.from))}</span>` : ""}
+    ${m.st.length ? ` <button class="lnk" data-mil="${esc(v.imei)}">History (${n} time${n === 1 ? "" : "s"} on)</button>` : ""}</div>`;
+}
+function milDialog(imei){
+  const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg"), st = milStretches(imei).reverse();
+  d.style.maxWidth = "760px";
+  d.innerHTML = `<h3 style="margin:0 0 4px">Check engine history · ${esc(vname(v))}</h3>
+    <p class="muted" style="margin:0 0 8px">From Bouncie's check engine alerts (sent when the light or its codes change, and at most engine starts). Newest first.</p>
+    ${st.length ? `<div class="box"><table><thead><tr><th>Light</th><th>From</th><th>Until</th><th class="n">How long</th><th>Codes</th></tr></thead><tbody>${st.map(x =>
+      `<tr><td>${x.on ? `<span class="pill red">ON</span>` : `<span class="pill green">Off</span>`}</td><td>${fmtDT(x.from)}</td><td>${x.to ? fmtDT(x.to) : "now"}</td>
+       <td class="n">${durL(((x.to || Date.now()) - x.from) / 1000)}</td><td style="white-space:normal;min-width:220px">${x.codes.length ? x.codes.map(c => codeLine(c, v)).join("") : `<span class="muted">none</span>`}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="muted">No check engine alerts from this tracker yet.</p>`}
+    <p class="muted">Code meanings are the standard (generic) ones; a dealer or shop scan can say more for this exact engine.</p>
+    <div class="bar"><button class="btn primary" data-evnew="${esc(imei)}" data-evtitle="Check engine light${st[0] && st[0].on && st[0].codes.length ? " (" + st[0].codes.join(", ") + ")" : ""}" data-evkind="repair">📅 Schedule a shop visit</button>
+      <button class="btn" id="mc">Close</button></div>`;
+  if(!d.open) d.showModal(); $("#mc", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
+}
+
+/* ---------- scheduled events (Brandon 2026-11-18): oil change appointments, tires, registration… ---------- */
+const durL = s => s >= 172800 ? Math.round(s / 86400) + " days" : dur(s);
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const planned = imei => S.events.filter(e => e.imei === imei && e.status === "planned");
+const fmtTime = t => { if(!t) return ""; const [h, m] = t.split(":").map(Number); return ((h + 11) % 12 + 1) + ":" + String(m).padStart(2, "0") + (h < 12 ? " am" : " pm"); };
+function evArgs(e, ch){
+  return Object.assign({ p_id: e.id || null, p_imei: e.imei, p_kind: e.kind, p_title: e.title, p_day: e.day, p_time: e.at_time || null,
+    p_place: e.place || "", p_who: e.who || "", p_note: e.note || "", p_status: e.status || "planned", p_service: null }, ch || {});
+}
+function eventsBlock(v){
+  const list = planned(v.imei), t = today(), done = S.events.filter(e => e.imei === v.imei && e.status === "done").length;
+  return `<div class="sec"><b>Scheduled</b>${list.length ? "" : ` <span class="muted">· nothing scheduled</span>`}
+    ${list.map(e => `<div class="evl"><div>${e.day < t ? `<span class="pill amber">Was ${esc(fmtD(e.day))}</span>` : `<span class="pill blue">${esc(fmtD(e.day))}${e.at_time ? " " + fmtTime(e.at_time) : ""}</span>`}
+        <b>${esc(e.title)}</b>${e.place ? `<br><span class="muted">📍 ${esc(e.place)}</span>` : ""}${e.who ? `<span class="muted"> · 🚗 ${esc(e.who)}</span>` : ""}${e.note ? `<br><span class="muted">${esc(e.note)}</span>` : ""}</div>
+      <div class="ea"><button class="btn" data-evdone="${e.id}" title="Mark done and add it to the service history">✓ Done</button><button class="btn" data-evedit="${e.id}">✎</button></div></div>`).join("")}
+    <div style="margin-top:4px"><button class="btn" data-evnew="${esc(v.imei)}">📅 Schedule something</button>${done ? ` <span class="muted" style="font-size:12px">${done} done</span>` : ""}</div></div>`;
+}
+function evDialog(imei, e, preset){
+  const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg"); e = e || {}; preset = preset || {};
+  const val = (k, def) => esc(e[k] != null ? e[k] : (preset[k] != null ? preset[k] : (def || "")));
+  const kind = e.kind || preset.kind || (/oil/i.test(preset.title || "") ? "oil_change" : /tire/i.test(preset.title || "") ? "tires" : /brake/i.test(preset.title || "") ? "brakes" : "service");
+  const sel = "display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)";
+  d.style.maxWidth = "520px";
+  d.innerHTML = `<h3 style="margin:0 0 4px">${e.id ? "Change" : "Schedule"} · ${esc(vname(v))}</h3>
+    <label>What is it<select id="ek" style="${sel}">${KINDS.map(([k, l]) => `<option value="${k}"${k === kind ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label>Title<input id="et" maxlength="160" value="${val("title")}" placeholder="e.g. Oil change + tire rotation"></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">
+      <label>Day<input id="ed" type="date" value="${val("day", today())}"></label>
+      <label>Time (optional)<input id="eh" type="time" value="${esc((e.at_time || "").slice(0, 5))}"></label></div>
+    <label>Where (optional)<input id="ep" maxlength="200" value="${val("place")}" placeholder="e.g. Jiffy Lube Kimball Junction"></label>
+    <label>Who's taking it (optional)<input id="ew" maxlength="120" value="${val("who")}" placeholder="e.g. Dave"></label>
+    <label>Note (optional)<input id="en" maxlength="600" value="${val("note")}"></label>
+    <div class="err" id="ee"></div>
+    <div class="bar"><button class="btn primary" id="es">Save</button>
+      ${e.id ? `<button class="btn" id="ex" style="color:var(--red)">Cancel this event</button>` : ""}<button class="btn" id="ec">Close</button></div>`;
+  if(!d.open) d.showModal();
+  $("#ec", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
+  let kindSet = !!e.id; $("#ek", d).onchange = () => { kindSet = true; };
+  $("#et", d).oninput = () => { if(kindSet) return; const t = $("#et", d).value;
+    const k = /oil/i.test(t) ? "oil_change" : /tire/i.test(t) ? "tires" : /brake/i.test(t) ? "brakes" : /batter/i.test(t) ? "battery" : /regist/i.test(t) ? "registration" : /inspect/i.test(t) ? "inspection" : /recall/i.test(t) ? "recall" : null;
+    if(k) $("#ek", d).value = k; };
+  const save = async status => {
+    const title = $("#et", d).value.trim(), day = $("#ed", d).value;
+    if(!title){ $("#ee", d).textContent = "Say what it is."; return; }
+    if(!day){ $("#ee", d).textContent = "Pick a day."; return; }
+    $("#es", d).disabled = true; $("#ee", d).textContent = "Saving…";
+    const r = await sb.rpc("vehicle_event_save", evArgs({ id: e.id, imei }, { p_kind: $("#ek", d).value, p_title: title, p_day: day, p_time: $("#eh", d).value || null,
+      p_place: $("#ep", d).value.trim(), p_who: $("#ew", d).value.trim(), p_note: $("#en", d).value.trim(), p_status: status || e.status || "planned" }));
+    if(r.error){ $("#ee", d).textContent = errText(r.error); $("#es", d).disabled = false; return; }
+    d.close(); d.style.maxWidth = ""; await refresh();
+  };
+  $("#es", d).onclick = () => save();
+  if(e.id) $("#ex", d).onclick = () => { if(confirm("Cancel this event? It stays in the log.")) save("cancelled"); };
+}
+function evDone(id){
+  const e = S.events.find(x => x.id === id); if(!e) return;
+  svcDialog(e.imei, { ev: e.id, kind: e.kind, day: e.day <= today() ? e.day : today(), place: e.place, note: e.title + (e.note ? " · " + e.note : "") });
+}
+
+/* ---------- routes (Brandon 2026-11-18): Leaflet + OpenStreetMap, one colour per trip ---------- */
+const COLORS = ["#2463a0", "#c8382b", "#3c5f12", "#b5770a", "#7b3fa0", "#0f8a8a", "#d1497b", "#5b6b2a", "#444"];
+const pcDay = t => new Date(t).toLocaleDateString("en-CA", { timeZone: "America/Denver" });
+function tripPts(t){
+  const r = route(t); if(r.length > 1) return r;
+  const p = S.points.filter(x => x.transaction_id === t.transaction_id).flatMap(x => x.points || [])
+    .map(x => ({ t: Date.parse(x.timestamp), lat: x.gps && +x.gps.lat, lon: x.gps && +x.gps.lon })).filter(x => x.lat && x.lon).sort((a, b) => a.t - b.t);
+  return p;
+}
+function routesSection(vs){
+  if(typeof L === "undefined") return `<h2>Routes</h2><div class="note">The map didn't load. Check your signal and reload.</div>`;
+  const withRt = S.trips.find(t => t.ended_at && tripPts(t).length > 1);
+  if(!S.rv || !vs.some(v => v.imei === S.rv)) S.rv = S.veh || (withRt && withRt.imei) || (S.trips[0] && S.trips[0].imei) || vs[0].imei;
+  const vt = S.trips.filter(t => t.imei === S.rv), days = [...new Set(vt.map(t => pcDay(t.started_at)))];
+  if(!days.includes(S.rday)){ const f = vt.find(t => t.ended_at && tripPts(t).length > 1); S.rday = f ? pcDay(f.started_at) : (days[0] || ""); }
+  const trips = vt.filter(t => pcDay(t.started_at) === S.rday).sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at));
+  S.rtrips = trips;
+  return `<h2 id="routes">Routes</h2>
+    <div class="bar"><label>Vehicle <select id="rv">${vs.map(v => `<option value="${esc(v.imei)}"${S.rv === v.imei ? " selected" : ""}>${esc(vname(v))}</option>`).join("")}</select></label>
+      <label>Day <select id="rday">${days.length ? days.map(d => `<option value="${d}"${d === S.rday ? " selected" : ""}>${esc(new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))} · ${(n => n + (n === 1 ? " trip" : " trips"))(vt.filter(t => pcDay(t.started_at) === d).length)}</option>`).join("") : `<option>No trips in the last ${S.days} days</option>`}</select></label></div>
+    ${trips.length ? `<div class="rgrid"><div id="rmap"></div><div class="box rlist">${trips.map((t, i) => `<div class="rrow${S.rsel === t.transaction_id ? " on" : ""}" data-rsel="${esc(t.transaction_id)}">
+        <span class="rdot" style="background:${COLORS[i % COLORS.length]}"></span><div><b>${new Date(t.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${t.ended_at ? " – " + new Date(t.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : " · driving now"}</b>
+        <br><span class="muted">${t.miles == null ? "" : (+t.miles).toFixed(1) + " mi · "}${dur(t.trip_s)}${t.max_mph ? " · top " + Math.round(t.max_mph) + " mph" : ""}</span>
+        ${tripPts(t).length > 1 ? "" : `<br><span class="muted">no route yet</span>`}<div class="drv">${drvShort(t)}</div></div></div>`).join("")}</div></div>
+      <p class="muted">Tap a trip to show only it. Map: © OpenStreetMap contributors. Route = Bouncie's trip path (live points while a trip is still going).</p>`
+      : `<div class="empty box">No trips to show.</div>`}`;
+}
+let RMAP = null;
+function drawLines(map, trips){
+  const all = [];
+  trips.forEach((t, i) => {
+    const p = tripPts(t).map(x => [x.lat, x.lon]); if(p.length < 2) return;
+    const c = COLORS[i % COLORS.length];
+    L.polyline(p, { color: c, weight: 4, opacity: .85 }).addTo(map).bindTooltip(new Date(t.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) + (t.miles ? " · " + (+t.miles).toFixed(1) + " mi" : ""));
+    L.circleMarker(p[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#3c5f12", fillOpacity: 1 }).addTo(map).bindTooltip("Left " + fmtDT(t.started_at));
+    L.circleMarker(p[p.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#c8382b", fillOpacity: 1 }).addTo(map).bindTooltip(t.ended_at ? "Parked " + fmtDT(t.ended_at) : "Latest point");
+    all.push(...p);
+  });
+  for(const pl of S.places) L.circle([pl.lat, pl.lon], { radius: pl.radius_m, color: "#88B535", weight: 1, fillOpacity: .12 }).addTo(map).bindTooltip(pl.name);
+  if(all.length) map.fitBounds(all, { padding: [24, 24] }); else map.setView([40.69, -111.52], 11);
+}
+function newMap(el){
+  const m = L.map(el, { scrollWheelZoom: false });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(m);
+  return m;
+}
+function drawRoutes(){
+  if(RMAP){ RMAP.remove(); RMAP = null; }
+  const el = $("#rmap"); if(!el || typeof L === "undefined") return;
+  RMAP = newMap(el);
+  const ts = S.rsel ? S.rtrips.filter(t => t.transaction_id === S.rsel) : S.rtrips;
+  drawLines(RMAP, ts);
+}
+function tripDialog(tx){
+  const t = S.trips.find(x => x.transaction_id === tx); if(!t) return;
+  const v = S.vehicles.find(x => x.imei === t.imei), d = $("#dlg"), g = S.drv[tx] || [];
+  d.style.maxWidth = "760px";
+  d.innerHTML = `<h3 style="margin:0 0 4px">Trip · ${esc(v ? vname(v) : t.imei)}</h3>
+    <p class="muted" style="margin:0 0 8px">${fmtDT(t.started_at)}${t.ended_at ? " – " + fmtDT(t.ended_at) : " · driving now"}${t.miles == null ? "" : " · " + (+t.miles).toFixed(1) + " mi"}${t.trip_s ? " · " + dur(t.trip_s) : ""}${t.max_mph ? " · top " + Math.round(t.max_mph) + " mph" : ""}</p>
+    <div class="tmap" id="tmap"></div>
+    <div class="sec"><b>Possible driver</b>${g.length ? g.slice(0, 3).map(p => `<div class="drv">${esc(p.who)} <span class="why">· ${esc(p.why.join("; "))}</span></div>`).join("") : `<div class="muted">No clues for this trip.</div>`}</div>
+    <div class="bar"><button class="btn" id="tc">Close</button></div>`;
+  if(!d.open) d.showModal();
+  const m = newMap($("#tmap", d)); drawLines(m, [t]); setTimeout(() => { m.invalidateSize(); const p = tripPts(t).map(x => [x.lat, x.lon]); if(p.length) m.fitBounds(p, { padding: [24, 24] }); }, 60);
+  $("#tc", d).onclick = () => { m.remove(); d.close(); d.style.maxWidth = ""; };
+}
+
+/* ---------- possible last driver (Brandon 2026-11-18): vehicle_driver_guess() scores clock-ins, Breezeway tasks and crew phones near where a trip left / parked ---------- */
+async function loadDrivers(){
+  const from = Date.now() - S.days * 86400000;
+  const ts = S.trips.filter(t => Date.parse(t.started_at) >= from).slice(0, 400), T = [];
+  for(const t of ts){ const p = tripPts(t), a = p[0], b = p[p.length - 1];
+    T.push({ tx: t.transaction_id, a: t.started_at, b: t.ended_at || null, slat: a ? a.lat : null, slon: a ? a.lon : null, elat: t.ended_at && b ? b.lat : null, elon: t.ended_at && b ? b.lon : null }); }
+  S.drv = {};
+  for(let i = 0; i < T.length; i += 80){
+    const r = await sb.rpc("vehicle_driver_guess", { p_trips: T.slice(i, i + 80) });
+    if(r.error) { S.drvErr = errText(r.error); break; }
+    for(const x of r.data || []) S.drv[x.tx] = x.people || [];
+  }
+}
+function drvShort(t){
+  const g = S.drv[t.transaction_id]; if(!g || !g.length) return `<span class="muted">—</span>`;
+  const top = g[0], strong = top.pts >= 2, tie = g[1] && g[1].pts === top.pts;
+  return `<span title="${esc(g.slice(0, 4).map(p => p.who + ": " + p.why.join("; ")).join("\n"))}">${strong ? "" : "maybe "}${esc(top.who)}${tie ? " or " + esc(g[1].who) : ""}</span>`;
+}
+function lastDriverHtml(v){
+  const t = S.trips.filter(x => x.imei === v.imei).sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0];
+  if(!t) return `<span class="muted">no trips in the last ${S.days} days</span>`;
+  const g = S.drv[t.transaction_id] || [];
+  if(!g.length) return `<span class="muted">no clues</span> <span class="muted">· trip ${fmtDT(t.started_at)}</span>`;
+  return `${drvShort(t)} <span class="muted">· trip ${fmtDT(t.started_at)}</span><br><span class="muted" style="font-size:12px">${esc(g[0].why.slice(0, 2).join("; "))}</span>`;
+}
+function driversSection(vs){
+  const rows = vs.filter(v => !S.veh || v.imei === S.veh).map(v => ({ v, ts: S.trips.filter(t => t.imei === v.imei).sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at)).slice(0, 5) }));
+  return `<h2>Possible last driver</h2>${S.drvErr ? `<div class="note">Couldn't work out drivers: ${esc(S.drvErr)}</div>` : ""}
+    <div class="box"><table><thead><tr><th>Vehicle</th><th>Trip</th><th>Best guess</th><th>Why</th></tr></thead><tbody>${rows.map(({ v, ts }) => ts.length ? ts.map((t, i) => {
+      const g = S.drv[t.transaction_id] || [];
+      return `<tr${i ? ` style="opacity:.75"` : ""}><td>${i ? "" : `<b>${esc(vname(v))}</b>`}</td><td><a href="#" data-trip="${esc(t.transaction_id)}">${fmtDT(t.started_at)}</a>${t.miles ? ` <span class="muted">${(+t.miles).toFixed(1)} mi</span>` : ""}</td>
+        <td>${drvShort(t)}${g[1] && !(g[1].pts === g[0].pts) ? `<br><span class="muted" style="font-size:12px">then ${esc(g[1].who)}</span>` : ""}</td>
+        <td style="white-space:normal;min-width:240px;font-size:12.5px" class="muted">${esc(g.length ? g[0].why.join("; ") : "")}</td></tr>`; }).join("")
+      : `<tr><td><b>${esc(vname(v))}</b></td><td colspan="3" class="muted">No trips in the last ${S.days} days</td></tr>`).join("")}</tbody></table></div>
+    <p class="muted">A best guess, never proof: clocking in near where the vehicle left or out where it parked, a Breezeway maintenance or inspection task finished right before it left that home or started right after it parked at one, a crew phone at the vehicle, and who was on the clock. Phones add the strongest clue once the crew's phone GPS is sending.</p>`;
 }
 
 async function refresh(){
@@ -461,8 +718,15 @@ async function refresh(){
   catch(e){ $("#app").innerHTML = `<h1>Vehicles</h1><div class="note">Couldn't load: ${esc(errText(e))}</div>`; }
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-tf],[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan],[data-addph]"); if(!b) return;
-  if(b.dataset.file || b.dataset.tf != null) e.preventDefault();
+  const b = e.target.closest("[data-tf],[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan],[data-addph],[data-mil],[data-evnew],[data-evedit],[data-evdone],[data-trip],[data-rsel],[data-route]"); if(!b) return;
+  if(b.dataset.file || b.dataset.tf != null || b.dataset.trip) e.preventDefault();
+  if(b.dataset.mil){ milDialog(b.dataset.mil); return; }
+  if(b.dataset.evnew){ if($("#dlg").open) $("#dlg").close(); evDialog(b.dataset.evnew, null, { title: b.dataset.evtitle || "", kind: b.dataset.evkind || "" }); return; }
+  if(b.dataset.evedit){ const ev = S.events.find(x => x.id === +b.dataset.evedit); if(ev) evDialog(ev.imei, ev); return; }
+  if(b.dataset.evdone){ evDone(+b.dataset.evdone); return; }
+  if(b.dataset.trip){ tripDialog(b.dataset.trip); return; }
+  if(b.dataset.rsel){ S.rsel = S.rsel === b.dataset.rsel ? "" : b.dataset.rsel; $$(".rrow").forEach(r => r.classList.toggle("on", r.dataset.rsel === S.rsel)); drawRoutes(); return; }
+  if(b.dataset.route){ S.rv = b.dataset.route; S.rday = ""; S.rsel = ""; render(); const r = $("#routes"); if(r) r.scrollIntoView({ behavior: "smooth" }); return; }
   if(b.dataset.tf != null){ S.tf = (S.tf === b.dataset.tf ? "" : b.dataset.tf); render(); }
   else if(b.dataset.days){ S.days = +b.dataset.days; refresh(); }
   else if(b.dataset.oil) oilDialog(b.dataset.oil);
@@ -474,13 +738,15 @@ document.addEventListener("click", e => {
   else if(b.dataset.addph) addPhoto(+b.dataset.addph);
 });
 document.addEventListener("change", e => {
-  if(e.target.id === "veh"){ S.veh = e.target.value; render(); }
+  if(e.target.id === "veh"){ S.veh = e.target.value; if(S.veh) S.rv = S.veh; S.rday = ""; render(); }
   if(e.target.id === "lim"){ S.limit = Math.max(30, Math.min(120, +e.target.value || 75)); render(); }
+  if(e.target.id === "rv"){ S.rv = e.target.value; S.rday = ""; S.rsel = ""; render(); $("#routes").scrollIntoView(); }
+  if(e.target.id === "rday"){ S.rday = e.target.value; S.rsel = ""; render(); $("#routes").scrollIntoView(); }
 });
 
 // every pop-up: ✕ in the top right + a click outside closes it (Brandon 2026-11-03)
 (function dlgClose(){
-  const d = $("#dlg"), shut = () => { d.close(); d.style.maxWidth = ""; };
+  const d = $("#dlg"), shut = () => { const m = d.querySelector(".leaflet-container"); if(m && m._leaflet_id) d.innerHTML = ""; d.close(); d.style.maxWidth = ""; };
   const addX = () => { if(!d.querySelector(":scope > .dlgx")) d.insertAdjacentHTML("afterbegin", `<button type="button" class="dlgx" aria-label="Close" title="Close">✕</button>`); };
   new MutationObserver(addX).observe(d, { childList: true });
   d.addEventListener("click", e => {
@@ -501,7 +767,7 @@ document.addEventListener("change", e => {
   S.mgr = ad.data === true || mg.data === true;
   refresh();
 })();
-window.__veh = { S, decode, meters, computeVisits, render };   // for the stub test
+window.__veh = { S, decode, meters, computeVisits, render, milStretches, milNow };   // for the stub test
 </script>
 </body>
 </html>
