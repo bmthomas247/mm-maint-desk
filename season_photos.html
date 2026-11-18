@@ -25,6 +25,7 @@
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
 .tile{background:var(--ground);border-radius:12px;padding:10px 12px}.tile .l{font-size:12px;color:var(--muted)}.tile .v{font-size:22px;font-weight:800}
 button.tile{border:1px solid transparent;font:inherit;color:inherit;text-align:left;cursor:pointer} button.tile:hover{border-color:var(--line-2)} button.tile.on{outline:2px solid var(--forest-2);outline-offset:-1px} .tfnote{font-size:12.5px;margin:8px 0 0}
+.sure{display:flex;gap:10px;align-items:center;margin:14px 0 0;padding:10px 12px;border-radius:10px;background:var(--ground);font-weight:600;cursor:pointer}.sure input{width:18px;height:18px;margin:0;flex:none}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:760px){.two{grid-template-columns:1fr}}
 .btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
 .btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn.warn{border-color:var(--red);color:var(--red)}.btn:disabled{opacity:.5;cursor:default}
@@ -145,16 +146,23 @@ function ask(dir, scope){
     ? `${photos} winter photo${photos === 1 ? "" : "s"} come off ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? ` and ${tops} summer photo${tops === 1 ? "" : "s"} go back into ${tops === 1 ? "its" : "their"} old top spot${tops === 1 ? "" : "s"}` : ""}. Nothing else on ${unit ? "the listing" : "the listings"} moves.`
     : `${photos} winter photo${photos === 1 ? "" : "s"} go back on ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? `, ${tops} of them into a summer photo's top spot` : ""}.`;
   const div = document.createElement("div"); div.className = "scrim";
-  div.innerHTML = `<div class="dlg" role="dialog" aria-modal="true"><h2>Switch ${unit ? esc(pick[0].code) : "every listing"} to ${dir}?</h2>
-    <p style="margin:6px 0 0">${what}</p>
+  div.innerHTML = `<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="sure_h"><h2 id="sure_h">Are you sure?</h2>
+    <p style="margin:6px 0 0"><b>Switch ${unit ? esc(pick[0].code) : "all " + pick.length + " listings"} to ${dir}.</b> ${what}</p>
     <p class="small muted">${unit ? "Takes a minute or two. Check the listing in Track afterwards." : `About ${Math.max(5, Math.round(pick.length / 6))} minutes. Each listing is checked in Track right after it's done.`}
       Airbnb and Vrbo pick up the change from Track, Vrbo about once a day.</p>
-    <div class="row" style="justify-content:flex-end"><button class="btn" id="no">Not now</button><button class="btn pri" id="yes">${unit ? "Switch this listing" : "Switch " + pick.length + " listings"}</button></div></div>`;
+    ${unit ? "" : `<label class="sure"><input type="checkbox" id="sure"> Yes, I'm sure: switch all ${pick.length} listings to ${dir}.</label>`}
+    <div class="row" style="justify-content:flex-end"><button class="btn" id="no">No, cancel</button><button class="btn pri" id="yes" ${unit ? "" : "disabled"}>${unit ? "Yes, switch " + esc(pick[0].code) : "Yes, switch " + pick.length + " listings"}</button></div></div>`;
   document.body.appendChild(div);
-  const close = () => div.remove();
+  const key = e => { if(e.key === "Escape") close(); };
+  const close = () => { div.remove(); document.removeEventListener("keydown", key); };
+  document.addEventListener("keydown", key);
   div.onclick = e => { if(e.target === div) close(); };
   div.querySelector("#no").onclick = close;
+  div.querySelector("#no").focus();
+  const sure = div.querySelector("#sure");
+  if(sure) sure.onchange = () => { div.querySelector("#yes").disabled = !sure.checked; };
   div.querySelector("#yes").onclick = async () => {
+    if(sure && !sure.checked) return;
     div.querySelector("#yes").disabled = true;
     const r = await sb.rpc("season_request", { p_direction:dir, p_unit:unit });
     close();
