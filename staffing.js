@@ -171,6 +171,21 @@ const notCounted = (rows, w) => { const l = rows.filter(p => (p.status === "deni
 const offBtn = p => ` <button class="btn small" data-off="${p.id}" title="Set this punch off (it stops counting; kept in the log)">✕</button>`;
 const pendRow = (p, nm, boss) => `<tr><td>${nm ? `<b>${esc(nm)}</b><br>` : ""}${dnm(dkey(p.at))} ${tm(p.at)} · clock ${p.kind}</td><td class="sm">${esc(p.note || "")}</td>
   <td class="r">${boss ? `<button class="btn small primary" data-ok="${p.id}">Approve</button> <button class="btn small" data-no="${p.id}">Deny</button>` : `<span class="pill amber">Waiting for your manager</span>`}</td></tr>`;
+/* Brandon 2026-11-17 (Chris, Bugs & upgrades #50/#52): managers add a whole shift (in + out) and time off FOR a team member
+   (timeoff_add_for: their own PTO rules apply, approved at once). */
+const shiftForm = uid => `<details class="card"><summary><b>Add a whole shift</b></summary>
+  <div class="row" style="margin-top:8px"><input type="date" data-sd="${uid}"><label class="sm">from <input type="time" data-ss="${uid}" value="10:00"></label>
+  <label class="sm">to <input type="time" data-se="${uid}" value="18:00"></label><input data-sn="${uid}" placeholder="Note (optional)" style="flex:1;min-width:160px">
+  <button class="btn primary" data-sadd="${uid}">Add shift</button></div>
+  <p class="sm muted" style="margin:6px 0 0">Adds a clock-in and a clock-out together. It counts right away. To change a punch that's there, tap ✎ next to it.</p></details>`;
+const toForm = uid => `<details class="card"><summary><b>Add time off for them</b></summary>
+  <div class="row" style="margin-top:8px"><select data-tk="${uid}"><option value="pto">Paid time off</option><option value="unpaid">Unpaid</option></select>
+  <label class="sm">from <input type="date" data-td="${uid}"></label><label class="sm">to <input type="date" data-te="${uid}"></label>
+  <input data-tn="${uid}" placeholder="Note (optional, they see it)" style="flex:1;min-width:160px">
+  <button class="btn primary" data-tadd="${uid}">Add time off</button></div>
+  <p class="sm muted" style="margin:6px 0 0">Whole days (8 h a day). It's approved right away and their PTO balance follows the usual rules (blackout dates, 40 h at a time). Part days: they ask on Request Time Off.</p></details>`;
+const toLine = (rows, uid) => { const l = rows.filter(r => r.user_id === uid); if(!l.length) return "";
+  return `<p class="sm" style="margin:6px 0 0">🌴 Time off: ${l.map(r => `${dnm(r.day)}${r.end_day !== r.day ? "–" + dnm(r.end_day) : ""} · ${hm(+r.hours || 0)} ${r.kind === "pto" ? "paid" : r.kind}${r.status === "pending" ? ' <span class="pill amber">waiting</span>' : ""}`).join(" · ")}</p>`; };
 const addForm = (uid, boss) => `<details class="card"><summary><b>${boss ? "Add a missed punch" : "Forgot to clock in or out?"}</b></summary>
   <div class="row" style="margin-top:8px"><select data-ak="${uid}"><option value="in">Clock in</option><option value="out">Clock out</option></select>
   <input type="datetime-local" data-at="${uid}"><input data-an="${uid}" placeholder="${boss ? "Note (optional)" : "What happened? (your manager sees it)"}" style="flex:1;min-width:180px">
@@ -215,6 +230,8 @@ window.staffingView = async function(v){
   const ppl = pp.data || [], all = cr.data || [], weeks = wr.data || [];
   const meP = ppl.find(p => p.is_me), myId = meP && meP.user_id, meOn = !!meP, team = ppl.filter(p => !p.is_me);
   const pend = await sb.from("hub_clock").select("*").eq("status", "pending").order("at");
+  const tor = await sb.from("hub_timeoff_requests").select("user_id,kind,day,end_day,hours,status").in("status", ["approved", "pending"]).lte("day", addK(w, 6)).gte("end_day", w).order("day");
+  const toRows = (tor && tor.data) || [];
   const pendAll = pend.data || [];
   const wkOk = (u, wk_) => weeks.find(x => x.user_id === u && x.week === wk_);
   const nav = `<div class="row" style="margin:0 0 10px"><button class="btn small" data-w="-7">← Week before</button><b>Week of ${dnm(w)}</b>
@@ -230,7 +247,7 @@ window.staffingView = async function(v){
         <div class="muted sm">This week: ${hm(myH)}${myH > 40 ? " · over 40" : myH >= 36 ? " · close to 40" : ""}</div>${otMeHtml()}</div></div>
       <button class="btn primary big" id="punch" data-k="${isIn ? "out" : "in"}">${isIn ? "Clock out" : "Clock in"}</button></div>
       <p class="muted sm" style="margin:-4px 0 10px">Your phone's location is saved once when you clock in or out (only you, your manager and Brandon/Kim see it). Not during the day.</p>
-      <div class="card">${nav}${weekTable(mine, w, pl, false, scOf(myId))}${ok ? `<p class="sm" style="margin:6px 0 0">✅ Approved by ${esc(ok.approved_by)} (${hm(+ok.hours)})</p>` : ""}</div>
+      <div class="card">${nav}${weekTable(mine, w, pl, false, scOf(myId))}${toLine(toRows, myId)}${ok ? `<p class="sm" style="margin:6px 0 0">✅ Approved by ${esc(ok.approved_by)} (${hm(+ok.hours)})</p>` : ""}</div>
       ${pendAll.filter(p => p.user_id === myId).length ? `<div class="card"><b>Waiting for your manager</b><table>${pendAll.filter(p => p.user_id === myId).map(p => pendRow(p, null, false)).join("")}</table></div>` : ""}
       ${addForm(myId, false)}<div id="wcapp"></div>`;
   }
@@ -248,11 +265,11 @@ window.staffingView = async function(v){
         const ot = (OT.l || []).find(x => x.user_id === p.user_id), sc = scOf(p.user_id), nf = sc ? sc.fl.length : 0;
         return `<details data-du="${p.user_id}" style="margin:8px 0" ${team.length === 1 || SS.open.has(p.user_id) ? "open" : ""}><summary><b>${esc(p.name)}</b> · ${hm(hrs)}${hh != null ? ` <span class="pill ${Math.abs(gap) > 0.5 ? "amber" : ""}" title="Hours Hubstaff tracked this week, side by side until Hubstaff is cancelled">Hubstaff ${hm(hh)}${Math.abs(gap) > 0.5 ? ` · ${gap > 0 ? "+" : "−"}${hm(Math.abs(gap))} on the hub` : ""}</span>` : ""} ${now ? `<span class="pill green">clocked in since ${tm(last.at)}</span>` : ""}${nf ? ` <span class="pill amber" title="Clock-ins that don't match the schedule this week">⚠ ${nf} off schedule</span>` : ""}
           ${ok ? `<span class="pill ${changed ? "amber" : "green"}">${changed ? `approved at ${hm(+ok.hours)}, changed since` : `approved by ${esc(ok.approved_by)}`}</span>` : ""}</summary>
-          ${weekTable(rows, w, pl, true, sc)}${ME.admin ? notCounted(rows, w) : ""}
+          ${weekTable(rows, w, pl, true, sc)}${toLine(toRows, p.user_id)}${ME.admin ? notCounted(rows, w) : ""}
           ${curW ? `<div class="row" style="margin-top:6px"><span class="sm">${ot && ot.plan_kind ? "Overtime plan: " + planTxt(ot) : "No overtime plan this week."}${ot && ot.asked_at ? " · asked for overtime" + (ot.asked_note ? `: “${esc(ot.asked_note)}”` : "") : ""}</span>
             <button class="btn small" data-otp="${p.user_id}" data-h="${Math.round(tH(p) * 100) / 100}">${ot && ot.plan_kind ? "Change overtime plan" : "Approve overtime / set clock-out"}</button></div>` : ""}
           <div class="row" style="margin-top:6px">${(!ok || changed) && w < wk(today) ? `<button class="btn small primary" data-wok="${p.user_id}" data-h="${hrs}">Approve ${hm(hrs)} for this week</button>` : w >= wk(today) ? `<span class="muted sm">Approve the week once it's over.</span>` : ""}</div>
-          ${addForm(p.user_id, true)}</details>`; }).join("")}</div>`;
+          ${addForm(p.user_id, true)}${shiftForm(p.user_id)}${toForm(p.user_id)}</details>`; }).join("")}</div>`;
   } else if(!meOn) h += `<div class="card"><p class="muted" style="margin:0">Nobody on your team has clocked in this week.</p></div>`;
   h += `<p class="muted sm">Hours count from each clock-in to the next clock-out, on the day of the clock-in (Park City time). Source: the hub time clock. Scheduled times come from Staffing ▸ Schedule; clocking in or out within 15 minutes of the schedule counts as on time.</p></div>`;
   v.innerHTML = h;
@@ -286,6 +303,23 @@ window.staffingView = async function(v){
     if(!at) return alert("Pick the date and time.");
     const r = await sb.rpc("clock_add", { p_user:u, p_kind:v.querySelector(`[data-ak="${u}"]`).value, p_at:new Date(at).toISOString(), p_note:v.querySelector(`[data-an="${u}"]`).value });
     if(!err(r)) re(); });
+  v.querySelectorAll("[data-sadd]").forEach(b => b.onclick = async () => { const u = b.dataset.sadd, d = v.querySelector(`[data-sd="${u}"]`).value,
+      a = v.querySelector(`[data-ss="${u}"]`).value, e = v.querySelector(`[data-se="${u}"]`).value, n = v.querySelector(`[data-sn="${u}"]`).value;
+    if(!d || !a || !e) return alert("Pick the day, start and end.");
+    const t1 = new Date(d + "T" + a), t2 = new Date(d + "T" + e); if(t2 <= t1) t2.setDate(t2.getDate() + 1);   // ends after midnight
+    if(!confirm(`Add a shift ${dnm(d)} ${tm(t1)} – ${tm(t2)} (${hm((t2 - t1) / 36e5)})?`)) return;
+    b.disabled = true;
+    if(err(await sb.rpc("clock_add", { p_user:u, p_kind:"in", p_at:t1.toISOString(), p_note:n || "Shift added by a manager" }))) { b.disabled = false; return; }
+    if(err(await sb.rpc("clock_add", { p_user:u, p_kind:"out", p_at:t2.toISOString(), p_note:n || "Shift added by a manager" }))) { b.disabled = false; re(); return; }
+    re(); });
+  v.querySelectorAll("[data-tadd]").forEach(b => b.onclick = async () => { const u = b.dataset.tadd, d = v.querySelector(`[data-td="${u}"]`).value,
+      e = v.querySelector(`[data-te="${u}"]`).value || d, k = v.querySelector(`[data-tk="${u}"]`).value, n = v.querySelector(`[data-tn="${u}"]`).value;
+    if(!d) return alert("Pick the first day.");
+    if(e < d) return alert("The last day is before the first day.");
+    if(!confirm(`Add ${k === "pto" ? "paid" : "unpaid"} time off ${dnm(d)}${e !== d ? " – " + dnm(e) : ""}? It's approved right away.`)) return;
+    b.disabled = true;
+    if(err(await sb.rpc("timeoff_add_for", { p_user:u, p_kind:k, p_day:d, p_end_day:e, p_all_day:true, p_start:null, p_end:null, p_reason:n || null }))) { b.disabled = false; return; }
+    re(); });
   v.querySelectorAll("[data-ok]").forEach(b => b.onclick = async () => { if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.ok, p_status:"ok", p_note:null }))) re(); });
   v.querySelectorAll("[data-no]").forEach(b => b.onclick = async () => { const n = prompt("Why? (they'll see it)"); if(n === null) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.no, p_status:"denied", p_note:n }))) re(); });
   v.querySelectorAll("[data-off]").forEach(b => b.onclick = async () => { const n = prompt("Why should this punch stop counting? (kept in the log)"); if(!n) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.off, p_status:"off", p_note:n }))) re(); });
