@@ -79,7 +79,7 @@ b,strong{font-weight:800}
 /* forms */
 .field{display:block;margin:10px 0}
 .field span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:700}
-input,select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line-2);border-radius:13px;padding:10px 13px;background:var(--card);color:var(--ink)}
+input:where(:not([type=checkbox],[type=radio])),select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line-2);border-radius:13px;padding:10px 13px;background:var(--card);color:var(--ink)}
 input:focus,select:focus,textarea:focus{outline:3px solid var(--moose-soft);border-color:var(--moose)}
 input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--forest-2)}
 .big{font-size:28px;letter-spacing:5px;font-weight:800;text-align:center}
@@ -129,7 +129,7 @@ button.stat.on{border-color:var(--forest-2);box-shadow:0 0 0 2px var(--forest-2)
 .master{font-size:18px;margin-top:8px}
 @media print{ .tabs,header,nav,#rgo,#rcsv,#rprint,.chips{display:none!important} .card{box-shadow:none!important;border:1px solid #ccc} }
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;padding:16px;overflow:auto}
-.hoodpick{position:relative}.hoodpick input{width:100%;padding-right:48px!important}
+.hoodpick{position:relative}.hoodpick input:where(:not([type=checkbox],[type=radio])){width:100%;padding-right:48px!important}
 .hp-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:22px;padding:6px 10px;cursor:pointer;color:var(--ink,#222)}
 .hp-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;max-height:300px;overflow:auto;background:var(--card,#fff);border:2px solid var(--moose);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .hp-row{display:flex;flex-direction:column;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:16px}.hp-row:last-child{border-bottom:0}
@@ -143,7 +143,7 @@ button.stat.on{border-color:var(--forest-2);box-shadow:0 0 0 2px var(--forest-2)
 .scf .sch{display:flex;align-items:center;gap:10px;margin-bottom:12px} .scf .sch b{flex:1;font-size:18px}
 .scf .schome{font-weight:800;font-size:15px;margin:-4px 0 12px;color:var(--pine,#2f4a12)}
 .scf .scl{display:block;font-weight:700;font-size:13px;margin:0 0 12px;min-width:0} .scf .scl small{font-weight:400;color:var(--muted)}
-.scf .scl input,.scf .scl select{display:block;width:100%;min-width:0;margin-top:5px;font-size:15px;padding:10px 12px}
+.scf .scl input:where(:not([type=checkbox],[type=radio])),.scf .scl select{display:block;width:100%;min-width:0;margin-top:5px;font-size:15px;padding:10px 12px}
 .scf div.scl{margin-bottom:6px}
 .scf .sct{margin:0 0 12px;gap:6px} .scf .scq{margin:-4px 0 12px;gap:6px}
 .scf .sc2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
@@ -207,7 +207,7 @@ details.status>summary .chev{transition:transform .15s;color:var(--muted,#6b7280
 details.status>summary::after{position:absolute;right:4px;top:12px} details.status[open] .sdots{display:none} details.status[open]>summary{margin-bottom:6px}
 .reveal{cursor:pointer;border:1px dashed var(--line-2);border-radius:9px;padding:3px 9px;font-weight:800;color:var(--ink-2);background:var(--ground)}
 .pwwrap{position:relative;display:block}
-.pwwrap input{width:100%;padding-right:52px !important;box-sizing:border-box}
+.pwwrap input:where(:not([type=checkbox],[type=radio])){width:100%;padding-right:52px !important;box-sizing:border-box}
 .pweye{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:22px;line-height:1;padding:8px 10px;cursor:pointer;color:inherit;min-width:44px;min-height:44px}
 </style>
 </head>
