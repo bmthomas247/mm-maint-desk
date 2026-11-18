@@ -383,7 +383,7 @@ async function meetTiles(v){
       ${(m.moves || []).filter(x => (x.to || x.from) >= t || x.from >= t).map(x => `<div class="when" style="color:#8a5a00">${x.kind === "skip" ? "⏭ No meeting " + esc(fday(x.from)) : "↪ " + esc(fday(x.from)) + " moved to " + esc(fday(x.to)) + (x.start ? " · " + esc(ftime(x.start)) : "")}${x.note ? " (" + esc(x.note) + ")" : ""}</div>`).join("")}
       <div class="muted" style="font-size:13px;margin-top:6px" data-agenda="${m.meet}">${m.meet === "meet_maint" ? "Projects, owner jobs and repeat problems from the Maintenance desk." : "Checking what's coming up…"}</div>
       ${m.open_tasks != null ? `<div style="margin-top:6px;font-size:13px"><b>${m.open_tasks} open task${m.open_tasks === 1 ? "" : "s"}</b>${(m.tasks || []).length ? `<ul>${m.tasks.map(x => `<li>${esc(x.text)}${x.who ? " · " + esc(x.who) : ""}${x.due ? " · due " + esc(fday(x.due)) : ""}</li>`).join("")}</ul>` : ""}</div>` : ""}</a>
-      <div class="row"><a class="btn small primary" href="#/${m.meet}">Open agenda</a>${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">▶ Join</a>` : ""}${ME.admin ? `<button class="btn small" data-settime="${m.meet}">${m.start ? "Change day & time" : "Set day & time"}</button><button class="btn small" data-mvone="${m.meet}">Move one meeting</button>` : ""}</div></div>`; };
+      <div class="row"><a class="btn small primary" href="#/${m.meet}">Open agenda</a>${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">▶ Join</a>` : ""}${ME.admin ? `<button class="btn small" data-settime="${m.meet}">${m.start ? "Change day & time" : "Set day & time"}</button><button class="btn small" data-mvone="${m.meet}">Move one meeting</button><button class="btn small" data-jlink="${m.meet}">${m.link ? "Change join link" : "+ Join link"}</button>` : ""}</div></div>`; };
   v.innerHTML = `<div class="page cal calwide">${tabs("cal_meet")}<div class="chead"><h2>Weekly meetings</h2></div>
     ${ms.length ? `<div class="tiles">${ms.map(tile).join("")}</div>` : `<div class="card"><p class="muted" style="margin:0">No weekly meetings on your calendar.</p></div>`}
     <p class="muted" style="font-size:12px">Times: ${esc([...new Set(ms.filter(m => m.start).map(m => NAMES[m.meet] + " from " + m.source))].join("; ") || "not set yet")}.</p></div>`;
@@ -420,6 +420,16 @@ async function meetTiles(v){
       const r = await sb.rpc("meeting_sched_set2", { p_meet:m.meet, p_day:q("#ms_d").value || null, p_repeat:q("#ms_r").value, p_start:st || null, p_minutes:st ? +q("#ms_m").value : null });
       if(r.error){ sv.disabled = false; sv.textContent = "Save"; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       close(); meetTiles(v); };
+  });
+  v.querySelectorAll("[data-jlink]").forEach(b => b.onclick = async () => {
+    const m = ms.find(x => x.meet === b.dataset.jlink);
+    const u = prompt(`Paste the Zoom / Google Meet / Teams link for ${NAMES[m.meet] || "this meeting"}.
+It shows as ▶ Join for everyone who can open the meeting.`, "");
+    if (u == null || !u.trim()) return;
+    if (!/^https:\/\//.test(u.trim())) { alert("The link must start with https://"); return; }
+    const r = await sb.rpc("meeting_link_set", { p_meet:m.meet, p_url:u.trim(), p_label:/meet\.google/.test(u) ? "Google Meet" : /zoom\.us/.test(u) ? "Zoom" : /teams\./.test(u) ? "Teams" : "" });
+    if (r.error) { alert((window.niceErr ? niceErr(r.error) : r.error.message)); return; }
+    meetTiles(v);
   });
   v.querySelectorAll("[data-mvone]").forEach(b => b.onclick = () => moveOne(ms.find(x => x.meet === b.dataset.mvone), null, () => meetTiles(v)));
   ms.filter(m => m.meet !== "meet_maint").forEach(async m => {
