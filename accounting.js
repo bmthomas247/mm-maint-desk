@@ -344,7 +344,7 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
   const p = PC.byId.get(o.user) || {}, add = !o.inId;
   const d = document.createElement("div"); d.id = "acdlg"; d.className = "acdlg";
   d.innerHTML = `<div class="box acct"><h3 style="margin:0 0 10px">${add ? "Add a missing shift" : "Change a shift"} · ${H(p.name || "")}</h3>
-    <label class="note">Day <input type="date" id="sdDay" value="${H(o.inAt ? pcDay(o.inAt) : (A.from || ""))}" ${add ? "" : "disabled"}></label>
+    <label class="note">Day <input type="date" id="sdDay" value="${H(o.inAt ? pcDay(o.inAt) : (A.from || ""))}"></label>${add ? "" : `<span class="note"> change the day to move the shift</span>`}
     <div style="display:flex;gap:10px;margin:8px 0"><label class="note">Clock in <input type="time" id="sdIn" value="${H(pcHm(o.inAt))}"></label>
     <label class="note">Clock out <input type="time" id="sdOut" value="${H(pcHm(o.outAt))}"></label></div>
     <label class="note" style="display:block">Why? (they and the managers see this) <input type="text" id="sdWhy" maxlength="300" style="width:100%" placeholder="e.g. forgot to clock out, left at 5"></label>
@@ -373,7 +373,8 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
   const bJoin = d.querySelector("#sdJoin"); if(bJoin) bJoin.onclick = () => offAll([o.outId, bJoin.dataset.in], "Join it with the next shift? The clock-out and clock-in between them are taken off, so it counts as one shift.");
   d.querySelector("#sdOk").onclick = async () => {
     const er = d.querySelector("#sdErr"), why = d.querySelector("#sdWhy").value.trim();
-    const day = add ? d.querySelector("#sdDay").value : pcDay(o.inAt), tin = d.querySelector("#sdIn").value, tout = d.querySelector("#sdOut").value;
+    const day = d.querySelector("#sdDay").value, tin = d.querySelector("#sdIn").value, tout = d.querySelector("#sdOut").value;
+    const move = !add && day && day !== pcDay(o.inAt);   // 2026-11-18 (Brandon): move a shift to another day
     if(!why){ er.textContent = "Say why (they and the managers see it)."; return; }
     if(!day || !tin){ er.textContent = "Pick the day and the clock-in time."; return; }
     const inIso = pcIso(day, tin);
@@ -382,7 +383,11 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
     const btn = d.querySelector("#sdOk"); btn.disabled = true; btn.textContent = "Saving…"; er.textContent = "";
     try {
       const run = async (fn, args) => { const r = await sb.rpc(fn, args); if(r.error) throw r.error; };
-      if(add){
+      if(move){   // new shift on the new day first, then the old punches set off (nothing deleted)
+        await run("clock_add", { p_user:o.user, p_kind:"in", p_at:inIso, p_note:"Moved from " + pcDay(o.inAt) + ": " + why });
+        if(outIso) await run("clock_add", { p_user:o.user, p_kind:"out", p_at:outIso, p_note:"Moved from " + pcDay(o.inAt) + ": " + why });
+        for(const id of [o.outId, o.inId].filter(Boolean)) await run("clock_decide", { p_id:Number(id), p_status:"off", p_note:"Moved to " + day + ": " + why });
+      } else if(add){
         await run("clock_add", { p_user:o.user, p_kind:"in", p_at:inIso, p_note:why });
         if(outIso) await run("clock_add", { p_user:o.user, p_kind:"out", p_at:outIso, p_note:why });
       } else {
