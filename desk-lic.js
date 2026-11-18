@@ -266,21 +266,25 @@ window.MM_LIC = function(A){
   function noteWhen(n){ return n.src === "import" && /^From the license sheet/.test(n.by_name || "") ? "" : A.fmtD(String(n.at).slice(0, 10)); }
   function lastNote(r){ return S.licNotes.filter(function(n){ return n.code === r.code && (!n.license_id || n.license_id === r.id); })[0] || null; }
 
+  /* one license = one full-width row (Jeff 2026-11-18: no white space): home | what to do + details + last note | status | buttons */
   function card(it, ed){ var r = it.r, c = it.c, st = r.virtual ? null : A.dueState(r.expires), ln = r.virtual ? null : lastNote(r), sc = sheetChanged(r);
-    var tone = c.g === "today" ? "stop" : c.g === "renew" ? "wait" : c.g === "good" ? "go" : c.g === "park" ? "mute" : "info";
+    var tone = c.g === "today" ? "stop" : c.g === "renew" ? "wait" : c.g === "good" ? "go" : c.g === "park" ? "mute" : "info", meta = [];
+    if(r.lic_no) meta.push('License # <b class="mono">'+esc(r.lic_no)+'</b>');
+    if(r.paid === "not_paid") meta.push('<span class="lwbad">not paid</span>');
+    if(r.step && !/^(waiting|park|insp)$/.test(c.g) && r.step !== "licensed") meta.push(esc(lstepName(r.step))+(r.step_on ? ' '+esc(A.fmtD(r.step_on)) : ''));
+    if(sc) meta.push('<span class="lwbad">Dropbox sheet changed — open to check</span>');
+    if(psuLine(r)) meta.push('<span class="lwpsu">'+esc(psuLine(r))+'</span>');
+    var nt = ln ? noteText(ln) : "";
     return '<div class="lwc t-'+tone+(S.licSel[r.id] ? ' sel' : '')+'"'+(r.virtual ? '' : ' data-lwopen="'+r.id+'" tabindex="0" role="button" aria-label="Open '+esc(r.code)+' '+esc(kName(r))+'"')+'>'+
-      '<div class="lwc1">'+(ed && !r.virtual ? '<label class="lwsel" title="Pick to change several at once"><input type="checkbox" data-lwsel="'+r.id+'"'+(S.licSel[r.id] ? ' checked' : '')+' aria-label="Pick '+esc(r.code)+'"></label>' : '')+
-        '<b class="lwcode">'+esc(r.code)+'</b><span class="lwk">'+esc(kName(r))+'</span>'+(st ? A.duePill(st) : '<span class="pill mute">No license on file</span>')+'</div>'+
-      '<div class="lwwhy">'+esc(c.why)+'</div>'+
-      (r.lic_no || r.paid === "not_paid" ? '<div class="lwmeta">'+(r.lic_no ? 'License # <b class="mono">'+esc(r.lic_no)+'</b>' : '')+(r.paid === "not_paid" ? (r.lic_no ? ' · ' : '')+'<span class="lwbad">not paid</span>' : '')+'</div>' : '')+
-      (r.step && !/^(waiting|park|insp)$/.test(c.g) && r.step !== "licensed" ? '<div class="lwmeta">'+esc(lstepName(r.step))+(r.step_on ? ' · '+esc(A.fmtD(r.step_on)) : '')+'</div>' : '')+
-      (sc ? '<div class="lwmeta lwbad">The Dropbox sheet changed — open to check</div>' : '')+
-      (psuLine(r) ? '<div class="lwmeta lwpsu">'+esc(psuLine(r))+'</div>' : '')+
-      (ln ? '<div class="lwnote">💬 <b>'+esc(noteWho(ln))+'</b>'+(noteWhen(ln) ? ', '+esc(noteWhen(ln)) : '')+': '+linky(noteText(ln).length > 140 ? noteText(ln).slice(0, 140)+"…" : noteText(ln))+'</div>' : '')+
-      '<div class="lwact">'+(r.virtual ? (ed ? '<button class="btn sm pri" data-lwstart="'+esc(r.code)+'|'+esc(guessKind(r.code))+'">+ Start a license</button>' : '<span class="lwmeta">Not on any license sheet yet</span>') :
+      '<div class="lwcA">'+(ed && !r.virtual ? '<label class="lwsel" title="Pick to change several at once"><input type="checkbox" data-lwsel="'+r.id+'"'+(S.licSel[r.id] ? ' checked' : '')+' aria-label="Pick '+esc(r.code)+'"></label>' : '')+'</div>'+
+      '<div class="lwcB"><b class="lwcode">'+esc(r.code)+'</b><span class="lwk">'+esc(kName(r))+'</span></div>'+
+      '<div class="lwcC"><div class="lwwhy">'+esc(c.why)+'</div>'+(meta.length ? '<div class="lwmeta">'+meta.join(' · ')+'</div>' : '')+
+        (ln ? '<div class="lwnote" title="'+esc(nt)+'">💬 <b>'+esc(noteWho(ln))+'</b>'+(noteWhen(ln) ? ', '+esc(noteWhen(ln)) : '')+': '+linky(nt)+'</div>' : '')+'</div>'+
+      '<div class="lwcD">'+(st ? A.duePill(st) : '<span class="pill mute">No license on file</span>')+'</div>'+
+      '<div class="lwact">'+(r.virtual ? (ed ? '<button class="btn sm pri" data-lwstart="'+esc(r.code)+'|'+esc(guessKind(r.code))+'">+ Start a license</button>' : '') :
         '<button class="btn sm'+(ed && c.g !== "good" ? ' pri' : '')+'" data-lwopenb="'+r.id+'">'+(ed ? 'Update' : 'Open')+'</button>'+
-        (ed && /^(today|renew|waiting)$/.test(c.g) ? ' <button class="btn sm ghost" data-lwrenew="'+r.id+'">✓ Renewed</button>' : '')+
-        (canNote() ? ' <button class="btn sm ghost" data-lwnq="'+r.id+'">📝 Note</button>' : ''))+'</div></div>'; }
+        (ed && /^(today|renew|waiting)$/.test(c.g) ? '<button class="btn sm ghost" data-lwrenew="'+r.id+'">✓ Renewed</button>' : '')+
+        (canNote() ? '<button class="btn sm ghost" data-lwnq="'+r.id+'">📝 Note</button>' : ''))+'</div></div>'; }
 
   function filtered(all){ var u = S.ui, q = String(u.lwQ || "").trim().toLowerCase();
     return all.filter(function(it){ var r = it.r;
@@ -439,16 +443,17 @@ window.MM_LIC = function(A){
       '.lwgh{display:flex;align-items:center;gap:8px;margin:16px 2px 8px;font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}'+
       '.lwgh span{background:var(--line);color:var(--ink-2);border-radius:999px;padding:1px 8px;letter-spacing:0}'+
       '.lwlink{appearance:none;border:0;background:none;padding:0;color:var(--go);font:inherit;font-weight:700;cursor:pointer;text-transform:none;letter-spacing:0;font-size:12.5px;text-decoration:underline}'+
-      '.lwgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}'+
-      '.lwc{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line-2);border-radius:18px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;box-shadow:var(--shadow);min-width:0}'+
+      '.lwgrid{display:flex;flex-direction:column;gap:6px}'+
+      '.lwc{display:grid;grid-template-columns:20px minmax(130px,170px) minmax(0,1fr) auto auto;grid-template-areas:"a b c d e";align-items:center;gap:4px 14px;background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line-2);border-radius:14px;padding:9px 12px;cursor:pointer;box-shadow:var(--shadow);min-width:0}'+
+      '.lwcA{grid-area:a}.lwcB{grid-area:b;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}.lwcC{grid-area:c;min-width:0}.lwcD{grid-area:d;white-space:nowrap;text-align:right}'+
       '.lwc:hover{box-shadow:0 8px 20px rgba(23,48,12,.12)}.lwc:focus-visible{outline:3px solid #c7e86b}'+
       '.lwc.t-stop{border-left-color:var(--stop)}.lwc.t-wait{border-left-color:var(--wait)}.lwc.t-go{border-left-color:var(--go)}.lwc.t-info{border-left-color:var(--info)}.lwc.sel{background:var(--go-soft)}'+
       '.lwc1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.lwc1 .pill{margin-left:auto}.lwcode{font-size:16px}'+
       '.lwk{font-size:11.5px;font-weight:700;background:var(--line-2);border-radius:999px;padding:2px 8px;color:var(--ink-2)}'+
-      '.lwwhy{font-weight:700;font-size:14px}.lwmeta{font-size:12.5px;color:var(--muted)}.lwbad{color:var(--stop);font-weight:700}'+
+      '.lwwhy{font-weight:700;font-size:14px;line-height:1.3}.lwmeta{font-size:12.5px;color:var(--muted);margin-top:2px}.lwbad{color:var(--stop);font-weight:700}'+
       '.lwpsu{color:var(--info);font-weight:700}.lwpsub{background:var(--info-soft)}'+
-      '.lwnote{font-size:12.5px;background:var(--surface-2);border-radius:10px;padding:6px 9px;color:var(--ink-2);line-height:1.35;overflow-wrap:anywhere}'+
-      '.lwact{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:auto;padding-top:4px}'+
+      '.lwnote{font-size:12.5px;color:var(--ink-2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+      '.lwact{grid-area:e;display:flex;gap:6px;align-items:center;justify-content:flex-end}.lwact .btn{white-space:nowrap}'+
       '.lwsel{display:inline-flex}.lwsel input{width:18px;height:18px;margin:0;cursor:pointer}'+
       '.lwbulk{position:sticky;bottom:10px;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#17300c;color:#fff;border-radius:16px;padding:10px 14px;margin-top:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}'+
       '.lwbulk label{display:inline-flex;gap:5px;align-items:center;font-size:12.5px}.lwbulk select,.lwbulk input{width:auto;border-radius:10px;border:0;padding:6px 8px;font:inherit;font-size:13px}'+
@@ -465,6 +470,7 @@ window.MM_LIC = function(A){
       '.lwnl .lwn{border-top:1px solid var(--line);padding:8px 0;font-size:13.5px;overflow-wrap:anywhere}.lwnby{font-size:12px;color:var(--muted);margin-top:2px}'+
       '.lwdocs a{display:inline-block;margin:0 10px 6px 0}.lwup{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}.lwup input[type=file]{width:auto;flex:1 1 200px}.lwup select{width:auto}'+
       '.lwhist{margin-top:12px}.lwhist>summary{cursor:pointer;font-weight:800;font-size:13px}'+
+      '@media (max-width:900px){.lwc{grid-template-columns:20px minmax(0,1fr) auto;grid-template-areas:"a b d" ". c c" "e e e"}.lwcB{flex-direction:row;flex-wrap:wrap;align-items:center}.lwact{justify-content:flex-start;flex-wrap:wrap;margin-top:4px}.lw .lwact .btn{padding:0 9px!important;font-size:13px}}'+
       '@media (max-width:640px){.lwtiles{grid-template-columns:repeat(3,minmax(0,1fr))}.lwt{padding:8px 9px}.lwt b{font-size:20px}.lwt span{font-size:11px}.lwhead{padding:16px 14px 12px}}';
     document.head.appendChild(s); }
 
