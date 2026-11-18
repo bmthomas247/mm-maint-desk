@@ -7,7 +7,7 @@
 (function(){
 const TABS = [["payroll", "Payroll hours"], ["maint", "Maintenance spending"], ["bookings", "Bookings & payouts"], ["owner", "Owner charges"]];
 const PAY_ANCHOR = "2026-11-02";   // first pay period (Mon); every other Monday after (Brandon 2026-10-29)
-const A = { tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
+const A = { stc:{}, tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const H = s => esc(s == null ? "" : String(s));
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -75,6 +75,19 @@ function css(){
 .acct button.tile{text-align:left;cursor:pointer;width:auto;font:inherit;color:inherit} .acct button.tile:hover{border-color:var(--ac-green)} .acct button.tile.on{border-color:var(--ac-green);box-shadow:0 0 0 2px var(--ac-green) inset}
 .acct .ckb{background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;width:auto;min-height:0;text-decoration:underline dotted;text-underline-offset:3px} .acct .ckb.on{font-weight:800;text-decoration:underline;color:var(--ac-forest)}
 .acct .tfnote{margin:0 2px 8px}
+.acct .btn2.sm{min-height:30px;padding:3px 10px;font-size:13px}
+.acct .lnk{background:none;border:0;padding:0;color:var(--ac-forest);text-decoration:underline;font:inherit;font-size:13px;cursor:pointer;width:auto;min-height:0}
+.acct .pen{background:none;border:1px solid var(--line-2,#cfd8cb);border-radius:8px;padding:0 6px;min-height:24px;font-size:13px;cursor:pointer;width:auto;color:var(--ac-forest)}
+.acct .ckl li{margin:2px 0;padding:6px 6px;border-radius:10px;font-size:14.5px} .acct .ckl li label{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.acct .ckl li input{width:18px;height:18px;min-height:0;margin-top:2px;flex:0 0 auto;accent-color:var(--ac-green)}
+.acct .ckl li.done span{color:var(--muted);text-decoration:line-through} .acct .ckl li.done .note{text-decoration:none}
+.acct .ckl li.info{padding-left:32px}
+.acct .apcard{border-left:5px solid #c9a227} .acct .apcard.allok{border-left-color:var(--ac-green)} .acct .ok{color:#2e7d32;font-weight:700}
+.acct td.apc{white-space:nowrap}
+.acct details.ext summary{cursor:pointer;font-size:15px;padding:2px}
+.acdlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999;display:grid;place-items:center;padding:16px}
+.acdlg .box{background:var(--card,#fff);border-radius:16px;padding:16px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.acdlg input{min-height:36px;border-radius:10px;border:1px solid var(--line-2,#cfd8cb);padding:0 8px;font-size:15px}
 @media (max-width:700px){.acct .tile b{font-size:22px} .acct td,.acct th{padding:6px 5px}}
 @media print{body *{visibility:hidden!important} .acct,.acct *{visibility:visible!important} .acct{position:absolute;left:0;top:0;width:100%;max-width:none}
   .acct .noprint{display:none!important} .acct .card,.acct .tile{box-shadow:none} .acct .head{background:none;color:#000;border:1px solid #999} .acct tr.sub{display:table-row!important}}`;
@@ -107,88 +120,204 @@ async function load(tab){
 }
 
 // ---------- Payroll ----------
+// 2026-11-18 (Brandon): extended team (hub_pay_extended) clock in for our records but aren't on Moose payroll -> own folded card, left out of
+// totals / QuickBooks / CSVs. Salaried people get their own card. Managers approve each person's hours for the pay period (pay_approve;
+// Maria can pay without it, the pill just shows a manager checked them). "Check these" lines are check boxes (pay_check, kept by item key).
+// ✎ on a shift changes its times (clock_edit / clock_add; managers + admins for people they look after). Hubstaff is gone from this page.
+const SNAPK = ["reg_h", "hol_h", "ot_total", "pto_h", "other_h", "unpaid_h"];
+const PC = { st:null, canA:new Set(), apv:new Map(), ckm:new Map(), byId:new Map() };
+const fwhen = s => s ? new Date(s).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit", timeZone:"America/Denver" }) : "";
+function apState(p){
+  const a = PC.apv.get(p.id);
+  if(!a || !a.ok) return { s:"none", a };
+  const ch = a.snap && SNAPK.some(k => Math.abs((+a.snap[k] || 0) - (+p[k] || 0)) > 0.009);
+  return { s: ch ? "changed" : "ok", a };
+}
+function apPill(p){
+  const { s, a } = apState(p), can = PC.canA.has(p.id);
+  let h = s === "ok" ? `<span class="pill" title="${H(a.note || "")}">✓ Approved by ${H(a.by)} · ${fwhen(a.at)}</span>`
+    : s === "changed" ? `<span class="pill o" title="Approved ${fwhen(a.at)}">Hours changed after ${H(a.by)} approved</span>`
+    : `<span class="pill r">Not approved yet</span>`;
+  if(can && s !== "ok") h += ` <button type="button" class="btn2 sm noprint" data-apv="${p.id}">✓ Approve</button>`;
+  if(can && s === "ok") h += ` <button type="button" class="lnk noprint" data-unapv="${p.id}">undo</button>`;
+  return h;
+}
 function payroll(x){
-  const P = (x.people || []).filter(p => p.hub_h || p.hs_h || (p.timeoff || []).length || p.pending || p.open);
-  const idle = (x.people || []).length - P.length;
-  const hourly = P.filter(p => !p.salaried), ot = sum(hourly, p => sum(p.weeks || [], w => w.ot_h));
-  const chk = [];
-  if(x.from < "2026-10-30") chk.push(`<span class="warn">Hub clock-ins started Fri Oct 30, 2026. Days before that only have Hubstaff hours.</span>`);
-  P.forEach(p => {
-    if(p.pending) chk.push(`<b>${H(p.name)}</b>: ${p.pending} missed punch${p.pending > 1 ? "es" : ""} waiting for a manager's OK (not counted below).`);
-    if(p.open) chk.push(`<b>${H(p.name)}</b>: ${p.open} clock-in${p.open > 1 ? "s" : ""} with no clock-out yet.`);
-    (p.weeks || []).forEach(w => { if(w.ot_h > 0) chk.push(`<b>${H(p.name)}</b>: <span class="bad">${hh(w.ot_h)} h overtime</span> in the week of ${fday(w.start)}${w.partial ? " (week runs past these dates)" : ""}.`); });
-    if(p.hs_h != null && (p.hs_h || 0) - (p.hub_h || 0) >= 1 && !p.no_clock)   // Hubstaff stopped Nov 11-13, 2026: only flag when it has MORE than the hub
-      chk.push(`<b>${H(p.name)}</b>: hub clock ${hh(p.hub_h)} h vs Hubstaff ${hh(p.hs_h)} h. Ask which is right before paying.`);
-    if(p.edited) chk.push(`<b>${H(p.name)}</b>: ${p.edited} shift${p.edited > 1 ? "s" : ""} edited by hand (reason shown in the detail).`);
-    (p.shifts || []).filter(s => s.hours > 12).forEach(s => chk.push(`<b>${H(p.name)}</b>: <span class="bad">${hh(s.hours)} h shift</span> on ${fday(s.day)} (${ftime(s.in)} – ${ftime(s.out)}). Likely a missed clock-out; check with their manager before paying.`));
-  });
-  const pto = p => (p.pto || []).map(b => `${hh(b.hours)} h`).join(" + ");
+  const ST = PC.st || { approvals:[], can_approve:[], checks:[] };
+  PC.canA = new Set(ST.can_approve || []);
+  PC.apv = new Map((ST.approvals || []).map(a => [a.user_id, a]));
+  PC.ckm = new Map((ST.checks || []).map(c => [c.item, c]));
+  const has = p => p.hub_h || (p.timeoff || []).length || p.pending || p.open;
+  const ALL = x.people || [];
+  PC.byId = new Map(ALL.map(p => [p.id, p]));
+  const EXT = ALL.filter(p => p.extended && has(p));
+  const HR = ALL.filter(p => !p.extended && !p.salaried && has(p));
+  const SAL = ALL.filter(p => !p.extended && p.salaried);
+  const P = [...HR, ...SAL];   // on Moose payroll
+  const idle = ALL.filter(p => !p.extended && !p.salaried && !has(p)).length;
   const tot = p => (Number(p.reg_h) || 0) + (Number(p.hol_h) || 0) + (Number(p.ot_total) || 0) + (Number(p.pto_h) || 0) + (Number(p.other_h) || 0);
   const ptoLeft = p => (p.pto || []).map(b => `${hh(b.hours)} h`).join(" + ");
-  (x.holidays || []).forEach(h => chk.push(`<b>${H(h.name)}</b> (${fday(h.day)}) is a paid holiday: hours worked that day are in the Holiday column.`));
-  CSV.pay_sum = () => ["payroll_breakdown", [["Name", "Teams", "Pay type", "Regular hours", "Holiday hours (worked)", "Overtime hours", "PTO hours", "Other paid hours", "Total paid hours", "Unpaid time off hours", "PTO balance (hours left)", "Missed punches waiting"],
+  const z = n => Number(n) ? hh(n) : "–";
+
+  // ---- check list (each line = a check box, kept by key; ticked lines drop to the bottom)
+  const ck = [];   // {k, h} ; k null = info only
+  if(x.from < "2026-10-30") ck.push({ k:null, h:`<span class="warn">Hub clock-ins started Fri Oct 30, 2026. Days before that aren't in these hours.</span>` });
+  P.forEach(p => {
+    if(p.pending) ck.push({ k:`pend:${p.id}:${x.from}:${x.to}:${p.pending}`, h:`<b>${H(p.name)}</b>: ${p.pending} missed punch${p.pending > 1 ? "es" : ""} waiting for a manager's OK (not counted below).` });
+    (p.shifts || []).filter(s => !s.out).forEach(s => ck.push({ k:`open:${s.in_id}`, h:`<b>${H(p.name)}</b>: clocked in ${fday(s.day)} ${ftime(s.in)} with no clock-out.` }));
+    (p.weeks || []).forEach(w => { if(w.ot_h > 0) ck.push({ k:`ot:${p.id}:${w.start}:${hh(w.ot_h)}`, h:`<b>${H(p.name)}</b>: <span class="bad">${hh(w.ot_h)} h overtime</span> in the week of ${fday(w.start)}${w.partial ? " (week runs past these dates)" : ""}.` }); });
+    if(p.edited) ck.push({ k:`edit:${p.id}:${x.from}:${x.to}:${p.edited}`, h:`<b>${H(p.name)}</b>: ${p.edited} shift${p.edited > 1 ? "s" : ""} edited by hand (reason shown in the detail).` });
+    (p.shifts || []).filter(s => s.hours > 12).forEach(s => ck.push({ k:`long:${s.in_id}:${s.out_id}`, h:`<b>${H(p.name)}</b>: <span class="bad">${hh(s.hours)} h shift</span> on ${fday(s.day)} (${ftime(s.in)} – ${ftime(s.out)}). Likely a missed clock-out; fix it with ✎ in their detail.` }));
+  });
+  (x.holidays || []).forEach(h => ck.push({ k:null, h:`<b>${H(h.name)}</b> (${fday(h.day)}) is a paid holiday: hours worked that day are in the Holiday column.` }));
+  const ckRow = c => {
+    if(!c.k) return `<li class="info">${c.h}</li>`;
+    const d = PC.ckm.get(c.k), done = d && d.done;
+    return `<li class="${done ? "done" : ""}"><label><input type="checkbox" data-ck="${H(c.k)}" ${done ? "checked" : ""}> <span>${c.h}</span></label>${done ? ` <span class="note">✓ ${H(d.by || "")}, ${fwhen(d.at)}</span>` : ""}</li>`;
+  };
+  const open = ck.filter(c => c.k && !(PC.ckm.get(c.k) || {}).done), shut = ck.filter(c => c.k && (PC.ckm.get(c.k) || {}).done), info = ck.filter(c => !c.k);
+  const checkCard = `<div class="card"><h3 style="margin-top:0">Check these <span class="note" style="text-transform:none;letter-spacing:0">${open.length ? `${open.length} left` : ck.some(c => c.k) ? "all checked ✓" : ""}</span></h3>
+    <ul class="checks ckl" style="margin:0;padding-left:4px;list-style:none">${[...open, ...info, ...shut].map(ckRow).join("") || `<li class="ok">Nothing to check. Everything lines up.</li>`}</ul>
+    <p class="src">Tick a line once it's sorted out; everyone with Payroll sees who ticked it and when.</p></div>`;
+
+  // ---- manager approval
+  const need = P.filter(p => tot(p) > 0 || Number(p.unpaid_h));
+  const okN = need.filter(p => apState(p).s === "ok").length;
+  const mine = need.filter(p => PC.canA.has(p.id) && apState(p).s !== "ok");
+  const notOk = need.filter(p => apState(p).s !== "ok");
+  const apCard = `<div class="card apcard ${okN === need.length && need.length ? "allok" : ""}"><h3 style="margin-top:0">Manager approval <span class="noprint">${mine.length ? `<button type="button" class="btn2 pri" data-apvall="${mine.map(p => p.id).join(",")}">✓ Approve ${mine.length === 1 ? H(mine[0].name) : `all ${mine.length} of your people`}</button>` : ""}</span></h3>
+    <p style="margin:0 2px 6px;font-size:16px"><b>${okN} of ${need.length}</b> ${need.length === 1 ? "person" : "people"} approved for ${fdate(x.from)} – ${fdate(x.to)}.</p>
+    ${notOk.length ? `<p class="note" style="margin:0 2px">Still waiting: ${notOk.map(p => `${H(p.name)}${apState(p).s === "changed" ? " (hours changed after approval)" : ""}`).join(", ")}.</p>` : need.length ? `<p class="ok" style="margin:0 2px">✓ Every person's hours have been approved by a manager.</p>` : ""}
+    <p class="src">A manager approves the hours of the people they look after (admins approve anyone). Approving isn't required to pay; it shows a manager checked the hours. If hours change after approval, it asks again.</p></div>`;
+
+  // ---- CSVs (Moose payroll only)
+  const apTxt = p => { const { s, a } = apState(p); return s === "ok" ? `${a.by} ${fwhen(a.at)}` : s === "changed" ? `changed after ${a.by} approved` : ""; };
+  const QB = P.filter(p => tot(p) > 0 || Number(p.unpaid_h));
+  CSV.pay_qb = () => ["quickbooks_payroll_" + x.from + "_to_" + x.to, [["Pay period", "Employee", "Pay type", "Regular Pay (hrs)", "Overtime Pay (hrs)", "Holiday Pay (hrs)", "Paid Time Off (hrs)", "Other paid (hrs)", "Total hours", "PTO balance for pay stub (hrs)", "Unpaid time off (hrs, not paid)", "Approved by"],
+    ...QB.map(p => [`${x.from} to ${x.to}`, p.name, p.salaried ? "Salaried" : "Hourly", hh(p.reg_h), hh(p.ot_total), hh(p.hol_h), hh(p.pto_h), hh(p.other_h), hh(tot(p)), (p.pto || []).map(b => hh(b.hours)).join(" + "), hh(p.unpaid_h), apTxt(p)])]];
+  CSV.pay_sum = () => ["payroll_breakdown", [["Name", "Teams", "Pay type", "Regular hours", "Holiday hours (worked)", "Overtime hours", "PTO hours", "Other paid hours", "Total paid hours", "Unpaid time off hours", "PTO balance (hours left)", "Missed punches waiting", "Approved by"],
     ...P.map(p => [p.name, (p.teams || []).join("; "), p.salaried ? "Salaried" : "Hourly", hh(p.reg_h), hh(p.hol_h), hh(p.ot_total), hh(p.pto_h), hh(p.other_h), hh(tot(p)),
-      hh(p.unpaid_h), (p.pto || []).map(b => hh(b.hours)).join(" + "), p.pending || 0]),
-    ["Total", "", "", hh(sum(P, p => p.reg_h)), hh(sum(P, p => p.hol_h)), hh(sum(P, p => p.ot_total)), hh(sum(P, p => p.pto_h)), hh(sum(P, p => p.other_h)), hh(sum(P, tot)), hh(sum(P, p => p.unpaid_h)), "", ""]]];
-  CSV.pay_days = () => ["payroll_by_day", [["Name", "Date", "Holiday", "Regular", "Holiday hours (worked)", "Overtime", "PTO", "Other paid", "Total paid", "Unpaid off", "Clocked (hub)", "Hubstaff"],
-    ...P.flatMap(p => (p.days || []).filter(d => d.hub_h || d.hs_h || d.pto || d.other || d.unpaid).map(d => [p.name, d.day, d.holiday || "", hh(d.reg), hh(d.hol), hh(d.ot), hh(d.pto), hh(d.other),
-      hh((+d.reg || 0) + (+d.hol || 0) + (+d.ot || 0) + (+d.pto || 0) + (+d.other || 0)), hh(d.unpaid), hh(d.hub_h), d.hs_h == null ? "" : hh(d.hs_h)]))]];
+      hh(p.unpaid_h), (p.pto || []).map(b => hh(b.hours)).join(" + "), p.pending || 0, apTxt(p)]),
+    ["Total", "", "", hh(sum(P, p => p.reg_h)), hh(sum(P, p => p.hol_h)), hh(sum(P, p => p.ot_total)), hh(sum(P, p => p.pto_h)), hh(sum(P, p => p.other_h)), hh(sum(P, tot)), hh(sum(P, p => p.unpaid_h)), "", "", ""]]];
+  CSV.pay_days = () => ["payroll_by_day", [["Name", "Date", "Holiday", "Regular", "Holiday hours (worked)", "Overtime", "PTO", "Other paid", "Total paid", "Unpaid off", "Clocked"],
+    ...P.flatMap(p => (p.days || []).filter(d => d.hub_h || d.pto || d.other || d.unpaid).map(d => [p.name, d.day, d.holiday || "", hh(d.reg), hh(d.hol), hh(d.ot), hh(d.pto), hh(d.other),
+      hh((+d.reg || 0) + (+d.hol || 0) + (+d.ot || 0) + (+d.pto || 0) + (+d.other || 0)), hh(d.unpaid), hh(d.hub_h)]))]];
   CSV.pay_shifts = () => ["payroll_punches", [["Name", "Date", "Clock in", "Clock out", "Hours", "Edited", "Edit reason", "Added by hand"],
     ...P.flatMap(p => (p.shifts || []).map(s => [p.name, s.day, ftime(s.in), s.out ? ftime(s.out) : "still in", s.hours == null ? "" : hh(s.hours), s.edited ? "yes" : "", s.note || "", s.added ? "yes" : ""]))]];
   CSV.pay_pto = () => ["payroll_pto_balances", [["Name", "Policy", "Hours left", "As of"],
     ...P.flatMap(p => (p.pto || []).map(b => [p.name, b.policy || "", hh(b.hours), b.as_of ? new Date(b.as_of).toLocaleDateString() : ""]))]];
   CSV.pay_off = () => ["payroll_time_off", [["Name", "From", "To", "Hours", "Kind", "Policy", "Paid", "Approved by"],
     ...P.flatMap(p => (p.timeoff || []).map(t => [p.name, t.from, t.to, hh(t.hours), t.kind, t.policy || "", t.paid ? "yes" : "no", t.approved_by || ""]))]];
-  const z = n => Number(n) ? hh(n) : "–";
-  // QuickBooks sheet (Brandon 2026-11-17: "something for her to submit into her quickbooks"): one line per person, columns named like the
-  // pay items on QuickBooks Online Payroll's Run payroll screen, in the order she types them. Standard QBO Payroll can't import split hours.
-  const QB = P.filter(p => tot(p) > 0 || Number(p.unpaid_h));
-  CSV.pay_qb = () => ["quickbooks_payroll_" + x.from + "_to_" + x.to, [["Pay period", "Employee", "Pay type", "Regular Pay (hrs)", "Overtime Pay (hrs)", "Holiday Pay (hrs)", "Paid Time Off (hrs)", "Other paid (hrs)", "Total hours", "PTO balance for pay stub (hrs)", "Unpaid time off (hrs, not paid)"],
-    ...QB.map(p => [`${x.from} to ${x.to}`, p.name, p.salaried ? "Salaried" : "Hourly", hh(p.reg_h), hh(p.ot_total), hh(p.hol_h), hh(p.pto_h), hh(p.other_h), hh(tot(p)), (p.pto || []).map(b => hh(b.hours)).join(" + "), hh(p.unpaid_h)])]];
+
   const qbCard = `<div class="card qb"><h3 style="margin-top:0">For QuickBooks <span class="noprint">${csvBtn("pay_qb", "QuickBooks CSV")}</span></h3>
-      <p class="note" style="margin:0 2px 8px">Pay period ${fdate(x.from)} – ${fdate(x.to)}. One line per person, in the same order as the pay items on QuickBooks' Run payroll screen. Type each number into that person's line, and put the PTO balance on their pay stub. Fix anything in "Check these" first.</p>
-      <div class="tw"><table><thead><tr><th>Employee</th><th class="n">Regular Pay</th><th class="n">Overtime Pay</th><th class="n">Holiday Pay</th><th class="n">Paid Time Off</th><th class="n">Other paid</th><th class="n">Total hours</th><th class="n">PTO balance</th></tr></thead>
-      <tbody>${QB.map(p => `<tr><td><b>${H(p.name)}</b>${p.salaried ? ` <span class="pill b">Salaried</span>` : ""}</td><td class="n">${z(p.reg_h)}</td><td class="n">${z(p.ot_total)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td><td class="n">${ptoLeft(p) || "–"}</td></tr>`).join("")
-        || `<tr><td colspan="8" class="note">No paid hours in these dates.</td></tr>`}
-      ${QB.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(QB, p => p.reg_h))}</td><td class="n">${hh(sum(QB, p => p.ot_total))}</td><td class="n">${hh(sum(QB, p => p.hol_h))}</td><td class="n">${hh(sum(QB, p => p.pto_h))}</td><td class="n">${hh(sum(QB, p => p.other_h))}</td><td class="n">${hh(sum(QB, tot))}</td><td></td></tr>` : ""}</tbody></table></div></div>`;
-  const rows = P.map((p, n) => {
-    const op = A.open["p" + n];
-    return `<tr class="click" data-open="p${n}"><td><b>${H(p.name)}</b> ${p.salaried ? `<span class="pill b">Salaried</span>` : ""}${p.no_clock ? `<span class="pill o">Doesn't clock in</span>` : ""}<br><span class="note">${H((p.teams || []).join(", "))}</span></td>
-      <td class="n">${z(p.reg_h)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${Number(p.ot_total) ? `<span class="bad">${hh(p.ot_total)}</span>` : "–"}</td>
-      <td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td>
-      <td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td>
-      <td class="noprint">${op ? "▴" : "▾"}</td></tr>` + (op ? `<tr class="sub"><td colspan="10">${payDetail(p)}</td></tr>` : "");
-  }).join("");
-  return `<div class="tiles">${tile(hh(sum(P, tot)), "Total paid hours", `${P.length} people`)}
+      <p class="note" style="margin:0 2px 8px">Pay period ${fdate(x.from)} – ${fdate(x.to)}. One line per person on Moose payroll, in the same order as the pay items on QuickBooks' Run payroll screen. Type each number into that person's line, and put the PTO balance on their pay stub.</p>
+      <div class="tw"><table><thead><tr><th>Employee</th><th class="n">Regular Pay</th><th class="n">Overtime Pay</th><th class="n">Holiday Pay</th><th class="n">Paid Time Off</th><th class="n">Other paid</th><th class="n">Total hours</th><th class="n">PTO balance</th><th>Manager</th></tr></thead>
+      <tbody>${QB.map(p => `<tr><td><b>${H(p.name)}</b>${p.salaried ? ` <span class="pill b">Salaried</span>` : ""}</td><td class="n">${z(p.reg_h)}</td><td class="n">${z(p.ot_total)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td><td class="n">${ptoLeft(p) || "–"}</td><td>${apState(p).s === "ok" ? `<span class="pill">✓ ${H(apState(p).a.by)}</span>` : apState(p).s === "changed" ? `<span class="pill o">changed</span>` : `<span class="pill r">not yet</span>`}</td></tr>`).join("")
+        || `<tr><td colspan="9" class="note">No paid hours in these dates.</td></tr>`}
+      ${QB.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(QB, p => p.reg_h))}</td><td class="n">${hh(sum(QB, p => p.ot_total))}</td><td class="n">${hh(sum(QB, p => p.hol_h))}</td><td class="n">${hh(sum(QB, p => p.pto_h))}</td><td class="n">${hh(sum(QB, p => p.other_h))}</td><td class="n">${hh(sum(QB, tot))}</td><td></td><td></td></tr>` : ""}</tbody></table></div></div>`;
+
+  const row = (p, cols, ncol) => { const k = "p" + p.id, op = A.open[k];
+    return `<tr class="click" data-open="${k}"><td><b>${H(p.name)}</b>${p.no_clock && !p.salaried ? `<span class="pill o">Doesn't clock in</span>` : ""}<br><span class="note">${H((p.teams || []).join(", "))}</span></td>${cols}<td class="noprint">${op ? "▴" : "▾"}</td></tr>`
+      + (op ? `<tr class="sub"><td colspan="${ncol}">${payDetail(p)}</td></tr>` : ""); };
+  const hrRows = HR.map(p => row(p, `<td class="n">${z(p.reg_h)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${Number(p.ot_total) ? `<span class="bad">${hh(p.ot_total)}</span>` : "–"}</td>
+      <td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td><td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td><td class="apc">${apPill(p)}</td>`, 11)).join("");
+  const salRows = SAL.map(p => row(p, `<td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td><td class="apc">${(tot(p) > 0 || Number(p.unpaid_h)) ? apPill(p) : `<span class="note">nothing to approve</span>`}</td>`, 7)).join("");
+  const extRows = EXT.map(p => row(p, `<td class="n">${hh(p.hub_h)}</td><td class="n">${(p.shifts || []).length}</td>`, 4)).join("");
+
+  return `<div class="tiles">${tile(hh(sum(P, tot)), "Total paid hours", `${QB.length} people on Moose payroll`)}
       ${tile(hh(sum(P, p => p.reg_h)), "Regular hours", "")}
       ${tile(hh(sum(P, p => p.ot_total)), "Overtime hours", `over 40 in a ${H(x.week_start)}–start workweek`)}
       ${tile(hh(sum(P, p => p.hol_h)), "Holiday hours", "worked on a paid holiday")}
-      ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}</div>
-    ${checks(chk)}
+      ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}
+      ${tile(`${okN}/${need.length}`, "Approved by a manager", okN === need.length && need.length ? "all approved ✓" : "")}</div>
+    ${apCard}
+    ${checkCard}
     ${qbCard}
-    <div class="card"><h3 style="margin-top:0">Hours by person <span class="noprint">${csvBtn("pay_sum", "Breakdown CSV")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")} ${csvBtn("pay_pto", "PTO balances CSV")}</span></h3>
+    <div class="card"><h3 style="margin-top:0">Hourly: hours by person <span class="noprint">${csvBtn("pay_sum", "Breakdown CSV")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")} ${csvBtn("pay_pto", "PTO balances CSV")}</span></h3>
       ${x.scope === "team" ? `<p class="note" style="margin:0 2px 8px">Showing the people you look after.</p>` : ""}
-      <div class="tw"><table><thead><tr><th>Person</th><th class="n">Regular</th><th class="n">Holiday</th><th class="n">Overtime</th><th class="n">PTO</th><th class="n">Other paid</th><th class="n">Total paid</th><th class="n">Unpaid off</th><th class="n">PTO left</th><th class="noprint"></th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="10" class="note">No hours in these dates.</td></tr>`}
-      ${P.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(P, p => p.reg_h))}</td><td class="n">${hh(sum(P, p => p.hol_h))}</td><td class="n">${hh(sum(P, p => p.ot_total))}</td><td class="n">${hh(sum(P, p => p.pto_h))}</td><td class="n">${hh(sum(P, p => p.other_h))}</td><td class="n">${hh(sum(P, tot))}</td><td class="n">${hh(sum(P, p => p.unpaid_h))}</td><td></td><td class="noprint"></td></tr>` : ""}</tbody></table></div>
-      <p class="note noprint" style="margin:8px 2px 0">Tap a person to see each day broken down, every clock-in and clock-out, and any time off.</p>
-      ${idle ? `<p class="note" style="margin:6px 2px 0">${idle} more ${idle > 1 ? "people" : "person"} on the hub clock had no hours in these dates.</p>` : ""}
-      <p class="src">From: hub clock-ins (Staffing ▸ Clock In / Clock Out; only punches that count; missed punches waiting for a manager are left out), approved time-off requests, PTO balances as the hub works them out (Staffing ▸ Request Time Off), paid holidays New Year's Day, Memorial Day, July 4th, Labor Day, Thanksgiving, Christmas Day (Brandon 2026-11-17). Regular = clocked hours that aren't overtime or holiday. Overtime = clocked hours past 40 in a workweek starting ${H(x.week_start)}, counted on the day they happen, hourly people only. Holiday = hours worked on a paid holiday (overtime that day counts as overtime). PTO = approved paid time off; Other paid = other paid time-off types; Unpaid off isn't in Total paid. Hours only: the hub keeps no pay rates.</p></div>`;
+      <div class="tw"><table><thead><tr><th>Person</th><th class="n">Regular</th><th class="n">Holiday</th><th class="n">Overtime</th><th class="n">PTO</th><th class="n">Other paid</th><th class="n">Total paid</th><th class="n">Unpaid off</th><th class="n">PTO left</th><th>Manager</th><th class="noprint"></th></tr></thead>
+      <tbody>${hrRows || `<tr><td colspan="11" class="note">No hourly hours in these dates.</td></tr>`}
+      ${HR.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(HR, p => p.reg_h))}</td><td class="n">${hh(sum(HR, p => p.hol_h))}</td><td class="n">${hh(sum(HR, p => p.ot_total))}</td><td class="n">${hh(sum(HR, p => p.pto_h))}</td><td class="n">${hh(sum(HR, p => p.other_h))}</td><td class="n">${hh(sum(HR, tot))}</td><td class="n">${hh(sum(HR, p => p.unpaid_h))}</td><td></td><td></td><td class="noprint"></td></tr>` : ""}</tbody></table></div>
+      <p class="note noprint" style="margin:8px 2px 0">Tap a person to see each day, every clock-in and clock-out (✎ to fix a time), and any time off.</p>
+      ${idle ? `<p class="note" style="margin:6px 2px 0">${idle} more ${idle > 1 ? "people" : "person"} on the hub clock had no hours in these dates.</p>` : ""}</div>
+    ${SAL.length ? `<div class="card"><h3 style="margin-top:0">Salaried</h3>
+      <p class="note" style="margin:0 2px 8px">Paid their salary; no clocked hours or overtime. Time off and PTO left are here for the pay stub.</p>
+      <div class="tw"><table><thead><tr><th>Person</th><th class="n">PTO</th><th class="n">Other paid</th><th class="n">Unpaid off</th><th class="n">PTO left</th><th>Manager</th><th class="noprint"></th></tr></thead>
+      <tbody>${salRows}</tbody></table></div></div>` : ""}
+    ${EXT.length ? `<details class="card ext"><summary><b>Extended team</b> <span class="note">· ${EXT.length} ${EXT.length > 1 ? "people" : "person"}, ${hh(sum(EXT, p => p.hub_h))} h clocked · not on Moose payroll</span></summary>
+      <p class="note" style="margin:8px 2px">They clock in so we know who's working. Their hours aren't in the totals, the QuickBooks sheet or the CSVs above.</p>
+      <div class="tw"><table><thead><tr><th>Person</th><th class="n">Hours clocked</th><th class="n">Shifts</th><th class="noprint"></th></tr></thead><tbody>${extRows}</tbody></table></div></details>` : ""}
+    <p class="src">From: hub clock-ins (Staffing ▸ Clock In / Clock Out; only punches that count; missed punches waiting for a manager are left out), approved time-off requests, PTO balances as the hub works them out (Staffing ▸ Request Time Off), paid holidays New Year's Day, Memorial Day, July 4th, Labor Day, Thanksgiving, Christmas Day (Brandon 2026-11-17), the extended team list (Brandon 2026-11-18: Porsha, Sheryl, Carmila, Keno). Regular = clocked hours that aren't overtime or holiday. Overtime = clocked hours past 40 in a workweek starting ${H(x.week_start)}, counted on the day they happen, hourly people only. Holiday = hours worked on a paid holiday (overtime that day counts as overtime). PTO = approved paid time off; Other paid = other paid time-off types; Unpaid off isn't in Total paid. Hours only: the hub keeps no pay rates.</p>`;
 }
 function payDetail(p){
-  const days = (p.days || []).filter(d => d.hub_h || d.hs_h || d.pto || d.other || d.unpaid);
+  const days = (p.days || []).filter(d => d.hub_h || d.pto || d.other || d.unpaid);
   const z = n => Number(n) ? hh(n) : "–";
+  const can = PC.canA.has(p.id);
+  const pen = s => can ? ` <button type="button" class="pen noprint" title="Change these times" data-pen="${p.id}|${s.in_id}|${s.out_id || ""}|${s.in}|${s.out || ""}">✎</button>` : "";
   return `<div class="tw"><table><thead><tr><th>Day</th><th class="n">Regular</th><th class="n">Holiday</th><th class="n">OT</th><th class="n">PTO</th><th class="n">Other</th><th class="n">Total</th><th>Clock in / out</th></tr></thead><tbody>${
     days.map(d => { const sh = (p.shifts || []).filter(s => s.day === d.day);
       const t = (+d.reg || 0) + (+d.hol || 0) + (+d.ot || 0) + (+d.pto || 0) + (+d.other || 0);
       return `<tr><td>${fday(d.day)}${d.holiday ? ` <span class="pill b">${H(d.holiday)}</span>` : ""}</td><td class="n">${z(d.reg)}</td><td class="n">${z(d.hol)}</td><td class="n">${Number(d.ot) ? `<span class="bad">${hh(d.ot)}</span>` : "–"}</td><td class="n">${z(d.pto)}</td><td class="n">${z(d.other)}</td><td class="n"><b>${hh(t)}</b></td><td>${
-        sh.map(s => `${ftime(s.in)} – ${s.out ? ftime(s.out) : `<span class="warn">still in</span>`}${s.hours != null ? ` (${hh(s.hours)} h)` : ""}${s.edited ? ` <span class="pill o">edited</span> <span class="note">${H(s.note || "")}</span>` : ""}${s.added ? ` <span class="pill">added by hand</span>` : ""}`).join("<br>")
-        || (d.unpaid ? `<span class="note">${hh(d.unpaid)} h unpaid off</span>` : (d.pto || d.other) ? `<span class="note">time off</span>` : d.hs_h ? `<span class="note">Hubstaff only (${hh(d.hs_h)} h)</span>` : "")}</td></tr>`; }).join("")
+        sh.map(s => `${ftime(s.in)} – ${s.out ? ftime(s.out) : `<span class="warn">still in</span>`}${s.hours != null ? ` (${hh(s.hours)} h)` : ""}${pen(s)}${s.edited ? ` <span class="pill o">edited</span> <span class="note">${H(s.note || "")}</span>` : ""}${s.added ? ` <span class="pill">added by hand</span>` : ""}`).join("<br>")
+        || (d.unpaid ? `<span class="note">${hh(d.unpaid)} h unpaid off</span>` : (d.pto || d.other) ? `<span class="note">time off</span>` : "")}</td></tr>`; }).join("")
     || `<tr><td colspan="8" class="note">No hours.</td></tr>`}</tbody></table></div>
-    ${(p.weeks || []).length ? `<p class="note" style="margin:8px 0 0">${(p.weeks || []).map(w => `Week of ${fday(w.start)}: ${hh(w.hub_h)} h clocked${Number(w.ot_h) ? ` (<span class="bad">${hh(w.ot_h)} h overtime</span>)` : ""}${w.partial ? ", part of the week" : ""}${w.signed_by ? `, signed off by ${H(w.signed_by)}` : ""}`).join(" · ")}</p>` : ""}
+    ${can && !p.salaried ? `<p class="noprint" style="margin:8px 0 0"><button type="button" class="btn2 sm" data-addsh="${p.id}">+ Add a missing shift</button></p>` : ""}
+    ${(p.weeks || []).length && !p.salaried ? `<p class="note" style="margin:8px 0 0">${(p.weeks || []).map(w => `Week of ${fday(w.start)}: ${hh(w.hub_h)} h clocked${Number(w.ot_h) ? ` (<span class="bad">${hh(w.ot_h)} h overtime</span>)` : ""}${w.partial ? ", part of the week" : ""}${w.signed_by ? `, signed off by ${H(w.signed_by)}` : ""}`).join(" · ")}</p>` : ""}
     ${(p.timeoff || []).length ? `<p class="note" style="margin:6px 0 0"><b>Time off:</b> ${(p.timeoff || []).map(t => `${fday(t.from)}${t.to !== t.from ? " – " + fday(t.to) : ""}: ${hh(t.hours)} h ${t.paid ? "paid" : "unpaid"} (${H(t.policy || t.kind)}${t.approved_by ? `, OK'd by ${H(t.approved_by)}` : ""})`).join(" · ")}</p>` : ""}
-    ${(p.pto || []).length ? `<p class="note" style="margin:6px 0 0"><b>PTO balance:</b> ${(p.pto || []).map(b => `${hh(b.hours)} h left (${H(b.policy || "")})`).join(" · ")}</p>` : ""}`;
+    ${(p.pto || []).length ? `<p class="note" style="margin:6px 0 0"><b>PTO balance:</b> ${(p.pto || []).map(b => `${hh(b.hours)} h left (${H(b.policy || "")})`).join(" · ")}</p>` : ""}
+    ${PC.st && PC.st.can_extend ? `<p class="noprint" style="margin:8px 0 0"><button type="button" class="lnk" data-ext="${p.id}|${p.extended ? "0" : "1"}">${p.extended ? "Put back on Moose payroll" : "Extended team (not on Moose payroll)"}</button></p>` : ""}`;
 }
+// Park City wall time -> ISO with the right offset for that date (MST/MDT)
+function pcIso(day, hm){
+  const probe = new Date(`${day}T12:00:00Z`);
+  const off = (new Intl.DateTimeFormat("en-US", { timeZone:"America/Denver", timeZoneName:"shortOffset" }).formatToParts(probe).find(x => x.type === "timeZoneName") || {}).value || "GMT-7";
+  const m = off.match(/GMT([+-])(\d+)/), sign = m ? m[1] : "-", h = m ? String(m[2]).padStart(2, "0") : "07";
+  return `${day}T${hm}:00${sign}${h}:00`;
+}
+const pcHm = s => s ? new Date(s).toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit", hour12:false, timeZone:"America/Denver" }) : "";
+const pcDay = s => s ? new Date(s).toLocaleDateString("en-CA", { timeZone:"America/Denver" }) : "";
+function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = add a shift
+  document.getElementById("acdlg")?.remove();
+  const p = PC.byId.get(o.user) || {}, add = !o.inId;
+  const d = document.createElement("div"); d.id = "acdlg"; d.className = "acdlg";
+  d.innerHTML = `<div class="box acct"><h3 style="margin:0 0 10px">${add ? "Add a missing shift" : "Change a shift"} · ${H(p.name || "")}</h3>
+    <label class="note">Day <input type="date" id="sdDay" value="${H(o.inAt ? pcDay(o.inAt) : (A.from || ""))}" ${add ? "" : "disabled"}></label>
+    <div style="display:flex;gap:10px;margin:8px 0"><label class="note">Clock in <input type="time" id="sdIn" value="${H(pcHm(o.inAt))}"></label>
+    <label class="note">Clock out <input type="time" id="sdOut" value="${H(pcHm(o.outAt))}"></label></div>
+    <label class="note" style="display:block">Why? (they and the managers see this) <input type="text" id="sdWhy" maxlength="300" style="width:100%" placeholder="e.g. forgot to clock out, left at 5"></label>
+    <p class="note" style="margin:6px 0 0">Park City time. A clock-out earlier than the clock-in counts as the next morning.</p>
+    <p id="sdErr" class="bad" style="margin:6px 0 0"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" class="btn2" id="sdNo">Cancel</button><button type="button" class="btn2 pri" id="sdOk">Save</button></div></div>`;
+  document.body.appendChild(d);
+  const close = () => d.remove();
+  d.onclick = e => { if(e.target === d) close(); };
+  d.querySelector("#sdNo").onclick = close;
+  d.querySelector("#sdOk").onclick = async () => {
+    const er = d.querySelector("#sdErr"), why = d.querySelector("#sdWhy").value.trim();
+    const day = add ? d.querySelector("#sdDay").value : pcDay(o.inAt), tin = d.querySelector("#sdIn").value, tout = d.querySelector("#sdOut").value;
+    if(!why){ er.textContent = "Say why (they and the managers see it)."; return; }
+    if(!day || !tin){ er.textContent = "Pick the day and the clock-in time."; return; }
+    const inIso = pcIso(day, tin);
+    let outIso = null;
+    if(tout){ outIso = pcIso(tout <= tin ? add_(day, 1) : day, tout); }
+    const btn = d.querySelector("#sdOk"); btn.disabled = true; btn.textContent = "Saving…"; er.textContent = "";
+    try {
+      const run = async (fn, args) => { const r = await sb.rpc(fn, args); if(r.error) throw r.error; };
+      if(add){
+        await run("clock_add", { p_user:o.user, p_kind:"in", p_at:inIso, p_note:why });
+        if(outIso) await run("clock_add", { p_user:o.user, p_kind:"out", p_at:outIso, p_note:why });
+      } else {
+        if(tin !== pcHm(o.inAt)) await run("clock_edit", { p_id:Number(o.inId), p_at:inIso, p_reason:why });
+        if(outIso && (!o.outAt || tout !== pcHm(o.outAt))){
+          if(o.outId) await run("clock_edit", { p_id:Number(o.outId), p_at:outIso, p_reason:why });
+          else await run("clock_add", { p_user:o.user, p_kind:"out", p_at:outIso, p_note:why });
+        }
+      }
+      close(); forget(); refresh(v);
+    } catch(e) { er.textContent = "Not saved: " + err(e); btn.disabled = false; btn.textContent = "Save"; }
+  };
+}
+const add_ = (s, n) => add(s, n);
 
 // ---------- Maintenance ----------
 function maint(x){
@@ -311,16 +440,56 @@ async function draw(v){
   const dc = () => { const f = v.querySelector("#acf").value, t = v.querySelector("#act").value; if(f && t){ A.from = f <= t ? f : t; A.to = f <= t ? t : f; A.preset = null; A.open = {}; save(); draw(v); } };
   v.querySelector("#acf").onchange = dc; v.querySelector("#act").onchange = dc;
   v.querySelector("#acprint").onclick = () => window.print();
-  const body = v.querySelector("#acbody"), tab = A.tab;
+  const body = v.querySelector("#acbody");
+  await fill(v, body);
+}
+function scroller(el){
+  for(let e = el.parentElement; e; e = e.parentElement){ const o = getComputedStyle(e).overflowY; if((o === "auto" || o === "scroll") && e.scrollHeight > e.clientHeight) return e; }
+  return document.scrollingElement || document.documentElement;
+}
+function forget(){ delete A.data[`payroll|${A.from}|${A.to}`]; delete A.stc[`${A.from}|${A.to}`]; }
+async function refresh(v){   // redraw only the report, keep the scroll where it was (Brandon 2026-11-18: opening a row jumped to the top)
+  const body = v.querySelector("#acbody"); if(!body) return draw(v);
+  const sc = scroller(body), y = sc.scrollTop;
+  await fill(v, body);
+  sc.scrollTop = y;
+}
+async function fill(v, body){
+  const tab = A.tab;
   let x; try { x = await load(tab); } catch(e) { body.innerHTML = `<div class="card bad">Couldn't load this report: ${H(err(e))}</div>`; return; }
+  if(tab === "payroll"){
+    const k = `${A.from}|${A.to}`;
+    if(!A.stc[k]){ const r = await sb.rpc("pay_status", { p_from:A.from, p_to:A.to }); A.stc[k] = r.error ? null : r.data; }
+    PC.st = A.stc[k];
+  }
   if(tab !== A.tab) return;
   for(const k in CSV) delete CSV[k];
   body.innerHTML = VIEWS[tab](x)
     + `<p class="src">Report made ${new Date(x.made_at || Date.now()).toLocaleString()}.</p>`;
   body.querySelectorAll("[data-csv]").forEach(b => b.onclick = e => { e.stopPropagation(); const f = CSV[b.dataset.csv]; if(f){ const [n, r] = f(); csv(n, r); } });
-  body.querySelectorAll("[data-open]").forEach(r => r.onclick = e => { if(e.target.closest("a")) return; const k = r.dataset.open; A.open[k] = !A.open[k]; const y = window.scrollY; draw(v).then(() => window.scrollTo(0, y)); });
-  body.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { A.sub = b.dataset.sub; A.tf = ""; draw(v); });
-  body.querySelectorAll("[data-tf]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.tf; A.tf = (A.tf === k ? "" : k); if(A.tf && BSUB[A.tf]) A.sub = BSUB[A.tf]; const y = window.scrollY; draw(v).then(() => window.scrollTo(0, y)); });
+  body.querySelectorAll("[data-open]").forEach(r => r.onclick = e => { if(e.target.closest("a,button,input,label")) return; const k = r.dataset.open; A.open[k] = !A.open[k]; refresh(v); });
+  body.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { A.sub = b.dataset.sub; A.tf = ""; refresh(v); });
+  body.querySelectorAll("[data-tf]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.tf; A.tf = (A.tf === k ? "" : k); if(A.tf && BSUB[A.tf]) A.sub = BSUB[A.tf]; refresh(v); });
+  const rpc = async (fn, args, btn) => { if(btn){ btn.disabled = true; } const r = await sb.rpc(fn, args); if(r.error){ alert("Not saved: " + err(r.error)); if(btn) btn.disabled = false; return false; } return r.data ?? true; };
+  body.querySelectorAll("[data-ck]").forEach(c => c.onchange = async () => {
+    if(await rpc("pay_check", { p_item:c.dataset.ck, p_from:A.from, p_to:A.to, p_done:c.checked, p_note:null }) === false){ c.checked = !c.checked; return; }
+    delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
+  const approve = async (ids, ok, btn) => {
+    let note = null;
+    if(!ok){ note = prompt("Why take the approval back?"); if(!note) return; }
+    const r = await rpc("pay_approve", { p_from:A.from, p_to:A.to, p_users:ids, p_ok:ok, p_note:note }, btn);
+    if(r === false) return;
+    if(r.skipped && r.skipped.length) alert("Not approved (not someone you look after): " + r.skipped.join(", "));
+    delete A.stc[`${A.from}|${A.to}`]; refresh(v); };
+  body.querySelectorAll("[data-apv]").forEach(b => b.onclick = e => { e.stopPropagation(); approve([b.dataset.apv], true, b); });
+  body.querySelectorAll("[data-unapv]").forEach(b => b.onclick = e => { e.stopPropagation(); approve([b.dataset.unapv], false, b); });
+  body.querySelectorAll("[data-apvall]").forEach(b => b.onclick = e => { e.stopPropagation(); approve(b.dataset.apvall.split(","), true, b); });
+  body.querySelectorAll("[data-pen]").forEach(b => b.onclick = e => { e.stopPropagation(); const [user, inId, outId, inAt, outAt] = b.dataset.pen.split("|");
+    shiftDlg(v, { user, inId, outId, inAt, outAt }); });
+  body.querySelectorAll("[data-addsh]").forEach(b => b.onclick = e => { e.stopPropagation(); shiftDlg(v, { user:b.dataset.addsh }); });
+  body.querySelectorAll("[data-ext]").forEach(b => b.onclick = async e => { e.stopPropagation(); const [u, on] = b.dataset.ext.split("|");
+    if(!confirm(on === "1" ? "Move them to the extended team? Their hours leave the totals, the QuickBooks sheet and the CSVs." : "Put them back on Moose payroll?")) return;
+    if(await rpc("pay_extended_set", { p_user:u, p_on:on === "1", p_note:null }, b) === false) return; forget(); refresh(v); });
 }
 window.payrollView = function(v){   // Staffing ▸ Payroll: accountant, admins, managers (desk payroll; acct_payroll limits managers to their people)
   A.mode = "pay"; A.tab = "payroll";
