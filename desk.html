@@ -324,6 +324,7 @@ table.t .mono{font-size:12px}
 .infocat summary::before{content:"";width:0;height:0;border-left:5px solid var(--muted);border-top:4px solid transparent;border-bottom:4px solid transparent;transition:transform .12s;flex:none}
 .infocat[open] summary::before{transform:rotate(90deg)}
 .infocat .prose{padding:0 0 10px 13px}
+.infoed{all:unset;cursor:pointer;margin-left:auto;padding:1px 8px;border-radius:6px;color:var(--muted);font-size:14px;line-height:1.2}.infoed:hover,.infoed:focus-visible{background:var(--surface-2);color:var(--accent)}.qvh .infoed{margin-left:6px;font-size:13px;letter-spacing:0}
 .bwlist{display:flex;flex-direction:column;gap:6px}
 .bwrow{display:flex;gap:10px;align-items:baseline;font-size:12.5px;border-bottom:1px solid var(--line-2);padding-bottom:5px}
 .bwrow:last-child{border-bottom:0}
@@ -1325,7 +1326,7 @@ function canEntry(){ return window.MM_CODES!==false || !!window.MM_ENTRY; }
 function homeQuick(code,p){ var pe=pedit(code), t=hqOf(code)||{}, a=function(rx){ var n=infoNote(p,rx); return n?n.text:""; };
   var r={src:{}}, pick=function(k,list){ for(var i=0;i<list.length;i++){ if(list[i][1]){ r[k]=list[i][1]; r.src[k]=list[i][0]; return; } } r[k]=""; };
   var wl=function(n,pw,x){ n=wfClean(n); pw=wfClean(pw); return [n?"Network: "+n:"",pw?"Password: "+pw:"",x||""].filter(Boolean).join("\n"); };
-  pick("wifi",[["Track",t.wifi_name||t.wifi_pass?wl(t.wifi_name,t.wifi_pass,t.wifi_note):""],["Hub edit",pe.wifiName||pe.wifiPass?wl(pe.wifiName,pe.wifiPass):""],["Asana",noStayfi(a(/^(wifi|wi-fi|stay[- ]?fi)/i))]]);
+  pick("wifi",[["Home information",wifiEdited(p)],["Track",t.wifi_name||t.wifi_pass?wl(t.wifi_name,t.wifi_pass,t.wifi_note):""],["Hub edit",pe.wifiName||pe.wifiPass?wl(pe.wifiName,pe.wifiPass):""],["Asana",wifiTidy(noStayfi(a(/^(wifi|wi-fi|stay[- ]?fi)/i)))]]);
   pick("garage",[["Track",t.garage_code?["Garage code: "+t.garage_code,t.garage_note||""].filter(Boolean).join("\n"):(t.garage_note||"")],["Hub edit",pe.garageCode],["Asana",a(/^parking\/? ?garage info$|^parking$/i)]]);
   var loc=homeInfo(code); r.keybox=[t.keybox_code?"Key box code: "+kbc(t.keybox_code):"",loc.keybox||""].filter(Boolean).join("\n"); r.src.keybox=t.keybox_code?"Track":(loc.src&&loc.src.keybox)||"";
   r.door=[t.door_code?"Front door: "+kbc(t.door_code):"",t.gate_code?"Gate / building: "+kbc(t.gate_code):""].filter(Boolean).join("\n"); r.src.door=r.door?"Track":"";
@@ -1346,6 +1347,29 @@ function tLine(l,plain){ var m=/^([^:]{1,28}):\s*(.+)$/.exec(l), v=function(x){ 
   return '<div class="tl" title="'+esc(l)+'">'+(m?'<span class="ql">'+esc(m[1])+'</span>'+v(m[2]):v(l))+'</div>'; }
 var PARK_RX=/\bpark(?:ing)?\s*(?:in\s*)?(?:assigned\s*)?(?:space|spot|stall)\s*#?\s*([A-Za-z]?\d{1,5}[A-Za-z]?)\b/i;
 function parkFix(s){ return String(s||"").replace(new RegExp(PARK_RX.source,"ig"),"Assigned parking spot $1"); }
+/* Brandon 2026-11-18: Quick view Wi-Fi feeds from the WIFI Info note in Home information; an edit there wins over Track */
+function infoPen(code,cat,arch,title){ return canEntry()?' <button type="button" class="infoed" data-infoed="'+esc(code)+'" data-cat="'+esc(cat||"")+'" data-arch="'+(arch?1:0)+'" title="'+esc(title||"Edit")+'" aria-label="'+esc(title||"Edit")+'">✎</button>':''; }
+function infoDocId(p){ var want=p.trackCode||p.code; for(var k in S.profiles) if(S.profiles[k]&&S.profiles[k].code===want) return k; return sid(want); }
+function infoEdit(code,cat,arch,add){ var p=profile(code); if(!p) return toast("Home not found");
+  var k=infoDocId(p), lc=String(cat||"").trim().toLowerCase(), el=!cat?null:(p.info||[]).filter(function(i){ return String(i.cat||"").trim().toLowerCase()===lc && !!i.archived===!!arch; })[0]||null;
+  var txt=el?String(el.notes||"").replace(/^\[codes\]\s*/,""):"", named=!!cat;
+  openModal(el?"Edit "+cat:named?"Add "+cat:"Add a note",'<div class="fields">'+(named?'':fld("ie_cat","Name of the note (e.g. TV Info)",""))+area("ie_txt",named?cat:"Note",txt,"")+'</div>'+
+    '<div class="note">Saves for everyone who reads this home. Codes typed here stay hidden from field crew. Codes shown as •••• can\'t be changed here; ask a manager.</div>',function(){
+    var c=named?cat:fv("ie_cat"), t=$("ie_txt").value; if(!c) return toast("Give the note a name");
+    if(!window.MM_SB) return toast("Couldn't save. Reload the page."); inspBusy("Saving…");
+    return window.MM_SB.rpc("home_info_set",{p_id:k,p_cat:c,p_archived:!!(el&&el.archived),p_notes:t,p_add:!el}).then(function(r){
+      if(r.error){ inspBusy(""); var b=document.querySelector('#modal [data-act="msave"]'); if(b) b.textContent="Save"; return toast("Couldn't save: "+(r.error.message||"try again")); }
+      var e2=r.data||{cat:c,notes:t};
+      if(el) Object.assign(el,e2); else { p.info=(p.info||[]).concat([e2]); var sp=S.profiles[k]; if(sp&&sp!==p&&sp.info!==p.info) sp.info=(sp.info||[]).concat([e2]); }
+      toast("Saved"); closeModal(); schedule(); },function(){ inspBusy(""); toast("Couldn't save. Check your signal."); }); },"Save"); }
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-infoed],[data-infoadd]"); if(!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  if(b.dataset.infoadd) return infoEdit(b.dataset.infoadd,"",false,true);
+  infoEdit(b.dataset.infoed,b.dataset.cat,b.dataset.arch==="1",false); },true);
+function wifiNoteEl(p){ return ((p&&p.info)||[]).filter(function(i){ return /^\s*(wifi|wi-fi|stay[- ]?fi)/i.test(i.cat||""); }).sort(function(a,b){ return (a.archived?1:0)-(b.archived?1:0); })[0]||null; }
+function wifiTidy(t){ var v=String(t||"").split("\n").filter(function(l){ return !/^\s*wi-?fi\s*info(rmation)?\s*:?\s*$/i.test(l); }).join("\n").trim();
+  return (/:\s*\S/.test(v) || (v && v.indexOf(":")<0)) ? v : ""; }
+function wifiEdited(p){ var e=wifiNoteEl(p); return e&&e.editedAt?wifiTidy(noStayfi(String(e.notes||"").replace(/^\[codes\]\s*/,""))):""; }
 function wfClean(v){ return String(v||"").replace(/^\s*(?:wi-?fi\s*)?(?:network(?:\s*name)?|ssid|name|password|pass(?:word)?|pw|key)\s*[:=-]\s*/i,"").trim(); }
 function kbc(v){ return String(v||"").replace(/\s*\(\s*private\s*\)/ig,"").trim(); }   /* Track key box codes carry "(PRIVATE)" (Brandon 2026-11-03) */
 /* .hentry = Entry notes, 2 columns wide */
@@ -1401,7 +1425,7 @@ function lockSecs(c,t,q,p){ var S={lock:[],gate:[],kb:[],own:[]}, src={lock:{},g
   all=all.filter(function(l){ return typeof l!=="string" || !/^(Key box location|Owner closet location):/.test(l); });
   return [tCell("Entry notes","",all,false,"hentry")]; }
 function tileCells(c,p,q){ var t=hqOf(c)||{}, pe=pedit(c), o=ownerOf(c), cells=[];
-  var wifi=t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+wfClean(t.wifi_name):"",t.wifi_pass?"Password: "+wfClean(t.wifi_pass):""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+wfClean(pe.wifiName):"",pe.wifiPass?"Password: "+wfClean(pe.wifiPass):""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
+  var wifi=q.src.wifi==="Home information"?String(q.wifi).split("\n").slice(0,2):t.wifi_name||t.wifi_pass?[t.wifi_name?"Network: "+wfClean(t.wifi_name):"",t.wifi_pass?"Password: "+wfClean(t.wifi_pass):""]:pe.wifiName||pe.wifiPass?[pe.wifiName?"Network: "+wfClean(pe.wifiName):"",pe.wifiPass?"Password: "+wfClean(pe.wifiPass):""]:codeLines(q.wifi,2).length?codeLines(q.wifi,2):String(q.wifi||"").split("\n").slice(0,2);
   cells.push(tCell("Wi-Fi",q.src.wifi,wifi,true));
   cells=cells.concat(lockSecs(c,t,q,p));
   /* paint stays in Home details only (Brandon 2026-11-03) */
@@ -1535,16 +1559,16 @@ function homeDetail(code){
   if(S.ui.rvr && S.ui.rvr.code===code) ah+='<div id="rvrbox" style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface-2)">'+rvrPanel()+'</div>';
   ah+='</details>';
   // info
-  var cats=p.info.filter(function(i){ return i.notes; });
+  var cats=p.info.filter(function(i){ return i.notes||i.editedAt; });
   /* Brandon 2026-11-06: fold-outs in A-Z order; Track's garage/parking notes get their own fold-out (the Quick view card keeps only the codes) */
   var fo=[]; if(ah) fo.push(["Appliances",ah]); if(pb) fo.push(["Paint colors",'<details class="infocat"><summary>Paint colors</summary>'+pb.replace(/^<div class="block">/,'<div>')+'</details>']);
   if(xh) fo.push(["Fire suppression & license",xh]);
   var gq=homeQuick(code,p); if(gq.garage && gq.src.garage && gq.src.garage!=="Asana") fo.push(["Garage & parking",'<details class="infocat"><summary>Garage &amp; parking</summary><div class="prose">'+esc(parkFix(gq.garage))+'</div></details>']);
   cats.forEach(function(i){ var codes=/^\[codes\]/.test(i.notes);
-    fo.push([i.cat||"Note",'<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+'</summary>'+
-        '<div class="prose">'+esc(i.notes.replace(/^\[codes\]\s*/,""))+'</div></details>']); });
+    fo.push([i.cat||"Note",'<details class="infocat"><summary>'+esc(i.cat||"Note")+(codes?' <span class="badge codes">Codes</span>':'')+(i.archived?' <span class="muted">(older copy)</span>':'')+infoPen(code,i.cat||"Note",i.archived,"Edit this note")+'</summary>'+
+        '<div class="prose">'+esc(String(i.notes||"").replace(/^\[codes\]\s*/,""))+'</div>'+(i.editedAt?'<div class="hint" style="padding:0 0 10px 13px">Edited in the hub'+(i.editedBy?' by '+esc(i.editedBy):'')+' · '+esc(fmtD(ymd(i.editedAt)))+'</div>':'')+'</details>']); });
   var ovf=function(x){ return /^overview$/i.test(String(x[0]).trim())?0:1; }; fo.sort(function(a,b){ return (ovf(a)-ovf(b))||String(a[0]).toLowerCase().localeCompare(String(b[0]).toLowerCase()); });
-  h+='<div class="block"><h4>Home information</h4>'+fo.map(function(x){ return x[1]; }).join("")+'</div>';
+  h+='<div class="block"><h4>Home information'+(canEntry()?' <button class="btn sm ghost" data-infoadd="'+esc(code)+'" style="float:right">+ Add a note</button>':'')+'</h4>'+fo.map(function(x){ return x[1]; }).join("")+'</div>';
   h+='<details class="block recacc"'+(S.ui.recOpen?' open':'')+'><summary><button type="button" class="recbtn" data-recacc="1"><h4><span class="recchev">'+(S.ui.recOpen?'\u25be':'\u25b8')+'</span>Recent items <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">'+(jobs.length||recent.length)+' \u00b7 newest first</span></h4></button></summary>'+
     '<style>.recacc>summary{list-style:none}.recacc>summary::-webkit-details-marker{display:none}.recbtn{all:unset;cursor:pointer;display:block;width:100%}.recbtn h4{display:flex;align-items:center;gap:8px;margin:0}.recchev{color:var(--accent);font-size:12px}.recacc[open]>summary{margin-bottom:8px}</style>'+
     (recent.length?'<div class="rows" style="border:1px solid var(--line-2);border-radius:8px">'+recent.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="note">Nothing on record.</div>')+
@@ -1956,10 +1980,11 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=(function(g){ g.v=parkFix(g.v); return g; })(qs("garage",/^parking\/? ?garage info$|^parking$/i)), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+emergHtml(p)+'</div>';
-  return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">✎ Edit Wi-Fi, codes & owner</button></h4><div class="qgrid">'+own+(window.OwnerNotes?OwnerNotes.html(code,render):'')+tnCard(code)+
+  return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">✎ Edit codes & owner</button></h4><div class="qgrid">'+own+(window.OwnerNotes?OwnerNotes.html(code,render):'')+tnCard(code)+
     /* Brandon 2026-11-17 (Kim #49, Cheree #55): a home with no Wi-Fi had no Wi-Fi card at all, so nobody found where to add it */
-    (wifi.v?qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi").replace(/<\/div>$/,'<button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">✎ Edit Wi-Fi</button></div>')
-      :'<div class="qv wifi"><div class="qvh">Wi-Fi</div><div class="muted">Not on file yet.</div><button class="btn sm" data-act="editquick" data-code="'+esc(code)+'">✎ Add Wi-Fi</button></div>')+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
+    (function(){ var we=wifiNoteEl(p), pen=infoPen(code,we?we.cat:"WIFI Info",we&&we.archived,"Edit the WIFI Info note below");
+      return wifi.v?qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi").replace('<div class="qvh">Wi-Fi</div>','<div class="qvh">Wi-Fi'+pen+'</div>')
+      :'<div class="qv wifi"><div class="qvh">Wi-Fi'+pen+'</div><div class="muted">Not on file yet.</div></div>'; })()+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
     qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+(function(){ var out=[], seen={}, txt=String(garage.v||"").replace(/<[^>]+>/g," ");
       txt.split("\n").forEach(function(l){ var pm=/assigned parking spot\s*#?\s*([A-Za-z]?\d{1,5}[A-Za-z]?)/i.exec(l), l2=l.replace(/assigned parking spot\s*#?\s*[A-Za-z]?\d{1,5}[A-Za-z]?/ig," ");
         if(/garage|gate|door|code/i.test(l2)) (kbc(l2).match(/•{3,}|[0-9][0-9#*]{2,}/g)||[]).forEach(function(c){ if(!seen[c]){ seen[c]=1; out.push((/gate/i.test(l2)&&!/garage/i.test(l2)?"Gate code: ":"Garage code: ")+c); } });
