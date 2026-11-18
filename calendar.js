@@ -99,7 +99,7 @@ const CCSS = `
 .cal .lrow:hover{background:var(--ground,#f6f4ef)} .cal .lrow.mt{border-left-color:var(--blue,#1f4e8c)} .cal .lrow.of{border-left-color:var(--amber,#8a5a00)} .cal .lrow.outp{border-left-color:var(--red,#b3261e)} .cal .lrow.sh{border-left-color:var(--muted,#7a857c)}
 .cal .lrow .lt{flex:0 0 64px;font-size:13px;font-weight:700} .cal .lrow .lt small{display:block;font-weight:400;color:var(--muted)}
 .cal .lrow .lb{flex:1;min-width:0} .cal .lrow .lb b{display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis} .cal .lrow .lb small{display:block;color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cal .qadd{display:flex;gap:8px;align-items:center;margin:0 0 6px} .cal .qadd input{flex:1;min-width:0;min-height:42px;font-size:15px}
+.cal .qadd{display:flex;gap:8px;align-items:center;margin:0 0 6px} .cal .qadd input:where(:not([type=checkbox],[type=radio])){flex:1;min-width:0;min-height:42px;font-size:15px}
 .cal .qprev{font-size:12.5px;color:var(--muted);margin:0 0 10px;min-height:16px} .cal .qprev b{color:var(--forest,#1d3b2a)}
 .cal .upd{font-size:12px;color:var(--muted);visibility:hidden} .cal.busy .upd{visibility:visible}
 .cal details.evmore{border:1px solid var(--line);border-radius:10px;padding:2px 10px;margin:8px 0} .cal details.evmore>summary{cursor:pointer;font-weight:700;padding:8px 0;font-size:14px}
