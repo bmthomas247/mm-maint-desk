@@ -1,7 +1,7 @@
 /* staffing.js (Brandon 2026-10-29: "we can call it the Staffing Desk"; first piece "Clock in/out + hours"; "Victor + managers + admins").
    Step 4 of the move-off-Hubstaff plan, for people who clock in the hub instead of Hubstaff (team hub_clock; Victor first).
    Loaded by hub.html; uses its sb / $ / esc / ME. Route #/staffing. Data (hub_staffing.sql): hub_clock (RLS hub_staff_sees: you,
-   your manager, admins) · clock_punch(in/out + one location pin) · clock_add (missed punch: yours waits for the manager, a manager's
+   your manager, admins) · clock_punch(in/out + one location pin) · clock_add (missed punch: counts at once with a note, kept as added by hand (Brandon 2026-11-18); a manager's
    counts) · clock_decide (approve / deny / set off) · hub_clock_weeks + clock_week_ok (manager signs off a Sat-Fri week) · clock_people().
    Staffing drop-down (Brandon 2026-10-29): Clock In / Clock Out (#/staffing) · Schedule (#/stf_sched, staffSched) · Request Time Off (#/cal_off, calendar.js) · My performance (#/stf_perf, myPerf).
    Hours: each "in" pairs with the next "out" and counts on the day of the "in" (Park City time). No pay rates here.
@@ -188,8 +188,8 @@ const toLine = (rows, uid) => { const l = rows.filter(r => r.user_id === uid); i
   return `<p class="sm" style="margin:6px 0 0">🌴 Time off: ${l.map(r => `${dnm(r.day)}${r.end_day !== r.day ? "–" + dnm(r.end_day) : ""} · ${hm(+r.hours || 0)} ${r.kind === "pto" ? "paid" : r.kind}${r.status === "pending" ? ' <span class="pill amber">waiting</span>' : ""}`).join(" · ")}</p>`; };
 const addForm = (uid, boss) => `<details class="card"><summary><b>${boss ? "Add a missed punch" : "Forgot to clock in or out?"}</b></summary>
   <div class="row" style="margin-top:8px"><select data-ak="${uid}"><option value="in">Clock in</option><option value="out">Clock out</option></select>
-  <input type="datetime-local" data-at="${uid}"><input data-an="${uid}" placeholder="${boss ? "Note (optional)" : "What happened? (your manager sees it)"}" style="flex:1;min-width:180px">
-  <button class="btn primary" data-add="${uid}">${boss ? "Add" : "Send to my manager"}</button></div></details>`;
+  <input type="datetime-local" data-at="${uid}"><input data-an="${uid}" placeholder="${boss ? "Note (optional)" : "What happened? (your manager sees it; it counts right away)"}" style="flex:1;min-width:180px">
+  <button class="btn primary" data-add="${uid}">${boss ? "Add" : "Add it"}</button></div></details>`;
 
 /* ---------- Work check app (Windows) download + is it running (hub_work_app.sql, workcheck_app/). Brandon 2026-11-09: our own app replaces
    Hubstaff's desktop app; cloud workers + office staff run it; it records only while clocked in on the hub. Only shown to people who need it. ---------- */
