@@ -1507,7 +1507,12 @@ async function homeView(pid){
       try{
         if(b.dataset.act==="set"){ const h2=$('[data-f="heat"]',card).value, c2=$('[data-f="cool"]',card).value;
           await rpc("lock_climate",{p_thermostat:id,p_mode:mode||"heat",p_heat:h2?+h2:null,p_cool:c2?+c2:null}); hub && wake(hub.id); toast("Sent"); }
-        if(b.dataset.act==="tsave"){ await rpc("lock_thermostat_update",{p_thermostat:id,p_name:$('[data-f="name"]',card).value,p_managed:$('[data-f="managed"]',card).checked}); toast("Saved"); }
+        if(b.dataset.act==="tsave"){ const nm=$('[data-f="name"]',card).value.trim(), mg=$('[data-f="managed"]',card).checked;
+          await rpc("lock_thermostat_update",{p_thermostat:id,p_name:nm,p_managed:mg});
+          const t0=thermos.find(t=>t.id===id); if(t0){ t0.name=nm; t0.managed=mg; }
+          const tb=$(".row .grow b",card); if(tb) tb.textContent=nm;
+          const tm=$(".row .grow .muted",card); if(tm) tm.textContent=((t0&&t0.model)||"")+" "+(mg?"":"· not managed");
+          toast("Saved"); }
       }catch(e){ fail(e); } }; });
   // rules
   $$("[data-reset]").forEach(b=>b.onclick=async()=>{ const k = b.dataset.reset, msg = t => $("#resetmsg").innerHTML = `<p class="pill green" style="margin-top:8px">${esc(t)}</p>`;
