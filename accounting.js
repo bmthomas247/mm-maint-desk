@@ -87,7 +87,7 @@ function css(){
 .acct details.ext summary{cursor:pointer;font-size:15px;padding:2px}
 .acdlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999;display:grid;place-items:center;padding:16px}
 .acdlg .box{background:var(--card,#fff);border-radius:16px;padding:16px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-.acdlg input{min-height:36px;border-radius:10px;border:1px solid var(--line-2,#cfd8cb);padding:0 8px;font-size:15px}
+.acdlg input:where(:not([type=checkbox],[type=radio])){min-height:36px;border-radius:10px;border:1px solid var(--line-2,#cfd8cb);padding:0 8px;font-size:15px}
 @media (max-width:700px){.acct .tile b{font-size:22px} .acct td,.acct th{padding:6px 5px}}
 @media print{body *{visibility:hidden!important} .acct,.acct *{visibility:visible!important} .acct{position:absolute;left:0;top:0;width:100%;max-width:none}
   .acct .noprint{display:none!important} .acct .card,.acct .tile{box-shadow:none} .acct .head{background:none;color:#000;border:1px solid #999} .acct tr.sub{display:table-row!important}}`;
