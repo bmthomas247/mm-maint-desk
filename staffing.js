@@ -20,8 +20,8 @@ const CSS = `.stf .big{font-size:20px;padding:14px 28px;border-radius:12px}.stf 
 .stf table{width:100%;border-collapse:collapse}.stf td,.stf th{padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);text-align:left;vertical-align:top;font-size:14px}
 .stf .r{text-align:right}.stf .sm{font-size:12px}.stf .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.stf .tow{overflow-x:auto}
 .hxbanner{color:#fff;padding:8px 18px;font-weight:600;font-size:14px;flex:none;border-top:1px solid rgba(255,255,255,.25)} .hxbanner a{color:#fff;text-decoration:underline;margin-left:10px;white-space:nowrap}
-.otplan{background:#fff8e6;color:#1f2937;padding:10px 18px;border-bottom:1px solid #f0d9a6;font-size:14px;flex:none}.otplan .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.otplan input{font:inherit;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px}
-.stf input,.stf select{font:inherit;padding:6px 8px;border:1px solid var(--line,#d1d5db);border-radius:8px}
+.otplan{background:#fff8e6;color:#1f2937;padding:10px 18px;border-bottom:1px solid #f0d9a6;font-size:14px;flex:none}.otplan .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.otplan input:where(:not([type=checkbox],[type=radio])){font:inherit;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px}
+.stf input:where(:not([type=checkbox],[type=radio])),.stf select{font:inherit;padding:6px 8px;border:1px solid var(--line,#d1d5db);border-radius:8px}
 .stf .ed{border:0;background:none;cursor:pointer;color:var(--muted);font-size:13px;padding:2px 4px}.stf .ed:hover{color:var(--ink)}
 .stf .edbox{background:var(--ground,#f5f7f0);border-radius:10px;padding:8px;margin:6px 0}
 .stf .now{display:flex;flex-wrap:wrap;gap:18px;align-items:center}.stf .now ul{list-style:none;margin:0;padding:0}.stf .now li{margin:3px 0;font-size:14px}
