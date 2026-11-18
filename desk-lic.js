@@ -10,7 +10,7 @@
 window.MM_LIC = function(A){
   var S = A.S, D = A.D, esc = A.esc;
   S.hubHomes = null; S.licFire = {}; S.licLease = {}; S.licNew = [];
-  S.licRecs = []; S.licBy = {}; S.licMe = null; S.licNotes = []; S.licFiles = []; S.licSel = {};
+  S.licRecs = []; S.licBy = {}; S.licMe = null; S.licNotes = []; S.licFiles = []; S.licSel = {}; S.licPsu = [];
   var NEW_DAYS = 120;   // "new in Track" window for New properties
 
   function sb(){ return window.MM_SB; }
@@ -22,7 +22,7 @@ window.MM_LIC = function(A){
     if(lic) jobs.push(c.from("lic_fire").select("*").limit(5000), c.from("lic_lease").select("*").limit(5000),
                       c.from("lic_new_homes").select("*").eq("off", false).order("added_at", { ascending:false }).limit(500),
                       c.rpc("lic_me"), c.from("hub_license_notes").select("*").eq("off", false).order("at", { ascending:false }).limit(3000),
-                      c.from("hub_license_files").select("*").eq("off", false).limit(3000));
+                      c.from("hub_license_files").select("*").eq("off", false).limit(3000), c.rpc("lic_psu_homes"));
     return Promise.all(jobs).then(function(r){
       if(r[0] && !r[0].error && (r[0].data || []).length) S.hubHomes = r[0].data;
       setRecs(r[1]);
@@ -30,7 +30,8 @@ window.MM_LIC = function(A){
         S.licLease = {}; ((r[3] && r[3].data) || []).forEach(function(x){ S.licLease[x.code] = x; });
         S.licNew = (r[4] && r[4].data) || [];
         S.licMe = (r[5] && !r[5].error && r[5].data) || null;
-        S.licNotes = (r[6] && !r[6].error && r[6].data) || []; S.licFiles = (r[7] && !r[7].error && r[7].data) || []; }
+        S.licNotes = (r[6] && !r[6].error && r[6].data) || []; S.licFiles = (r[7] && !r[7].error && r[7].data) || [];
+        S.licPsu = (r[8] && !r[8].error && Array.isArray(r[8].data)) ? r[8].data : []; }
       A.derive(); A.render(); }).catch(function(){}); }
   /* after a save: only the licensing tables again */
   function loadLic(){ var c = sb(); if(!c) return Promise.resolve();
@@ -222,13 +223,24 @@ window.MM_LIC = function(A){
   function sheetLine(e){ return e ? [e.no ? "License # "+e.no : "no license #", e.exp ? "expires "+A.fmtD(e.exp) : "no date", e.paid || "", e.note ? "note: "+e.note : ""].filter(Boolean).join(" · ") : "not on the sheet"; }
   function hubLine(r){ return [r.lic_no ? "License # "+r.lic_no : "no license #", r.expires ? "expires "+A.fmtD(r.expires) : "no date", r.paid === "paid" ? "PAID" : r.paid ? "NOT PAID" : ""].filter(Boolean).join(" · "); }
 
+  /* Property Set Up (Launch Pad) homes, 2026-11-18 (lic_psu_homes, hub_licenses_psu.sql): being set up / for sale / leaving.
+     Launch Pad keeps Haylee's sheet-style codes; the database maps them (codes). Haylee + admins only. */
+  var PSU_LBL = { str:"🏗 Being set up", lease:"🏗 Lease being set up", sale:"🏷 For sale", off:"👋 Leaving Moose" };
+  function psuOf(code){ return (S.licPsu || []).filter(function(j){ return (j.codes || []).indexOf(code) >= 0 || j.code === code; }); }
+  function psuLine(r){ var ps = psuOf(r.code); if(!ps.length) return "";
+    return ps.map(function(j){ var x = (PSU_LBL[j.kind] || "In Property Set Up")+" (Property Set Up"+(j.started ? ", since "+A.fmtD(j.started) : "")+")";
+      if(j.insp_on && !(r.step === "insp_sched" && r.step_on === j.insp_on)) x += " · it has the county inspection on "+A.fmtD(j.insp_on)+(j.insp_done ? " (done)" : "");
+      return x; }).join(" · "); }
   /* why a license is on the list, and which tile it belongs to */
   function cls(r){ var td = A.today(), s = r.step || "", e = r.expires, d = e ? daysTo(e) : null;
-    if(r.virtual) return { g:"newh", why:"No license on file", at:"" };
+    if(r.virtual) return { g:"newh", why:r.psu ? "In Property Set Up · no license on file" : "No license on file", at:"" };
+    var ps = psuOf(r.code), leaving = ps.some(function(j){ return j.kind === "off"; }), selling = ps.some(function(j){ return j.kind === "sale"; });
+    if(leaving && s !== "stop") return { g:"today", why:"Leaving Moose — cancel the license, or mark it Not renewing", at:"" };
     var inprog = /^(applied|fee_paid|insp_wait|insp_sched|insp_passed|renew_sent|insp_failed)$/.test(s), park = /^(bldg_hold|owner|hold|stop)$/.test(s);
     if(r.follow_up && r.follow_up <= td) return { g:"today", why:r.follow_up === td ? "Follow up today" : "Follow-up was due "+A.fmtD(r.follow_up), at:r.follow_up };
     if(s === "insp_sched" && r.step_on && r.step_on < td) return { g:"today", why:"Inspection was "+A.fmtD(r.step_on)+" — how did it go?", at:r.step_on };
     if(s === "insp_failed") return { g:"today", why:"Failed inspection — set up the re-inspection", at:r.step_on || "" };
+    if(selling && !park && e && d <= 60) return { g:"today", why:"For sale — "+(d < 0 ? "expired "+A.fmtD(e) : "renews "+A.fmtD(e))+": renew it, or let it go?", at:e };
     if(e && e < td && !inprog && !park) return { g:"today", why:"Expired "+A.fmtD(e), at:e };
     if(park) return { g:"park", why:lstepName(s), at:e || "" };
     if(s === "insp_sched") return { g:"insp", why:"Inspection "+(r.step_on ? A.fmtD(r.step_on) : "— date not set"), at:r.step_on || "9999" };
@@ -243,7 +255,10 @@ window.MM_LIC = function(A){
   function items(){ var out = S.licRecs.filter(function(r){ return !r.off; }).map(function(r){ return { r:r, c:cls(r) }; });
     (D.homes || []).forEach(function(h){ if(h.company || LIC_SKIP[h.code] || !A.needsLicense(h.code) || S.licBy[h.code] || (h.trackCode && S.licBy[h.trackCode])) return;
       if(h.track && h.track.kind && h.track.kind !== "nightly") return;
-      var v = { virtual:true, id:"v:"+h.code, code:h.code, kind:guessKind(h.code) || "other" }; out.push({ r:v, c:cls(v) }); });
+      var v = { virtual:true, id:"v:"+h.code, code:h.code, kind:guessKind(h.code) || "other", psu:psuOf(h.code).length > 0 }; out.push({ r:v, c:cls(v) }); });
+    var seen = {}; out.forEach(function(it){ seen[it.r.code] = 1; });
+    (S.licPsu || []).forEach(function(j){ if(j.kind !== "str") return; (j.codes || [j.code]).forEach(function(c){ if(seen[c] || S.licBy[c]) return; seen[c] = 1;
+      var v = { virtual:true, id:"v:"+c, code:c, kind:guessKind(c) || "other", psu:true }; out.push({ r:v, c:cls(v) }); }); });
     return out; }
   /* who wrote a note, short; notes copied from a sheet's NOTES column say so (their real date isn't known) */
   function noteWho(n){ return n.src === "import" && /^From the license sheet/.test(n.by_name || "") ? "Sheet note" : first(n.by_name) || "Note"; }
@@ -260,6 +275,7 @@ window.MM_LIC = function(A){
       (r.lic_no || r.paid === "not_paid" ? '<div class="lwmeta">'+(r.lic_no ? 'License # <b class="mono">'+esc(r.lic_no)+'</b>' : '')+(r.paid === "not_paid" ? (r.lic_no ? ' · ' : '')+'<span class="lwbad">not paid</span>' : '')+'</div>' : '')+
       (r.step && !/^(waiting|park|insp)$/.test(c.g) && r.step !== "licensed" ? '<div class="lwmeta">'+esc(lstepName(r.step))+(r.step_on ? ' · '+esc(A.fmtD(r.step_on)) : '')+'</div>' : '')+
       (sc ? '<div class="lwmeta lwbad">The Dropbox sheet changed — open to check</div>' : '')+
+      (psuLine(r) ? '<div class="lwmeta lwpsu">'+esc(psuLine(r))+'</div>' : '')+
       (ln ? '<div class="lwnote">💬 <b>'+esc(noteWho(ln))+'</b>'+(noteWhen(ln) ? ', '+esc(noteWhen(ln)) : '')+': '+linky(noteText(ln).length > 140 ? noteText(ln).slice(0, 140)+"…" : noteText(ln))+'</div>' : '')+
       '<div class="lwact">'+(r.virtual ? (ed ? '<button class="btn sm pri" data-lwstart="'+esc(r.code)+'|'+esc(guessKind(r.code))+'">+ Start a license</button>' : '<span class="lwmeta">Not on any license sheet yet</span>') :
         '<button class="btn sm'+(ed && c.g !== "good" ? ' pri' : '')+'" data-lwopenb="'+r.id+'">'+(ed ? 'Update' : 'Open')+'</button>'+
@@ -270,7 +286,7 @@ window.MM_LIC = function(A){
     return all.filter(function(it){ var r = it.r;
       if(u.lwC && (KIND[r.kind] || KIND.other).grp !== u.lwC) return false;
       if(!q) return true;
-      return [r.code, r.lic_no, r.sheet_code, kName(r), lstepName(r.step), it.c.why].join(" ").toLowerCase().indexOf(q) >= 0; }); }
+      return [r.code, r.lic_no, r.sheet_code, kName(r), lstepName(r.step), it.c.why, psuLine(r)].join(" ").toLowerCase().indexOf(q) >= 0; }); }
   function listHtml(){ var u = S.ui, ed = canEdit(), tile = u.lwT || "today", all = filtered(items());
     var show = all.filter(function(it){ return tile === "all" || it.c.g === tile; });
     if(!show.length) return '<div class="lwempty">'+(tile === "today" ? "Nothing to do today. 🎉 Pick another tile above." : "Nothing here.")+'</div>';
@@ -344,6 +360,7 @@ window.MM_LIC = function(A){
     ensureCss(); var ed = canEdit(), sc = sheetChanged(r), fe = sheetEntry(r), st = A.dueState(r.expires);
     var body = '<div class="lwmhead"><span class="lwk">'+esc(r.kind === "other" ? (r.kind_other || "Other license") : KIND[r.kind].label)+'</span> '+A.duePill(st)+
         ' <a href="./#/homes/'+encodeURIComponent(r.code)+'" target="_top" class="muted" style="font-size:12.5px">Open '+esc(r.code)+' in Property Details →</a></div>'+
+      (psuLine(r) ? '<div class="lwsheet lwpsub">'+esc(psuLine(r))+'</div>' : '')+
       (sc ? '<div class="lwsheet"><b>The Dropbox sheet changed since the hub copy.</b><div>Sheet now: '+esc(sheetLine(fe))+'</div><div>Hub: '+esc(hubLine(r))+'</div>'+
         (ed ? '<div class="lwact"><button type="button" class="btn sm pri" data-lwsheet="use" data-id="'+r.id+'">Use the sheet\'s</button> <button type="button" class="btn sm ghost" data-lwsheet="keep" data-id="'+r.id+'">Keep the hub\'s</button></div>' : '')+'</div>' : '')+
       '<div class="lbl" style="margin-top:4px">Where it stands</div>'+stepChips(r, ed)+'<input type="hidden" id="lw_step" value="'+esc(r.step || "")+'">'+
@@ -429,6 +446,7 @@ window.MM_LIC = function(A){
       '.lwc1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.lwc1 .pill{margin-left:auto}.lwcode{font-size:16px}'+
       '.lwk{font-size:11.5px;font-weight:700;background:var(--line-2);border-radius:999px;padding:2px 8px;color:var(--ink-2)}'+
       '.lwwhy{font-weight:700;font-size:14px}.lwmeta{font-size:12.5px;color:var(--muted)}.lwbad{color:var(--stop);font-weight:700}'+
+      '.lwpsu{color:var(--info);font-weight:700}.lwpsub{background:var(--info-soft)}'+
       '.lwnote{font-size:12.5px;background:var(--surface-2);border-radius:10px;padding:6px 9px;color:var(--ink-2);line-height:1.35;overflow-wrap:anywhere}'+
       '.lwact{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:auto;padding-top:4px}'+
       '.lwsel{display:inline-flex}.lwsel input{width:18px;height:18px;margin:0;cursor:pointer}'+
