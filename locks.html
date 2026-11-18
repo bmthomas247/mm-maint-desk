@@ -1386,7 +1386,9 @@ async function homeView(pid){
   const setupDone = { hub: !!hub, lock: locks.length>0, test: myAssign.some(a=>a.ref_kind!=="foreign" && a.state==="verified"), wifi: !!wifi.wifi_name };
 
   const ip = installProgress(h);
-  const setup = h.installed_at ? "" : `<a class="card home todo" href="#/install/${encodeURIComponent(pid)}"><div class="row"><div class="grow"><b>Install</b><div class="muted">${ip.done} of ${ip.total} steps done</div></div><span class="btn go small">Open install</span></div>
+  // 2026-11-18 (Brandon): once the home is working (hub online, doors paired, every code on), the Install card goes away
+  const working = hub && online(hub) && locks.length && myAssign.some(a=>a.wanted) && myAssign.filter(a=>a.wanted).every(a=>a.state==="verified");
+  const setup = h.installed_at || working ? "" : `<a class="card home todo" href="#/install/${encodeURIComponent(pid)}"><div class="row"><div class="grow"><b>Install</b><div class="muted">${ip.done} of ${ip.total} steps done</div></div><span class="btn go small">Open install</span></div>
     <div class="progress"><i style="width:${Math.round(100*ip.done/ip.total)}%"></i></div></a>`;
   const doorCard = l => {
     const as = myAssign.filter(a=>a.lock_id===l.id);
