@@ -140,6 +140,17 @@ function payroll(x){
   CSV.pay_off = () => ["payroll_time_off", [["Name", "From", "To", "Hours", "Kind", "Policy", "Paid", "Approved by"],
     ...P.flatMap(p => (p.timeoff || []).map(t => [p.name, t.from, t.to, hh(t.hours), t.kind, t.policy || "", t.paid ? "yes" : "no", t.approved_by || ""]))]];
   const z = n => Number(n) ? hh(n) : "–";
+  // QuickBooks sheet (Brandon 2026-11-17: "something for her to submit into her quickbooks"): one line per person, columns named like the
+  // pay items on QuickBooks Online Payroll's Run payroll screen, in the order she types them. Standard QBO Payroll can't import split hours.
+  const QB = P.filter(p => tot(p) > 0 || Number(p.unpaid_h));
+  CSV.pay_qb = () => ["quickbooks_payroll_" + x.from + "_to_" + x.to, [["Pay period", "Employee", "Pay type", "Regular Pay (hrs)", "Overtime Pay (hrs)", "Holiday Pay (hrs)", "Paid Time Off (hrs)", "Other paid (hrs)", "Total hours", "PTO balance for pay stub (hrs)", "Unpaid time off (hrs, not paid)"],
+    ...QB.map(p => [`${x.from} to ${x.to}`, p.name, p.salaried ? "Salaried" : "Hourly", hh(p.reg_h), hh(p.ot_total), hh(p.hol_h), hh(p.pto_h), hh(p.other_h), hh(tot(p)), (p.pto || []).map(b => hh(b.hours)).join(" + "), hh(p.unpaid_h)])]];
+  const qbCard = `<div class="card qb"><h3 style="margin-top:0">For QuickBooks <span class="noprint">${csvBtn("pay_qb", "QuickBooks CSV")}</span></h3>
+      <p class="note" style="margin:0 2px 8px">Pay period ${fdate(x.from)} – ${fdate(x.to)}. One line per person, in the same order as the pay items on QuickBooks' Run payroll screen. Type each number into that person's line, and put the PTO balance on their pay stub. Fix anything in "Check these" first.</p>
+      <div class="tw"><table><thead><tr><th>Employee</th><th class="n">Regular Pay</th><th class="n">Overtime Pay</th><th class="n">Holiday Pay</th><th class="n">Paid Time Off</th><th class="n">Other paid</th><th class="n">Total hours</th><th class="n">PTO balance</th></tr></thead>
+      <tbody>${QB.map(p => `<tr><td><b>${H(p.name)}</b>${p.salaried ? ` <span class="pill b">Salaried</span>` : ""}</td><td class="n">${z(p.reg_h)}</td><td class="n">${z(p.ot_total)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td><td class="n">${ptoLeft(p) || "–"}</td></tr>`).join("")
+        || `<tr><td colspan="8" class="note">No paid hours in these dates.</td></tr>`}
+      ${QB.length ? `<tr class="tot"><td>Total</td><td class="n">${hh(sum(QB, p => p.reg_h))}</td><td class="n">${hh(sum(QB, p => p.ot_total))}</td><td class="n">${hh(sum(QB, p => p.hol_h))}</td><td class="n">${hh(sum(QB, p => p.pto_h))}</td><td class="n">${hh(sum(QB, p => p.other_h))}</td><td class="n">${hh(sum(QB, tot))}</td><td></td></tr>` : ""}</tbody></table></div></div>`;
   const rows = P.map((p, n) => {
     const op = A.open["p" + n];
     return `<tr class="click" data-open="p${n}"><td><b>${H(p.name)}</b> ${p.salaried ? `<span class="pill b">Salaried</span>` : ""}${p.no_clock ? `<span class="pill o">Doesn't clock in</span>` : ""}<br><span class="note">${H((p.teams || []).join(", "))}</span></td>
@@ -154,6 +165,7 @@ function payroll(x){
       ${tile(hh(sum(P, p => p.hol_h)), "Holiday hours", "worked on a paid holiday")}
       ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}</div>
     ${checks(chk)}
+    ${qbCard}
     <div class="card"><h3 style="margin-top:0">Hours by person <span class="noprint">${csvBtn("pay_sum", "Breakdown CSV")} ${csvBtn("pay_days", "By day CSV")} ${csvBtn("pay_shifts", "Punches CSV")} ${csvBtn("pay_off", "Time off CSV")} ${csvBtn("pay_pto", "PTO balances CSV")}</span></h3>
       ${x.scope === "team" ? `<p class="note" style="margin:0 2px 8px">Showing the people you look after.</p>` : ""}
       <div class="tw"><table><thead><tr><th>Person</th><th class="n">Regular</th><th class="n">Holiday</th><th class="n">Overtime</th><th class="n">PTO</th><th class="n">Other paid</th><th class="n">Total paid</th><th class="n">Unpaid off</th><th class="n">PTO left</th><th class="noprint"></th></tr></thead>
