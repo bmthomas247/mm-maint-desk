@@ -266,25 +266,33 @@ window.MM_LIC = function(A){
   function noteWhen(n){ return n.src === "import" && /^From the license sheet/.test(n.by_name || "") ? "" : A.fmtD(String(n.at).slice(0, 10)); }
   function lastNote(r){ return S.licNotes.filter(function(n){ return n.code === r.code && (!n.license_id || n.license_id === r.id); })[0] || null; }
 
-  /* one license = one full-width row (Jeff 2026-11-18: no white space): home | what to do + details + last note | status | buttons */
-  function card(it, ed){ var r = it.r, c = it.c, st = r.virtual ? null : A.dueState(r.expires), ln = r.virtual ? null : lastNote(r), sc = sheetChanged(r);
-    var tone = c.g === "today" ? "stop" : c.g === "renew" ? "wait" : c.g === "good" ? "go" : c.g === "park" ? "mute" : "info", meta = [];
+  /* one license = one box; boxes run 4 across in ONE grid (no county breaks = no half-empty rows). Jeff 2026-11-18. */
+  function shortPill(r){ var e = r.expires, st = A.dueState(e), cls = { late:"stop", soon:"waiting", ok:"done", none:"mute" }[st.k];
+    /* short dates so the pill fits beside the home code: Jan 15 this year, 9/30/27 another year */
+    var md = function(d){ try{ var x = new Date(d+"T12:00:00");
+        return d.slice(0, 4) === A.today().slice(0, 4) ? x.toLocaleDateString(undefined, { month:"short", day:"numeric" }) : (x.getMonth() + 1)+"/"+x.getDate()+"/"+String(x.getFullYear()).slice(2); }catch(z){ return A.fmtD(d); } };
+    var t = !e ? "No date" : st.k === "late" ? "Expired "+md(e) : st.k === "soon" ? "Due "+new Date(e+"T12:00:00").toLocaleDateString(undefined, { month:"short", day:"numeric" }) : "Good to "+md(e);
+    return '<span class="pill '+cls+'">'+esc(t)+'</span>'; }
+  function psuShort(r){ var j = psuOf(r.code)[0]; return j ? (PSU_LBL[j.kind] || "In Property Set Up")+(j.started ? " · "+A.fmtD(j.started) : "") : ""; }
+  function card(it, ed){ var r = it.r, c = it.c, ln = r.virtual ? null : lastNote(r), sc = sheetChanged(r), meta = [], ps = psuShort(r);
+    var tone = c.g === "today" ? "stop" : c.g === "renew" ? "wait" : c.g === "good" ? "go" : c.g === "park" ? "mute" : "info";
     if(r.lic_no) meta.push('License # <b class="mono">'+esc(r.lic_no)+'</b>');
     if(r.paid === "not_paid") meta.push('<span class="lwbad">not paid</span>');
     if(r.step && !/^(waiting|park|insp)$/.test(c.g) && r.step !== "licensed") meta.push(esc(lstepName(r.step))+(r.step_on ? ' '+esc(A.fmtD(r.step_on)) : ''));
-    if(sc) meta.push('<span class="lwbad">Dropbox sheet changed — open to check</span>');
-    if(psuLine(r)) meta.push('<span class="lwpsu">'+esc(psuLine(r))+'</span>');
+    var lpd = psuOf(r.code).filter(function(j){ return j.insp_on && !(r.step === "insp_sched" && r.step_on === j.insp_on); })[0];
+    if(lpd) meta.push('Property Set Up has the county on '+esc(A.fmtD(lpd.insp_on)));
+    if(sc) meta.push('<span class="lwbad">Dropbox sheet changed</span>');
     var nt = ln ? noteText(ln) : "";
     return '<div class="lwc t-'+tone+(S.licSel[r.id] ? ' sel' : '')+'"'+(r.virtual ? '' : ' data-lwopen="'+r.id+'" tabindex="0" role="button" aria-label="Open '+esc(r.code)+' '+esc(kName(r))+'"')+'>'+
-      '<div class="lwcA">'+(ed && !r.virtual ? '<label class="lwsel" title="Pick to change several at once"><input type="checkbox" data-lwsel="'+r.id+'"'+(S.licSel[r.id] ? ' checked' : '')+' aria-label="Pick '+esc(r.code)+'"></label>' : '')+'</div>'+
-      '<div class="lwcB"><b class="lwcode">'+esc(r.code)+'</b><span class="lwk">'+esc(kName(r))+'</span></div>'+
-      '<div class="lwcC"><div class="lwwhy">'+esc(c.why)+'</div>'+(meta.length ? '<div class="lwmeta">'+meta.join(' · ')+'</div>' : '')+
-        (ln ? '<div class="lwnote" title="'+esc(nt)+'">💬 <b>'+esc(noteWho(ln))+'</b>'+(noteWhen(ln) ? ', '+esc(noteWhen(ln)) : '')+': '+linky(nt)+'</div>' : '')+'</div>'+
-      '<div class="lwcD">'+(st ? A.duePill(st) : '<span class="pill mute">No license on file</span>')+'</div>'+
+      '<div class="lwc1">'+(ed && !r.virtual ? '<label class="lwsel" title="Pick to change several at once"><input type="checkbox" data-lwsel="'+r.id+'"'+(S.licSel[r.id] ? ' checked' : '')+' aria-label="Pick '+esc(r.code)+'"></label>' : '')+
+        '<b class="lwcode">'+esc(r.code)+'</b>'+(r.virtual ? '<span class="pill mute">No license</span>' : shortPill(r))+'</div>'+
+      '<div class="lwc2"><span class="lwk k-'+esc(r.kind)+'">'+esc(kName(r))+'</span>'+(ps ? '<span class="lwk lwkpsu">'+esc(ps)+'</span>' : '')+'</div>'+
+      '<div class="lwwhy">'+esc(c.why)+'</div>'+(meta.length ? '<div class="lwmeta">'+meta.join(' · ')+'</div>' : '')+
+      (ln ? '<div class="lwnote" title="'+esc(nt)+'">💬 <b>'+esc(noteWho(ln))+'</b>'+(noteWhen(ln) ? ', '+esc(noteWhen(ln)) : '')+': '+linky(nt)+'</div>' : '')+
       '<div class="lwact">'+(r.virtual ? (ed ? '<button class="btn sm pri" data-lwstart="'+esc(r.code)+'|'+esc(guessKind(r.code))+'">+ Start a license</button>' : '') :
         '<button class="btn sm'+(ed && c.g !== "good" ? ' pri' : '')+'" data-lwopenb="'+r.id+'">'+(ed ? 'Update' : 'Open')+'</button>'+
         (ed && /^(today|renew|waiting)$/.test(c.g) ? '<button class="btn sm ghost" data-lwrenew="'+r.id+'">✓ Renewed</button>' : '')+
-        (canNote() ? '<button class="btn sm ghost" data-lwnq="'+r.id+'">📝 Note</button>' : ''))+'</div></div>'; }
+        (canNote() ? '<button class="btn sm ghost lwnb" data-lwnq="'+r.id+'" title="Add a note" aria-label="Add a note">📝</button>' : ''))+'</div></div>'; }
 
   function filtered(all){ var u = S.ui, q = String(u.lwQ || "").trim().toLowerCase();
     return all.filter(function(it){ var r = it.r;
@@ -294,12 +302,10 @@ window.MM_LIC = function(A){
   function listHtml(){ var u = S.ui, ed = canEdit(), tile = u.lwT || "today", all = filtered(items());
     var show = all.filter(function(it){ return tile === "all" || it.c.g === tile; });
     if(!show.length) return '<div class="lwempty">'+(tile === "today" ? "Nothing to do today. 🎉 Pick another tile above." : "Nothing here.")+'</div>';
-    var by = {}; show.forEach(function(it){ var g = (KIND[it.r.kind] || KIND.other).grp; (by[g] = by[g] || []).push(it); });
-    return KORD.map(function(k){ return KIND[k].grp; }).filter(function(g, i, a){ return by[g] && a.indexOf(g) === i; }).map(function(g){
-      var list = by[g].sort(function(a, b){ return String(a.c.at || "").localeCompare(String(b.c.at || "")) || a.r.code.localeCompare(b.r.code, undefined, { numeric:true }); });
-      var ids = list.filter(function(it){ return !it.r.virtual; }).map(function(it){ return it.r.id; });
-      return '<div class="lwgh"><b>'+esc(g)+'</b><span>'+list.length+'</span>'+(ed && ids.length > 1 ? '<button type="button" class="lwlink" data-lwselall="'+ids.join(",")+'">Pick all '+ids.length+'</button>' : '')+'</div>'+
-        '<div class="lwgrid">'+list.map(function(it){ return card(it, ed); }).join("")+'</div>'; }).join(""); }
+    show.sort(function(a, b){ return KORD.indexOf(a.r.kind) - KORD.indexOf(b.r.kind) || String(a.c.at || "").localeCompare(String(b.c.at || "")) || a.r.code.localeCompare(b.r.code, undefined, { numeric:true }); });
+    var ids = show.filter(function(it){ return !it.r.virtual; }).map(function(it){ return it.r.id; });
+    return '<div class="lwtool"><span>'+show.length+' shown</span>'+(ed && ids.length > 1 ? '<button type="button" class="lwlink" data-lwselall="'+ids.join(",")+'">Pick all '+ids.length+'</button>' : '')+'</div>'+
+      '<div class="lwgrid">'+show.map(function(it){ return card(it, ed); }).join("")+'</div>'; }
   function bulkHtml(){ var ids = Object.keys(S.licSel).filter(function(k){ return S.licSel[k]; }); if(!ids.length || !canEdit()) return "";
     return '<div class="lwbulk"><b>'+ids.length+' picked</b>'+
       '<select id="lwb_step" aria-label="Where it stands"><option value="">Where it stands…</option>'+LSTEP.map(function(s){ return '<option value="'+s[0]+'">'+esc(s[1])+'</option>'; }).join("")+'</select>'+
@@ -343,9 +349,10 @@ window.MM_LIC = function(A){
   function nextExp(r){ var td = A.today(), from = r.expires && r.expires > td ? r.expires : td, md = FIXED_END[r.kind], x;
     if(md){ x = from.slice(0, 4)+"-"+md; if(x <= from) x = (+from.slice(0, 4) + 1)+"-"+md; return x; }
     x = r.expires || td; do { x = A.addYear(x); } while(x <= td); return x; }
-  function stepChips(r, ed){ var grp = function(g, title){ return '<div class="lwsg"><span class="lbl">'+title+'</span><div class="chiprow">'+LSTEP.filter(function(s){ return s[2] === g; }).map(function(s){
-      return '<button type="button" class="chip" data-lwstepc="'+s[0]+'" aria-pressed="'+(r.step === s[0])+'"'+(ed ? '' : ' disabled')+'>'+esc(s[1])+'</button>'; }).join("")+'</div></div>'; };
-    return grp("new", "Getting the license")+grp("renew", "Renewing")+grp("park", "Parked"); }
+  var LSHORT = { insp_wait:"Waiting on county", insp_passed:"Passed inspection", bldg_hold:"Building / HOA", licensed:"Licensed" };
+  var PATH = ["need_apply","applied","fee_paid","insp_wait","insp_sched","insp_passed","licensed"], OTHER = ["insp_failed","renew_sent","bldg_hold","owner","hold","stop"];
+  function stepChips(r, ed){ var chip = function(k){ return '<button type="button" class="chip" data-lwstepc="'+k+'" aria-pressed="'+(r.step === k)+'" title="'+esc(lstepName(k))+'"'+(ed ? '' : ' disabled')+'>'+esc(LSHORT[k] || lstepName(k))+'</button>'; };
+    return '<div class="lwpath">'+PATH.map(chip).join('<span class="lwar">›</span>')+'</div><div class="lwpath lwother"><span class="lwor">Or:</span>'+OTHER.map(chip).join("")+'</div>'; }
   function docsHtml(r){ var dd = (A.licDocs ? A.licDocs(r.code) : []) || [], hf = S.licFiles.filter(function(f){ return f.code === r.code; });
     var a = dd.map(function(x){ return '<a href="#" class="ldoc" data-ldoc="'+esc(x.path)+'" title="'+esc(x.name)+'">📄 '+esc(x.kind === "License" ? "License" : "Inspection")+(x.year ? ' '+x.year : '')+'</a>'; })
       .concat(hf.map(function(x){ return '<a href="#" class="ldoc" data-ldoc="'+esc(x.path)+'" title="Added by '+esc(x.by_name || "")+' '+esc(fmtTime(x.at))+'">📄 '+esc(x.kind === "License" ? "License" : x.kind)+(x.year ? ' '+x.year : '')+' · '+esc(x.name.length > 28 ? x.name.slice(0, 28)+"…" : x.name)+'</a>'; }));
@@ -361,28 +368,32 @@ window.MM_LIC = function(A){
       (h.fields || []).map(function(f){ return f === "sheet" ? "Sheet copy updated" : (FLD[f] || f)+": "+v(f, (h.old || {})[f])+" → "+v(f, (h.new || {})[f]); }).join(" · ");
       return '<div class="lwn"><div>'+esc(what)+'</div><div class="lwnby">'+esc(h.by_name || "")+' · '+esc(fmtTime(h.at))+'</div></div>'; }).join(""); }
   function mRec(id){ var r = recById(id); if(!r) return A.toast("That license isn't on the list any more");
-    ensureCss(); var ed = canEdit(), sc = sheetChanged(r), fe = sheetEntry(r), st = A.dueState(r.expires);
-    var body = '<div class="lwmhead"><span class="lwk">'+esc(r.kind === "other" ? (r.kind_other || "Other license") : KIND[r.kind].label)+'</span> '+A.duePill(st)+
-        ' <a href="./#/homes/'+encodeURIComponent(r.code)+'" target="_top" class="muted" style="font-size:12.5px">Open '+esc(r.code)+' in Property Details →</a></div>'+
-      (psuLine(r) ? '<div class="lwsheet lwpsub">'+esc(psuLine(r))+'</div>' : '')+
-      (sc ? '<div class="lwsheet"><b>The Dropbox sheet changed since the hub copy.</b><div>Sheet now: '+esc(sheetLine(fe))+'</div><div>Hub: '+esc(hubLine(r))+'</div>'+
-        (ed ? '<div class="lwact"><button type="button" class="btn sm pri" data-lwsheet="use" data-id="'+r.id+'">Use the sheet\'s</button> <button type="button" class="btn sm ghost" data-lwsheet="keep" data-id="'+r.id+'">Keep the hub\'s</button></div>' : '')+'</div>' : '')+
-      '<div class="lbl" style="margin-top:4px">Where it stands</div>'+stepChips(r, ed)+'<input type="hidden" id="lw_step" value="'+esc(r.step || "")+'">'+
-      '<div class="fields" style="margin-top:8px">'+A.fld("lw_on", STEP_DATE[r.step] || "Date for this step", r.step_on, "date")+
+    ensureCss(); var ed = canEdit(), sc = sheetChanged(r), fe = sheetEntry(r), ps = psuShort(r), nN = S.licNotes.filter(function(n){ return n.code === r.code; }).length,
+      nC = ((A.licDocs ? A.licDocs(r.code) : []) || []).length + S.licFiles.filter(function(f){ return f.code === r.code; }).length;
+    var lpd = psuOf(r.code).filter(function(j){ return j.insp_on; })[0];
+    var body = '<div class="lwm"><div class="lwmhead"><span class="lwk">'+esc(r.kind === "other" ? (r.kind_other || "Other license") : KIND[r.kind].label)+'</span>'+shortPill(r)+
+        (ps ? '<span class="lwk lwkpsu">'+esc(ps)+'</span>' : '')+(lpd ? '<span class="lwk lwkpsu">Property Set Up: county '+esc(A.fmtD(lpd.insp_on))+'</span>' : '')+
+        '<a href="./#/homes/'+encodeURIComponent(r.code)+'" target="_top" class="lwplink">Property Details →</a></div>'+
+      (sc ? '<div class="lwsheet"><b>The Dropbox sheet changed.</b> Sheet: '+esc(sheetLine(fe))+' · Hub: '+esc(hubLine(r))+
+        (ed ? ' <button type="button" class="btn sm pri" data-lwsheet="use" data-id="'+r.id+'">Use the sheet\'s</button> <button type="button" class="btn sm ghost" data-lwsheet="keep" data-id="'+r.id+'">Keep the hub\'s</button>' : '')+'</div>' : '')+
+      '<div class="lbl">Where it stands</div>'+stepChips(r, ed)+'<input type="hidden" id="lw_step" value="'+esc(r.step || "")+'">'+
+      '<div class="fields lwf">'+A.fld("lw_on", STEP_DATE[r.step] || "Date for this step", r.step_on, "date")+
         A.fld("lw_fu", "Follow up on", r.follow_up, "date")+A.fld("lw_no", "License #", r.lic_no)+A.fld("lw_exp", "Expires", r.expires, "date")+
         A.sel("lw_paid", "Paid", [["","Not set"],["paid","Paid"],["not_paid","Not paid"]], r.paid || "")+'</div>'+
-      (ed ? '<div class="lwfu"><span class="muted">Follow up:</span><button type="button" class="chip" data-lwfu="3">in 3 days</button><button type="button" class="chip" data-lwfu="7">in a week</button><button type="button" class="chip" data-lwfu="14">in 2 weeks</button><button type="button" class="chip" data-lwfu="0">no follow-up</button>'+
-        '<span class="muted" style="margin-left:8px">Expires:</span><button type="button" class="chip" data-lwnext="'+esc(nextExp(r))+'">'+(FIXED_NAME[r.kind] || "one year on")+' ('+esc(A.fmtD(nextExp(r)))+')</button></div>' : '')+
-      (canNote() ? '<div class="lbl" style="margin-top:14px">Notes · '+esc(r.code)+'</div><div class="lwaddn"><textarea id="lw_nt" placeholder="What happened? e.g. Called Torrie, she\'ll email the inspection date. Ticket numbers like #106066 become links."></textarea>'+
-        '<button type="button" class="btn sm pri" data-lwnadd="'+r.id+'">Add note</button></div><div class="lwnl" id="lwnl">'+notesHtml(r.code)+'</div>' +
-        '<div class="lbl" style="margin-top:14px">License copies</div><div class="lwdocs" id="lwdocs">'+docsHtml(r)+'</div>'+
-        '<div class="lwup"><input type="file" id="lw_file" accept=".pdf,image/*" aria-label="Pick a file"><select id="lw_fk" aria-label="What it is"><option>License</option><option>Inspection report</option><option>Other</option></select>'+
-        '<input type="number" id="lw_fy" placeholder="Year" min="2000" max="2100" style="width:90px" aria-label="Year"><button type="button" class="btn sm" data-lwup="'+r.id+'">Upload</button></div>'+
-        '<details class="lwhist" data-lwhist="'+r.id+'"><summary>History</summary><div id="lwhl" class="lwnl">Loading…</div></details>' : '');
+      (ed ? '<div class="lwfu"><span class="muted">Follow up</span><button type="button" class="chip" data-lwfu="3">3 days</button><button type="button" class="chip" data-lwfu="7">1 week</button><button type="button" class="chip" data-lwfu="14">2 weeks</button><button type="button" class="chip" data-lwfu="0">none</button>'+
+        '<span class="muted lwsp">Expires</span><button type="button" class="chip" data-lwnext="'+esc(nextExp(r))+'">'+(FIXED_NAME[r.kind] || "a year on")+' · '+esc(A.fmtD(nextExp(r)))+'</button></div>' : '')+
+      (canNote() ? '<div class="lwtabs" role="tablist"><button type="button" role="tab" data-lwtab="notes" aria-selected="true">Notes ('+nN+')</button>'+
+          '<button type="button" role="tab" data-lwtab="copies" aria-selected="false">Copies ('+nC+')</button><button type="button" role="tab" data-lwtab="hist" data-id="'+r.id+'" aria-selected="false">History</button></div>'+
+        '<div class="lwpane" data-pane="notes"><div class="lwaddn"><textarea id="lw_nt" rows="2" placeholder="What happened? Ticket numbers like #106066 become links."></textarea>'+
+          '<button type="button" class="btn sm pri" data-lwnadd="'+r.id+'">Add note</button></div><div class="lwnl" id="lwnl">'+notesHtml(r.code)+'</div></div>'+
+        '<div class="lwpane" data-pane="copies" hidden><div class="lwdocs" id="lwdocs">'+docsHtml(r)+'</div>'+
+          '<div class="lwup"><input type="file" id="lw_file" accept=".pdf,image/*" aria-label="Pick a file"><select id="lw_fk" aria-label="What it is"><option>License</option><option>Inspection report</option><option>Other</option></select>'+
+          '<input type="number" id="lw_fy" placeholder="Year" min="2000" max="2100" style="width:90px" aria-label="Year"><button type="button" class="btn sm" data-lwup="'+r.id+'">Upload</button></div></div>'+
+        '<div class="lwpane" data-pane="hist" hidden><div id="lwhl" class="lwnl">Loading…</div></div>' : '')+'</div>';
     A.openModal(r.code+" · "+kName(r), body, ed ? function(){ var p = { step:A.fv("lw_step"), step_on:A.fv("lw_on"), follow_up:A.fv("lw_fu"), lic_no:A.fv("lw_no"), expires:A.fv("lw_exp"), paid:A.fv("lw_paid") };
         return rpc("lic_save", { p_id:r.id, p:p }).then(function(x){ if(!x) return; A.toast("Saved"); A.closeModal(); return loadLic(); }); } : null, "Save",
       ed ? '<button type="button" class="btn ghost" data-lwoff="'+r.id+'" style="margin-right:auto">Not renewing / take off</button>' : '');
-    var m = document.getElementById("modal"); if(m){ m.classList.add("wide"); if(!ed) [].forEach.call(m.querySelectorAll(".fields input,.fields select"), function(x){ x.disabled = true; }); } }
+    var m = document.getElementById("modal"); if(m){ m.classList.add("wide"); m.scrollTop = 0; if(!ed) [].forEach.call(m.querySelectorAll(".fields input,.fields select"), function(x){ x.disabled = true; }); } }
   function refreshModal(r){ var nl = document.getElementById("lwnl"), dl = document.getElementById("lwdocs"); if(nl) nl.innerHTML = notesHtml(r.code); if(dl) dl.innerHTML = docsHtml(r); }
   function mRenew(id){ var r = recById(id); if(!r) return;
     A.openModal("Renewed · "+r.code+" · "+kName(r), '<div class="fields">'+A.fld("lw_rexp", "New expiration", nextExp(r), "date")+A.fld("lw_rno", "License #", r.lic_no)+
@@ -443,17 +454,18 @@ window.MM_LIC = function(A){
       '.lwgh{display:flex;align-items:center;gap:8px;margin:16px 2px 8px;font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}'+
       '.lwgh span{background:var(--line);color:var(--ink-2);border-radius:999px;padding:1px 8px;letter-spacing:0}'+
       '.lwlink{appearance:none;border:0;background:none;padding:0;color:var(--go);font:inherit;font-weight:700;cursor:pointer;text-transform:none;letter-spacing:0;font-size:12.5px;text-decoration:underline}'+
-      '.lwgrid{display:flex;flex-direction:column;gap:6px}'+
-      '.lwc{display:grid;grid-template-columns:20px minmax(130px,170px) minmax(0,1fr) auto auto;grid-template-areas:"a b c d e";align-items:center;gap:4px 14px;background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line-2);border-radius:14px;padding:9px 12px;cursor:pointer;box-shadow:var(--shadow);min-width:0}'+
-      '.lwcA{grid-area:a}.lwcB{grid-area:b;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}.lwcC{grid-area:c;min-width:0}.lwcD{grid-area:d;white-space:nowrap;text-align:right}'+
+      '.lwtool{display:flex;gap:10px;align-items:center;margin:2px 2px 8px;font-size:12.5px;color:var(--muted);font-weight:700}'+
+      '.lwgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}'+
+      '@media (max-width:1200px){.lwgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media (max-width:820px){.lwgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:560px){.lwgrid{grid-template-columns:1fr}}'+
+      '.lwc{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line-2);border-radius:16px;padding:12px 14px;cursor:pointer;box-shadow:var(--shadow);min-width:0;min-height:168px}'+
       '.lwc:hover{box-shadow:0 8px 20px rgba(23,48,12,.12)}.lwc:focus-visible{outline:3px solid #c7e86b}'+
       '.lwc.t-stop{border-left-color:var(--stop)}.lwc.t-wait{border-left-color:var(--wait)}.lwc.t-go{border-left-color:var(--go)}.lwc.t-info{border-left-color:var(--info)}.lwc.sel{background:var(--go-soft)}'+
-      '.lwc1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.lwc1 .pill{margin-left:auto}.lwcode{font-size:16px}'+
-      '.lwk{font-size:11.5px;font-weight:700;background:var(--line-2);border-radius:999px;padding:2px 8px;color:var(--ink-2)}'+
-      '.lwwhy{font-weight:700;font-size:14px;line-height:1.3}.lwmeta{font-size:12.5px;color:var(--muted);margin-top:2px}.lwbad{color:var(--stop);font-weight:700}'+
-      '.lwpsu{color:var(--info);font-weight:700}.lwpsub{background:var(--info-soft)}'+
-      '.lwnote{font-size:12.5px;color:var(--ink-2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
-      '.lwact{grid-area:e;display:flex;gap:6px;align-items:center;justify-content:flex-end}.lwact .btn{white-space:nowrap}'+
+      '.lwc1{display:flex;align-items:center;gap:4px 8px;min-width:0;flex-wrap:wrap}.lw .lwc1 .pill{margin-left:auto;white-space:nowrap;font-size:11.5px;padding:3px 8px}.lwcode{font-size:16px;white-space:nowrap}'+
+      '.lwc2{display:flex;gap:5px;flex-wrap:wrap}'+
+      '.lwk{font-size:11.5px;font-weight:700;background:var(--line-2);border-radius:999px;padding:2px 8px;color:var(--ink-2);white-space:nowrap}.lwk.lwkpsu{background:var(--info-soft);color:var(--info)}'+
+      '.lwwhy{font-weight:700;font-size:14.5px;line-height:1.3}.lwmeta{font-size:12.5px;color:var(--muted);line-height:1.35}.lwbad{color:var(--stop);font-weight:700}'+
+      '.lwnote{font-size:12.5px;background:var(--surface-2);border-radius:10px;padding:6px 9px;color:var(--ink-2);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}'+
+      '.lwact{display:flex;gap:6px;align-items:center;margin-top:auto;padding-top:6px}.lw .lwact .btn{padding:0 10px!important;min-height:34px;font-size:13px;white-space:nowrap}.lw .lwact .lwnb{margin-left:auto;padding:0 9px!important}'+
       '.lwsel{display:inline-flex}.lwsel input{width:18px;height:18px;margin:0;cursor:pointer}'+
       '.lwbulk{position:sticky;bottom:10px;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#17300c;color:#fff;border-radius:16px;padding:10px 14px;margin-top:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}'+
       '.lwbulk label{display:inline-flex;gap:5px;align-items:center;font-size:12.5px}.lwbulk select,.lwbulk input{width:auto;border-radius:10px;border:0;padding:6px 8px;font:inherit;font-size:13px}'+
@@ -461,23 +473,33 @@ window.MM_LIC = function(A){
       '.lwnr{display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:6px 0;cursor:pointer;color:var(--ink);font:inherit;font-size:13.5px}'+
       '.lwempty{padding:22px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:16px}'+
       '.lwfold{margin-top:12px;padding:0}.lwfold>summary{cursor:pointer;padding:12px 16px;font-weight:800}'+
-      '.lwmhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}'+
+      '.modal:has(> .lwm){max-width:1060px;max-height:calc(100vh - 48px);overflow:auto;padding:14px 20px;gap:8px}'+
+      '.modal:has(> .lwm) .mhead{margin-bottom:2px}.modal:has(> .lwm) .modact{position:sticky;bottom:-14px;background:var(--surface);padding:10px 0;border-top:1px solid var(--line);margin-top:4px;z-index:2}'+
+      '.lwm{display:flex;flex-direction:column;gap:8px}.lwm .lbl{margin:2px 0 -2px}'+
+      '.lwmhead{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.lwplink{margin-left:auto;font-size:12.5px;color:var(--muted)}'+
+      '.lwpath{display:flex;gap:4px;flex-wrap:wrap;align-items:center}.lwpath .chip{font-size:12.5px;padding:5px 10px}.lwar{color:var(--muted);font-weight:800}'+
+      '.lwother{padding-top:2px}.lwor{font-size:12px;color:var(--muted);font-weight:700;margin-right:2px}'+
+      '.lwpath .chip[aria-pressed=true]{background:#17300c;color:#fff;border-color:#17300c}'+
+      '.lwf{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:8px!important;margin:0}@media (max-width:760px){.lwf{grid-template-columns:repeat(2,minmax(0,1fr))!important}}'+
+      '.lwsp{margin-left:10px}'+
+      '.lwtabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:4px}.lwtabs button{appearance:none;border:0;background:none;padding:8px 12px;font:inherit;font-weight:700;font-size:13.5px;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}'+
+      '.lwtabs button[aria-selected=true]{color:var(--ink);border-bottom-color:#4f7a18}'+
+      '.lwpane .lwnl{max-height:min(230px,30vh);overflow:auto}'+
       '.lwsheet{background:var(--wait-soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13.5px}'+
       '.lwsg{margin:6px 0}.lwsg .lbl{display:block;margin-bottom:4px;font-size:11.5px}.lwsg .chip{font-size:12.5px;padding:6px 11px}'+
       '.lwsg .chip[aria-pressed=true],.lwfu .chip.on{background:#17300c;color:#fff;border-color:#17300c}'+
       '.lwfu{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px}.lwfu .chip{font-size:12px;padding:5px 10px}'+
-      '.lwaddn{display:flex;gap:8px;align-items:flex-end;margin-top:4px}.lwaddn textarea{flex:1;min-height:58px}'+
+      '.lwaddn{display:flex;gap:8px;align-items:flex-end;margin:6px 0 2px}.lwaddn textarea{flex:1;min-height:44px}'+
       '.lwnl .lwn{border-top:1px solid var(--line);padding:8px 0;font-size:13.5px;overflow-wrap:anywhere}.lwnby{font-size:12px;color:var(--muted);margin-top:2px}'+
       '.lwdocs a{display:inline-block;margin:0 10px 6px 0}.lwup{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}.lwup input[type=file]{width:auto;flex:1 1 200px}.lwup select{width:auto}'+
       '.lwhist{margin-top:12px}.lwhist>summary{cursor:pointer;font-weight:800;font-size:13px}'+
-      '@media (max-width:900px){.lwc{grid-template-columns:20px minmax(0,1fr) auto;grid-template-areas:"a b d" ". c c" "e e e"}.lwcB{flex-direction:row;flex-wrap:wrap;align-items:center}.lwact{justify-content:flex-start;flex-wrap:wrap;margin-top:4px}.lw .lwact .btn{padding:0 9px!important;font-size:13px}}'+
       '@media (max-width:640px){.lwtiles{grid-template-columns:repeat(3,minmax(0,1fr))}.lwt{padding:8px 9px}.lwt b{font-size:20px}.lwt span{font-size:11px}.lwhead{padding:16px 14px 12px}}';
     document.head.appendChild(s); }
 
   /* ---- clicks, typing, picking ---- */
   document.addEventListener("click", function(ev){
     if(ev.target.closest(".lwsel") || ev.target.closest('a[target="_blank"]')) return;   // the pick box has its own change handler; outside links just open
-    var t = ev.target.closest("[data-lwt],[data-lwc],[data-lwadd],[data-lwstart],[data-lwopenb],[data-lwrenew],[data-lwnq],[data-lwselall],[data-lwbapply],[data-lwbclear],[data-lwnote-open],[data-lwstepc],[data-lwfu],[data-lwnext],[data-lwnadd],[data-lwnoff],[data-lwup],[data-lwoff],[data-lwsheet],[data-lwopen]");
+    var t = ev.target.closest("[data-lwt],[data-lwc],[data-lwadd],[data-lwstart],[data-lwopenb],[data-lwrenew],[data-lwnq],[data-lwselall],[data-lwbapply],[data-lwbclear],[data-lwnote-open],[data-lwstepc],[data-lwfu],[data-lwnext],[data-lwnadd],[data-lwnoff],[data-lwup],[data-lwoff],[data-lwsheet],[data-lwtab],[data-lwopen]");
     if(!t) return; var d = t.dataset;
     if(t.tagName === "A" || t.tagName === "BUTTON") ev.preventDefault();
     if(d.lwt){ S.ui.lwT = d.lwt; return redraw(); }
@@ -510,6 +532,11 @@ window.MM_LIC = function(A){
         return loadLic().then(function(){ refreshModal(r); }); }); }
     if(d.lwnoff){ if(!confirm("Take this note off? It's kept, not deleted.")) return;
       return rpc("lic_note_off", { p_id:+d.lwnoff }).then(function(x){ if(!x) return; A.toast("Note taken off"); return loadLic().then(function(){ var nb = document.querySelector("[data-lwnadd]"), mr = nb ? recById(nb.dataset.lwnadd) : null; if(mr) refreshModal(mr); }); }); }
+    if(d.lwtab){ [].forEach.call(document.querySelectorAll("[data-lwtab]"), function(b){ b.setAttribute("aria-selected", String(b === t)); });
+      [].forEach.call(document.querySelectorAll(".lwpane"), function(x){ x.hidden = x.dataset.pane !== d.lwtab; });
+      if(d.lwtab === "hist" && !t.dataset.loaded){ t.dataset.loaded = "1"; sb().from("hub_licenses_log").select("*").eq("license_id", +d.id).order("at", { ascending:false }).limit(60).then(function(r){
+        var el = document.getElementById("lwhl"); if(el) el.innerHTML = r.error ? '<div class="muted">Couldn\'t load the history.</div>' : histHtml(r.data || []); }); }
+      return; }
     if(d.lwup){ var ur = recById(d.lwup); if(ur) upload(ur); return; }
     if(d.lwoff){ A.closeModal(); return mOff(d.lwoff); }
     if(d.lwsheet){ var sr = recById(d.id), e = sr && sheetEntry(sr); if(!sr) return;
