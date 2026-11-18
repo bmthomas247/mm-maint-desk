@@ -31,7 +31,7 @@ h1{font-size:24px;margin:0 0 4px;line-height:1.25} h2{font-size:16px;margin:0 0 
 .chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:9px 12px;font:inherit;font-weight:700;cursor:pointer;min-width:92px}
 .chip small{display:block;font-weight:600;color:var(--muted);font-size:12px}
 .chip.on{background:var(--moose);border-color:var(--moose);color:#16260a} .chip.on small{color:#2f4710}
-label{display:block;margin:10px 0 0;font-weight:700;font-size:14px} input,textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin-top:4px}
+label{display:block;margin:10px 0 0;font-weight:700;font-size:14px} input:where(:not([type=checkbox],[type=radio])),textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin-top:4px}
 textarea{min-height:80px} .btn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:800;font-size:17px;background:var(--moose);color:#16260a;cursor:pointer}
 .btn:disabled{opacity:.6} .bad{color:var(--red);font-weight:700} .trap{position:absolute;left:-5000px}
 .note{white-space:pre-wrap;background:var(--moose-soft);color:var(--moose-ink);border-radius:12px;padding:12px 14px;margin:12px 0 0}
