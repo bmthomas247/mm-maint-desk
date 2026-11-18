@@ -432,7 +432,7 @@ window.MM_LIC = function(A){
       '.lwhead h2{margin:0;font-size:24px;font-weight:800;color:#fff}.lwhead p{margin:4px 0 0;color:rgba(255,255,255,.82);font-size:13.5px;max-width:820px}'+
       '.lwtop{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}'+
       '.lwadd{appearance:none;background:#c7e86b;color:#17300c;border:0;border-radius:999px;padding:9px 16px;font:inherit;font-weight:800;cursor:pointer}'+
-      '.lwtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-top:14px}'+
+      '.lwtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:14px}'+
       '.lwt{appearance:none;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:9px 12px;text-align:left;color:#fff;cursor:pointer;font:inherit}'+
       '.lwt b{display:block;font-size:24px;font-weight:800;line-height:1.1}.lwt span{font-size:12px;color:rgba(255,255,255,.85)}'+
       '.lwt.on{background:#fff;color:#17300c}.lwt.on span{color:#4a5a3a}.lwt.hot b{color:#ffcfc6}.lwt.on.hot b{color:#c8382b}'+
