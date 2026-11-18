@@ -177,7 +177,7 @@ function computeVisits(){
 /* ---------- data ---------- */
 async function load(){
   const from = new Date(Date.now() - (S.days + 1) * 86400000).toISOString();
-  const [v, p, o, t, sv, sf, mp, ev, ml] = await Promise.all([
+  const [v, p, o, t, sv, sf, mp, ev, vd, pp, ml] = await Promise.all([
     sb.from("bouncie_vehicles").select("*").order("nickname"),
     sb.from("vehicle_places").select("*").eq("off", false),
     sb.from("vehicle_oil").select("*").order("entered_at", { ascending: false }),
@@ -186,8 +186,11 @@ async function load(){
     sb.from("vehicle_service_files").select("id,service_id,path,file_name,mime,uploaded_name,uploaded_at").eq("off", false).limit(5000),
     sb.from("vehicle_maint_plan").select("*").eq("off", false).order("sort"),
     sb.from("vehicle_events").select("*").eq("off", false).gte("day", new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10)).order("day").limit(2000),
+    sb.from("vehicle_drivers").select("*").eq("off", false),
+    sb.rpc("vehicle_driver_people"),
     sb.from("bouncie_events").select("imei,received_at,payload").eq("event_type", "mil").gte("received_at", new Date(Date.now() - 365 * 86400000).toISOString()).order("received_at").limit(10000)]);
-  const bad = [v, p, o, t, sv, sf, mp, ev, ml].find(x => x.error); if(bad) throw bad.error;
+  const bad = [v, p, o, t, sv, sf, mp, ev, vd, pp, ml].find(x => x.error); if(bad) throw bad.error;
+  S.vdrv = vd.data; S.people = pp.data;
   S.events = ev.data; S.mil = ml.data;
   S.service = sv.data; S.files = sf.data; S.plan = mp.data;
   S.vehicles = v.data; S.places = p.data; S.trips = t.data; S.oil = {};
@@ -237,8 +240,8 @@ function render(){
         ${milNow(v).on ? `<span class="pill red">Check engine</span>` : ""}${v.battery && !/normal/i.test(v.battery) ? `<span class="pill amber">Battery: ${esc(v.battery)}</span>` : ""}</div>
       <dl class="kv"><dt>Odometer</dt><dd>${v.odometer > 0 ? mi(v.odometer) + " mi" : `<span class="muted">waiting for the tracker</span>`}</dd>
         <dt>Last seen</dt><dd>${fmtDT(v.last_seen)}${v.last_address ? "<br><span class='muted'>" + esc(v.last_address) + "</span>" : ""}</dd>
-        <dt>Car wash</dt><dd>${wash ? fmtDT(wash.a) + " · " + dur((wash.b - wash.a) / 1000) : `<span class="muted">none in the last ${S.days} days</span>`}</dd>
-        ${oilBlock(v)}<dt>Last driver</dt><dd>${lastDriverHtml(v)}</dd></dl>${milBlock(v)}${eventsBlock(v)}${maintBlock(v)}
+        <dt>Car wash</dt><dd>${wash ? fmtDT(wash.a) : `<span class="muted">none in the last ${S.days} days</span>`}</dd>
+        ${oilBlock(v)}<dt>Usually driven by</dt><dd>${usualHtml(v)}</dd><dt>Last driver</dt><dd>${lastDriverHtml(v)}</dd></dl>${milBlock(v)}${eventsBlock(v)}${maintBlock(v)}
       <div class="bar" style="margin:10px 0 0"><button class="btn" data-hist="${esc(v.imei)}">📋 Service history (${S.service.filter(s => s.imei === v.imei).length})</button>
         <button class="btn" data-svc="${esc(v.imei)}">+ Add service / invoice</button>
         <button class="btn" data-route="${esc(v.imei)}">🗺 Routes</button></div></div>`;
@@ -681,7 +684,7 @@ async function loadDrivers(){
   const from = Date.now() - S.days * 86400000;
   const ts = S.trips.filter(t => Date.parse(t.started_at) >= from).slice(0, 400), T = [];
   for(const t of ts){ const p = tripPts(t), a = p[0], b = p[p.length - 1];
-    T.push({ tx: t.transaction_id, a: t.started_at, b: t.ended_at || null, slat: a ? a.lat : null, slon: a ? a.lon : null, elat: t.ended_at && b ? b.lat : null, elon: t.ended_at && b ? b.lon : null }); }
+    T.push({ tx: t.transaction_id, imei: t.imei, a: t.started_at, b: t.ended_at || null, slat: a ? a.lat : null, slon: a ? a.lon : null, elat: t.ended_at && b ? b.lat : null, elon: t.ended_at && b ? b.lon : null }); }
   S.drv = {};
   for(let i = 0; i < T.length; i += 80){
     const r = await sb.rpc("vehicle_driver_guess", { p_trips: T.slice(i, i + 80) });
@@ -710,7 +713,37 @@ function driversSection(vs){
         <td>${drvShort(t)}${g[1] && !(g[1].pts === g[0].pts) ? `<br><span class="muted" style="font-size:12px">then ${esc(g[1].who)}</span>` : ""}</td>
         <td style="white-space:normal;min-width:240px;font-size:12.5px" class="muted">${esc(g.length ? g[0].why.join("; ") : "")}</td></tr>`; }).join("")
       : `<tr><td><b>${esc(vname(v))}</b></td><td colspan="3" class="muted">No trips in the last ${S.days} days</td></tr>`).join("")}</tbody></table></div>
-    <p class="muted">A best guess, never proof: clocking in near where the vehicle left or out where it parked, a Breezeway maintenance or inspection task finished right before it left that home or started right after it parked at one, a crew phone at the vehicle, and who was on the clock. Phones add the strongest clue once the crew's phone GPS is sending.</p>`;
+    <p class="muted">A best guess, never proof: who usually drives it, clocking in near where the vehicle left or out where it parked, a Breezeway maintenance or inspection task finished right before it left that home or started right after it parked at one, a crew phone at the vehicle, and who was on the clock. Phones add the strongest clue once the crew's phone GPS is sending.</p>`;
+}
+
+/* ---------- who usually drives each vehicle (Brandon 2026-11-18) ---------- */
+const pname = id => (S.people.find(p => p.id === id) || {}).name || "someone";
+function usualHtml(v){
+  const ds = (S.vdrv || []).filter(x => x.imei === v.imei);
+  return (ds.length ? ds.map(x => esc(pname(x.user_id)) + (x.how === "assigned" ? ` <span class="pill green">their vehicle</span>` : "")).join(", ") : `<span class="muted">not set</span>`)
+    + ` <button class="lnk" data-usual="${esc(v.imei)}">✎</button>`;
+}
+function usualDialog(imei){
+  const v = S.vehicles.find(x => x.imei === imei), d = $("#dlg"), ds = (S.vdrv || []).filter(x => x.imei === imei);
+  const sel = "display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)";
+  d.style.maxWidth = "480px";
+  d.innerHTML = `<h3 style="margin:0 0 4px">Who drives it · ${esc(vname(v))}</h3>
+    <p class="muted" style="margin:0">Helps the "possible driver" guess: their vehicle counts more than "usually drives it". It never decides on its own.</p>
+    ${ds.length ? ds.map(x => `<div class="evl"><div><b>${esc(pname(x.user_id))}</b> · ${x.how === "assigned" ? "their vehicle" : "usually drives it"}${x.note ? `<br><span class="muted">${esc(x.note)}</span>` : ""}</div>
+      <div class="ea"><button class="btn" data-uoff="${esc(x.user_id)}">Take off</button></div></div>`).join("") : `<p class="muted">Nobody set yet.</p>`}
+    <label>Add someone<select id="uu" style="${sel}"><option value="">Pick a person…</option>${S.people.filter(p => !ds.some(x => x.user_id === p.id)).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
+    <label>How<select id="uh" style="${sel}"><option value="often">Usually drives it</option><option value="assigned">It's their vehicle</option></select></label>
+    <div class="err" id="ue"></div>
+    <div class="bar"><button class="btn primary" id="us">Add</button><button class="btn" id="uc">Close</button></div>`;
+  if(!d.open) d.showModal();
+  $("#uc", d).onclick = () => { d.close(); d.style.maxWidth = ""; };
+  const go = async (user, how, off) => {
+    const r = await sb.rpc("vehicle_driver_set", { p_imei: imei, p_user: user, p_how: how, p_note: "", p_off: off });
+    if(r.error){ $("#ue", d).textContent = errText(r.error); return; }
+    await load(); render(); usualDialog(imei);
+  };
+  $("#us", d).onclick = () => { const u = $("#uu", d).value; if(!u){ $("#ue", d).textContent = "Pick a person."; return; } go(u, $("#uh", d).value, false); };
+  $$("[data-uoff]", d).forEach(b => b.onclick = () => go(b.dataset.uoff, "often", true));
 }
 
 async function refresh(){
@@ -718,9 +751,10 @@ async function refresh(){
   catch(e){ $("#app").innerHTML = `<h1>Vehicles</h1><div class="note">Couldn't load: ${esc(errText(e))}</div>`; }
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-tf],[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan],[data-addph],[data-mil],[data-evnew],[data-evedit],[data-evdone],[data-trip],[data-rsel],[data-route]"); if(!b) return;
+  const b = e.target.closest("[data-tf],[data-days],[data-oil],[data-hist],[data-svc],[data-file],[data-hide],[data-plan],[data-addph],[data-mil],[data-evnew],[data-evedit],[data-evdone],[data-trip],[data-rsel],[data-route],[data-usual]"); if(!b) return;
   if(b.dataset.file || b.dataset.tf != null || b.dataset.trip) e.preventDefault();
   if(b.dataset.mil){ milDialog(b.dataset.mil); return; }
+  if(b.dataset.usual){ usualDialog(b.dataset.usual); return; }
   if(b.dataset.evnew){ if($("#dlg").open) $("#dlg").close(); evDialog(b.dataset.evnew, null, { title: b.dataset.evtitle || "", kind: b.dataset.evkind || "" }); return; }
   if(b.dataset.evedit){ const ev = S.events.find(x => x.id === +b.dataset.evedit); if(ev) evDialog(ev.imei, ev); return; }
   if(b.dataset.evdone){ evDone(+b.dataset.evdone); return; }
