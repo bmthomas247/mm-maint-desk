@@ -6,7 +6,8 @@
    keeps no pay rates). Loaded by hub.html; uses its sb / $ / esc / niceErr. */
 (function(){
 const TABS = [["payroll", "Payroll hours"], ["maint", "Maintenance spending"], ["bookings", "Bookings & payouts"], ["owner", "Owner charges"]];
-const PAY_ANCHOR = "2026-10-31";   // first pay period (Sat); every other Saturday after (Brandon 2026-11-18: "it needs to show oct 31st as the first day")
+const PAY_ANCHOR = "2026-11-01";   // pay periods = two Sun-Sat weeks; the first one also takes Sat Oct 31 (Brandon 2026-11-18: "oct 31 - nov 14 is this pay period")
+const PAY_FIRST = "2026-10-31";
 const A = { stc:{}, logged:{}, tab:"payroll", from:null, to:null, preset:null, data:{}, open:{}, sub:"depart", tf:"", mode:"acct", payInit:false };   // mode "pay" = Staffing ▸ Payroll (#/payroll, 2026-11-17)
 const err = e => window.niceErr ? niceErr(e) : (e && e.message) || String(e);
 const H = s => esc(s == null ? "" : String(s));
@@ -21,7 +22,7 @@ const hh = n => n == null || n === "" ? "–" : (Math.round(Number(n) * 100) / 1
 const sum = (a, f) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const today = () => iso(new Date());
 function monday(s){ const d = pd(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d); }
-function payPeriod(s){ const n = Math.floor((pd(s) - pd(PAY_ANCHOR)) / 864e5 / 14); const f = add(PAY_ANCHOR, n * 14); return [f, add(f, 13)]; }
+function payPeriod(s){ if(s < PAY_ANCHOR) return [PAY_FIRST, add(PAY_ANCHOR, 13)]; const n = Math.floor((pd(s) - pd(PAY_ANCHOR)) / 864e5 / 14); const f = add(PAY_ANCHOR, n * 14); return [f === PAY_ANCHOR ? PAY_FIRST : f, add(f, 13)]; }
 const PRESETS = {
   lastweek: ["Last week", () => { const m = add(monday(today()), -7); return [m, add(m, 6)]; }],
   thisweek: ["This week", () => { const m = monday(today()); return [m, add(m, 6)]; }],
@@ -211,7 +212,7 @@ function payroll(x){
     ${isPaid ? `<p style="margin:0 2px 4px"><b>${H(PD.by)}</b> marked ${fdate(x.from)} – ${fdate(x.to)} paid on <b>${fwhen(PD.at)}</b>. Changing these hours now needs a note, and every change shows here and on the next pay period as a correction.</p>`
       : PD && PD.status === "open" ? `<p class="note" style="margin:0 2px 4px">Unlocked by ${H(PD.by)} on ${fwhen(PD.at)}${PD.note ? `: ${H(PD.note)}` : ""}.</p>`
       : `<p class="note" style="margin:0 2px 4px">Not marked paid yet. Once the accountant pays it, she taps <b>Mark this pay period paid</b> and the hours lock.</p>`}
-    ${RD ? `<p class="note" style="margin:0 2px 4px">📣 After all three signed off, the accountant was told the hours are ready on ${fwhen(RD.at)}${RD.email_at ? " (bell + email)" : " (bell)"}.</p>` : ""}
+    ${RD ? `<p class="note" style="margin:0 2px 4px">📣 Everyone's hours were approved, so the accountant was told they're ready on ${fwhen(RD.at)}${RD.email_at ? " (bell + email)" : " (bell)"}.</p>` : ""}
     ${sincePaid.length ? `<div class="chgbox"><b>⚠ Changed after it was paid</b> — add these to the next payroll:<ul>${sincePaid.map(c => `<li><b>${H(c.name)}</b>: ${H(c.txt)}</li>`).join("")}</ul></div>` : isPaid ? `<p class="ok" style="margin:4px 2px 0">No changes since it was paid.</p>` : ""}</div>`;
   // ---- sign-off (Brandon 2026-11-18: "it only goes when brandon, chris and cheree say its ready all three have to check off")
   const SG = (PC.st && PC.st.signers) || [], myName = (typeof ME !== "undefined" && ME && ME.name) || "";
@@ -289,7 +290,6 @@ function payroll(x){
       ${tile(hh(sum(P, p => p.hol_h)), "Holiday hours", "worked on a paid holiday")}
       ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}
       ${tile(`${okN}/${need.length}`, "Approved by a manager", okN === need.length && need.length ? "all approved ✓" : "")}</div>
-    ${signCard}
     ${lockCard}
     ${corrCard}
     ${apCard}
