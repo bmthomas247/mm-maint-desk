@@ -84,7 +84,7 @@ function css(){
 .acct .ckl li.info{padding-left:32px}
 .acct .apcard{border-left:5px solid #c9a227} .acct .apcard.allok{border-left-color:var(--ac-green)} .acct .ok{color:#2e7d32;font-weight:700}
 .acct td.apc{white-space:nowrap}
-.acct .pullcard{border-left:5px solid #5b8a1e} .acct .chgbox{margin:6px 2px 0;padding:8px 12px;border-radius:12px;background:#fdf0dc;color:#7a4700} .acct .chgbox ul{margin:4px 0 0;padding-left:18px}
+.acct .pullcard{border-left:5px solid #5b8a1e} .acct .lockcard{border-left:5px solid #9aa59a} .acct .lockcard.paid{border-left-color:#3c5f12;background:color-mix(in srgb,#88B535 6%,var(--card))} .acct .chgbox{margin:6px 2px 0;padding:8px 12px;border-radius:12px;background:#fdf0dc;color:#7a4700} .acct .chgbox ul{margin:4px 0 0;padding-left:18px}
 .acct details.ext summary{cursor:pointer;font-size:15px;padding:2px}
 .acdlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999;display:grid;place-items:center;padding:16px}
 .acdlg .box{background:var(--card,#fff);border-radius:16px;padding:16px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
@@ -128,6 +128,17 @@ async function load(tab){
 const SNAPK = ["reg_h", "hol_h", "ot_total", "pto_h", "other_h", "unpaid_h"];
 const PC = { st:null, canA:new Set(), apv:new Map(), ckm:new Map(), byId:new Map() };
 const fwhen = s => s ? new Date(s).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit", timeZone:"America/Denver" }) : "";
+const SNAPL = { reg_h:"regular", hol_h:"holiday", ot_total:"overtime", pto_h:"PTO", other_h:"other paid", unpaid_h:"unpaid off" };
+function snapDiff(snap, people){   // [{name, txt}] for people whose hours moved since the snapshot
+  const out = [], seen = new Set();
+  (people || []).filter(p => !p.extended).forEach(p => { const was = snap[p.id]; seen.add(p.id);
+    const d = SNAPK.filter(k => Math.abs((+(was || {})[k] || 0) - (+p[k] || 0)) > 0.009).map(k => {
+      const b = +(was || {})[k] || 0, n = +p[k] || 0, ch = n - b;
+      return `${SNAPL[k]} ${hh(b)} → ${hh(n)} (${ch > 0 ? "+" : ""}${hh(ch)})`; });
+    if(d.length) out.push({ name:p.name, txt:(was ? "" : "new since then: ") + d.join(", ") }); });
+  Object.entries(snap || {}).forEach(([id, w]) => { if(!seen.has(id) && SNAPK.some(k => +w[k])) out.push({ name:w.name, txt:"no longer on the list" }); });
+  return out;
+}
 function apState(p){
   const a = PC.apv.get(p.id);
   if(!a || !a.ok) return { s:"none", a };
@@ -191,6 +202,21 @@ function payroll(x){
     ${notOk.length ? `<p class="note" style="margin:0 2px">Still waiting: ${notOk.map(p => `${H(p.name)}${apState(p).s === "changed" ? " (hours changed after approval)" : ""}`).join(", ")}.</p>` : need.length ? `<p class="ok" style="margin:0 2px">✓ Every person's hours have been approved by a manager.</p>` : ""}
     <p class="src">A manager approves the hours of the people they look after (admins approve anyone). Approving isn't required to pay; it shows a manager checked the hours. If hours change after approval, it asks again.</p></div>`;
 
+  // ---- paid lock + corrections (Brandon 2026-11-18: "lock" + "tell maria when ready")
+  const PD = (PC.st && PC.st.paid) || null, isPaid = PD && PD.status === "paid";
+  const sincePaid = isPaid && PD.snap ? snapDiff(PD.snap, ALL) : [];
+  const RD = PC.st && PC.st.ready;
+  const lockCard = `<div class="card lockcard ${isPaid ? "paid" : ""}"><h3 style="margin-top:0">${isPaid ? "🔒 Paid" : "Pay period status"}
+      <span class="noprint">${!isPaid && PC.st && PC.st.can_pay ? `<button type="button" class="btn2 pri" data-paid="1">✓ Mark this pay period paid</button>` : ""}${isPaid && PC.st && PC.st.can_unlock ? `<button type="button" class="btn2" data-paid="0">Unlock</button>` : ""}</span></h3>
+    ${isPaid ? `<p style="margin:0 2px 4px"><b>${H(PD.by)}</b> marked ${fdate(x.from)} – ${fdate(x.to)} paid on <b>${fwhen(PD.at)}</b>. Changing these hours now needs a note, and every change shows here and on the next pay period as a correction.</p>`
+      : PD && PD.status === "open" ? `<p class="note" style="margin:0 2px 4px">Unlocked by ${H(PD.by)} on ${fwhen(PD.at)}${PD.note ? `: ${H(PD.note)}` : ""}.</p>`
+      : `<p class="note" style="margin:0 2px 4px">Not marked paid yet. Once the accountant pays it, she taps <b>Mark this pay period paid</b> and the hours lock.</p>`}
+    ${RD ? `<p class="note" style="margin:0 2px 4px">📣 The accountant was told the hours are ready on ${fwhen(RD.at)}${RD.email_at ? " (bell + email)" : " (bell)"}.</p>` : ""}
+    ${sincePaid.length ? `<div class="chgbox"><b>⚠ Changed after it was paid</b> — add these to the next payroll:<ul>${sincePaid.map(c => `<li><b>${H(c.name)}</b>: ${H(c.txt)}</li>`).join("")}</ul></div>` : isPaid ? `<p class="ok" style="margin:4px 2px 0">No changes since it was paid.</p>` : ""}</div>`;
+  const PP = PC.st && PC.st.prev_paid, prevChg = PP && PP.snap && PC.prevData ? snapDiff(PP.snap, PC.prevData.people) : [];
+  const corrCard = prevChg.length ? `<div class="card"><h3 style="margin-top:0">Corrections from the last paid pay period</h3>
+    <p class="note" style="margin:0 2px 6px">${fdate(PP.from)} – ${fdate(PP.to)} was paid on ${fwhen(PP.at)} (${H(PP.by)}). These hours changed after that; add the difference to this payroll.</p>
+    <div class="chgbox" style="margin-top:0"><ul style="margin:0">${prevChg.map(c => `<li><b>${H(c.name)}</b>: ${H(c.txt)}</li>`).join("")}</ul></div></div>` : "";
   // ---- the accountant's pulls (Brandon 2026-11-18: "shows marias last download ... so we know when she pulled hours last")
   const PL = (PC.st && PC.st.pulls) || {};
   const WHAT = { pay_qb:"QuickBooks CSV", pay_sum:"Breakdown CSV", pay_days:"By day CSV", pay_shifts:"Punches CSV", pay_off:"Time off CSV", pay_pto:"PTO balances CSV" };
@@ -254,6 +280,8 @@ function payroll(x){
       ${tile(hh(sum(P, p => p.hol_h)), "Holiday hours", "worked on a paid holiday")}
       ${tile(hh(sum(P, p => p.pto_h)), "PTO hours", `${hh(sum(P, p => p.other_h))} h other paid · ${hh(sum(P, p => p.unpaid_h))} h unpaid`)}
       ${tile(`${okN}/${need.length}`, "Approved by a manager", okN === need.length && need.length ? "all approved ✓" : "")}</div>
+    ${lockCard}
+    ${corrCard}
     ${apCard}
     ${pullCard}
     ${checkCard}
@@ -310,7 +338,7 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
     <div style="display:flex;gap:10px;margin:8px 0"><label class="note">Clock in <input type="time" id="sdIn" value="${H(pcHm(o.inAt))}"></label>
     <label class="note">Clock out <input type="time" id="sdOut" value="${H(pcHm(o.outAt))}"></label></div>
     <label class="note" style="display:block">Why? (they and the managers see this) <input type="text" id="sdWhy" maxlength="300" style="width:100%" placeholder="e.g. forgot to clock out, left at 5"></label>
-    <p class="note" style="margin:6px 0 0">Park City time. A clock-out earlier than the clock-in counts as the next morning.</p>
+    <p class="note" style="margin:6px 0 0">Park City time. A clock-out earlier than the clock-in counts as the next morning.${PC.st && PC.st.paid && PC.st.paid.status === "paid" ? " This pay period is already paid, so this shows as a correction for the next payroll." : ""}</p>
     <p id="sdErr" class="bad" style="margin:6px 0 0"></p>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" class="btn2" id="sdNo">Cancel</button><button type="button" class="btn2 pri" id="sdOk">Save</button></div></div>`;
   document.body.appendChild(d);
@@ -490,6 +518,11 @@ async function fill(v, body){
     const k = `${A.from}|${A.to}`;
     if(!A.stc[k]){ const r = await sb.rpc("pay_status", { p_from:A.from, p_to:A.to }); A.stc[k] = r.error ? null : r.data; }
     PC.st = A.stc[k];
+    PC.prevData = null;
+    const pp = PC.st && PC.st.prev_paid;
+    if(pp){ const kk = `payroll|${pp.from}|${pp.to}`;
+      if(!A.data[kk]){ const r2 = await sb.rpc("acct_payroll", { p_from:pp.from, p_to:pp.to }); if(!r2.error) A.data[kk] = r2.data; }
+      PC.prevData = A.data[kk] || null; }
   }
   if(tab !== A.tab) return;
   for(const k in CSV) delete CSV[k];
@@ -518,6 +551,12 @@ async function fill(v, body){
   body.querySelectorAll("[data-pen]").forEach(b => b.onclick = e => { e.stopPropagation(); const [user, inId, outId, inAt, outAt] = b.dataset.pen.split("|");
     shiftDlg(v, { user, inId, outId, inAt, outAt }); });
   body.querySelectorAll("[data-addsh]").forEach(b => b.onclick = e => { e.stopPropagation(); shiftDlg(v, { user:b.dataset.addsh }); });
+  body.querySelectorAll("[data-paid]").forEach(b => b.onclick = async e => { e.stopPropagation(); const paid = b.dataset.paid === "1";
+    let note = null;
+    if(paid){ if(!confirm(`Mark ${fdate(A.from)} – ${fdate(A.to)} paid? The hours lock: any change after this needs a note and shows as a correction.`)) return; }
+    else { note = prompt("Why unlock this pay period?"); if(!note) return; }
+    if(await rpc("pay_period_set", { p_from:A.from, p_to:A.to, p_paid:paid, p_note:note }, b) === false) return;
+    delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
   body.querySelectorAll("[data-ext]").forEach(b => b.onclick = async e => { e.stopPropagation(); const [u, on] = b.dataset.ext.split("|");
     if(!confirm(on === "1" ? "Move them to the extended team? Their hours leave the totals, the QuickBooks sheet and the CSVs." : "Put them back on Moose payroll?")) return;
     if(await rpc("pay_extended_set", { p_user:u, p_on:on === "1", p_note:null }, b) === false) return; forget(); refresh(v); });
