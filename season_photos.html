@@ -29,7 +29,7 @@ button.tile{border:1px solid transparent;font:inherit;color:inherit;text-align:l
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:760px){.two{grid-template-columns:1fr}}
 .btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
 .btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn.warn{border-color:var(--red);color:var(--red)}.btn:disabled{opacity:.5;cursor:default}
-select,input{font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:9px 12px;background:var(--card);color:var(--ink);min-height:42px}
+select,input:where(:not([type=checkbox],[type=radio])){font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:9px 12px;background:var(--card);color:var(--ink);min-height:42px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
 .step{font-size:13px;font-weight:800;color:var(--muted);margin-top:14px}
 .bar{height:8px;background:var(--ground);border-radius:4px;margin-top:8px;overflow:hidden}.bar>i{display:block;height:8px;background:var(--forest-2)}
