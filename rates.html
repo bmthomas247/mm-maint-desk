@@ -1178,6 +1178,9 @@ async function loadSetRates() {
     if (ids.length) { const ar = await sb.from("nightly_snapshots").select("comp_id,start_date,rates,avail,captured_at").eq("channel", "Airbnb").like("source", "AirROI%").in("comp_id", ids).order("captured_at", { ascending: false }).limit(ids.length * 4);
       for (const n of ar.data || []) if (!SR.air[n.comp_id]) SR.air[n.comp_id] = n; } }
   SR.fee = srFeeModel(SR.ck || [], h.comp_id); SR.compAll = srCompAllIn(SR.ck || []); SR.totRatio = null;
+  // Rates memory rules + our bigger homes' prices (Brandon 2026-11-18: page builds the same way as the morning re-price)
+  try { const rq = await sb.from("rates_rules").select("key,value").eq("live", true).eq("off", false); SR.rules = Object.fromEntries((rq.data || []).map(x => [x.key, x.value])); } catch (e) { SR.rules = {}; }
+  try { const bq = await sb.rpc("rates_bigger_rates", { p_code: SR.code }); SR.big = {}; for (const r of bq.data || []) (SR.big[r.night] ||= []).push(+r.rate); } catch (e) { SR.big = {}; }
   try { SR.owner = h.comp_id ? (rs => rs.find(x => x.min_price_peak != null && x.peak_start && x.peak_end) || rs[0] || null)((await sb.from("owner_rules").select("min_price,min_price_peak,peak_start,peak_end,note,captured_at").eq("comp_id", h.comp_id).order("captured_at", { ascending: false })).data || []) : null; } catch (e) { SR.owner = null; }
   srDraw();
 }
@@ -1258,6 +1261,11 @@ const srShadow = k => { const x = SR.x?.shadow; if (!x) return null; const off =
 // Recent bookings: stats + the last 3 bookings' rates (Track our_bookings; rent before cleaning, fees and tax)
 // Reviews = revenue (Brandon 2026-11-08): count of 4-5* reviews (2 yrs) + bookings (12 mo) raise the standard price; 1-3* lower it;
 // a home with few good reviews starts lower so reviews start flowing. Same math in rates_set_auto.py.
+const srRule = (k, d) => { const v = SR.rules?.[k]; return v == null || isNaN(+v) ? d : +v; };
+// Reviews vs comps, from this morning's re-price (auto_summary.rev_comp: our Key Data rating vs the group's Primary comps)
+function srRevComp() { const S = SR.homes?.find(x => x.code === SR.code)?.auto_summary || {}, c = S.rev_comp; if (!c || c.ours_adj == null) return null;
+  return { pct: +c.pct || 0, below: (+c.ours_n || 0) >= srRule("rev_rel_min_reviews", 5) && +c.ours_adj < +c.comps_mid,
+    txt: `reviews vs comps: ours ${(+c.ours).toFixed(2)} (${c.ours_n}) vs comps' middle ${(+c.comps_mid).toFixed(2)}` }; }
 function srRevBoost(Y) { Y = Y || Object.assign({ revPer: 0.5, revBk: 0.25, revBad: 2, revCap: 15, newN: 5, newOff: 10, newOn: false }, SR.dynSaved || {}, SR.dyn || {});
   const since = addD(iso(new Date()), -730), S = SR.homes?.find(x => x.code === SR.code)?.auto_summary || {};
   // recent reviews count more: last 6 months x2, 6-12 months x1.5, 1-2 years ago x1
@@ -1547,7 +1555,8 @@ function srDraw() {
         <label class="srchk" style="grid-column:1/-1"><input type="checkbox" id="dyNewOn"${Y.newOn ? " checked" : ""}> This is a new home: start lower until the reviews come in</label>
         <label title="A home with fewer 4–5★ reviews than this (last 2 years) starts lower">Until it has this many good reviews${num("dyNewN", Y.newN ?? 5)}</label>
         <label title="With no reviews at all it starts this much lower; each good review takes part of it away">…start this much lower %${num("dyNewOff", Y.newOff ?? 10)}</label>
-        <div class="small muted">${(() => { const B = srRevBoost(); return B ? escH(srName(SR.code)) + ": " + escH(B.txt) + "." : ""; })()}</div>
+        <div class="small muted">${(() => { const B = srRevBoost(), C = srRevComp(), off = B && B.pct > 0 && C?.below && srRule("rev_bonus_below_comps", 0) === 0;
+          return (B ? escH(srName(SR.code)) + ": " + escH(B.txt) + "." : "") + (C ? ` ${escH(C.txt)}: ${C.pct > 0 ? "+" : ""}${C.pct.toFixed(1)}%.` : "") + (off ? " <b>No reviews bonus: our reviews trail the comps.</b>" : ""); })()}</div>
         <div class="small muted">${(() => { const lb = (SR.bk || []).filter(b => b.kind === "guest" && !/cancel/i.test(b.status || "") && b.booked_at).map(b => b.booked_at).sort().pop();
           const P = SR.homes.find(x => x.code === SR.code)?.auto_summary?.pace;
           const pace = P ? `<br><b>Booked, next 60 nights:</b> ${escH(srName(SR.code))} ${P.ours}% · our other ${P.others} homes in this group ${P.group_now ?? "—"}% now · the group this time last year ${P.group_ly ?? "—"}%${P.group_ly != null && P.ours <= P.group_ly - 15 ? " ⚠ behind last year" : ""}. ` : "";
@@ -2052,21 +2061,23 @@ function srWire(R) {
     const pace = ob.length >= 20 && cf.length >= 20 ? (ob.filter(v => v === "0").length / ob.length - cf.reduce((x, y) => x + y, 0) / cf.length) * 100 : null;
     const rnd = v => Y.rd === "9" ? Math.max(29, Math.round((v + 1) / 10) * 10 - 1) : Math.round(v / +Y.rd) * +Y.rd;
     let n = 0; const built = [];
-    const RB = srRevBoost(Y), RV = RB ? RB.pct : 0;
+    const RB0 = srRevBoost(Y), RC = srRevComp(), RRp = RC ? RC.pct : 0;
+    // Brandon 2026-11-18: "we need to not have a review bonus if the reviews are lower than the comps"
+    const RB = RB0 && RB0.pct > 0 && RC?.below && srRule("rev_bonus_below_comps", 0) === 0 ? null : RB0, RV = RB ? RB.pct : 0;
     const lMaxE = (+Y.learnMax || 25) + Math.max(0, RV);
     const A = Y.base === "a", L = Math.max(+Y.learnMin || -20, Math.min(lMaxE, +(Y.learn?.lvl || 0))), LP = (+Y.lowPct || 35) / 100, U = +Y.under || 0;
     for (const r of R) { if (SR.bkd?.[r.k]) continue; if (Y.which === "empty" && r.v.set) continue;
       const ct = srCompTot(r.k), clo = A && ct ? srCompLow(r.k, LP) : null, out0 = Math.round((new Date(r.k + "T12:00:00") - new Date(today + "T12:00:00")) / 864e5);
-      const hN = (typeof holOf === "function" && holOf(r.k).filter(srPriced)[0]) || (typeof peakOf === "function" && peakOf(r.k)) || "", hQ = out0 <= 14 ? 0.5 : 0.75; /* Brandon 2026-11-18: 75th, 50th inside 2 weeks */
+      const hN = (typeof holOf === "function" && holOf(r.k).filter(srPriced)[0]) || (typeof peakOf === "function" && peakOf(r.k)) || "", hQ = out0 <= srRule("hol_near_days", 14) ? srRule("hol_pct_near", 0.5) : srRule("hol_pct_far", 0.75); /* Rates memory (Brandon 2026-11-18: 75th, 50th inside 2 weeks) */
       const hV = A && ct && hN ? srCompLow(r.k, hQ) : null, cv = hV != null && hV > ct.v ? hV : ct?.v;
       // standard = comps' average − $under (holidays: the comps' high end), moved by what bookings taught us; last minute slides toward the cheaper comps (not on holidays)
-      const std = ct ? (cv - U) * (1 + L / 100) * (1 + RV / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
+      const std = ct ? (cv - U) * (1 + L / 100) * (1 + RV / 100) * (1 + RRp / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
       const mix = hN || ourAv(r.k) === "0" ? 0 : out0 <= 3 ? (+Y.mix3 || 0) / 100 : out0 <= 7 ? (+Y.mix7 || 0) / 100 : 0;
       const tgt = std == null ? null : low != null && low < std ? std + (low - std) * mix : std;
       const b0 = A ? srRackFor(tgt, ct?.nt) : Y.base === "s" ? r.s?.price : Y.base === "b" ? r.b : Y.base === "t" ? (r.t ? +r.t.rate : null) : Y.base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null);
       let far = null; if (b0 == null || out0 >= (+Y.farDays || 180)) { far = srLyRate(r.k); if (!far && b0 == null) continue; }
       const why = far ? [`${out0} days out (comps too far out): last year at ${far.who} ${fmt(far.v)}/night (our rate, ${far.n} stays around ${far.near.slice(5)}) + ${Y.farLY ?? 20}% = ${fmt(far.v * (1 + (Y.farLY ?? 20) / 100))}`]
-        : A ? [cv !== ct.v ? `${hN.replace(/^event: /, "")}: comps' high end (${Math.round(hQ * 100)}th percentile) ${fmt(cv)}/night (average ${fmt(ct.v)})` : `comps' average total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `$${U} under${L ? `, learned ${L > 0 ? "+" : ""}${L.toFixed(1)}%` : ""}${RV ? `, ${RB.short} ${RV > 0 ? "+" : ""}${RV.toFixed(1)}%` : ""} = ${fmt(std)}`,
+        : A ? [cv !== ct.v ? `${hN.replace(/^event: /, "")}: comps' high end (${Math.round(hQ * 100)}th percentile) ${fmt(cv)}/night (average ${fmt(ct.v)})` : `comps' average total ${fmt(ct.v)}/night${ct.est ? " (estimated from their daily rate)" : ` (${ct.n} comps' Airbnb checkout)`}`, `$${U} under${L ? `, learned ${L > 0 ? "+" : ""}${L.toFixed(1)}%` : ""}${RV ? `, ${RB.short} ${RV > 0 ? "+" : ""}${RV.toFixed(1)}%` : ""}${RRp ? `, ${RC.txt} ${RRp > 0 ? "+" : ""}${RRp.toFixed(1)}%` : ""}${RB0 && !RB ? ", no reviews bonus (our reviews trail the comps)" : ""} = ${fmt(std)}`,
           ...(mix && low != null && low < std ? [`${out0} days out: ${Math.round(mix * 100)}% toward the cheaper comps (${fmt(clo)}) = ${fmt(tgt)}`] : []), `guest total ${fmt(tgt)} → our rate ${fmt(b0)}`]
         : [`start: ${{ s: "engine", c: "comps' daily rate", b: "our other homes' average", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = far ? far.v * (1 + (Y.farLY ?? 20) / 100) : b0;
       const step = (f, t) => { if (far || !f || f === 1) return; v *= f; why.push(`${t} ${pc((f - 1) * 100)} → ${fmt(v)}`); };
@@ -2117,6 +2128,9 @@ function srWire(R) {
       const mU = Y.maxU === "" || Y.maxU == null ? 10 : +Y.maxU, l10 = x.ct ? srRackFor(x.ct.v * (1 - mU / 100), x.ct.nt) : null;
       const lc = !x.ly && A && x.clo != null ? srRackFor(x.clo - U, x.ct?.nt) : null, lo = l10 != null && lc != null ? Math.max(l10, lc) : (l10 ?? lc);
       if (lo != null && v < lo) { v = lo; x.why.push(lo === lc && lc !== l10 ? `held at the cheaper comps' price → ${fmt(v)}` : `held at ${mU}% under the comps' average total (never lower) → ${fmt(v)}`); }
+      { const bl = (SR.big?.[x.r.k] || []).slice().sort((a, b) => a - b); if (bl.length && srRule("size_cap_on", 1)) {   // Brandon 2026-11-18: "we cant have 2 bedrooms higher than 3"
+          const bm = bl.length % 2 ? bl[bl.length >> 1] : (bl[bl.length / 2 - 1] + bl[bl.length / 2]) / 2, cp = bm * (1 - srRule("size_cap_under_pct", 5) / 100);
+          if (v > cp) { v = cp; x.why.push(`kept under our ${bl.length} bigger home${bl.length > 1 ? "s" : ""} in this community (their middle ${fmt(bm)}, -${srRule("size_cap_under_pct", 5)}%) → ${fmt(v)}`); } } }
       if (om != null && v < om) { v = om; x.why.push(`owner minimum ${fmt(om)}`); }
       const wsN = Y.floorStay !== "" && Y.floorStay != null ? +Y.floorStay : (Y.floor !== "" && Y.floor != null ? null : srBedStay()), wsH = Y.floorStayHol !== "" && Y.floorStayHol != null ? +Y.floorStayHol : null;
       const useH = wsH != null && x.hol && !x.gap, ws = useH ? wsH : wsN;
