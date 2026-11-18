@@ -502,8 +502,16 @@ function drawActs(){
     : `<p class="muted" style="margin:0">Sending from the hub turns on once Brandon or Kim OK it. Until then: <b>Save to Brevo as a draft</b>, then open it in Brevo, add “Do Not Contact (Previous Owners)” under Exclude, and press Send.</p>`}`;
   if(lock) return;
   $("#aSave").onclick = () => save(false).catch(() => {});
-  $("#aBrevo").onclick = async () => { try { await save(true); pollStart(); } catch(e){} };
-  if(M.can_send){ $("#aTest").onclick = () => ask("test"); $("#aSend").onclick = sendDialog; }
+  // Jeff 2026-11-18: "an are you sure prompt before it ever goes to brevo" - every button that sends the flyer to Brevo asks first
+  $("#aBrevo").onclick = () => sureBox("Put this flyer in Brevo?", `${sureFacts()}
+      <p style="margin:8px 0 0">It goes into Brevo as a <b>draft</b>. Nobody gets an email from this. You still open it in Brevo and press Send there.</p>`,
+    "☁️ Yes, put it in Brevo", async () => { try { await save(true); pollStart(); } catch(e){} });
+  if(M.can_send){
+    $("#aTest").onclick = () => sureBox("Send yourself a test?", `${sureFacts()}
+        <p style="margin:8px 0 0">This puts the flyer in Brevo and emails it <b>only to ${esc(M.my_email || "you")}</b>. No owner gets it.</p>`,
+      "✉️ Yes, send me the test", () => ask("test"));
+    $("#aSend").onclick = sendDialog;
+  }
 }
 async function ask(kind){
   try {
@@ -531,6 +539,22 @@ function sendDialog(){
   $("#cOk", d).onchange = e => $("#cGo", d).disabled = !e.target.checked;
   $("#cGo", d).onclick = async () => { d.close(); await ask("send"); };
   d.showModal();
+}
+// what is about to go to Brevo, shown in every "are you sure?" box
+function sureFacts(){
+  const lists = $$("[data-list]").filter(c => c.checked).map(c => c.parentElement.textContent.trim().replace(/\s+/g, " "));
+  const warns = (S.checks || []).filter(c => c[0] === "warn").map(c => c[1]);
+  return `<p style="margin:0"><b>${esc(($("#fSub") || {}).value || "")}</b></p>
+    <p class="muted" style="margin:2px 0 0">${esc(($("#fName") || {}).value || "")} · lists: ${esc(lists.join(", ") || "none ticked")}</p>
+    ${warns.length ? `<div class="warn" style="margin:10px 0 0"><b>Still to look at:</b><br>${warns.map(w => "⚠️ " + esc(w)).join("<br>")}</div>` : ""}`;
+}
+function sureBox(title, body, okLabel, go){
+  const d = $("#dlg");
+  d.innerHTML = `<h3>${esc(title)}</h3>${body}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn" data-x>Not yet</button><button class="btn primary" id="sureGo">${esc(okLabel)}</button></div>`;
+  $("[data-x]", d).onclick = () => d.close();
+  $("#sureGo", d).onclick = () => { d.close(); go(); };
+  d.showModal(); $("[data-x]", d).focus();   // "Not yet" has the focus, so Enter never sends it by accident
 }
 function alertBox(msg){ const d = $("#dlg"); d.innerHTML = `<p style="margin:0 0 12px">${esc(msg)}</p><div style="display:flex;justify-content:flex-end"><button class="btn primary" data-x>OK</button></div>`;
   $("[data-x]", d).onclick = () => d.close(); d.showModal(); }
