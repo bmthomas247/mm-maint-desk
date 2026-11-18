@@ -26,11 +26,11 @@ const CSS = `.prk .hd{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-star
 .prk .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
 .prk .lbl{font-size:13px;color:var(--muted);margin:12px 0 4px;font-weight:600}
 .prk .cities{display:grid;grid-template-columns:1fr 1fr;gap:12px}.prk .city{position:relative}
-.prk .city input{width:100%;box-sizing:border-box;font-size:17px;padding:10px 12px}
+.prk .city input:where(:not([type=checkbox],[type=radio])){width:100%;box-sizing:border-box;font-size:17px;padding:10px 12px}
 .prk .sug{position:absolute;z-index:30;left:0;right:0;top:100%;margin-top:2px;background:var(--card,#fff);border:1px solid var(--line,#d1d5db);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);max-height:320px;overflow:auto}
 .prk .sug div{padding:8px 12px;cursor:pointer;font-size:14px}.prk .sug div.on,.prk .sug div:hover{background:var(--line-2,#eef0ea)}.prk .sug b{margin-right:6px}
 .prk .frm{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}.prk .frm label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted)}
-.prk input,.prk select{font:inherit;padding:6px 8px;border:1px solid var(--line,#d1d5db);border-radius:8px;color:var(--ink);background:var(--card,#fff)}
+.prk input:where(:not([type=checkbox],[type=radio])),.prk select{font:inherit;padding:6px 8px;border:1px solid var(--line,#d1d5db);border-radius:8px;color:var(--ink);background:var(--card,#fff)}
 .prk input[type=checkbox]{width:auto}.prk .chk{flex-direction:row!important;align-items:center;gap:6px!important}
 .prk details{margin-top:10px}.prk summary{cursor:pointer;color:var(--muted);font-size:14px}
 .prk .go{font-size:17px;padding:10px 26px;margin-top:14px}
