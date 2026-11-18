@@ -148,7 +148,7 @@ button.ctb{appearance:none;font:inherit;color:inherit;background:none;border:1px
 /* toolbar */
 .toolbar{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:10px 12px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
 .qsearch{position:relative;flex:0 1 300px;min-width:190px}
-.qsearch input{width:100%;font-size:13px;padding:6px 10px 6px 27px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.qsearch input:where(:not([type=checkbox],[type=radio])){width:100%;font-size:13px;padding:6px 10px 6px 27px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .qsearch .mag{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:12px;opacity:.5;pointer-events:none}
 .toolbar select,.inp{font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);min-width:0}
 .toolbar select{max-width:240px}
@@ -174,7 +174,7 @@ button.ctb{appearance:none;font:inherit;color:inherit;background:none;border:1px
 .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .f{display:flex;flex-direction:column;gap:3px;min-width:0}
 .f>span{font-family:Archivo;font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
-.f input,.f select,.f textarea{width:100%;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:0}
+.f input:where(:not([type=checkbox],[type=radio])),.f select,.f textarea{width:100%;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:0}
 .f textarea{min-height:60px;resize:vertical;line-height:1.45}
 .f .hint{font-size:11px;color:var(--muted)}
 .prose{font-size:13px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink-2)}
@@ -409,7 +409,7 @@ tr.xtr:hover td{background:var(--surface-2)} tr.xtr.open td{background:var(--acc
 .rcard .rbtns{margin-top:auto;padding-top:6px;display:flex;flex-wrap:wrap;gap:6px}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="moose-theme.css?v=20261104b">
+<link rel="stylesheet" href="moose-theme.css?v=20261118cb">
 <div class="wrap">
   <header class="top">
     <button class="btn" id="backbtn" title="Back to where you were" style="display:none">← Back</button><div class="brand"><span class="mk">Maintenance Desk</span><span class="sub">Moose Management</span></div>
@@ -1997,7 +1997,7 @@ function tnForm(c,x){ x=x||{};
     '<div class="hint tnw">No rent, bank or card numbers, and no codes — codes go in the Quick view Edit.</div></div>'; }
 function tnCard(c){ if(!tnHas(c)) return ""; tnBoot(); if(!D._tnok) return ""; tnLoad(c); var n=D._tn[c]||{rows:[]}, ed=S.ui.tnEd||{}, is2=homeType(c)==="2h";
   var cur=n.rows.filter(function(x){ return !x.off; }), past=n.rows.filter(function(x){ return x.off; });
-  var css='<style>.qv.tenant{grid-column:1/-1;border-left:4px solid var(--info)}.tnrow{padding:6px 0;border-bottom:1px solid var(--line-2)}.tnrow:last-child{border-bottom:0}.tnform{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;margin-top:6px}.tnform .tnw{grid-column:1/-1}.tnform label span{display:block;font-size:12px;color:var(--muted)}.tnform input,.tnform textarea{width:100%}.tnhead{display:flex;justify-content:space-between;align-items:center;gap:8px}</style>';
+  var css='<style>.qv.tenant{grid-column:1/-1;border-left:4px solid var(--info)}.tnrow{padding:6px 0;border-bottom:1px solid var(--line-2)}.tnrow:last-child{border-bottom:0}.tnform{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;margin-top:6px}.tnform .tnw{grid-column:1/-1}.tnform label span{display:block;font-size:12px;color:var(--muted)}.tnform input:where(:not([type=checkbox],[type=radio])),.tnform textarea{width:100%}.tnhead{display:flex;justify-content:space-between;align-items:center;gap:8px}</style>';
   if(is2 && n.none && !cur.length) return css+'<div class="qv tenant"><div class="tnhead"><div class="muted">No tenant at this home'+(n.noneBy?' · set by '+esc(n.noneBy):'')+'.</div><button class="btn sm ghost" data-act="tnnone" data-code="'+esc(c)+'" data-v="0">It has a tenant now</button></div></div>';
   var row=function(x){ if(ed.code===c&&String(ed.id)===String(x.id)) return '<div class="tnrow">'+tnForm(c,x)+'</div>';
     var nx=tnNext(x.visits), L=[];
@@ -4205,7 +4205,7 @@ var MEET_CSS='<style>.mcard{background:#fff;border:1px solid var(--line);border-
   '.mh-d{color:#888;font-size:12px;padding-top:1px}.mh-by{font-weight:700}.mh-n{margin-top:3px;color:#3c5f12;font-size:12.5px;font-weight:600}'+
   '.mh-more{background:none;border:0;color:#3c5f12;font-weight:700;cursor:pointer;padding:6px 0 0;font-size:12.5px}'+
   '.mc-form{display:grid;grid-template-columns:120px 1.3fr 1fr auto;gap:10px;margin-top:12px;align-items:end;border-top:1px dashed var(--line);padding-top:10px}'+
-  '.mc-l{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:#666}.mc-l textarea,.mc-l input{width:100%;font-weight:400}'+
+  '.mc-l{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:#666}.mc-l textarea,.mc-l input:where(:not([type=checkbox],[type=radio])){width:100%;font-weight:400}'+
   '@media(max-width:860px){.mc-form{grid-template-columns:1fr}.mh-row{grid-template-columns:1fr;gap:2px}}</style>';
 /* Upload a meeting recording / transcript / notes (2026-11-09, Brandon): anyone at the meeting sends in Zoom (or other) notes + recordings;
    Claude reads the TEXT (Edge Function meet-notes-read) and suggests notes + next steps per item; a person puts them in. hub_meeting_uploads.sql */
