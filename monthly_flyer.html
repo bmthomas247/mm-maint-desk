@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Monthly flyer</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Owners ▸ Monthly flyer (Jeff 2026-11-18). The owners' monthly email: start from an old flyer (Brevo owner campaigns in mkt_campaigns,
+     or a flyer made here), change words / pictures / links right in the email, then save it to Brevo as a draft (works today) or, once
+     Brandon or Kim turn it on, send a test to yourself and send it to the owner lists from the hub.
+     Data: mkt_drafts (tab owners, design.kind 'flyer'), mkt_flyer_sends, mkt_flyer_lists, mkt_flyer_mode()/mkt_flyer_ask()
+     (hub_monthly_flyer.sql). Access = hub_can('advertising'), enforced in Supabase. Sends are done by hub_site/mkt_flyer_send.py. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1400px;margin:0 auto;padding:16px 16px 90px}
+h1{font-size:22px;margin:0;font-weight:800;letter-spacing:-.01em}
+h2{font-size:16px;margin:24px 0 10px;font-weight:800}
+h3{font-size:15px;margin:0 0 8px;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px}
+.src{color:var(--muted);font-size:12px;margin:8px 2px 0}
+.hero{background:linear-gradient(135deg,#2f4a10,#5b8a1e);color:#fff;border-radius:18px;padding:18px 20px;box-shadow:var(--shadow)}
+.hero p{margin:4px 0 0;opacity:.92;font-size:14px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:38px;padding:0 13px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff}
+.btn.go{background:var(--forest);border-color:var(--forest);color:#fff}
+.btn.small{min-height:30px;font-size:12.5px;padding:0 9px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)}
+.pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px;margin:14px 0 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.tile small{display:block;color:var(--muted);font-size:12px;font-weight:700} .tile b{display:block;font-size:17px;font-weight:800;line-height:1.3}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+.card .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.card .sub{color:var(--ink-2);font-size:13.5px;margin:2px 0 6px}
+.empty{padding:16px;color:var(--muted);font-size:14px;background:var(--card);border:1px dashed var(--line-2);border-radius:14px}
+.note{background:var(--blue-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
+.warn{background:var(--amber-soft);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:10px 0}
+.err{color:var(--red);font-size:13px;font-weight:700}
+label.f{display:block;font-size:12.5px;font-weight:800;color:var(--ink-2);margin:12px 0 4px}
+input.t,select.t{width:100%;font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:7px 10px;background:var(--card);color:var(--ink);min-height:38px}
+.cnt{font-size:11.5px;color:var(--muted);text-align:right}
+.lists label{display:flex;gap:8px;align-items:center;font-size:13.5px;padding:3px 0;cursor:pointer}
+.lists input{width:18px;height:18px;accent-color:var(--forest-2)}
+/* editor */
+.edtop{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.edtop .nm{font-size:18px;font-weight:800;flex:1;min-width:200px}
+.ed{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start}
+.side{display:flex;flex-direction:column;gap:12px;position:sticky;top:10px;max-height:calc(100vh - 20px);overflow:auto;padding-bottom:6px}
+.tb{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.chip{border:1px solid var(--line-2);background:var(--card);color:var(--ink);padding:5px 12px;border-radius:999px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
+.chip.on{background:var(--forest);color:#fff;border-color:var(--forest)}
+.fw{background:#e9ede6;border-radius:16px;padding:16px;display:flex;justify-content:center;overflow:auto}
+.fw iframe{border:0;width:100%;max-width:760px;background:#fff;border-radius:6px;box-shadow:0 2px 14px rgba(0,0,0,.12);min-height:600px;display:block}
+.fw.phone iframe{max-width:390px}
+.ck{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13px}
+.ck li{display:flex;gap:7px;align-items:flex-start} .ck li b{flex:0 0 18px}
+.acts2{display:grid;gap:8px}
+.hist{font-size:12.5px;color:var(--ink-2);display:grid;gap:6px}
+.hist div{border-top:1px solid var(--line);padding-top:6px}
+#selbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(680px,calc(100% - 24px));background:var(--card);border:1px solid var(--line-2);
+  border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:12px 14px;z-index:20;display:none}
+#selbar.on{display:block}
+#selbar .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#selbar img.th{width:64px;height:48px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+dialog{border:0;border-radius:18px;padding:18px 20px;max-width:min(560px,calc(100vw - 24px));width:100%;background:var(--card);color:var(--ink);box-shadow:0 10px 40px rgba(0,0,0,.25)}
+dialog.big{max-width:min(900px,calc(100vw - 24px))}
+dialog::backdrop{background:rgba(10,20,12,.45)}
+.dhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px} .dhead h3{flex:1;margin:0}
+.pv{background:#e9ede6;border-radius:12px;padding:10px;display:flex;justify-content:center}
+.pv iframe{border:0;width:100%;max-width:720px;height:70vh;background:#fff;border-radius:6px}
+.pv.phone iframe{max-width:390px}
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;max-height:60vh;overflow:auto}
+.lib button{padding:4px;min-height:0;height:96px}
+.lib img{max-width:100%;max-height:86px;object-fit:contain}
+@media (max-width: 980px){ .ed{grid-template-columns:1fr} .side{position:static;max-height:none} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<div id="selbar" role="region" aria-label="Change the selected picture or link"></div>
+<dialog id="dlg"></dialog>
+<dialog id="big" class="big"></dialog>
+<input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = window.__sb || supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtD = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const today = () => new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const monthName = ym => { const [y, m] = String(ym || "").split("-").map(Number); return y && m ? MONTHS[m - 1] + " " + y : ""; };
+const ymAdd = (ym, n) => { let [y, m] = ym.split("-").map(Number); m += n; while(m > 12){ m -= 12; y++; } while(m < 1){ m += 12; y--; } return y + "-" + String(m).padStart(2, "0"); };
+const pct = (a, b) => b ? Math.round(a / b * 100) + "%" : "—";
+const niceErr = e => { const m = String((e && (e.message || e.error_description)) || e || "");
+  if(/Failed to fetch|NetworkError|network/i.test(m)) return "No signal right now. Check your connection and try again.";
+  if(/JWT|expired/i.test(m)) return "Your sign-in ran out. Reload the page.";
+  return m.replace(/^.*?ERROR:\s*/, ""); };
+// a tiny fingerprint so the page can tell "nothing changed from the old flyer yet"
+const sig = s => { let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for(let i = 0; i < s.length; i++){ const c = s.charCodeAt(i);
+  h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); } return ((h2 >>> 0).toString(36) + (h1 >>> 0).toString(36)); };
+
+const S = { mode:null, lists:[], sizes:{}, camps:[], flyers:[], sends:[], cur:null, dirty:false, phone:false, sel:null, poll:null };
+
+/* ---------- data ---------- */
+async function load(){
+  const [m, runs, camps, fl] = await Promise.all([
+    sb.rpc("mkt_flyer_mode"),
+    sb.from("mkt_runs").select("ran_at,lists:summary->brevo_all").order("ran_at", { ascending:false }).limit(1),
+    sb.from("mkt_campaigns").select("brevo_id,name,subject,preview_text,status,list_names,created_at,sent_at,stats,draft_id,gone").order("created_at", { ascending:false }).limit(300),
+    sb.from("mkt_drafts").select("id,tab,name,subject,preview_text,list_ids,design,status,brevo_id,brevo_note,pushed_at,created_name,created_at,updated_name,updated_at")
+      .eq("tab", "owners").eq("off", false).eq("design->>kind", "flyer").order("updated_at", { ascending:false })]);
+  for(const r of [m, camps, fl]) if(r.error) throw r.error;
+  S.mode = m.data || { mode:"off", can_send:false, lists:[] };
+  S.lists = (S.mode.lists || []);
+  S.sizes = {}; ((runs.data && runs.data[0] && runs.data[0].lists) || []).forEach(l => S.sizes[l.id] = l.size);
+  // an "old flyer" = a Brevo campaign that went only to owner lists (the Owner Edition emails, the Moose Memo), not the guest-wide magazine
+  S.camps = (camps.data || []).filter(c => !c.gone && (c.list_names || []).length && c.list_names.every(n => /owner/i.test(n)));
+  S.flyers = fl.data || [];
+  const ids = S.flyers.map(f => f.id);
+  S.sends = [];
+  if(ids.length){ const r = await sb.from("mkt_flyer_sends").select("*").in("draft_id", ids).order("asked_at", { ascending:false }).limit(300);
+    if(r.error) throw r.error; S.sends = r.data || []; }
+}
+const sendsOf = id => S.sends.filter(s => s.draft_id === id);
+const sentRow = id => sendsOf(id).find(s => s.kind === "send" && s.status === "sent");
+const busyRow = id => sendsOf(id).find(s => s.status === "asked" || s.status === "sending");
+const campOf = f => f.brevo_id ? S.camps.find(c => c.brevo_id === f.brevo_id) || null : null;
+function flyerState(f){
+  const sent = sentRow(f.id), c = campOf(f), busy = busyRow(f.id);
+  if(sent || (c && c.status === "sent")) return ["green", "Sent " + fmtD(sent ? sent.done_at : c.sent_at)];
+  if(c && /in_process|queued|scheduled/.test(c.status)) return ["blue", "Going out from Brevo"];
+  if(busy) return ["blue", busy.kind === "send" ? "Sending to owners…" : "Sending your test…"];
+  if(f.status === "queued") return ["blue", "Going to Brevo…"];
+  if(f.status === "error") return ["red", "Not saved to Brevo"];
+  if(f.status === "in_brevo") return ["green", "Draft in Brevo"];
+  if(f.brevo_id) return ["amber", "Changed since it went to Brevo"];
+  return ["", "Hub draft"];
+}
+const locked = f => !!(sentRow(f.id) || (campOf(f) && campOf(f).status !== "draft") || busyRow(f.id));
+
+/* ---------- list view ---------- */
+function listView(){
+  const lastSent = S.camps.filter(c => c.status === "sent" && c.sent_at).sort((a, b) => b.sent_at.localeCompare(a.sent_at))[0];
+  const ls = lastSent && lastSent.stats || {}, del = ls.delivered || ls.sent || 0;
+  const working = S.flyers.filter(f => !sentRow(f.id) && !(campOf(f) && campOf(f).status === "sent"));
+  const thisMonth = today().slice(0, 7);
+  const sentThisMonth = S.camps.some(c => c.status === "sent" && String(c.sent_at || "").slice(0, 7) === thisMonth);
+  const starts = [...S.flyers.filter(f => f.brevo_id && campOf(f) && campOf(f).status === "sent").map(f => ({ type:"flyer", f })),
+                  ...S.camps.map(c => ({ type:"camp", c }))]
+    .filter((x, i, a) => x.type === "camp" ? !a.some(y => y.type === "flyer" && y.f.brevo_id === x.c.brevo_id) : true);
+  $("#app").innerHTML = `
+  <div class="hero"><h1>🫎 Monthly flyer</h1><p>The owners' monthly email. Start from an old flyer, change the words and pictures, then send it.</p></div>
+  <div class="tiles">
+    <div class="tile"><small>Last flyer sent</small><b>${lastSent ? esc(lastSent.name) : "None yet"}</b>
+      ${lastSent ? `<span class="muted">${esc(fmtD(lastSent.sent_at))} · ${(ls.sent || 0).toLocaleString()} owners · opened ${pct(ls.uniqueViews || 0, del)}</span>` : ""}</div>
+    <div class="tile"><small>${esc(MONTHS[+thisMonth.slice(5) - 1])}</small><b>${sentThisMonth ? "✅ Sent this month" : "Not sent yet this month"}</b></div>
+    <div class="tile"><small>In the works</small><b>${working.length} flyer${working.length === 1 ? "" : "s"}</b></div>
+    <div class="tile"><small>Sending from the hub</small><b>${S.mode.can_send ? "✅ On" : "Off for now"}</b>
+      <span class="muted">${S.mode.can_send ? "Send a test, then send to owners" : "Save to Brevo as a draft, then send it in Brevo"}</span></div>
+  </div>
+  <h2>Your flyers</h2>
+  ${S.flyers.length ? `<div class="grid">${S.flyers.map(f => { const [tone, lab] = flyerState(f);
+      return `<div class="card"><div style="display:flex;gap:8px;align-items:flex-start"><h3 style="flex:1">${esc(f.name)}</h3><span class="pill ${tone}">${esc(lab)}</span></div>
+        <div class="sub">${esc(f.subject || "No subject yet")}</div>
+        <div class="muted">${f.design && f.design.month ? esc(monthName(f.design.month)) + " · " : ""}Last change ${esc(f.updated_name || f.created_name || "")} · ${esc(fmtDT(f.updated_at))}</div>
+        <div class="acts"><a class="btn primary small" href="#/f/${f.id}">${locked(f) ? "👁 Open" : "✏️ Open"}</a>
+          <button class="btn small" data-start="flyer:${f.id}">⧉ Start a new flyer from this</button></div></div>`; }).join("")}</div>`
+    : `<div class="empty">No flyers made here yet. Pick an old flyer below and press <b>Start a new flyer from this</b>.</div>`}
+  <h2>Start from an old flyer</h2>
+  ${starts.length ? `<div class="grid">${starts.map(x => { if(x.type === "flyer"){ const f = x.f, c = campOf(f), st = c && c.stats || {}, d2 = st.delivered || st.sent || 0;
+        return `<div class="card"><h3>${esc(f.name)}</h3><div class="sub">${esc(f.subject || "")}</div>
+          <div class="muted">Made here · sent ${esc(fmtD(c && c.sent_at))}${c ? ` · opened ${pct(st.uniqueViews || 0, d2)}` : ""}</div>
+          <div class="acts"><button class="btn small" data-pvf="${f.id}">👁 Preview</button><button class="btn primary small" data-start="flyer:${f.id}">⧉ Start a new flyer from this</button></div></div>`; }
+      const c = x.c, st = c.stats || {}, d2 = st.delivered || st.sent || 0;
+      return `<div class="card"><h3>${esc(c.name)}</h3><div class="sub">${esc(c.subject || "")}</div>
+        <div class="muted">${c.status === "sent" ? `Sent ${esc(fmtD(c.sent_at))} · ${(st.sent || 0).toLocaleString()} owners · opened ${pct(st.uniqueViews || 0, d2)}` : `Brevo ${esc(c.status)}`} · ${esc((c.list_names || []).join(", "))}</div>
+        <div class="acts"><button class="btn small" data-pvc="${c.brevo_id}">👁 Preview</button><button class="btn primary small" data-start="camp:${c.brevo_id}">⧉ Start a new flyer from this</button></div></div>`; }).join("")}</div>`
+    : `<div class="empty">No owner emails in Brevo yet.</div>`}
+  <p class="src">Old flyers = Brevo email campaigns sent only to owner lists (read from Brevo every minute). Opened = unique opens ÷ delivered; Apple Mail privacy makes opens look higher than they are.</p>`;
+}
+
+/* ---------- preview + start a new flyer ---------- */
+const SAMPLE = s => String(s || "").replace(/\{\{\s*contact\.FIRSTNAME\b[^}]*\}\}/gi, "Alex").replace(/\{\{\s*contact\.LASTNAME\b[^}]*\}\}/gi, "Sample").replace(/\{\{\s*params\.[^}]*\}\}/gi, "…");
+async function htmlOf(type, id){
+  if(type === "camp"){ const r = await sb.from("mkt_campaigns").select("html").eq("brevo_id", id).maybeSingle(); if(r.error) throw r.error; return r.data && r.data.html || ""; }
+  const r = await sb.from("mkt_drafts").select("html").eq("id", id).maybeSingle(); if(r.error) throw r.error; return r.data && r.data.html || "";
+}
+async function preview(type, id, title){
+  const d = $("#big");
+  d.innerHTML = `<div class="dhead"><h3>${esc(title)}</h3><button class="chip on" data-w="desk">Desktop</button><button class="chip" data-w="phone">Phone</button><button class="btn" data-x>Close</button></div><div id="pvb" class="pv"><p class="muted">Loading…</p></div>`;
+  d.showModal(); $("[data-x]", d).onclick = () => d.close();
+  let html; try { html = await htmlOf(type, id); } catch(e){ $("#pvb", d).innerHTML = `<p class="err">${esc(niceErr(e))}</p>`; return; }
+  const show = ph => { const b = $("#pvb", d); b.className = "pv" + (ph ? " phone" : ""); b.innerHTML = `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox" title="Flyer preview"></iframe>`;
+    $("iframe", b).srcdoc = SAMPLE(html || "<p style='font-family:sans-serif;padding:20px'>No HTML for this one.</p>"); };
+  show(false);
+  $$("[data-w]", d).forEach(b => b.onclick = () => { $$("[data-w]", d).forEach(x => x.classList.toggle("on", x === b)); show(b.dataset.w === "phone"); });
+}
+function startDialog(type, id){
+  const src = type === "camp" ? S.camps.find(c => c.brevo_id == id) : S.flyers.find(f => f.id == id);
+  if(!src) return;
+  const now = today().slice(0, 7), opts = [0, 1, 2].map(n => ymAdd(now, n));
+  const def = new Date().getDate() >= 15 ? opts[1] : opts[0];
+  const d = $("#dlg");
+  d.innerHTML = `<h3>Start a new flyer</h3><p class="muted" style="margin:0">From: <b>${esc(src.name)}</b>. The old one stays as it is.</p>
+    <label class="f" for="nMonth">Which month is it for?</label><select class="t" id="nMonth">${opts.map(o => `<option value="${o}" ${o === def ? "selected" : ""}>${esc(monthName(o))}</option>`).join("")}</select>
+    <label class="f" for="nName">Flyer name (only the team sees this)</label><input class="t" id="nName" maxlength="200">
+    <p class="err" id="nErr"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button class="btn" data-x>Cancel</button><button class="btn primary" id="nGo">Start it</button></div>`;
+  const setName = () => { $("#nName", d).value = "Owner Edition - " + monthName($("#nMonth", d).value); };
+  setName(); $("#nMonth", d).onchange = setName;
+  $("[data-x]", d).onclick = () => d.close();
+  $("#nGo", d).onclick = async () => {
+    const b = $("#nGo", d); b.disabled = true; b.textContent = "Starting…";
+    try {
+      const html = await htmlOf(type, id);
+      if(!html) throw new Error("That old flyer has no HTML to copy.");
+      const ticked = S.lists.filter(l => l.role === "send" && l.ticked).map(l => l.id);
+      const row = { tab:"owners", name:$("#nName", d).value.trim() || "Owner Edition - " + monthName($("#nMonth", d).value),
+        subject:src.subject || null, preview_text:src.preview_text || null, list_ids:ticked, html, status:"draft",
+        design:{ kind:"flyer", month:$("#nMonth", d).value, from:{ type, id:Number(id), name:src.name }, from_sig:sig(html) } };
+      const r = await sb.from("mkt_drafts").insert(row).select("id").single();
+      if(r.error) throw r.error;
+      d.close(); await load(); location.hash = "#/f/" + r.data.id;
+    } catch(e){ $("#nErr", d).textContent = niceErr(e); b.disabled = false; b.textContent = "Start it"; }
+  };
+  d.showModal();
+}
+
+/* ---------- editor ---------- */
+async function editor(id){
+  const f = S.flyers.find(x => x.id === id);
+  if(!f){ $("#app").innerHTML = `<p><a class="btn" href="#/">← All flyers</a></p><div class="empty">That flyer wasn't found.</div>`; return; }
+  const r = await sb.from("mkt_drafts").select("*").eq("id", id).single();
+  if(r.error){ $("#app").innerHTML = `<p class="err">${esc(niceErr(r.error))}</p>`; return; }
+  S.cur = r.data; S.dirty = false; S.sel = null; hideSel();
+  const D = S.cur, lock = locked(D), [tone, lab] = flyerState(D);
+  const months = [-1, 0, 1, 2].map(n => ymAdd(today().slice(0, 7), n)); if(D.design.month && !months.includes(D.design.month)) months.unshift(D.design.month);
+  const skip = S.lists.filter(l => l.role === "skip");
+  $("#app").innerHTML = `
+  <div class="edtop"><a class="btn small" href="#/">← All flyers</a><span class="nm">${esc(D.name)}</span><span class="pill ${tone}" id="stp">${esc(lab)}</span><span class="muted" id="sv"></span></div>
+  ${lock ? `<div class="note">${sentRow(D.id) || (campOf(D) && campOf(D).status === "sent") ? "This flyer was sent, so it can't be changed. Use <b>Start a new flyer from this</b> to make next month's." : "The office PC is working on this flyer right now, so it can't be changed until that's done."}</div>` : ""}
+  <div class="ed">
+    <div class="side">
+      <div class="card">
+        <label class="f" for="fName" style="margin-top:0">Flyer name (only the team sees this)</label><input class="t" id="fName" maxlength="200" value="${esc(D.name)}" ${lock ? "disabled" : ""}>
+        <label class="f" for="fMonth">Month</label><select class="t" id="fMonth" ${lock ? "disabled" : ""}>${months.map(m => `<option value="${m}" ${m === D.design.month ? "selected" : ""}>${esc(monthName(m))}</option>`).join("")}</select>
+        <label class="f" for="fSub">Subject line</label><input class="t" id="fSub" maxlength="250" value="${esc(D.subject || "")}" ${lock ? "disabled" : ""}><div class="cnt" id="fSubN"></div>
+        <label class="f" for="fPre">Preview text (shows after the subject in the inbox)</label><input class="t" id="fPre" maxlength="250" value="${esc(D.preview_text || "")}" ${lock ? "disabled" : ""}>
+        <label class="f">Send to</label>
+        <div class="lists">${S.lists.filter(l => l.role === "send").map(l => `<label><input type="checkbox" data-list="${l.id}" ${(D.list_ids || []).includes(l.id) ? "checked" : ""} ${lock ? "disabled" : ""}>
+          ${esc(l.name)}${S.sizes[l.id] != null ? ` <span class="muted">(${S.sizes[l.id]})</span>` : ""}</label>`).join("")}</div>
+        ${skip.length ? `<p class="muted" style="margin:6px 0 0">Always left out: ${skip.map(l => esc(l.name) + (S.sizes[l.id] != null ? ` (${S.sizes[l.id]})` : "")).join(", ")}</p>` : ""}
+      </div>
+      <div class="card"><h3>Before you send</h3><ul class="ck" id="checks"><li>Checking…</li></ul></div>
+      <div class="card"><h3>Save &amp; send</h3><div class="acts2" id="acts"></div></div>
+      <div class="card"><h3>What happened</h3><div class="hist" id="hist"></div></div>
+    </div>
+    <div>
+      <div class="tb">
+        <button class="chip ${S.phone ? "" : "on"}" data-w="desk">Desktop</button><button class="chip ${S.phone ? "on" : ""}" data-w="phone">Phone</button>
+        ${lock ? "" : `<button class="chip" data-cmd="undo" title="Undo">↶ Undo</button><button class="chip" data-cmd="redo" title="Redo">↷ Redo</button>
+        <span class="muted">Click any words to change them. Click a picture to swap it. Click a button or link to change where it goes.</span>`}
+      </div>
+      <div class="fw ${S.phone ? "phone" : ""}" id="fw"><iframe id="ef" sandbox="allow-same-origin" title="The flyer (click to change it)"></iframe></div>
+    </div>
+  </div>`;
+  const fr = $("#ef");
+  fr.onload = () => frameReady(fr, lock);
+  fr.srcdoc = D.html || "";
+  ["fName","fSub","fPre"].forEach(k => $("#" + k).addEventListener("input", () => { markDirty(); if(k === "fSub") subCount(); runChecks(); }));
+  $("#fMonth").onchange = () => { markDirty(); runChecks(); };
+  $$("[data-list]").forEach(c => c.onchange = () => { markDirty(); runChecks(); });
+  $$("[data-w]").forEach(b => b.onclick = () => { S.phone = b.dataset.w === "phone"; $$("[data-w]").forEach(x => x.classList.toggle("on", x === b));
+    $("#fw").classList.toggle("phone", S.phone); setTimeout(fitFrame, 50); });
+  $$("[data-cmd]").forEach(b => b.onclick = () => { const doc = fr.contentDocument; if(doc){ doc.execCommand(b.dataset.cmd); markDirty(); runChecks(); } });
+  subCount(); drawActs(); drawHist();
+}
+const UI_STYLE = `img{cursor:pointer} img:hover{outline:3px solid #88B535;outline-offset:2px} a{cursor:text} [data-mf-sel]{outline:3px solid #2463a0 !important;outline-offset:2px}`;
+function frameReady(fr, lock){
+  const doc = fr.contentDocument; if(!doc) return;
+  const st = doc.createElement("style"); st.setAttribute("data-mf-ui", "1"); st.textContent = UI_STYLE; (doc.head || doc.documentElement).appendChild(st);
+  if(!lock){ doc.designMode = "on";
+    doc.addEventListener("input", () => { markDirty(); clearTimeout(S.ckT); S.ckT = setTimeout(runChecks, 600); fitFrame(); });
+    doc.addEventListener("click", e => {
+      const img = e.target.closest && e.target.closest("img");
+      if(img){ e.preventDefault(); return selectEl(img); }
+      const a = e.target.closest && e.target.closest("a");
+      if(a){ e.preventDefault(); return selectEl(a); }
+      hideSel();
+    });
+    doc.addEventListener("keydown", e => { if(e.key === "Escape") hideSel(); });
+  } else {
+    doc.addEventListener("click", e => { if(e.target.closest && e.target.closest("a")) e.preventDefault(); });
+  }
+  $$("img", doc).forEach(i => { if(!i.complete) i.addEventListener("load", () => { fitFrame(); runChecks(); }, { once:true });
+    i.addEventListener("error", () => runChecks(), { once:true }); });
+  S.openSig = sig(frameHtml());   // how the email reads right after opening (the browser tidies HTML a little, so compare with this)
+  fitFrame(); runChecks();
+}
+function fitFrame(){ const fr = $("#ef"); if(!fr || !fr.contentDocument) return; const de = fr.contentDocument.documentElement;
+  fr.style.height = Math.max(600, de.scrollHeight + 4) + "px"; }
+// the email exactly as it will be saved: no editor outline styles, no selection marks, the original doctype kept
+function frameHtml(){
+  const fr = $("#ef"), doc = fr && fr.contentDocument; if(!doc) return S.cur.html;
+  const root = doc.documentElement.cloneNode(true);
+  root.querySelectorAll("[data-mf-ui]").forEach(x => x.remove());
+  root.querySelectorAll("[data-mf-sel]").forEach(x => x.removeAttribute("data-mf-sel"));
+  root.querySelectorAll("[contenteditable]").forEach(x => x.removeAttribute("contenteditable"));
+  const dt = (String(S.cur.html || "").match(/^\s*<!doctype[^>]*>/i) || [""])[0].trim();
+  return (dt ? dt + "\n" : "") + root.outerHTML;
+}
+function subCount(){ const n = ($("#fSub") || {}).value; if(n == null) return; $("#fSubN").textContent = n.length + " characters" + (n.length > 70 ? " · long subjects get cut off on phones" : ""); }
+
+/* ---------- picture / link panel ---------- */
+function selectEl(el){
+  const doc = el.ownerDocument; $$("[data-mf-sel]", doc).forEach(x => x.removeAttribute("data-mf-sel"));
+  el.setAttribute("data-mf-sel", "1"); S.sel = el; drawSel();
+}
+function hideSel(){ const b = $("#selbar"); b.classList.remove("on"); b.innerHTML = "";
+  if(S.sel){ S.sel.removeAttribute("data-mf-sel"); S.sel = null; } }
+function drawSel(){
+  const el = S.sel, b = $("#selbar"); if(!el){ return hideSel(); }
+  if(el.tagName === "IMG"){
+    const a = el.closest("a");
+    b.innerHTML = `<div class="row"><img class="th" src="${esc(el.getAttribute("src") || "")}" alt=""><b style="flex:1">Picture</b>
+        <button class="btn primary small" id="sUp">📷 Replace with a photo</button><button class="btn small" id="sLib">🖼 Our pictures</button><button class="btn small" id="sX" aria-label="Close">✕</button></div>
+      <label class="f" for="sAlt">Words for people whose email hides pictures</label><input class="t" id="sAlt" maxlength="200" value="${esc(el.getAttribute("alt") || "")}">
+      ${a ? `<label class="f" for="sHref">Tapping the picture opens</label><input class="t" id="sHref" value="${esc(a.getAttribute("href") || "")}">` : ""}
+      <p class="muted" id="sMsg" style="margin:6px 0 0"></p>`;
+    $("#sUp").onclick = () => { $("#picfile").value = ""; $("#picfile").click(); };
+    $("#sLib").onclick = picLibrary;
+    $("#sAlt").oninput = e => { el.setAttribute("alt", e.target.value); markDirty(); runChecks(); };
+    if(a) $("#sHref").onchange = e => setHref(a, e.target.value);
+  } else {
+    b.innerHTML = `<div class="row"><b style="flex:1">Button or link</b><button class="btn small" id="sTry">↗ Open it</button><button class="btn small" id="sX" aria-label="Close">✕</button></div>
+      <p class="muted" style="margin:4px 0 0">Change the words by clicking them in the flyer. Here you change where it goes.</p>
+      <label class="f" for="sHref">Opens</label><input class="t" id="sHref" value="${esc(el.getAttribute("href") || "")}" placeholder="https://…">
+      <p class="muted" id="sMsg" style="margin:6px 0 0"></p>`;
+    $("#sHref").onchange = e => setHref(el, e.target.value);
+    $("#sTry").onclick = () => { const h = el.getAttribute("href") || ""; if(/^https?:\/\//i.test(h)) window.open(h, "_blank", "noopener"); else $("#sMsg").textContent = "Only https links can be opened from here."; };
+  }
+  $("#sX").onclick = hideSel;
+  b.classList.add("on");
+}
+function setHref(a, v){
+  v = String(v || "").trim();
+  if(v && !/^(https?:\/\/|mailto:|tel:|#|\{\{)/i.test(v)) v = "https://" + v.replace(/^\/+/, "");
+  a.setAttribute("href", v); markDirty(); runChecks();
+  const m = $("#sMsg"); if(m) m.textContent = v ? "Changed. It saves by itself in a few seconds." : "This link goes nowhere now.";
+}
+const BUCKET = "mkt-images";
+async function shrink(file){   // photos -> max 1200 px wide (sharp on phones, small enough for email); PNG stays PNG; GIF untouched
+  if(file.type === "image/gif") return { blob:file, ext:"gif", type:"image/gif" };
+  let bmp; try { bmp = await createImageBitmap(file); } catch(e){ throw new Error("That picture type can't be read here. Use a JPG or PNG."); }
+  const png = file.type === "image/png", scale = Math.min(1, 1200 / bmp.width);
+  if(scale === 1 && file.size < 600000 && /^image\/(jpeg|png)$/.test(file.type)) return { blob:file, ext:png ? "png" : "jpg", type:file.type };
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const type = png ? "image/png" : "image/jpeg", blob = await new Promise(r => c.toBlob(r, type, 0.85));
+  return { blob, ext:png ? "png" : "jpg", type };
+}
+function setPic(url, name){
+  const el = S.sel; if(!el || el.tagName !== "IMG") return;
+  el.setAttribute("src", url);
+  el.removeAttribute("height");   // a new picture can have another shape; let the height follow the width
+  el.style.height = "auto";
+  if(name && !el.getAttribute("alt")) el.setAttribute("alt", name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").slice(0, 120));
+  el.addEventListener("load", fitFrame, { once:true });
+  markDirty(); drawSel(); runChecks();
+  const m = $("#sMsg"); if(m) m.textContent = "Picture swapped. It saves by itself in a few seconds.";
+}
+document.addEventListener("change", async e => { if(e.target.id !== "picfile") return;
+  const file = e.target.files[0]; if(!file || !S.sel) return;
+  const m = $("#sMsg"); if(m) m.textContent = "Uploading picture…";
+  try {
+    const { blob, ext, type } = await shrink(file);
+    if(blob.size > 5242880) throw new Error("That picture is over 5 MB even after shrinking.");
+    const path = `${today().slice(0, 7)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType:type, upsert:false, cacheControl:"31536000" });
+    if(up.error) throw up.error;
+    setPic(sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl, file.name);
+  } catch(err){ if(m) m.textContent = "Upload didn't work: " + niceErr(err); }
+});
+async function picLibrary(){
+  const d = $("#dlg"); d.innerHTML = `<h3>Our pictures</h3><div id="plib" class="muted">Loading…</div><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn" data-x>Close</button></div>`;
+  d.showModal(); $("[data-x]", d).onclick = () => d.close();
+  try {
+    const top = await sb.storage.from(BUCKET).list("", { limit:100, sortBy:{ column:"name", order:"desc" } }); if(top.error) throw top.error;
+    const months = (top.data || []).filter(x => !x.id).map(x => x.name).slice(0, 6);
+    let files = [];
+    for(const mo of months){ const r = await sb.storage.from(BUCKET).list(mo, { limit:100, sortBy:{ column:"created_at", order:"desc" } });
+      files = files.concat((r.data || []).filter(x => x.id).map(x => ({ path:mo + "/" + x.name, at:x.created_at }))); }
+    files.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    $("#plib", d).outerHTML = files.length ? `<div class="lib">${files.slice(0, 60).map(f => { const u = sb.storage.from(BUCKET).getPublicUrl(f.path).data.publicUrl;
+        return `<button class="btn" data-pick="${esc(u)}" title="${esc(fmtDT(f.at))}"><img src="${esc(u)}" alt=""></button>`; }).join("")}</div>`
+      : `<p class="muted">No pictures uploaded yet. Use 📷 Replace with a photo.</p>`;
+    $$("[data-pick]", d).forEach(btn => btn.onclick = () => { d.close(); setPic(btn.dataset.pick); });
+  } catch(e){ $("#plib", d).textContent = niceErr(e); }
+}
+
+/* ---------- checks ---------- */
+const HOL = [["Halloween",[10]],["Thanksgiving",[11]],["Christmas",[12]],["New Year",[12,1]],["Valentine",[2]],["St. Patrick",[3]],["Easter",[3,4]],
+  ["Memorial Day",[5]],["Fourth of July",[7]],["4th of July",[7]],["Labor Day",[9]],["Presidents",[2]],["Sundance",[1]],["Black Friday",[11]]];
+function runChecks(){
+  const box = $("#checks"); if(!box || !S.cur) return;
+  const fr = $("#ef"), doc = fr && fr.contentDocument; if(!doc || !doc.body) return;
+  const out = [], add = (lvl, txt) => out.push([lvl, txt]);
+  const sub = ($("#fSub") || {}).value || "", pre = ($("#fPre") || {}).value || "";
+  const month = ($("#fMonth") || {}).value || S.cur.design.month || today().slice(0, 7), mNum = +month.slice(5), yr = +month.slice(0, 4);
+  sub.trim() ? add("ok", "Subject line") : add("bad", "Add a subject line");
+  pre.trim() ? add("ok", "Preview text") : add("warn", "No preview text (the inbox shows the first words of the email instead)");
+  const lists = $$("[data-list]").filter(c => c.checked);
+  lists.length ? add("ok", "Going to " + lists.map(c => c.parentElement.textContent.trim()).join(", ")) : add("bad", "Tick at least one owner list");
+  const html = doc.documentElement.outerHTML;
+  /unsubscribe/i.test(html) ? add("ok", "Unsubscribe link") : add("bad", "No unsubscribe link (keep the old flyer's footer)");
+  const links = $$("a", doc), badL = links.filter(a => { const h = (a.getAttribute("href") || "").trim(); return !h || h === "#"; }),
+        httpL = links.filter(a => /^http:\/\//i.test(a.getAttribute("href") || ""));
+  badL.length ? add("bad", `${badL.length} button${badL.length > 1 ? "s or links go" : " or link goes"} nowhere`) : add("ok", `${links.length} links point somewhere`);
+  if(httpL.length) add("warn", `${httpL.length} link${httpL.length > 1 ? "s start" : " starts"} with http:// instead of https://`);
+  const imgs = $$("img", doc), broken = imgs.filter(i => i.complete && !i.naturalWidth), noAlt = imgs.filter(i => !(i.getAttribute("alt") || "").trim());
+  broken.length ? add("bad", `${broken.length} picture${broken.length > 1 ? "s don't" : " doesn't"} load`) : add("ok", `${imgs.length} pictures load`);
+  if(noAlt.length) add("warn", `${noAlt.length} picture${noAlt.length > 1 ? "s have" : " has"} no words for people whose email hides pictures`);
+  // words left over from the old flyer
+  const text = (doc.body.innerText || "") + " " + sub + " " + pre;
+  const left = [];
+  HOL.forEach(([w, ms]) => { if(!ms.includes(mNum) && new RegExp("\\b" + w.replace(".", "\\."), "i").test(text)) left.push(w); });
+  [1, 2, 3].forEach(n => { const mm = ((mNum - 1 - n + 12) % 12), nm = MONTHS[mm];
+    const re = nm === "May" ? /\bMay\s+\d/ : new RegExp("\\b" + nm + "\\b"); if(re.test(text)) left.push(nm); });
+  const years = [...new Set((text.match(/\b20\d\d\b/g) || []).filter(y => +y < yr - (mNum === 1 ? 1 : 0)))];
+  left.push(...years);
+  left.length ? add("warn", `Still says ${left.map(w => "“" + w + "”").join(", ")}. Left over from the old flyer?`) : add("ok", "No leftover month or holiday words found");
+  if(!S.cur.design.touched && S.openSig && sig(frameHtml()) === S.openSig) add("warn", "Nothing in the email has changed from the old flyer yet");
+  S.checks = out;
+  const ic = { ok:"✅", warn:"⚠️", bad:"❌" };
+  box.innerHTML = out.map(([l, t]) => `<li><b>${ic[l]}</b><span>${esc(t)}</span></li>`).join("");
+  drawActs();
+}
+
+/* ---------- save, Brevo draft, test, send ---------- */
+function markDirty(){ if(S.cur && locked(S.cur)) return; S.dirty = true; const s = $("#sv"); if(s) s.textContent = "Not saved yet";
+  clearTimeout(S.saveT); S.saveT = setTimeout(() => save(false).catch(() => {}), 4000); }
+async function save(queue){
+  const D = S.cur; if(!D || locked(D)) return;
+  clearTimeout(S.saveT);
+  const row = { name:($("#fName").value || "").trim().slice(0, 200) || D.name, subject:($("#fSub").value || "").trim() || null,
+    preview_text:($("#fPre").value || "").trim() || null, list_ids:$$("[data-list]").filter(c => c.checked).map(c => +c.dataset.list),
+    design:Object.assign({}, D.design, { month:$("#fMonth").value }, S.dirty && S.openSig && sig(frameHtml()) !== S.openSig ? { touched:true } : {}), html:frameHtml() };
+  if(queue) row.status = "queued";
+  else if(S.dirty && D.status !== "draft") row.status = "draft";   // changed after it went to Brevo: Brevo has the older copy now
+  if(!queue && !S.dirty) return;
+  const s = $("#sv"); if(s) s.textContent = "Saving…";
+  const r = await sb.from("mkt_drafts").update(row).eq("id", D.id).select("*").single();
+  if(r.error){ if(s) s.textContent = "Couldn't save: " + niceErr(r.error); throw r.error; }
+  S.cur = r.data; S.dirty = false;
+  const i = S.flyers.findIndex(f => f.id === D.id); if(i >= 0) S.flyers[i] = Object.assign({}, S.flyers[i], r.data);
+  if(s) s.textContent = "Saved " + new Date().toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
+  const [tone, lab] = flyerState(S.cur); const p = $("#stp"); if(p){ p.className = "pill " + tone; p.textContent = lab; }
+  drawActs();
+}
+function drawActs(){
+  const box = $("#acts"); if(!box || !S.cur) return;
+  const D = S.cur, lock = locked(D), bad = (S.checks || []).some(c => c[0] === "bad"), M = S.mode;
+  const lastTest = sendsOf(D.id).find(s => s.kind === "test");
+  const brevoLink = D.brevo_id ? `https://app.brevo.com/marketing-campaign/edit/${D.brevo_id}` : "";
+  box.innerHTML = lock ? `<p class="muted" style="margin:0">Nothing to do here.</p>${brevoLink ? `<a class="btn small" href="${brevoLink}" target="_blank" rel="noopener">Open it in Brevo ↗</a>` : ""}` : `
+    <button class="btn" id="aSave">💾 Save</button>
+    <button class="btn" id="aBrevo" ${bad ? "disabled title='Fix the ❌ checks first'" : ""}>☁️ Save to Brevo as a draft</button>
+    ${D.status === "in_brevo" && brevoLink ? `<a class="btn small" href="${brevoLink}" target="_blank" rel="noopener">Open the Brevo draft ↗</a>` : ""}
+    ${D.status === "error" && D.brevo_note ? `<p class="err" style="margin:0">${esc(D.brevo_note)}</p>` : ""}
+    ${M.can_send ? `
+      <button class="btn primary" id="aTest" ${bad ? "disabled title='Fix the ❌ checks first'" : ""}>✉️ Send me a test</button>
+      <p class="muted" style="margin:0">The test goes to ${esc(M.my_email || "your email")}. That address has to be a Brevo contact on a list.</p>
+      <button class="btn go" id="aSend" ${bad ? "disabled title='Fix the ❌ checks first'" : ""}>🚀 Send to owners</button>
+      ${lastTest && lastTest.status === "sent" ? `<p class="muted" style="margin:0">Last test sent ${esc(fmtDT(lastTest.done_at))}.</p>` : `<p class="muted" style="margin:0">Send yourself a test first. The hub sends the exact version you tested.</p>`}`
+    : `<p class="muted" style="margin:0">Sending from the hub turns on once Brandon or Kim OK it. Until then: <b>Save to Brevo as a draft</b>, then open it in Brevo, add “Do Not Contact (Previous Owners)” under Exclude, and press Send.</p>`}`;
+  if(lock) return;
+  $("#aSave").onclick = () => save(false).catch(() => {});
+  $("#aBrevo").onclick = async () => { try { await save(true); pollStart(); } catch(e){} };
+  if(M.can_send){ $("#aTest").onclick = () => ask("test"); $("#aSend").onclick = sendDialog; }
+}
+async function ask(kind){
+  try {
+    if(S.dirty || S.cur.status === "queued") await save(false);
+    const lists = $$("[data-list]").filter(c => c.checked).map(c => +c.dataset.list);
+    const r = await sb.rpc("mkt_flyer_ask", { p_draft:S.cur.id, p_kind:kind, p_lists:lists });
+    if(r.error) throw r.error;
+    $("#sv").textContent = kind === "test" ? "Test asked for. The office PC sends it within a minute." : "Send asked for. The office PC sends it within a minute.";
+    await refreshSends(); editor(S.cur.id); pollStart();
+  } catch(e){ alertBox(niceErr(e)); }
+}
+function sendDialog(){
+  const D = S.cur, lists = $$("[data-list]").filter(c => c.checked), total = lists.reduce((n, c) => n + (S.sizes[+c.dataset.list] || 0), 0);
+  const skip = S.lists.filter(l => l.role === "skip");
+  const d = $("#dlg");
+  d.innerHTML = `<h3>Send to owners?</h3>
+    <p style="margin:0 0 6px"><b>${esc($("#fSub").value)}</b></p>
+    <p class="muted" style="margin:0">To: ${lists.map(c => esc(c.parentElement.textContent.trim())).join(", ")}${total ? ` · about ${total} people` : ""}<br>
+      Left out: ${skip.map(l => esc(l.name)).join(", ") || "nobody"}</p>
+    <div class="warn">This can't be taken back once it goes out. The hub sends the version you tested.</div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="cOk" style="width:18px;height:18px"> I opened my test email and it looks right</label>
+    <p class="err" id="cErr"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button class="btn" data-x>Not yet</button><button class="btn go" id="cGo" disabled>🚀 Send it</button></div>`;
+  $("[data-x]", d).onclick = () => d.close();
+  $("#cOk", d).onchange = e => $("#cGo", d).disabled = !e.target.checked;
+  $("#cGo", d).onclick = async () => { d.close(); await ask("send"); };
+  d.showModal();
+}
+function alertBox(msg){ const d = $("#dlg"); d.innerHTML = `<p style="margin:0 0 12px">${esc(msg)}</p><div style="display:flex;justify-content:flex-end"><button class="btn primary" data-x>OK</button></div>`;
+  $("[data-x]", d).onclick = () => d.close(); d.showModal(); }
+async function refreshSends(){
+  const ids = S.flyers.map(f => f.id); if(!ids.length) return;
+  const r = await sb.from("mkt_flyer_sends").select("*").in("draft_id", ids).order("asked_at", { ascending:false }).limit(300);
+  if(!r.error) S.sends = r.data || [];
+}
+function drawHist(){
+  const box = $("#hist"); if(!box || !S.cur) return;
+  const rows = sendsOf(S.cur.id), D = S.cur, c = campOf(D), st = c && c.stats || {};
+  const ST = { asked:"waiting for the office PC", sending:"sending…", sent:"✅ sent", failed:"❌ didn't go", refused:"❌ refused", cancelled:"taken back" };
+  const items = rows.map(s => `<div><b>${s.kind === "test" ? "Test to " + esc(s.test_to || "") : "Send to owners"}</b> · ${esc(ST[s.status] || s.status)}<br>
+      <span class="muted">${esc(s.asked_name || "")} · ${esc(fmtDT(s.asked_at))}${s.done_at ? " → " + esc(fmtDT(s.done_at)) : ""}</span>
+      ${s.note ? `<br><span class="${/failed|refused/.test(s.status) ? "err" : "muted"}">${esc(s.note)}</span>` : ""}
+      ${s.status === "asked" && s.asked_by ? `<br><button class="btn small" data-cancel="${s.id}">Take it back</button>` : ""}</div>`);
+  if(c && c.status === "sent") items.unshift(`<div><b>Brevo:</b> sent ${esc(fmtD(c.sent_at))} to ${(st.sent || 0).toLocaleString()} · opened ${pct(st.uniqueViews || 0, st.delivered || st.sent)} · clicked ${pct(st.uniqueClicks || 0, st.delivered || st.sent)} · unsubscribed ${st.unsubscriptions || 0}</div>`);
+  if(D.pushed_at && D.brevo_note) items.push(`<div><b>Brevo draft:</b> ${esc(D.brevo_note)}<br><span class="muted">${esc(fmtDT(D.pushed_at))}</span></div>`);
+  items.push(`<div><span class="muted">Started ${esc(fmtDT(D.created_at))} by ${esc(D.created_name || "")} from “${esc((D.design.from || {}).name || "")}”</span></div>`);
+  box.innerHTML = items.join("");
+  $$("[data-cancel]", box).forEach(b => b.onclick = async () => { const r = await sb.rpc("mkt_flyer_cancel", { p_id:+b.dataset.cancel });
+    if(r.error) return alertBox(niceErr(r.error)); await refreshSends(); editor(S.cur.id); });
+}
+// while something is on its way (Brevo draft, test, send), check every 5 seconds for up to 4 minutes
+function pollStart(){
+  clearInterval(S.poll); let n = 0;
+  S.poll = setInterval(async () => {
+    if(++n > 48 || !S.cur) return clearInterval(S.poll);
+    const id = S.cur.id;
+    const [d, s] = await Promise.all([sb.from("mkt_drafts").select("status,brevo_id,brevo_note,pushed_at").eq("id", id).single(), refreshSends()]);
+    if(d.error || !S.cur || S.cur.id !== id) return;
+    Object.assign(S.cur, d.data);
+    const fl = S.flyers.find(f => f.id === id); if(fl) Object.assign(fl, d.data);
+    const waiting = S.cur.status === "queued" || busyRow(id);
+    const [tone, lab] = flyerState(S.cur); const p = $("#stp"); if(p){ p.className = "pill " + tone; p.textContent = lab; }
+    drawActs(); drawHist();
+    if(!waiting){ clearInterval(S.poll); const all = await load().catch(() => null); if(S.cur && S.cur.id === id && !S.dirty) editor(id); }
+  }, 5000);
+}
+
+/* ---------- routing ---------- */
+async function route(){
+  if(S.dirty && S.cur){ try { await save(false); } catch(e){} }
+  hideSel(); clearInterval(S.poll);
+  const m = location.hash.match(/^#\/f\/(\d+)/);
+  if(m) return editor(+m[1]);
+  S.cur = null; listView();
+}
+window.addEventListener("hashchange", route);
+window.addEventListener("beforeunload", e => { if(S.dirty){ e.preventDefault(); e.returnValue = ""; } });
+document.addEventListener("click", e => {
+  const st = e.target.closest("[data-start]"); if(st){ const [t, id] = st.dataset.start.split(":"); return startDialog(t, id); }
+  const pc = e.target.closest("[data-pvc]"); if(pc){ const c = S.camps.find(x => x.brevo_id == pc.dataset.pvc); return preview("camp", c.brevo_id, c.name + " · " + (c.subject || "")); }
+  const pf = e.target.closest("[data-pvf]"); if(pf){ const f = S.flyers.find(x => x.id == pf.dataset.pvf); return preview("flyer", f.id, f.name + " · " + (f.subject || "")); }
+});
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"advertising" });
+  if(ok.error){ $("#app").innerHTML = `<h1>Monthly flyer</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
+  if(ok.data !== true){ $("#app").innerHTML = `<h1>Monthly flyer</h1><p class="muted">Nothing to show.</p>`; return; }
+  try { await load(); } catch(e){ $("#app").innerHTML = `<h1>Monthly flyer</h1><p class="err">${esc(niceErr(e))}</p>`; return; }
+  route();
+})();
+window.__mf = { S, runChecks, frameHtml };   // for the stub test
+</script>
+</body>
+</html>
