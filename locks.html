@@ -390,8 +390,6 @@ function navTabs(active){
     ${DESK ? t("stays","#/stays",ICON.lock,"Stays & guest codes") : off ? "" : t("install","#/install",ICON.install,"Install")}
     ${DESK ? t("codes","#/codes",ICON.codes,"Access codes") : ""}
     ${t("alerts","#/alerts",ICON.alerts,"Alerts", S.alertCount?`<span class="badge">${S.alertCount}</span>`:"")}
-    ${DESK ? t("reports","#/reports",ICON.score,"Reports") : ""}
-    ${DESK ? t("rules","#/rules",ICON.homes,"Company rules") : ""}
     ${DESK ? t("score","#/score",ICON.score,"Scorecard & updates") : ""}
     ${DESK && !off ? t("install","#/install",ICON.install,"Install") : ""}
     ${DESK && adm ? t("people","#/people",ICON.codes,"People") : ""}
