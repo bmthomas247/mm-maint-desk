@@ -16,7 +16,7 @@
 .cols{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}@media (max-width:760px){.cols{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
 label{display:block;font-weight:800;font-size:13px;margin:12px 0 6px;color:var(--ink-2)}
-input,select{width:100%;font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
+input:where(:not([type=checkbox],[type=radio])),select{width:100%;font:inherit;border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
 .btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;min-height:42px;padding:0 15px;font:inherit;font-weight:800;cursor:pointer}
 .btn.pri{background:var(--forest);border-color:var(--forest);color:#fff}.btn:disabled{opacity:.55}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
