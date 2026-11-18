@@ -29,7 +29,7 @@
 .note{background:var(--amber-soft);border-radius:12px;padding:10px 12px;margin:10px 0}
 .ok{background:var(--moose-soft);color:var(--forest);border-radius:12px;padding:10px 12px;margin-top:10px;font-weight:700}
 .bad{background:var(--red-soft);color:var(--red);border-radius:12px;padding:10px 12px;margin-top:10px;font-weight:700}
-.copy{display:flex;gap:8px;align-items:center;margin:6px 0} .copy input{flex:1;min-width:0;font:14px ui-monospace,monospace;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink)}
+.copy{display:flex;gap:8px;align-items:center;margin:6px 0} .copy input:where(:not([type=checkbox],[type=radio])){flex:1;min-width:0;font:14px ui-monospace,monospace;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink)}
 .copy .btn{width:auto;margin:0;min-height:46px}
 ul{padding-left:20px;margin:6px 0} li{margin:5px 0} code{font:14px ui-monospace,monospace;background:var(--ground);padding:1px 5px;border-radius:6px}
 details summary{cursor:pointer;font-weight:700;margin-top:4px}
