@@ -1948,8 +1948,10 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=(function(g){ g.v=parkFix(g.v); return g; })(qs("garage",/^parking\/? ?garage info$|^parking$/i)), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
   var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+emergHtml(p)+'</div>';
-  return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">Edit</button></h4><div class="qgrid">'+own+(window.OwnerNotes?OwnerNotes.html(code,render):'')+tnCard(code)+
-    qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi")+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
+  return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">✎ Edit Wi-Fi, codes & owner</button></h4><div class="qgrid">'+own+(window.OwnerNotes?OwnerNotes.html(code,render):'')+tnCard(code)+
+    /* Brandon 2026-11-17 (Kim #49, Cheree #55): a home with no Wi-Fi had no Wi-Fi card at all, so nobody found where to add it */
+    (wifi.v?qCard("Wi-Fi",wifi.v,wifi.s,"wifi","wi-?fi|stay[- ]?fi").replace(/<\/div>$/,'<button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">✎ Edit Wi-Fi</button></div>')
+      :'<div class="qv wifi"><div class="qvh">Wi-Fi</div><div class="muted">Not on file yet.</div><button class="btn sm" data-act="editquick" data-code="'+esc(code)+'">✎ Add Wi-Fi</button></div>')+(q.door?qCard("Door / gate",q.door,"From Track","codes",""):'')+
     qCard("Lockout info",entry.v||(q.ownerView?"Owner lockout and owner closet are hidden. Tap View to open them.":""),ownerViewHtml(code,q),"codes","lockout")+(function(){ var out=[], seen={}, txt=String(garage.v||"").replace(/<[^>]+>/g," ");
       txt.split("\n").forEach(function(l){ var pm=/assigned parking spot\s*#?\s*([A-Za-z]?\d{1,5}[A-Za-z]?)/i.exec(l), l2=l.replace(/assigned parking spot\s*#?\s*[A-Za-z]?\d{1,5}[A-Za-z]?/ig," ");
         if(/garage|gate|door|code/i.test(l2)) (kbc(l2).match(/•{3,}|[0-9][0-9#*]{2,}/g)||[]).forEach(function(c){ if(!seen[c]){ seen[c]=1; out.push((/gate/i.test(l2)&&!/garage/i.test(l2)?"Gate code: ":"Garage code: ")+c); } });
@@ -2089,7 +2091,7 @@ function ownerViewHtml(code,q){ if(!q.ownerView) return ""; var v=(D._ov||{})[co
 function ownerView(code){ var sb=window.MM_SB; if(!sb) return; D._ov=D._ov||{};
   sb.rpc("home_owner_reveal",{p_home:code}).then(function(r){ D._ov[code]=r.error?{err:"Couldn't open it. Try again."}:Object.assign({at:Date.now()},r.data||{}); render(); }); }
 function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
-  openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div>'+
+  openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div><div class="hint">When Track has Wi-Fi for this home, Track\'s shows first. If Track\'s is wrong, change it in Track too.</div>'+
     (canEntry()?area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Track's garage code shows first; this is used when Track has none"):'')+(window.MM_CODES===false?'':area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note"))+
     (o.can?'<div class="lbl" style="margin-top:10px">Owner contact <span class="muted">(blank = use Track)</span></div><div class="fields">'+fld("o_name","Owner name",oc.name||"")+fld("o_phone","Phone",oc.phone||"","tel")+fld("o_email","Email",oc.email||"","email")+'</div>'+area("o_notes","Owner notes",oc.notes||"","e.g. prefers text, second contact"):''),
   function(){ var k=sid(code);
@@ -3666,22 +3668,24 @@ var WD3={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
 function trashInDow(r){ var m=String(r.title||"").match(/\bin\s+(sun|mon|tue|wed|thu|fri|sat)/i); return m?WD3[m[1].toLowerCase()]:null; }
 function trashOutDow(r){ var w=String(r.when||"").toLowerCase().slice(0,3); return WD3[w]!=null?WD3[w]:null; }
 function trashBack(r){ var ind=trashInDow(r), od=trashOutDow(r); if(ind==null||od==null) return null;
-  var t=today(), td=new Date(Date.parse(t+"T12:00:00")); if(td.getDay()!==ind) return null;
-  var gap=(ind-od+7)%7||7, out=new Date(td.getTime()-gap*864e5).toISOString().slice(0,10);
+  var t=today(), td=new Date(Date.parse(t+"T12:00:00")), need=(ind-od+7)%7||7, since=(td.getDay()-od+7)%7;
+  if(since===0||since<need) return null;   /* Brandon 2026-11-17 (Dave #57): keep the list up after the in day until the next pickup */
+  var out=new Date(td.getTime()-since*864e5).toISOString().slice(0,10);
   var tk=Object.keys(S.rlog).map(function(k){ return S.rlog[k]; }).filter(function(x){ return x&&x.rid===r.id&&x.home&&x.day===out&&!x.undone; });
   var homes, src;
   if(tk.length){ homes=tk.filter(function(x){ return x.state==="out"; }).map(function(x){ return {c:x.home,why:"Taken out "+fmtD(out)+" by "+nameFor(x.by)}; }); src="ticked"; }
   else { var p=trashPlan(r,out); if(!p) return null; homes=p.out.concat(p.check).map(function(x){ return {c:x.c,why:"On the "+fmtD(out)+" list (nobody ticked homes that day)"}; }); src="plan"; }
   return {day:t,out:out,homes:homes,src:src}; }
 function trashInKey(rid,day,c){ return sid(rid)+"__"+day+"__in__"+sid(c); }
-function trashInTick(rid,day,c){ var x=S.rlog[trashInKey(rid,day,c)]; return x&&!x.undone?x:null; }
+function trashInTick(rid,day,c,out){ var x=S.rlog[trashInKey(rid,day,c)]; if(x&&!x.undone) return x;
+  if(!out) return null; return Object.keys(S.rlog).map(function(k){ return S.rlog[k]; }).filter(function(y){ return y&&y.rid===rid&&y.home===c&&y.state==="in"&&y.out===out&&!y.undone; })[0]||null; }
 function trashBackBlock(r,b){ var rid=r.id;
-  var cards=b.homes.slice().sort(function(a,c){ return a.c.localeCompare(c.c,undefined,{numeric:true}); }).map(function(x){ var tk=trashInTick(rid,b.day,x.c), key=esc(rid+"|"+b.day+"|"+x.c+"|"+b.out);
+  var cards=b.homes.slice().sort(function(a,c){ return a.c.localeCompare(c.c,undefined,{numeric:true}); }).map(function(x){ var tk=trashInTick(rid,b.day,x.c,b.out), key=esc(rid+"|"+(tk&&tk.day||b.day)+"|"+x.c+"|"+b.out);
     if(tk) return '<div class="tcard tdone" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill ok">In</span></div>'+
       '<div class="tdid">Brought in by '+esc(nameFor(tk.by))+' · '+esc(trashTime(tk.at))+' <button class="btn sm ghost" data-tinundo="'+key+'">Undo</button></div></div>';
     return '<div class="tcard" data-thome="'+esc(x.c)+'"><div class="tch"><b class="tcode">'+esc(x.c)+'</b><span class="pill waiting">Bring in</span></div>'+
       '<div class="twhy">'+esc(x.why)+'</div>'+trashGarage(x.c)+'<div class="tbtns"><button class="btn tgo" data-tin="'+key+'">✓ Cans back in</button></div></div>'; }).join("");
-  return '<div class="tbig" style="background:#eef4e6;border-color:#9bb57a"><b>🔙 Bring the cans back in today</b> — they went out '+esc(fmtD(b.out))+'.</div>'+
+  return '<div class="tbig" style="background:#eef4e6;border-color:#9bb57a"><b>🔙 Bring the cans back in</b> — they went out '+esc(fmtD(b.out))+'.</div>'+
     (b.homes.length?cards:'<div class="tcard"><div class="twhy">Nothing went out '+esc(fmtD(b.out))+', so nothing to bring in.</div></div>')+
     '<div class="thood" style="margin-top:14px">Next pickup</div>'; }
 document.addEventListener("click",function(ev){ var b=ev.target.closest("[data-tin],[data-tinundo]"); if(!b) return; ev.preventDefault();
