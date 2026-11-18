@@ -29,6 +29,8 @@ const PRESETS = {
   lastpay: ["Last pay period", () => payPeriod(add(payPeriod(today())[0], -1))],
   lastmonth: ["Last month", () => { const d = new Date(); const f = new Date(d.getFullYear(), d.getMonth() - 1, 1), t = new Date(d.getFullYear(), d.getMonth(), 0); return [iso(f), iso(t)]; }] };
 try { const s = JSON.parse(sessionStorage.getItem("acct") || "{}"); if(s.from){ A.from = s.from; A.to = s.to; A.preset = s.preset || null; } } catch(e) {}
+// a saved preset ("Last pay period"…) is worked out again from today, so a change to the pay schedule or a new day shows the right dates
+try { if(A.preset && PRESETS[A.preset]){ const [f, t] = PRESETS[A.preset][1](); A.from = f; A.to = t; } } catch(e) {}
 function setPreset(k){ const [f, t] = PRESETS[k][1](); A.from = f; A.to = t; A.preset = k; save(); }
 function save(){ try { sessionStorage.setItem("acct", JSON.stringify({ from:A.from, to:A.to, preset:A.preset })); } catch(e) {} }
 if(!A.from) setPreset("lastweek");
