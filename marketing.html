@@ -813,8 +813,22 @@ document.addEventListener("click", async e => { const b = e.target.closest("butt
   if(b.dataset.dsave) saveDraft(false);
   if(b.dataset.dbrevo){ if(!(DES.d.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
     if(!B.some(x => x.t === "footer" || (x.t === "html" && /unsubscribe/i.test(x.html || "")))){ $("#dst").textContent = "Add the footer block (it has the unsubscribe link)."; return; }
-    saveDraft(true); }
+    brevoSure(); }
 });
+
+// Jeff 2026-11-18: "an are you sure prompt before it ever goes to brevo" - same box as Owners > Monthly flyer. "Not yet" has the focus.
+function brevoSure(){
+  const D = DES.d, d = $("#dlg");
+  const lists = $$("#big [data-list]").filter(c => c.checked).map(c => (c.closest("label") || c.parentElement).textContent.trim().replace(/\s+/g, " "));
+  d.innerHTML = `<h3 style="margin:0 0 8px">Put this email in Brevo?</h3>
+    <p style="margin:0"><b>${esc(D.subject || "")}</b></p>
+    <p class="muted" style="margin:2px 0 0">${esc(D.name || "")} · lists: ${esc(lists.join(", ") || "none ticked (pick them in Brevo)")}</p>
+    <p style="margin:10px 0 0">It goes into Brevo as a <b>draft</b>${D.brevo_id ? ` (it updates Brevo draft #${esc(D.brevo_id)})` : ""}. Nobody gets an email from this. You still schedule or send it in Brevo.</p>
+    <div class="bar" style="justify-content:flex-end;margin-top:14px"><button class="btn" id="bsNo">Not yet</button><button class="btn primary" id="bsGo">Yes, put it in Brevo</button></div>`;
+  d.showModal(); $("#bsNo", d).focus();
+  $("#bsNo", d).onclick = () => d.close();
+  $("#bsGo", d).onclick = () => { d.close(); saveDraft(true); };
+}
 
 async function refresh(){ try { await load(); render(); } catch(e){ $("#app").innerHTML = `<h1>${esc(TABS[TAB])}</h1><p class="muted">Couldn't load: ${esc(e.message || e)}</p>`; } }
 document.addEventListener("click", e => {
