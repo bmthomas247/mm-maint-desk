@@ -4147,6 +4147,7 @@ function renderHotels() {
 // ===== Market pacing (Brandon 2026-11-18: grow off Cathy's Key Data dashboard "Winter 11/20-4/18", one view per neighborhood + size).
 // Data = rates_pacing(set, from, to): Key Data calendars of the group's Primary comps (now vs ~2 weeks ago), our homes from Track bookings,
 // Key Data neighborhood market KPIs (all sizes) + last year = Key Data's final numbers for the same weeks.
+const pcEsc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const PC = { set: null, from: null, to: null, data: null, busy: false };
 function pcDefaults() {
   const t = new Date(); t.setHours(12, 0, 0, 0); const y = t.getFullYear(), m = t.getMonth();
@@ -4159,7 +4160,7 @@ async function loadPacing() {
   if (!PC.set) { try { PC.set = localStorage.getItem("mmPacingSet"); } catch (e) {} }
   const sets = (state.sets || []).filter(s => s.active !== false);
   if (!PC.set || !sets.some(s => s.id === PC.set)) PC.set = (sets.find(s => /bear hollow village up to/i.test(s.name)) || sets[0] || {}).id;
-  const opt = sets.map(s => `<option value="${esc(s.id)}"${s.id === PC.set ? " selected" : ""}>${esc(s.name)}</option>`).join("");
+  const opt = sets.map(s => `<option value="${pcEsc(s.id)}"${s.id === PC.set ? " selected" : ""}>${pcEsc(s.name)}</option>`).join("");
   const d = pcDefaults();
   $("pcCtl").innerHTML = `<div class="pcctl"><label>Neighborhood + size<select id="pcSet">${opt}</select></label>
     <label>From<input type="date" id="pcFrom" value="${PC.from}"></label><label>To<input type="date" id="pcTo" value="${PC.to}"></label>
@@ -4180,7 +4181,7 @@ async function pcFetch() {
   $("pcOut").innerHTML = `<p class="small muted">Loading…</p>`;
   const r = await sb.rpc("rates_pacing", { p_set: PC.set, p_from: PC.from, p_to: PC.to });
   if (tok !== PC.tok) return;
-  if (r.error) { $("pcOut").innerHTML = `<p class="small muted">Couldn't load: ${esc(r.error.message)}</p>`; return; }
+  if (r.error) { $("pcOut").innerHTML = `<p class="small muted">Couldn't load: ${pcEsc(r.error.message)}</p>`; return; }
   PC.data = r.data; pcDraw();
 }
 function pcAvg(W, k) { const v = W.map(w => w[k]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + +b, 0) / v.length : null; }
@@ -4198,7 +4199,7 @@ function pcLine(W, series, opt) {
     let d = "", pen = false;
     W.forEach((x, i) => { const v = x[s.k]; if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + X(i).toFixed(1) + " " + Y(+v).toFixed(1) + " "; pen = true; });
     g += `<path d="${d}" fill="none" stroke="${s.c}" stroke-width="${s.wd || 2.5}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ""} stroke-linecap="round" stroke-linejoin="round"/>`;
-    W.forEach((x, i) => { const v = x[s.k]; if (v == null) return; g += `<circle cx="${X(i)}" cy="${Y(+v)}" r="3" fill="${s.c}"><title>${esc(s.n)} · week of ${x.week}: ${opt.pct ? v + "%" : "$" + v}</title></circle>`; });
+    W.forEach((x, i) => { const v = x[s.k]; if (v == null) return; g += `<circle cx="${X(i)}" cy="${Y(+v)}" r="3" fill="${s.c}"><title>${pcEsc(s.n)} · week of ${x.week}: ${opt.pct ? v + "%" : "$" + v}</title></circle>`; });
   }
   return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto">${g}</svg>`;
 }
@@ -4217,18 +4218,18 @@ function pcDraw() {
     { k: "comp_adr", n: "Comps: booked nights", c: GOLD }, { k: "comp_ask", n: "Comps: open nights (asking)", c: GOLD, dash: "6 5", wd: 1.8 },
     { k: "ours_adr", n: "Our homes: booked (Track rent)", c: GREEN },
     { k: "mkt_adr", n: `${mk} market`, c: GREY, wd: 2 }, { k: "mkt_ly_adr", n: `${mk} market last year`, c: GREY, dash: "2 4", wd: 2 }];
-  const leg = S => `<div class="pcleg">${S.map(s => `<span><i class="${s.dash ? (s.dash.startsWith("2") ? "o" : "d") : ""}" style="border-top-color:${s.c}"></i>${esc(s.n)}</span>`).join("")}</div>`;
+  const leg = S => `<div class="pcleg">${S.map(s => `<span><i class="${s.dash ? (s.dash.startsWith("2") ? "o" : "d") : ""}" style="border-top-color:${s.c}"></i>${pcEsc(s.n)}</span>`).join("")}</div>`;
   $("pcOut").innerHTML = `<div class="pctiles">
       <div class="pctile"><small>Comps booked (avg week)</small><b>${f(cN)}</b><small>${dif(cN, cT, 1)} vs ${asThen}</small></div>
       <div class="pctile"><small>Our homes booked (avg week)</small><b>${f(oN)}</b><small>${dif(oN, oT, 1)} vs ${asThen}</small></div>
       <div class="pctile"><small>Us vs comps</small><b>${oN == null || cN == null ? "–" : (oN - cN > 0 ? "+" : "") + (oN - cN).toFixed(1) + " pts"}</b><small>booked share, same weeks</small></div>
-      <div class="pctile"><small>${esc(mk)} market (Key Data)</small><b>${f(mN)}</b><small>${dif(mN, mL, 1)} vs last year</small></div>
+      <div class="pctile"><small>${pcEsc(mk)} market (Key Data)</small><b>${f(mN)}</b><small>${dif(mN, mL, 1)} vs last year</small></div>
     </div>
     <div class="pccard"><h3>Booked share by week</h3><div class="small muted">Booked nights ÷ nights not blocked (Key Data's "Adj. Paid Occ.").</div>${leg(occS)}${pcLine(W, occS, { pct: 1 })}</div>
     <div class="pccard"><h3>Nightly rate by week</h3><div class="small muted">Key Data's listed nightly rate for comps (Airbnb includes some cleaning); our homes = Track rent ÷ nights on booked stays.</div>${leg(adrS)}${pcLine(W, adrS, {})}</div>
     <div class="pccard"><h3>Week by week</h3><div style="overflow-x:auto"><table id="pcTbl"><tr><th>Week of</th><th>Comps now</th><th>vs ${asThen}</th><th>Ours now</th><th>vs ${asThen}</th><th>Market</th><th>Market last year</th><th>Comps rate</th><th>Our rate</th><th>Market rate</th><th>Market rate last year</th></tr>
       ${W.map(x => `<tr><td>${new Date(x.week + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td><td>${f(x.comp_now)}</td><td>${dif(x.comp_now, x.comp_then, 1)}</td><td>${f(x.ours_now)}</td><td>${dif(x.ours_now, x.ours_then, 1)}</td><td>${f(x.mkt_occ)}</td><td>${f(x.mkt_ly_occ)}</td><td>${fm(x.comp_adr)}</td><td>${fm(x.ours_adr)}</td><td>${fm(x.mkt_adr)}</td><td>${fm(x.mkt_ly_adr)}</td></tr>`).join("")}</table></div></div>
-    <p class="small muted">Comps: ${c.comps_cal || 0} of ${c.comps || 0} Primary comps have a Key Data calendar (Key Data pulls them every night; copies saved since Oct 13, 2026). Our homes: ${c.ours || 0} in this group, from Track bookings. Market = Key Data's ${esc(mk)} market, all bedroom sizes (Key Data's API can't split by bedrooms); last year = Key Data's final numbers for the same weeks. As of ${asOf}.</p>`;
+    <p class="small muted">Comps: ${c.comps_cal || 0} of ${c.comps || 0} Primary comps have a Key Data calendar (Key Data pulls them every night; copies saved since Oct 13, 2026). Our homes: ${c.ours || 0} in this group, from Track bookings. Market = Key Data's ${pcEsc(mk)} market, all bedroom sizes (Key Data's API can't split by bedrooms); last year = Key Data's final numbers for the same weeks. As of ${asOf}.</p>`;
 }
 // ===== Hotels page (Brandon 2026-10-30): sidebar Rates ▸ Hotels (?view=hotels). Every hotel price we have, for the check-in dates picked.
 // Source: hotel_rates (hotels.py, Google Hotels via SerpApi): one row per hotel + check-in night + pull; 2 adults, 2-night stay from that night.
