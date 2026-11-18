@@ -95,6 +95,23 @@ dialog::backdrop{background:rgba(10,20,12,.45)}
 .lib button{padding:4px;min-height:0;height:96px}
 .lib img{max-width:100%;max-height:86px;object-fit:contain}
 .yay{font-size:52px;text-align:center;line-height:1;margin-top:4px}
+/* results */
+.rhead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.rtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:10px;margin:12px 0 0}
+.rt{background:var(--ground);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.rt small{display:block;color:var(--muted);font-size:12px;font-weight:700} .rt b{display:block;font-size:22px;font-weight:800;line-height:1.25}
+.rt span{font-size:12.5px;color:var(--ink-2)} .up{color:var(--forest-2);font-weight:800} .down{color:var(--red);font-weight:800}
+.rcols{display:grid;grid-template-columns:3fr 2fr;gap:18px;margin-top:16px} h4{font-size:14px;margin:0 0 8px;font-weight:800}
+.rbars{display:grid;gap:8px}
+.rbar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(60px,1fr) 46px;gap:10px;align-items:center;font-size:13px}
+.rl{min-width:0} .rl b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .rl a,.rl span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rtrack{height:10px;background:var(--line);border-radius:99px;overflow:hidden} .rtrack i{display:block;height:100%;background:var(--forest-2);border-radius:99px}
+.rn{text-align:right}
+.rwho{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.rwho table{width:100%;border-collapse:collapse;font-size:13px} .rwho th,.rwho td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.rwho th{position:sticky;top:0;background:var(--card);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media (max-width: 760px){ .rcols{grid-template-columns:1fr} }
 @media (max-width: 980px){ .ed{grid-template-columns:1fr} .side{position:static;max-height:none} }
 </style>
 </head>
@@ -127,7 +144,7 @@ const niceErr = e => { const m = String((e && (e.message || e.error_description)
 const sig = s => { let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for(let i = 0; i < s.length; i++){ const c = s.charCodeAt(i);
   h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); } return ((h2 >>> 0).toString(36) + (h1 >>> 0).toString(36)); };
 
-const S = { mode:null, lists:[], sizes:{}, camps:[], flyers:[], sends:[], cur:null, dirty:false, phone:false, sel:null, poll:null };
+const S = { mode:null, lists:[], sizes:{}, camps:[], flyers:[], sends:[], cur:null, dirty:false, phone:false, sel:null, poll:null, details:{}, people:{}, html:{} };
 
 /* ---------- data ---------- */
 async function load(){
@@ -148,6 +165,11 @@ async function load(){
   S.sends = [];
   if(ids.length){ const r = await sb.from("mkt_flyer_sends").select("*").in("draft_id", ids).order("asked_at", { ascending:false }).limit(300);
     if(r.error) throw r.error; S.sends = r.data || []; }
+  // link clicks + opens by device (mkt_flyer_stats.py on the office PC, every 30 minutes); empty until that runs
+  S.details = {};
+  const sent = S.camps.filter(c => c.status === "sent").map(c => c.brevo_id);
+  if(sent.length){ const r = await sb.from("mkt_campaign_details").select("*").in("brevo_id", sent);
+    if(!r.error) (r.data || []).forEach(x => S.details[x.brevo_id] = x); }
 }
 const sendsOf = id => S.sends.filter(s => s.draft_id === id);
 const sentRow = id => sendsOf(id).find(s => s.kind === "send" && s.status === "sent");
@@ -191,20 +213,123 @@ function listView(){
       return `<div class="card"><div style="display:flex;gap:8px;align-items:flex-start"><h3 style="flex:1">${esc(f.name)}</h3><span class="pill ${tone}">${esc(lab)}</span></div>
         <div class="sub">${esc(f.subject || "No subject yet")}</div>
         <div class="muted">${f.design && f.design.month ? esc(monthName(f.design.month)) + " · " : ""}Last change ${esc(f.updated_name || f.created_name || "")} · ${esc(fmtDT(f.updated_at))}</div>
-        <div class="acts"><a class="btn primary small" href="#/f/${f.id}">${locked(f) ? "👁 Open" : "✏️ Open"}</a>
+        <div class="acts"><a class="btn primary small" href="#/f/${f.id}">${locked(f) ? "👁 Open" : "✏️ Open"}</a>${campOf(f) && campOf(f).status === "sent" ? `<button class="btn small" data-res="${f.brevo_id}">📊 Results</button>` : ""}
           <button class="btn small" data-start="flyer:${f.id}">⧉ Start a new flyer from this</button></div></div>`; }).join("")}</div>`
     : `<div class="empty">No flyers made here yet. Pick an old flyer below and press <b>Start a new flyer from this</b>.</div>`}
   <h2>Start from an old flyer</h2>
   ${starts.length ? `<div class="grid">${starts.map(x => { if(x.type === "flyer"){ const f = x.f, c = campOf(f), st = c && c.stats || {}, d2 = st.delivered || st.sent || 0;
         return `<div class="card"><h3>${esc(f.name)}</h3><div class="sub">${esc(f.subject || "")}</div>
-          <div class="muted">Made here · sent ${esc(fmtD(c && c.sent_at))}${c ? ` · opened ${pct(st.uniqueViews || 0, d2)}` : ""}</div>
-          <div class="acts"><button class="btn small" data-pvf="${f.id}">👁 Preview</button><button class="btn primary small" data-start="flyer:${f.id}">⧉ Start a new flyer from this</button></div></div>`; }
+          <div class="muted">Made here · sent ${esc(fmtD(c && c.sent_at))}${c ? ` · opened ${pct(st.uniqueViews || 0, d2)} · clicked ${pct(st.uniqueClicks || 0, d2)}` : ""}</div>
+          <div class="acts">${c ? `<button class="btn small" data-res="${c.brevo_id}">📊 Results</button>` : ""}<button class="btn small" data-pvf="${f.id}">👁 Preview</button><button class="btn primary small" data-start="flyer:${f.id}">⧉ Start a new flyer from this</button></div></div>`; }
       const c = x.c, st = c.stats || {}, d2 = st.delivered || st.sent || 0;
       return `<div class="card"><h3>${esc(c.name)}</h3><div class="sub">${esc(c.subject || "")}</div>
-        <div class="muted">${c.status === "sent" ? `Sent ${esc(fmtD(c.sent_at))} · ${(st.sent || 0).toLocaleString()} owners · opened ${pct(st.uniqueViews || 0, d2)}` : `Brevo ${esc(c.status)}`} · ${esc((c.list_names || []).join(", "))}</div>
-        <div class="acts"><button class="btn small" data-pvc="${c.brevo_id}">👁 Preview</button><button class="btn primary small" data-start="camp:${c.brevo_id}">⧉ Start a new flyer from this</button></div></div>`; }).join("")}</div>`
+        <div class="muted">${c.status === "sent" ? `Sent ${esc(fmtD(c.sent_at))} · ${(st.sent || 0).toLocaleString()} owners · opened ${pct(st.uniqueViews || 0, d2)} · clicked ${pct(st.uniqueClicks || 0, d2)}` : `Brevo ${esc(c.status)}`} · ${esc((c.list_names || []).join(", "))}</div>
+        <div class="acts">${c.status === "sent" ? `<button class="btn small" data-res="${c.brevo_id}">📊 Results</button>` : ""}<button class="btn small" data-pvc="${c.brevo_id}">👁 Preview</button><button class="btn primary small" data-start="camp:${c.brevo_id}">⧉ Start a new flyer from this</button></div></div>`; }).join("")}</div>`
     : `<div class="empty">No owner emails in Brevo yet.</div>`}
   <p class="src">Old flyers = Brevo email campaigns sent only to owner lists (read from Brevo every minute). Opened = unique opens ÷ delivered; Apple Mail privacy makes opens look higher than they are.</p>`;
+}
+
+/* ---------- results (Jeff 2026-11-18: "On brevo you can see the data can we add that to the hub as well?") ----------
+   Main numbers = mkt_campaigns.stats, the same numbers Brevo's campaign list shows (opened / clicked = unique ÷ delivered).
+   Links + devices = mkt_campaign_details; who opened = mkt_flyer_people (only while Brandon/Kim have it on). hub_flyer_results.sql */
+const rate = (a, b) => b ? a / b * 100 : null;
+const pctS = v => v == null ? "—" : (Math.round(v * 10) / 10) + "%";
+function prevCamp(c){
+  return S.camps.filter(x => x.status === "sent" && x.sent_at && x.brevo_id !== c.brevo_id && x.sent_at < c.sent_at)
+    .sort((a, b) => b.sent_at.localeCompare(a.sent_at))[0] || null;
+}
+function normUrl(u){
+  try { const x = new URL(u); return (x.host.replace(/^www\./i, "") + x.pathname.replace(/\/+$/, "") + x.search + x.hash).toLowerCase(); }
+  catch(e){ return String(u || "").toLowerCase(); }
+}
+async function linkLabels(brevoId){   // url -> the words on that button / link in the flyer (pictures: their alt words)
+  if(!S.html[brevoId]){ try { S.html[brevoId] = await htmlOf("camp", brevoId); } catch(e){ S.html[brevoId] = ""; } }
+  const m = {};
+  try { new DOMParser().parseFromString(S.html[brevoId] || "", "text/html").querySelectorAll("a[href]").forEach(a => {
+    const t = (a.textContent || "").replace(/\s+/g, " ").trim() || ((a.querySelector("img") || {}).alt || "").trim() || "A picture";
+    (m[normUrl(a.getAttribute("href"))] = m[normUrl(a.getAttribute("href"))] || new Set()).add(t.slice(0, 70)); }); } catch(e){}
+  return m;
+}
+const DEV = { computer:"💻 Computer", phone:"📱 Phone", tablet:"📲 Tablet" };
+async function resultsInto(box, brevoId){
+  const c = S.camps.find(x => x.brevo_id === brevoId);
+  if(!c){ box.innerHTML = `<p class="muted" style="margin:0">Results show here once Brevo reports on it.</p>`; return; }
+  const st = c.stats || {}, del = st.delivered || st.sent || 0, det = S.details[brevoId];
+  const p = prevCamp(c), ps = p && p.stats || {}, pdel = ps.delivered || ps.sent || 0;
+  const vs = (a, b) => { if(a == null || b == null) return ""; const d = Math.round((a - b) * 10) / 10;
+    return `<span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${Math.abs(d)} pts</span>`; };
+  const oR = rate(st.uniqueViews || 0, del), cR = rate(st.uniqueClicks || 0, del), poR = p ? rate(ps.uniqueViews || 0, pdel) : null, pcR = p ? rate(ps.uniqueClicks || 0, pdel) : null;
+  const hrs = c.sent_at ? (Date.now() - new Date(c.sent_at)) / 36e5 : 99;
+  const tile = (lab, big, small) => `<div class="rt"><small>${lab}</small><b>${big}</b><span>${small || ""}</span></div>`;
+  let html = `<div class="rhead"><h3 style="margin:0;flex:1">📊 Results: ${esc(c.name)}</h3>
+      <span class="muted">Sent ${esc(fmtDT(c.sent_at))}${c.synced_at ? ` · from Brevo ${esc(fmtDT(c.synced_at))}` : ""}</span></div>
+    ${hrs < 72 ? `<p class="muted" style="margin:4px 0 0">It went out ${hrs < 1 ? "less than an hour" : Math.round(hrs) + " hours"} ago. Opens and clicks keep coming in for a few days.</p>` : ""}
+    <div class="rtiles">
+      ${tile("Delivered", (st.delivered || 0).toLocaleString(), `of ${(st.sent || 0).toLocaleString()} sent`)}
+      ${tile("Opened", pctS(oR), `${(st.uniqueViews || 0).toLocaleString()} owners ${p ? vs(oR, poR) : ""}`)}
+      ${tile("Clicked", pctS(cR), `${(st.uniqueClicks || 0).toLocaleString()} owners ${p ? vs(cR, pcR) : ""}`)}
+      ${tile("Unsubscribed", (st.unsubscriptions || 0).toLocaleString(), pctS(rate(st.unsubscriptions || 0, del)))}
+      ${tile("Bounced", ((st.hardBounces || 0) + (st.softBounces || 0)).toLocaleString(), `${st.hardBounces || 0} hard · ${st.softBounces || 0} soft`)}
+      ${tile("Marked as spam", (st.complaints || 0).toLocaleString(), "")}
+    </div>
+    ${p ? `<p class="muted" style="margin:6px 0 0">▲▼ = compared with the owner email before it: ${esc(p.name)} (sent ${esc(fmtD(p.sent_at))}, opened ${pctS(poR)}, clicked ${pctS(pcR)}).</p>` : ""}`;
+  // links + devices
+  const lab = await linkLabels(brevoId);
+  if(det){
+    const links = (det.links || []).slice().sort((a, b) => (b.clicks || 0) - (a.clicks || 0)), top = Math.max(1, ...links.map(l => l.clicks || 0));
+    html += `<div class="rcols"><div><h4>Which links got clicked</h4>${links.length ? `<div class="rbars">${links.map(l => {
+        const words = [...(lab[normUrl(l.url)] || [])].join(" / ");
+        return `<div class="rbar"><div class="rl"><b>${esc(words || "Link")}</b><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60))}</a></div>
+          <div class="rtrack"><i style="width:${Math.round((l.clicks || 0) / top * 100)}%"></i></div><b class="rn">${(l.clicks || 0).toLocaleString()}</b></div>`; }).join("")}</div>
+        <p class="muted" style="margin:6px 0 0">Clicks on each link (an owner clicking twice counts twice).</p>` : `<p class="muted">No links in this one.</p>`}</div>
+      <div><h4>Opened on</h4>${(() => { const d = det.devices || {}, keys = Object.keys(DEV).filter(k => d[k]), tot = keys.reduce((n, k) => n + (d[k].opens || 0), 0);
+        return tot ? `<div class="rbars">${keys.map(k => `<div class="rbar"><div class="rl"><b>${DEV[k]}</b><span class="muted">${(d[k].clickers || 0)} clicked</span></div>
+          <div class="rtrack"><i style="width:${Math.round((d[k].opens || 0) / tot * 100)}%"></i></div><b class="rn">${pctS(rate(d[k].opens || 0, tot))}</b></div>`).join("")}</div>
+          <p class="muted" style="margin:6px 0 0">Share of opens Brevo could tell the device for. Apple Mail's privacy opens often count as computer.</p>`
+          : `<p class="muted">No device numbers yet.</p>`; })()}</div></div>
+      <p class="src">Links and devices: Brevo, read by the office PC ${esc(fmtDT(det.fetched_at))}.</p>`;
+  } else html += `<p class="muted" style="margin:10px 0 0">Which links got clicked and phone vs computer show here once the office PC starts reading them from Brevo.</p>`;
+  // who opened (only while Brandon / Kim have it on)
+  if(S.mode.who){
+    if(!S.people[brevoId]){ const r = await sb.from("mkt_flyer_people").select("*").eq("brevo_id", brevoId).order("name").limit(2000); S.people[brevoId] = r.error ? [] : (r.data || []); }
+    const P = S.people[brevoId];
+    if(P.length){
+      const F = [["opened", "Opened", x => x.opened], ["clicked", "Clicked", x => x.clicked], ["not", "Didn't open", x => !x.opened && !x.bounced], ["unsub", "Unsubscribed", x => x.unsubscribed], ["all", "Everyone", () => true]];
+      html += `<h4 style="margin-top:16px">Which owners opened it</h4>
+        <div class="bar" style="margin:6px 0">${F.map(([k, l, fn], i) => `<button class="chip ${i === 0 ? "on" : ""}" data-wf="${k}">${l} (${P.filter(fn).length})</button>`).join("")}
+          <input class="t" data-wq placeholder="Find an owner or home" style="max-width:220px;min-height:34px"><button class="btn small" data-wcsv>⬇ CSV</button></div>
+        <div class="rwho"><table><thead><tr><th>Owner</th><th>Home</th><th>Opened</th><th>Clicked</th></tr></thead><tbody>
+        ${P.map(x => `<tr data-w="${[x.opened ? "opened" : "", x.clicked ? "clicked" : "", !x.opened && !x.bounced ? "not" : "", x.unsubscribed ? "unsub" : "", "all"].join(" ")}" data-n="${esc(((x.name || "") + " " + (x.homes || []).join(" ")).toLowerCase())}">
+          <td>${esc(x.name || "Owner (no name on file)")}${x.unsubscribed ? ` <span class="pill red">unsubscribed</span>` : ""}${x.bounced ? ` <span class="pill amber">bounced</span>` : ""}</td>
+          <td>${esc((x.homes || []).join(", "))}</td>
+          <td>${x.opened ? `${esc(fmtDT(x.first_open))}${x.opens > 1 ? ` <span class="muted">(${x.opens}×)</span>` : ""}` : `<span class="muted">—</span>`}</td>
+          <td>${x.clicked ? esc((x.links || []).map(u => [...(lab[normUrl(u)] || [])][0] || u.replace(/^https?:\/\/(www\.)?/, "")).join(", ")) : `<span class="muted">—</span>`}</td></tr>`).join("")}
+        </tbody></table></div>
+        <p class="muted" style="margin:6px 0 0">Names and homes come from Track's owner list (else the name on the Brevo contact). No email addresses are kept in the hub. Opens include Apple Mail's automatic opens, so a few "opened" owners may not have read it.</p>`;
+    }
+  }
+  box.innerHTML = html;
+  // who-opened filters
+  const W = $(".rwho", box);
+  if(W){
+    let f = "opened", q = "";
+    const apply = () => $$("tbody tr", W).forEach(tr => tr.hidden = !(tr.dataset.w.split(" ").includes(f) && (!q || tr.dataset.n.includes(q))));
+    $$("[data-wf]", box).forEach(b => b.onclick = () => { f = b.dataset.wf; $$("[data-wf]", box).forEach(x => x.classList.toggle("on", x === b)); apply(); });
+    $("[data-wq]", box).oninput = e => { q = e.target.value.trim().toLowerCase(); apply(); };
+    $("[data-wcsv]", box).onclick = () => {
+      const rows = [["Owner", "Homes", "Opened", "First open", "Opens", "Clicked", "Links", "Unsubscribed", "Bounced"]].concat(S.people[brevoId].map(x =>
+        [x.name || "", (x.homes || []).join(" "), x.opened ? "yes" : "no", x.first_open || "", x.opens || 0, x.clicked ? "yes" : "no", (x.links || []).join(" "), x.unsubscribed ? "yes" : "no", x.bounced ? "yes" : "no"]));
+      const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type:"text/csv" })); a.download = `${c.name} - who opened.csv`; a.click();
+    };
+    apply();
+  }
+}
+function resultsDialog(brevoId){
+  const d = $("#big"), c = S.camps.find(x => x.brevo_id === brevoId);
+  d.innerHTML = `<div class="dhead"><h3>${esc(c ? c.subject || c.name : "Results")}</h3><button class="btn" data-x>Close</button></div><div id="resd"><p class="muted">Loading results…</p></div>`;
+  $("[data-x]", d).onclick = () => d.close();
+  d.showModal(); resultsInto($("#resd", d), brevoId);
 }
 
 /* ---------- preview + start a new flyer ---------- */
@@ -267,6 +392,7 @@ async function editor(id){
   $("#app").innerHTML = `
   <div class="edtop"><a class="btn small" href="#/">← All flyers</a><span class="nm">${esc(D.name)}</span><span class="pill ${tone}" id="stp">${esc(lab)}</span><span class="muted" id="sv"></span></div>
   ${lock ? `<div class="note">${sentRow(D.id) || (campOf(D) && campOf(D).status === "sent") ? "This flyer was sent, so it can't be changed. Use <b>Start a new flyer from this</b> to make next month's." : "The office PC is working on this flyer right now, so it can't be changed until that's done."}</div>` : ""}
+  ${campOf(D) && campOf(D).status === "sent" ? `<div class="card" id="resbox" style="margin-bottom:16px"><p class="muted" style="margin:0">Loading results…</p></div>` : ""}
   <div class="ed">
     <div class="side">
       <div class="card">
@@ -302,6 +428,7 @@ async function editor(id){
     $("#fw").classList.toggle("phone", S.phone); setTimeout(fitFrame, 50); });
   $$("[data-cmd]").forEach(b => b.onclick = () => { const doc = fr.contentDocument; if(doc){ doc.execCommand(b.dataset.cmd); markDirty(); runChecks(); } });
   subCount(); drawActs(); drawHist();
+  if($("#resbox")) resultsInto($("#resbox"), D.brevo_id);
 }
 const UI_STYLE = `img{cursor:pointer} img:hover{outline:3px solid #88B535;outline-offset:2px} a{cursor:text} [data-mf-sel]{outline:3px solid #2463a0 !important;outline-offset:2px}`;
 function frameReady(fr, lock){
@@ -633,6 +760,7 @@ window.addEventListener("beforeunload", e => { if(S.dirty){ e.preventDefault(); 
 document.addEventListener("click", e => {
   const st = e.target.closest("[data-start]"); if(st){ const [t, id] = st.dataset.start.split(":"); return startDialog(t, id); }
   const pc = e.target.closest("[data-pvc]"); if(pc){ const c = S.camps.find(x => x.brevo_id == pc.dataset.pvc); return preview("camp", c.brevo_id, c.name + " · " + (c.subject || "")); }
+  const rs = e.target.closest("[data-res]"); if(rs) return resultsDialog(+rs.dataset.res);
   const pf = e.target.closest("[data-pvf]"); if(pf){ const f = S.flyers.find(x => x.id == pf.dataset.pvf); return preview("flyer", f.id, f.name + " · " + (f.subject || "")); }
 });
 
@@ -645,7 +773,7 @@ document.addEventListener("click", e => {
   try { await load(); } catch(e){ $("#app").innerHTML = `<h1>Monthly flyer</h1><p class="err">${esc(niceErr(e))}</p>`; return; }
   route();
 })();
-window.__mf = { S, runChecks, frameHtml };   // for the stub test
+window.__mf = { S, runChecks, frameHtml, resultsInto };   // for the stub test
 </script>
 </body>
 </html>
