@@ -1874,8 +1874,11 @@ function srMinFor(Y, k, dw, hol, out) { const nz = v => v !== "" && v != null &&
 // Everyday business minimums by season + bedroom size (Brandon 2026-11-10; our Track stays 2020-2026 + Key Data market stays).
 function srDayMin(k, dw, out) { const md = k.slice(5), b = srBeds(), sz = b <= 1 ? 0 : b <= 3 ? 1 : 2, we = dw === 5 || dw === 6;
   const sea = (md >= "11-20" || md <= "03-31") ? "winter" : (md >= "06-15" && md <= "08-31") ? "summer" : "off";
-  const m = sea === "winter" ? [we ? 2 : 1, we ? 3 : 2, out <= 14 ? 2 : 3][sz] : sea === "summer" ? [1, 2, 3][sz] : [1, 2, 2][sz];
-  return { m, one: m === 1, why: `everyday ${sea === "off" ? "off-season" : sea}, ${["studio/1BR", "2-3BR", "4BR+"][sz]}` }; }
+  // Brandon 2026-11-19: shorter than Beyond's. Studios 1 every night, 2-3BR 2 (weekends too), 4BR+ 3 (2 inside 14 days in winter);
+  // inside 7 days every home drops one night, never under 2 for 2BR+. Same as rates_set_auto.py day_min.
+  let m = sea === "winter" ? [1, 2, out <= 14 ? 2 : 3][sz] : sea === "summer" ? [1, 2, 3][sz] : [1, 2, 2][sz];
+  const lm = out <= 7 && m > (sz === 0 ? 1 : 2); if (lm) m -= 1;
+  return { m, one: m === 1, why: `everyday ${sea === "off" ? "off-season" : sea}, ${["studio/1BR", "2-3BR", "4BR+"][sz]}${lm ? ", last minute" : ""}` }; }
 // Highlight nights in the table (drag down the rows, Shift-click for a range, Ctrl/⌘-click one), then move them all at once.
 function srBulk() { const tbl = document.querySelector("[data-srr]")?.closest("table"); if (!tbl) return;
   const sel = SR.sel ||= new Set(), rows = () => [...tbl.querySelectorAll("tr[data-k]")], keys = () => rows().map(t => t.dataset.k);
