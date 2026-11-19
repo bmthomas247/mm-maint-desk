@@ -1395,4 +1395,45 @@ window.calHomeCard = async function(el){
     ${nWait ? `<a href="#/cal_off" class="pill amber" style="display:inline-block;margin:6px 0;text-decoration:none">🌴 ${nWait} time-off request${nWait === 1 ? "" : "s"} waiting for you</a>` : ""}
     <div class="calwk">${rows.length ? rows.map(r => `<div class="it"><span class="d">${r.d === t ? "Today" : esc(fday(r.d))}</span><span style="flex:1">${r.h}</span></div>`).join("") : `<p class="muted">Nothing on your calendar in the next 7 days.</p>`}</div>`;
 };
+
+/* ---------- Home: meeting starting soon (Brandon 2026-11-19: "meetings pop up on the front page 15 minutes prior so we can start them from here").
+   From 15 min before until the meeting ends: staff meetings you can open, your own + office events you're going to (or open to all),
+   hub meetings you host / are invited to, your Outlook. Big Join button = the saved Zoom/Meet link; staff meetings also get "Open the agenda".
+   Data re-read every 5 min, the card re-checked every 30 s while Home is open. ---------- */
+const SOON = { data:null, at:0, el:null, tick:null };
+async function soonData(){
+  if(SOON.data && Date.now() - SOON.at < 300000) return SOON.data;
+  const t = today(), b = addD(t, 1);
+  const [ms, evs, ppl, hm, olr] = await Promise.all([meetings(true), events(t, b), people(), sb.rpc("meet_mine", { p_from:t, p_to:b }), sb.rpc("ms_cal_mine", { p_from:t, p_to:b })]);
+  const myId = (ppl.find(p => p.name === ME.name) || {}).id, nt = x => (x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(), L = [];
+  ms.forEach(m => occurs(m, t, b).forEach(s => { const w = mAt(m, s); if(w.start) L.push({ d:s, s:w.start, min:w.minutes || 60, title:(NAMES[m.meet] || m.meet) + " meeting", join:m.link || null, open:"#/" + m.meet, agenda:1, k:s + nt(NAMES[m.meet]) }); }));
+  const ev = evs.filter(e => (e.kind || "event") === "event" && e.start_time && (e.cal !== "office" || !(e.attendees || []).length || (e.attendees || []).includes(myId)));
+  const lk = {}; { const ids = ev.filter(e => e.virtual).map(e => e.id); if(ids.length){ const lr = await sb.rpc("cal_links", { p_ids:ids }); ((lr && lr.data) || []).forEach(x => lk[x.event_id] = x.url); } }
+  const mins = (a, z) => { if(!z) return 60; const [h1, m1] = a.split(":").map(Number), [h2, m2] = z.split(":").map(Number); const n = h2 * 60 + m2 - h1 * 60 - m1; return n > 0 ? n : 60; };
+  ev.forEach(e => L.push({ d:e.day, s:e.start_time.slice(0, 5), min:mins(e.start_time.slice(0, 5), (e.end_time || "").slice(0, 5)), title:e.title, join:lk[e.id] || null, where:e.virtual ? "" : e.location, open:"#/" + (e.cal === "office" ? "cal_office" : "cal_me"), k:e.day + nt(e.title) }));
+  ((hm && hm.data) || []).filter(m => m.status === "on" && !((m.my_answer || {}).answer === "no")).forEach(m => L.push({ d:m.day, s:(m.start || "").slice(0, 5), min:m.minutes || 30, title:m.title, join:m.zoom_join || null, where:m.virtual === false ? m.location : "", open:"#/cal_me/m" + m.id, k:m.day + nt(m.title) }));
+  const seen = new Set(L.map(x => x.k));
+  ((olr && olr.data) || []).filter(o => !o.cancelled && o.response !== "declined" && o.start_time && !seen.has(o.day + nt(o.title))).forEach(o => L.push({ d:o.day, s:o.start_time.slice(0, 5), min:mins(o.start_time.slice(0, 5), (o.end_time || "").slice(0, 5)), title:o.title, join:o.join_url || null, where:o.location, open:"#/cal_me" }));
+  SOON.data = L.filter(x => x.s); SOON.at = Date.now(); return SOON.data;
+}
+function soonDraw(){
+  const el = SOON.el; if(!el || !document.body.contains(el)){ clearInterval(SOON.tick); SOON.tick = null; return; }
+  const now = Date.now(), at = x => new Date(x.d + "T" + x.s + ":00").getTime();
+  const on = (SOON.data || []).filter(x => now >= at(x) - 15 * 60000 && now < at(x) + x.min * 60000).sort((x, y) => at(x) - at(y));
+  if(!on.length){ el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="card" style="border:2px solid #5a8a1f;background:linear-gradient(135deg,#f3f8ec,#fff)">${on.map((x, i) => { const m = Math.round((at(x) - now) / 60000);
+    const when = m > 1 ? `Starts in ${m} minutes` : m >= 0 ? "Starting now" : `Started ${-m} minute${m === -1 ? "" : "s"} ago`;
+    return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap${i ? ";border-top:1px solid #dfe8d2;margin-top:10px;padding-top:10px" : ""}">
+      <div style="flex:1;min-width:200px"><div style="font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:${m <= 0 ? "#b42318" : "#3c5f12"}">🎥 ${esc(when)}</div>
+        <div style="font-size:18px;font-weight:700;margin-top:2px">${esc(x.title)}</div>
+        <div class="muted">${esc(ftime(x.s))} – ${esc(ftime(endTime(x.s, x.min)))}${x.where ? " · " + esc(x.where) : ""}${!x.join && !x.where ? " · no join link saved" : ""}</div></div>
+      ${x.open ? `<a class="btn" href="${esc(x.open)}">${x.agenda ? "Open the agenda" : "Details"}</a>` : ""}
+      ${x.join ? `<a class="btn primary" style="font-size:17px;padding:12px 26px" href="${esc(x.join)}" target="_blank" rel="noopener noreferrer">Join now</a>` : ""}</div>`; }).join("")}</div>`;
+}
+window.calSoonCard = async function(el){
+  if(!el) return; SOON.el = el;
+  try{ await soonData(); }catch(e){ return; }
+  soonDraw();
+  if(!SOON.tick) SOON.tick = setInterval(async () => { if(!SOON.el || !document.body.contains(SOON.el)) return soonDraw(); try{ await soonData(); }catch(e){} soonDraw(); }, 30000);
+};
 })();
