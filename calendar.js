@@ -659,6 +659,42 @@ async function evCal(v, key, fresh){
   const fnCall = async o => { const ss = (await sb.auth.getSession()).data.session;
     const r = await fetch(MM_CONFIG.url + "/functions/v1/meet", { method:"POST", headers:{ "content-type":"application/json", apikey:MM_CONFIG.anonKey, authorization:"Bearer " + (ss ? ss.access_token : MM_CONFIG.anonKey) }, body:JSON.stringify(o) });
     return r.json().catch(() => ({ ok:false, error:"No answer from the server." })); };
+  // ✉ Email invite to people from outside Moose (2026-11-19): shown after Save, nothing goes out until Send (Edge Function cal-invite-send, from hello@ with a calendar file)
+  const inviteBox = async (ev, guests, done) => {
+    const sent = {}; try { const sr = await sb.rpc("cal_invites_sent", { p_event:ev.id }); ((sr && sr.data) || []).forEach(x => sent[x.email] = x); } catch(_){}
+    const longDay = s => D(s).toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
+    const when = longDay(ev.day) + (ev.end_day && ev.end_day !== ev.day ? " to " + longDay(ev.end_day) : "") + (ev.st ? " · " + ftime(ev.st) + (ev.en ? " – " + ftime(ev.en) : "") + " Mountain Time" : " · all day");
+    const me = (window.ME && ME.name) || "", first = me.split(" ")[0] || "Our team";
+    const subj0 = "Invitation: " + ev.title + " · " + fday(ev.day) + (ev.st ? " " + ftime(ev.st) : "");
+    const place = ev.virt ? (ev.link ? "Join here: " + ev.link : "We'll send the meeting link before we meet.") : ev.where ? "Where: " + ev.where : "";
+    const body0 = `Hi {name},\n\n${first} from Moose Management would like to meet with you.\n\n**${ev.title}**\n${when}${place ? "\n" + place : ""}\n\nThe calendar file is attached so you can add it to your calendar. Just reply to this email if the time doesn't work for you.\n\n${me || "Moose Management"}\nMoose Management\n435-714-6544`;
+    const gs = guests.map(g => ({ name:(g.name || "").trim(), email:(g.email || "").trim().toLowerCase() }));
+    modal({ h:"✉ Email the invite?", b:`<p class="muted" style="margin:4px 0 10px">The event is saved. Here's the email each person below will get from <b>hello@moosemanagement.com</b>. Nothing is sent until you press Send.</p>
+      <div class="field"><span>Send to</span>${gs.map((g, i) => `<label class="lyr" style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" data-iv="${i}" ${sent[g.email] && sent[g.email].status === "sent" ? "" : "checked"}><span><b>${esc(g.name)}</b> · ${esc(g.email)}${sent[g.email] ? ` <span class="muted">· ${sent[g.email].status === "sent" ? "already invited " + esc(fday(String(sent[g.email].at).slice(0, 10))) : sent[g.email].status === "failed" ? "last try failed" : "sending…"}</span>` : ""}</span></label>`).join("")}</div>
+      <label class="field"><span>Subject</span><input id="iv_s" value="${esc(subj0)}"></label>
+      <label class="field"><span>Message ({name} = each person's first name, **bold**)</span><textarea id="iv_b" style="min-height:190px">${esc(body0)}</textarea></label>
+      <div class="field"><span>Preview</span><div id="iv_p" style="border:1px solid var(--line,#ddd);border-radius:12px;padding:12px 14px;background:var(--card,#fff);font-size:14px;line-height:1.45"></div><p class="muted" style="font-size:12px;margin:4px 0 0">📎 invite.ics (adds it to their calendar) · Their reply comes to hello@ in Freshdesk.</p></div>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" style="flex:1" id="iv_go">Send</button><button class="btn" id="iv_no">Not now</button></div><p class="muted" id="iv_m" style="margin:6px 0 0"></p>` });
+    const close = () => { $("#evm").classList.remove("on"); done(); };
+    $("#evx").onclick = close; $("#evm").onclick = x => { if(x.target === $("#evm")) close(); }; $("#iv_no").onclick = close;
+    const ticked = () => [...$("#evcard").querySelectorAll("[data-iv]:checked")].map(x => gs[+x.dataset.iv]);
+    const pv = () => { const p = ticked()[0] || gs[0], fn = (p.name.split(" ")[0] || "there");
+      const t = $("#iv_b").value.replaceAll("{name}", fn);
+      $("#iv_p").innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:8px">To: ${esc(p.name)} &lt;${esc(p.email)}&gt;<br>Subject: <b>${esc($("#iv_s").value.replaceAll("{name}", fn))}</b></div>` + t.trim().split(/\n{2,}/).map(x => "<p style='margin:0 0 10px'>" + esc(x).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/https:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`).replace(/\n/g, "<br>") + "</p>").join("");
+      const n = ticked().length; $("#iv_go").textContent = n ? `Send ${n} invite${n > 1 ? "s" : ""}` : "Tick someone to send"; $("#iv_go").disabled = !n; };
+    $("#iv_b").oninput = pv; $("#iv_s").oninput = pv; $("#evcard").querySelectorAll("[data-iv]").forEach(x => x.onchange = pv); pv();
+    $("#iv_go").onclick = async () => { const ppl = ticked(); if(!ppl.length) return;
+      $("#iv_go").disabled = true; $("#iv_m").textContent = "Sending…";
+      let res; try { const ss = (await sb.auth.getSession()).data.session;
+        const r = await fetch(MM_CONFIG.url + "/functions/v1/cal-invite-send", { method:"POST", headers:{ "content-type":"application/json", apikey:MM_CONFIG.anonKey, authorization:"Bearer " + (ss ? ss.access_token : MM_CONFIG.anonKey) },
+          body:JSON.stringify({ event_id:ev.id, subject:$("#iv_s").value, body:$("#iv_b").value, people:ppl }) });
+        res = await r.json().catch(() => ({ ok:false, error:"No answer from the server." })); } catch(e){ res = { ok:false, error:(window.niceErr ? niceErr(e) : String(e)) }; }
+      const rs = res.results || [];
+      if(!rs.length){ $("#iv_go").disabled = false; return $("#iv_m").textContent = "Not sent: " + (res.error || "try again"); }
+      const good = rs.filter(x => x.ok), bad = rs.filter(x => !x.ok);
+      $("#iv_m").innerHTML = (good.length ? `✓ Sent to ${good.map(x => esc(x.email)).join(", ")}.` : "") + (bad.length ? `<br><span style="color:#b42318">Not sent: ${bad.map(x => esc(x.email) + " (" + esc(x.error || "") + ")").join("; ")}</span>` : "");
+      if(!bad.length){ $("#iv_go").textContent = "Done"; $("#iv_go").disabled = false; $("#iv_go").onclick = close; } else $("#iv_go").disabled = false; };
+  };
   const modal = html => { $("#evcard").innerHTML = `<div class="evhd" style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${html.h}</h2><button class="btn small" id="evx" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>${html.b}`;
     $("#evm").classList.add("on"); $("#evcard").scrollTop = 0; $("#evx").onclick = () => $("#evm").classList.remove("on");
     $("#evm").onclick = x => { if(x.target === $("#evm")) $("#evm").classList.remove("on"); }; };
@@ -972,6 +1008,8 @@ async function evCal(v, key, fresh){
       if(kind === "event" && !off && (gl.length || (e && (guests[e.id] || []).length))){
         const gr = await sb.rpc("cal_guests_set", { p_event:r.data, p_guests:gl.map(g => ({ name:g.name, company:g.company, email:g.email, phone:g.phone, vendor_id:g.vendor_id || null })) });
         if(gr.error) return $("#ev_m").textContent = "Saved the event, but not the people from outside Moose: " + gr.error.message; }
+      const em = kind === "event" && !off ? gl.filter(g => (g.email || "").trim()) : [];
+      if(em.length) return inviteBox({ id:r.data, title:t, day:d, end_day:$("#ev_e").value || null, st:sT, en:fT, virt, link, where:virt ? "" : $("#ev_l").value.trim() }, em, () => { ST.sel[key] = d; evCal(v, key, true); });
       ST.sel[key] = d; evCal(v, key, true); };
     $("#ev_go").onclick = () => go(false);
     if($("#ev_off")) $("#ev_off").onclick = () => { if(confirm("Remove this from the calendar?")) go(true); };
