@@ -898,7 +898,7 @@ async function evCal(v, key, fresh){
     const moreOpen = ro || (e && ((e.attendees || []).length || (guests[e.id] || []).length || e.notes));
     const whereH = kind === "event" ? `<div class="field"><span>Meeting type</span><div><label class="lyr"><input type="radio" name="ev_v" value="0" ${virt0 ? "" : "checked"} ${ro ? "disabled" : ""}>In person</label> <label class="lyr"><input type="radio" name="ev_v" value="1" ${virt0 ? "checked" : ""} ${ro ? "disabled" : ""}>💻 Virtual</label></div></div>
       <div id="ev_vbox" style="display:${virt0 ? "block" : "none"}">${ro ? (lk0 ? `<a class="btn primary" href="${esc(lk0)}" target="_blank" rel="noopener noreferrer">💻 Join the meeting</a>` : "")
-        : `<label class="field"><span>Meeting link (Zoom, Google Meet, Teams…)</span><input id="ev_link" type="url" placeholder="https://zoom.us/j/…" value="${esc(lk0)}"></label>${lk0 ? `<a class="btn small" href="${esc(lk0)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}`}
+        : `<label class="field"><span>Meeting link (Zoom, Google Meet, Teams…)</span><input id="ev_link" type="url" placeholder="https://zoom.us/j/…" value="${esc(lk0)}"></label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn small primary" type="button" id="ev_zoom">🎥 Make a Zoom link</button>${lk0 ? `<a class="btn small" href="${esc(lk0)}" target="_blank" rel="noopener noreferrer">💻 Join</a>` : ""}<span class="muted" id="ev_zm" style="font-size:12px"></span></div>`}
         <p class="muted" style="font-size:12px;margin:4px 0 0">The link shows to the people on the meeting, managers and admins (on an office event with nobody picked, everyone).</p></div>` : "";
     const attH = (cal === "office" || boss) && kind === "event" ? `<div class="field" id="ev_att" style="display:${cal === "office" ? "block" : "none"}"><span>Who's going (shows on their Personal calendar)</span><div class="attp">${ppl.map(p => `<label class="lyr"><input type="checkbox" data-att="${p.id}" ${(e ? (e.attendees || []).includes(p.id) : isMe && p.id === myId) ? "checked" : ""} ${ro ? "disabled" : ""}>${esc(p.name)}</label>`).join("")}</div></div>` : "";
     $("#evcard").innerHTML = `<div class="evhd" style="display:flex;align-items:center;gap:10px"><h2 style="font-size:20px;flex:1;margin:0">${head}</h2><button class="btn small" id="evx" aria-label="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
@@ -940,6 +940,17 @@ async function evCal(v, key, fresh){
     // a link copied out of an email or Google search is often wrapped (google.com/url?q=…) - keep the real meeting link
     const unwrap = u => { try { const x = new URL(u); if(/(^|\.)google\.[a-z.]+$/i.test(x.hostname) && x.pathname === "/url"){ const q = x.searchParams.get("q") || x.searchParams.get("url"); if(q && /^https:\/\//i.test(q)) return q; } } catch(_){} return u; };
     if($("#ev_link")) $("#ev_link").onchange = () => { $("#ev_link").value = unwrap($("#ev_link").value.trim()); };
+    // 🎥 Make a Zoom link (2026-11-19): Edge Function meet action event_zoom makes the Zoom meeting for this day + time and fills the box; Save keeps it
+    if($("#ev_zoom")) $("#ev_zoom").onclick = async () => { const zb = $("#ev_zoom"), zm = $("#ev_zm"), d = $("#ev_d").value;
+      if(!d) return zm.textContent = "Pick the day first.";
+      if($("#ev_link").value.trim() && !confirm("Replace the link that's there with a new Zoom link?")) return;
+      const st = $("#ev_s").value, len = st && $("#ev_f").value ? toMin($("#ev_f").value) - toMin(st) : 60;
+      zb.disabled = true; zm.textContent = "Making the Zoom meeting…";
+      const r = await fnCall({ action:"event_zoom", title:$("#ev_t").value.trim(), day:d, start:st || "", minutes:len > 0 ? len : 60 });
+      zb.disabled = false;
+      if(!r || !r.ok || !r.join) return zm.textContent = "Couldn't make it: " + ((r && r.error) || "no answer") ;
+      $("#ev_link").value = r.join; zb.textContent = "🎥 Make a new Zoom link";
+      zm.textContent = "✓ Zoom link added (hosted by " + (r.host || "Zoom") + "). Press Save to keep it."; };
     { const S = $("#ev_s"), L = $("#ev_len"), F = $("#ev_f");
       const setEnd = () => { if(!S.value || !L.value) return; const t = endTime(S.value, +L.value); if(![...F.options].some(o => o.value === t)) F.add(new Option(ftime(t), t)); F.value = t; };
       S.onchange = () => { L.disabled = F.disabled = !S.value; if(S.value && !L.value) L.value = "60"; setEnd(); };
