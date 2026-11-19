@@ -282,7 +282,7 @@ function payroll(x){
       + (op ? `<tr class="sub"><td colspan="${ncol}">${payDetail(p)}</td></tr>` : ""); };
   const hrRows = HR.map(p => row(p, `<td class="n">${z(p.reg_h)}</td><td class="n">${z(p.hol_h)}</td><td class="n">${Number(p.ot_total) ? `<span class="bad">${hh(p.ot_total)}</span>` : "–"}</td>
       <td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n"><b>${hh(tot(p))}</b></td><td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td><td class="apc">${apPill(p)}</td>`, 11)).join("");
-  const salRows = SAL.map(p => row(p, `<td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td><td class="apc">${(tot(p) > 0 || Number(p.unpaid_h)) ? apPill(p) : `<span class="note">nothing to approve</span>`}</td>`, 7)).join("");
+  const salRows = SAL.map(p => row(p, `<td class="n">${z(p.pto_h)}</td><td class="n">${z(p.other_h)}</td><td class="n">${z(p.unpaid_h)}</td><td class="n">${ptoLeft(p) || "–"}</td><td class="apc">${(!p.no_clock && (tot(p) > 0 || Number(p.unpaid_h))) ? apPill(p) : `<span class="note">nothing to approve</span>`}</td>`, 7)).join("");
   const extRows = EXT.map(p => row(p, `<td class="n">${hh(p.hub_h)}</td><td class="n">${(p.shifts || []).length}</td>`, 4)).join("");
 
   return `<div class="tiles">${tile(hh(sum(P, tot)), "Total paid hours", `${QB.length} people on Moose payroll`)}
