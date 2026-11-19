@@ -1,6 +1,6 @@
 /* market_watch.js (Brandon 2026-10-30: SerpApi beyond Rates, "go ahead and do them all").
    Reports ▸ Market watch (#/market_watch): what serp_watch.py found outside - our homes listed for sale, homes for sale and rentals
-   near ours (owner leads, lease pricing), Google Maps / search order (us vs. competitors), competitors' ads, local news, job-post pay.
+   near ours (owner leads, lease pricing), recent sales near ours (2026-11-19), Google Maps / search order (us vs. competitors), competitors' ads, local news, job-post pay.
    Loaded by hub.html; uses its sb / $ / esc. Data: serp_finds (hub_serp_watch.sql). Each row is gated in Supabase to its desk, so a
    section only shows when this person may read rows in it (no hints about the rest). */
 (function(){
@@ -80,6 +80,19 @@ window.marketWatchView = async function(v){
     out.push(section(`Homes for sale near ours (${sale.length})`, "Within 400 m of one of our homes: possible owner leads. New ones in the last 7 days are marked.",
       `<p><select id="mwc"><option value="">All neighborhoods</option>${comms.map(c => `<option>${esc(c)}</option>`).join("")}</select></p><div class="scroll" id="mws"></div>`, "Zillow via SerpApi"));
   }
+  // Recent sales (Brandon 2026-11-19): Zillow "sold" + RentCast off-market listings + county sale dates, matched by address
+  // (serp_watch.build_recent_sales). Utah doesn't make sale prices public and we have no MLS feed: asking price only, never a sold price.
+  const rs = K("recent_sale");
+  if(rs.length){
+    const comms = [...new Set(rs.map(r => r.community).filter(Boolean))].sort();
+    out.push(section(`Recent sales near our homes (${rs.length})`, `Homes within about half a mile of ours that <b>sold</b> or <b>came off the market</b> in the last 12 months. Utah doesn't make sale prices public, so the price shown is the <b>last asking price</b>, not what it sold for. "Came off the market" can mean sold, withdrawn or expired.`,
+      `<div id="rstiles" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px"></div>
+       <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="rsc"><option value="">All neighborhoods</option>${comms.map(c => `<option>${esc(c)}</option>`).join("")}</select>
+       <select id="rsp"><option value="90">Last 3 months</option><option value="182" selected>Last 6 months</option><option value="365">Last 12 months</option></select>
+       <input id="rsq" placeholder="Search address, agent, owner…" style="max-width:260px"> <button class="btn small" id="rscsv">⬇ Download CSV</button></p>
+       <div class="scroll" id="rst"></div>`,
+      "RentCast sale listings (last asking price, dates, agent) · Zillow recently sold via SerpApi · county records via RentCast (owner, sale date)"));
+  }
   // RentCast owner records around our homes (rentcast_watch.py). Prime prospect = the owner doesn't live there (second-home owner)
   const own = K("area_owner");
   if(own.length){
@@ -124,6 +137,44 @@ window.marketWatchView = async function(v){
       return `<tr><td>${link(d.link, d.street || r.title)}${new Date(r.first_seen).getTime() > wk ? ` <span class="pill amber">new</span>` : ""}</td><td>${usd(d.price)}</td><td>${d.beds ?? ""}</td><td>${d.baths ?? ""}</td><td>${d.sqft ?? ""}</td>
         <td>${d.days_on_zillow ?? ""}</td><td>${esc(r.home || "")}${d.meters_to_ours != null ? ` <span class="muted">${d.meters_to_ours} m</span>` : ""}</td><td>${esc(r.community || "")}</td></tr>`; }).join("")}</table>`; };
   if($("#mws")){ draw(); $("#mwc").onchange = draw; }
+  if($("#rst")){
+    const RS = { f: "" };   // clickable tiles filter the list (tap again = all)
+    const when = d => d.sold_date || d.removed || "";
+    const base = () => { const c = $("#rsc").value, days = +$("#rsp").value, cut = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10), q = $("#rsq").value.trim().toLowerCase();
+      return rs.filter(r => { const d = r.data || {}; const w = when(d);
+        if(c && r.community !== c) return false;
+        if(w && w < cut) return false;
+        if(q && !JSON.stringify([d.address, d.agent, d.office, d.owners, r.home, r.community]).toLowerCase().includes(q)) return false;
+        return true; }); };
+    const fil = a => a.filter(r => { const d = r.data || {};
+      return !RS.f || (RS.f === "sold" ? d.status === "sold" : RS.f === "off" ? d.status === "off_market" : RS.f === "ours" ? !!d.ours : RS.f === "away" ? d.owner_occupied === false : true); });
+    const tiles = a => { const t = (k, n, label) => `<button class="btn small ${RS.f === k ? "" : "ghost"}" data-rsf="${k}" style="min-width:120px;text-align:left"><b style="font-size:18px">${n}</b><br><span style="font-size:12px">${label}</span></button>`;
+      const sold = a.filter(r => (r.data || {}).status === "sold"), asks = sold.map(r => (r.data || {}).asking).filter(Boolean).map(Number), doms = a.map(r => (r.data || {}).dom).filter(x => x != null).map(Number);
+      return t("sold", sold.length, "Sold") + t("off", a.length - sold.length, "Came off the market") + t("away", a.filter(r => (r.data || {}).owner_occupied === false).length, "Owner doesn't live there")
+        + t("ours", a.filter(r => (r.data || {}).ours).length, "Our homes")
+        + `<div class="card" style="margin:0;padding:6px 10px;min-width:150px"><b style="font-size:18px">${usd(med(asks)) || "—"}</b><br><span class="muted" style="font-size:12px">Middle last asking (sold)</span></div>`
+        + `<div class="card" style="margin:0;padding:6px 10px;min-width:150px"><b style="font-size:18px">${med(doms) ?? "—"}</b><br><span class="muted" style="font-size:12px">Middle days on market</span></div>`; };
+    const drawR = () => { const a = base(), list = fil(a).sort((x, y) => when(y.data || {}).localeCompare(when(x.data || {})));
+      $("#rstiles").innerHTML = tiles(a);
+      $("#rstiles").querySelectorAll("[data-rsf]").forEach(b => b.onclick = () => { RS.f = RS.f === b.dataset.rsf ? "" : b.dataset.rsf; drawR(); });
+      $("#rst").innerHTML = (RS.f ? `<p class="muted" style="margin:0 0 6px">Showing ${list.length} of ${a.length} · <a href="#" id="rsall">show all</a></p>` : "")
+        + `<table><tr><th>Address</th><th>What happened</th><th>Last asking</th><th>Days on market</th><th>Home</th><th>Zestimate</th><th>Listing agent</th><th>Owner (county record)</th><th>Near our</th></tr>${list.slice(0, 500).map(r => { const d = r.data || {};
+        const what = d.status === "sold" ? `<span class="pill green">Sold</span> ${esc(d.sold_date ? fday(d.sold_date) : (d.sold_when || ""))}<div class="muted" style="font-size:11px">${esc(d.how || "")}</div>`
+          : `<span class="pill amber">Came off the market</span> ${esc(d.removed ? fday(d.removed) : "")}`;
+        return `<tr${d.ours ? ' class="ours"' : ""}><td>${link(d.link, d.address || r.title)}${d.ours ? ` <span class="pill">our ${esc(d.ours)}</span>` : ""}</td><td>${what}</td>
+          <td>${usd(d.asking)}${d.price_cut ? `<div class="muted" style="font-size:11px">cut ${esc(String(d.price_cut))}</div>` : ""}${d.listed ? `<div class="muted" style="font-size:11px">listed ${fday(d.listed)}</div>` : ""}</td>
+          <td>${d.dom ?? ""}</td><td>${esc([d.type, d.beds != null ? d.beds + "bd" : "", d.baths ? d.baths + "ba" : "", d.sqft ? d.sqft + " sq ft" : ""].filter(Boolean).join(" · "))}${d.hoa_fee ? `<div class="muted" style="font-size:11px">HOA ${usd(d.hoa_fee)}/mo</div>` : ""}</td>
+          <td>${usd(d.zestimate)}</td><td>${esc(d.agent || "")}${d.office ? `<div class="muted" style="font-size:11px">${esc(d.office)}</div>` : ""}</td>
+          <td>${esc((d.owners || []).join(", "))}${d.owner_occupied === false ? ` <span class="pill green">doesn't live there</span>` : ""}${d.owner_as_of ? `<div class="muted" style="font-size:11px">as of ${fday(d.owner_as_of)}</div>` : ""}</td>
+          <td>${esc(r.home || "")}${d.meters_to_ours != null ? ` <span class="muted">${d.meters_to_ours} m</span>` : ""}</td></tr>`; }).join("")}</table>${list.length > 500 ? `<p class="muted">First 500 of ${list.length}: use the filters or the CSV.</p>` : ""}`;
+      const sa = $("#rsall"); if(sa) sa.onclick = e => { e.preventDefault(); RS.f = ""; drawR(); }; };
+    drawR(); ["#rsc", "#rsp"].forEach(x => $(x).onchange = drawR); $("#rsq").oninput = drawR;
+    $("#rscsv").onclick = () => { const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["address", "status", "sold date", "how we know", "came off the market", "last asking price", "listed", "days on market", "type", "beds", "baths", "sqft", "zestimate", "listing agent", "office", "owners (county record)", "owner lives there", "mailing address", "near our home", "meters", "neighborhood", "our home"]]
+        .concat(fil(base()).map(r => { const d = r.data || {}; return [d.address, d.status === "sold" ? "sold" : "came off the market", d.sold_date || d.sold_when, d.how, d.removed, d.asking, d.listed, d.dom, d.type, d.beds, d.baths, d.sqft, d.zestimate, d.agent, d.office, (d.owners || []).join("; "), d.owner_occupied == null ? "" : d.owner_occupied ? "yes" : "no", d.mailing, r.home, d.meters_to_ours, r.community, d.ours]; }));
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(x => x.map(q).join(",")).join(String.fromCharCode(10))], { type: "text/csv" }));
+      a.download = "recent-sales-near-our-homes.csv"; a.click(); };
+  }
   if($("#mwot")){
     const pick = () => { const f = $("#mwo").value; return own.filter(r => f === "all" || (f === "new" ? (r.data || {}).new_owner : (r.data || {}).owner_occupied === false))
       .sort((a, b) => ((b.data || {}).new_owner - (a.data || {}).new_owner) || String(a.community || "").localeCompare(String(b.community || ""))); };
