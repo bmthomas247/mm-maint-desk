@@ -317,7 +317,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="analytics.js?v=20261117pf"></script>
 <script src="meetings.js?v=20261118cb"></script>
 <script src="owner_notes.js?v=20261118cb"></script>
-<script src="calendar.js?v=20261119invite"></script>
+<script src="calendar.js?v=20261119soon"></script>
 <script src="checks.js"></script>
 <script src="banners.js?v=20261113err"></script>
 <script src="staffing.js?v=20261118noapprove"></script>
@@ -2114,6 +2114,7 @@ async function homeView(v){
     <div class="modal" id="wxm"><div class="card" style="width:min(720px,100%);max-height:90vh;overflow:auto">
       <div style="display:flex;align-items:center;gap:10px"><button class="btn small" id="wxback">← Back</button><h2 style="font-size:20px;flex:1;margin:0">Park City weather + snow</h2><button class="btn small" id="wxx" aria-label="Close" title="Close" style="border-radius:50%;width:38px;padding:0">✕</button></div>
       <div id="wxbody"><p class="muted">Loading…</p></div></div></div>
+    <div id="msoon"></div>
     <div id="hclk"></div>
     <div id="bdays"></div>
     <div id="chk"></div>
@@ -2134,6 +2135,7 @@ async function homeView(v){
       <button class="btn primary" id="nwsend">Post</button> <span class="muted" id="nwmsg"></span></div><div id="nwlist"></div></div>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">📅 This week in Park City</b><span class="muted" id="evn"></span></summary><div id="evlist"><p class="muted">Loading events…</p></div></details>
     <details class="card acc" name="pcacc"><summary><b style="font-size:17px">🗞️ Park City news</b><span class="muted" id="pcn"></span></summary><div id="pclist"><p class="muted">Loading headlines…</p></div></details></div>`;
+  if(window.calSoonCard) calSoonCard($("#msoon"));   // calendar.js: meeting starting in 15 min = Join from Home (Brandon 2026-11-19)
   if(window.calHomeCard && $("#mywk")) calHomeCard($("#mywk"));   // calendar.js (2026-10-29)
   homeClock($("#hclk"));   // 2026-11-06 (Brandon): clock in/out right on Home
   loadStays(); dailyPick(0); loadMentions(); loadBirthdays(); pennyHello(); pennyTips($("#ptips")); homeQuick($("#hq"));
