@@ -69,7 +69,7 @@ body.embed{background:transparent} body.embed .wrap{max-width:none;padding:0 0 6
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -264,7 +264,7 @@ function wire(app){
   $$("[data-move]", app).forEach(b => b.onclick = async () => { const id = b.dataset.move, [src, ref] = id.split("|"), d = app.querySelector(`[data-due="${CSS.escape(id)}"]`).value;
     if(!d) return alert("Pick a day.");
     if(await rpc("wx_move", { p_src:src, p_ref:+ref, p_due:d, p_rule:b.dataset.rule }, b)) refresh(); });
-  $$("[data-ck]", app).forEach(b => b.onclick = async () => { const ok = b.dataset.ok === "1", note = ok ? null : prompt("What did you see? (this goes to Chris)");
+  $$("[data-ck]", app).forEach(b => b.onclick = async () => { const ok = b.dataset.ok === "1", note = ok ? null : await mmAsk("What did you see? (this goes to Chris)");
     if(!ok && !note) return;
     if(await rpc("wx_check_answer", { p_home:b.dataset.ck, p_ok:ok, p_note:note }, b)) refresh(); });
   $$("[data-again]", app).forEach(b => b.onclick = async () => { const h = b.dataset.again, d = free(h, 1)[0];
