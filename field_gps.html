@@ -38,6 +38,7 @@ select{font:inherit;padding:9px;border-radius:10px;border:1px solid var(--line);
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="config.js"></script>
@@ -197,7 +198,7 @@ document.addEventListener("click", async e => {
   }
   if(b.hasAttribute("data-done")){ S.made = null; return load(); }
   if(b.dataset.off){
-    if(!confirm("Turn this phone off? Anything it sends after this is thrown away. (Set up the new phone after.)")) return;
+    if(!await mmConfirm("Turn this phone off? Anything it sends after this is thrown away. (Set up the new phone after.)")) return;
     const r = await sb.rpc("field_gps_device_off", { p_id: +b.dataset.off }); if(r.error) alert(errText(r.error)); return load();
   }
   if(b.dataset.new){
