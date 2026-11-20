@@ -69,6 +69,7 @@ body.embed{background:transparent} body.embed .wrap{max-width:none;padding:0 0 6
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -255,7 +256,7 @@ function wire(app){
       pp = app.querySelector(`[data-pp="all|${rule}"]`), homes = $$(`[data-tick="${rule}"]:checked`, app).map(x => x.value);
     if(!homes.length) return alert("Tick at least one home.");
     const r = S.plan.rules.find(x => x.key === rule);
-    if(!confirm(`Schedule “${r.task_name}” at ${homes.length} home${homes.length === 1 ? "" : "s"}, each on its first empty day from ${day(from)}, for ${pp && pp.selectedOptions[0] ? pp.selectedOptions[0].text : "Chris"}?`)) return;
+    if(!await mmConfirm(`Schedule “${r.task_name}” at ${homes.length} home${homes.length === 1 ? "" : "s"}, each on its first empty day from ${day(from)}, for ${pp && pp.selectedOptions[0] ? pp.selectedOptions[0].text : "Chris"}?`)) return;
     b.disabled = true; let bad = 0;
     for(const h of homes){ const hh = r.homes.find(x => x.home === h) || {}, d = hh.suggest || free(h, 1, from)[0]; const x = await sb.rpc("wx_schedule", { p_rule:rule, p_home:h, p_due:d, p_person:pp && pp.value ? +pp.value : null }); if(x.error) bad++; }
     if(bad) alert(`${bad} couldn't be scheduled (already scheduled, or no empty day soon).`);
@@ -267,10 +268,10 @@ function wire(app){
     if(!ok && !note) return;
     if(await rpc("wx_check_answer", { p_home:b.dataset.ck, p_ok:ok, p_note:note }, b)) refresh(); });
   $$("[data-again]", app).forEach(b => b.onclick = async () => { const h = b.dataset.again, d = free(h, 1)[0];
-    if(!confirm(`Schedule “Turn ON Heat Tape” at ${h} on ${day(d)} for Chris? (The drive-by said the snow isn't melting.)`)) return;
+    if(!await mmConfirm(`Schedule “Turn ON Heat Tape” at ${h} on ${day(d)} for Chris? (The drive-by said the snow isn't melting.)`)) return;
     if(await rpc("wx_schedule", { p_rule:"heat_on", p_home:h, p_due:d, p_person:null, p_note:"Drive-by check: snow not melting along the heat tape line" }, b)) refresh(); });
   $$("[data-hs]", app).forEach(s => s.onchange = async () => { if(await rpc("wx_home_set", { p_kind:S.list, p_home:s.dataset.hs, p_state:s.value }, s)) refresh(); });
-  $$("[data-confirm]", app).forEach(b => b.onclick = async () => { if(confirm(`Confirm the ${LISTS[b.dataset.confirm]} list as it is now?`) && await rpc("wx_home_confirm", { p_kind:b.dataset.confirm }, b)) refresh(); });
+  $$("[data-confirm]", app).forEach(b => b.onclick = async () => { if(await mmConfirm(`Confirm the ${LISTS[b.dataset.confirm]} list as it is now?`) && await rpc("wx_home_confirm", { p_kind:b.dataset.confirm }, b)) refresh(); });
   const ab = $("#addb", app); if(ab) ab.onclick = async () => { const h = $("#addh", app).value; if(!h) return alert("Pick a home.");
     if(await rpc("wx_home_set", { p_kind:S.list, p_home:h, p_state:$("#adds", app).value }, ab)) refresh(); };
   $$("[data-save]", app).forEach(b => b.onclick = async () => { const c = b.closest("[data-set]"), p = {};
