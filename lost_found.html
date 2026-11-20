@@ -83,7 +83,7 @@ body.inhub .wrap{padding-top:10px}
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
 <datalist id="dl-home"></datalist>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -225,7 +225,7 @@ document.addEventListener("click", async e => {
   if(t.id === "add"){ open(null); return; }
   if(t.id === "csv"){ csv(); return; }
   if(t.id === "clr"){ S.show = "open"; S.home = ""; S.q = ""; render(); return; }
-  if(t.id === "fee"){ try { await navigator.clipboard.writeText(FEE); toast("Copied ✓"); } catch(_){ prompt("Copy this:", FEE); } }
+  if(t.id === "fee"){ try { await navigator.clipboard.writeText(FEE); toast("Copied ✓"); } catch(_){ await mmAsk("Copy this:", FEE); } }
 });
 document.addEventListener("change", e => { if(e.target.id === "fhome"){ S.home = e.target.value; render(); } });
 document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; const p = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(p, p); } });
