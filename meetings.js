@@ -790,7 +790,7 @@ function render(v, key, data, ppl){
     wire(o); msgWire(o, it); bwWire(o, it); onWire(o, it);
     if(key === "meet_or") orPanelWire(o, it);
     const toff = o.querySelector("#mtoff");
-    if(toff) toff.onclick = async () => { if(!confirm("Remove \"" + it.title + "\" from this meeting? (Its notes stay.)")) return;
+    if(toff) toff.onclick = async () => { if(!await mmConfirm("Remove \"" + it.title + "\" from this meeting? (Its notes stay.)")) return;
       const r = await sb.rpc("meeting_topic_off", { p_id:it.own }); if(r.error) return alert("Couldn't remove: " + r.error.message); close(); redraw(); };
     const sbtn = o.querySelector("#mss");
     if(sbtn) sbtn.onclick = async () => { const g2 = i => o.querySelector(i).value; sbtn.disabled = true;
@@ -1003,7 +1003,7 @@ function render(v, key, data, ppl){
     root.querySelectorAll("[data-mfile]").forEach(a => a.onclick = async e => { e.preventDefault(); e.stopPropagation();
       const w = window.open("", "_blank"); const r = await sb.storage.from("meeting-files").createSignedUrl(a.dataset.mfile, 600);
       if(r.error || !r.data){ if(w) w.close(); return alert("Couldn't open the file."); } if(w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl; });
-    root.querySelectorAll("[data-mfoff]").forEach(b => b.onclick = async e => { e.stopPropagation(); if(!confirm("Take this file off? It stays saved, it just won't show here.")) return;
+    root.querySelectorAll("[data-mfoff]").forEach(b => b.onclick = async e => { e.stopPropagation(); if(!await mmConfirm("Take this file off? It stays saved, it just won't show here.")) return;
       const r = await sb.rpc("meeting_file_off", { p_id:+b.dataset.mfoff }); if(r.error) return alert("Couldn't: " + r.error.message); redraw(); });
   }
   function wire(root){
