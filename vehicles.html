@@ -89,7 +89,7 @@ dialog input:where(:not([type=checkbox],[type=radio])){display:block;width:100%;
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="config.js"></script>
@@ -419,7 +419,7 @@ function addPhoto(id){   // add an invoice photo to a record that's already save
     const files = [...(inp.files || [])]; if(!files.length) return;
     const bad = await uploadFiles(s.imei, id, files);
     await load(); render(); histDialog(s.imei);
-    if(bad) alert(bad + " file(s) didn't upload. Try again.");
+    if(bad) await mmAlert(bad + " file(s) didn't upload. Try again.");
   };
   inp.click();
 }
@@ -427,7 +427,7 @@ async function openFile(id){
   const f = S.files.find(x => x.id === +id); if(!f) return;
   const w = window.open("", "_blank");
   const r = await sb.storage.from("vehicle-docs").createSignedUrl(f.path, 300);
-  if(r.error){ if(w) w.close(); alert("Couldn't open the file: " + errText(r.error)); return; }
+  if(r.error){ if(w) w.close(); await mmAlert("Couldn't open the file: " + errText(r.error)); return; }
   if(w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl;
 }
 async function hideSvc(id){
@@ -435,7 +435,7 @@ async function hideSvc(id){
   if(!await mmConfirm("Hide this record? It stays in the history log and an admin can bring it back.")) return;
   const r = await sb.rpc("vehicle_service_set", { p_id: id, p_kind: null, p_items: null, p_done: s.done_on, p_odometer: s.odometer, p_vendor: null,
     p_cost: s.cost, p_invoice: null, p_note: null, p_off: true });
-  if(r.error){ alert(errText(r.error)); return; }
+  if(r.error){ await mmAlert(errText(r.error)); return; }
   await load(); render(); histDialog(s.imei);
 }
 function svcDialog(imei, pre){
@@ -486,7 +486,7 @@ function svcDialog(imei, pre){
     if(pre.ev){ const e = S.events.find(x => x.id === pre.ev);
       if(e) await sb.rpc("vehicle_event_save", evArgs(e, { p_status: "done", p_service: r.data.id })); }
     await load(); render(); histDialog(imei);
-    if(bad) alert(bad + " file(s) didn't upload. The record is saved; add the file again with a new record.");
+    if(bad) await mmAlert(bad + " file(s) didn't upload. The record is saved; add the file again with a new record.");
   };
 }
 
