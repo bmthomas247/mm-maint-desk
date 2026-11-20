@@ -96,6 +96,9 @@ dialog.big[open]{display:flex}
 .blk .bh span{flex:1}
 .blk .bh button{min-height:26px;padding:0 7px;font-size:12px}
 .status{font-size:12.5px;color:var(--muted)}
+.gtypes{gap:6px} .gtypes .chip{font-size:12.5px;min-height:32px;padding:4px 10px}
+#gfind tbody tr[data-grow]:hover{background:var(--moose-soft)}
+.audbox{background:var(--moose-soft);border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;margin:10px 0 4px}
 </style>
 </head>
 <body>
@@ -142,11 +145,12 @@ async function load(){
   if(i.error) throw i.error;
   S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
   S.camps = (cp.data || []).filter(c => !c.gone); S.drafts = dr.data || [];
+  if(TAB === "guest" && !GF.loading){ GF.loading = true; gfLoad().then(() => { GF.loading = false; gfDraw(); }); }
 }
 
 function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`, `<div id="mstats">${statsHtml()}${pullLine()}</div>`];
-  if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(top, campsHtml(), `<h2 id="gst">Guests</h2>` + list); }   // campaigns above the long guest list
+  if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(findHtml(), campsHtml(), `<h2>⭐ 5-star return renters</h2>`, top, `<h2 id="gst">Guests</h2>` + list); }   // campaigns above the long guest list
   else if(TAB === "owners") h.push(ownersHtml(), campsHtml());
   else if(TAB === "general") h.push(placesHtml(), campsHtml());
   else h.push(campsHtml());
@@ -620,7 +624,7 @@ function campsHtml(){
   <div class="bar"><button class="btn primary" data-design="new">✏️ Design an email</button>
     <span class="muted">Designs go to Brevo as drafts. Schedule and send them in Brevo.</span></div>
   ${drafts.length ? `<div class="box" style="margin-bottom:12px"><table><thead><tr><th>Designed in the hub</th><th>Status</th><th>Last change</th><th></th></tr></thead><tbody>
-    ${drafts.map(d => `<tr><td><b>${esc(d.name)}</b><div class="muted">${esc(d.subject || "no subject yet")}</div></td>
+    ${drafts.map(d => `<tr><td><b>${esc(d.name)}</b><div class="muted">${esc(d.subject || "no subject yet")}${d.design && d.design.aud ? ` · <span class="pill green">to: ${esc(d.design.aud.name)}</span>` : ""}</div></td>
       <td>${d.status === "in_brevo" ? `<span class="pill green">In Brevo #${esc(d.brevo_id)}</span>` : d.status === "queued" ? `<span class="pill blue">Sending to Brevo…</span>` : d.status === "error" ? `<span class="pill red">Not saved to Brevo</span>` : `<span class="pill">Hub draft</span>`}
         ${d.brevo_note && d.status === "error" ? `<div class="err">${esc(d.brevo_note)}</div>` : ""}</td>
       <td>${esc(d.updated_name || d.created_name || "")} · ${esc(fmtDT(d.updated_at))}</td><td><button class="btn small" data-design="${d.id}">✏️ Open</button></td></tr>`).join("")}</tbody></table></div>` : ""}
@@ -656,7 +660,22 @@ const START = {
     { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\nThank you again for the 5-star review. It means a lot to our whole crew.\n\nIt's about the time of year you stayed with us, so we wanted you to be first to know: your dates are open to book again. Book direct on our website and talk to our local team any time.\n\nWe'd love to have you back." },
     { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=return-renters", color:"#5b8a1e" },
     newBlock("spacer"), newBlock("footer")],
-  blank: () => [newBlock("header"), newBlock("heading"), newBlock("text"), newBlock("footer")] };
+  blank: () => [newBlock("header"), newBlock("heading"), newBlock("text"), newBlock("footer")],
+  // started from Find guests: words that fit the renter type (Brandon 2026-11-20). Edit freely; nothing here is sent without a test first.
+  find: f => { const t = f && f.type, why = t === "five" || t === "good" || t === "ota" ? "Thank you again for the great review. It means a lot to our whole crew."
+      : t === "repeat" ? "You've stayed with us more than once, and that means the world to our crew."
+      : t === "once" || t === "lapsed" ? "It's been a while since your stay, and Park City has been busy: new restaurants, new trails, and the same mountains you loved."
+      : t === "xmas" ? "The holidays in Park City are something special, and we'd love to host you again this year."
+      : t === "thanks" ? "Thanksgiving in the mountains is a tradition for a lot of our guests, and we'd love to make it yours again."
+      : t === "summer" ? "Summer in Park City is our favorite secret: cool nights, open trails, concerts and the farmers market."
+      : t === "winter" ? "Snow is on the way, and the best homes for ski season go first."
+      : t === "coming" ? "We can't wait to have you. Here are a few things to make your stay even better."
+      : "Thank you for staying with Moose Management. We'd love to have you back.";
+    const utm = "?utm_source=brevo&utm_medium=email&utm_campaign=" + (t || "guests");
+    return [newBlock("header"), { t:"heading", text:t === "coming" ? "Your Park City stay is coming up" : "Park City misses you", size:26 },
+      { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n" + why + "\n\nBook direct on our website for the best price, and talk to our local team any time." },
+      { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/" + utm, color:"#5b8a1e" },
+      newBlock("spacer"), newBlock("footer")]; } };
 const escT = s => esc(s).replace(/\{\{\s*([\w. ]+?)\s*\}\}/g, (m, k) => "{{ " + k + " }}");
 const inline = s => escT(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
   .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" style="color:#3c5f12;font-weight:bold">$1</a>');
@@ -719,7 +738,8 @@ function drawDesigner(){
       <label>Name (only we see this)<input data-top="name" maxlength="200" value="${esc(D.name)}"></label>
       <label>Subject line<input data-top="subject" maxlength="250" value="${esc(D.subject || "")}"></label>
       <label>Preview text (shows after the subject in the inbox)<input data-top="preview_text" maxlength="250" value="${esc(D.preview_text || "")}"></label>
-      <label>Send to (Brevo lists)</label><div class="lists">${lists.map(l => `<label><input type="checkbox" data-list="${l.id}" ${(D.list_ids || []).includes(l.id) ? "checked" : ""}> ${esc(l.name)} <span class="muted">(${(l.size ?? 0).toLocaleString()})</span></label>`).join("") || `<span class="muted">No lists yet.</span>`}</div>
+      ${audBox()}
+      <label>${D.design && D.design.aud ? "Or send to Brevo lists (Save to Brevo, then send in Brevo)" : "Send to (Brevo lists)"}</label><div class="lists">${lists.map(l => `<label><input type="checkbox" data-list="${l.id}" ${(D.list_ids || []).includes(l.id) ? "checked" : ""}> ${esc(l.name)} <span class="muted">(${(l.size ?? 0).toLocaleString()})</span></label>`).join("") || `<span class="muted">No lists yet.</span>`}</div>
       <h3 style="margin:14px 0 4px;font-size:14px">Blocks</h3>
       ${B.map((b, i) => `<div class="blk"><div class="bh"><span>${esc(BTYPES[b.t] || b.t)}</span>
         <button class="btn" data-mv="${i}" data-dir="-1" ${i ? "" : "disabled"} title="Move up">↑</button><button class="btn" data-mv="${i}" data-dir="1" ${i < B.length - 1 ? "" : "disabled"} title="Move down">↓</button>
@@ -830,6 +850,280 @@ function brevoSure(){
   $("#bsGo", d).onclick = () => { d.close(); saveDraft(true); };
 }
 
+/* ---------- Guest: Find guests + email them (Brandon 2026-11-20; mkt_guests / mkt_audiences / mkt_guest_sends, hub_mkt_guests.sql) ---------- */
+// One row per Track guest (stays since 2020, owner stays + owners' guests left out), rebuilt nightly by mkt_guests_build.py. No emails in the hub.
+const GF0 = () => ({ type:"", from:"", to:"", site:"any", comm:"", home:"", beds:"", stars:"any", stays:"any", last:"any", next:"any", hol:"", season:"any", state:"", nights:"", can:"yes", fresh:"14", q:"" });
+const GF = { f:GF0(), rows:null, err:"", aud:[], sends:[], mode:null, sort:"last", more:false, audName:"" };
+const GTYPES = {
+  five:  ["⭐", "5-star reviewers", "Left us a 5-star review", { stars:"5" }],
+  good:  ["⭐", "4–5 star reviewers", "Left us a 4 or 5 star review", { stars:"4" }],
+  repeat:["🔁", "Came back 2+ times", "Stayed with us more than once", { stays:"2" }],
+  direct:["🏠", "Booked direct", "Booked on our website or with our team at least once", { site:"direct" }],
+  ota:   ["🔄", "Happy Airbnb / Vrbo guests", "4–5 stars on Airbnb or Vrbo: bring them direct next time", { site:"ota", stars:"4" }],
+  once:  ["👋", "Stayed once, never back", "One stay, over a year ago, nothing booked", { stays:"1", last:"1y+", next:"none" }],
+  lapsed:["💤", "Not back in 2+ years", "Last stay 2+ years ago, nothing booked", { last:"2y+", next:"none" }],
+  xmas:  ["🎄", "Christmas & New Year", "Stayed over Christmas or New Year's", { hol:"xmas" }],
+  thanks:["🦃", "Thanksgiving", "Stayed over Thanksgiving", { hol:"thanksgiving" }],
+  winter:["❄️", "Winter guests", "Arrived December to March", { season:"winter" }],
+  summer:["☀️", "Summer guests", "Arrived June to August", { season:"summer" }],
+  big:   ["👨‍👩‍👧‍👦", "Big groups (4+ bedrooms)", "Stayed in a home with 4 or more bedrooms", { beds:"4" }],
+  long:  ["🗓", "Long stays (7+ nights)", "Their stays average a week or more", { nights:"7" }],
+  coming:["🧳", "Booked and coming", "Have a stay coming up (pre-arrival offers)", { next:"has" }] };
+const HOLS = { xmas:"Christmas or New Year's", christmas:"Christmas (Dec 20–27)", new_year:"New Year's (Dec 28–Jan 2)", thanksgiving:"Thanksgiving", mlk:"MLK weekend", presidents:"Presidents' weekend", july4:"Fourth of July" };
+const SITE = { airbnb:"Airbnb", vrbo:"Vrbo", direct:"Direct", other:"Other site" };
+const gfDay = (n) => new Date(Date.now() - n * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+const canMail = x => x.has_email && !x.excluded && !x.brevo_unsub;
+
+async function gfLoad(){
+  try {
+    const cols = "contact_id,name,first,city,state,country,has_email,excluded,vip,stays,nights,first_in,last_in,last_out,next_in,homes,communities,max_beds,channels,direct_stays,rent_known,lead_med,avg_nights,winter,summer,holidays,max_people,pets,reviews,stars_best,stars_avg,five,four,low,last_review,review_excerpt,brevo_in,brevo_unsub,stays_j,built_at";
+    const first = await sb.from("mkt_guests").select(cols, { count:"exact" }).order("contact_id").range(0, 999);
+    if(first.error) throw first.error;
+    let all = first.data || []; const n = first.count || all.length, jobs = [];
+    for(let from = 1000; from < n; from += 1000) jobs.push(sb.from("mkt_guests").select(cols).order("contact_id").range(from, from + 999));
+    for(const r of await Promise.all(jobs)){ if(r.error) throw r.error; all = all.concat(r.data || []); }
+    const [a, s, m] = await Promise.all([sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }),
+      sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id,brevo_list_id,contact_ids").order("asked_at", { ascending:false }).limit(200),
+      sb.rpc("mkt_guest_mode")]);
+    GF.rows = all; GF.aud = a.data || []; GF.sends = s.data || []; GF.mode = m.data || null; GF.err = "";
+  } catch(e){ GF.rows = GF.rows || []; GF.err = (e && e.message) || String(e); }
+}
+function gfRecent(days){   // guests the hub emailed in the last N days (sent requests)
+  const since = new Date(Date.now() - days * 864e5).toISOString(), out = new Set();
+  GF.sends.filter(s => s.kind === "send" && s.status === "sent" && s.done_at > since).forEach(s => (s.contact_ids || []).forEach(id => out.add(+id)));
+  return out;
+}
+function gfMatch(x, f, recent){
+  const t = today(), y1 = gfDay(365), y2 = gfDay(730);
+  if(f.can === "yes" && !canMail(x)) return false;
+  if(f.can === "no" && canMail(x)) return false;
+  if(f.can === "uns" && !x.brevo_unsub) return false;
+  if(f.fresh !== "any" && recent && recent.has(+x.contact_id)) return false;
+  if(f.from || f.to){ const fr = f.from || "1900-01-01", to = f.to || "2999-12-31";
+    if(!(x.stays_j || []).some(s => !s[6] && s[0] <= to && new Date(new Date(s[0] + "T12:00:00").getTime() + s[1] * 864e5).toISOString().slice(0, 10) > fr
+      && (f.site === "any" || (f.site === "ota" ? /airbnb|vrbo/.test(s[3]) : s[3] === f.site)))) return false; }
+  else if(f.site !== "any" && !(f.site === "ota" ? (x.channels || []).some(c => c === "airbnb" || c === "vrbo") : (x.channels || []).includes(f.site))) return false;
+  if(f.comm && !(x.communities || []).includes(f.comm)) return false;
+  if(f.home){ const h = f.home.toLowerCase().replace(/\s+/g, ""); if(!(x.homes || []).some(v => v.toLowerCase().replace(/\s+/g, "").includes(h))) return false; }
+  if(f.beds && !((x.max_beds || 0) >= +f.beds)) return false;
+  if(f.stars === "5" && !x.five) return false;
+  if(f.stars === "4" && !(x.five + x.four)) return false;
+  if(f.stars === "rev" && !x.reviews) return false;
+  if(f.stars === "none" && x.reviews) return false;
+  if(f.stars === "low" && !x.low) return false;
+  if(f.stays === "1" && x.stays !== 1) return false;
+  if(f.stays === "2" && x.stays < 2) return false;
+  if(f.stays === "3" && x.stays < 3) return false;
+  if(f.stays === "0" && x.stays !== 0) return false;
+  const li = x.last_in || "";
+  if(f.last === "1y" && !(li >= y1)) return false;
+  if(f.last === "1-2y" && !(li < y1 && li >= y2)) return false;
+  if(f.last === "1y+" && !(li && li < y1)) return false;
+  if(f.last === "2y+" && !(li && li < y2)) return false;
+  if(f.next === "has" && !x.next_in) return false;
+  if(f.next === "none" && x.next_in) return false;
+  if(f.hol){ const H = x.holidays || []; if(f.hol === "xmas" ? !(H.includes("christmas") || H.includes("new_year")) : !H.includes(f.hol)) return false; }
+  if(f.season === "winter" && !x.winter) return false;
+  if(f.season === "summer" && !x.summer) return false;
+  if(f.state){ const s = f.state.trim().toLowerCase(); if(s && ![x.state, x.country, x.city].some(v => String(v || "").toLowerCase().startsWith(s))) return false; }
+  if(f.nights && !((+x.avg_nights || 0) >= +f.nights)) return false;
+  if(f.q){ const q = f.q.trim().toLowerCase(); if(q && ![x.name, (x.homes || []).join(" "), x.city, x.state].some(v => String(v || "").toLowerCase().includes(q))) return false; }
+  return true;
+}
+function gfRows(f){ f = f || GF.f; const rc = f.fresh !== "any" ? gfRecent(+f.fresh || 14) : null; return (GF.rows || []).filter(x => gfMatch(x, f, rc)); }
+const gfSorts = { last:(a, b) => String(b.last_in || b.next_in || "").localeCompare(String(a.last_in || a.next_in || "")), stays:(a, b) => b.stays - a.stays || String(b.last_in).localeCompare(String(a.last_in)),
+  stars:(a, b) => (b.five * 2 + b.four) - (a.five * 2 + a.four) || b.stays - a.stays, name:(a, b) => String(a.name).localeCompare(String(b.name)), next:(a, b) => String(a.next_in || "9").localeCompare(String(b.next_in || "9")) };
+function gfLabel(){
+  const f = GF.f, bits = [];
+  if(f.type && GTYPES[f.type]) bits.push(GTYPES[f.type][1]);
+  if(f.from || f.to) bits.push(`stayed ${f.from ? fmtD(f.from) : "…"}–${f.to ? fmtD(f.to) : "…"}`);
+  if(f.comm) bits.push(f.comm); if(f.home) bits.push(f.home); if(f.state) bits.push("from " + f.state);
+  return bits.join(" · ") || "All guests";
+}
+function gfTile(k, label, n, sub, on, title){ return `<button type="button" class="kpi${on ? " on" : ""}" data-gtile="${k}" title="${esc(title)}"><small>${label}</small><b>${n.toLocaleString()}</b><small>${sub}</small></button>`; }
+function findHtml(){ return `<h2 style="margin-top:14px">🔎 Find guests</h2><div id="gfind">${findInner()}</div>`; }
+function findInner(){
+  if(!GF.rows) return `<p class="muted">Loading every guest…</p>`;
+  if(GF.err && !GF.rows.length) return `<p class="muted">Couldn't load the guest list: ${esc(GF.err)}</p>`;
+  const f = GF.f, nocan = Object.assign({}, f, { can:"any", fresh:"any" }), base = gfRows(nocan), rows = gfRows();
+  const emailable = base.filter(canMail), five = base.filter(x => x.five), back = base.filter(x => x.stays >= 2), coming = base.filter(x => x.next_in), uns = base.filter(x => x.brevo_unsub);
+  const comms = [...new Set(GF.rows.flatMap(x => x.communities || []))].sort();
+  const built = GF.rows.reduce((m, x) => x.built_at > m ? x.built_at : m, "");
+  const sel = (k, opts) => `<select data-gff="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}"${String(f[k]) === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const sorted = rows.slice().sort(gfSorts[GF.sort] || gfSorts.last);
+  const recent = GF.sends.filter(s => s.kind === "send").slice(0, 8);
+  return `<p class="muted" style="margin:0 0 8px">Every guest who stayed with us since 2020 (${GF.rows.length.toLocaleString()}), from Track. Owners and owners' guests are left out. Pick a renter type, or set your own filters below.</p>
+  <div class="bar gtypes">${Object.entries(GTYPES).map(([k, t]) => `<button class="chip${f.type === k ? " on" : ""}" data-gt="${k}" title="${esc(t[2])}">${t[0]} ${esc(t[1])}</button>`).join("")}
+    ${f.type || JSON.stringify(f) !== JSON.stringify(GF0()) ? `<button class="chip" data-gt="" title="Clear every filter">✕ Clear</button>` : ""}</div>
+  ${GF.aud.length ? `<div class="bar"><span class="muted" style="font-weight:800">Saved searches:</span>${GF.aud.map(a => `<span class="chip" style="display:inline-flex;gap:6px;align-items:center"><a href="#" data-gaud="${a.id}" style="color:inherit;text-decoration:none" title="${esc(a.note || "Saved by " + (a.created_name || ""))}">📌 ${esc(a.name)}${a.last_count != null ? ` <span class="muted">(${a.last_count.toLocaleString()})</span>` : ""}</a><a href="#" data-gaudx="${a.id}" title="Take this saved search off the list" style="color:var(--muted);text-decoration:none">✕</a></span>`).join("")}</div>` : ""}
+  <div class="box" style="padding:12px 14px;overflow:visible"><div class="bar" style="margin:0 0 8px">
+    <label>Stayed from <input type="date" data-gff="from" value="${esc(f.from)}"></label><label>to <input type="date" data-gff="to" value="${esc(f.to)}"></label>
+    <label>Booked on ${sel("site", [["any","any site"],["direct","our website / direct"],["airbnb","Airbnb"],["vrbo","Vrbo"],["ota","Airbnb or Vrbo"],["other","other sites"]])}</label>
+    <label>Reviews ${sel("stars", [["any","any"],["5","5 stars"],["4","4–5 stars"],["rev","left any review"],["none","no review"],["low","a 3 star or lower"]])}</label>
+    <label>Stays ${sel("stays", [["any","any"],["1","just 1"],["2","2 or more"],["3","3 or more"],["0","booked, not stayed yet"]])}</label>
+    <label>Last stay ${sel("last", [["any","any time"],["1y","in the last year"],["1-2y","1–2 years ago"],["1y+","over a year ago"],["2y+","over 2 years ago"]])}</label>
+    <label>Coming up ${sel("next", [["any","either"],["has","has a stay booked"],["none","nothing booked"]])}</label>
+    <label>Find <input data-gff="q" placeholder="name, home, city" value="${esc(f.q)}" style="width:150px"></label>
+    <button class="btn small" data-gmore="1">${GF.more ? "Fewer filters ▴" : "More filters ▾"}</button></div>
+    ${GF.more ? `<div class="bar" style="margin:0 0 8px">
+    <label>Community <select data-gff="comm"><option value="">any</option>${comms.map(c => `<option${f.comm === c ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+    <label>Home <input data-gff="home" placeholder="e.g. BHL 3307" value="${esc(f.home)}" style="width:120px"></label>
+    <label>Bedrooms ${sel("beds", [["","any"],["2","2+"],["3","3+"],["4","4+"],["5","5+"],["6","6+"]])}</label>
+    <label>Holiday ${sel("hol", [["",""]].concat(Object.entries(HOLS)).map(([v, l]) => [v, v ? l : "any"]))}</label>
+    <label>Season ${sel("season", [["any","any"],["winter","winter (Dec–Mar)"],["summer","summer (Jun–Aug)"]])}</label>
+    <label>Stays average ${sel("nights", [["","any length"],["3","3+ nights"],["5","5+ nights"],["7","7+ nights"],["14","14+ nights"]])}</label>
+    <label>From (state / country) <input data-gff="state" placeholder="e.g. TX" value="${esc(f.state)}" style="width:110px"></label></div>` : ""}
+    <div class="bar" style="margin:0">
+    <label>Email ${sel("can", [["yes","only guests we can email"],["any","everyone"],["no","only guests we can't email"]])}</label>
+    <label>Skip guests the hub emailed in the last ${sel("fresh", [["14","14 days"],["30","30 days"],["7","7 days"],["any","(don't skip)"]])}</label></div></div>
+  <div class="kpis">
+    ${gfTile("all", "Guests found", base.length, gfLabel(), !["can","five","back","coming","uns"].some(k => GF.tile === k), "Show every guest this search finds")}
+    ${gfTile("can", "We can email", emailable.length, `${base.length ? Math.round(emailable.length / base.length * 100) : 0}% have an email + not unsubscribed`, GF.tile === "can", "Only guests with an email, not unsubscribed or Do Not Rent")}
+    ${gfTile("five", "Left 5 stars", five.length, `${five.filter(canMail).length.toLocaleString()} we can email`, GF.tile === "five", "Only 5-star reviewers")}
+    ${gfTile("back", "Came back 2+ times", back.length, `${back.filter(canMail).length.toLocaleString()} we can email`, GF.tile === "back", "Only guests who stayed more than once")}
+    ${gfTile("coming", "Booked and coming", coming.length, "have a stay coming up", GF.tile === "coming", "Only guests with a stay coming up")}
+    ${gfTile("uns", "Unsubscribed", uns.length, "Brevo won't email them", GF.tile === "uns", "Only guests who unsubscribed in Brevo")}
+  </div>
+  <div class="bar">
+    <button class="btn primary" data-gmail="1" ${rows.filter(canMail).length ? "" : "disabled"}>✉️ Email these ${rows.filter(canMail).length.toLocaleString()} guests</button>
+    <button class="btn" data-gsave="1">💾 Save this search</button>
+    <button class="btn" data-gcsv="1">⬇ Download CSV</button>
+    <label class="muted" style="font-size:13px">Sort <select data-gsort="1">${[["last","newest stay first"],["stays","most stays"],["stars","best reviews"],["next","next stay"],["name","name A–Z"]].map(([v, l]) => `<option value="${v}"${GF.sort === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+    <span class="muted">${rows.length.toLocaleString()} guests shown</span></div>
+  <div class="box"><table><thead><tr><th>Guest</th><th>From</th><th class="n">Stays</th><th>Last stay</th><th>Next stay</th><th>Booked on</th><th>Reviews</th><th>Email</th></tr></thead>
+  <tbody>${sorted.slice(0, 250).map(x => { const s = (x.stays_j || []).find(v => !v[6] && v[0] <= today()) || (x.stays_j || [])[0] || [];
+    return `<tr data-grow="${x.contact_id}" style="cursor:pointer" title="Tap to see every stay"><td><b>${esc(x.name || "—")}</b>${x.vip ? ` <span class="pill blue">VIP</span>` : ""}</td>
+    <td>${esc([x.city, x.state].filter(Boolean).join(", ") || x.country || "")}</td><td class="n">${x.stays}</td>
+    <td>${x.last_in ? `${esc(fmtD(x.last_in))}<div class="muted">${esc(s[2] || "")} · ${esc(s[1] || "")} nights</div>` : ""}</td>
+    <td>${x.next_in ? `<span class="pill green">${esc(fmtD(x.next_in))}</span>` : ""}</td>
+    <td>${(x.channels || []).map(c => esc(SITE[c] || c)).join(", ")}</td>
+    <td>${x.reviews ? `${x.five ? `<span class="pill green">${x.five}× 5★</span> ` : ""}${x.four ? `<span class="pill">${x.four}× 4★</span> ` : ""}${x.low ? `<span class="pill red">${x.low}× ≤3★</span>` : ""}` : `<span class="muted">none</span>`}</td>
+    <td>${x.excluded ? `<span class="pill red">${x.excluded === "dnr" ? "Do Not Rent" : x.excluded === "owner" ? "owner" : "blocked in Track"}</span>` : x.brevo_unsub ? `<span class="pill red">unsubscribed</span>` : !x.has_email ? `<span class="pill">no email</span>` : `<span class="pill green">✓ can email</span>`}</td></tr>`; }).join("")
+    || `<tr><td colspan="8" class="empty">No guests match. Try fewer filters.</td></tr>`}</tbody></table>
+  ${rows.length > 250 ? `<div class="empty">Showing the first 250. The email and the CSV use all ${rows.length.toLocaleString()}.</div>` : ""}</div>
+  ${recent.length ? `<h3 style="margin:16px 0 6px;font-size:15px">Emails sent to guest searches</h3><div class="box"><table><thead><tr><th>Email</th><th>Search</th><th class="n">Guests</th><th>Status</th><th>When</th></tr></thead><tbody>
+    ${recent.map(s => `<tr><td><b>${esc(s.subject || "")}</b></td><td>${esc(s.audience_name || "")}</td><td class="n">${(s.emailed ?? s.people ?? 0).toLocaleString()}</td>
+      <td>${s.status === "sent" ? `<span class="pill green">Sent</span>` : s.status === "failed" || s.status === "refused" ? `<span class="pill red" title="${esc(s.note || "")}">${esc(s.status)}</span>` : `<span class="pill blue">${esc(s.status)}</span>`}</td>
+      <td>${esc(s.asked_name || "")} · ${esc(fmtDT(s.done_at || s.asked_at))}</td></tr>`).join("")}</tbody></table></div>` : ""}
+  <p class="src">Sources: Track reservations (since 2020) + Track contacts, Track reviews (staff-flagged ones left out), Brevo contacts (unsubscribed = blocklisted in Brevo). Rebuilt nightly${built ? `, last ${esc(fmtDT(built))}` : ""}. The hub keeps no email addresses: they're read from Track only when an email goes out.</p>`;
+}
+function gfDraw(focusKey){
+  const box = $("#gfind"); if(!box) return;
+  const a = document.activeElement, k = a && a.dataset && a.dataset.gff, pos = a && a.selectionStart;
+  box.innerHTML = findInner();
+  if(k && (focusKey || a.tagName === "INPUT")){ const i = box.querySelector(`[data-gff="${k}"]`); if(i){ i.focus(); try { if(pos != null) i.setSelectionRange(pos, pos); } catch(e){} } }
+}
+function gfDetail(id){
+  const x = GF.rows.find(r => r.contact_id == id); if(!x) return;
+  const d = $("#dlg");
+  d.innerHTML = `<h3 style="margin:0 0 4px">${esc(x.name || "Guest")}</h3>
+    <p class="muted" style="margin:0 0 8px">${esc([x.city, x.state, x.country].filter(Boolean).join(", "))} · ${x.stays} stay${x.stays === 1 ? "" : "s"}, ${x.nights} nights${x.lead_med != null ? ` · usually books ${x.lead_med} days ahead` : ""}${x.max_people ? ` · up to ${x.max_people} people` : ""}${x.rent_known ? ` · rent we have on file $${Math.round(x.rent_known).toLocaleString()}` : ""}</p>
+    <div class="box" style="max-height:50vh;overflow:auto"><table><thead><tr><th>Arrive</th><th class="n">Nights</th><th>Home</th><th>Booked on</th><th>Res #</th></tr></thead><tbody>
+    ${(x.stays_j || []).map(s => `<tr${s[6] ? ` style="opacity:.5" title="Cancelled"` : ""}><td>${esc(fmtD(s[0]))}${s[6] ? " (cancelled)" : ""}</td><td class="n">${s[1]}</td><td>${esc(s[2] || "")}${s[4] ? ` <span class="muted">${s[4]} BR</span>` : ""}</td><td>${esc(SITE[s[3]] || s[3] || "")}</td>
+      <td><a href="https://moosemanagement.trackhs.com/pms/reservations/view/${esc(s[5])}/" target="_blank" rel="noopener">${esc(s[5])} ↗</a></td></tr>`).join("")}</tbody></table></div>
+    ${x.review_excerpt ? `<p style="margin:10px 0 0"><b>What they wrote:</b> “${esc(x.review_excerpt)}”</p>` : ""}
+    <div class="bar" style="justify-content:flex-end;margin-top:12px"><button class="btn" id="gdClose">Close</button></div>`;
+  d.showModal(); $("#gdClose", d).onclick = () => d.close();
+}
+function gfCsv(){
+  const rows = gfRows(), cols = ["name","city","state","country","stays","nights","first_in","last_in","next_in","homes","communities","channels","five","four","low","stars_avg","holidays","avg_nights","max_beds","can_email"];
+  const q = v => { v = Array.isArray(v) ? v.join(" ") : v; return /[",\n]/.test(String(v ?? "")) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ""); };
+  const blob = new Blob([[cols.join(",")].concat(rows.map(r => cols.map(c => q(c === "can_email" ? (canMail(r) ? "yes" : "no") : r[c])).join(","))).join("\n")], { type:"text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `guests-${today()}.csv`; a.click();
+}
+function gfSetType(k){
+  const keep = { can:GF.f.can, fresh:GF.f.fresh };
+  GF.f = Object.assign(GF0(), keep, k && GTYPES[k] ? GTYPES[k][3] : {}, { type:k || "" }); GF.tile = ""; GF.audName = k && GTYPES[k] ? GTYPES[k][1] : "";
+  if(GF.f.hol || GF.f.season !== "any" || GF.f.beds || GF.f.nights) GF.more = true;
+}
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-gt],[data-gtile],[data-gaud],[data-gaudx],[data-gsave],[data-gcsv],[data-gmail],[data-grow],[data-gmore]");
+  if(!t || !t.closest("#gfind")) return;
+  e.preventDefault();
+  if(t.dataset.gt != null){ gfSetType(GF.f.type === t.dataset.gt ? "" : t.dataset.gt); return gfDraw(); }
+  if(t.dataset.gmore){ GF.more = !GF.more; return gfDraw(); }
+  if(t.dataset.gtile){ const k = t.dataset.gtile, on = GF.tile === k;
+    GF.tile = on || k === "all" ? "" : k;
+    Object.assign(GF.f, { can:"any", stars:GF.f.stars, stays:GF.f.stays, next:GF.f.next });
+    if(k === "can" && !on) GF.f.can = "yes";
+    if(k === "five") GF.f.stars = on ? "any" : "5";
+    if(k === "back") GF.f.stays = on ? "any" : "2";
+    if(k === "coming") GF.f.next = on ? "any" : "has";
+    if(k === "uns"){ GF.f.can = on ? "yes" : "uns"; }
+    if(k === "all"){ GF.f.can = "any"; }
+    return gfDraw(); }
+  if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ GF.f = Object.assign(GF0(), a.filters || {}); GF.audName = a.name; GF.tile = ""; GF.more = true; gfDraw(); } return; }
+  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !confirm(`Take "${a.name}" off the saved searches?`)) return;
+    const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return alert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
+  if(t.dataset.gsave){ const name = prompt("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
+    const ex = GF.aud.find(x => x.name.toLowerCase() === name.trim().toLowerCase());
+    const r = await sb.rpc("mkt_audience_save", { p_id:ex ? ex.id : null, p_name:name, p_filters:Object.assign({}, GF.f), p_count:gfRows().length, p_note:null });
+    if(r.error) return alert(niceE(r.error));
+    const a = await sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }); GF.aud = a.data || GF.aud; GF.audName = name; return gfDraw(); }
+  if(t.dataset.gcsv) return gfCsv();
+  if(t.dataset.grow) return gfDetail(t.dataset.grow);
+  if(t.dataset.gmail){ const name = GF.audName || gfLabel();
+    design("new"); DES.d.name = name + " · " + fmtD(today()); DES.d.design.blocks = START.find(GF.f);
+    DES.d.design.aud = { name, filters:Object.assign({}, GF.f) }; drawDesigner(); return; }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if(t.dataset && t.dataset.gsort != null && t.closest("#gfind")){ GF.sort = t.value; return gfDraw(); }
+  if(!t.dataset || t.dataset.gff == null || !t.closest("#gfind") || t.tagName === "INPUT" && t.type !== "date") return;
+  GF.f[t.dataset.gff] = t.value; if(t.dataset.gff === "can") GF.tile = ""; GF.f.type = ""; gfDraw();
+});
+document.addEventListener("input", e => {
+  const t = e.target; if(!t.dataset || t.dataset.gff == null || !t.closest("#gfind") || t.type === "date") return;
+  GF.f[t.dataset.gff] = t.value; GF.f.type = ""; clearTimeout(GF.tm); GF.tm = setTimeout(() => gfDraw(true), 250);
+});
+const niceE = e => (window.top && window.top.niceErr ? window.top.niceErr(e) : (e && e.message) || String(e));
+
+// the email designer: "To" box when the email was started from a search
+function audBox(){
+  const D = DES.d, A = D.design && D.design.aud; if(!A) return "";
+  if(!GF.rows) return `<div class="audbox"><b>To: guests from “${esc(A.name)}”</b><div class="muted">Open the Guest tab to load the guest list.</div></div>`;
+  const ids = gfRows(A.filters).filter(canMail).map(x => +x.contact_id), M = GF.mode || {};
+  const mine = D.id ? GF.sends.filter(s => s.draft_id === D.id) : [], last = mine[0];
+  const sent = mine.find(s => s.kind === "send" && s.status === "sent");
+  return `<div class="audbox"><b>To: ${ids.length.toLocaleString()} guests</b> from the search “${esc(A.name)}”
+    <div class="muted" style="font-size:12.5px">Guests with an email, not unsubscribed, not Do Not Rent${A.filters.fresh !== "any" ? `, not emailed by the hub in the last ${esc(A.filters.fresh)} days` : ""}. The hub reads their emails from Track and puts them on a new Brevo list when you send.</div>
+    ${last ? `<div style="margin-top:6px">${last.status === "asked" || last.status === "sending" ? `<span class="pill blue">⏳ ${last.kind === "test" ? "Test" : "Send"} ${last.status === "asked" ? "waiting for the office PC" : "going out"}…</span>`
+      : last.status === "sent" ? `<span class="pill green">${last.kind === "test" ? "✓ Test sent" : "✓ Sent"}</span>` : `<span class="pill red">${esc(last.status)}</span>`} <span class="muted" style="font-size:12.5px">${esc(last.note || "")}</span></div>` : ""}
+    ${sent ? "" : M.can_send ? `<div class="bar" style="margin:8px 0 0"><button class="btn" data-gtest="1" ${ids.length ? "" : "disabled"}>📧 Send me a test</button>
+      <button class="btn primary" data-gsend="1" ${ids.length ? "" : "disabled"}>🚀 Send to ${ids.length.toLocaleString()} guests</button></div>`
+      : `<div class="muted" style="margin-top:6px;font-size:12.5px">Sending to a search from the hub is on for hub admins (Brandon, Kim, Jeff). Ask one of them to send it.</div>`}</div>`;
+}
+async function gfAsk(kind){
+  const D = DES.d, A = D.design.aud;
+  if(!(D.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
+  if(!D.design.blocks.some(x => x.t === "footer" || (x.t === "html" && /unsubscribe/i.test(x.html || "")))){ $("#dst").textContent = "Add the footer block (it has the unsubscribe link)."; return; }
+  const ids = gfRows(A.filters).filter(canMail).map(x => +x.contact_id);
+  const dl = $("#dlg"), test = kind === "test", M = GF.mode || {};
+  dl.innerHTML = `<h3 style="margin:0 0 8px">${test ? "Send yourself a test?" : `Send this email to ${ids.length.toLocaleString()} guests?`}</h3>
+    <p style="margin:0"><b>${esc(D.subject)}</b></p><p class="muted" style="margin:2px 0 0">${esc(D.name)} · search “${esc(A.name)}”</p>
+    <p style="margin:10px 0 0">${test ? `A test goes only to <b>${esc(M.my_email || "your email")}</b>. The office PC also builds the Brevo list for these ${ids.length.toLocaleString()} guests, so the real send is ready after.`
+      : `It goes out from Brevo right away to the guests on the list your test made. <b>This can't be taken back.</b>`}</p>
+    ${test ? "" : `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:700"><input type="checkbox" id="gaOk"> I opened my test email and it looks right</label>`}
+    <div class="bar" style="justify-content:flex-end;margin-top:14px"><button class="btn" id="gaNo">Not yet</button><button class="btn primary" id="gaGo" ${test ? "" : "disabled"}>${test ? "Yes, send me a test" : "Yes, send it"}</button></div>`;
+  dl.showModal(); $("#gaNo", dl).focus(); $("#gaNo", dl).onclick = () => dl.close();
+  if(!test) $("#gaOk", dl).onchange = e => { $("#gaGo", dl).disabled = !e.target.checked; };
+  $("#gaGo", dl).onclick = async () => { dl.close();
+    if(DES.dirty || !D.id){ await saveDraft(false); }
+    const r = await sb.rpc("mkt_guest_ask", { p_draft:DES.d.id, p_kind:kind, p_contacts:ids, p_name:A.name, p_filters:A.filters });
+    if(r.error){ $("#dst").textContent = niceE(r.error); return; }
+    await gfPollSends(DES.d.id, 0); };
+}
+async function gfPollSends(id, n){
+  const s = await sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id,brevo_list_id,contact_ids").order("asked_at", { ascending:false }).limit(200);
+  if(!s.error) GF.sends = s.data || [];
+  if(DES.d && DES.d.id === id && $("#big").open) drawDesigner();
+  const last = GF.sends.find(x => x.draft_id === id);
+  if(last && (last.status === "asked" || last.status === "sending") && n < 120) setTimeout(() => gfPollSends(id, n + 1), 6000);
+  else gfDraw();
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-gtest],[data-gsend]"); if(!b || !b.closest("#big") || !DES.d) return;
+  gfAsk(b.dataset.gtest ? "test" : "send"); });
+
 async function refresh(){ try { await load(); render(); } catch(e){ $("#app").innerHTML = `<h1>${esc(TABS[TAB])}</h1><p class="muted">Couldn't load: ${esc(e.message || e)}</p>`; } }
 document.addEventListener("click", e => {
   if(e.target.closest("[data-new]")) return ideaDialog(null);
@@ -855,7 +1149,7 @@ function restoreFilters(){ $$("select[data-f]").forEach(s => s.value = S.f[s.dat
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Advertising</h1><p class="muted">Nothing to show.</p>`; return; }
   await refresh(); restoreFilters();
 })();
-window.__mkt = { S, guestRows, render };   // for the stub test
+window.__mkt = { S, guestRows, render, GF, gfRows };   // for the stub test
 </script>
 </body>
 </html>
