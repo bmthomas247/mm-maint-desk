@@ -1225,7 +1225,7 @@ async function asanaCheck(v){
       if(note === null) return;
       b.disabled = true;
       const r = await sb.rpc("res_asana_look", { p_res:b.dataset.raq, p_item:b.dataset.it, p_note:note || null });
-      if(r.error){ b.disabled = false; alert(window.niceErr ? niceErr(r.error) : r.error.message); return; }
+      if(r.error){ b.disabled = false; await mmAlert(window.niceErr ? niceErr(r.error) : r.error.message); return; }
       looked[b.dataset.raq + "|" + b.dataset.it] = { by_name:"you", at:new Date().toISOString(), note };
       const y = window.scrollY; draw(); window.scrollTo(0, y); });
   };
