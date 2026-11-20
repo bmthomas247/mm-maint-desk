@@ -48,13 +48,13 @@ function dups(el, A){
     box.querySelectorAll(".job").forEach(x => x.style.outline = ""); r.closest(".job").style.outline = "2px solid #5b8a1e"; });
   el.querySelectorAll("[data-comb]").forEach(b => b.onclick = async () => {
     const id = +b.dataset.comb, box = el.querySelector(`[data-g="${id}"]`), k = box.querySelector("[data-keepj]:checked");
-    if(!k) return alert("Pick the job to keep.");
+    if(!k) return await mmAlert("Pick the job to keep.");
     const keepId = +k.dataset.keepj, n = box.querySelectorAll(".job").length - 1, pp = el.querySelector(`[data-cp="${id}"]`);
     if(!await mmConfirm(`Keep #${keepId} and close the other ${n}? Their notes are copied to #${keepId} first.`)) return;
     b.disabled = true;
     const r = await sb.rpc("maint_dup_combine", { p_group:id, p_keep:keepId, p_due:el.querySelector(`[data-cd="${id}"]`).value || null,
       p_person:pp && pp.value ? +pp.value : null, p_note:el.querySelector(`[data-why="${id}"]`).value || null });
-    if(r.error){ alert(r.error.message.replace(/^.*?: /, "")); b.disabled = false; return; }
+    if(r.error){ await mmAlert(r.error.message.replace(/^.*?: /, "")); b.disabled = false; return; }
     render(); });
 }
 
@@ -78,7 +78,7 @@ function guest(el, A){
     const id = +b.dataset.sch, pp = el.querySelector(`[data-gp="${id}"]`); b.disabled = true;
     const r = await sb.rpc("maint_job_schedule", { p_job:id, p_kind:el.querySelector(`[data-kind="${id}"]`).value, p_due:el.querySelector(`[data-due="${id}"]`).value,
       p_person:pp && pp.value ? +pp.value : null });
-    if(r.error){ alert(r.error.message.replace(/^.*?: /, "")); b.disabled = false; return; }
+    if(r.error){ await mmAlert(r.error.message.replace(/^.*?: /, "")); b.disabled = false; return; }
     render(); });
 }
 
@@ -107,10 +107,10 @@ async function season(el, A){
       <div class="row"><button class="btn primary" data-skip="${gi}">Skip the ticked ones until the season</button></div></div>`).join("");
   el.querySelectorAll("[data-skip]").forEach(b => b.onclick = async () => {
     const ids = [...el.querySelectorAll(`[data-sk="${b.dataset.skip}"]:checked`)].map(x => +x.value);
-    if(!ids.length) return alert("Tick at least one job.");
+    if(!ids.length) return await mmAlert("Tick at least one job.");
     if(!await mmConfirm(`Skip ${ids.length} job${ids.length === 1 ? "" : "s"} until the season? They close here and in Breezeway.`)) return;
     b.disabled = true; const r = await sb.rpc("maint_season_skip", { p_ids:ids, p_note:w && !w.err ? `Park City highs ${w.lo}-${w.hi}F this week (Open-Meteo)` : null });
-    if(r.error){ alert(r.error.message.replace(/^.*?: /, "")); b.disabled = false; return; }
+    if(r.error){ await mmAlert(r.error.message.replace(/^.*?: /, "")); b.disabled = false; return; }
     render(); });
 }
 
