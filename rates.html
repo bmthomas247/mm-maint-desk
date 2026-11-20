@@ -4615,28 +4615,55 @@ function mgDraw() {
     <div class="pctiles">
       ${tile("Companies tracked", mgN(all.length), "with 5+ active homes", "all")}
       ${tile("Active homes in the area", mgN(tot), "booked in the last 6 months or booked ahead")}
-      ${tile("Moose Management", mgN(us.homes), tot ? `${Math.round(100 * us.homes / tot)}% of the managed homes here · rank #${all.filter(m => +m.homes > +us.homes).length + 1}` : "")}
+      ${tile("Moose Management", mgN(us.homes), (tot ? `${Math.round(100 * us.homes / tot)}% of the managed homes here · rank #${all.filter(m => +m.homes > +us.homes).length + 1}` : "") + " · tap for our Vrbo check", "us")}
       ${tile("Homes added in 12 months", mgN(add12), "listed for the first time, all companies", "growing")}
       ${tile("Gone quiet", mgN(quiet), "listed, but no booking in 6 months and none ahead", "losing")}
     </div>
     <div class="pccard"><div class="pcchips" style="align-items:center">${chips.map(([k, t]) => `<span class="pcchip ${MG.chip === k ? "on" : ""}" data-mgc="${k}">${t}</span>`).join("")}
       <input class="mgsrch" id="mgQ" type="search" placeholder="Find a company or town" value="${pcEsc(MG.q)}"></div>
-      <div class="small muted" style="margin-top:6px">From Key Data's weekly pull of every Airbnb + Vrbo listing (newest ${mgD(d.last_pull)}, first ${mgD(d.first_pull)}). Booked % and rates are Key Data estimates for each listing. A home on both sites counts once when we can match the two. ${mgN(d.no_manager)} of ${mgN(d.listings)} listings are owners renting their own home (no company), left out. Tap a company to see its homes.</div>
-      <div style="overflow:auto;margin-top:8px"><table id="mgTbl"><thead><tr>${th("name", "Company")}${th("homes", "Active homes", "Booked in the last 6 months or booked ahead")}${th("airbnb", "Airbnb")}${th("vrbo", "Vrbo")}${th("new6", "Added 6 mo", "Listed for the first time in the last 6 months")}${th("new12", "Added 12 mo")}${th("quiet", "Gone quiet", "Listed but no booking in 6 months and none ahead: may have left them")}${th("beds", "Avg beds")}${th("sleeps", "Avg sleeps")}${th("l12_occ", "Booked % 12 mo")}${th("l12_adr", "Rate 12 mo", "Average nightly rate guests paid, last 12 months")}${th("n6_occ", "Booked % next 6")}${th("n6_adr", "Rate next 6")}${th("rating", "Rating")}${th("last_booking", "Last booking")}<th style="text-align:left">Main towns</th></tr></thead>
-      <tbody>${rows.map(m => `<tr data-mgk="${pcEsc(m.mkey)}" class="${m.ours ? "ours" : ""} ${MG.key === m.mkey ? "on" : ""}"><td>${m.ours ? `<img src="moose-logo.png" style="height:16px;vertical-align:middle;margin-right:5px" alt="">` : ""}${pcEsc(m.name)}</td><td><b>${mgN(m.homes)}</b></td><td>${mgN(m.airbnb)}</td><td>${mgN(m.vrbo)}</td><td>${+m.new6 ? `<span class="pcup">+${m.new6}</span>` : "–"}</td><td>${+m.new12 ? "+" + m.new12 : "–"}</td><td>${+m.quiet ? `<span class="pcdn">${m.quiet}</span>` : "–"}</td><td>${m.beds ?? "–"}</td><td>${m.sleeps ?? "–"}</td><td>${m.l12_occ ?? "–"}%</td><td>${mg$(m.l12_adr)}</td><td>${m.n6_occ ?? "–"}%</td><td>${mg$(m.n6_adr)}</td><td>${m.rating ? m.rating + "★" : "–"} <span class="mgsub">${m.reviews ? "(" + mgN(m.reviews) + ")" : ""}</span></td><td>${mgD(m.last_booking)}</td><td style="text-align:left" class="mgsub">${pcEsc((m.cities || []).join(", "))}</td></tr>`).join("") || `<tr><td colspan="16" class="small muted">No company matches.</td></tr>`}</tbody></table></div></div>
+      <div class="small muted" style="margin-top:6px">From Key Data's weekly pull of every Airbnb + Vrbo listing (newest ${mgD(d.last_pull)}, first ${mgD(d.first_pull)}). Booked % and rates are Key Data estimates for each listing. A home on both sites counts once when we can match the two. Airbnb / Vrbo = listings booking now / every listing Key Data has (a listing with no booking in 6 months and none ahead isn't "booking"). ${mgN(d.no_manager)} of ${mgN(d.listings)} listings are owners renting their own home (no company), left out. Tap a company to see its homes.</div>
+      <div style="overflow:auto;margin-top:8px"><table id="mgTbl"><thead><tr>${th("name", "Company")}${th("homes", "Active homes", "Booked in the last 6 months or booked ahead")}${th("airbnb", "Airbnb", "Listings booking now (booked in 6 months or booked ahead) / every listing Key Data has")}${th("vrbo", "Vrbo", "Listings booking now (booked in 6 months or booked ahead) / every listing Key Data has")}${th("new6", "Added 6 mo", "Listed for the first time in the last 6 months")}${th("new12", "Added 12 mo")}${th("quiet", "Gone quiet", "Listed but no booking in 6 months and none ahead: may have left them")}${th("beds", "Avg beds")}${th("sleeps", "Avg sleeps")}${th("l12_occ", "Booked % 12 mo")}${th("l12_adr", "Rate 12 mo", "Average nightly rate guests paid, last 12 months")}${th("n6_occ", "Booked % next 6")}${th("n6_adr", "Rate next 6")}${th("rating", "Rating")}${th("last_booking", "Last booking")}<th style="text-align:left">Main towns</th></tr></thead>
+      <tbody>${rows.map(m => `<tr data-mgk="${pcEsc(m.mkey)}" class="${m.ours ? "ours" : ""} ${MG.key === m.mkey ? "on" : ""}"><td>${m.ours ? `<img src="moose-logo.png" style="height:16px;vertical-align:middle;margin-right:5px" alt="">` : ""}${pcEsc(m.name)}</td><td><b>${mgN(m.homes)}</b></td><td>${mgN(m.airbnb)} <span class="mgsub">/ ${mgN(m.airbnb_listed)}</span></td><td>${mgN(m.vrbo)} <span class="mgsub">/ ${mgN(m.vrbo_listed)}</span></td><td>${+m.new6 ? `<span class="pcup">+${m.new6}</span>` : "–"}</td><td>${+m.new12 ? "+" + m.new12 : "–"}</td><td>${+m.quiet ? `<span class="pcdn">${m.quiet}</span>` : "–"}</td><td>${m.beds ?? "–"}</td><td>${m.sleeps ?? "–"}</td><td>${m.l12_occ ?? "–"}%</td><td>${mg$(m.l12_adr)}</td><td>${m.n6_occ ?? "–"}%</td><td>${mg$(m.n6_adr)}</td><td>${m.rating ? m.rating + "★" : "–"} <span class="mgsub">${m.reviews ? "(" + mgN(m.reviews) + ")" : ""}</span></td><td>${mgD(m.last_booking)}</td><td style="text-align:left" class="mgsub">${pcEsc((m.cities || []).join(", "))}</td></tr>`).join("") || `<tr><td colspan="16" class="small muted">No company matches.</td></tr>`}</tbody></table></div></div>
     <div id="mgHomes"></div>`;
-  document.querySelectorAll("[data-mgc]").forEach(e => e.onclick = () => { MG.chip = MG.chip === e.dataset.mgc && e.dataset.mgc !== "all" ? "all" : e.dataset.mgc; mgDraw(); });
+  document.querySelectorAll("[data-mgc]").forEach(e => e.onclick = () => { if (e.dataset.mgc === "us") { const u = all.find(m => m.ours); if (u) mgOpen(u.mkey); return; } MG.chip = MG.chip === e.dataset.mgc && e.dataset.mgc !== "all" ? "all" : e.dataset.mgc; mgDraw(); });
   document.querySelectorAll("#mgTbl th[data-ms]").forEach(e => e.onclick = () => { const k = e.dataset.ms; MG.dir = MG.sort === k ? -MG.dir : (k === "name" ? 1 : -1); MG.sort = k; mgDraw(); });
   document.querySelectorAll("#mgTbl tr[data-mgk]").forEach(e => e.onclick = () => mgOpen(e.dataset.mgk));
   const q = $("mgQ"); q.oninput = () => { MG.q = q.value.trim().toLowerCase(); const pos = q.selectionStart; mgDraw(); const q2 = $("mgQ"); q2.focus(); q2.setSelectionRange(pos, pos); };
   if (MG.key && MG.homes) mgHomesDraw();
+}
+const VG_ST = { off: ["Vrbo off in Track", "#9b2c2c", "Track has the Vrbo channel switched off for this home: it isn't on Vrbo"],
+  unpublished: ["Not published", "#b7791f", "Vrbo is on in Track, but Track says the listing isn't published and it got no Vrbo booking in 6 months. Check it in Vrbo Partner Central."],
+  error: ["Track error", "#9b2c2c", "Track's last send of rates or dates to Vrbo failed"],
+  quiet: ["Listed, no Vrbo booking", "#b7791f", "On Vrbo, but no Vrbo booking made in the last 6 months"],
+  booking: ["Booking on Vrbo", "#2f6b3a", "A Vrbo booking made in the last 6 months"],
+  unknown: ["Not checked yet", "#718096", "Track's Vrbo status hasn't been read for this home yet"] };
+function mgVrboCard() {
+  if (MG.vg.err) return `<div class="pccard"><p class="small muted">Couldn't load the Vrbo check. Check your signal and try again.</p></div>`;
+  const V = MG.vg, cnt = k => V.filter(h => h.state === k).length, order = ["off", "unpublished", "error", "quiet", "booking", "unknown"];
+  const list = (MG.vgc ? V.filter(h => h.state === MG.vgc) : V.filter(h => h.state !== "booking")).slice()
+    .sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state) || (b.abb_6 - a.abb_6) || a.code.localeCompare(b.code));
+  const d = t => t ? mgD(String(t).slice(0, 10)) : "never";
+  const chk = V.map(h => h.checked_at).filter(Boolean).sort().pop();
+  return `<div class="pccard"><h3>Our homes on Vrbo <span class="mgsub">(every active short-term home)</span></h3>
+    <div class="small muted">Track = whether the Vrbo channel is on + published for the home (read from Track ${chk ? mgD(chk.slice(0, 10)) : "daily"}). Bookings = our Track reservations, booked in the last 6 months, cancelled left out. Key Data = whether Key Data's market pull has the listing. Tap a box to filter; tap again for everything not booking.</div>
+    <div class="pctiles" style="margin-top:8px">${order.filter(k => cnt(k) || k !== "unknown").map(k => `<div class="pctile" data-vgc="${k}" style="cursor:pointer${MG.vgc === k ? ";box-shadow:0 0 0 2px #1f4d2b" : ""}" title="${VG_ST[k][2]}"><small>${VG_ST[k][0]}</small><b style="color:${VG_ST[k][1]}">${cnt(k)}</b><small>of ${V.length} homes</small></div>`).join("")}</div>
+    <div class="pcchips" style="margin:6px 0"><span class="small muted">${MG.vgc ? "Showing: " + VG_ST[MG.vgc][0] : "Showing every home not booking on Vrbo"} (${list.length})</span><button class="csbtn" id="vgCsv" style="margin-left:auto">⤓ CSV (all homes)</button></div>
+    <div style="overflow:auto;max-height:520px"><table id="vgTbl"><thead><tr><th>Home</th><th>Beds</th><th>What's going on</th><th>Vrbo in Track</th><th>Vrbo listing</th><th>Key Data sees it</th><th>Last Vrbo booking</th><th>Booked last 6 mo: Vrbo / Airbnb / all</th></tr></thead>
+    <tbody>${list.map(h => `<tr><td style="text-align:left"><b>${pcEsc(h.code)}</b> <span class="mgsub">${pcEsc(h.community || "")}</span></td><td>${h.beds ?? "–"}</td>
+      <td style="text-align:left"><span style="color:${VG_ST[h.state][1]};font-weight:700" title="${VG_ST[h.state][2]}">${VG_ST[h.state][0]}</span>${h.rates_error || h.avail_error ? `<div class="mgsub">${pcEsc(h.rates_error || h.avail_error).slice(0, 140)}</div>` : ""}</td>
+      <td>${h.enabled == null ? "–" : h.enabled ? (h.published ? "On · published" : "On · <b>not published</b>") : "<b>Off</b>"}</td>
+      <td>${h.vrbo_id ? `<a href="https://www.vrbo.com/${pcEsc(h.vrbo_id)}ha" target="_blank" rel="noopener">${pcEsc(h.vrbo_id)}</a>` : `<span class="mgsub">no link on file</span>`}</td>
+      <td>${h.vrbo_id ? (h.in_kd ? "Yes" : "No") : "–"}</td><td>${d(h.last_vrbo)}</td>
+      <td>${h.vrbo_6} / ${h.abb_6} / ${h.all_6}</td></tr>`).join("") || `<tr><td colspan="8" class="small muted">Nothing here.</td></tr>`}</tbody></table></div></div>`;
 }
 async function mgOpen(k) {
   MG.key = k; MG.homes = null; MG.hchip = "active"; mgDraw();
   $("mgHomes").innerHTML = `<div class="pccard"><p class="small muted">Loading homes…</p></div>`;
   const r = await sb.rpc("rates_mgr_homes", { p_key: k });
   if (r.error) { $("mgHomes").innerHTML = `<div class="pccard"><p class="small muted">Couldn't load. Check your signal and try again.</p></div>`; return; }
-  MG.homes = r.data || []; mgHomesDraw(); $("mgHomes").scrollIntoView({ behavior: "smooth", block: "start" });
+  MG.homes = r.data || []; MG.vg = null;
+  if ((MG.d.managers || []).find(x => x.mkey === k && x.ours)) { const g = await sb.rpc("rates_vrbo_gap"); MG.vg = g.error ? { err: 1 } : (g.data || []); }
+  mgHomesDraw(); $("mgHomes").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 function mgHomesDraw() {
   const m = (MG.d.managers || []).find(x => x.mkey === MG.key) || { name: MG.key }, H = MG.homes;
@@ -4653,9 +4680,9 @@ function mgHomesDraw() {
   const th = (k, t) => `<th data-hs="${k}" class="${MG.hsort === k ? "on" : ""}">${t}${MG.hsort === k ? (MG.hdir < 0 ? " ▾" : " ▴") : ""}</th>`;
   const logo = o => `<img class="cslogo img" src="https://www.google.com/s2/favicons?domain=${o === "vrbo" ? "vrbo.com" : "airbnb.com"}&sz=32" alt="${o}" title="${o === "vrbo" ? "Vrbo" : "Airbnb"}">`;
   const how = { brand: "", website: "", company: "", "same host": "matched by host", "host name": "host name" };
-  $("mgHomes").innerHTML = `<div class="pccard"><h3>${pcEsc(m.name)} · homes</h3>
+  $("mgHomes").innerHTML = (m.ours && MG.vg ? mgVrboCard() : "") + `<div class="pccard"><h3>${pcEsc(m.name)} · homes</h3>
     <div class="pctiles" style="margin-top:8px">
-      <div class="pctile"><small>Active homes</small><b>${mgN(m.homes)}</b><small>${mgN(m.airbnb)} Airbnb · ${mgN(m.vrbo)} Vrbo listings</small></div>
+      <div class="pctile"><small>Active homes</small><b>${mgN(m.homes)}</b><small>booking now: ${mgN(m.airbnb)} of ${mgN(m.airbnb_listed)} Airbnb · ${mgN(m.vrbo)} of ${mgN(m.vrbo_listed)} Vrbo listings</small></div>
       <div class="pctile"><small>Added</small><b>+${mgN(m.new12)}</b><small>in 12 months · +${mgN(m.new6)} in 6 months</small></div>
       <div class="pctile"><small>Gone quiet</small><b>${mgN(m.quiet)}</b><small>no booking in 6 months, none ahead</small></div>
       <div class="pctile"><small>Last 12 months</small><b>${m.l12_occ ?? "–"}% · ${mg$(m.l12_adr)}</b><small>booked · nightly rate · ${mg$(m.l12_rev)} total</small></div>
@@ -4666,6 +4693,11 @@ function mgHomesDraw() {
       <button class="csbtn" id="mgCsv" style="margin-left:auto">⤓ CSV</button></div>
     <div style="overflow:auto"><table id="mgHt"><thead><tr>${th("title", "Listing")}${th("city", "Town")}${th("bedrooms", "Beds")}${th("sleeps", "Sleeps")}${th("listed_on", "Listed")}${th("last_booking_on", "Last booking")}${th("l12_occ", "Booked 12 mo")}${th("l12_adr", "Rate 12 mo")}${th("n6_occ", "Booked next 6")}${th("n6_adr", "Rate next 6")}${th("rating", "Rating")}${th("min_stay", "Min nights")}</tr></thead>
     <tbody>${list.map(h => `<tr><td class="mgt">${logo(h.ota)} ${h.url ? `<a href="${pcEsc(h.url)}" target="_blank" rel="noopener">${pcEsc(h.title || h.listing_id)}</a>` : pcEsc(h.title || h.listing_id)}${how[h.how] ? ` <span class="mgsub">· ${how[h.how]}</span>` : ""}</td><td style="text-align:left">${pcEsc(h.city || "")}</td><td>${h.bedrooms ?? "–"}</td><td>${h.sleeps ?? "–"}</td><td>${mgD(h.listed_on)}</td><td>${mgD(h.last_booking_on)}</td><td>${h.l12_occ != null ? Math.round(h.l12_occ * 100) + "%" : "–"}</td><td>${mg$(h.l12_adr)}</td><td>${h.n6_occ != null ? Math.round(h.n6_occ * 100) + "%" : "–"}</td><td>${mg$(h.n6_adr)}</td><td>${h.rating ? (+h.rating).toFixed(2) + "★" : "–"} <span class="mgsub">${h.reviews ? "(" + h.reviews + ")" : ""}</span></td><td>${h.min_stay ?? "–"}</td></tr>`).join("") || `<tr><td colspan="12" class="small muted">None.</td></tr>`}</tbody></table></div></div>`;
+  document.querySelectorAll("[data-vgc]").forEach(e => e.onclick = () => { MG.vgc = MG.vgc === e.dataset.vgc ? "" : e.dataset.vgc; mgHomesDraw(); });
+  const vcsv = $("vgCsv"); if (vcsv) vcsv.onclick = () => {
+    const cols = ["code", "name", "community", "beds", "state", "enabled", "published", "vrbo_id", "in_kd", "last_vrbo", "vrbo_6", "abb_6", "all_6", "rates_error", "avail_error"];
+    const csv = [cols.join(",")].concat((MG.vg || []).map(h => cols.map(c => `"${String(h[c] ?? "").replace(/"/g, '""')}"`).join(","))).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "our-homes-on-vrbo.csv"; a.click(); };
   document.querySelectorAll("[data-mgh]").forEach(e => e.onclick = () => { MG.hchip = MG.hchip === e.dataset.mgh && e.dataset.mgh !== "active" ? "active" : e.dataset.mgh; mgHomesDraw(); });
   document.querySelectorAll("#mgHt th[data-hs]").forEach(e => e.onclick = () => { const k = e.dataset.hs; MG.hdir = MG.hsort === k ? -MG.hdir : (["title", "city"].includes(k) ? 1 : -1); MG.hsort = k; mgHomesDraw(); });
   $("mgCsv").onclick = () => {
