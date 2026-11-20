@@ -1,4 +1,4 @@
-/* Moose Hub: "Are you sure?" + "type an answer" pop-ups inside the hub instead of the browser's own box.
+/* Moose Hub: "Are you sure?", "type an answer" and info pop-ups inside the hub instead of the browser's own box.
    - window.mmConfirm(text, opts) -> Promise<true|false>   (use with await in new code)
        opts: { title, yes, no, danger }   danger = red Yes button
    - window.mmAsk(text, opts) -> Promise<string|null>      (a box to type in; opts.value, opts.placeholder)
@@ -50,10 +50,13 @@
         <div class="mmc-head" id="mmc-t"></div>
         <div class="mmc-body"></div>
         <div class="mmc-foot"><button type="button" class="mmc-no"></button><button type="button" class="mmc-yes${danger ? " mmc-danger" : ""}"></button></div></div>`;
-      scrim.querySelector(".mmc-head").textContent = opts.title || (withInput ? "Moose Hub" : "Are you sure?");
+      const info = withInput === "info";
+      if (info) withInput = false;
+      scrim.querySelector(".mmc-head").textContent = opts.title || (withInput || info ? "Moose Hub" : "Are you sure?");
       scrim.querySelector(".mmc-body").textContent = String(text == null ? "" : text);
       const yes = scrim.querySelector(".mmc-yes"), no = scrim.querySelector(".mmc-no");
-      yes.textContent = opts.yes || (withInput ? "OK" : "Yes");
+      yes.textContent = opts.yes || (withInput || info ? "OK" : "Yes");
+      if (info) no.remove();
       no.textContent = opts.no || (withInput ? "Cancel" : "No");
       let inp = null;
       if (withInput){
@@ -80,10 +83,12 @@
       scrim.addEventListener("cancel", e => { e.preventDefault(); nay(); });
       d.body.appendChild(scrim);
       try { scrim.showModal(); } catch(e) { scrim.setAttribute("open", ""); scrim.style.zIndex = "2147483000"; }
-      (inp || (danger ? no : yes)).focus();
+      (inp || (danger && !info ? no : yes)).focus();
     });
   }
   window.mmConfirm = (text, opts) => open(text, opts, false);
+  // mmAlert(text, {title}) -> Promise that settles when they tap OK
+  window.mmAlert = (text, opts) => open(text instanceof Error ? text.message : text, Object.assign({ danger: false }, opts || {}), "info").then(() => undefined);
   // mmAsk(text, default) or mmAsk(text, {value, placeholder, multiline, title, yes, no}) -> text or null
   window.mmAsk = (text, opts) => {
     if (opts == null || typeof opts !== "object") opts = { value: opts == null ? "" : String(opts) };
@@ -110,6 +115,8 @@
     target.dispatchEvent(e2);
   }
   const nativePrompt = window.prompt.bind(window);
+  // Old alert() calls: same in-hub message; the page carries on without waiting (it never needed an answer).
+  window.alert = function(text){ try { window.mmAlert(text instanceof Error ? text.message : text); } catch(e) {} };
   window.confirm = function(text){
     sweep(); const k = "c|" + String(text == null ? "" : text);
     if (PASS.has(k)) return true;
