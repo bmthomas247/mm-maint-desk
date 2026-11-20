@@ -285,7 +285,7 @@ window.staffingView = async function(v){
     (b.closest("td") || b.parentNode).appendChild(f);
     f.querySelector("[data-ec]").onclick = () => f.remove();
     f.querySelector("[data-es]").onclick = async () => { const t = f.querySelector("[data-et]").value, why = f.querySelector("[data-er]").value.trim();
-      if(!t) return alert("Pick the new date and time."); if(!why) return alert("Say why you're changing it.");
+      if(!t) return await mmAlert("Pick the new date and time."); if(!why) return await mmAlert("Say why you're changing it.");
       if(!err(await sb.rpc("clock_edit", { p_id:+b.dataset.ed, p_at:new Date(t).toISOString(), p_reason:why }))) { otBanner(true); re(); } }; });
   v.querySelectorAll("[data-otp]").forEach(b => b.onclick = () => { const u = b.dataset.otp, p = ppl.find(x => x.user_id === u), o = (OT.l || []).find(x => x.user_id === u);
     otPlanBox(Object.assign({ user_id:u, name:p ? p.name : "", hours:+b.dataset.h, open_since:(shifts(all.filter(x => x.user_id === u)).open || {}).at || null }, o || {}), b.parentNode, re); });
@@ -300,12 +300,12 @@ window.staffingView = async function(v){
     if(!navigator.geolocation) return go(null, null, null);
     navigator.geolocation.getCurrentPosition(p => go(p.coords.latitude, p.coords.longitude, Math.round(p.coords.accuracy)), () => go(null, null, null), { enableHighAccuracy:true, timeout:10000, maximumAge:60000 }); };
   v.querySelectorAll("[data-add]").forEach(b => b.onclick = async () => { const u = b.dataset.add, at = v.querySelector(`[data-at="${u}"]`).value;
-    if(!at) return alert("Pick the date and time.");
+    if(!at) return await mmAlert("Pick the date and time.");
     const r = await sb.rpc("clock_add", { p_user:u, p_kind:v.querySelector(`[data-ak="${u}"]`).value, p_at:new Date(at).toISOString(), p_note:v.querySelector(`[data-an="${u}"]`).value });
     if(!err(r)) re(); });
   v.querySelectorAll("[data-sadd]").forEach(b => b.onclick = async () => { const u = b.dataset.sadd, d = v.querySelector(`[data-sd="${u}"]`).value,
       a = v.querySelector(`[data-ss="${u}"]`).value, e = v.querySelector(`[data-se="${u}"]`).value, n = v.querySelector(`[data-sn="${u}"]`).value;
-    if(!d || !a || !e) return alert("Pick the day, start and end.");
+    if(!d || !a || !e) return await mmAlert("Pick the day, start and end.");
     const t1 = new Date(d + "T" + a), t2 = new Date(d + "T" + e); if(t2 <= t1) t2.setDate(t2.getDate() + 1);   // ends after midnight
     if(!await mmConfirm(`Add a shift ${dnm(d)} ${tm(t1)} – ${tm(t2)} (${hm((t2 - t1) / 36e5)})?`)) return;
     b.disabled = true;
@@ -314,8 +314,8 @@ window.staffingView = async function(v){
     re(); });
   v.querySelectorAll("[data-tadd]").forEach(b => b.onclick = async () => { const u = b.dataset.tadd, d = v.querySelector(`[data-td="${u}"]`).value,
       e = v.querySelector(`[data-te="${u}"]`).value || d, k = v.querySelector(`[data-tk="${u}"]`).value, n = v.querySelector(`[data-tn="${u}"]`).value;
-    if(!d) return alert("Pick the first day.");
-    if(e < d) return alert("The last day is before the first day.");
+    if(!d) return await mmAlert("Pick the first day.");
+    if(e < d) return await mmAlert("The last day is before the first day.");
     if(!await mmConfirm(`Add ${k === "pto" ? "paid" : "unpaid"} time off ${dnm(d)}${e !== d ? " – " + dnm(e) : ""}? It's approved right away.`)) return;
     b.disabled = true;
     if(err(await sb.rpc("timeoff_add_for", { p_user:u, p_kind:k, p_day:d, p_end_day:e, p_all_day:true, p_start:null, p_end:null, p_reason:n || null }))) { b.disabled = false; return; }
@@ -594,7 +594,7 @@ function hxDraw(){
   b.title = left.length ? "Not on the hub clock yet: " + left.join(", ") : "";
   b.querySelector("[data-hxdone]").onclick = async e => { e.preventDefault();
     if(!await mmConfirm("Confirm we've moved off Hubstaff? The warning stops for you and Kim/Brandon.")) return;
-    const r = await sb.rpc("hubstaff_exit_set", { p_done:true, p_note:null }); if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); hxBanner(true); };
+    const r = await sb.rpc("hubstaff_exit_set", { p_done:true, p_note:null }); if(r.error) return await mmAlert((window.niceErr ? niceErr(r.error) : r.error.message)); hxBanner(true); };
   bxAdd(b, "hx", hxSig); v.parentNode.insertBefore(b, v);
 }
 window.hxBanner = async function(force){
@@ -631,7 +631,7 @@ function otPlanBox(x, b, done){
     const k = f.querySelector("[name=otk]:checked").value, tv = f.querySelector("[data-t]").value;
     const r = await sb.rpc("overtime_plan", { p_user:x.user_id, p_kind:k, p_out_at: k === "clock_out" && tv ? new Date(tv).toISOString() : null,
       p_up_to: k === "approved" ? +f.querySelector("[data-u]").value : null, p_note: f.querySelector("[data-n]").value || null });
-    if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); f.remove(); await otBanner(true); if(done) done(); };
+    if(r.error) return await mmAlert((window.niceErr ? niceErr(r.error) : r.error.message)); f.remove(); await otBanner(true); if(done) done(); };
   b.after(f);
 }
 // Brandon 2026-11-06: "we can turn overtime banners into just bell notifications". otDraw no longer puts a banner on the page; it builds
@@ -647,7 +647,7 @@ function otMeHtml(){
 }
 document.addEventListener("click", async e => { const a = e.target.closest && e.target.closest("[data-otask]"); if(!a) return; e.preventDefault();
   const n = await mmAsk("Why do you need overtime this week? (your manager sees this)"); if(n === null) return;
-  const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); await otBanner(true);
+  const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return await mmAlert((window.niceErr ? niceErr(r.error) : r.error.message)); await otBanner(true);
   if(location.hash.startsWith("#/staffing") && window.staffingView) staffingView(document.getElementById("view")); });
 function otDraw(){
   document.querySelectorAll(".otbanner").forEach(x => x.remove());   // old banners from a cached page
