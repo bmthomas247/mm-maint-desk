@@ -110,7 +110,6 @@ dialog.big[open]{display:flex}
 <dialog id="big" class="big"></dialog>
 <dialog id="osd" class="big"></dialog>
 <input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
-<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -482,7 +481,7 @@ async function osSave(){
 }
 async function osSend(){
   const r = OS.row;
-  if(!await mmConfirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
+  if(!confirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
   if(!(await osSave())) return;
   $("#osst").textContent = "Sending…";
   const { data, error } = await sb.functions.invoke("owner-stay-send", { body:{ id:r.id } });
@@ -521,12 +520,12 @@ document.addEventListener("click", async e => {
       OS.items.todo.push({ id:"my" + Date.now(), text:t, source:`Added by ${OS.me || "you"}, ${osShort(today())}`, on:true, mine:true }); }
     return OS.edited ? osDraw() : osRecompose(); }
   if(b.dataset.osadd) return osEventDialog();
-  if(b.dataset.evoff){ if(!await mmConfirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
+  if(b.dataset.evoff){ if(!confirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
   if(b.dataset.osclose) return $("#osd").close();
   if(b.dataset.osre) return osRecompose();
   if(b.dataset.ossave) return osSave();
   if(b.dataset.ossend) return osSend();
-  if(b.dataset.osskip || b.dataset.osback){ const skip = !!b.dataset.osskip, note = skip ? await mmAsk("Why skip this one? (optional)") : "";
+  if(b.dataset.osskip || b.dataset.osback){ const skip = !!b.dataset.osskip, note = skip ? prompt("Why skip this one? (optional)") : "";
     if(skip && note === null) return;
     const q = await sb.rpc("mkt_owner_email_skip", { p_id:OS.row.id, p_skip:skip, p_note:note || "" });
     if(q.error){ $("#osst").innerHTML = `<span class="err">${esc(q.error.message)}</span>`; return; }
@@ -660,11 +659,12 @@ const VOICES = { patrick:{ name:"Patrick the Moose", line:"Your Park City local"
   penny:{ name:"Penny", line:"Your Moose Management helper", pic:"https://ogugdhhiajebfdwpzofp.supabase.co/storage/v1/object/public/mkt-images/mascots/penny-face.png", sign:"Penny 🫏\nMoose Management · (435) 714-6544" } };
 const SITE_URL = "https://www.vacationrentalsparkcity.com";
 const unitUrl = name => SITE_URL + "/booking-engine/unit/" + String(name || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "/";
-const BTYPES = { voice:"Who's talking (Patrick / Penny)", homes:"Home picks", header:"Logo bar", heading:"Heading", text:"Text", image:"Picture", button:"Button", divider:"Line", spacer:"Space", html:"HTML (advanced)", footer:"Footer + unsubscribe" };
+const BTYPES = { hero:"Big photo + headline", note:"Note from Patrick / Penny", cards:"Highlight cards", ps:"P.S. line", voice:"Who's talking (Patrick / Penny)", homes:"Home picks", header:"Logo bar", heading:"Heading", text:"Text", image:"Picture", button:"Button", divider:"Line", spacer:"Space", html:"HTML (advanced)", footer:"Footer + unsubscribe" };
 const newBlock = t => ({ header:{ t, logo:"https://crew.moosemanagement.com/moose-logo.png", bg:"#3c5f12" }, heading:{ t, text:"A heading", size:26 },
   text:{ t, text:"Hi {{ contact.FIRSTNAME }},\n\nWrite your message here. **Bold** like this, links like [our homes](https://www.vacationrentalsparkcity.com)." },
   image:{ t, src:"", alt:"", href:"" }, button:{ t, label:"Book your stay", href:"https://www.vacationrentalsparkcity.com", color:"#5b8a1e" },
-  divider:{ t }, spacer:{ t, h:24 }, html:{ t, html:"" }, footer:{ t, text:SIGNOFF }, voice:{ t, who:"patrick" }, homes:{ t, codes:"", title:"Homes we'd pick for you", items:[] } })[t];
+  divider:{ t }, spacer:{ t, h:24 }, html:{ t, html:"" }, footer:{ t, text:SIGNOFF }, voice:{ t, who:"patrick" }, hero:{ t, src:"", title:"A headline", sub:"" }, note:{ t, who:"patrick", text:"Hi {{ contact.FIRSTNAME }},\n\nA short note." },
+  cards:{ t, items:[{ icon:"✈️", title:"A highlight", text:"One short line." }] }, ps:{ t, text:"P.S. " }, homes:{ t, codes:"", title:"Homes we'd pick for you", items:[] } })[t];
 const START = {
   guest: () => [newBlock("header"), { t:"heading", text:"Park City misses you", size:26 },
     { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\nThank you again for the 5-star review. It means a lot to our whole crew.\n\nIt's about the time of year you stayed with us, so we wanted you to be first to know: your dates are open to book again. Book direct on our website and talk to our local team any time.\n\nWe'd love to have you back." },
@@ -679,30 +679,55 @@ function blockHtml(b, i, mark){   // mark = the preview being edited: editable p
   const MK = mark ? ` data-bi="${i}"` : "";
   const cell = (inner, pad = "12px 32px") => `<tr><td style="padding:${pad};${FONT}">${inner}</td></tr>`;
   switch(b.t){
-    case "header": return `<tr><td style="background:${esc(b.bg || "#3c5f12")};padding:18px 32px" align="left">${b.logo ? `<img src="${esc(b.logo)}" alt="Moose Management" height="64" style="display:block;height:64px;border:0">` : ""}</td></tr>`;
+    case "header": return `<tr><td style="background:${esc(b.bg || "#3c5f12")};padding:16px 32px" align="center">${b.logo ? `<img src="${esc(b.logo)}" alt="Moose Management" height="56" style="display:block;height:56px;border:0;margin:0 auto">` : ""}</td></tr>`;
     case "heading": return cell(`<h1${MK} style="margin:0;font-size:${+b.size || 26}px;line-height:1.25;${FONT}">${inline(b.text)}</h1>`, "24px 32px 6px");
     case "text": return cell(`<div${MK}>` + String(b.text || "").split(/\n{2,}/).map(p => `<p style="margin:0 0 14px;font-size:16px;line-height:1.55">${inline(p).replace(/\n/g, "<br>")}</p>`).join("") + `</div>`, "8px 32px");
     case "image": { if(!b.src) return ""; const img = `<img src="${esc(b.src)}" alt="${esc(b.alt || "")}" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:8px">`;
       return cell(b.href ? `<a href="${esc(b.href)}">${img}</a>` : img); }
-    case "button": return cell(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${esc(b.color || "#5b8a1e")};border-radius:8px">
-      <a href="${esc(b.href || "#")}" style="display:inline-block;padding:13px 26px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none"${MK}>${esc(b.label || "Click here")}</a></td></tr></table>`, "10px 32px 18px");
+    case "button": return `<tr><td align="center" style="padding:14px 36px 22px"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td style="background:${esc(b.color || "#3c5f12")};border-radius:999px">
+      <a href="${esc(b.href || "#")}" style="display:inline-block;padding:15px 34px;font-family:Helvetica,Arial,sans-serif;font-size:17px;font-weight:bold;color:#ffffff;text-decoration:none"${MK}>${esc(b.label || "Click here")}</a></td></tr></table></td></tr>`;
     case "voice": { const v = VOICES[b.who] || VOICES.patrick;
       return cell(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:12px"><img src="${esc(v.pic)}" alt="${esc(v.name)}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:50%;border:0"></td>
         <td style="${FONT};font-size:15px;line-height:1.35"><b>${esc(v.name)}</b><br><span style="color:#6b776f;font-size:13px">${esc(v.line)}</span></td></tr></table>`, "18px 32px 4px"); }
     case "homes": { const it = (b.items || []).filter(x => x.url); if(!it.length) return "";
+      if(b.style !== "list") { const w = it.length === 1 ? 528 : 262;
+        return `<tr><td class="mpad2" style="padding:22px 26px 6px;${FONT}">${b.title ? `<h2 style="margin:0 6px 12px;font-size:20px;line-height:1.3;${FONT}">${inline(b.title)}</h2>` : ""}<div style="font-size:0;text-align:left">${it.map(x => `<div class="mcol" style="display:inline-block;width:100%;max-width:${w}px;vertical-align:top;padding:0 6px 14px;box-sizing:border-box">
+          <a href="${esc(x.url)}" style="text-decoration:none;color:#15201a;display:block;border:1px solid #e1e7de;border-radius:14px;overflow:hidden">
+          ${x.photo ? `<img src="${esc(x.photo)}" alt="${esc(x.name)}" width="${w}" style="display:block;width:100%;height:auto;border:0">` : ""}
+          <div style="padding:12px 14px 14px;${FONT}"><div style="font-size:16px;font-weight:bold;line-height:1.3">${esc(x.name)}</div>
+          <div style="font-size:13px;color:#4a5850;margin-top:3px">${esc(x.facts || "")}</div>
+          ${x.price ? `<div style="font-size:15px;font-weight:bold;color:#3c5f12;margin-top:8px">${esc(x.price)}</div>${x.priceNote ? `<div style="font-size:11.5px;color:#6b776f">${esc(x.priceNote)}</div>` : ""}` : ""}
+          <div style="font-size:13.5px;font-weight:bold;color:#3c5f12;margin-top:8px">See this home →</div></div></a></div>`).join("")}</div></td></tr>`; }
       return cell(`${b.title ? `<h2 style="margin:0 0 10px;font-size:19px;${FONT}">${inline(b.title)}</h2>` : ""}<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${it.map(x => `<tr><td style="padding:0 0 14px">
         <a href="${esc(x.url)}" style="text-decoration:none;color:#15201a">${x.photo ? `<img src="${esc(x.photo)}" alt="${esc(x.name)}" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:8px">` : ""}
         <div style="${FONT};font-size:16px;font-weight:bold;margin-top:6px">${esc(x.name)}</div><div style="${FONT};font-size:14px;color:#6b776f">${esc(x.facts || "")} · <span style="color:#3c5f12;font-weight:bold">See this home →</span></div></a></td></tr>`).join("")}</table>`, "10px 32px"); }
+    case "hero": return `${b.src ? `<tr><td style="padding:0"><img src="${esc(b.src)}" alt="${esc(b.title || "")}" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0"></td></tr>` : ""}
+      <tr><td class="mpad" style="padding:${b.src ? "26px" : "34px"} 36px 6px;${FONT}" align="left"><h1 class="mh1" data-bk="title"${MK} style="margin:0;font-size:30px;line-height:1.18;letter-spacing:-0.3px;${FONT}">${inline(b.title)}</h1>
+      ${b.sub ? `<p data-bk="sub"${MK} style="margin:10px 0 0;font-size:17px;line-height:1.45;color:#4a5850">${inline(b.sub)}</p>` : ""}</td></tr>`;
+    case "note": { const v = VOICES[b.who] || VOICES.patrick;
+      return `<tr><td class="mpad" style="padding:18px 36px 6px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f7ec;border-radius:14px"><tr>
+        <td class="mav" width="64" valign="top" style="padding:18px 0 18px 18px"><img src="${esc(v.pic)}" alt="${esc(v.name)}" width="52" height="52" style="display:block;width:52px;height:52px;border-radius:50%;border:0"></td>
+        <td valign="top" style="padding:16px 20px 16px 14px;${FONT};font-size:16px;line-height:1.55"><div data-bk="text"${MK}>${String(b.text || "").split(/\n{2,}/).map(p => `<p style="margin:0 0 10px">${inline(p).replace(/\n/g, "<br>")}</p>`).join("")}</div>
+        <p style="margin:2px 0 0;font-size:14px;color:#4a5850"><b style="color:#15201a">${esc(v.name)}</b> · ${esc(v.line)}</p></td></tr></table></td></tr>`; }
+    case "cards": { const it = (b.items || []).filter(x => x.title || x.text); if(!it.length) return "";
+      const w = it.length >= 3 ? 168 : it.length === 2 ? 256 : 528;
+      return `<tr><td class="mpad2" style="padding:16px 26px 4px;font-size:0" align="center">${it.map(x => `<div class="mcol" style="display:inline-block;width:100%;max-width:${w}px;vertical-align:top;padding:0 6px 12px;box-sizing:border-box">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e1e7de;border-radius:12px"><tr><td style="padding:16px 16px 14px;${FONT}">
+        <div style="font-size:24px;line-height:1">${esc(x.icon || "")}</div><div style="font-size:15px;font-weight:bold;margin:8px 0 4px;line-height:1.3">${esc(x.title || "")}</div>
+        <div style="font-size:13.5px;line-height:1.45;color:#4a5850">${inline(x.text || "")}</div></td></tr></table></div>`).join("")}</td></tr>`; }
+    case "ps": return b.text ? `<tr><td class="mpad" style="padding:4px 36px 18px;${FONT}"><p data-bk="text"${MK} style="margin:0;font-size:14.5px;line-height:1.5;color:#4a5850">${inline(b.text)}</p></td></tr>` : "";
     case "divider": return cell(`<hr style="border:0;border-top:1px solid #e1e7de;margin:0">`);
     case "spacer": return `<tr><td style="height:${Math.min(120, +b.h || 24)}px;line-height:1px;font-size:1px">&nbsp;</td></tr>`;
     case "html": return `<tr><td>${b.html || ""}</td></tr>`;
-    case "footer": return `<tr><td style="padding:20px 32px 28px;border-top:1px solid #e1e7de;${FONT};font-size:13px;line-height:1.5;color:#6b776f">${inline(b.text).replace(/\n/g, "<br>")}
+    case "footer": return `<tr><td align="center" style="padding:22px 32px 28px;background:#f5f7f0;${FONT};font-size:13px;line-height:1.6;color:#6b776f">${inline(b.text).replace(/\n/g, "<br>")}
+      <p style="margin:8px 0 0;font-size:13px"><a href="https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=footer" style="color:#3c5f12;font-weight:bold;text-decoration:none">vacationrentalsparkcity.com</a></p>
       <p style="margin:12px 0 0;font-size:12px;color:#6b776f">Don't want these emails? <a href="{{ unsubscribe }}" style="color:#6b776f">Unsubscribe</a></p></td></tr>`;
   }
   return "";
 }
 function emailHtml(D, mark){
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(D.subject || "")}</title></head>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(D.subject || "")}</title>
+<style>@media only screen and (max-width:480px){ .mcol{max-width:100%!important;width:100%!important} .mpad{padding-left:18px!important;padding-right:18px!important} .mpad2{padding-left:12px!important;padding-right:12px!important} .mav{width:44px!important;padding:14px 0 0 12px!important} .mav img{width:40px!important;height:40px!important} .mh1{font-size:26px!important} }</style></head>
 <body style="margin:0;padding:0;background:#f5f7f0">${D.preview_text ? `<div style="display:none;max-height:0;overflow:hidden">${esc(D.preview_text)}</div>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7f0"><tr><td align="center" style="padding:20px 10px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden">
@@ -725,7 +750,12 @@ function drawDesigner(){
     ? `<label>${lab}<textarea data-b="${i}" data-k="${k}">${esc(b[k] || "")}</textarea></label>`
     : `<label>${lab}<input data-b="${i}" data-k="${k}" ${extra} value="${esc(b[k] ?? "")}"></label>`;
   const pics = (i, k) => `<div class="bar" style="margin:2px 0 6px"><button class="btn small" data-up="${i}" data-pk="${k}">📷 Upload a photo</button><button class="btn small" data-lib="${i}" data-pk="${k}">🖼 Our pictures</button></div>`;
-  const fields = (b, i) => ({ voice:() => `<label>Who's talking <select data-b="${i}" data-k="who" data-redraw="1">${Object.entries(VOICES).map(([k, v]) => `<option value="${k}"${b.who === k ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label><p class="muted" style="font-size:12px;margin:2px 0 0">Changing it also changes the sign-off at the bottom.</p>`,
+  const fields = (b, i) => ({ hero:() => f(b,i,"title","Headline") + f(b,i,"sub","Line under it (optional)") + f(b,i,"src","Photo URL (optional)") + pics(i, "src"),
+    note:() => `<label>From <select data-b="${i}" data-k="who" data-redraw="1">${Object.entries(VOICES).map(([k, v]) => `<option value="${k}"${b.who === k ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>` + f(b,i,"text","Note (blank line = new paragraph · **bold** · [words](https://link))","textarea") +
+      `<div class="bar" style="margin:2px 0 6px;gap:4px"><span class="muted" style="font-size:12px">Add:</span>${[["first name","{{ contact.FIRSTNAME }}"],["home they stayed in","{{ contact.HUB_LAST_HOME }}"],["month of that stay","{{ contact.HUB_LAST_STAY }}"]].map(([l, t]) => `<button class="btn small" data-tag="${i}" data-tv="${esc(t)}">+ ${l}</button>`).join("")}</div>`,
+    cards:() => `<label>Cards, one per line: emoji | title | short line<textarea data-b="${i}" data-k="_cards" data-redraw2="1">${esc((b.items || []).map(x => [x.icon, x.title, x.text].join(" | ")).join("\n"))}</textarea></label>`,
+    ps:() => f(b,i,"text","P.S. line"),
+    voice:() => `<label>Who's talking <select data-b="${i}" data-k="who" data-redraw="1">${Object.entries(VOICES).map(([k, v]) => `<option value="${k}"${b.who === k ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label><p class="muted" style="font-size:12px;margin:2px 0 0">Changing it also changes the sign-off at the bottom.</p>`,
     homes:() => f(b,i,"title","Heading over the homes") + f(b,i,"codes","Home codes, comma between (e.g. BHL 3307, PL 627)") + `<div class="bar" style="margin:2px 0 6px"><button class="btn small" data-hfill="${i}">🏠 Add these homes</button><span class="muted" style="font-size:12px">${(b.items || []).length ? (b.items || []).map(x => esc(x.code)).join(", ") : "none yet"}</span></div>`,
     header:() => f(b,i,"logo","Logo picture URL") + pics(i, "logo") + f(b,i,"bg","Bar color","input",'type="color"'),
     heading:() => f(b,i,"text","Heading") + f(b,i,"size","Size","input",'type="number" min="16" max="44"'),
@@ -764,10 +794,13 @@ function drawPreview(){ const box = $("#dpv"); if(!box) return;
     doc.querySelectorAll("a").forEach(a => a.addEventListener("click", ev => ev.preventDefault()));
     doc.addEventListener("input", ev => { const el = ev.target.closest && ev.target.closest("[data-bi]"); if(!el) return;
       const bl = DES.d.design.blocks[+el.dataset.bi]; if(!bl) return;
-      if(bl.t === "heading") bl.text = el.innerText.trim();
+      if(bl.t === "hero") bl[el.dataset.bk || "title"] = el.innerText.trim();
+      else if(bl.t === "note") bl.text = htmlToText(el);
+      else if(bl.t === "ps") bl.text = el.innerText.trim();
+      else if(bl.t === "heading") bl.text = el.innerText.trim();
       else if(bl.t === "button") bl.label = el.innerText.trim();
       else if(bl.t === "text") bl.text = htmlToText(el);
-      const k = bl.t === "button" ? "label" : "text", side = $(`#big .ed [data-b="${el.dataset.bi}"][data-k="${k}"]`); if(side) side.value = bl[k];   // keep the left side in step
+      const k = bl.t === "button" ? "label" : bl.t === "hero" ? (el.dataset.bk || "title") : "text", side = $(`#big .ed [data-b="${el.dataset.bi}"][data-k="${k}"]`); if(side) side.value = bl[k];   // keep the left side in step
       DES.dirty = true; if(DES.d.status !== "queued") DES.d.status = "draft"; const st = $("#dst"); if(st) st.textContent = "Not saved"; }); }; }
 function htmlToText(el){   // the edited paragraphs back into the text block's format: blank line = paragraph, **bold**, [words](link)
   const c = el.cloneNode(true);
@@ -854,6 +887,8 @@ async function pollDraft(id, n){
   setTimeout(() => pollDraft(id, n + 1), 10000);
 }
 document.addEventListener("input", e => { const t = e.target; if(!DES.d || !t.closest("#big .ed")) return;
+  if(t.dataset.k === "_cards"){ DES.d.design.blocks[+t.dataset.b].items = t.value.split("\n").map(l => l.split("|").map(x => x.trim())).filter(x => x.join("")).slice(0, 3).map(([icon, title, text]) => ({ icon:icon || "", title:title || "", text:text || "" }));
+    DES.dirty = true; $("#dst").textContent = "Not saved"; clearTimeout(DES.tm); DES.tm = setTimeout(drawPreview, 250); return; }
   if(t.dataset.top){ DES.d[t.dataset.top] = t.value; }
   else if(t.dataset.b != null){ DES.d.design.blocks[+t.dataset.b][t.dataset.k] = t.value; }
   else return;
@@ -863,7 +898,7 @@ document.addEventListener("change", e => { const t = e.target; if(!DES.d || !t.c
   if(t.dataset.redraw && t.dataset.k === "who"){ const v = VOICES[t.value]; DES.d.design.blocks.forEach(x => { if(x.t === "footer") x.text = v.sign; }); DES.dirty = true; drawDesigner(); }
   if(t.id === "addb" && t.value){ DES.d.design.blocks.splice(Math.max(0, DES.d.design.blocks.length - (DES.d.design.blocks.at(-1)?.t === "footer" ? 1 : 0)), 0, newBlock(t.value)); DES.dirty = true; drawDesigner(); } });
 document.addEventListener("click", async e => { const b = e.target.closest("button"); if(!b || !b.closest("#big")) return;
-  if(b.dataset.close){ if(DES.d && DES.dirty && !await mmConfirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
+  if(b.dataset.close){ if(DES.d && DES.dirty && !confirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
   if(!DES.d) return;
   const B = DES.d.design.blocks;
   if(b.dataset.dw){ DES.phone = b.dataset.dw === "phone"; drawDesigner(); }
@@ -1100,7 +1135,7 @@ async function gfDetail(id){
   d.showModal(); $("#gdClose", d).onclick = () => d.close();
 }
 async function gfCsv(){
-  let d; try { d = await gfFind(GF.f, GF.types, { limit:20000, lite:true }); } catch(e){ return await mmAlert(niceE(e)); }
+  let d; try { d = await gfFind(GF.f, GF.types, { limit:20000, lite:true }); } catch(e){ return alert(niceE(e)); }
   const rows = d.rows || [], cols = ["name","city","state","country","stays","nights","last_in","next_in","homes","communities","channels","five","four","low","holidays","avg_nights","max_beds","can_mail"];
   const q = v => { v = Array.isArray(v) ? v.join(" ") : v; return /[",\n]/.test(String(v ?? "")) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ""); };
   const blob = new Blob([[cols.join(",")].concat(rows.map(r => cols.map(c => q(r[c])).join(","))).join("\n")], { type:"text/csv" });
@@ -1135,12 +1170,12 @@ document.addEventListener("click", async e => {
     if(k === "coming") GF.f.next = on ? "any" : "has";
     return gfSearch(); }
   if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ const fl = a.filters || {}; gfApply(fl.types || [], fl.f || fl, a.name); } return; }
-  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !await mmConfirm(`Take "${a.name}" off the saved searches?`)) return;
-    const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return await mmAlert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
-  if(t.dataset.gsave){ const name = await mmAsk("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
+  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !confirm(`Take "${a.name}" off the saved searches?`)) return;
+    const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return alert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
+  if(t.dataset.gsave){ const name = prompt("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
     const ex = GF.aud.find(x => x.name.toLowerCase() === name.trim().toLowerCase());
     const r = await sb.rpc("mkt_audience_save", { p_id:ex ? ex.id : null, p_name:name, p_filters:{ f:Object.assign({}, GF.f), types:GF.types.slice() }, p_count:(GF.res || {}).shown || 0, p_note:null });
-    if(r.error) return await mmAlert(niceE(r.error));
+    if(r.error) return alert(niceE(r.error));
     const a = await sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }); GF.aud = a.data || GF.aud; GF.audName = name; return gfDraw(); }
   if(t.dataset.gcsv) return gfCsv();
   if(t.dataset.grow) return gfDetail(t.dataset.grow);
@@ -1227,24 +1262,23 @@ function segmentOf(rows){
 }
 async function writeFromData(){
   const D = DES.d, A = D.design.aud; if(!A || DES.writing) return;
-  const edited = D.design.blocks.some(b => b.t === "text" && !/^Hi \{\{ contact\.FIRSTNAME \}\},\n\n(Thank you|It's been|You've stayed|The holidays|Thanksgiving|Summer|Snow is|We can't wait|We loved|Round-trip|\[Write)/.test(b.text || ""));
-  if(edited && !await mmConfirm("Replace the words in this email with a new draft written from the data?")) return;
+  const edited = D.design.blocks.some(b => (b.t === "text" || b.t === "note") && !/\[A few lines|\bA short note\b/.test(b.text || "") && !/^Hi \{\{ contact\.FIRSTNAME \}\},\n\n(Thank you|It's been|You've stayed|The holidays|Thanksgiving|Summer|Snow is|We can't wait|We loved|Round-trip|\[Write)/.test(b.text || ""));
+  if(edited && !confirm("Replace the words in this email with a new draft written from the data?")) return;
   DES.writing = true; drawDesigner();
   try {
     const seg = segmentOf(((await gfFind(A.filters, A.types || [], { limit:250, lite:true })).rows) || []);
-    const v = (D.design.blocks.find(b => b.t === "voice") || {}).who || "patrick", ctx = A.ctx || {};
+    const v = (D.design.blocks.find(b => b.t === "voice" || b.t === "note") || {}).who || "patrick", ctx = A.ctx || {};
     const r = await sb.functions.invoke("mkt-email-write", { body:{ name:A.name, label:gfLabel(A.filters, A.types || []), count:(DES.audInfo && DES.audInfo.ids || []).length,
       types:A.types || [], segment:seg, voice:v, flight:ctx.flight || null, topic:ctx.topic || null,
       from:A.filters.tyf || A.filters.from || "", to:A.filters.tyt || A.filters.to || "", allow_home_tags:!(A.types || []).includes("coming") } });
     if(r.error || !r.data || !r.data.ok) throw new Error((r.data && r.data.error) || (r.error && r.error.message) || "The writer didn't answer.");
-    const E = r.data.email, V = VOICES[v];
-    const blocks = [newBlock("header"), { t:"voice", who:v }, { t:"heading", text:E.heading, size:26 }, { t:"text", text:(E.paragraphs || []).join("\n\n") },
-      { t:"button", label:E.button_label || "See homes", href:E.button_url + (E.button_url.includes("?") ? "&" : "?") + "utm_source=brevo&utm_medium=email&utm_campaign=hub-guests", color:"#5b8a1e" }];
-    if((E.home_codes || []).length) blocks.push({ t:"homes", codes:E.home_codes.join(", "), title:E.homes_title || "Homes I'd pick", items:[] });
-    blocks.push(newBlock("spacer"), Object.assign(newBlock("footer"), { text:V.sign }));
-    D.design.blocks = blocks; D.subject = E.subject; D.preview_text = E.preview_text; DES.facts = E.facts_used || []; DES.dirty = true;
-    DES.writing = false; drawDesigner();
-    const hi = blocks.findIndex(b => b.t === "homes"); if(hi >= 0) await fillHomes(hi);
+    const E = r.data.email, H = r.data.homes || [];
+    D.design.blocks = [newBlock("header"), { t:"hero", src:r.data.hero_photo || "", title:E.hero_title, sub:E.hero_sub || "" }, { t:"note", who:v, text:E.note },
+      ...((E.highlights || []).length ? [{ t:"cards", items:E.highlights.slice(0, 3) }] : []),
+      { t:"button", label:E.cta_label || "See homes", href:E.cta_url + (E.cta_url.includes("?") ? "&" : "?") + "utm_source=brevo&utm_medium=email&utm_campaign=hub-guests", color:"#3c5f12" },
+      ...(H.length ? [{ t:"homes", codes:H.map(h => h.code).join(", "), title:E.homes_title || "", items:H }] : []),
+      ...(E.ps ? [{ t:"ps", text:E.ps }] : []), Object.assign(newBlock("footer"), { text:"Moose Management · Park City, Utah · (435) 714-6544" })];
+    D.subject = E.subject; D.preview_text = E.preview_text; DES.facts = E.facts_used || []; DES.dirty = true; DES.writing = false; drawDesigner();
     $("#dst").textContent = `Written from the data (${r.data.data && r.data.data.open_homes ? r.data.data.open_homes.count + " homes open those dates, " : ""}cost about $${r.data.cost}). Read it and check the facts, then Save.`;
   } catch(e){ DES.writing = false; drawDesigner(); $("#dst").textContent = "Couldn't write it: " + niceE(e); }
 }
@@ -1356,7 +1390,7 @@ async function ideasOpen(){
   d.querySelectorAll("[data-iwrite]").forEach(b => b.onclick = () => { const x = GF.ideas[+b.dataset.iwrite]; d.close();
     GF.types = x.types.slice(); GF.f = Object.assign(GF0(), x.f); GF.audName = x.name; gfSearch(); gfEmail(x.start ? x.start() : START.find({ type:x.types[0] }), x.name, x.ctx); });
   d.querySelectorAll("[data-iskip]").forEach(b => b.onclick = async () => { const x = GF.ideas[+b.dataset.iskip];
-    const r = await sb.rpc("mkt_topic_set", { p_query:x.topic, p_status:"skip", p_note:null }); if(r.error) return await mmAlert(niceE(r.error));
+    const r = await sb.rpc("mkt_topic_set", { p_query:x.topic, p_status:"skip", p_note:null }); if(r.error) return alert(niceE(r.error));
     GF.topics.forEach(t => { if(t.query === x.topic) t.status = "skip"; }); ideasBuild(); ideasOpen(); });
 }
 
@@ -1463,9 +1497,27 @@ document.addEventListener("click", e => {
     return gfEmail(START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret), GF.audName, fareCtx(m)); }
 });
 document.addEventListener("change", async e => { const s = e.target.closest("[data-tstat]"); if(!s || !s.value) return;
-  const r = await sb.rpc("mkt_topic_set", { p_query:s.dataset.tstat, p_status:s.value, p_note:null }); if(r.error) return await mmAlert(niceE(r.error));
+  const r = await sb.rpc("mkt_topic_set", { p_query:s.dataset.tstat, p_status:s.value, p_note:null }); if(r.error) return alert(niceE(r.error));
   GF.topics.forEach(t => { if(t.query === s.dataset.tstat){ t.status = s.value; t.status_by = "you"; } }); const d = $("#gdata"); if(d) d.innerHTML = dataInner(); });
 
+// every starter email uses the new layout: logo · headline (+ photo) · note from Patrick/Penny · button · home picks · footer
+const layout = o => [newBlock("header"), { t:"hero", src:o.src || "", title:o.title, sub:o.sub || "" }, { t:"note", who:o.who || "patrick", text:o.note },
+  ...(o.cards && o.cards.length ? [{ t:"cards", items:o.cards }] : []),
+  { t:"button", label:o.label || "See homes & book", href:o.href || "https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=hub-guests", color:"#3c5f12" },
+  { t:"homes", codes:"", title:o.homesTitle || "", items:[] }, ...(o.ps ? [{ t:"ps", text:o.ps }] : []), Object.assign(newBlock("footer"), { text:"Moose Management · Park City, Utah · (435) 714-6544" })];
+START.find = f => { const t = f && f.type, u = "?utm_source=brevo&utm_medium=email&utm_campaign=" + (t || "guests");
+  const W = { rrdue:["It's almost time to come back", "Same time of year, same mountains.", "Hi {{ contact.FIRSTNAME }},\n\nWe loved having you at {{ contact.HUB_LAST_HOME }} back in {{ contact.HUB_LAST_STAY }}, and thank you again for the 5-star review.\n\nGuests often come back the same time of year, and the best dates go first. Booking direct on our website is the best price.", "See dates for your home", "{{ contact.HUB_HOME_LINK }}"],
+    coming:["Your Park City stay is coming up", "A few things to make it even better.", "Hi {{ contact.FIRSTNAME }},\n\nWe can't wait to have you. If you need anything before you arrive, our local team is a call away."],
+    once:["Park City misses you", "It's been a while.", "Hi {{ contact.FIRSTNAME }},\n\nIt's been a while since your stay at {{ contact.HUB_LAST_HOME }}. If Park City is on your list again, we'd love to have you back. Booking direct on our website is the best price."],
+    xmas:["Holidays in the mountains", "The best holiday dates go first.", "Hi {{ contact.FIRSTNAME }},\n\nYou spent the holidays with us before, and we'd love to host you again. Booking direct on our website is the best price."],
+    summer:["Park City in the summer", "Cool nights, open trails.", "Hi {{ contact.FIRSTNAME }},\n\nYou've stayed with us in the summer before. If you're thinking about this year, booking direct on our website is the best price."],
+    winter:["Ski season is here", "The best winter dates go first.", "Hi {{ contact.FIRSTNAME }},\n\nYou've stayed with us in the winter before. If a ski trip is on your list, booking direct on our website is the best price."] };
+  const w = W[t] || W[t === "lapsed" ? "once" : t === "thanks" ? "xmas" : ""] || ["Park City misses you", "We'd love to have you back.", "Hi {{ contact.FIRSTNAME }},\n\nThank you for staying with Moose Management. If Park City is on your list again, booking direct on our website is the best price."];
+  return layout({ title:w[0], sub:w[1], note:w[2], who:t === "coming" ? "penny" : "patrick", label:w[3], href:w[4] || ("https://www.vacationrentalsparkcity.com/" + u), homesTitle:"Homes we'd pick for you" }); };
+START.flight = (m, price, dep, ret) => layout({ title:`Flights from ${m} from $${price}`, sub:`Round trip, ${fmtD(dep).replace(/, \d{4}$/, "")}–${fmtD(ret).replace(/, \d{4}$/, "")}, when we checked.`,
+  note:`Hi {{ contact.FIRSTNAME }},\n\nRound trips from ${m} to Salt Lake City were about $${price} for those dates when we checked (Google Flights, ${fmtD(today())}). Fares change fast, so if Park City is on your list, this is a good week to look.`,
+  label:"See homes open those dates", href:`https://www.vacationrentalsparkcity.com/booking-engine/results/?arrival_date=${dep}&departure_date=${ret}&utm_source=brevo&utm_medium=email&utm_campaign=flights`, homesTitle:"A few homes open those dates" });
+START.topic = q => layout({ title:titleCase(q) + " in Park City", sub:"People are looking it up this month.", note:"Hi {{ contact.FIRSTNAME }},\n\n[A few lines about " + q + ": what it is, where near our homes, and why now. Or press ✨ Write it from the data.]", homesTitle:"Homes we'd pick for you" });
 async function refresh(){ try { await load(); render(); } catch(e){ $("#app").innerHTML = `<h1>${esc(TABS[TAB])}</h1><p class="muted">Couldn't load: ${esc(e.message || e)}</p>`; } }
 document.addEventListener("click", e => {
   if(e.target.closest("[data-new]")) return ideaDialog(null);
