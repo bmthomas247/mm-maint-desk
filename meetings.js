@@ -169,7 +169,7 @@ window.meetJoin = async function(key){
   if(r.data.admin) put(`<button class="btn small mjoin mjset">${L ? "Change link" : "+ Join link"}</button>`);   // afterend: put this first so Join lands next to the title
   if(L) put(`<a class="btn small mjoin" href="${esc(L.url)}" target="_blank" rel="noopener">▶ Join${L.label ? " " + esc(L.label) : ""}</a>`);
   document.querySelectorAll(".mjset").forEach(b => b.onclick = async () => {
-    const u = prompt("Paste the meeting's join link (https://…). Only people who can open this meeting will see it.", ""); if(!u) return;
+    const u = await mmAsk("Paste the meeting's join link (https://…). Only people who can open this meeting will see it.", ""); if(!u) return;
     const w = await sb.rpc("meeting_link_set", { p_meet:key, p_url:u.trim(), p_label:/meet\.google/.test(u) ? "Google Meet" : /zoom\.us/.test(u) ? "Zoom" : "" });
     if(w.error) return alert("Couldn't save: " + w.error.message);
     document.querySelectorAll(".mjoin").forEach(x => x.remove()); meetJoin(key); });
@@ -630,7 +630,7 @@ function render(v, key, data, ppl){
       if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       await orState(); render(v, key, data, ppl); });
     v.querySelectorAll("[data-prepnote]").forEach(b => b.onclick = async e => { e.stopPropagation(); e.preventDefault();
-      const k = b.dataset.prepnote, cur = orPrep()[k], t = prompt("Reminder for the meeting (shows on the card):", (cur && cur.note) || ""); if(t == null) return;
+      const k = b.dataset.prepnote, cur = orPrep()[k], t = await mmAsk("Reminder for the meeting (shows on the card):", (cur && cur.note) || ""); if(t == null) return;
       const r = await sb.rpc("meeting_prep_set", { p_meet:key, p_day:day, p_item:k, p_mark:cur && cur.mark === "skip" ? "skip" : "must", p_note:t.trim() || null });
       if(r.error) return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message));
       await orState(); render(v, key, data, ppl); });
@@ -841,7 +841,7 @@ function render(v, key, data, ppl){
       msg.textContent = bad.length ? "Couldn't send to " + bad.join("; ") : "✓ Sent"; if(!bad.length) setTimeout(redraw, 700); };
     box.querySelector("#mmtask").onclick = async e => { const to = targets(), text = box.querySelector("#mmtx").value.trim().split("\n")[0];
       if(!to.length) return msg.textContent = "Pick who gets it.";
-      const t = prompt("Task for " + to.map(p => p.name.split(" ")[0]).join(", ") + ":", it.ask ? it.ask.replace(/\?$/, "") + " (" + short(it.title, 60) + ")" : text); if(!t) return;
+      const t = await mmAsk("Task for " + to.map(p => p.name.split(" ")[0]).join(", ") + ":", it.ask ? it.ask.replace(/\?$/, "") + " (" + short(it.title, 60) + ")" : text); if(!t) return;
       e.target.disabled = true; let err = "";
       for(const p of to){ const r = await sb.rpc("meeting_task_add2", { p_meet:key, p_day:day, p_item:it.key, p_item_title:it.title, p_text:t, p_who:p.id, p_due:box.querySelector("#mmdue").value || null }); if(r.error) err = r.error.message; }
       e.target.disabled = false; if(err) return msg.textContent = "Couldn't add: " + err; redraw(); };
@@ -1044,7 +1044,7 @@ function render(v, key, data, ppl){
   $("#mday").onchange = e => { if(e.target.value){ ST.day[key] = e.target.value; ST.drafts = {}; render(v, key, data, ppl); } };
   $("#mref").onclick = redraw;
   if($("#mlink")) $("#mlink").onclick = async () => {   // admins paste the Zoom / Meet link themselves (it can carry a passcode)
-    const u = prompt("Paste the meeting's join link (https://…). Only people who can open this meeting will see it.", ""); if(!u) return;
+    const u = await mmAsk("Paste the meeting's join link (https://…). Only people who can open this meeting will see it.", ""); if(!u) return;
     const r = await sb.rpc("meeting_link_set", { p_meet:key, p_url:u.trim(), p_label:/meet\.google/.test(u) ? "Google Meet" : /zoom\.us/.test(u) ? "Zoom" : "" });
     if(r.error) return alert("Couldn't save: " + r.error.message); redraw(); };
   $("#mprint").onclick = () => window.print();
