@@ -69,7 +69,7 @@ body.embed{background:transparent} body.embed .wrap{max-width:none;padding:0 0 6
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
-<script src="confirm.js?v=20261120b"></script>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -240,7 +240,7 @@ function render(){
 }
 
 const rpc = async (fn, args, btn) => { if(btn) btn.disabled = true; const r = await sb.rpc(fn, args);
-  if(r.error){ alert(errText(r.error)); if(btn) btn.disabled = false; return false; } return true; };
+  if(r.error){ await mmAlert(errText(r.error)); if(btn) btn.disabled = false; return false; } return true; };
 const refresh = async () => { await load(); render(); poll(); };
 function wire(app){
   $$("[data-tab]", app).forEach(b => b.onclick = () => { S.tab = b.dataset.tab; render(); });
@@ -250,19 +250,19 @@ function wire(app){
   $$("[data-chip]", app).forEach(b => b.onclick = () => { const i = app.querySelector(`[data-due="${CSS.escape(b.dataset.chip)}"]`); if(i) i.value = b.dataset.day; });
   $$("[data-one]", app).forEach(b => b.onclick = async () => { const id = b.dataset.one, [rule, home] = id.split("|"), d = app.querySelector(`[data-due="${CSS.escape(id)}"]`).value,
       pp = app.querySelector(`[data-pp="${CSS.escape("all|" + rule)}"]`);
-    if(!d) return alert("Pick a day.");
+    if(!d) return await mmAlert("Pick a day.");
     if(await rpc("wx_schedule", { p_rule:rule, p_home:home, p_due:d, p_person:pp && pp.value ? +pp.value : null }, b)) refresh(); });
   $$("[data-bulk]", app).forEach(b => b.onclick = async () => { const rule = b.dataset.bulk, from = app.querySelector(`[data-bfrom="${rule}"]`).value,
       pp = app.querySelector(`[data-pp="all|${rule}"]`), homes = $$(`[data-tick="${rule}"]:checked`, app).map(x => x.value);
-    if(!homes.length) return alert("Tick at least one home.");
+    if(!homes.length) return await mmAlert("Tick at least one home.");
     const r = S.plan.rules.find(x => x.key === rule);
     if(!await mmConfirm(`Schedule “${r.task_name}” at ${homes.length} home${homes.length === 1 ? "" : "s"}, each on its first empty day from ${day(from)}, for ${pp && pp.selectedOptions[0] ? pp.selectedOptions[0].text : "Chris"}?`)) return;
     b.disabled = true; let bad = 0;
     for(const h of homes){ const hh = r.homes.find(x => x.home === h) || {}, d = hh.suggest || free(h, 1, from)[0]; const x = await sb.rpc("wx_schedule", { p_rule:rule, p_home:h, p_due:d, p_person:pp && pp.value ? +pp.value : null }); if(x.error) bad++; }
-    if(bad) alert(`${bad} couldn't be scheduled (already scheduled, or no empty day soon).`);
+    if(bad) await mmAlert(`${bad} couldn't be scheduled (already scheduled, or no empty day soon).`);
     refresh(); });
   $$("[data-move]", app).forEach(b => b.onclick = async () => { const id = b.dataset.move, [src, ref] = id.split("|"), d = app.querySelector(`[data-due="${CSS.escape(id)}"]`).value;
-    if(!d) return alert("Pick a day.");
+    if(!d) return await mmAlert("Pick a day.");
     if(await rpc("wx_move", { p_src:src, p_ref:+ref, p_due:d, p_rule:b.dataset.rule }, b)) refresh(); });
   $$("[data-ck]", app).forEach(b => b.onclick = async () => { const ok = b.dataset.ok === "1", note = ok ? null : await mmAsk("What did you see? (this goes to Chris)");
     if(!ok && !note) return;
@@ -272,7 +272,7 @@ function wire(app){
     if(await rpc("wx_schedule", { p_rule:"heat_on", p_home:h, p_due:d, p_person:null, p_note:"Drive-by check: snow not melting along the heat tape line" }, b)) refresh(); });
   $$("[data-hs]", app).forEach(s => s.onchange = async () => { if(await rpc("wx_home_set", { p_kind:S.list, p_home:s.dataset.hs, p_state:s.value }, s)) refresh(); });
   $$("[data-confirm]", app).forEach(b => b.onclick = async () => { if(await mmConfirm(`Confirm the ${LISTS[b.dataset.confirm]} list as it is now?`) && await rpc("wx_home_confirm", { p_kind:b.dataset.confirm }, b)) refresh(); });
-  const ab = $("#addb", app); if(ab) ab.onclick = async () => { const h = $("#addh", app).value; if(!h) return alert("Pick a home.");
+  const ab = $("#addb", app); if(ab) ab.onclick = async () => { const h = $("#addh", app).value; if(!h) return await mmAlert("Pick a home.");
     if(await rpc("wx_home_set", { p_kind:S.list, p_home:h, p_state:$("#adds", app).value }, ab)) refresh(); };
   $$("[data-save]", app).forEach(b => b.onclick = async () => { const c = b.closest("[data-set]"), p = {};
     $$("[data-p]", c).forEach(i => p[i.dataset.p] = i.type === "checkbox" ? i.checked : i.value.trim());
