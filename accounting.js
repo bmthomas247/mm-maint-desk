@@ -587,7 +587,7 @@ async function fill(v, body){
   body.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { A.sub = b.dataset.sub; A.tf = ""; refresh(v); });
   body.querySelectorAll("[data-tf]").forEach(b => b.onclick = e => { e.preventDefault(); const k = b.dataset.tf; A.tf = (A.tf === k ? "" : k); if(A.tf && BSUB[A.tf]) A.sub = BSUB[A.tf]; refresh(v); });
   if(tab === "payroll" && !A.logged[`${A.from}|${A.to}`]){ A.logged[`${A.from}|${A.to}`] = 1; sb.rpc("pay_pull_log", { p_from:A.from, p_to:A.to, p_kind:"open", p_what:null }).then(() => {}, () => {}); }
-  const rpc = async (fn, args, btn) => { if(btn){ btn.disabled = true; } const r = await sb.rpc(fn, args); if(r.error){ alert("Not saved: " + err(r.error)); if(btn) btn.disabled = false; return false; } return r.data ?? true; };
+  const rpc = async (fn, args, btn) => { if(btn){ btn.disabled = true; } const r = await sb.rpc(fn, args); if(r.error){ await mmAlert("Not saved: " + err(r.error)); if(btn) btn.disabled = false; return false; } return r.data ?? true; };
   body.querySelectorAll("[data-ck]").forEach(c => c.onchange = async () => {
     if(await rpc("pay_check", { p_item:c.dataset.ck, p_from:A.from, p_to:A.to, p_done:c.checked, p_note:null }) === false){ c.checked = !c.checked; return; }
     delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
@@ -596,7 +596,7 @@ async function fill(v, body){
     if(!ok){ note = await mmAsk("Why take the approval back?"); if(!note) return; }
     const r = await rpc("pay_approve", { p_from:A.from, p_to:A.to, p_users:ids, p_ok:ok, p_note:note }, btn);
     if(r === false) return;
-    if(r.skipped && r.skipped.length) alert("Not approved (not someone you look after): " + r.skipped.join(", "));
+    if(r.skipped && r.skipped.length) await mmAlert("Not approved (not someone you look after): " + r.skipped.join(", "));
     delete A.stc[`${A.from}|${A.to}`]; refresh(v); };
   body.querySelectorAll("[data-apv]").forEach(b => b.onclick = e => { e.stopPropagation(); approve([b.dataset.apv], true, b); });
   body.querySelectorAll("[data-unapv]").forEach(b => b.onclick = e => { e.stopPropagation(); approve([b.dataset.unapv], false, b); });
