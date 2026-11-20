@@ -156,7 +156,7 @@
     if(k === "save"){ if(ov) save(ov); return; }
     if(k === "add"){ const box = b.closest("[data-onbox]"), x = (box && box._ctx) || {};
       ask(b.getAttribute("data-home"), b.getAttribute("data-src") === "meeting" ? x : { src:"home" }); return; }
-    if(k === "off"){ if(!confirm("Take this owner note off? It stays in the history for admins.")) return;
+    if(k === "off"){ if(!await mmConfirm("Take this owner note off? It stays in the history for admins.")) return;
       const key = b.getAttribute("data-key"), r = await SB().rpc("owner_note_off", { p_id:+b.getAttribute("data-id"), p_why:null });
       if(r.error) return alert(nice(r.error)); delete ST.notes[key]; load(key, key); return; }
     const x = (ST.asks || [])[+b.getAttribute("data-i")]; if(!x) return;
