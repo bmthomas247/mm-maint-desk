@@ -50,7 +50,7 @@ function dups(el, A){
     const id = +b.dataset.comb, box = el.querySelector(`[data-g="${id}"]`), k = box.querySelector("[data-keepj]:checked");
     if(!k) return alert("Pick the job to keep.");
     const keepId = +k.dataset.keepj, n = box.querySelectorAll(".job").length - 1, pp = el.querySelector(`[data-cp="${id}"]`);
-    if(!confirm(`Keep #${keepId} and close the other ${n}? Their notes are copied to #${keepId} first.`)) return;
+    if(!await mmConfirm(`Keep #${keepId} and close the other ${n}? Their notes are copied to #${keepId} first.`)) return;
     b.disabled = true;
     const r = await sb.rpc("maint_dup_combine", { p_group:id, p_keep:keepId, p_due:el.querySelector(`[data-cd="${id}"]`).value || null,
       p_person:pp && pp.value ? +pp.value : null, p_note:el.querySelector(`[data-why="${id}"]`).value || null });
@@ -108,7 +108,7 @@ async function season(el, A){
   el.querySelectorAll("[data-skip]").forEach(b => b.onclick = async () => {
     const ids = [...el.querySelectorAll(`[data-sk="${b.dataset.skip}"]:checked`)].map(x => +x.value);
     if(!ids.length) return alert("Tick at least one job.");
-    if(!confirm(`Skip ${ids.length} job${ids.length === 1 ? "" : "s"} until the season? They close here and in Breezeway.`)) return;
+    if(!await mmConfirm(`Skip ${ids.length} job${ids.length === 1 ? "" : "s"} until the season? They close here and in Breezeway.`)) return;
     b.disabled = true; const r = await sb.rpc("maint_season_skip", { p_ids:ids, p_note:w && !w.err ? `Park City highs ${w.lo}-${w.hi}F this week (Open-Meteo)` : null });
     if(r.error){ alert(r.error.message.replace(/^.*?: /, "")); b.disabled = false; return; }
     render(); });
