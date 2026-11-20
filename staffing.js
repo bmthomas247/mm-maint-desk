@@ -307,7 +307,7 @@ window.staffingView = async function(v){
       a = v.querySelector(`[data-ss="${u}"]`).value, e = v.querySelector(`[data-se="${u}"]`).value, n = v.querySelector(`[data-sn="${u}"]`).value;
     if(!d || !a || !e) return alert("Pick the day, start and end.");
     const t1 = new Date(d + "T" + a), t2 = new Date(d + "T" + e); if(t2 <= t1) t2.setDate(t2.getDate() + 1);   // ends after midnight
-    if(!confirm(`Add a shift ${dnm(d)} ${tm(t1)} – ${tm(t2)} (${hm((t2 - t1) / 36e5)})?`)) return;
+    if(!await mmConfirm(`Add a shift ${dnm(d)} ${tm(t1)} – ${tm(t2)} (${hm((t2 - t1) / 36e5)})?`)) return;
     b.disabled = true;
     if(err(await sb.rpc("clock_add", { p_user:u, p_kind:"in", p_at:t1.toISOString(), p_note:n || "Shift added by a manager" }))) { b.disabled = false; return; }
     if(err(await sb.rpc("clock_add", { p_user:u, p_kind:"out", p_at:t2.toISOString(), p_note:n || "Shift added by a manager" }))) { b.disabled = false; re(); return; }
@@ -316,14 +316,14 @@ window.staffingView = async function(v){
       e = v.querySelector(`[data-te="${u}"]`).value || d, k = v.querySelector(`[data-tk="${u}"]`).value, n = v.querySelector(`[data-tn="${u}"]`).value;
     if(!d) return alert("Pick the first day.");
     if(e < d) return alert("The last day is before the first day.");
-    if(!confirm(`Add ${k === "pto" ? "paid" : "unpaid"} time off ${dnm(d)}${e !== d ? " – " + dnm(e) : ""}? It's approved right away.`)) return;
+    if(!await mmConfirm(`Add ${k === "pto" ? "paid" : "unpaid"} time off ${dnm(d)}${e !== d ? " – " + dnm(e) : ""}? It's approved right away.`)) return;
     b.disabled = true;
     if(err(await sb.rpc("timeoff_add_for", { p_user:u, p_kind:k, p_day:d, p_end_day:e, p_all_day:true, p_start:null, p_end:null, p_reason:n || null }))) { b.disabled = false; return; }
     re(); });
   v.querySelectorAll("[data-ok]").forEach(b => b.onclick = async () => { if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.ok, p_status:"ok", p_note:null }))) re(); });
   v.querySelectorAll("[data-no]").forEach(b => b.onclick = async () => { const n = prompt("Why? (they'll see it)"); if(n === null) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.no, p_status:"denied", p_note:n }))) re(); });
   v.querySelectorAll("[data-off]").forEach(b => b.onclick = async () => { const n = prompt("Why should this punch stop counting? (kept in the log)"); if(!n) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.off, p_status:"off", p_note:n }))) re(); });
-  v.querySelectorAll("[data-wok]").forEach(b => b.onclick = async () => { if(!confirm(`Approve ${hm(+b.dataset.h)} for the week of ${dnm(w)}?`)) return;
+  v.querySelectorAll("[data-wok]").forEach(b => b.onclick = async () => { if(!await mmConfirm(`Approve ${hm(+b.dataset.h)} for the week of ${dnm(w)}?`)) return;
     if(!err(await sb.rpc("clock_week_ok", { p_user:b.dataset.wok, p_week:w, p_hours:+b.dataset.h, p_note:null }))) re(); });
 };
 
@@ -593,7 +593,7 @@ function hxDraw(){
     <a href="#/staffing">Staffing →</a><a href="#" data-hxdone>We're off Hubstaff ✓</a>`;
   b.title = left.length ? "Not on the hub clock yet: " + left.join(", ") : "";
   b.querySelector("[data-hxdone]").onclick = async e => { e.preventDefault();
-    if(!confirm("Confirm we've moved off Hubstaff? The warning stops for you and Kim/Brandon.")) return;
+    if(!await mmConfirm("Confirm we've moved off Hubstaff? The warning stops for you and Kim/Brandon.")) return;
     const r = await sb.rpc("hubstaff_exit_set", { p_done:true, p_note:null }); if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); hxBanner(true); };
   bxAdd(b, "hx", hxSig); v.parentNode.insertBefore(b, v);
 }
