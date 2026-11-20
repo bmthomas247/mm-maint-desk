@@ -99,6 +99,7 @@ dialog.big[open]{display:flex}
 .gtypes{gap:6px} .gtypes .chip{font-size:12.5px;min-height:32px;padding:4px 10px}
 #gfind tbody tr[data-grow]:hover{background:var(--moose-soft)}
 #gfind .bar label{max-width:100%;flex-wrap:wrap} #gfind select{max-width:100%}
+.tacc{margin:22px 0 10px;padding:0} .tacc>summary{cursor:pointer;padding:14px 16px;font-size:15px;list-style:none} .tacc>summary::before{content:"▸ ";color:var(--muted)} .tacc[open]>summary::before{content:"▾ "} .tacc #gdata{padding:0 12px 12px}
 .tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:10px;margin-top:10px} .tcard{padding:12px 14px;min-width:0} .tcard table th,.tcard table td{padding:5px 6px}
 .audbox{background:var(--moose-soft);border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;margin:10px 0 4px}
 </style>
@@ -147,7 +148,7 @@ async function load(){
   if(i.error) throw i.error;
   S.ideas = i.data || []; S.run = (r.data || [])[0] || null; S.rr = rr ? (rr.data || []) : [];
   S.camps = (cp.data || []).filter(c => !c.gone); S.drafts = dr.data || [];
-  if(TAB === "guest" && !GF.loading){ GF.loading = true; Promise.all([gfLoad(), trLoad()]).then(() => { GF.loading = false; gfDraw(); const t = $("#gtrend"); if(t) t.innerHTML = trendHtml(); }); }
+  if(TAB === "guest" && !GF.booted){ GF.booted = true; gfBoot(); }
 }
 
 function render(){
@@ -157,6 +158,7 @@ function render(){
   else if(TAB === "general") h.push(placesHtml(), campsHtml());
   else h.push(campsHtml());
   h.push(listsHtml(), boardHtml());
+  if(TAB === "guest") h.push(dataHtml());   // the search data, folded at the bottom (Brandon 2026-11-20)
   $("#app").innerHTML = h.join("");
 }
 
@@ -852,16 +854,18 @@ function brevoSure(){
   $("#bsGo", d).onclick = () => { d.close(); saveDraft(true); };
 }
 
-/* ---------- Guest: Find guests + email them (Brandon 2026-11-20; mkt_guests / mkt_audiences / mkt_guest_sends, hub_mkt_guests.sql) ---------- */
-// One row per Track guest (stays since 2020, owner stays + owners' guests left out), rebuilt nightly by mkt_guests_build.py. No emails in the hub.
-const GF0 = () => ({ area:"", type:"", from:"", to:"", site:"any", comm:"", home:"", beds:"", stars:"any", stays:"any", last:"any", next:"any", hol:"", season:"any", state:"", nights:"", can:"yes", fresh:"14", q:"" });
-const GF = { f:GF0(), rows:null, err:"", aud:[], sends:[], mode:null, sort:"last", more:false, audName:"" };
+/* ---------- Guest: Find guests + email them (Brandon 2026-11-20; hub_mkt_guests.sql, hub_mkt_guest_find.sql, hub_mkt_area_trends.sql, hub_mkt_search_flights.sql) ----------
+   The search runs in the database (mkt_guest_find): the page only gets counts, the first 250 guests and the ids we can email ("load after the search").
+   Renter types stack (5-star + Christmas = both). Ideas pop up once a day from the search data; the data itself sits folded at the bottom. */
+const GF0 = () => ({ area:"", from:"", to:"", site:"any", comm:"", home:"", beds:"", stars:"any", stays:"any", last:"any", next:"any", hol:"", season:"any", state:"", nights:"", can:"yes", fresh:"14", q:"" });
+const GF = { f:GF0(), types:[], res:null, busy:false, seq:0, err:"", fac:null, aud:[], sends:[], mode:null, sort:"last", more:false, audName:"", tile:"",
+  tr:null, trNat:null, cal:[], routes:[], news:[], topics:[], tf:"all", ideas:null };
 const GTYPES = {
   five:  ["⭐", "5-star reviewers", "Left us a 5-star review", { stars:"5" }],
   good:  ["⭐", "4–5 star reviewers", "Left us a 4 or 5 star review", { stars:"4" }],
   repeat:["🔁", "Came back 2+ times", "Stayed with us more than once", { stays:"2" }],
   direct:["🏠", "Booked direct", "Booked on our website or with our team at least once", { site:"direct" }],
-  ota:   ["🔄", "Happy Airbnb / Vrbo guests", "4–5 stars on Airbnb or Vrbo: bring them direct next time", { site:"ota", stars:"4" }],
+  ota:   ["🔄", "Airbnb / Vrbo guests", "Booked on Airbnb or Vrbo: bring them direct next time", { site:"ota" }],
   once:  ["👋", "Stayed once, never back", "One stay, over a year ago, nothing booked", { stays:"1", last:"1y+", next:"none" }],
   lapsed:["💤", "Not back in 2+ years", "Last stay 2+ years ago, nothing booked", { last:"2y+", next:"none" }],
   xmas:  ["🎄", "Christmas & New Year", "Stayed over Christmas or New Year's", { hol:"xmas" }],
@@ -874,105 +878,95 @@ const GTYPES = {
   hot:   ["📈", "Live where searches are up", "Live in a state where Park City searches are up vs last year (Google Trends)", { area:"hot" }] };
 const HOLS = { xmas:"Christmas or New Year's", christmas:"Christmas (Dec 20–27)", new_year:"New Year's (Dec 28–Jan 2)", thanksgiving:"Thanksgiving", mlk:"MLK weekend", presidents:"Presidents' weekend", july4:"Fourth of July" };
 const SITE = { airbnb:"Airbnb", vrbo:"Vrbo", direct:"Direct", other:"Other site" };
-const gfDay = (n) => new Date(Date.now() - n * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
-const canMail = x => x.has_email && !x.excluded && !x.brevo_unsub;
+const REGIONS = { west:["West Coast", ["CA","OR","WA"]], mtn:["Mountain West", ["CO","ID","MT","NV","WY"]], sw:["Southwest", ["AZ","NM"]], tx:["Texas & Oklahoma", ["TX","OK"]],
+  mw:["Midwest", ["IL","IN","IA","KS","MI","MN","MO","NE","ND","OH","SD","WI"]], se:["Southeast", ["AL","AR","FL","GA","KY","LA","MS","NC","SC","TN","VA","WV"]],
+  ne:["Northeast", ["CT","DC","DE","MA","MD","ME","NH","NJ","NY","PA","RI","VT"]], ut:["Utah (locals)", ["UT"]], hiak:["Hawaii & Alaska", ["HI","AK"]] };
+const AIRLINE = { DAL:"Delta", SKW:"SkyWest (Delta/United/American)", UAL:"United", AAL:"American", SWA:"Southwest", JBU:"JetBlue", ASA:"Alaska", NKS:"Spirit", FFT:"Frontier",
+  HAL:"Hawaiian", KLM:"KLM", AFR:"Air France", ACA:"Air Canada", WJA:"WestJet", AMX:"Aeroméxico", KAL:"Korean Air", VOI:"Volaris", SCX:"Sun Country", AAY:"Allegiant", BRZ:"Breeze", MXY:"Breeze" };
+const niceE = e => (window.top && window.top.niceErr ? window.top.niceErr(e) : (e && e.message) || String(e));
+const plural = (n, a, b) => `${(+n || 0).toLocaleString()} ${(+n === 1) ? a : (b || a + "s")}`;
 
-async function gfLoad(){
-  try {
-    const cols = "contact_id,name,first,city,state,country,has_email,excluded,vip,stays,nights,first_in,last_in,last_out,next_in,homes,communities,max_beds,channels,direct_stays,rent_known,lead_med,avg_nights,winter,summer,holidays,max_people,pets,reviews,stars_best,stars_avg,five,four,low,last_review,review_excerpt,brevo_in,brevo_unsub,stays_j,built_at";
-    const first = await sb.from("mkt_guests").select(cols, { count:"exact" }).order("contact_id").range(0, 999);
-    if(first.error) throw first.error;
-    let all = first.data || []; const n = first.count || all.length, jobs = [];
-    for(let from = 1000; from < n; from += 1000) jobs.push(sb.from("mkt_guests").select(cols).order("contact_id").range(from, from + 999));
-    for(const r of await Promise.all(jobs)){ if(r.error) throw r.error; all = all.concat(r.data || []); }
-    const [a, s, m] = await Promise.all([sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }),
-      sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id,brevo_list_id,contact_ids").order("asked_at", { ascending:false }).limit(200),
-      sb.rpc("mkt_guest_mode")]);
-    GF.rows = all; GF.aud = a.data || []; GF.sends = s.data || []; GF.mode = m.data || null; GF.err = "";
-  } catch(e){ GF.rows = GF.rows || []; GF.err = (e && e.message) || String(e); }
+/* ---------- loading: small things first, guests only after a search ---------- */
+async function gfBoot(){
+  const [fa, au, se, mo, tr, ca, ro, ne, tp] = await Promise.all([
+    sb.rpc("mkt_guest_facets"), sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }),
+    sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id").order("asked_at", { ascending:false }).limit(100),
+    sb.rpc("mkt_guest_mode"),
+    sb.from("mkt_area_trends").select("kind,key,label,share,vs_ly_pct,vs_prior_pct,weeks,few,checked_at").neq("kind", "query").limit(1000),
+    sb.from("mkt_flight_cal").select("origin,market,state,depart,ret,price,low,prev_price,checked_at").gte("depart", today()).order("depart").limit(5000),
+    sb.from("mkt_flight_routes").select("*").limit(2000),
+    sb.from("serp_finds").select("key,title,data,first_seen").eq("kind", "slc_route_news").eq("off", false).order("first_seen", { ascending:false }).limit(20),
+    sb.from("mkt_search_topics").select("*").order("last_seen", { ascending:false }).limit(600)]);
+  GF.fac = fa.data || null; GF.aud = au.data || []; GF.sends = se.data || []; GF.mode = mo.data || null; GF.tr = tr.data || [];
+  GF.cal = ca.data || []; GF.routes = ro.data || []; GF.news = ne.data || []; GF.topics = tp.data || [];
+  const nat = GF.tr.find(r => r.kind === "national" && r.key === "Park City Utah"); GF.trNat = nat ? nat.vs_ly_pct : null;
+  GF.err = fa.error ? niceE(fa.error) : "";
+  gfDraw(); const d = $("#gdata"); if(d) d.innerHTML = dataInner();
+  ideasBuild(); ideasAuto();
 }
-function gfRecent(days){   // guests the hub emailed in the last N days (sent requests)
-  const since = new Date(Date.now() - days * 864e5).toISOString(), out = new Set();
-  GF.sends.filter(s => s.kind === "send" && s.status === "sent" && s.done_at > since).forEach(s => (s.contact_ids || []).forEach(id => out.add(+id)));
-  return out;
+const isOn = () => GF.types.length > 0 || JSON.stringify(GF.f) !== JSON.stringify(GF0());
+function hotStates(){ return (GF.tr || []).filter(t => t.kind === "state" && !t.few && t.vs_ly_pct != null && (t.vs_ly_pct >= 10 || (GF.trNat != null && t.vs_ly_pct - GF.trNat >= 15))).map(t => t.key); }
+function gfParams(f, types, extra){   // filters + stacked renter types -> what mkt_guest_find takes
+  const m = Object.assign({}, f); (types || []).forEach(k => GTYPES[k] && Object.assign(m, GTYPES[k][3]));
+  const p = Object.assign({}, m, { city:m.state || "", sort:GF.sort }); delete p.area; delete p.state;
+  const a = m.area || "";
+  if(a === "hot"){ p.area_kind = "states"; p.states = hotStates(); }
+  else if(a.startsWith("rg:")){ p.area_kind = "states"; p.states = (REGIONS[a.slice(3)] || ["", []])[1]; }
+  else if(a === "st:AU"){ p.area_kind = "country"; p.country = "AU"; }
+  else if(a.startsWith("st:")){ p.area_kind = "states"; p.states = [a.slice(3)]; }
+  else if(a === "intl" || a === "unknown") p.area_kind = a;
+  return Object.assign(p, extra || {});
 }
-function gfMatch(x, f, recent){
-  const t = today(), y1 = gfDay(365), y2 = gfDay(730);
-  if(f.can === "yes" && !canMail(x)) return false;
-  if(f.can === "no" && canMail(x)) return false;
-  if(f.can === "uns" && !x.brevo_unsub) return false;
-  if(f.fresh !== "any" && recent && recent.has(+x.contact_id)) return false;
-  if(f.from || f.to){ const fr = f.from || "1900-01-01", to = f.to || "2999-12-31";
-    if(!(x.stays_j || []).some(s => !s[6] && s[0] <= to && new Date(new Date(s[0] + "T12:00:00").getTime() + s[1] * 864e5).toISOString().slice(0, 10) > fr
-      && (f.site === "any" || (f.site === "ota" ? /airbnb|vrbo/.test(s[3]) : s[3] === f.site)))) return false; }
-  else if(f.site !== "any" && !(f.site === "ota" ? (x.channels || []).some(c => c === "airbnb" || c === "vrbo") : (x.channels || []).includes(f.site))) return false;
-  if(f.comm && !(x.communities || []).includes(f.comm)) return false;
-  if(f.home){ const h = f.home.toLowerCase().replace(/\s+/g, ""); if(!(x.homes || []).some(v => v.toLowerCase().replace(/\s+/g, "").includes(h))) return false; }
-  if(f.beds && !((x.max_beds || 0) >= +f.beds)) return false;
-  if(f.stars === "5" && !x.five) return false;
-  if(f.stars === "4" && !(x.five + x.four)) return false;
-  if(f.stars === "rev" && !x.reviews) return false;
-  if(f.stars === "none" && x.reviews) return false;
-  if(f.stars === "low" && !x.low) return false;
-  if(f.stays === "1" && x.stays !== 1) return false;
-  if(f.stays === "2" && x.stays < 2) return false;
-  if(f.stays === "3" && x.stays < 3) return false;
-  if(f.stays === "0" && x.stays !== 0) return false;
-  const li = x.last_in || "";
-  if(f.last === "1y" && !(li >= y1)) return false;
-  if(f.last === "1-2y" && !(li < y1 && li >= y2)) return false;
-  if(f.last === "1y+" && !(li && li < y1)) return false;
-  if(f.last === "2y+" && !(li && li < y2)) return false;
-  if(f.next === "has" && !x.next_in) return false;
-  if(f.next === "none" && x.next_in) return false;
-  if(f.hol){ const H = x.holidays || []; if(f.hol === "xmas" ? !(H.includes("christmas") || H.includes("new_year")) : !H.includes(f.hol)) return false; }
-  if(f.season === "winter" && !x.winter) return false;
-  if(f.season === "summer" && !x.summer) return false;
-  if(!areaMatch(x, f.area)) return false;
-  if(f.state){ const s = f.state.trim().toLowerCase(); if(s && ![x.state, x.country, x.city].some(v => String(v || "").toLowerCase().startsWith(s))) return false; }
-  if(f.nights && !((+x.avg_nights || 0) >= +f.nights)) return false;
-  if(f.q){ const q = f.q.trim().toLowerCase(); if(q && ![x.name, (x.homes || []).join(" "), x.city, x.state].some(v => String(v || "").toLowerCase().includes(q))) return false; }
-  return true;
+async function gfFind(f, types, extra){ const r = await sb.rpc("mkt_guest_find", { p:gfParams(f, types, extra) }); if(r.error) throw r.error; return r.data; }
+async function gfSearch(){
+  if(!isOn()){ GF.res = null; return gfDraw(); }
+  const my = ++GF.seq; GF.busy = true; gfDraw();
+  try { const d = await gfFind(GF.f, GF.types); if(my !== GF.seq) return; GF.res = d; GF.err = ""; }
+  catch(e){ if(my !== GF.seq) return; GF.err = niceE(e); }
+  GF.busy = false; gfDraw();
 }
-function gfRows(f){ f = f || GF.f; const rc = f.fresh !== "any" ? gfRecent(+f.fresh || 14) : null; return (GF.rows || []).filter(x => gfMatch(x, f, rc)); }
-const gfSorts = { last:(a, b) => String(b.last_in || b.next_in || "").localeCompare(String(a.last_in || a.next_in || "")), stays:(a, b) => b.stays - a.stays || String(b.last_in).localeCompare(String(a.last_in)),
-  stars:(a, b) => (b.five * 2 + b.four) - (a.five * 2 + a.four) || b.stays - a.stays, name:(a, b) => String(a.name).localeCompare(String(b.name)), next:(a, b) => String(a.next_in || "9").localeCompare(String(b.next_in || "9")) };
-function gfLabel(){
-  const f = GF.f, bits = [];
-  if(f.type && GTYPES[f.type]) bits.push(GTYPES[f.type][1]);
-  if(f.area) bits.push(f.area === "hot" ? "live where searches are up" : f.area.startsWith("rg:") ? (REGIONS[f.area.slice(3)] || [""])[0] : f.area.startsWith("st:") ? "from " + f.area.slice(3) : f.area === "intl" ? "outside the US" : "no address");
+function gfLabel(f, types){
+  f = f || GF.f; types = types || GF.types; const bits = types.map(k => GTYPES[k] ? GTYPES[k][1] : k);
+  const a = f.area; if(a && !types.includes("hot")) bits.push(a === "hot" ? "live where searches are up" : a.startsWith("rg:") ? (REGIONS[a.slice(3)] || [""])[0] : a === "st:AU" ? "Australia" : a.startsWith("st:") ? "from " + a.slice(3) : a === "intl" ? "outside the US" : "no address");
   if(f.from || f.to) bits.push(`stayed ${f.from ? fmtD(f.from) : "…"}–${f.to ? fmtD(f.to) : "…"}`);
-  if(f.comm) bits.push(f.comm); if(f.home) bits.push(f.home); if(f.state) bits.push("from " + f.state);
-  return bits.join(" · ") || "All guests";
+  if(f.comm) bits.push(f.comm); if(f.home) bits.push(f.home); if(f.state) bits.push(f.state);
+  return bits.join(" + ") || "All guests";
 }
-function gfTile(k, label, n, sub, on, title){ return `<button type="button" class="kpi${on ? " on" : ""}" data-gtile="${k}" title="${esc(title)}"><small>${label}</small><b>${n.toLocaleString()}</b><small>${sub}</small></button>`; }
-function findHtml(){ return `<div id="gtrend">${trendHtml()}</div><h2 id="gfh" style="margin-top:22px">🔎 Find guests</h2><div id="gfind">${findInner()}</div>`; }
+
+/* ---------- the Find guests section ---------- */
+function findHtml(){
+  const n = (GF.ideas || []).length;
+  return `<div class="bar" style="justify-content:space-between;margin:14px 0 0"><h2 id="gfh" style="margin:0">🔎 Find guests</h2>
+    <button class="btn" data-ideas="1" ${GF.ideas ? "" : "disabled"}>💡 Ideas for this week${n ? ` (${n})` : ""}</button></div><div id="gfind">${findInner()}</div>`;
+}
+function areaSelect(f){
+  const n = (GF.fac && GF.fac.states) || {}, st = Object.keys(n).sort((a, b) => n[b] - n[a]), o = (v, l) => `<option value="${esc(v)}"${f.area === v ? " selected" : ""}>${esc(l)}</option>`;
+  return `<select data-gff="area">${o("", "anywhere")}${o("hot", "📈 states where Park City searches are up")}
+    <optgroup label="Regions">${Object.entries(REGIONS).map(([k, r]) => o("rg:" + k, r[0])).join("")}</optgroup>
+    <optgroup label="States (our past guests)">${st.map(s => o("st:" + s, `${s} (${n[s].toLocaleString()})`)).join("")}</optgroup>
+    ${o("st:AU", "Australia")}${o("intl", "outside the US")}${o("unknown", "no address in Track")}</select>`;
+}
+function gfTile(k, label, n, sub, title){ return `<button type="button" class="kpi${GF.tile === k ? " on" : ""}" data-gtile="${k}" title="${esc(title)}"><small>${label}</small><b>${(+n || 0).toLocaleString()}</b><small>${sub}</small></button>`; }
 function findInner(){
-  if(!GF.rows) return `<p class="muted">Loading every guest…</p>`;
-  if(GF.err && !GF.rows.length) return `<p class="muted">Couldn't load the guest list: ${esc(GF.err)}</p>`;
-  const f = GF.f, nocan = Object.assign({}, f, { can:"any", fresh:"any" }), base = gfRows(nocan), rows = gfRows();
-  const emailable = base.filter(canMail), five = base.filter(x => x.five), back = base.filter(x => x.stays >= 2), coming = base.filter(x => x.next_in), uns = base.filter(x => x.brevo_unsub);
-  const comms = [...new Set(GF.rows.flatMap(x => x.communities || []))].sort();
-  const built = GF.rows.reduce((m, x) => x.built_at > m ? x.built_at : m, "");
+  const f = GF.f, R = GF.res, fac = GF.fac || {};
   const sel = (k, opts) => `<select data-gff="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}"${String(f[k]) === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
-  const sorted = rows.slice().sort(gfSorts[GF.sort] || gfSorts.last);
   const recent = GF.sends.filter(s => s.kind === "send").slice(0, 8);
-  return `<p class="muted" style="margin:0 0 8px">Every guest who stayed with us since 2020 (${GF.rows.length.toLocaleString()}), from Track. Owners and owners' guests are left out. Pick a renter type, or set your own filters below.</p>
-  <div class="bar gtypes">${Object.entries(GTYPES).map(([k, t]) => `<button class="chip${f.type === k ? " on" : ""}" data-gt="${k}" title="${esc(t[2])}">${t[0]} ${esc(t[1])}</button>`).join("")}
-    ${f.type || JSON.stringify(f) !== JSON.stringify(GF0()) ? `<button class="chip" data-gt="" title="Clear every filter">✕ Clear</button>` : ""}</div>
+  return `<p class="muted" style="margin:4px 0 8px">Every guest who stayed with us since 2020${fac.total ? ` (${fac.total.toLocaleString()}; ${(fac.can || 0).toLocaleString()} we can email)` : ""}, from Track. Owners and owners' guests are left out. Tap renter types (they stack) or set filters, and the guests show up.</p>
+  <div class="bar gtypes">${Object.entries(GTYPES).map(([k, t]) => `<button class="chip${GF.types.includes(k) ? " on" : ""}" data-gt="${k}" title="${esc(t[2])}">${t[0]} ${esc(t[1])}</button>`).join("")}
+    ${isOn() ? `<button class="chip" data-gt="" title="Clear every filter">✕ Clear</button>` : ""}</div>
   ${GF.aud.length ? `<div class="bar"><span class="muted" style="font-weight:800">Saved searches:</span>${GF.aud.map(a => `<span class="chip" style="display:inline-flex;gap:6px;align-items:center"><a href="#" data-gaud="${a.id}" style="color:inherit;text-decoration:none" title="${esc(a.note || "Saved by " + (a.created_name || ""))}">📌 ${esc(a.name)}${a.last_count != null ? ` <span class="muted">(${a.last_count.toLocaleString()})</span>` : ""}</a><a href="#" data-gaudx="${a.id}" title="Take this saved search off the list" style="color:var(--muted);text-decoration:none">✕</a></span>`).join("")}</div>` : ""}
   <div class="box" style="padding:12px 14px;overflow:visible"><div class="bar" style="margin:0 0 8px">
-    <label>Stayed from <input type="date" data-gff="from" value="${esc(f.from)}"></label><label>to <input type="date" data-gff="to" value="${esc(f.to)}"></label>
     <label>Lives in ${areaSelect(f)}</label>
+    <label>Stayed from <input type="date" data-gff="from" value="${esc(f.from)}"></label><label>to <input type="date" data-gff="to" value="${esc(f.to)}"></label>
     <label>Booked on ${sel("site", [["any","any site"],["direct","our website / direct"],["airbnb","Airbnb"],["vrbo","Vrbo"],["ota","Airbnb or Vrbo"],["other","other sites"]])}</label>
     <label>Reviews ${sel("stars", [["any","any"],["5","5 stars"],["4","4–5 stars"],["rev","left any review"],["none","no review"],["low","a 3 star or lower"]])}</label>
-    <label>Stays ${sel("stays", [["any","any"],["1","just 1"],["2","2 or more"],["3","3 or more"],["0","booked, not stayed yet"]])}</label>
-    <label>Last stay ${sel("last", [["any","any time"],["1y","in the last year"],["1-2y","1–2 years ago"],["1y+","over a year ago"],["2y+","over 2 years ago"]])}</label>
-    <label>Coming up ${sel("next", [["any","either"],["has","has a stay booked"],["none","nothing booked"]])}</label>
     <label>Find <input data-gff="q" placeholder="name, home, city" value="${esc(f.q)}" style="width:150px"></label>
     <button class="btn small" data-gmore="1">${GF.more ? "Fewer filters ▴" : "More filters ▾"}</button></div>
     ${GF.more ? `<div class="bar" style="margin:0 0 8px">
-    <label>Community <select data-gff="comm"><option value="">any</option>${comms.map(c => `<option${f.comm === c ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+    <label>Stays ${sel("stays", [["any","any"],["1","just 1"],["2","2 or more"],["3","3 or more"],["0","booked, not stayed yet"]])}</label>
+    <label>Last stay ${sel("last", [["any","any time"],["1y","in the last year"],["1-2y","1–2 years ago"],["1y+","over a year ago"],["2y+","over 2 years ago"]])}</label>
+    <label>Coming up ${sel("next", [["any","either"],["has","has a stay booked"],["none","nothing booked"]])}</label>
+    <label>Community <select data-gff="comm"><option value="">any</option>${(fac.comms || []).map(c => `<option${f.comm === c ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
     <label>Home <input data-gff="home" placeholder="e.g. BHL 3307" value="${esc(f.home)}" style="width:120px"></label>
     <label>Bedrooms ${sel("beds", [["","any"],["2","2+"],["3","3+"],["4","4+"],["5","5+"],["6","6+"]])}</label>
     <label>Holiday ${sel("hol", [["",""]].concat(Object.entries(HOLS)).map(([v, l]) => [v, v ? l : "any"]))}</label>
@@ -980,50 +974,58 @@ function findInner(){
     <label>Stays average ${sel("nights", [["","any length"],["3","3+ nights"],["5","5+ nights"],["7","7+ nights"],["14","14+ nights"]])}</label>
     <label>City or state <input data-gff="state" placeholder="e.g. Dallas" value="${esc(f.state)}" style="width:120px"></label></div>` : ""}
     <div class="bar" style="margin:0">
-    <label>Email ${sel("can", [["yes","only guests we can email"],["any","everyone"],["no","only guests we can't email"]])}</label>
+    <label>Email ${sel("can", [["yes","only guests we can email"],["any","everyone"],["no","only guests we can't email"],["uns","only unsubscribed"]])}</label>
     <label>Skip guests the hub emailed in the last ${sel("fresh", [["14","14 days"],["30","30 days"],["7","7 days"],["any","(don't skip)"]])}</label></div></div>
-  <div class="kpis">
-    ${gfTile("all", "Guests found", base.length, gfLabel(), !["can","five","back","coming","uns"].some(k => GF.tile === k), "Show every guest this search finds")}
-    ${gfTile("can", "We can email", emailable.length, `${base.length ? Math.round(emailable.length / base.length * 100) : 0}% have an email + not unsubscribed`, GF.tile === "can", "Only guests with an email, not unsubscribed or Do Not Rent")}
-    ${gfTile("five", "Left 5 stars", five.length, `${five.filter(canMail).length.toLocaleString()} we can email`, GF.tile === "five", "Only 5-star reviewers")}
-    ${gfTile("back", "Came back 2+ times", back.length, `${back.filter(canMail).length.toLocaleString()} we can email`, GF.tile === "back", "Only guests who stayed more than once")}
-    ${gfTile("coming", "Booked and coming", coming.length, "have a stay coming up", GF.tile === "coming", "Only guests with a stay coming up")}
-    ${gfTile("uns", "Unsubscribed", uns.length, "Brevo won't email them", GF.tile === "uns", "Only guests who unsubscribed in Brevo")}
+  ${!isOn() ? `<div class="box" style="padding:22px;text-align:center;margin-top:10px"><b>Pick a renter type or a filter to see guests.</b>
+      <div class="muted" style="margin-top:4px">Not sure where to start? <a href="#" data-ideas="1">💡 See this week's ideas</a>.</div></div>`
+  : GF.err && !R ? `<p class="muted">Couldn't search: ${esc(GF.err)}</p>`
+  : !R ? `<p class="muted">Finding guests…</p>` : resultsHtml(R)}
+  ${recent.length ? `<h3 style="margin:16px 0 6px;font-size:15px">Emails sent to guest searches</h3><div class="box"><table><thead><tr><th>Email</th><th>Search</th><th class="n">Guests</th><th>Status</th><th>When</th></tr></thead><tbody>
+    ${recent.map(s => `<tr><td><b>${esc(s.subject || "")}</b></td><td>${esc(s.audience_name || "")}</td><td class="n">${(s.emailed ?? s.people ?? 0).toLocaleString()}</td>
+      <td>${s.status === "sent" ? `<span class="pill green">Sent</span>` : s.status === "failed" || s.status === "refused" ? `<span class="pill red" title="${esc(s.note || "")}">${esc(s.status)}</span>` : `<span class="pill blue">${esc(s.status)}</span>`}</td>
+      <td>${esc(s.asked_name || "")} · ${esc(fmtDT(s.done_at || s.asked_at))}</td></tr>`).join("")}</tbody></table></div>` : ""}
+  <p class="src">Sources: Track reservations (since 2020) + Track contacts, Track reviews (staff-flagged ones left out), Brevo contacts (unsubscribed = blocklisted in Brevo). Rebuilt nightly${fac.built_at ? `, last ${esc(fmtDT(fac.built_at))}` : ""}. The hub keeps no email addresses: they're read from Track only when an email goes out.</p>`;
+}
+function resultsHtml(R){
+  const ids = R.ids || [], rows = R.rows || [];
+  return `<div class="tfnote" style="margin:10px 0 4px;font-size:14px"><b>${(R.shown || 0).toLocaleString()} guests</b> · ${esc(gfLabel())}${GF.busy ? ` <span class="muted">· updating…</span>` : ""}</div>
+  <div class="kpis" style="margin-top:4px">
+    ${gfTile("all", "Guests found", R.found, "any email status", "Show every guest this search finds, emailable or not")}
+    ${gfTile("can", "We can email", R.can, `${R.found ? Math.round(R.can / R.found * 100) : 0}% have an email + not unsubscribed`, "Only guests with an email, not unsubscribed or Do Not Rent")}
+    ${gfTile("five", "Left 5 stars", R.five, `${(R.five_can || 0).toLocaleString()} we can email`, "Only 5-star reviewers")}
+    ${gfTile("back", "Came back 2+ times", R.back, `${(R.back_can || 0).toLocaleString()} we can email`, "Only guests who stayed more than once")}
+    ${gfTile("coming", "Booked and coming", R.coming, "have a stay coming up", "Only guests with a stay coming up")}
+    ${gfTile("uns", "Unsubscribed", R.uns, "Brevo won't email them", "Only guests who unsubscribed in Brevo")}
   </div>
   <div class="bar">
-    <button class="btn primary" data-gmail="1" ${rows.filter(canMail).length ? "" : "disabled"}>✉️ Email these ${rows.filter(canMail).length.toLocaleString()} guests</button>
+    <button class="btn primary" data-gmail="1" ${ids.length ? "" : "disabled"}>✉️ Email these ${ids.length.toLocaleString()} guests</button>
     <button class="btn" data-gsave="1">💾 Save this search</button>
     <button class="btn" data-gcsv="1">⬇ Download CSV</button>
-    <label class="muted" style="font-size:13px">Sort <select data-gsort="1">${[["last","newest stay first"],["stays","most stays"],["stars","best reviews"],["next","next stay"],["name","name A–Z"]].map(([v, l]) => `<option value="${v}"${GF.sort === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-    <span class="muted">${rows.length.toLocaleString()} guests shown</span></div>
+    <label class="muted" style="font-size:13px">Sort <select data-gsort="1">${[["last","newest stay first"],["stays","most stays"],["stars","best reviews"],["next","next stay"],["name","name A–Z"]].map(([v, l]) => `<option value="${v}"${GF.sort === v ? " selected" : ""}>${l}</option>`).join("")}</select></label></div>
   <div class="box"><table><thead><tr><th>Guest</th><th>From</th><th class="n">Stays</th><th>Last stay</th><th>Next stay</th><th>Booked on</th><th>Reviews</th><th>Email</th></tr></thead>
-  <tbody>${sorted.slice(0, 250).map(x => { const s = (x.stays_j || []).find(v => !v[6] && v[0] <= today()) || (x.stays_j || [])[0] || [];
+  <tbody>${rows.map(x => { const s = (x.stays_j || []).find(v => !v[6] && v[0] <= today()) || (x.stays_j || [])[0] || [];
     return `<tr data-grow="${x.contact_id}" style="cursor:pointer" title="Tap to see every stay"><td><b>${esc(x.name || "—")}</b>${x.vip ? ` <span class="pill blue">VIP</span>` : ""}</td>
     <td>${esc([x.city, x.state].filter(Boolean).join(", ") || x.country || "")}</td><td class="n">${x.stays}</td>
-    <td>${x.last_in ? `${esc(fmtD(x.last_in))}<div class="muted">${esc(s[2] || "")} · ${esc(s[1] || "")} nights</div>` : ""}</td>
+    <td>${x.last_in ? `${esc(fmtD(x.last_in))}<div class="muted">${esc(s[2] || "")}${s[1] ? " · " + s[1] + " nights" : ""}</div>` : ""}</td>
     <td>${x.next_in ? `<span class="pill green">${esc(fmtD(x.next_in))}</span>` : ""}</td>
     <td>${(x.channels || []).map(c => esc(SITE[c] || c)).join(", ")}</td>
     <td>${x.reviews ? `${x.five ? `<span class="pill green">${x.five}× 5★</span> ` : ""}${x.four ? `<span class="pill">${x.four}× 4★</span> ` : ""}${x.low ? `<span class="pill red">${x.low}× ≤3★</span>` : ""}` : `<span class="muted">none</span>`}</td>
     <td>${x.excluded ? `<span class="pill red">${x.excluded === "dnr" ? "Do Not Rent" : x.excluded === "owner" ? "owner" : "blocked in Track"}</span>` : x.brevo_unsub ? `<span class="pill red">unsubscribed</span>` : !x.has_email ? `<span class="pill">no email</span>` : `<span class="pill green">✓ can email</span>`}</td></tr>`; }).join("")
     || `<tr><td colspan="8" class="empty">No guests match. Try fewer filters.</td></tr>`}</tbody></table>
-  ${rows.length > 250 ? `<div class="empty">Showing the first 250. The email and the CSV use all ${rows.length.toLocaleString()}.</div>` : ""}</div>
-  ${recent.length ? `<h3 style="margin:16px 0 6px;font-size:15px">Emails sent to guest searches</h3><div class="box"><table><thead><tr><th>Email</th><th>Search</th><th class="n">Guests</th><th>Status</th><th>When</th></tr></thead><tbody>
-    ${recent.map(s => `<tr><td><b>${esc(s.subject || "")}</b></td><td>${esc(s.audience_name || "")}</td><td class="n">${(s.emailed ?? s.people ?? 0).toLocaleString()}</td>
-      <td>${s.status === "sent" ? `<span class="pill green">Sent</span>` : s.status === "failed" || s.status === "refused" ? `<span class="pill red" title="${esc(s.note || "")}">${esc(s.status)}</span>` : `<span class="pill blue">${esc(s.status)}</span>`}</td>
-      <td>${esc(s.asked_name || "")} · ${esc(fmtDT(s.done_at || s.asked_at))}</td></tr>`).join("")}</tbody></table></div>` : ""}
-  <p class="src">Sources: Track reservations (since 2020) + Track contacts, Track reviews (staff-flagged ones left out), Brevo contacts (unsubscribed = blocklisted in Brevo). Rebuilt nightly${built ? `, last ${esc(fmtDT(built))}` : ""}. The hub keeps no email addresses: they're read from Track only when an email goes out.</p>`;
+  ${R.shown > rows.length ? `<div class="empty">Showing the first ${rows.length}. The email and the CSV use all ${R.shown.toLocaleString()}.</div>` : ""}</div>`;
 }
 function gfDraw(focusKey){
   const box = $("#gfind"); if(!box) return;
   const a = document.activeElement, k = a && a.dataset && a.dataset.gff, pos = a && a.selectionStart;
   box.innerHTML = findInner();
+  const ib = $('[data-ideas="1"].btn'); if(ib){ ib.disabled = !GF.ideas; ib.textContent = "💡 Ideas for this week" + ((GF.ideas || []).length ? ` (${GF.ideas.length})` : ""); }
   if(k && (focusKey || a.tagName === "INPUT")){ const i = box.querySelector(`[data-gff="${k}"]`); if(i){ i.focus(); try { if(pos != null) i.setSelectionRange(pos, pos); } catch(e){} } }
 }
-function gfDetail(id){
-  const x = GF.rows.find(r => r.contact_id == id); if(!x) return;
+async function gfDetail(id){
+  const r = await sb.from("mkt_guests").select("*").eq("contact_id", id).maybeSingle(); const x = r.data; if(!x) return;
   const d = $("#dlg");
   d.innerHTML = `<h3 style="margin:0 0 4px">${esc(x.name || "Guest")}</h3>
-    <p class="muted" style="margin:0 0 8px">${esc([x.city, x.state, x.country].filter(Boolean).join(", "))} · ${x.stays} stay${x.stays === 1 ? "" : "s"}, ${x.nights} nights${x.lead_med != null ? ` · usually books ${x.lead_med} days ahead` : ""}${x.max_people ? ` · up to ${x.max_people} people` : ""}${x.rent_known ? ` · rent we have on file $${Math.round(x.rent_known).toLocaleString()}` : ""}</p>
+    <p class="muted" style="margin:0 0 8px">${esc([x.city, x.state, x.country].filter(Boolean).join(", "))} · ${plural(x.stays, "stay")}, ${x.nights} nights${x.lead_med != null ? ` · usually books ${x.lead_med} days ahead` : ""}${x.max_people ? ` · up to ${x.max_people} people` : ""}${x.rent_known ? ` · rent we have on file $${Math.round(x.rent_known).toLocaleString()}` : ""}</p>
     <div class="box" style="max-height:50vh;overflow:auto"><table><thead><tr><th>Arrive</th><th class="n">Nights</th><th>Home</th><th>Booked on</th><th>Res #</th></tr></thead><tbody>
     ${(x.stays_j || []).map(s => `<tr${s[6] ? ` style="opacity:.5" title="Cancelled"` : ""}><td>${esc(fmtD(s[0]))}${s[6] ? " (cancelled)" : ""}</td><td class="n">${s[1]}</td><td>${esc(s[2] || "")}${s[4] ? ` <span class="muted">${s[4]} BR</span>` : ""}</td><td>${esc(SITE[s[3]] || s[3] || "")}</td>
       <td><a href="https://moosemanagement.trackhs.com/pms/reservations/view/${esc(s[5])}/" target="_blank" rel="noopener">${esc(s[5])} ↗</a></td></tr>`).join("")}</tbody></table></div>
@@ -1031,68 +1033,75 @@ function gfDetail(id){
     <div class="bar" style="justify-content:flex-end;margin-top:12px"><button class="btn" id="gdClose">Close</button></div>`;
   d.showModal(); $("#gdClose", d).onclick = () => d.close();
 }
-function gfCsv(){
-  const rows = gfRows(), cols = ["name","city","state","country","stays","nights","first_in","last_in","next_in","homes","communities","channels","five","four","low","stars_avg","holidays","avg_nights","max_beds","can_email"];
+async function gfCsv(){
+  let d; try { d = await gfFind(GF.f, GF.types, { limit:20000, lite:true }); } catch(e){ return alert(niceE(e)); }
+  const rows = d.rows || [], cols = ["name","city","state","country","stays","nights","last_in","next_in","homes","communities","channels","five","four","low","holidays","avg_nights","max_beds","can_mail"];
   const q = v => { v = Array.isArray(v) ? v.join(" ") : v; return /[",\n]/.test(String(v ?? "")) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ""); };
-  const blob = new Blob([[cols.join(",")].concat(rows.map(r => cols.map(c => q(c === "can_email" ? (canMail(r) ? "yes" : "no") : r[c])).join(","))).join("\n")], { type:"text/csv" });
+  const blob = new Blob([[cols.join(",")].concat(rows.map(r => cols.map(c => q(r[c])).join(","))).join("\n")], { type:"text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `guests-${today()}.csv`; a.click();
 }
-function gfSetType(k){
-  const keep = { can:GF.f.can, fresh:GF.f.fresh };
-  GF.f = Object.assign(GF0(), keep, k && GTYPES[k] ? GTYPES[k][3] : {}, { type:k || "" }); GF.tile = ""; GF.audName = k && GTYPES[k] ? GTYPES[k][1] : "";
-  if(GF.f.hol || GF.f.season !== "any" || GF.f.beds || GF.f.nights) GF.more = true;
+function gfApply(types, f, name){   // used by ideas, saved searches and the data section
+  GF.types = (types || []).slice(); GF.f = Object.assign(GF0(), f || {}); GF.tile = ""; GF.audName = name || "";
+  if(GF.f.hol || GF.f.season !== "any" || GF.f.beds || GF.f.nights || GF.f.comm || GF.f.home || GF.f.stays !== "any" || GF.f.last !== "any") GF.more = true;
+  gfSearch(); const g = document.getElementById("gfh"); if(g) g.scrollIntoView({ block:"start", behavior:"smooth" });
+}
+function gfEmail(start, name){   // open the designer with this search attached
+  name = name || GF.audName || gfLabel();
+  design("new"); DES.d.name = name + " · " + fmtD(today()); DES.d.design.blocks = start || START.find({ type:GF.types[0] });
+  DES.d.design.aud = { name, filters:Object.assign({}, GF.f), types:GF.types.slice() }; DES.audInfo = null; drawDesigner(); audCount();
 }
 document.addEventListener("click", async e => {
   const t = e.target.closest("[data-gt],[data-gtile],[data-gaud],[data-gaudx],[data-gsave],[data-gcsv],[data-gmail],[data-grow],[data-gmore]");
   if(!t || !t.closest("#gfind")) return;
   e.preventDefault();
-  if(t.dataset.gt != null){ gfSetType(GF.f.type === t.dataset.gt ? "" : t.dataset.gt); return gfDraw(); }
+  if(t.dataset.gt != null){ const k = t.dataset.gt;
+    if(!k){ GF.types = []; GF.f = GF0(); GF.tile = ""; GF.audName = ""; }
+    else GF.types = GF.types.includes(k) ? GF.types.filter(x => x !== k) : GF.types.concat(k);
+    GF.audName = ""; return gfSearch(); }
   if(t.dataset.gmore){ GF.more = !GF.more; return gfDraw(); }
-  if(t.dataset.gtile){ const k = t.dataset.gtile, on = GF.tile === k;
-    GF.tile = on || k === "all" ? "" : k;
-    Object.assign(GF.f, { can:"any", stars:GF.f.stars, stays:GF.f.stays, next:GF.f.next });
-    if(k === "can" && !on) GF.f.can = "yes";
+  if(t.dataset.gtile){ const k = t.dataset.gtile, on = GF.tile === k; GF.tile = on || k === "all" ? "" : k;
+    GF.f.can = k === "all" ? "any" : k === "uns" ? (on ? "yes" : "uns") : k === "can" ? "yes" : GF.f.can;
     if(k === "five") GF.f.stars = on ? "any" : "5";
     if(k === "back") GF.f.stays = on ? "any" : "2";
     if(k === "coming") GF.f.next = on ? "any" : "has";
-    if(k === "uns"){ GF.f.can = on ? "yes" : "uns"; }
-    if(k === "all"){ GF.f.can = "any"; }
-    return gfDraw(); }
-  if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ GF.f = Object.assign(GF0(), a.filters || {}); GF.audName = a.name; GF.tile = ""; GF.more = true; gfDraw(); } return; }
+    return gfSearch(); }
+  if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ const fl = a.filters || {}; gfApply(fl.types || [], fl.f || fl, a.name); } return; }
   if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !confirm(`Take "${a.name}" off the saved searches?`)) return;
     const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return alert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
   if(t.dataset.gsave){ const name = prompt("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
     const ex = GF.aud.find(x => x.name.toLowerCase() === name.trim().toLowerCase());
-    const r = await sb.rpc("mkt_audience_save", { p_id:ex ? ex.id : null, p_name:name, p_filters:Object.assign({}, GF.f), p_count:gfRows().length, p_note:null });
+    const r = await sb.rpc("mkt_audience_save", { p_id:ex ? ex.id : null, p_name:name, p_filters:{ f:Object.assign({}, GF.f), types:GF.types.slice() }, p_count:(GF.res || {}).shown || 0, p_note:null });
     if(r.error) return alert(niceE(r.error));
     const a = await sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }); GF.aud = a.data || GF.aud; GF.audName = name; return gfDraw(); }
   if(t.dataset.gcsv) return gfCsv();
   if(t.dataset.grow) return gfDetail(t.dataset.grow);
-  if(t.dataset.gmail){ const name = GF.audName || gfLabel();
-    design("new"); DES.d.name = name + " · " + fmtD(today()); DES.d.design.blocks = START.find(GF.f);
-    DES.d.design.aud = { name, filters:Object.assign({}, GF.f) }; drawDesigner(); return; }
+  if(t.dataset.gmail) return gfEmail();
 });
 document.addEventListener("change", e => {
   const t = e.target;
-  if(t.dataset && t.dataset.gsort != null && t.closest("#gfind")){ GF.sort = t.value; return gfDraw(); }
-  if(!t.dataset || t.dataset.gff == null || !t.closest("#gfind") || t.tagName === "INPUT" && t.type !== "date") return;
-  GF.f[t.dataset.gff] = t.value; if(t.dataset.gff === "can") GF.tile = ""; GF.f.type = ""; gfDraw();
+  if(t.dataset && t.dataset.gsort != null && t.closest("#gfind")){ GF.sort = t.value; return gfSearch(); }
+  if(!t.dataset || t.dataset.gff == null || !t.closest("#gfind") || (t.tagName === "INPUT" && t.type !== "date")) return;
+  GF.f[t.dataset.gff] = t.value; if(t.dataset.gff === "can") GF.tile = ""; GF.audName = ""; gfSearch();
 });
 document.addEventListener("input", e => {
   const t = e.target; if(!t.dataset || t.dataset.gff == null || !t.closest("#gfind") || t.type === "date") return;
-  GF.f[t.dataset.gff] = t.value; GF.f.type = ""; clearTimeout(GF.tm); GF.tm = setTimeout(() => gfDraw(true), 250);
+  GF.f[t.dataset.gff] = t.value; GF.audName = ""; clearTimeout(GF.tm); GF.tm = setTimeout(gfSearch, 350);
 });
-const niceE = e => (window.top && window.top.niceErr ? window.top.niceErr(e) : (e && e.message) || String(e));
+document.addEventListener("click", e => { const b = e.target.closest("[data-ideas]"); if(!b) return; e.preventDefault(); ideasOpen(); });
 
-// the email designer: "To" box when the email was started from a search
+/* ---------- the email designer's "To" box ---------- */
+async function audCount(){
+  const D = DES.d, A = D && D.design && D.design.aud; if(!A) return;
+  try { const r = await gfFind(A.filters, A.types || [], { limit:0 }); if(DES.d === D){ DES.audInfo = { ids:(r.ids || []).map(Number) }; drawDesigner(); } }
+  catch(e){ if(DES.d === D){ DES.audInfo = { err:niceE(e) }; drawDesigner(); } }
+}
 function audBox(){
   const D = DES.d, A = D.design && D.design.aud; if(!A) return "";
-  if(!GF.rows) return `<div class="audbox"><b>To: guests from “${esc(A.name)}”</b><div class="muted">Open the Guest tab to load the guest list.</div></div>`;
-  const ids = gfRows(A.filters).filter(canMail).map(x => +x.contact_id), M = GF.mode || {};
-  const mine = D.id ? GF.sends.filter(s => s.draft_id === D.id) : [], last = mine[0];
-  const sent = mine.find(s => s.kind === "send" && s.status === "sent");
-  return `<div class="audbox"><b>To: ${ids.length.toLocaleString()} guests</b> from the search “${esc(A.name)}”
-    <div class="muted" style="font-size:12.5px">Guests with an email, not unsubscribed, not Do Not Rent${A.filters.fresh !== "any" ? `, not emailed by the hub in the last ${esc(A.filters.fresh)} days` : ""}. The hub reads their emails from Track and puts them on a new Brevo list when you send.</div>
+  if(!DES.audInfo){ setTimeout(audCount, 0); DES.audInfo = { loading:true }; }
+  const I = DES.audInfo, ids = I.ids || [], M = GF.mode || {};
+  const mine = D.id ? GF.sends.filter(s => s.draft_id === D.id) : [], last = mine[0], sent = mine.find(s => s.kind === "send" && s.status === "sent");
+  return `<div class="audbox"><b>To: ${I.loading ? "…" : ids.length.toLocaleString()} guests</b> from the search “${esc(A.name)}”
+    <div class="muted" style="font-size:12.5px">${I.err ? esc(I.err) : `Guests with an email, not unsubscribed, not Do Not Rent${A.filters.fresh !== "any" ? `, not emailed by the hub in the last ${esc(A.filters.fresh)} days` : ""}. The hub reads their emails from Track and puts them on a new Brevo list when you send.`}</div>
     ${last ? `<div style="margin-top:6px">${last.status === "asked" || last.status === "sending" ? `<span class="pill blue">⏳ ${last.kind === "test" ? "Test" : "Send"} ${last.status === "asked" ? "waiting for the office PC" : "going out"}…</span>`
       : last.status === "sent" ? `<span class="pill green">${last.kind === "test" ? "✓ Test sent" : "✓ Sent"}</span>` : `<span class="pill red">${esc(last.status)}</span>`} <span class="muted" style="font-size:12.5px">${esc(last.note || "")}</span></div>` : ""}
     ${sent ? "" : M.can_send ? `<div class="bar" style="margin:8px 0 0"><button class="btn" data-gtest="1" ${ids.length ? "" : "disabled"}>📧 Send me a test</button>
@@ -1103,7 +1112,7 @@ async function gfAsk(kind){
   const D = DES.d, A = D.design.aud;
   if(!(D.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
   if(!D.design.blocks.some(x => x.t === "footer" || (x.t === "html" && /unsubscribe/i.test(x.html || "")))){ $("#dst").textContent = "Add the footer block (it has the unsubscribe link)."; return; }
-  const ids = gfRows(A.filters).filter(canMail).map(x => +x.contact_id);
+  let ids; try { ids = ((await gfFind(A.filters, A.types || [], { limit:0 })).ids || []).map(Number); } catch(e){ $("#dst").textContent = niceE(e); return; }
   const dl = $("#dlg"), test = kind === "test", M = GF.mode || {};
   dl.innerHTML = `<h3 style="margin:0 0 8px">${test ? "Send yourself a test?" : `Send this email to ${ids.length.toLocaleString()} guests?`}</h3>
     <p style="margin:0"><b>${esc(D.subject)}</b></p><p class="muted" style="margin:2px 0 0">${esc(D.name)} · search “${esc(A.name)}”</p>
@@ -1115,12 +1124,12 @@ async function gfAsk(kind){
   if(!test) $("#gaOk", dl).onchange = e => { $("#gaGo", dl).disabled = !e.target.checked; };
   $("#gaGo", dl).onclick = async () => { dl.close();
     if(DES.dirty || !D.id){ await saveDraft(false); }
-    const r = await sb.rpc("mkt_guest_ask", { p_draft:DES.d.id, p_kind:kind, p_contacts:ids, p_name:A.name, p_filters:A.filters });
+    const r = await sb.rpc("mkt_guest_ask", { p_draft:DES.d.id, p_kind:kind, p_contacts:ids, p_name:A.name, p_filters:{ f:A.filters, types:A.types || [] } });
     if(r.error){ $("#dst").textContent = niceE(r.error); return; }
     await gfPollSends(DES.d.id, 0); };
 }
 async function gfPollSends(id, n){
-  const s = await sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id,brevo_list_id,contact_ids").order("asked_at", { ascending:false }).limit(200);
+  const s = await sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id").order("asked_at", { ascending:false }).limit(100);
   if(!s.error) GF.sends = s.data || [];
   if(DES.d && DES.d.id === id && $("#big").open) drawDesigner();
   const last = GF.sends.find(x => x.draft_id === id);
@@ -1130,42 +1139,118 @@ async function gfPollSends(id, n){
 document.addEventListener("click", e => { const b = e.target.closest("[data-gtest],[data-gsend]"); if(!b || !b.closest("#big") || !DES.d) return;
   gfAsk(b.dataset.gtest ? "test" : "send"); });
 
-/* ---------- Search data for email ideas (Brandon 2026-11-20: "use trends and data"; mkt_area_trends.py weekly + flight_prices) ---------- */
-const REGIONS = { west:["West Coast", ["CA","OR","WA"]], mtn:["Mountain West", ["CO","ID","MT","NV","WY"]], sw:["Southwest", ["AZ","NM"]], tx:["Texas & Oklahoma", ["TX","OK"]],
-  mw:["Midwest", ["IL","IN","IA","KS","MI","MN","MO","NE","ND","OH","SD","WI"]], se:["Southeast", ["AL","AR","FL","GA","KY","LA","MS","NC","SC","TN","VA","WV"]],
-  ne:["Northeast", ["CT","DC","DE","MA","MD","ME","NH","NJ","NY","PA","RI","VT"]], ut:["Utah (locals)", ["UT"]], hiak:["Hawaii & Alaska", ["HI","AK"]] };
-const MKT_STATE = { Massachusetts:"MA", Arizona:"AZ", California:"CA", Denver:"CO", Atlanta:"GA", "New York":"NY", Seattle:"WA", Texas:"TX", Chicago:"IL", Australia:"AU" };
-const isUS = x => x.state && x.state.length === 2 && (!x.country || x.country === "US");
-function hotStates(){ return new Set((GF.tr || []).filter(t => t.kind === "state" && !t.few && t.vs_ly_pct != null && (t.vs_ly_pct >= 10 || (GF.trNat != null && t.vs_ly_pct - GF.trNat >= 15))).map(t => t.key)); }
-function areaMatch(x, a){
-  if(!a) return true;
-  if(a === "unknown") return !x.state && !x.country;
-  if(a === "intl") return !!x.country && x.country !== "US";
-  if(a === "hot") return isUS(x) && hotStates().has(x.state);
-  if(a.startsWith("rg:")) return isUS(x) && (REGIONS[a.slice(3)] || ["", []])[1].includes(x.state);
-  if(a.startsWith("st:")) return a.slice(3) === "AU" ? x.country === "AU" : x.state === a.slice(3) && isUS(x);
-  return true;
+/* ---------- starter words for emails from the data ---------- */
+const titleCase = s => String(s || "").replace(/\b(utah|park city|deer valley)\b/gi, "").replace(/\s+/g, " ").trim().replace(/\b\w/g, c => c.toUpperCase());
+START.topic = q => [newBlock("header"), { t:"heading", text:titleCase(q) + " in Park City", size:26 },
+  { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n[Write a few lines about " + q + ": what it is, where to do it near our homes, and why now. People are searching for it on Google this month.]\n\nBook direct on our website for the best price, and talk to our local team any time." },
+  { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=topic", color:"#5b8a1e" }, newBlock("spacer"), newBlock("footer")];
+START.flight = (m, price, dep, ret) => [newBlock("header"), { t:"heading", text:`Flights from ${m} to Park City from $${price}`, size:26 },
+  { t:"text", text:`Hi {{ contact.FIRSTNAME }},\n\nRound-trip flights from ${m} to Salt Lake City are about $${price} right now for ${fmtD(dep)} to ${fmtD(ret)} (Google Flights, ${fmtD(today())}). Salt Lake's airport is about 40 minutes from our homes.\n\nFares change fast, so if you've been thinking about a Park City trip, this is a good week to look.` },
+  { t:"button", label:"See homes for those dates", href:`https://www.vacationrentalsparkcity.com/booking-engine/results/?arrival_date=${dep}&departure_date=${ret}&utm_source=brevo&utm_medium=email&utm_campaign=flights`, color:"#5b8a1e" },
+  newBlock("spacer"), newBlock("footer")];
+START.find = f => { const t = f && f.type, why = t === "five" || t === "good" ? "Thank you again for the great review. It means a lot to our whole crew."
+    : t === "ota" ? "Thank you for staying with us. Next time, book with us directly: same homes, same local team, and no booking-site fees."
+    : t === "repeat" ? "You've stayed with us more than once, and that means the world to our crew."
+    : t === "once" || t === "lapsed" ? "It's been a while since your stay, and Park City has been busy: new restaurants, new trails, and the same mountains you loved."
+    : t === "xmas" ? "The holidays in Park City are something special, and we'd love to host you again this year."
+    : t === "thanks" ? "Thanksgiving in the mountains is a tradition for a lot of our guests, and we'd love to make it yours again."
+    : t === "summer" ? "Summer in Park City is our favorite secret: cool nights, open trails, concerts and the farmers market."
+    : t === "winter" ? "Snow is on the way, and the best homes for ski season go first."
+    : t === "coming" ? "We can't wait to have you. Here are a few things to make your stay even better."
+    : "Thank you for staying with Moose Management. We'd love to have you back.";
+  const utm = "?utm_source=brevo&utm_medium=email&utm_campaign=" + (t || "guests");
+  return [newBlock("header"), { t:"heading", text:t === "coming" ? "Your Park City stay is coming up" : "Park City misses you", size:26 },
+    { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n" + why + "\n\nBook direct on our website for the best price, and talk to our local team any time." },
+    { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/" + utm, color:"#5b8a1e" }, newBlock("spacer"), newBlock("footer")]; };
+
+/* ---------- ideas for this week (pop-up) ---------- */
+function fareMarkets(){   // per airport: middle price, best day 14-90 days out, change vs last week
+  const by = {}; GF.cal.forEach(c => (by[c.origin] = by[c.origin] || []).push(c));
+  const t0 = new Date(today() + "T12:00:00").getTime();
+  return Object.entries(by).map(([o, cs]) => {
+    const ps = cs.map(c => +c.price).sort((a, b) => a - b), mid = ps[Math.floor(ps.length / 2)] || 0;
+    const win = cs.filter(c => { const d = (new Date(c.depart + "T12:00:00").getTime() - t0) / 864e5; return d >= 14 && d <= 90; });
+    const best = win.slice().sort((a, b) => a.price - b.price)[0];
+    const prev = cs.filter(c => c.prev_price), drop = prev.length ? Math.round(prev.reduce((s, c) => s + (c.price - c.prev_price) / c.prev_price, 0) / prev.length * 100) : null;
+    const lows = win.filter(c => +c.price <= mid * 0.8).length;
+    return { origin:o, market:cs[0].market, state:cs[0].state, mid, best, drop, lows, off:best && mid ? Math.round((1 - best.price / mid) * 100) : 0, checked:cs[0].checked_at };
+  }).filter(m => m.best);
 }
-function areaSelect(f){
-  const n = {}; (GF.rows || []).forEach(x => { if(isUS(x)) n[x.state] = (n[x.state] || 0) + 1; });
-  const st = Object.keys(n).sort((a, b) => n[b] - n[a]), o = (v, l) => `<option value="${esc(v)}"${f.area === v ? " selected" : ""}>${esc(l)}</option>`;
-  return `<select data-gff="area">${o("", "anywhere")}${o("hot", "📈 states where Park City searches are up")}
-    <optgroup label="Regions">${Object.entries(REGIONS).map(([k, r]) => o("rg:" + k, r[0])).join("")}</optgroup>
-    <optgroup label="States (our past guests)">${st.map(s => o("st:" + s, `${s} (${n[s].toLocaleString()})`)).join("")}</optgroup>
-    ${o("st:AU", "Australia")}${o("intl", "outside the US")}${o("unknown", "no address in Track")}</select>`;
+function ideasBuild(){
+  const I = [], can = (GF.fac && GF.fac.states_can) || {};
+  // 1. cheap fares from where our guests live
+  fareMarkets().filter(m => m.off >= 20 && (can[m.state] || 0) >= 15).sort((a, b) => b.off * Math.sqrt(can[b.state] || 1) - a.off * Math.sqrt(can[a.state] || 1)).slice(0, 2).forEach(m => I.push({
+    icon:"✈️", title:`Cheap flights from ${m.market}: $${Math.round(m.best.price)} round trip`,
+    why:`Leaving ${fmtD(m.best.depart)}, back ${fmtD(m.best.ret)} (7 nights). The usual fare from ${m.origin} over the next 4 months is about $${Math.round(m.mid)}, so this is ${m.off}% under. ${(can[m.state] || 0).toLocaleString()} past guests in ${m.state} we can email.`,
+    src:`Google Flights via SerpApi, ${fmtD(m.checked)}`, types:[], f:{ area:"st:" + m.state }, name:`Guests from ${m.state} (cheap flights)`,
+    start:() => START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret) }));
+  // 2. rising searches = topics
+  const wk = GF.topics.reduce((m, t) => t.last_seen > m ? t.last_seen : m, "");
+  const num = v => /breakout/i.test(v || "") ? 1e6 : +String(v || "").replace(/\D/g, "") || 0;
+  GF.topics.filter(t => t.last_seen === wk && t.kind === "rising" && t.status !== "skip" && t.status !== "used").sort((a, b) => num(b.last_value) - num(a.last_value)).slice(0, 2).forEach(t => {
+    const w = /ski|snow|sled|winter|christmas|epic|ikon|board|powder/i.test(t.query) ? "winter" : /summer|hike|bike|golf|lake|concert|july/i.test(t.query) ? "summer" : "good";
+    I.push({ icon:"🔥", title:`People are searching “${t.query}”`, why:`${/breakout/i.test(t.last_value) ? "A breakout search on Google (more than 5,000% up)" : `Up ${t.last_value} on Google`} in the last month${t.first_seen === wk ? ", new this week" : ""}. Write an email about it to ${GTYPES[w][1].toLowerCase()}.`,
+      src:"Google Trends via SerpApi, related searches", types:[w], f:{}, name:`${GTYPES[w][1]}: ${t.query}`, start:() => START.topic(t.query), topic:t.query });
+  });
+  // 3. timing: is next month bigger than this month (5-year average)?
+  const nat = GF.tr.find(r => r.kind === "national" && r.key === "Park City Utah");
+  if(nat){ const s = Array(12).fill(0), c = Array(12).fill(0); (nat.weeks || []).forEach(([d, v]) => { const m = +d.slice(5, 7) - 1; s[m] += v; c[m]++; });
+    const a = s.map((x, i) => c[i] ? x / c[i] : 0), cm = new Date().getMonth(), nm = (cm + 1) % 12, names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    if(a[nm] > a[cm] * 1.08){ const w = [11, 0, 1, 2].includes(nm) ? "winter" : [5, 6, 7].includes(nm) ? "summer" : null;
+      I.push({ icon:"📅", title:`Searches climb into ${names[nm]}`, why:`Over the last 5 years, Park City searches in ${names[nm]} run ${Math.round((a[nm] / a[cm] - 1) * 100)}% above ${names[cm]}. People are planning now${w ? `, so this is the time to email ${GTYPES[w][1].toLowerCase()}` : ""}.`,
+        src:"Google Trends via SerpApi (\"Park City Utah\", whole US, 5 years)", types:w ? [w, "five"] : ["five"], f:{}, name:`${w ? GTYPES[w][1] : "5-star reviewers"} before ${names[nm]}` }); } }
+  // 4. 5-star return renters due
+  const in30 = new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+  const due = S.rr.filter(x => !x.excluded && x.send_on <= in30 && !x.brevo_list && !x.came_back_booked).length;
+  if(due) I.push({ icon:"⭐", title:`${plural(due, "5-star guest")} due an email`, why:"Return renters whose best email date (just before they usually book, aimed at the anniversary of their stay) is in the next 30 days, not in a Brevo batch yet and not booked again.",
+    src:"Track reviews + reservations, rebuilt nightly", scroll:"#gst" });
+  // 5. states holding up better than the US
+  const st = GF.tr.filter(r => r.kind === "state" && !r.few && r.vs_ly_pct != null && GF.trNat != null && r.vs_ly_pct - GF.trNat >= 15 && (can[r.key] || 0) >= 20)
+    .sort((a, b) => (b.vs_ly_pct - a.vs_ly_pct)).slice(0, 2);
+  st.forEach(r => I.push({ icon:"📈", title:`${r.label}: Park City searches are holding up`, why:`${r.label} is ${r.vs_ly_pct > 0 ? "up " + r.vs_ly_pct : "down only " + Math.abs(r.vs_ly_pct)}% vs last year while the whole US is ${GF.trNat}%. ${(can[r.key] || 0).toLocaleString()} past guests there we can email.`,
+    src:"Google Trends via SerpApi, weekly by state", types:[], f:{ area:"st:" + r.key }, name:`Guests from ${r.label}` }));
+  // 6. guests coming soon
+  I.push({ icon:"🧳", title:"Guests arriving soon", why:"Guests with a stay booked: a pre-arrival email (ski rentals, restaurants, the snow report) is a good add-on and a reason to book direct next time.",
+    src:"Track reservations", types:["coming"], f:{}, name:"Booked and coming" });
+  GF.ideas = I;
+  const b = $('[data-ideas="1"].btn'); if(b){ b.disabled = false; b.textContent = `💡 Ideas for this week (${I.length})`; }
 }
-async function trLoad(){
-  try {
-    const [t, f] = await Promise.all([sb.from("mkt_area_trends").select("kind,key,label,share,now_4w,prior_4w,ly_4w,vs_ly_pct,vs_prior_pct,weeks,few,guests,note,checked_at").limit(1000),
-      sb.rpc("mkt_flights_latest")]);
-    const rows = t.data || [], q = rows.filter(r => r.kind === "query"), lastQ = q.reduce((m, r) => r.checked_at > m ? r.checked_at : m, "");
-    GF.tr = rows.filter(r => r.kind !== "query" || r.checked_at.slice(0, 10) === lastQ.slice(0, 10)); GF.fl = f.data || [];
-    const nat = rows.find(r => r.kind === "national" && r.key === "Park City Utah"); GF.trNat = nat ? nat.vs_ly_pct : null;
-  } catch(e){ GF.tr = []; GF.fl = []; }
+function ideasAuto(){   // pops up once a day for each person who opens the Guest desk
+  let k = "mm_mkt_ideas_" + today(); try { if(localStorage.getItem(k)) return; localStorage.setItem(k, "1"); } catch(e){ return; }
+  if(GF.ideas && GF.ideas.length && !$("#big").open) ideasOpen();
 }
+async function ideasOpen(){
+  if(!GF.ideas) return; const d = $("#osd");
+  d.innerHTML = `<div class="dhead"><h3>💡 Ideas for this week</h3><button class="btn" data-close="1" id="idClose">Close</button></div>
+    <p class="muted" style="margin:0 12px 8px">From this week's search data, fares and our guest list. Each one finds the guests for you; "Write it" starts the email.</p>
+    <div style="display:grid;gap:10px;padding:0 12px 14px;max-height:72vh;overflow:auto">${GF.ideas.map((x, i) => `<div class="box" style="padding:12px 14px;overflow:visible">
+      <div style="font-weight:800;font-size:15px">${x.icon} ${esc(x.title)}</div><div style="margin:4px 0">${esc(x.why)}</div>
+      <div class="muted" style="font-size:12px">Source: ${esc(x.src)}${x.types || x.f ? ` · <span data-icnt="${i}">counting guests…</span>` : ""}</div>
+      <div class="bar" style="margin:8px 0 0">${x.scroll ? `<button class="btn primary" data-igo="${i}">Open return renters</button>`
+        : `<button class="btn" data-igo="${i}">🔎 Find these guests</button><button class="btn primary" data-iwrite="${i}">✏️ Write it</button>`}
+        ${x.topic ? `<button class="btn small" data-iskip="${i}" title="Don't suggest this search again">Not for us</button>` : ""}</div></div>`).join("")}</div>`;
+  if(!d.open) d.showModal();
+  $("#idClose", d).onclick = () => d.close();
+  GF.ideas.forEach(async (x, i) => { if(x.scroll) return;
+    try { const r = await gfFind(Object.assign(GF0(), x.f), x.types, { limit:0 }); const el = d.querySelector(`[data-icnt="${i}"]`); if(el) el.textContent = `${(r.ids || []).length.toLocaleString()} guests we can email`; } catch(e){} });
+  d.querySelectorAll("[data-igo]").forEach(b => b.onclick = () => { const x = GF.ideas[+b.dataset.igo]; d.close();
+    if(x.scroll){ const g = $(x.scroll); if(g) g.scrollIntoView({ block:"start", behavior:"smooth" }); return; } gfApply(x.types, x.f, x.name); });
+  d.querySelectorAll("[data-iwrite]").forEach(b => b.onclick = () => { const x = GF.ideas[+b.dataset.iwrite]; d.close();
+    GF.types = x.types.slice(); GF.f = Object.assign(GF0(), x.f); GF.audName = x.name; gfSearch(); gfEmail(x.start ? x.start() : START.find({ type:x.types[0] }), x.name); });
+  d.querySelectorAll("[data-iskip]").forEach(b => b.onclick = async () => { const x = GF.ideas[+b.dataset.iskip];
+    const r = await sb.rpc("mkt_topic_set", { p_query:x.topic, p_status:"skip", p_note:null }); if(r.error) return alert(niceE(r.error));
+    GF.topics.forEach(t => { if(t.query === x.topic) t.status = "skip"; }); ideasBuild(); ideasOpen(); });
+}
+
+/* ---------- search data, folded at the bottom of the page ---------- */
 const sgn = v => v == null ? "—" : (v > 0 ? "▲ +" : v < 0 ? "▼ " : "") + v + "%";
 const sgc = v => v == null ? "" : v >= 5 ? "green" : v <= -5 ? "red" : "";
-function spark(weeks){   // last 52 weeks (green) over the 52 before (grey)
+function spark(weeks, W, H){
+  const v = (weeks || []).map(w => w[1]).filter(x => x != null); if(v.length < 4) return "";
+  W = W || 160; H = H || 30; const mx = Math.max(1, ...v);
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:${W}px;max-width:100%;height:${H}px;display:block" aria-hidden="true"><polyline points="${v.map((y, i) => `${(i / (v.length - 1) * W).toFixed(1)},${(H - y / mx * (H - 3) - 1.5).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--forest-2)" stroke-width="2"/></svg>`;
+}
+function yearSpark(weeks){
   const v = (weeks || []).map(w => w[1]); if(v.length < 60) return "";
   const a = v.slice(-52), b = v.slice(-104, -52), mx = Math.max(1, ...a, ...b), W = 520, H = 70;
   const line = arr => arr.map((y, i) => `${(i / 51 * W).toFixed(1)},${(H - y / mx * (H - 4) - 2).toFixed(1)}`).join(" ");
@@ -1173,38 +1258,68 @@ function spark(weeks){   // last 52 weeks (green) over the 52 before (grey)
     <polyline points="${line(b)}" fill="none" stroke="var(--line-2)" stroke-width="2"/><polyline points="${line(a)}" fill="none" stroke="var(--forest-2)" stroke-width="2.5"/></svg>
     <div class="muted" style="font-size:11.5px;display:flex;justify-content:space-between;gap:8px"><span>a year ago</span><span><b style="color:var(--forest-2)">━</b> last 52 weeks · <b style="color:var(--line-2)">━</b> the year before</span><span>this week</span></div>`;
 }
-function months(weeks){   // 5-year average by month = when people search
-  const s = Array(12).fill(0), c = Array(12).fill(0);
-  (weeks || []).forEach(([d, v]) => { const m = +d.slice(5, 7) - 1; s[m] += v; c[m]++; });
+function monthBars(weeks){
+  const s = Array(12).fill(0), c = Array(12).fill(0); (weeks || []).forEach(([d, v]) => { const m = +d.slice(5, 7) - 1; s[m] += v; c[m]++; });
   const a = s.map((x, i) => c[i] ? x / c[i] : 0), mx = Math.max(1, ...a), cur = new Date().getMonth(), M = "JFMAMJJASOND";
   const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   return { html:`<div style="display:flex;gap:4px;align-items:flex-end;height:64px;margin-top:6px">${a.map((v, i) => `<div title="${names[i]}: ${Math.round(v / mx * 100)}" style="flex:1;text-align:center">
       <div style="height:${Math.max(3, v / mx * 50)}px;background:${i === cur ? "var(--forest)" : "var(--moose)"};opacity:${i === cur ? 1 : .55};border-radius:4px 4px 0 0"></div><small class="muted">${M[i]}</small></div>`).join("")}</div>`,
     top:names[a.indexOf(Math.max(...a))] };
 }
-function trendHtml(){
-  if(!GF.tr) return `<h2>📊 Search data for email ideas</h2><p class="muted">Loading…</p>`;
-  if(!GF.tr.length) return "";
+function dataHtml(){ return `<details class="box tacc" id="gdatab" ${GF.dataOpen ? "open" : ""}><summary><b>📊 Search data for email ideas</b> <span class="muted">· Google Trends, topics people search, fares to Salt Lake, new flights into SLC</span></summary><div id="gdata">${dataInner()}</div></details>`; }
+function dataInner(){
+  if(!GF.tr) return `<p class="muted">Loading…</p>`;
+  const can = (GF.fac && GF.fac.states_can) || {}, all = (GF.fac && GF.fac.states) || {};
   const nat = GF.tr.filter(r => r.kind === "national"), pcu = nat.find(r => r.key === "Park City Utah") || nat[0];
   const st = GF.tr.filter(r => r.kind === "state" && r.key !== "UT"), mt = GF.tr.filter(r => r.kind === "metro").sort((a, b) => b.share - a.share).slice(0, 12);
-  const can = {}, all = {}; (GF.rows || []).forEach(x => { if(isUS(x)){ all[x.state] = (all[x.state] || 0) + 1; if(canMail(x)) can[x.state] = (can[x.state] || 0) + 1; } });
   const rel = r => r.vs_ly_pct == null || GF.trNat == null ? null : r.vs_ly_pct - GF.trNat;
   const ranked = st.filter(r => !r.few && r.vs_ly_pct != null).sort((a, b) => (rel(b) ?? -999) - (rel(a) ?? -999));
-  const qr = GF.tr.filter(r => r.kind === "query" && !r.few).sort((a, b) => a.share - b.share), qt = GF.tr.filter(r => r.kind === "query" && r.few).sort((a, b) => a.share - b.share);
-  const fl = {}; (GF.fl || []).forEach(f => { (fl[f.market] = fl[f.market] || []).push(f); });
-  const fdays = [...new Set((GF.fl || []).map(f => f.outbound_date))].sort().slice(0, 5);
-  const mo = pcu ? months(pcu.weeks) : null, when = (GF.tr.find(r => r.kind === "state") || {}).checked_at;
-  return `<h2>📊 Search data for email ideas</h2>
-  <p class="muted" style="margin:0 0 8px">What people around the US are searching for Park City right now (Google Trends), and flight prices to Salt Lake from where our guests live. Tap "Find" to see our past guests who live there.</p>
-  ${pcu ? `<div class="tgrid">
-    <div class="box tcard"><b>“Park City Utah” searches, whole US</b>
+  const mo = pcu ? monthBars(pcu.weeks) : null, when = (GF.tr.find(r => r.kind === "state") || {}).checked_at;
+  // topics
+  const wk = GF.topics.reduce((m, t) => t.last_seen > m ? t.last_seen : m, "");
+  const num = v => /breakout/i.test(v || "") ? 1e6 : +String(v || "").replace(/\D/g, "") || 0;
+  const tps = GF.topics.filter(t => GF.tf === "all" ? t.last_seen === wk && t.status !== "skip" : GF.tf === "rising" ? t.last_seen === wk && t.kind === "rising" && t.status !== "skip"
+      : GF.tf === "new" ? t.first_seen === wk && t.status !== "skip" : GF.tf === "skip" ? t.status === "skip" : t.status === GF.tf)
+    .sort((a, b) => (a.kind === "rising" ? 0 : 1) - (b.kind === "rising" ? 0 : 1) || num(b.last_value) - num(a.last_value));
+  const fm = fareMarkets().sort((a, b) => b.off - a.off);
+  const fr0 = GF.routes.reduce((m, r) => !m || r.first_seen < m ? r.first_seen : m, ""), watchDays = fr0 ? Math.floor((Date.now() - new Date(fr0).getTime()) / 864e5) : 0;
+  const newR = watchDays >= 21 ? GF.routes.filter(r => new Date(r.first_seen).getTime() - new Date(fr0).getTime() > 21 * 864e5).sort((a, b) => String(b.first_seen).localeCompare(String(a.first_seen))) : [];
+  const orig = {}; GF.routes.forEach(r => { orig[r.origin] = (orig[r.origin] || 0) + r.sightings; });
+  return `<div class="box tcard" style="margin-top:10px"><b>🔥 Topics to build emails on</b> <span class="muted" style="font-size:12px">(what people search with Park City, whole US, last 30 days)</span>
+      <div class="bar" style="margin:6px 0">${[["all","This week"],["rising","Rising"],["new","New this week"],["planned","Planned"],["used","Used"],["skip","Not for us"]].map(([k, l]) => `<button class="chip${GF.tf === k ? " on" : ""}" data-tf="${k}">${l}</button>`).join("")}</div>
+      <div style="max-height:430px;overflow:auto"><table><thead><tr><th>Search</th><th class="n">Google</th><th>Last 12 months</th><th></th></tr></thead><tbody>
+      ${tps.slice(0, 60).map(t => `<tr><td><b>${esc(t.query)}</b>${t.first_seen === wk && t.first_seen !== GF.topics.reduce((m, x) => !m || x.first_seen < m ? x.first_seen : m, "") ? ` <span class="pill blue">new</span>` : ""}
+          <div class="muted" style="font-size:11.5px">${t.weeks_seen > 1 ? `seen ${t.weeks_seen} weeks` : "first seen " + esc(fmtD(t.first_seen))} · ${esc((t.seeds || []).join(", "))}${t.status !== "new" ? ` · <b>${esc(t.status === "skip" ? "not for us" : t.status)}</b>${t.status_by ? " by " + esc(t.status_by) : ""}` : ""}</div></td>
+        <td class="n"><span class="pill ${t.kind === "rising" ? "green" : ""}" title="${t.kind === "rising" ? "How much it grew (Breakout = over 5,000%)" : "Most searched, top = 100"}">${esc(t.last_value)}</span></td>
+        <td>${spark(t.line) || `<span class="muted" style="font-size:11.5px">—</span>`}</td>
+        <td style="white-space:nowrap"><button class="btn small" data-twrite="${esc(t.query)}">✏️ Write</button>
+          <select data-tstat="${esc(t.query)}" style="font-size:12px"><option value="">…</option><option value="planned">Planned</option><option value="used">Used</option><option value="skip">Not for us</option><option value="new">Reset</option></select></td></tr>`).join("") || `<tr><td colspan="4" class="empty">Nothing here.</td></tr>`}</tbody></table></div>
+      <p class="src">Lines only for the strongest ~15 topics each week (Google compares 5 at a time, so a line shows its own ups and downs, not its size).</p></div>
+  <div class="tgrid">
+    ${pcu ? `<div class="box tcard"><b>“Park City Utah” searches, whole US</b>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin:6px 0"><div><small class="muted">Last 4 weeks vs same weeks last year</small><div><span class="pill ${sgc(pcu.vs_ly_pct)}" style="font-size:14px">${sgn(pcu.vs_ly_pct)}</span></div></div>
       <div><small class="muted">vs the 4 weeks before</small><div><span class="pill ${sgc(pcu.vs_prior_pct)}" style="font-size:14px">${sgn(pcu.vs_prior_pct)}</span></div></div>
       ${nat.filter(r => r !== pcu).map(r => `<div><small class="muted">“${esc(r.key)}” vs last year</small><div><span class="pill ${sgc(r.vs_ly_pct)}" style="font-size:14px">${sgn(r.vs_ly_pct)}</span></div></div>`).join("")}</div>
-      ${spark(pcu.weeks)}</div>
-    <div class="box tcard"><b>When people search (5-year average by month)</b>${mo.html}
-      <p class="muted" style="margin:6px 0 0;font-size:12.5px">Searches peak in <b>${esc(mo.top)}</b>. Emails land best a few weeks before the climb, while people are still planning.</p></div>
-  </div>` : ""}
+      ${yearSpark(pcu.weeks)}
+      <div style="margin-top:12px"><b>When people search (5-year average by month)</b>${mo.html}
+      <p class="muted" style="margin:6px 0 0;font-size:12.5px">Searches peak in <b>${esc(mo.top)}</b>. Emails land best a few weeks before the climb, while people are still planning.</p></div></div>` : ""}
+    <div class="box tcard"><b>🛬 New flights into Salt Lake City</b>
+      ${watchDays < 21 ? `<p class="muted" style="margin:6px 0">Watching since ${esc(fmtD(fr0))}: ${GF.routes.length} airport + airline pairs seen flying into SLC so far. New routes show here once we've watched for 3 weeks${fr0 ? ` (from ${esc(fmtD(new Date(new Date(fr0).getTime() + 21 * 864e5).toISOString()))})` : ""}.</p>`
+        : newR.length ? `<table style="margin-top:6px"><thead><tr><th>From</th><th>Airline</th><th>First seen</th></tr></thead><tbody>${newR.slice(0, 15).map(r => `<tr><td><b>${esc(r.origin)}</b></td><td>${esc(AIRLINE[r.airline] || r.airline || "—")}</td><td>${esc(fmtD(r.first_seen))}</td></tr>`).join("")}</tbody></table>`
+        : `<p class="muted" style="margin:6px 0">No new airport + airline pairs in the last weeks.</p>`}
+      <div style="margin:8px 0 2px;font-weight:800;font-size:12.5px">Busiest airports flying in (as seen so far)</div>
+      <div class="bar" style="margin:0;gap:5px">${Object.entries(orig).sort((a, b) => b[1] - a[1]).slice(0, 18).map(([o, n]) => `<span class="pill">${esc(o)} · ${n}</span>`).join("")}</div>
+      ${GF.news.length ? `<div style="margin:10px 0 2px;font-weight:800;font-size:12.5px">In the news</div>${GF.news.slice(0, 8).map(n => `<div style="font-size:13px;margin:3px 0"><a href="${esc(n.key)}" target="_blank" rel="noopener">${esc(n.title)}</a> <span class="muted" style="font-size:11.5px">${esc((n.data || {}).source || "")} ${esc(String((n.data || {}).date || "").slice(0, 10))}</span></div>`).join("")}` : ""}
+      <p class="src">Flightradar24 (via SerpApi) planes in the air headed to SLC, checked 3 times a day; Google News "Salt Lake City new nonstop flights", weekly. A route seen for the first time can be a new route or a rare flight: check the news or the airline before advertising it.</p></div>
+  </div>
+    <div class="box tcard" style="margin-top:10px"><b>✈️ Fares to Salt Lake City from where our guests live</b> <span class="muted" style="font-size:12px">(7-night round trips, next 4 months)</span>
+      <div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr><th>From</th><th class="n">Usual</th><th>Cheapest 2 weeks–3 months out</th><th class="n">vs last week</th><th class="n">Past guests</th><th></th></tr></thead><tbody>
+      ${fm.map(m => `<tr><td><b>${esc(m.market)}</b> <span class="muted" style="font-size:11.5px">${esc(m.origin)}</span></td><td class="n">$${Math.round(m.mid)}</td>
+        <td>$${Math.round(m.best.price)} <span class="muted" style="font-size:11.5px">${esc(fmtD(m.best.depart).replace(/, \d{4}$/, ""))}–${esc(fmtD(m.best.ret).replace(/, \d{4}$/, ""))}</span>${m.off >= 20 ? ` <span class="pill green">${m.off}% under</span>` : ""}</td>
+        <td class="n">${m.drop == null ? "—" : `<span class="pill ${m.drop <= -5 ? "green" : m.drop >= 5 ? "red" : ""}">${m.drop > 0 ? "+" : ""}${m.drop}%</span>`}</td>
+        <td class="n">${(all[m.state] || 0).toLocaleString()}<div class="muted" style="font-size:11px">${m.state} · ${(can[m.state] || 0).toLocaleString()} can email</div></td>
+        <td style="white-space:nowrap"><button class="btn small" data-tarea="st:${esc(m.state)}">Find</button> <button class="btn small" data-fwrite="${esc(m.origin)}">✏️</button></td></tr>`).join("") || `<tr><td colspan="6" class="empty">Fares load every Monday.</td></tr>`}</tbody></table></div>
+      <p class="src">Usual = the middle fare over every departure day in the next 4 months. vs last week = the same days' fares a week ago (green = cheaper now). Source: Google Flights calendar via SerpApi, read every Monday${GF.cal[0] ? `, last ${esc(fmtDT(GF.cal[0].checked_at))}` : ""}.</p></div>
   <div class="tgrid">
     <div class="box tcard"><b>Where Park City searches are up or down</b> <span class="muted" style="font-size:12px">(each state vs its own searches a year ago${GF.trNat != null ? `; whole US ${sgn(GF.trNat)}` : ""})</span>
       <div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr><th>State</th><th class="n">vs last year</th><th class="n">vs last month</th><th class="n">Past guests</th><th></th></tr></thead><tbody>
@@ -1213,26 +1328,24 @@ function trendHtml(){
         <td class="n">${(all[r.key] || 0).toLocaleString()}<div class="muted" style="font-size:11px">${(can[r.key] || 0).toLocaleString()} can email</div></td>
         <td><button class="btn small" data-tarea="st:${esc(r.key)}">Find</button></td></tr>`).join("")}</tbody></table></div>
       <p class="src">States with too few searches to measure week to week (${st.filter(r => r.few).length}) are left out. Google gives each state its own 0–100 scale, so compare a state with itself, not with another state.</p></div>
-    <div class="box tcard"><b>What people search with “Park City”</b> <span class="muted" style="font-size:12px">(last 30 days, whole US)</span>
-      <div style="margin:6px 0 2px;font-weight:800;font-size:12.5px">📈 Rising (email topic ideas)</div>
-      <div class="bar" style="margin:0;gap:5px">${qr.slice(0, 14).map(r => `<span class="pill green" title="Google: ${esc(r.note)}">${esc(r.label)} <small>${esc(r.note)}</small></span>`).join("") || `<span class="muted">none this week</span>`}</div>
-      <div style="margin:10px 0 2px;font-weight:800;font-size:12.5px">🔝 Most searched</div>
-      <div class="bar" style="margin:0;gap:5px">${qt.slice(0, 12).map(r => `<span class="pill">${esc(r.label)}</span>`).join("")}</div>
-      <div style="margin:10px 0 2px;font-weight:800;font-size:12.5px">📍 Top metros right now <span class="muted" style="font-weight:600">(Salt Lake left out)</span></div>
-      <div class="bar" style="margin:0;gap:5px">${mt.map(m => `<span class="pill" title="Share of searches, top metro = 100">${esc(m.label)} · ${m.share}</span>`).join("")}</div></div>
+    <div class="box tcard"><b>📍 Top metros searching right now</b> <span class="muted" style="font-size:12px">(Salt Lake left out; top = 100)</span>
+      <div class="bar" style="margin:6px 0 0;gap:5px">${mt.map(m => `<span class="pill">${esc(m.label)} · ${m.share}</span>`).join("")}</div></div>
   </div>
-  ${Object.keys(fl).length ? `<div class="box tcard" style="margin-top:10px"><b>✈️ Round-trip flights to Salt Lake City</b> <span class="muted" style="font-size:12px">(cheapest found, Google Flights)</span>
-    <div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr><th>From</th>${fdays.map(d => `<th class="n">${esc(fmtD(d).replace(/, \d{4}$/, ""))}</th>`).join("")}<th class="n">Past guests</th><th></th></tr></thead><tbody>
-    ${Object.entries(fl).map(([m, fs]) => { const s = MKT_STATE[m]; return `<tr><td><b>${esc(m)}</b> <span class="muted" style="font-size:11.5px">${esc(fs[0].origin.split(",").slice(0, 3).join(", "))}</span></td>
-      ${fdays.map(d => { const f = fs.find(x => x.outbound_date === d); return !f || !(+f.lowest_price > 0) ? `<td class="n muted">—</td>`
-        : `<td class="n"><a href="${esc(f.search_url)}" target="_blank" rel="noopener" title="${esc(fmtD(f.outbound_date))}–${esc(fmtD(f.return_date))} · ${esc(f.cheapest_airline || "")} · ${f.cheapest_stops ? f.cheapest_stops + " stop" : "nonstop"}">$${Math.round(f.lowest_price)}</a></td>`; }).join("")}
-      <td class="n">${s === "AU" ? (GF.rows || []).filter(x => x.country === "AU").length : s ? (all[s] || 0).toLocaleString() : ""}</td><td>${s ? `<button class="btn small" data-tarea="st:${s}">Find</button>` : ""}</td></tr>`; }).join("")}</tbody></table></div>
-    <p class="src">Each column is a trip leaving that day (about 9 nights). Tap a price for the flights. A cheap fare from where a group of our guests lives makes a good email subject. A dash = no fare found that day. Source: Google Flights via SerpApi, read weekly.</p></div>` : ""}
-  <p class="src">Source: Google Trends via SerpApi (“Park City Utah”, “Park City ski”, “Deer Valley”), read every Monday${when ? `, last ${esc(fmtDT(when))}` : ""}. “Park City” alone also matches Park City, Kansas, so it isn't used.</p>`;
+  <p class="src">Source: Google Trends via SerpApi (“Park City Utah”, “Park City ski”, “Deer Valley”, “things to do in Park City”, “Park City summer”), read every Monday${when ? `, last ${esc(fmtDT(when))}` : ""}. “Park City” alone also matches Park City, Kansas, so it isn't used.</p>`;
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-tarea]"); if(!b) return;
-  gfSetType(""); GF.f.area = b.dataset.tarea; GF.audName = "Guests from " + b.dataset.tarea.slice(3);
-  gfDraw(); const g = document.getElementById("gfh"); if(g) g.scrollIntoView({ block:"start", behavior:"smooth" }); });
+document.addEventListener("toggle", e => { if(e.target && e.target.id === "gdatab") GF.dataOpen = e.target.open; }, true);
+document.addEventListener("click", e => {
+  const a = e.target.closest("[data-tarea]"); if(a){ e.preventDefault(); return gfApply([], { area:a.dataset.tarea }, "Guests from " + a.dataset.tarea.slice(3)); }
+  const tf = e.target.closest("[data-tf]"); if(tf){ GF.tf = tf.dataset.tf; const d = $("#gdata"); if(d) d.innerHTML = dataInner(); return; }
+  const tw = e.target.closest("[data-twrite]"); if(tw){ const q = tw.dataset.twrite, w = /ski|snow|sled|winter|christmas|epic|ikon|board|powder/i.test(q) ? "winter" : /summer|hike|bike|golf|lake|concert/i.test(q) ? "summer" : "good";
+    GF.types = [w]; GF.f = GF0(); GF.audName = `${GTYPES[w][1]}: ${q}`; gfSearch(); return gfEmail(START.topic(q), GF.audName); }
+  const fw = e.target.closest("[data-fwrite]"); if(fw){ const m = fareMarkets().find(x => x.origin === fw.dataset.fwrite); if(!m) return;
+    GF.types = []; GF.f = Object.assign(GF0(), { area:"st:" + m.state }); GF.audName = `Guests from ${m.state} (cheap flights)`; gfSearch();
+    return gfEmail(START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret), GF.audName); }
+});
+document.addEventListener("change", async e => { const s = e.target.closest("[data-tstat]"); if(!s || !s.value) return;
+  const r = await sb.rpc("mkt_topic_set", { p_query:s.dataset.tstat, p_status:s.value, p_note:null }); if(r.error) return alert(niceE(r.error));
+  GF.topics.forEach(t => { if(t.query === s.dataset.tstat){ t.status = s.value; t.status_by = "you"; } }); const d = $("#gdata"); if(d) d.innerHTML = dataInner(); });
 
 async function refresh(){ try { await load(); render(); } catch(e){ $("#app").innerHTML = `<h1>${esc(TABS[TAB])}</h1><p class="muted">Couldn't load: ${esc(e.message || e)}</p>`; } }
 document.addEventListener("click", e => {
@@ -1259,7 +1372,7 @@ function restoreFilters(){ $$("select[data-f]").forEach(s => s.value = S.f[s.dat
   if(ok.error || ok.data !== true){ $("#app").innerHTML = `<h1>Advertising</h1><p class="muted">Nothing to show.</p>`; return; }
   await refresh(); restoreFilters();
 })();
-window.__mkt = { S, guestRows, render, GF, gfRows };   // for the stub test
+window.__mkt = { S, guestRows, render, GF, gfSearch };   // for the stub test
 </script>
 </body>
 </html>
