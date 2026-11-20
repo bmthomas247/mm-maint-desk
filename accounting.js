@@ -593,7 +593,7 @@ async function fill(v, body){
     delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
   const approve = async (ids, ok, btn) => {
     let note = null;
-    if(!ok){ note = prompt("Why take the approval back?"); if(!note) return; }
+    if(!ok){ note = await mmAsk("Why take the approval back?"); if(!note) return; }
     const r = await rpc("pay_approve", { p_from:A.from, p_to:A.to, p_users:ids, p_ok:ok, p_note:note }, btn);
     if(r === false) return;
     if(r.skipped && r.skipped.length) alert("Not approved (not someone you look after): " + r.skipped.join(", "));
@@ -611,7 +611,7 @@ async function fill(v, body){
   body.querySelectorAll("[data-paid]").forEach(b => b.onclick = async e => { e.stopPropagation(); const paid = b.dataset.paid === "1";
     let note = null;
     if(paid){ if(!await mmConfirm(`Mark ${fdate(A.from)} – ${fdate(A.to)} paid? The hours lock: any change after this needs a note and shows as a correction.`)) return; }
-    else { note = prompt("Why unlock this pay period?"); if(!note) return; }
+    else { note = await mmAsk("Why unlock this pay period?"); if(!note) return; }
     if(await rpc("pay_period_set", { p_from:A.from, p_to:A.to, p_paid:paid, p_note:note }, b) === false) return;
     delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
   body.querySelectorAll("[data-ext]").forEach(b => b.onclick = async e => { e.stopPropagation(); const [u, on] = b.dataset.ext.split("|");
