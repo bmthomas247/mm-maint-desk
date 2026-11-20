@@ -281,7 +281,7 @@ function wireFind(v, redraw){
 }
 // "I'm on it" and "Open in Claude Code" copy the item's prompt and say where to paste it.
 async function copyGo(it){
-  const t = prompt(it); let ok = false; try { await navigator.clipboard.writeText(t); ok = true; } catch(e) {}
+  const t = await mmAsk(it); let ok = false; try { await navigator.clipboard.writeText(t); ok = true; } catch(e) {}
   const d = document.createElement("div");
   d.innerHTML = `<div class="card" style="max-width:640px;margin:8vh auto;padding:16px;border-radius:18px"><b>${ok ? "Copied ✓ - now open Claude Code and paste" : "Copy this into Claude Code"}</b>
     <p class="muted" style="margin:6px 0 8px">${ME && ME.admin ? "Open the Claude app (Code tab) in the maintenance_desk folder, start a new session and paste." : "Open Claude Code (or a new chat in your Claude project), start a new session and paste. It tells Claude the house rules and how to send the finished work to Brandon."}</p>
