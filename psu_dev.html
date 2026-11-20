@@ -29,6 +29,7 @@ code{background:var(--ground);border:1px solid var(--line);border-radius:6px;pad
 </style>
 </head><body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -118,7 +119,7 @@ async function save(){
 }
 async function publish(id){
   const lid = liveId();
-  if(!confirm(id < lid ? `Roll back: make version ${id} live for everyone?` : `Publish version ${id} to everyone on Property Set Up?`)) return;
+  if(!await mmConfirm(id < lid ? `Roll back: make version ${id} live for everyone?` : `Publish version ${id} to everyone on Property Set Up?`)) return;
   const r = await sb.rpc("psu_publish", { p_id:id });
   S.msg = r.error ? `<span class="bad">${esc(r.error.message)}</span>` : `<span class="ok">Version ${id} is live.</span>`;
   await load();
