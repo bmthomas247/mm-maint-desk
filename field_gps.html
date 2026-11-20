@@ -38,7 +38,7 @@ select{font:inherit;padding:9px;border-radius:10px;border:1px solid var(--line);
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="config.js"></script>
@@ -206,7 +206,7 @@ document.addEventListener("click", async e => {
     const p = self ? null : S.me.people.find(x => x.user_id === v);
     const kind = IS_IOS ? "iPhone" : IS_AND ? "Android phone" : "phone";
     const first = p ? String(p.label).split(" ")[0] : "";
-    const label = p ? first + "'s phone" : (self && !test && ON_PHONE) ? "My " + kind : prompt("Name this phone (for example: Dave's iPhone)", test ? "Test phone" : ((p ? p.label : "My") + "'s phone")); if(label === null) return;
+    const label = p ? first + "'s phone" : (self && !test && ON_PHONE) ? "My " + kind : await mmAsk("Name this phone (for example: Dave's iPhone)", test ? "Test phone" : ((p ? p.label : "My") + "'s phone")); if(label === null) return;
     b.disabled = true;
     const r = await sb.rpc("field_gps_device_new", { p_user: self ? null : v, p_label: label, p_test: test });
     b.disabled = false;
