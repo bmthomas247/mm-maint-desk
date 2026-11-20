@@ -6,7 +6,7 @@
 <title>Rates · Moose Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -4430,7 +4430,7 @@ function csDraw() {
   W.querySelectorAll("[data-csch]").forEach(b => b.onclick = () => { CS.ch = b.dataset.csch; csDraw(); });
   W.querySelectorAll("[data-cst]").forEach(b => b.onclick = async () => {
     const x = rows.find(r => r.id === b.dataset.c), stt = b.dataset.cst; let note = null;
-    if (stt === "delete") { note = prompt(`Delete "${x.label}" from ${d.name}? It's switched off (history kept). Why?`); if (note === null) return; }
+    if (stt === "delete") { note = await mmAsk(`Delete "${x.label}" from ${d.name}? It's switched off (history kept). Why?`); if (note === null) return; }
     if (stt === "paused" && !confirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
     const r = await sb.rpc("rates_comp_state", { p_comp: x.id, p_state: stt, p_note: note });
     if (r.error) alert(r.error.message); else { CS.sets = null; await csFetch(true); rateSetsRefresh(); } });
