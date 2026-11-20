@@ -201,15 +201,15 @@ async function openItem(v, id, edit){
   if(q("[data-cancel]")) q("[data-cancel]").onclick = () => openItem(v, id);
   if(q("[data-save]")) q("[data-save]").onclick = async () => { const f = n => q(`[data-f="${n}"]`).value;
     const r = await sb.rpc("build_item_save", { p_id:id, p_title:f("title"), p_detail:f("detail"), p_plan:f("plan"), p_desk:f("desk"), p_pri:f("pri"), p_waits:f("waits"), p_note:f("note") });
-    if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
+    if(r.error) return await mmAlert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
   // a note without starting the item (Brandon 2026-11-04): added under the earlier notes as "Name, Nov 4: …"
   if(q("[data-addnote]")) q("[data-addnote]").onclick = async () => { const t = q("[data-newnote]").value.trim(); if(!t) return q("[data-newnote]").focus();
     const line = `${first(meName()) || "Someone"}, ${fday(new Date())}: ${t}`, cur = (BL.rows.find(x => x.id === id) || {}).note || "";
-    const r = await sb.rpc("build_item_save", { p_id:id, p_note:(cur ? cur + "\n" : "") + line }); if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
+    const r = await sb.rpc("build_item_save", { p_id:id, p_note:(cur ? cur + "\n" : "") + line }); if(r.error) return await mmAlert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
   if(q("[data-see]")) q("[data-see]").onchange = async e => { const val = e.target.value; const r = await sb.rpc("build_item_staff", { p_id:id, p_see:val === "" ? null : val === "1" });
-    if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
+    if(r.error) return await mmAlert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
   if(q("[data-off]")) q("[data-off]").onclick = async () => { if(!await mmConfirm("Take this item off the list? (It's kept in the history, not deleted.)")) return;
-    const r = await sb.rpc("build_item_save", { p_id:id, p_off:true }); if(r.error) return alert("Didn't save: " + err(r.error)); close(); await load(); show(v); };
+    const r = await sb.rpc("build_item_save", { p_id:id, p_off:true }); if(r.error) return await mmAlert("Didn't save: " + err(r.error)); close(); await load(); show(v); };
   wireItem(v, d, i, again);
 }
 const tabsHtml = () => `<div class="tabs"><button class="${BL.tab === "list" ? "on" : ""}" data-tab="list">${ico("list")} Build list</button>
@@ -292,30 +292,30 @@ async function copyGo(it){
   document.body.appendChild(d); if(!ok){ const ta = d.querySelector("textarea"); ta.focus(); ta.select(); }
 }
 async function act(v, fn){
-  const r = await fn(); if(r && r.error){ alert("Didn't save: " + err(r.error)); return null; }
+  const r = await fn(); if(r && r.error){ await mmAlert("Didn't save: " + err(r.error)); return null; }
   await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); return r;
 }
 // buttons shared by a card and the pop-up; `after` redraws whatever is showing
 function wireItem(v, el, it, after){
   const id = it.id, b = s => el.querySelector(s);
-  if(b("[data-st]")) b("[data-st]").onchange = async e => { const r = await sb.rpc("build_item_save", { p_id:id, p_status:e.target.value }); if(r.error) alert("Didn't save: " + err(r.error)); after(); };
+  if(b("[data-st]")) b("[data-st]").onchange = async e => { const r = await sb.rpc("build_item_save", { p_id:id, p_status:e.target.value }); if(r.error) await mmAlert("Didn't save: " + err(r.error)); after(); };
   if(b("[data-claim]")) b("[data-claim]").onclick = async () => {
-    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:false }); if(r.error) return alert("Didn't save: " + err(r.error));
+    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:false }); if(r.error) return await mmAlert("Didn't save: " + err(r.error));
     if(r.data && r.data.ok === false){ if(!await mmConfirm(`${(r.data.busy || []).join(" + ")} just took this one. Work on it together?`)) return after();
-      const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return alert("Didn't save: " + err(j.error)); }
+      const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return await mmAlert("Didn't save: " + err(j.error)); }
     await copyGo(it); after(); };
   if(b("[data-join]")) b("[data-join]").onclick = async () => { if(!await mmConfirm(`${(it.worker_names || []).join(" + ")} ${it.worker_names.length > 1 ? "are" : "is"} already on this. Work on it together?`)) return;
-    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(r.error) return alert("Didn't save: " + err(r.error)); await copyGo(it); after(); };
-  if(b("[data-rel]")) b("[data-rel]").onclick = async () => { const r = await sb.rpc("build_item_release", { p_id:id }); if(r.error) alert("Didn't save: " + err(r.error)); after(); };
+    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(r.error) return await mmAlert("Didn't save: " + err(r.error)); await copyGo(it); after(); };
+  if(b("[data-rel]")) b("[data-rel]").onclick = async () => { const r = await sb.rpc("build_item_release", { p_id:id }); if(r.error) await mmAlert("Didn't save: " + err(r.error)); after(); };
   if(b("[data-free]")) b("[data-free]").onclick = async () => { if(!await mmConfirm(`Take ${it.worker_names.join(" + ")} off this item?`)) return;
-    for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error){ alert("Didn't save: " + err(r.error)); break; } } after(); };
+    for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error){ await mmAlert("Didn't save: " + err(r.error)); break; } } after(); };
   // Open in Claude Code also puts you on the item (Brandon 2026-11-06); copy first so the clipboard keeps the tap
   if(b("[data-copy]")) b("[data-copy]").onclick = async () => { await copyGo(it);
     if(!ADM() || it.status === "done" || mine(it)) return;
-    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:(it.workers || []).length > 0 }); if(r.error) return alert("Copied, but couldn't put you on it: " + err(r.error));
-    if(r.data && r.data.ok === false){ const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return alert("Copied, but couldn't put you on it: " + err(j.error)); }
+    const r = await sb.rpc("build_item_claim", { p_id:id, p_together:(it.workers || []).length > 0 }); if(r.error) return await mmAlert("Copied, but couldn't put you on it: " + err(r.error));
+    if(r.data && r.data.ok === false){ const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return await mmAlert("Copied, but couldn't put you on it: " + err(j.error)); }
     after(); };
-  if(b("[data-like]")) b("[data-like]").onclick = async () => { const r = await sb.rpc("build_like", { p_id:id, p_on:!it.mine }); if(r.error) return alert("Didn't save: " + err(r.error)); after(); };
+  if(b("[data-like]")) b("[data-like]").onclick = async () => { const r = await sb.rpc("build_like", { p_id:id, p_on:!it.mine }); if(r.error) return await mmAlert("Didn't save: " + err(r.error)); after(); };
 }
 function wire(v){
   wireTabs(v); wireTiles(v); wireFind(v, draw);
@@ -338,7 +338,7 @@ function wire(v){
     const qs = el.querySelector("[data-qsave]"); if(qs) qs.onclick = async () => { const t = el.querySelector("[data-qtext]").value.trim(); if(!t) return el.querySelector("[data-qtext]").focus();
       const line = `${first(meName()) || "Someone"}, ${fday(new Date())}: ${t}`;
       qs.disabled = true; const r = await sb.rpc("build_item_save", { p_id:id, p_note:(it.note ? it.note + "\n" : "") + line }); qs.disabled = false;
-      if(r.error) return alert("Didn't save: " + err(r.error)); BL.qn = null; delete BL.hist[id]; await load(); const y = window.scrollY; draw(v); window.scrollTo(0, y); };
+      if(r.error) return await mmAlert("Didn't save: " + err(r.error)); BL.qn = null; delete BL.hist[id]; await load(); const y = window.scrollY; draw(v); window.scrollTo(0, y); };
     wireItem(v, el, it, async () => { await load(); const y = window.scrollY; show(v); window.scrollTo(0, y); });
   });
   const add = v.querySelector("#bladd"); if(add) add.onsubmit = e => { e.preventDefault(); const g = s => v.querySelector(s).value.trim();
