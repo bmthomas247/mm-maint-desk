@@ -4265,6 +4265,10 @@ async function csFetch(keep) {
     CS.nl = n.data; CS.ckr = c.data;
     const oc = (r.data.ours || []).map(o => o.comp_id).filter(Boolean);   // our homes' own calendars (booked nights)
     if (oc.length) { const q0 = await sb.from("latest_calendar").select("comp_id,start_date,avail").in("comp_id", oc); (q0.data || []).forEach(x => CS.cal[x.comp_id] = x); }
+    // our asking price = today's Track rack rate from the daily price record (hub_price_snap), newest per home
+    CS.snap = {}; const codes = (r.data.ours || []).map(o => o.code);
+    if (codes.length) { const q1 = await sb.from("hub_price_snap").select("code,day,start_day,rates").in("code", codes).order("day", { ascending: false }).limit(codes.length * 3);
+      for (const x of q1.data || []) if (!CS.snap[x.code]) CS.snap[x.code] = x; }
     if (tok !== CS.tok) return;
     (n.data || []).forEach(x => { CS.cal[x.comp_id + "|" + chOf(x.channel)] = x; });
     (n.data || []).forEach(x => csSeen(x.comp_id, chOf(x.channel), x.captured_at));
@@ -4289,6 +4293,13 @@ function csCalc() {
     if (v.length) (CS.ask[x.comp_id] ||= {})[ch] = { v: mid(v) };
     if (seen) (CS.bk[x.comp_id] ||= {})[ch] = bk / seen;
   }
+  // our homes' asking per site = Track rack rate x that site's markup (Track rate types: ABB-N 10 +17%, VRBO-N-10 +15%, our site = rack), open nights in the dates
+  const MK = { Airbnb: 1.17, VRBO: 1.15, Direct: 1 };
+  for (const o of (CS.data && CS.data.ours) || []) { const x = (CS.snap || {})[o.code]; if (!x) continue; const cal = (CS.cal || {})[o.comp_id], av = cal ? String(cal.avail || "") : "";
+    const co = cal ? Math.round((new Date(a + "T12:00") - new Date(String(cal.start_date).slice(0, 10) + "T12:00")) / 864e5) : 0;
+    const o0 = Math.round((new Date(a + "T12:00") - new Date(String(x.start_day).slice(0, 10) + "T12:00")) / 864e5), n0 = Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5) + 1;
+    const v = []; for (let i = 0; i < n0; i++) { const r0 = (x.rates || [])[o0 + i]; if (r0 == null || av[co + i] === "0") continue; v.push(+r0); }
+    if (v.length) { const m0 = mid(v); CS.ask[o.comp_id] = { Airbnb: { v: m0 * MK.Airbnb, rack: m0 }, VRBO: { v: m0 * MK.VRBO, rack: m0 }, Direct: { v: m0, rack: m0 } }; } }
   for (const [id, x] of Object.entries(CS.cal || {})) { if (id.includes("|")) continue;   // our homes' calendars
     const o0 = Math.round((new Date(a + "T12:00") - new Date(String(x.start_date).slice(0, 10) + "T12:00")) / 864e5), n0 = Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5) + 1;
     const av = String(x.avail || ""); let bk = 0, seen = 0; for (let i = 0; i < n0; i++) { const o = av[o0 + i]; if (o === undefined) continue; seen++; if (o === "0") bk++; }
