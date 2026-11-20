@@ -110,7 +110,6 @@ dialog.big[open]{display:flex}
 <dialog id="big" class="big"></dialog>
 <dialog id="osd" class="big"></dialog>
 <input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
-<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -482,7 +481,7 @@ async function osSave(){
 }
 async function osSend(){
   const r = OS.row;
-  if(!await mmConfirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
+  if(!confirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
   if(!(await osSave())) return;
   $("#osst").textContent = "Sending…";
   const { data, error } = await sb.functions.invoke("owner-stay-send", { body:{ id:r.id } });
@@ -521,7 +520,7 @@ document.addEventListener("click", async e => {
       OS.items.todo.push({ id:"my" + Date.now(), text:t, source:`Added by ${OS.me || "you"}, ${osShort(today())}`, on:true, mine:true }); }
     return OS.edited ? osDraw() : osRecompose(); }
   if(b.dataset.osadd) return osEventDialog();
-  if(b.dataset.evoff){ if(!await mmConfirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
+  if(b.dataset.evoff){ if(!confirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
   if(b.dataset.osclose) return $("#osd").close();
   if(b.dataset.osre) return osRecompose();
   if(b.dataset.ossave) return osSave();
@@ -715,7 +714,7 @@ function design(id, fromCamp){
     design:{ blocks:(TAB === "guest" ? START.guest : START.blank)() } };
   if(fromCamp){ DES.d.name = "Copy of " + fromCamp.name; DES.d.subject = fromCamp.subject || ""; DES.d.list_ids = fromCamp.list_ids || [];
     DES.d.design = { blocks:[{ t:"html", html:fromCamp.html || "" }] }; }
-  DES.dirty = !ex; drawDesigner();
+  DES.dirty = !ex; DES.audInfo = null; drawDesigner();
   const d = $("#big"); if(!d.open) d.showModal();
 }
 function drawDesigner(){
@@ -839,7 +838,7 @@ document.addEventListener("change", e => { const t = e.target; if(!DES.d || !t.c
   if(t.dataset.redraw && t.dataset.k === "who"){ const v = VOICES[t.value]; DES.d.design.blocks.forEach(x => { if(x.t === "footer") x.text = v.sign; }); DES.dirty = true; drawDesigner(); }
   if(t.id === "addb" && t.value){ DES.d.design.blocks.splice(Math.max(0, DES.d.design.blocks.length - (DES.d.design.blocks.at(-1)?.t === "footer" ? 1 : 0)), 0, newBlock(t.value)); DES.dirty = true; drawDesigner(); } });
 document.addEventListener("click", async e => { const b = e.target.closest("button"); if(!b || !b.closest("#big")) return;
-  if(b.dataset.close){ if(DES.d && DES.dirty && !await mmConfirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
+  if(b.dataset.close){ if(DES.d && DES.dirty && !confirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
   if(!DES.d) return;
   const B = DES.d.design.blocks;
   if(b.dataset.dw){ DES.phone = b.dataset.dw === "phone"; drawDesigner(); }
@@ -952,7 +951,7 @@ function gfParams(f, types, extra){   // filters + stacked renter types -> what 
 async function gfFind(f, types, extra){ const r = await sb.rpc("mkt_guest_find", { p:gfParams(f, types, extra) }); if(r.error) throw r.error; return r.data; }
 async function gfSearch(){
   if(!isOn()){ GF.res = null; return gfDraw(); }
-  const my = ++GF.seq; GF.busy = true; gfDraw();
+  const my = ++GF.seq; GF.busy = true; GF.showAll = false; gfDraw();
   try { const d = await gfFind(GF.f, GF.types); if(my !== GF.seq) return; GF.res = d; GF.err = ""; }
   catch(e){ if(my !== GF.seq) return; GF.err = niceE(e); }
   GF.busy = false; gfDraw();
@@ -1042,7 +1041,7 @@ function resultsHtml(R){
     <button class="btn" data-gcsv="1">⬇ Download CSV</button>
     <label class="muted" style="font-size:13px">Sort <select data-gsort="1">${[["last","newest stay first"],["stays","most stays"],["stars","best reviews"],["next","next stay"],["name","name A–Z"]].map(([v, l]) => `<option value="${v}"${GF.sort === v ? " selected" : ""}>${l}</option>`).join("")}</select></label></div>
   <div class="box"><table><thead><tr><th>Guest</th><th>From</th><th class="n">Stays</th><th>Last stay</th><th>Next stay</th><th>Booked on</th><th>Reviews</th><th>Email</th></tr></thead>
-  <tbody>${rows.map(x => { const s = (x.stays_j || []).find(v => !v[6] && v[0] <= today()) || (x.stays_j || [])[0] || [];
+  <tbody>${rows.slice(0, GF.showAll ? rows.length : 6).map(x => { const s = (x.stays_j || []).find(v => !v[6] && v[0] <= today()) || (x.stays_j || [])[0] || [];
     return `<tr data-grow="${x.contact_id}" style="cursor:pointer" title="Tap to see every stay"><td><b>${esc(x.name || "—")}</b>${x.vip ? ` <span class="pill blue">VIP</span>` : ""}</td>
     <td>${esc([x.city, x.state].filter(Boolean).join(", ") || x.country || "")}</td><td class="n">${x.stays}</td>
     <td>${x.last_in ? `${esc(fmtD(x.last_in))}<div class="muted">${esc(s[2] || "")}${s[1] ? " · " + s[1] + " nights" : ""}</div>` : ""}</td>
@@ -1051,7 +1050,8 @@ function resultsHtml(R){
     <td>${x.reviews ? `${x.five ? `<span class="pill green">${x.five}× 5★</span> ` : ""}${x.four ? `<span class="pill">${x.four}× 4★</span> ` : ""}${x.low ? `<span class="pill red">${x.low}× ≤3★</span>` : ""}` : `<span class="muted">none</span>`}</td>
     <td>${x.excluded ? `<span class="pill red">${x.excluded === "dnr" ? "Do Not Rent" : x.excluded === "owner" ? "owner" : "blocked in Track"}</span>` : x.brevo_unsub ? `<span class="pill red">unsubscribed</span>` : !x.has_email ? `<span class="pill">no email</span>` : `<span class="pill green">✓ can email</span>`}</td></tr>`; }).join("")
     || `<tr><td colspan="8" class="empty">No guests match. Try fewer filters.</td></tr>`}</tbody></table>
-  ${R.shown > rows.length ? `<div class="empty">Showing the first ${rows.length}. The email and the CSV use all ${R.shown.toLocaleString()}.</div>` : ""}</div>`;
+  ${rows.length > 6 ? `<div class="empty"><button class="btn small" data-gall="1">${GF.showAll ? "Show fewer ▴" : `Show more ▾ (${Math.min(rows.length, 250) - 6} more${R.shown > rows.length ? `, first ${rows.length} of ${R.shown.toLocaleString()}` : ""})`}</button></div>` : ""}
+  ${GF.showAll && R.shown > rows.length ? `<div class="empty">Showing the first ${rows.length}. The email and the CSV use all ${R.shown.toLocaleString()}.</div>` : ""}</div>`;
 }
 function gfDraw(focusKey){
   const box = $("#gfind"); if(!box) return;
@@ -1092,6 +1092,7 @@ function gfEmail(start, name){   // open the designer with this search attached
   DES.d.design.aud = { name, filters:fl, types:GF.types.slice(), auto_next:auto }; DES.audInfo = null; drawDesigner(); audCount();
 }
 document.addEventListener("click", async e => {
+  const sa = e.target.closest("[data-gall]"); if(sa && sa.closest("#gfind")){ e.preventDefault(); GF.showAll = !GF.showAll; return gfDraw(); }
   const t = e.target.closest("[data-gt],[data-gtile],[data-gaud],[data-gaudx],[data-gsave],[data-gcsv],[data-gmail],[data-grow],[data-gmore]");
   if(!t || !t.closest("#gfind")) return;
   e.preventDefault();
@@ -1107,7 +1108,7 @@ document.addEventListener("click", async e => {
     if(k === "coming") GF.f.next = on ? "any" : "has";
     return gfSearch(); }
   if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ const fl = a.filters || {}; gfApply(fl.types || [], fl.f || fl, a.name); } return; }
-  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !await mmConfirm(`Take "${a.name}" off the saved searches?`)) return;
+  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !confirm(`Take "${a.name}" off the saved searches?`)) return;
     const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return alert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
   if(t.dataset.gsave){ const name = prompt("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
     const ex = GF.aud.find(x => x.name.toLowerCase() === name.trim().toLowerCase());
@@ -1202,8 +1203,8 @@ START.find = f => { const t = f && f.type, why = t === "five" || t === "good" ? 
     : "Thank you for staying with Moose Management. We'd love to have you back.";
   const utm = "?utm_source=brevo&utm_medium=email&utm_campaign=" + (t || "guests");
   if(t === "rrdue") return voiceStart("patrick", [newBlock("header"), { t:"heading", text:"It's almost time to come back", size:26 },
-    { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\nWe loved having you at {{ contact.HUB_LAST_HOME }} back in {{ contact.HUB_LAST_STAY }}, and thank you again for the 5-star review. It means a lot to our whole crew.\n\nThis is about when guests start booking that same time of year, so I wanted you to hear it from us first: your home is open to book again, and booking direct on our website is the best price." },
-    { t:"button", label:"Book your home again", href:"{{ contact.HUB_HOME_LINK }}", color:"#5b8a1e" },
+    { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\nWe loved having you at {{ contact.HUB_LAST_HOME }} back in {{ contact.HUB_LAST_STAY }}, and thank you again for the 5-star review. It means a lot to our whole crew.\n\nGuests often come back the same time of year, and the best dates go first. If Park City is on your list again, now is a good time to look. Book direct on our website for the best price, and our local team is a call away." },
+    { t:"button", label:"See dates for your home", href:"{{ contact.HUB_HOME_LINK }}", color:"#5b8a1e" },
     { t:"homes", codes:"", title:"Or try one of these", items:[] }, newBlock("spacer"), newBlock("footer")]);
   return voiceStart(t === "coming" ? "penny" : "patrick", [newBlock("header"), { t:"heading", text:t === "coming" ? "Your Park City stay is coming up" : "Park City misses you", size:26 },
     { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n" + why + "\n\nBook direct on our website for the best price, and talk to our local team any time." },
