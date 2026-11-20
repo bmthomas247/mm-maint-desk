@@ -6,6 +6,7 @@
 <title>Rates · Moose Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -2021,19 +2022,19 @@ function srWire(R) {
         under: nz("dyUnder"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
         learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), newOn: !!document.getElementById("dyNewOn")?.checked, matchSleeps: !!document.getElementById("dyMatchSleeps")?.checked, bedOff: nz("dyBedOff"), sleepsWin: nz("dySleepsWin"), noHt: !!document.getElementById("dyNoHt")?.checked, htOff: nz("dyHtOff"), pets: !!document.getElementById("dyPets")?.checked, petUp: nz("dyPetUp"), petDown: nz("dyPetDown"), pool: !!document.getElementById("dyPool")?.checked, poolUp: nz("dyPoolUp"), farLY: g("dyFarLY") === "" ? 20 : +g("dyFarLY"), farDays: g("dyFarDays") === "" ? 180 : +g("dyFarDays"), oneOk: !!document.getElementById("dyOneOk")?.checked, minLm7: g("dyMinLm7"), minLm3: g("dyMinLm3"), floorStayHol: g("dyFloorStayHol") });
       const on = $("auOn").checked, send = $("auSend").checked;
-      if (send && !confirm(`Send ${srName(SR.code)}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
+      if (send && !await mmConfirm(`Send ${srName(SR.code)}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
       const r = await sb.rpc("rates_set_auto", { p_code: SR.code, p_dyn: SR.dyn, p_on: on, p_days: +$("auDays").value, p_send: send });
       if (r.error) return alert(niceE(r.error)); SR.dynFor = null; loadSetRates(); }; }
   const on = (id, ev, f) => { const e = $(id); if (e) e[ev] = f; };
   on("srHome", "onchange", e => { SR.code = e.target.value; loadSetRates(); });
   on("srAdd", "onchange", async e => { const c = e.target.value; if (!c) return;
-    if (!confirm(`Add ${c} to the Set rates test? Nothing is sent to Track until someone presses Send and Beyond is marked off for it.`)) { e.target.value = ""; return; }
+    if (!await mmConfirm(`Add ${c} to the Set rates test? Nothing is sent to Track until someone presses Send and Beyond is marked off for it.`)) { e.target.value = ""; return; }
     const r = await sb.rpc("rates_set_home", { p_code: c, p_on: true }); if (r.error) return alert(niceE(r.error)); SR.code = c; loadSetRates(); });
   on("srPick", "onclick", srCal);
   document.querySelectorAll("[data-srmore]").forEach(b => b.onclick = () => { const w = b.closest(".wrap"), y = w?.scrollTop; SR.to = addD(SR.to, +b.dataset.srmore); srDraw(); const w2 = document.querySelector("#srBody .wrap"); if (w2 && y != null) w2.scrollTop = y; });
   document.querySelectorAll("[data-srd]").forEach(b => b.onclick = () => { const t = iso(new Date(new Date().setHours(12, 0, 0, 0))); SR.from = t; SR.to = addD(t, +b.dataset.srd - 1); srDraw(); });
   on("srBoff", "onchange", async e => { const v = e.target.checked;
-    if (v && !confirm(`Confirm Beyond Pricing is turned OFF for ${srName(SR.code)} (in Beyond, or Kolleen did it)? If it's still on, Beyond will write over our rates in Track.`)) { e.target.checked = false; return; }
+    if (v && !await mmConfirm(`Confirm Beyond Pricing is turned OFF for ${srName(SR.code)} (in Beyond, or Kolleen did it)? If it's still on, Beyond will write over our rates in Track.`)) { e.target.checked = false; return; }
     const r = await sb.rpc("rates_set_home", { p_code: SR.code, p_beyond_off: v }); if (r.error) { alert(niceE(r.error)); e.target.checked = !v; return; } loadSetRates(); });
   document.querySelectorAll("[data-srr],[data-srm]").forEach(i => i.onchange = () => { const k = i.dataset.srr || i.dataset.srm, cur = srVal(k), e = (SR.edits[k] ||= { rate: cur.rate, min: cur.min });   // starts from what's shown (saved, or Track's current rate)
     const v = i.value === "" ? null : Math.round(+i.value); if (i.dataset.srr) { e.rate = v; delete e.why; } else e.min = v;
@@ -2164,7 +2165,7 @@ function srWire(R) {
       SR.edits = {}; await loadSetRates(); return document.getElementById("srPush")?.click(); }
     const n = R.filter(r => r.v.saved).length; if (!n) return alert("No saved suggestions in these dates. Save first.");
     srSendOpen(R, async () => { const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return alert(niceE(r.error)); loadSetRates(); }); });
-  document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!confirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
+  document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!await mmConfirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
   on("srCsv", "onclick", () => { if (!R) return; const q = v => v == null ? "" : String(v);
     const lines = [["Night", "Track now", "Track min", srGrpName() + " avg", "Comps daily rate", "Our rate", "Our min"].join(",")].concat(R.map(r => [r.k, q(r.t?.rate), q(r.t?.min_nights), q(r.b), r.c ? Math.round(r.c.adr) : "", q(r.v.rate), q(r.v.min)].join(",")));
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" })); a.download = `set_rates_${SR.code.replace(/\s+/g, "_")}_${SR.from}_${SR.to}.csv`; a.click(); });
@@ -2826,7 +2827,7 @@ function render() {
   $("grid").onclick = async e => {
     const b = e.target.closest("button[data-rm]"); if (!b) return;
     const c = state.comps.find(x => x.id === b.dataset.rm);
-    if (!confirm(`Remove ${c.label} from this comp set? Its price history is kept.`)) return;
+    if (!await mmConfirm(`Remove ${c.label} from this comp set? Its price history is kept.`)) return;
     const { error } = await sb.rpc("remove_comp", { cid: c.id });
     if (error) alert(error.message); else load(state.set.id);
   };
@@ -4374,17 +4375,17 @@ function csDraw() {
   W.querySelectorAll("[data-cst]").forEach(b => b.onclick = async () => {
     const x = rows.find(r => r.id === b.dataset.c), stt = b.dataset.cst; let note = null;
     if (stt === "delete") { note = prompt(`Delete "${x.label}" from ${d.name}? It's switched off (history kept). Why?`); if (note === null) return; }
-    if (stt === "paused" && !confirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
+    if (stt === "paused" && !await mmConfirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
     const r = await sb.rpc("rates_comp_state", { p_comp: x.id, p_state: stt, p_note: note });
     if (r.error) alert(r.error.message); else { CS.sets = null; await csFetch(true); rateSetsRefresh(); } });
   W.querySelectorAll("[data-mvs]").forEach(s0 => s0.onchange = async () => {
     const to = s0.value; if (!to) return; const tn = (CS.sets.find(x => x.id === to) || {}).name;
-    if (!confirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
+    if (!await mmConfirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
     const r = await sb.rpc("rates_home_move", { p_code: s0.dataset.mvs, p_to_set: to, p_note: null });
     if (r.error) { alert(r.error.message); s0.value = ""; return; }
     CS.sets = null; await rateSetsRefresh(); loadCompSets(); });
   W.querySelectorAll("[data-req]").forEach(b => b.onclick = async () => {
-    if (b.dataset.d === "Primary" && !confirm("Add this listing to the comp set as in use?")) return;
+    if (b.dataset.d === "Primary" && !await mmConfirm("Add this listing to the comp set as in use?")) return;
     const r = await sb.rpc("decide_comp_request", { req_id: +b.dataset.req, decision: b.dataset.d });
     if (r.error) alert(r.error.message); else { await rateSetsRefresh(); csFetch(); } });
   const rq = W.querySelector("details.csreq"); if (rq) rq.ontoggle = () => { CS.reqOpen = rq.open; };
@@ -4972,7 +4973,7 @@ function fdWire(el) {
   el.querySelectorAll("[data-bulk]").forEach(b => b.onclick = async () => {
     const all = (FD.rows || []).map(f => ({ ...f, d: fdDecision(f) })).filter(x => (FD.kind === "*" || x.kind === FD.kind) && (!x.d || x.d.decision === "later"));
     const kol = b.dataset.bulk === "kol", ids = (kol ? all.filter(x => x.change) : all).map(x => x.id);
-    if (!ids.length || !confirm(kol ? `Add all ${ids.length} suggested changes to the Kolleen list?` : `Snooze all ${ids.length} for a week?`)) return;
+    if (!ids.length || !await mmConfirm(kol ? `Add all ${ids.length} suggested changes to the Kolleen list?` : `Snooze all ${ids.length} for a week?`)) return;
     b.disabled = true;
     const r = await sb.rpc("finding_act_many", { p_ids: ids, p_decision: kol ? "accept" : "later", p_action: kol ? "📋 Add to the Kolleen list" : "⏰ Snooze a week" });
     if (r.error) { $("fdMsg").innerHTML = `<span class="up">Couldn't save: ${escH(r.error.message)}</span>`; b.disabled = false; return; }
@@ -5144,7 +5145,7 @@ function renderMarketList() {
 $("market").onclick = async e => {
   const c = e.target.closest(".mkchip"); if (c) { MK[c.dataset.mk] = !MK[c.dataset.mk]; mkSave(); renderMarketBar(); if (state.set) render(); return; }
   const hb = e.target.closest("button[data-hide]");
-  if (hb) { if (!confirm("Hide this note from the Desk? It stays in the history.")) return;
+  if (hb) { if (!await mmConfirm("Hide this note from the Desk? It stays in the history.")) return;
     const { error } = await sb.rpc("hide_market_event", { eid: +hb.dataset.hide }); if (error) alert(error.message); else loadMarket(); }
 };
 $("mkSlc").onchange = () => { MK.slc = $("mkSlc").checked; mkSave(); renderMarketBar(); if (state.set) render(); };
@@ -5344,7 +5345,7 @@ async function loadReqs() {
 }
 $("reqs").onclick = async e => {
   const b = e.target.closest("button[data-r]"); if (!b) return;
-  if (b.dataset.d !== "reject" && !confirm(`Add this home to the comp set?`)) return;
+  if (b.dataset.d !== "reject" && !await mmConfirm(`Add this home to the comp set?`)) return;
   const { error } = await sb.rpc("decide_comp_request", { req_id: +b.dataset.r, decision: b.dataset.d });
   if (error) alert(error.message); else load(state.set.id);
 };
