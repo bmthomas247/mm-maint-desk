@@ -110,6 +110,7 @@ dialog.big[open]{display:flex}
 <dialog id="big" class="big"></dialog>
 <dialog id="osd" class="big"></dialog>
 <input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -481,7 +482,7 @@ async function osSave(){
 }
 async function osSend(){
   const r = OS.row;
-  if(!confirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
+  if(!await mmConfirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
   if(!(await osSave())) return;
   $("#osst").textContent = "Sending…";
   const { data, error } = await sb.functions.invoke("owner-stay-send", { body:{ id:r.id } });
@@ -520,12 +521,12 @@ document.addEventListener("click", async e => {
       OS.items.todo.push({ id:"my" + Date.now(), text:t, source:`Added by ${OS.me || "you"}, ${osShort(today())}`, on:true, mine:true }); }
     return OS.edited ? osDraw() : osRecompose(); }
   if(b.dataset.osadd) return osEventDialog();
-  if(b.dataset.evoff){ if(!confirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
+  if(b.dataset.evoff){ if(!await mmConfirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
   if(b.dataset.osclose) return $("#osd").close();
   if(b.dataset.osre) return osRecompose();
   if(b.dataset.ossave) return osSave();
   if(b.dataset.ossend) return osSend();
-  if(b.dataset.osskip || b.dataset.osback){ const skip = !!b.dataset.osskip, note = skip ? prompt("Why skip this one? (optional)") : "";
+  if(b.dataset.osskip || b.dataset.osback){ const skip = !!b.dataset.osskip, note = skip ? await mmAsk("Why skip this one? (optional)") : "";
     if(skip && note === null) return;
     const q = await sb.rpc("mkt_owner_email_skip", { p_id:OS.row.id, p_skip:skip, p_note:note || "" });
     if(q.error){ $("#osst").innerHTML = `<span class="err">${esc(q.error.message)}</span>`; return; }
@@ -862,7 +863,7 @@ document.addEventListener("change", e => { const t = e.target; if(!DES.d || !t.c
   if(t.dataset.redraw && t.dataset.k === "who"){ const v = VOICES[t.value]; DES.d.design.blocks.forEach(x => { if(x.t === "footer") x.text = v.sign; }); DES.dirty = true; drawDesigner(); }
   if(t.id === "addb" && t.value){ DES.d.design.blocks.splice(Math.max(0, DES.d.design.blocks.length - (DES.d.design.blocks.at(-1)?.t === "footer" ? 1 : 0)), 0, newBlock(t.value)); DES.dirty = true; drawDesigner(); } });
 document.addEventListener("click", async e => { const b = e.target.closest("button"); if(!b || !b.closest("#big")) return;
-  if(b.dataset.close){ if(DES.d && DES.dirty && !confirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
+  if(b.dataset.close){ if(DES.d && DES.dirty && !await mmConfirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
   if(!DES.d) return;
   const B = DES.d.design.blocks;
   if(b.dataset.dw){ DES.phone = b.dataset.dw === "phone"; drawDesigner(); }
@@ -1099,7 +1100,7 @@ async function gfDetail(id){
   d.showModal(); $("#gdClose", d).onclick = () => d.close();
 }
 async function gfCsv(){
-  let d; try { d = await gfFind(GF.f, GF.types, { limit:20000, lite:true }); } catch(e){ return alert(niceE(e)); }
+  let d; try { d = await gfFind(GF.f, GF.types, { limit:20000, lite:true }); } catch(e){ return await mmAlert(niceE(e)); }
   const rows = d.rows || [], cols = ["name","city","state","country","stays","nights","last_in","next_in","homes","communities","channels","five","four","low","holidays","avg_nights","max_beds","can_mail"];
   const q = v => { v = Array.isArray(v) ? v.join(" ") : v; return /[",\n]/.test(String(v ?? "")) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ""); };
   const blob = new Blob([[cols.join(",")].concat(rows.map(r => cols.map(c => q(r[c])).join(","))).join("\n")], { type:"text/csv" });
@@ -1134,12 +1135,12 @@ document.addEventListener("click", async e => {
     if(k === "coming") GF.f.next = on ? "any" : "has";
     return gfSearch(); }
   if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ const fl = a.filters || {}; gfApply(fl.types || [], fl.f || fl, a.name); } return; }
-  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !confirm(`Take "${a.name}" off the saved searches?`)) return;
-    const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return alert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
-  if(t.dataset.gsave){ const name = prompt("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
+  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !await mmConfirm(`Take "${a.name}" off the saved searches?`)) return;
+    const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return await mmAlert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
+  if(t.dataset.gsave){ const name = await mmAsk("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
     const ex = GF.aud.find(x => x.name.toLowerCase() === name.trim().toLowerCase());
     const r = await sb.rpc("mkt_audience_save", { p_id:ex ? ex.id : null, p_name:name, p_filters:{ f:Object.assign({}, GF.f), types:GF.types.slice() }, p_count:(GF.res || {}).shown || 0, p_note:null });
-    if(r.error) return alert(niceE(r.error));
+    if(r.error) return await mmAlert(niceE(r.error));
     const a = await sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }); GF.aud = a.data || GF.aud; GF.audName = name; return gfDraw(); }
   if(t.dataset.gcsv) return gfCsv();
   if(t.dataset.grow) return gfDetail(t.dataset.grow);
@@ -1227,7 +1228,7 @@ function segmentOf(rows){
 async function writeFromData(){
   const D = DES.d, A = D.design.aud; if(!A || DES.writing) return;
   const edited = D.design.blocks.some(b => b.t === "text" && !/^Hi \{\{ contact\.FIRSTNAME \}\},\n\n(Thank you|It's been|You've stayed|The holidays|Thanksgiving|Summer|Snow is|We can't wait|We loved|Round-trip|\[Write)/.test(b.text || ""));
-  if(edited && !confirm("Replace the words in this email with a new draft written from the data?")) return;
+  if(edited && !await mmConfirm("Replace the words in this email with a new draft written from the data?")) return;
   DES.writing = true; drawDesigner();
   try {
     const seg = segmentOf(((await gfFind(A.filters, A.types || [], { limit:250, lite:true })).rows) || []);
@@ -1355,7 +1356,7 @@ async function ideasOpen(){
   d.querySelectorAll("[data-iwrite]").forEach(b => b.onclick = () => { const x = GF.ideas[+b.dataset.iwrite]; d.close();
     GF.types = x.types.slice(); GF.f = Object.assign(GF0(), x.f); GF.audName = x.name; gfSearch(); gfEmail(x.start ? x.start() : START.find({ type:x.types[0] }), x.name, x.ctx); });
   d.querySelectorAll("[data-iskip]").forEach(b => b.onclick = async () => { const x = GF.ideas[+b.dataset.iskip];
-    const r = await sb.rpc("mkt_topic_set", { p_query:x.topic, p_status:"skip", p_note:null }); if(r.error) return alert(niceE(r.error));
+    const r = await sb.rpc("mkt_topic_set", { p_query:x.topic, p_status:"skip", p_note:null }); if(r.error) return await mmAlert(niceE(r.error));
     GF.topics.forEach(t => { if(t.query === x.topic) t.status = "skip"; }); ideasBuild(); ideasOpen(); });
 }
 
@@ -1462,7 +1463,7 @@ document.addEventListener("click", e => {
     return gfEmail(START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret), GF.audName, fareCtx(m)); }
 });
 document.addEventListener("change", async e => { const s = e.target.closest("[data-tstat]"); if(!s || !s.value) return;
-  const r = await sb.rpc("mkt_topic_set", { p_query:s.dataset.tstat, p_status:s.value, p_note:null }); if(r.error) return alert(niceE(r.error));
+  const r = await sb.rpc("mkt_topic_set", { p_query:s.dataset.tstat, p_status:s.value, p_note:null }); if(r.error) return await mmAlert(niceE(r.error));
   GF.topics.forEach(t => { if(t.query === s.dataset.tstat){ t.status = s.value; t.status_by = "you"; } }); const d = $("#gdata"); if(d) d.innerHTML = dataInner(); });
 
 async function refresh(){ try { await load(); render(); } catch(e){ $("#app").innerHTML = `<h1>${esc(TABS[TAB])}</h1><p class="muted">Couldn't load: ${esc(e.message || e)}</p>`; } }
