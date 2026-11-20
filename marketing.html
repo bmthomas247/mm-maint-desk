@@ -110,6 +110,7 @@ dialog.big[open]{display:flex}
 <dialog id="big" class="big"></dialog>
 <dialog id="osd" class="big"></dialog>
 <input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -481,7 +482,7 @@ async function osSave(){
 }
 async function osSend(){
   const r = OS.row;
-  if(!confirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
+  if(!await mmConfirm(`Send this email to the owner of ${r.home} from hello@moosemanagement.com?`)) return;
   if(!(await osSave())) return;
   $("#osst").textContent = "Sending…";
   const { data, error } = await sb.functions.invoke("owner-stay-send", { body:{ id:r.id } });
@@ -520,7 +521,7 @@ document.addEventListener("click", async e => {
       OS.items.todo.push({ id:"my" + Date.now(), text:t, source:`Added by ${OS.me || "you"}, ${osShort(today())}`, on:true, mine:true }); }
     return OS.edited ? osDraw() : osRecompose(); }
   if(b.dataset.osadd) return osEventDialog();
-  if(b.dataset.evoff){ if(!confirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
+  if(b.dataset.evoff){ if(!await mmConfirm("Hide this event from the owner emails?")) return; const q = await sb.rpc("mkt_event_off", { p_id:+b.dataset.evoff }); if(!q.error){ await loadOwners(); render(); } return; }
   if(b.dataset.osclose) return $("#osd").close();
   if(b.dataset.osre) return osRecompose();
   if(b.dataset.ossave) return osSave();
@@ -838,7 +839,7 @@ document.addEventListener("change", e => { const t = e.target; if(!DES.d || !t.c
   if(t.dataset.redraw && t.dataset.k === "who"){ const v = VOICES[t.value]; DES.d.design.blocks.forEach(x => { if(x.t === "footer") x.text = v.sign; }); DES.dirty = true; drawDesigner(); }
   if(t.id === "addb" && t.value){ DES.d.design.blocks.splice(Math.max(0, DES.d.design.blocks.length - (DES.d.design.blocks.at(-1)?.t === "footer" ? 1 : 0)), 0, newBlock(t.value)); DES.dirty = true; drawDesigner(); } });
 document.addEventListener("click", async e => { const b = e.target.closest("button"); if(!b || !b.closest("#big")) return;
-  if(b.dataset.close){ if(DES.d && DES.dirty && !confirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
+  if(b.dataset.close){ if(DES.d && DES.dirty && !await mmConfirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
   if(!DES.d) return;
   const B = DES.d.design.blocks;
   if(b.dataset.dw){ DES.phone = b.dataset.dw === "phone"; drawDesigner(); }
@@ -1106,7 +1107,7 @@ document.addEventListener("click", async e => {
     if(k === "coming") GF.f.next = on ? "any" : "has";
     return gfSearch(); }
   if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ const fl = a.filters || {}; gfApply(fl.types || [], fl.f || fl, a.name); } return; }
-  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !confirm(`Take "${a.name}" off the saved searches?`)) return;
+  if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !await mmConfirm(`Take "${a.name}" off the saved searches?`)) return;
     const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return alert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
   if(t.dataset.gsave){ const name = prompt("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
     const ex = GF.aud.find(x => x.name.toLowerCase() === name.trim().toLowerCase());
