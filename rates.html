@@ -4257,7 +4257,7 @@ async function csFetch(keep) {
     const t = new Date(); t.setHours(12, 0, 0, 0); const today = t.toISOString().slice(0, 10);
     const end = new Date(t.getTime() + 120 * 864e5).toISOString().slice(0, 10);
     const mid = a => { a = a.slice().sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
-    const chOf = c => /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
+    const chOf = c => c === "ABNB" ? "ABNB" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
     const sids = r.data.set_ids || [];
     const parts = await Promise.all(sids.flatMap(id => [sb.rpc("set_latest_nightly", { p_set: id }), sb.rpc("set_latest_checks", { p_set: id, p_from: today })]));
     if (tok !== CS.tok) return;
@@ -4283,7 +4283,7 @@ function csRange() { const t = new Date(); t.setHours(12, 0, 0, 0); const today 
 function csCalc() {
   const [a, b] = csRange(); CS.ask = {}; CS.tot = {}; CS.bk = {};
   const mid = v => { v = v.slice().sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
-  const chOf = c => /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
+  const chOf = c => c === "ABNB" ? "ABNB" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
   for (const x of CS.nl || []) {   // asking = open nights in the dates; booked % = nights not open
     const o0 = Math.round((new Date(a + "T12:00") - new Date(String(x.start_date).slice(0, 10) + "T12:00")) / 864e5), n0 = Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5) + 1;
     const v = [], av = String(x.avail || ""); let bk = 0, seen = 0;
@@ -4312,6 +4312,12 @@ function csCalc() {
   }
   for (const [id, m] of Object.entries(by)) for (const [ch, a0] of Object.entries(m)) {
     const s4 = a0.filter(x => x[1] <= 4), q = s4.length ? s4 : a0; (CS.tot[id] ||= {})[ch] = { v: mid(q.map(x => x[0])), n: q.length }; }
+  // Brandon 2026-11-20: our homes on the Airbnb tab use Airbnb's own numbers ("ABNB": Key Data calendar of our listing / airbnb.com quotes)
+  // when we have them; else Track's channel price, marked "Track".
+  for (const o of (CS.data && CS.data.ours) || []) { const id = o.comp_id;
+    for (const M of [CS.ask, CS.tot]) { const m = M[id]; if (!m) continue;
+      if (m.ABNB) { m.AirbnbTrack = m.Airbnb; m.Airbnb = { ...m.ABNB, src: "airbnb" }; } else if (m.Airbnb) m.Airbnb = { ...m.Airbnb, src: "track" };
+      if (m.VRBO) m.VRBO = { ...m.VRBO, src: "track" }; } }
 }
 function csSeen(id, ch, at) { const t = Date.parse(at || ""); if (!t) return; const m = (CS.fresh[id] ||= {}); if (!m[ch] || t > m[ch]) m[ch] = t; }
 // Airbnb / Vrbo / our website logos: colored = we have prices from that site in the last 7 days; grey = no fresh data (needs fixing)
@@ -4354,7 +4360,7 @@ function csDraw() {
   const homes = d.ours.map(h => { const f = F[h.code], low = f.rule !== "sleeps";
     return `<tr${CS.hl === h.code ? ' class="cshl1"' : ""}><td><b>${pcEsc(h.code)}</b> <small class="cshk ${kind(h).toLowerCase()}">${kind(h)}</small></td><td>${csLogos(h.comp_id, h.links, true)}</td><td>${h.beds ?? NA} bd</td><td>sleeps ${h.sleeps ?? NA}</td>
       <td>${f.use.size} comps <small class="${low ? "csbad" : "muted"}">${f.rule === "sleeps" ? `same bedrooms, sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}` : `no comps sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}: using every ${h.beds}-bedroom comp until some are added`}</small></td>
-      <td>${totOf(h.comp_id) ? money(totOf(h.comp_id).v) + " <small class='muted'>guest total</small>" : NA}</td>
+      <td>${totOf(h.comp_id) ? money(totOf(h.comp_id).v) + ` <small class='muted'>guest pays${totOf(h.comp_id).src === "airbnb" ? " · from Airbnb" : totOf(h.comp_id).src === "track" ? " · Track's price" : ""}</small>` : NA}</td>
       <td>${ed ? `<select class="csmv" data-mvs="${pcEsc(h.code)}"><option value="">Move to another comp set…</option>${setOpts(h.set_id)}</select>` : ""}</td></tr>`; }).join("");
   let pick = CS.f === "inuse" ? inuse : CS.f === "paused" ? paused : CS.f === "sec" ? sec : CS.f === "out" ? out : rows;
   let list = pick.slice();
@@ -4438,7 +4444,7 @@ function csDraw() {
       return cmpRow + ourRow + difRow;
     })()}
     </table></div>
-    <p class="small muted" style="margin-top:8px">${pcEsc(d.source)} Asking = middle daily rate on ${CH} for open nights in the next 120 days (before fees and cleaning). Guest pays / night = what a guest would pay at checkout per night on ${CH} for open dates (rent + cleaning + fees, from our price checks; not booked nights). Our homes' Airbnb / VRBO prices are Track's channel prices (our rack rate × Track markups), not read from airbnb.com / vrbo.com yet (2–4 night stays when there are any; number of quotes in brackets). Key Data tracks each comp on one site, so booked rate, booked % and rating show N/A on the other tabs. Red miles = more than 0.2 mi from our homes. Site logos: colored = prices from that site in the last 7 days; grey = no fresh data, needs fixing (tap a logo to open the listing). Delete switches a comp off; its history is kept.</p></div>`;
+    <p class="small muted" style="margin-top:8px">${pcEsc(d.source)} Asking = middle daily rate on ${CH} for open nights in the next 120 days (before fees and cleaning). Guest pays / night = what a guest would pay at checkout per night on ${CH} for open dates (rent + cleaning + fees, from our price checks; not booked nights). Our homes on the Airbnb tab: read from Airbnb (Key Data calendar of our listing, airbnb.com checkout quotes) when we have it, else Track's channel price; on VRBO always Track's price until a Vrbo source is added (2–4 night stays when there are any; number of quotes in brackets). Key Data tracks each comp on one site, so booked rate, booked % and rating show N/A on the other tabs. Red miles = more than 0.2 mi from our homes. Site logos: colored = prices from that site in the last 7 days; grey = no fresh data, needs fixing (tap a logo to open the listing). Delete switches a comp off; its history is kept.</p></div>`;
   const W = $("csOut");
   W.querySelectorAll("[data-csf]").forEach(b => b.onclick = () => { CS.f = CS.f === b.dataset.csf ? "all" : b.dataset.csf; csDraw(); });
   W.querySelectorAll("[data-sort]").forEach(h => h.onclick = () => { const k = h.dataset.sort;
@@ -4475,7 +4481,7 @@ function csDraw() {
 // weekly rates (Mon–Sun weeks inside the dates): comps' middle asking (open nights), comps booked %, our booked %, comps' guest total
 function csWeekly(d, inuse, CH) {
   const [a, b] = csRange(), mid = v => { v = v.filter(x => x != null).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
-  const chOf = c => /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
+  const chOf = c => c === "ABNB" ? "ABNB" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
   const ids = new Set(inuse.map(x => x.id)), wkS = k => { const dd = new Date(k + "T12:00"); dd.setDate(dd.getDate() - ((dd.getDay() + 6) % 7)); return dd.toISOString().slice(0, 10); };
   const W = {}; for (let k = a; k <= b; k = csDay(k, 1)) (W[wkS(k)] ||= { ask: [], bk: 0, n: 0, obk: 0, on: 0, tot: [] });
   const at = (x, k) => Math.round((new Date(k + "T12:00") - new Date(String(x.start_date).slice(0, 10) + "T12:00")) / 864e5);
