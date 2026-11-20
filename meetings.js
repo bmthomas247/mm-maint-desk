@@ -171,7 +171,7 @@ window.meetJoin = async function(key){
   document.querySelectorAll(".mjset").forEach(b => b.onclick = async () => {
     const u = await mmAsk("Paste the meeting's join link (https://…). Only people who can open this meeting will see it.", ""); if(!u) return;
     const w = await sb.rpc("meeting_link_set", { p_meet:key, p_url:u.trim(), p_label:/meet\.google/.test(u) ? "Google Meet" : /zoom\.us/.test(u) ? "Zoom" : "" });
-    if(w.error) return alert("Couldn't save: " + w.error.message);
+    if(w.error) return await mmAlert("Couldn't save: " + w.error.message);
     document.querySelectorAll(".mjoin").forEach(x => x.remove()); meetJoin(key); });
 };
 const t12 = t => { const [h, mi] = t.split(":").map(Number); return (h % 12 || 12) + (mi ? ":" + String(mi).padStart(2, "0") : "") + (h < 12 ? " am" : " pm"); };
@@ -215,11 +215,11 @@ async function upList(key, day, items, redraw){
   const l = r.data || [], el = document.getElementById("muplist"); if(!el) return; if(!l.length){ el.innerHTML = ""; return; }
   el.innerHTML = `<b style="font-size:13px">Sent in for this meeting</b>` + l.map(x => `<div style="font-size:13px;padding:6px 0;border-top:1px solid var(--line)"><span class="muted">${esc(x.by_name || "")} · ${esc(new Date(x.at).toLocaleString())} · ${esc(x.status === "read" ? "read" : x.status === "no_text" ? "recording only" : x.status)}</span><br>
     ${x.path ? `<a href="#" data-dl="${esc(x.path)}">${esc(x.file_name || "file")}</a>` : esc(x.file_name || "Pasted notes")}${x.size ? ` <span class="muted">${(x.size / 1048576).toFixed(1)} MB</span>` : ""}${x.result ? ` · <a href="#" data-show="${x.id}">See what it found</a>` : ""}${x.error && x.status !== "no_text" ? ` <span style="color:#b33">${esc(x.error)}</span>` : ""}</div>`).join("");
-  el.querySelectorAll("[data-dl]").forEach(a => a.onclick = async e => { e.preventDefault(); const u = await sb.storage.from("meeting-files").createSignedUrl(a.dataset.dl, 600); if(u.data) window.open(u.data.signedUrl, "_blank"); else alert("Couldn't open it"); });
+  el.querySelectorAll("[data-dl]").forEach(a => a.onclick = async e => { e.preventDefault(); const u = await sb.storage.from("meeting-files").createSignedUrl(a.dataset.dl, 600); if(u.data) window.open(u.data.signedUrl, "_blank"); else await mmAlert("Couldn't open it"); });
   el.querySelectorAll("[data-show]").forEach(a => a.onclick = e => { e.preventDefault(); const x = l.find(y => String(y.id) === a.dataset.show); if(x) upShow(x.result, x.file_name, key, items, redraw); }); }
 async function upGo(key, day, items, redraw){
   if(UP.busy) return; const fs = [...(document.getElementById("mupf").files || [])], pasted = document.getElementById("mupt").value, msg = document.getElementById("mupmsg");
-  if(!fs.length && !pasted.trim()) return alert("Pick a file or paste notes");
+  if(!fs.length && !pasted.trim()) return await mmAlert("Pick a file or paste notes");
   UP.busy = true; document.getElementById("mupgo").disabled = true; const texts = [], names = [], ids = [];
   try {
     for(const f of fs){ const kind = upKind(f), path = `${key}/${day}/${Date.now()}-${f.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
@@ -245,7 +245,7 @@ async function upGo(key, day, items, redraw){
 async function upAnswer(key, items, redraw){
   const L = UP.last, msg = document.getElementById("mupqmsg"); if(!L) return;
   const ans = [...document.querySelectorAll("[data-q]")].map(x => ({ q: x.dataset.q, a: x.value.trim() })).filter(x => x.a);
-  if(!ans.length) return alert("Type an answer first");
+  if(!ans.length) return await mmAlert("Type an answer first");
   L.answers = L.answers.concat(ans); msg.textContent = "Updating the notes…"; document.getElementById("mupqgo").disabled = true;
   const r = await sb.functions.invoke("meet-notes-read", { body: { id: L.id, text: L.text, items: L.items, answers: L.answers } }); const b = r.data || {};
   if(r.error || !b.ok){ msg.textContent = b.error || "Couldn't update. Try again."; document.getElementById("mupqgo").disabled = false; return; }
@@ -555,7 +555,7 @@ function render(v, key, data, ppl){
       let r = null;
       if(pn && pn.value.trim()) r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:pn.value.trim() });
       if(!r || !r.error) r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:it.key, p_text:(ta && ta.value.trim()) || "Covered in the meeting.", p_state:"covered" });
-      if(r.error){ cv.disabled = false; cv.textContent = "✓ Covered → next"; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      if(r.error){ cv.disabled = false; cv.textContent = "✓ Covered → next"; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       delete ST.drafts[key + "|" + it.key];
       const nx = list[i + 1] || (i > 0 ? list[i - 1] : null);
       MX.open = nx; MX.tab = "ov"; MX.tf = "all"; MX.bwopen = false; MX.chg = null;
@@ -627,12 +627,12 @@ function render(v, key, data, ppl){
       const k = b.dataset.pk, cur = orPrep()[k], want = b.dataset.prep, mark = cur && cur.mark === want ? "none" : want;
       b.disabled = true;
       const r = await sb.rpc("meeting_prep_set", { p_meet:key, p_day:day, p_item:k, p_mark:mark, p_note:cur && mark !== "none" ? cur.note : null });
-      if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      if(r.error){ b.disabled = false; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       await orState(); render(v, key, data, ppl); });
     v.querySelectorAll("[data-prepnote]").forEach(b => b.onclick = async e => { e.stopPropagation(); e.preventDefault();
       const k = b.dataset.prepnote, cur = orPrep()[k], t = await mmAsk("Reminder for the meeting (shows on the card):", (cur && cur.note) || ""); if(t == null) return;
       const r = await sb.rpc("meeting_prep_set", { p_meet:key, p_day:day, p_item:k, p_mark:cur && cur.mark === "skip" ? "skip" : "must", p_note:t.trim() || null });
-      if(r.error) return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message));
+      if(r.error) return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message));
       await orState(); render(v, key, data, ppl); });
     v.querySelectorAll("[data-orh]").forEach(b => b.onclick = e => { e.stopPropagation(); MX.orh[b.dataset.orh] = !MX.orh[b.dataset.orh]; render(v, key, data, ppl); });
     v.querySelectorAll("details[data-orfold]").forEach(d => d.ontoggle = () => { MX.orf[d.dataset.orfold] = d.open; });
@@ -791,7 +791,7 @@ function render(v, key, data, ppl){
     if(key === "meet_or") orPanelWire(o, it);
     const toff = o.querySelector("#mtoff");
     if(toff) toff.onclick = async () => { if(!await mmConfirm("Remove \"" + it.title + "\" from this meeting? (Its notes stay.)")) return;
-      const r = await sb.rpc("meeting_topic_off", { p_id:it.own }); if(r.error) return alert("Couldn't remove: " + r.error.message); close(); redraw(); };
+      const r = await sb.rpc("meeting_topic_off", { p_id:it.own }); if(r.error) return await mmAlert("Couldn't remove: " + r.error.message); close(); redraw(); };
     const sbtn = o.querySelector("#mss");
     if(sbtn) sbtn.onclick = async () => { const g2 = i => o.querySelector(i).value; sbtn.disabled = true;
       const r = await sb.rpc("meeting_sale_set", { p_meet:key, p_home:String(it.key).slice(5), p_mls:g2("#msm"), p_agent:g2("#msa"), p_phone:g2("#msp"), p_email:g2("#mse"), p_note:g2("#msn") }); sbtn.disabled = false;
@@ -805,7 +805,7 @@ function render(v, key, data, ppl){
         delete ST.drafts[key + "|" + it.key]; redraw(); }; }
     const sv = (res, fu, btn) => async () => { const r0 = res ? o.querySelector("#mofbr").value.trim() : ""; if(res && !r0) return o.querySelector("#mofbr").focus();
       btn.disabled = true; const r = await sb.rpc("meeting_ofb_set", { p_meet:key, p_day:day, p_id:fid, p_result:r0 || null, p_followup:fu ? o.querySelector("#mofbd").value || null : null }); btn.disabled = false;
-      if(r.error) return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); redraw(); };
+      if(r.error) return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); redraw(); };
     if(isOfb){ const s1 = o.querySelector("#mofbs"), s2 = o.querySelector("#mofbm"); s1.onclick = sv(true, false, s1); s2.onclick = sv(false, true, s2); }
   }
   /* message / alert a person or the topic's team: Slack from the hub bot ("From <you> (from the <meeting> meeting on the Moose Hub)"),
@@ -892,7 +892,7 @@ function render(v, key, data, ppl){
       const j = (MX.bw[key] || []).find(z => z.id === f.dataset.bwform), h = j && (j.homes || []).find(z => z.home === f.dataset.home);
       const was = String((h && h.date) || (j && j.due) || "").slice(0, 10), due = g("due") && g("due") !== was ? g("due") : null;
       b.disabled = true; const r = await sb.rpc("meeting_bw_change", { p_meet:key, p_day:day, p_job:f.dataset.bwform, p_home:f.dataset.home, p_due:due, p_who:g("who") || null, p_note:g("note") });
-      b.disabled = false; if(r.error) return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message));
+      b.disabled = false; if(r.error) return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message));
       MX.chg = null; await bwLoad(key); redraw(); bwPoll(); });
   }
   // the hub sends queued Breezeway work within about a minute: check back a few times so the panel shows "In Breezeway"
@@ -904,12 +904,12 @@ function render(v, key, data, ppl){
   /* buttons shared by the page and the panel */
   async function mfUp(k, task, tday, files){   // files go to meeting-files/<meeting>/<day>/notes/… then get recorded
     for(const f of files){
-      if(f.size > 50 * 1048576){ alert(f.name + " is over 50 MB."); continue; }
+      if(f.size > 50 * 1048576){ await mmAlert(f.name + " is over 50 MB."); continue; }
       const safe = f.name.replace(/[^\w.\-]+/g, "_").slice(-80), path = `${key}/${tday || day}/notes/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
       const u = await sb.storage.from("meeting-files").upload(path, f, { contentType:f.type || "application/octet-stream" });
-      if(u.error){ alert("Couldn't upload " + f.name + ": " + (window.niceErr ? niceErr(u.error) : u.error.message)); continue; }
+      if(u.error){ await mmAlert("Couldn't upload " + f.name + ": " + (window.niceErr ? niceErr(u.error) : u.error.message)); continue; }
       const r = await sb.rpc("meeting_file_add", { p_meet:key, p_day:tday || day, p_item:k || null, p_task:task || null, p_path:path, p_name:f.name, p_size:f.size, p_mime:f.type || null });
-      if(r.error) alert("Couldn't save " + f.name + ": " + (window.niceErr ? niceErr(r.error) : r.error.message));
+      if(r.error) await mmAlert("Couldn't save " + f.name + ": " + (window.niceErr ? niceErr(r.error) : r.error.message));
     } }
   function pick(cb){ const i = document.createElement("input"); i.type = "file"; i.multiple = true; i.style.display = "none"; document.body.appendChild(i);
     i.onchange = () => { const fs = [...i.files]; i.remove(); if(fs.length) cb(fs); }; i.click(); }
@@ -952,8 +952,8 @@ function render(v, key, data, ppl){
       const r = await sb.rpc("meeting_task_edit", { p_id:t.id, p_text:o.querySelector("#tdt").value, p_who:o.querySelector("#tdw").value || null,
         p_due:o.querySelector("#tdd").value || null, p_meet:nm, p_day:o.querySelector("#tdy").value || null });
       b.disabled = false;
-      if(r.error){ msg.textContent = ""; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
-      if(nm !== key){ const to = MS.find(x => x.key === nm); shut(); alert("Moved to " + (to ? to.name : "the other meeting") + "."); }
+      if(r.error){ msg.textContent = ""; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      if(nm !== key){ const to = MS.find(x => x.key === nm); shut(); await mmAlert("Moved to " + (to ? to.name : "the other meeting") + "."); }
       redraw(); };
     const pc = () => new Date(new Date().toLocaleString("en-US", { timeZone:"America/Denver" }));
     const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -978,7 +978,7 @@ function render(v, key, data, ppl){
       b.disabled = false; if(r.error) return m2.textContent = "Couldn't save: " + nice(r.error);
       const h12 = (hh % 12 || 12) + ":" + String(mm).padStart(2, "0") + (hh < 12 ? " am" : " pm");
       await tnote("🗓 On the " + (cal === "office" ? "Office" : "my") + " calendar: " + fmtD(d0) + ", " + h12 + " (" + o.querySelector("#tcl").selectedOptions[0].text + ")");
-      if(fell) alert("Saved on your own calendar. Only managers can add to the Office calendar.");
+      if(fell) await mmAlert("Saved on your own calendar. Only managers can add to the Office calendar.");
       redraw(); };
     o.querySelector("#tdbw").onclick = async () => { const f = o.querySelector("#tdbwf"); f.hidden = !f.hidden; o.querySelector("#tdcalf").hidden = true; if(f.hidden) return;
       if(!o.querySelector("#tbt").value) o.querySelector("#tbt").value = short(t.text, 200);
@@ -996,15 +996,15 @@ function render(v, key, data, ppl){
       await tnote("🛠 Sent to Breezeway: " + o.querySelector("#tbt").value.trim() + " · " + homes.join(", ") + " · " + fmtD(d0) + (who ? " · " + who : ""));
       await bwLoad(key); redraw(); bwPoll(); };
     o.querySelector("#tdna").onclick = async () => { const tx = o.querySelector("#tdn").value.trim(); if(!tx) return o.querySelector("#tdn").focus();
-      const r = await sb.rpc("meeting_task_note_add", { p_task:t.id, p_text:tx }); if(r.error) return alert("Couldn't save: " + r.error.message); redraw(); };
+      const r = await sb.rpc("meeting_task_note_add", { p_task:t.id, p_text:tx }); if(r.error) return await mmAlert("Couldn't save: " + r.error.message); redraw(); };
     o.querySelector("#tdf").onclick = () => pick(async fs => { msg.textContent = "Uploading…"; await mfUp(t.item_key, t.id, t.day, fs); redraw(); });
   }
   function fileWire(root){
     root.querySelectorAll("[data-mfile]").forEach(a => a.onclick = async e => { e.preventDefault(); e.stopPropagation();
       const w = window.open("", "_blank"); const r = await sb.storage.from("meeting-files").createSignedUrl(a.dataset.mfile, 600);
-      if(r.error || !r.data){ if(w) w.close(); return alert("Couldn't open the file."); } if(w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl; });
+      if(r.error || !r.data){ if(w) w.close(); return await mmAlert("Couldn't open the file."); } if(w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl; });
     root.querySelectorAll("[data-mfoff]").forEach(b => b.onclick = async e => { e.stopPropagation(); if(!await mmConfirm("Take this file off? It stays saved, it just won't show here.")) return;
-      const r = await sb.rpc("meeting_file_off", { p_id:+b.dataset.mfoff }); if(r.error) return alert("Couldn't: " + r.error.message); redraw(); });
+      const r = await sb.rpc("meeting_file_off", { p_id:+b.dataset.mfoff }); if(r.error) return await mmAlert("Couldn't: " + r.error.message); redraw(); });
   }
   function wire(root){
     fileWire(root);
@@ -1017,17 +1017,17 @@ function render(v, key, data, ppl){
       const k = b.dataset.nsave, t = root.querySelector(`textarea[data-note="${CSS.escape(k)}"]`), s = root.querySelector(`select[data-nstate="${CSS.escape(k)}"]`);
       if(!t.value.trim()) return t.focus();
       b.disabled = true; const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:k, p_text:t.value.trim(), p_state:s ? s.value : "covered" }); b.disabled = false;
-      if(r.error) return alert("Couldn't save: " + r.error.message);
+      if(r.error) return await mmAlert("Couldn't save: " + r.error.message);
       delete ST.drafts[key + "|" + k]; redraw(); });
     root.querySelectorAll("[data-tadd]").forEach(b => b.onclick = async () => {
       const f = b.closest(".mtask"), g = n => f.querySelector(`[data-tf="${n}"]`).value.trim();
       if(g("text").length < 2) return f.querySelector('[data-tf="text"]').focus();
       b.disabled = true; const r = await sb.rpc("meeting_task_add2", { p_meet:key, p_day:day, p_item:b.dataset.tadd, p_item_title:f.dataset.ttitle || null, p_text:g("text"), p_who:g("who") || null, p_due:g("due") || null }); b.disabled = false;
-      if(r.error) return alert("Couldn't add: " + (window.niceErr ? niceErr(r.error) : r.error.message));
+      if(r.error) return await mmAlert("Couldn't add: " + (window.niceErr ? niceErr(r.error) : r.error.message));
       delete MX.sug[b.dataset.tadd]; redraw(); });
     root.querySelectorAll("[data-tdone]").forEach(c => c.onchange = async () => {
       const r = await sb.rpc("meeting_task_set", { p_id:+c.dataset.tdone, p_done:c.checked, p_off:false });
-      if(r.error){ alert("Couldn't save: " + r.error.message); c.checked = !c.checked; return; }
+      if(r.error){ await mmAlert("Couldn't save: " + r.error.message); c.checked = !c.checked; return; }
       redraw(); });
   }
   wire(v);
@@ -1038,7 +1038,7 @@ function render(v, key, data, ppl){
     c.onclick = go; c.onkeydown = e => { if(e.key === "Enter") go(e); }; });
   v.querySelectorAll("[data-quick]").forEach(b => b.onclick = async e => { e.stopPropagation(); b.disabled = true;
     const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:b.dataset.quick, p_text:"Covered in the meeting.", p_state:"covered" });
-    if(r.error){ b.disabled = false; return alert("Couldn't save: " + r.error.message); } redraw(); });
+    if(r.error){ b.disabled = false; return await mmAlert("Couldn't save: " + r.error.message); } redraw(); });
   v.querySelectorAll("[data-filt]").forEach(b => b.onclick = () => { MX.filt = b.dataset.filt; render(v, key, data, ppl); });
   const mq = $("#mq"); mq.oninput = () => { MX.q = mq.value; const p = mq.selectionStart; render(v, key, data, ppl); const n = $("#mq"); n.focus(); n.setSelectionRange(p, p); };
   $("#mday").onchange = e => { if(e.target.value){ ST.day[key] = e.target.value; ST.drafts = {}; render(v, key, data, ppl); } };
@@ -1046,7 +1046,7 @@ function render(v, key, data, ppl){
   if($("#mlink")) $("#mlink").onclick = async () => {   // admins paste the Zoom / Meet link themselves (it can carry a passcode)
     const u = await mmAsk("Paste the meeting's join link (https://…). Only people who can open this meeting will see it.", ""); if(!u) return;
     const r = await sb.rpc("meeting_link_set", { p_meet:key, p_url:u.trim(), p_label:/meet\.google/.test(u) ? "Google Meet" : /zoom\.us/.test(u) ? "Zoom" : "" });
-    if(r.error) return alert("Couldn't save: " + r.error.message); redraw(); };
+    if(r.error) return await mmAlert("Couldn't save: " + r.error.message); redraw(); };
   $("#mprint").onclick = () => window.print();
   $("#mup").onclick = () => upOpen(v, key, day, items, () => render(v, key, data, ppl));
   $("#mplus").onclick = () => {   // + : add a topic, or bring back one covered today
@@ -1069,7 +1069,7 @@ function render(v, key, data, ppl){
       o.remove(); MX.open = "own:" + r.data; MX.tab = "ov"; redraw(); };
     o.querySelectorAll("[data-back]").forEach(b => b.onclick = async () => { b.disabled = true;
       const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:b.dataset.back, p_text:"Brought back to the agenda.", p_state:"open" });
-      if(r.error){ b.disabled = false; return alert("Couldn't: " + r.error.message); } o.remove(); redraw(); });
+      if(r.error){ b.disabled = false; return await mmAlert("Couldn't: " + r.error.message); } o.remove(); redraw(); });
   };
   $("#mwrap").onclick = () => {   // what was decided + who does what, ready to copy
     const L = [`${m.name} meeting · ${fmt(day)}`, ""];
@@ -1103,7 +1103,7 @@ window.meetTasksHome = async function(el){
         t.meet ? `<a href="#/${esc(t.meet)}">${esc(t.meet_name)} meeting</a>` : "From " + esc(t.meet_name), t.topic ? esc(t.topic) : "", t.by ? "from " + esc(t.by) : ""].filter(Boolean).join(" · ")}</small></div></div>`).join("")}</div>`;
   el.querySelectorAll("[data-mhd]").forEach(c => c.onchange = async () => { c.disabled = true;
     const w = await sb.rpc("meeting_task_set", { p_id:+c.dataset.mhd, p_done:true, p_off:false });
-    if(w.error){ c.disabled = false; c.checked = false; return alert("Couldn't save: " + w.error.message); }
+    if(w.error){ c.disabled = false; c.checked = false; return await mmAlert("Couldn't save: " + w.error.message); }
     c.closest(".tk").classList.add("done"); setTimeout(() => window.meetTasksHome(el), 900); });
 };
 window.meetTasksBell = async function(){
