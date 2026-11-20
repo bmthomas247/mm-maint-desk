@@ -637,7 +637,8 @@ function campsHtml(){
     : `<p class="muted">${S.camps.length ? `No campaigns for ${esc(TABS[TAB])} lists yet.` : "Brevo campaigns show here once the hub can read them from Brevo."}</p>`}
   ${last ? `<p class="src">Source: Brevo email campaigns (read every 15 minutes), last read ${esc(fmtDT(last))}. Opened / clicked = unique opens or clicks ÷ delivered. Apple Mail privacy makes opens look higher than they are.</p>` : ""}`;
 }
-const SAMPLE = s => String(s || "").replace(/\{\{\s*contact\.FIRSTNAME\b[^}]*\}\}/gi, "Alex").replace(/\{\{\s*contact\.LASTNAME\b[^}]*\}\}/gi, "Sample")
+const SAMPLE = s => String(s || "").replace(/\{\{\s*contact\.FIRSTNAME\b[^}]*\}\}/gi, "Alex").replace(/\{\{\s*contact\.HUB_LAST_HOME\b[^}]*\}\}/gi, "Bear Hollow Lodges 3307")
+  .replace(/\{\{\s*contact\.HUB_LAST_STAY\b[^}]*\}\}/gi, "January 2025").replace(/\{\{\s*contact\.HUB_HOME_LINK\b[^}]*\}\}/gi, "https://www.vacationrentalsparkcity.com/").replace(/\{\{\s*contact\.LASTNAME\b[^}]*\}\}/gi, "Sample")
   .replace(/\{\{\s*params\.[^}]*\}\}/gi, "…");
 const frame = (html, phone) => `<div class="pv ${phone ? "phone" : ""}"><iframe sandbox="allow-popups allow-popups-to-escape-sandbox" title="Email preview" srcdoc="${esc(SAMPLE(html))}"></iframe></div>`;
 async function preview(id){
@@ -669,7 +670,7 @@ const START = {
     { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=return-renters", color:"#5b8a1e" },
     newBlock("spacer"), newBlock("footer")],
   blank: () => [newBlock("header"), newBlock("heading"), newBlock("text"), newBlock("footer")] };
-const escT = s => esc(s).replace(/\{\{\s*([\w. ]+?)\s*\}\}/g, (m, k) => "{{ " + k + " }}");
+const escT = s => String(s == null ? "" : s).split(/(\{\{[^{}]{1,120}\}\})/).map((x, i) => i % 2 && /^\{\{\s*[\w.]+(\s*\|\s*default\s*:\s*"[^"<>]{0,60}")?\s*\}\}$/.test(x) ? x : esc(x)).join("");
 const inline = s => escT(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
   .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" style="color:#3c5f12;font-weight:bold">$1</a>');
 const FONT = "font-family:Helvetica,Arial,sans-serif;color:#15201a";
@@ -726,7 +727,7 @@ function drawDesigner(){
     homes:() => f(b,i,"title","Heading over the homes") + f(b,i,"codes","Home codes, comma between (e.g. BHL 3307, PL 627)") + `<div class="bar" style="margin:2px 0 6px"><button class="btn small" data-hfill="${i}">🏠 Add these homes</button><span class="muted" style="font-size:12px">${(b.items || []).length ? (b.items || []).map(x => esc(x.code)).join(", ") : "none yet"}</span></div>`,
     header:() => f(b,i,"logo","Logo picture URL") + pics(i, "logo") + f(b,i,"bg","Bar color","input",'type="color"'),
     heading:() => f(b,i,"text","Heading") + f(b,i,"size","Size","input",'type="number" min="16" max="44"'),
-    text:() => f(b,i,"text","Text (blank line = new paragraph · **bold** · [words](https://link) · {{ contact.FIRSTNAME }})","textarea"),
+    text:() => f(b,i,"text","Text (blank line = new paragraph · **bold** · [words](https://link))","textarea") + `<div class="bar" style="margin:2px 0 6px;gap:4px"><span class="muted" style="font-size:12px">Add:</span>${[["first name","{{ contact.FIRSTNAME }}"],["home they stayed in","{{ contact.HUB_LAST_HOME }}"],["month of that stay","{{ contact.HUB_LAST_STAY }}"]].map(([l, t]) => `<button class="btn small" data-tag="${i}" data-tv="${esc(t)}" title="Put ${esc(l)} where the cursor is">+ ${l}</button>`).join("")}</div>`,
     image:() => f(b,i,"src","Picture URL (https://…)") + pics(i, "src") + f(b,i,"alt","Describe the picture") + f(b,i,"href","Link when tapped (optional)"),
     button:() => f(b,i,"label","Button words") + f(b,i,"href","Link") + f(b,i,"color","Color","input",'type="color"'),
     spacer:() => f(b,i,"h","Height (px)","input",'type="number" min="4" max="120"'),
@@ -845,6 +846,8 @@ document.addEventListener("click", async e => { const b = e.target.closest("butt
   if(b.dataset.rm != null){ B.splice(+b.dataset.rm, 1); DES.dirty = true; drawDesigner(); }
   if(b.dataset.up != null) return uploadPic(+b.dataset.up, b.dataset.pk);
   if(b.dataset.hfill != null) return fillHomes(+b.dataset.hfill);
+  if(b.dataset.tag != null){ const ta = $(`#big textarea[data-b="${b.dataset.tag}"]`), blk = B[+b.dataset.tag]; if(!ta) return;
+    const at = ta.selectionStart ?? ta.value.length; blk.text = ta.value.slice(0, at) + b.dataset.tv + ta.value.slice(ta.selectionEnd ?? at); DES.dirty = true; drawDesigner(); return; }
   if(b.dataset.lib != null) return picLibrary(+b.dataset.lib, b.dataset.pk);
   if(b.dataset.dsave) saveDraft(false);
   if(b.dataset.dbrevo){ if(!(DES.d.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
@@ -869,10 +872,11 @@ function brevoSure(){
 /* ---------- Guest: Find guests + email them (Brandon 2026-11-20; hub_mkt_guests.sql, hub_mkt_guest_find.sql, hub_mkt_area_trends.sql, hub_mkt_search_flights.sql) ----------
    The search runs in the database (mkt_guest_find): the page only gets counts, the first 250 guests and the ids we can email ("load after the search").
    Renter types stack (5-star + Christmas = both). Ideas pop up once a day from the search data; the data itself sits folded at the bottom. */
-const GF0 = () => ({ area:"", tyf:"", tyt:"", from:"", to:"", site:"any", comm:"", home:"", beds:"", stars:"any", stays:"any", last:"any", next:"any", hol:"", season:"any", state:"", nights:"", can:"yes", fresh:"14", q:"" });
+const GF0 = () => ({ rr:"", area:"", tyf:"", tyt:"", from:"", to:"", site:"any", comm:"", home:"", beds:"", stars:"any", stays:"any", last:"any", next:"any", hol:"", season:"any", state:"", nights:"", can:"yes", fresh:"14", q:"" });
 const GF = { f:GF0(), types:[], res:null, busy:false, seq:0, err:"", fac:null, aud:[], sends:[], mode:null, sort:"last", more:false, audName:"", tile:"",
   tr:null, trNat:null, cal:[], routes:[], news:[], topics:[], tf:"all", ideas:null };
 const GTYPES = {
+  rrdue: ["💌", "Return renters due now", "5-star guests whose best email day (just before they usually book, aimed at the anniversary of their stay) is in the next 30 days, not in a Brevo batch, not booked again", { rr:"due" }],
   five:  ["⭐", "5-star reviewers", "Left us a 5-star review", { stars:"5" }],
   good:  ["⭐", "4–5 star reviewers", "Left us a 4 or 5 star review", { stars:"4" }],
   repeat:["🔁", "Came back 2+ times", "Stayed with us more than once", { stays:"2" }],
@@ -914,7 +918,7 @@ const plural = (n, a, b) => `${(+n || 0).toLocaleString()} ${(+n === 1) ? a : (b
 async function gfBoot(){
   const [fa, au, se, mo, tr, ca, ro, ne, tp] = await Promise.all([
     sb.rpc("mkt_guest_facets"), sb.from("mkt_audiences").select("*").eq("off", false).order("updated_at", { ascending:false }),
-    sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id").order("asked_at", { ascending:false }).limit(100),
+    sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id,booked_after,booked_direct,booked_rent,results_at").order("asked_at", { ascending:false }).limit(100),
     sb.rpc("mkt_guest_mode"),
     sb.from("mkt_area_trends").select("kind,key,label,share,vs_ly_pct,vs_prior_pct,weeks,few,checked_at").neq("kind", "query").limit(1000),
     sb.from("mkt_flight_cal").select("origin,market,state,depart,ret,price,low,prev_price,checked_at").gte("depart", today()).order("depart").limit(5000),
@@ -1010,10 +1014,14 @@ function findInner(){
       <div class="muted" style="margin-top:4px">Not sure where to start? <a href="#" data-ideas="1">💡 See this week's ideas</a>.</div></div>`
   : GF.err && !R ? `<p class="muted">Couldn't search: ${esc(GF.err)}</p>`
   : !R ? `<p class="muted">Finding guests…</p>` : resultsHtml(R)}
-  ${recent.length ? `<h3 style="margin:16px 0 6px;font-size:15px">Emails sent to guest searches</h3><div class="box"><table><thead><tr><th>Email</th><th>Search</th><th class="n">Guests</th><th>Status</th><th>When</th></tr></thead><tbody>
-    ${recent.map(s => `<tr><td><b>${esc(s.subject || "")}</b></td><td>${esc(s.audience_name || "")}</td><td class="n">${(s.emailed ?? s.people ?? 0).toLocaleString()}</td>
+  ${recent.length ? `<h3 style="margin:16px 0 6px;font-size:15px">Emails sent to guest searches</h3><div class="box"><table><thead><tr><th>Email</th><th>Search</th><th class="n">Guests</th><th class="n">Opened</th><th class="n">Clicked</th><th class="n">Booked after</th><th>Status</th><th>When</th></tr></thead><tbody>
+    ${recent.map(s => { const c = S.camps.find(x => x.brevo_id == s.brevo_id), st = (c && c.stats) || {}, del = st.delivered || st.sent || 0, pc = n => del ? Math.round(n / del * 100) + "%" : "—";
+      return `<tr><td><b>${esc(s.subject || "")}</b></td><td>${esc(s.audience_name || "")}</td><td class="n">${(s.emailed ?? s.people ?? 0).toLocaleString()}</td>
+      <td class="n">${s.status === "sent" ? pc(st.uniqueViews || 0) : ""}</td><td class="n">${s.status === "sent" ? pc(st.uniqueClicks || 0) : ""}</td>
+      <td class="n">${s.results_at ? `<b>${s.booked_after || 0}</b>${s.booked_after ? `<div class="muted" style="font-size:11px">${s.booked_direct || 0} direct${s.booked_rent ? ` · $${Math.round(s.booked_rent).toLocaleString()} rent` : ""}</div>` : ""}` : `<span class="muted" style="font-size:11.5px">tomorrow</span>`}</td>
       <td>${s.status === "sent" ? `<span class="pill green">Sent</span>` : s.status === "failed" || s.status === "refused" ? `<span class="pill red" title="${esc(s.note || "")}">${esc(s.status)}</span>` : `<span class="pill blue">${esc(s.status)}</span>`}</td>
-      <td>${esc(s.asked_name || "")} · ${esc(fmtDT(s.done_at || s.asked_at))}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      <td>${esc(s.asked_name || "")} · ${esc(fmtDT(s.done_at || s.asked_at))}</td></tr>`; }).join("")}</tbody></table></div>
+    <p class="src">Opened / clicked = Brevo, unique ÷ delivered (Apple Mail makes opens look higher). Booked after = Track stays booked on or after the send day by the guests it went to (not cancelled), updated nightly; a guest who books under another Track contact isn't counted.</p>` : ""}
   <p class="src">Sources: Track reservations (since 2020) + Track contacts, Track reviews (staff-flagged ones left out), Brevo contacts (unsubscribed = blocklisted in Brevo). Rebuilt nightly${fac.built_at ? `, last ${esc(fmtDT(fac.built_at))}` : ""}. The hub keeps no email addresses: they're read from Track only when an email goes out.</p>`;
 }
 function resultsHtml(R){
@@ -1077,8 +1085,10 @@ function gfApply(types, f, name){   // used by ideas, saved searches and the dat
 }
 function gfEmail(start, name){   // open the designer with this search attached
   name = name || GF.audName || gfLabel();
+  const fl = Object.assign({}, GF.f); let auto = false;
+  if(!GF.types.includes("coming") && !GF.types.includes("rrdue") && fl.next === "any"){ fl.next = "none"; auto = true; }   // they're coming anyway: no "come back" email
   design("new"); DES.d.name = name + " · " + fmtD(today()); DES.d.design.blocks = start || START.find({ type:GF.types[0] });
-  DES.d.design.aud = { name, filters:Object.assign({}, GF.f), types:GF.types.slice() }; DES.audInfo = null; drawDesigner(); audCount();
+  DES.d.design.aud = { name, filters:fl, types:GF.types.slice(), auto_next:auto }; DES.audInfo = null; drawDesigner(); audCount();
 }
 document.addEventListener("click", async e => {
   const t = e.target.closest("[data-gt],[data-gtile],[data-gaud],[data-gaudx],[data-gsave],[data-gcsv],[data-gmail],[data-grow],[data-gmore]");
@@ -1131,7 +1141,7 @@ function audBox(){
   const I = DES.audInfo, ids = I.ids || [], M = GF.mode || {};
   const mine = D.id ? GF.sends.filter(s => s.draft_id === D.id) : [], last = mine[0], sent = mine.find(s => s.kind === "send" && s.status === "sent");
   return `<div class="audbox"><b>To: ${I.loading ? "…" : ids.length.toLocaleString()} guests</b> from the search “${esc(A.name)}”
-    <div class="muted" style="font-size:12.5px">${I.err ? esc(I.err) : `Guests with an email, not unsubscribed, not Do Not Rent${A.filters.fresh !== "any" ? `, not emailed by the hub in the last ${esc(A.filters.fresh)} days` : ""}. The hub reads their emails from Track and puts them on a new Brevo list when you send.`}</div>
+    <div class="muted" style="font-size:12.5px">${I.err ? esc(I.err) : `Guests with an email, not unsubscribed, not Do Not Rent${A.filters.fresh !== "any" ? `, not emailed by the hub in the last ${esc(A.filters.fresh)} days` : ""}${A.filters.next === "none" ? ", and no stay already booked" : ""}. The hub reads their emails from Track and puts them on a new Brevo list when you send.`}</div>
     ${last ? `<div style="margin-top:6px">${last.status === "asked" || last.status === "sending" ? `<span class="pill blue">⏳ ${last.kind === "test" ? "Test" : "Send"} ${last.status === "asked" ? "waiting for the office PC" : "going out"}…</span>`
       : last.status === "sent" ? `<span class="pill green">${last.kind === "test" ? "✓ Test sent" : "✓ Sent"}</span>` : `<span class="pill red">${esc(last.status)}</span>`} <span class="muted" style="font-size:12.5px">${esc(last.note || "")}</span></div>` : ""}
     ${sent ? "" : M.can_send ? `<div class="bar" style="margin:8px 0 0"><button class="btn" data-gtest="1" ${ids.length ? "" : "disabled"}>📧 Send me a test</button>
@@ -1159,7 +1169,7 @@ async function gfAsk(kind){
     await gfPollSends(DES.d.id, 0); };
 }
 async function gfPollSends(id, n){
-  const s = await sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id").order("asked_at", { ascending:false }).limit(100);
+  const s = await sb.from("mkt_guest_sends").select("id,draft_id,kind,status,note,people,emailed,audience_name,subject,asked_name,asked_at,done_at,brevo_id,booked_after,booked_direct,booked_rent,results_at").order("asked_at", { ascending:false }).limit(100);
   if(!s.error) GF.sends = s.data || [];
   if(DES.d && DES.d.id === id && $("#big").open) drawDesigner();
   const last = GF.sends.find(x => x.draft_id === id);
@@ -1190,6 +1200,10 @@ START.find = f => { const t = f && f.type, why = t === "five" || t === "good" ? 
     : t === "coming" ? "We can't wait to have you. Here are a few things to make your stay even better."
     : "Thank you for staying with Moose Management. We'd love to have you back.";
   const utm = "?utm_source=brevo&utm_medium=email&utm_campaign=" + (t || "guests");
+  if(t === "rrdue") return voiceStart("patrick", [newBlock("header"), { t:"heading", text:"It's almost time to come back", size:26 },
+    { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\nWe loved having you at {{ contact.HUB_LAST_HOME }} back in {{ contact.HUB_LAST_STAY }}, and thank you again for the 5-star review. It means a lot to our whole crew.\n\nThis is about when guests start booking that same time of year, so I wanted you to hear it from us first: your home is open to book again, and booking direct on our website is the best price." },
+    { t:"button", label:"Book your home again", href:"{{ contact.HUB_HOME_LINK }}", color:"#5b8a1e" },
+    { t:"homes", codes:"", title:"Or try one of these", items:[] }, newBlock("spacer"), newBlock("footer")]);
   return voiceStart(t === "coming" ? "penny" : "patrick", [newBlock("header"), { t:"heading", text:t === "coming" ? "Your Park City stay is coming up" : "Park City misses you", size:26 },
     { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n" + why + "\n\nBook direct on our website for the best price, and talk to our local team any time." },
     { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/" + utm, color:"#5b8a1e" }, { t:"homes", codes:"", title:"Homes we'd pick for you", items:[] }, newBlock("spacer"), newBlock("footer")]); };
@@ -1235,8 +1249,8 @@ function ideasBuild(){
   // 4. 5-star return renters due
   const in30 = new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-CA", { timeZone:"America/Denver" });
   const due = S.rr.filter(x => !x.excluded && x.send_on <= in30 && !x.brevo_list && !x.came_back_booked).length;
-  if(due) I.push({ icon:"⭐", title:`${plural(due, "5-star guest")} due an email`, why:"Return renters whose best email date (just before they usually book, aimed at the anniversary of their stay) is in the next 30 days, not in a Brevo batch yet and not booked again.",
-    src:"Track reviews + reservations, rebuilt nightly", scroll:"#gst" });
+  if(due) I.unshift({ icon:"💌", title:`${plural(due, "5-star guest")} due a come-back email`, why:"Return renters whose best email day (just before they usually book, aimed at the anniversary of their stay) is in the next 30 days, not in a Brevo batch and not booked again. The email names the home they stayed in and when.",
+    src:"Track reviews + reservations, rebuilt nightly", types:["rrdue"], f:{ next:"none" }, name:"5-star return renters due", start:() => START.find({ type:"rrdue" }) });
   // 5. states holding up better than the US
   const st = GF.tr.filter(r => r.kind === "state" && !r.few && r.vs_ly_pct != null && GF.trNat != null && r.vs_ly_pct - GF.trNat >= 15 && (can[r.key] || 0) >= 20)
     .sort((a, b) => (b.vs_ly_pct - a.vs_ly_pct)).slice(0, 2);
