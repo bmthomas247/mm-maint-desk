@@ -40,7 +40,7 @@
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px"><button class="btn small" data-save>Save text</button><button class="btn primary small" data-ok${r.auto_text ? "" : " disabled"}>✓ Approve this text</button><span class="muted" data-m></span></div></details>` : ""}</div>`; }).join("") || `<div class="card"><p>No rules yet.</p></div>`;
       $("#sgRules").querySelectorAll("[data-rk]").forEach(card => { const k = card.dataset.rk, m = () => card.querySelector("[data-m]") || {};
         const set = async (args, msg) => { const r = await sb.rpc("signal_rule_set", Object.assign({ p_key:k }, args));
-          if(r.error){ const x = m(); x.textContent = "Couldn't save: " + r.error.message; if(!card.querySelector("[data-m]")) alert(r.error.message); return; } (m().textContent = msg); setTimeout(load, 900); };
+          if(r.error){ const x = m(); x.textContent = "Couldn't save: " + r.error.message; if(!card.querySelector("[data-m]")) await mmAlert(r.error.message); return; } (m().textContent = msg); setTimeout(load, 900); };
         card.querySelector("[data-mode]").onchange = e => set({ p_mode:e.target.value }, "Saved ✓");
         const sv = card.querySelector("[data-save]"), ok = card.querySelector("[data-ok]");
         if(sv) sv.onclick = () => set({ p_auto_text:card.querySelector("[data-text]").value }, "Text saved — approve it before Auto ✓");
