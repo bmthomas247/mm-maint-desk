@@ -4195,7 +4195,7 @@ async function loadCompSets() {
     hits = CS.sets.filter(x => !q || x.name.toLowerCase().includes(q) || x.ours.some(h => h.code.toLowerCase().includes(q) || h.code.replace(/\s+/g, "").toLowerCase().includes(qn)))
       .sort((x, y) => (+y.ours.some(h => h.live) - +x.ours.some(h => h.live)) || x.name.localeCompare(y.name));
     pick = Math.min(pick, Math.max(0, hits.length - 1));
-    hl.innerHTML = hits.length ? hits.map((x, i) => `<div class="csgr${i === pick ? " on" : ""}${x.id === CS.set ? " cur" : ""}" data-i="${i}"><div class="csgn">${pcEsc(x.name)} <small class="muted" style="font-weight:600">· ${x.comps} comps${x.paused ? ` · ${x.paused} paused` : ""}</small></div>` +
+    hl.innerHTML = hits.length ? hits.map((x, i) => `<div class="csgr${i === pick ? " on" : ""}${x.id === CS.set ? " cur" : ""}" data-i="${i}"><div class="csgn">${pcEsc(x.name)} <small class="muted" style="font-weight:600">· ${x.comps} comps${(() => { const v = x.ours.map(h => h.sleeps).filter(n => n != null); if (!v.length) return ""; const lo = Math.min(...v), hi = Math.max(...v); return ` · sleeps ${lo === hi ? lo : lo + "–" + hi}`; })()}${x.paused ? ` · ${x.paused} paused` : ""}</small></div>` +
       (() => { const lv = x.ours.filter(h => h.live), sh = lv.slice(0, 4), more = x.ours.length - sh.length;   // live homes only, about 2 lines, then "and N more"
         return sh.map(h => `<span class="cshm">${pcEsc(h.code)}<small class="cshk live">Live</small></span>`).join("") +
           (more ? `<span class="cshm muted">${sh.length ? "and " : ""}${more} more</span>` : ""); })() + `</div>`).join("")
