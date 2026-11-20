@@ -654,32 +654,21 @@ async function preview(id){
 /* ---------- email designer: blocks -> table-based email HTML (inline styles, 600px) ---------- */
 // Sign-off from the One Click Marketing playbook (Downloads\one-click-marketing-playbook.md): the brand is the sender.
 const SIGNOFF = "The Moose crew 🫎\nMoose Management · (435) 714-6544";
-const BTYPES = { header:"Logo bar", heading:"Heading", text:"Text", image:"Picture", button:"Button", divider:"Line", spacer:"Space", html:"HTML (advanced)", footer:"Footer + unsubscribe" };
+const VOICES = { patrick:{ name:"Patrick the Moose", line:"Your Park City local", pic:"https://ogugdhhiajebfdwpzofp.supabase.co/storage/v1/object/public/mkt-images/mascots/patrick-web.png", sign:"Patrick the Moose 🫎\nMoose Management · (435) 714-6544" },
+  penny:{ name:"Penny", line:"Your Moose Management helper", pic:"https://ogugdhhiajebfdwpzofp.supabase.co/storage/v1/object/public/mkt-images/mascots/penny-face.png", sign:"Penny 🫏\nMoose Management · (435) 714-6544" } };
+const SITE_URL = "https://www.vacationrentalsparkcity.com";
+const unitUrl = name => SITE_URL + "/booking-engine/unit/" + String(name || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "/";
+const BTYPES = { voice:"Who's talking (Patrick / Penny)", homes:"Home picks", header:"Logo bar", heading:"Heading", text:"Text", image:"Picture", button:"Button", divider:"Line", spacer:"Space", html:"HTML (advanced)", footer:"Footer + unsubscribe" };
 const newBlock = t => ({ header:{ t, logo:"https://crew.moosemanagement.com/moose-logo.png", bg:"#3c5f12" }, heading:{ t, text:"A heading", size:26 },
   text:{ t, text:"Hi {{ contact.FIRSTNAME }},\n\nWrite your message here. **Bold** like this, links like [our homes](https://www.vacationrentalsparkcity.com)." },
   image:{ t, src:"", alt:"", href:"" }, button:{ t, label:"Book your stay", href:"https://www.vacationrentalsparkcity.com", color:"#5b8a1e" },
-  divider:{ t }, spacer:{ t, h:24 }, html:{ t, html:"" }, footer:{ t, text:SIGNOFF } })[t];
+  divider:{ t }, spacer:{ t, h:24 }, html:{ t, html:"" }, footer:{ t, text:SIGNOFF }, voice:{ t, who:"patrick" }, homes:{ t, codes:"", title:"Homes we'd pick for you", items:[] } })[t];
 const START = {
   guest: () => [newBlock("header"), { t:"heading", text:"Park City misses you", size:26 },
     { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\nThank you again for the 5-star review. It means a lot to our whole crew.\n\nIt's about the time of year you stayed with us, so we wanted you to be first to know: your dates are open to book again. Book direct on our website and talk to our local team any time.\n\nWe'd love to have you back." },
     { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=return-renters", color:"#5b8a1e" },
     newBlock("spacer"), newBlock("footer")],
-  blank: () => [newBlock("header"), newBlock("heading"), newBlock("text"), newBlock("footer")],
-  // started from Find guests: words that fit the renter type (Brandon 2026-11-20). Edit freely; nothing here is sent without a test first.
-  find: f => { const t = f && f.type, why = t === "five" || t === "good" || t === "ota" ? "Thank you again for the great review. It means a lot to our whole crew."
-      : t === "repeat" ? "You've stayed with us more than once, and that means the world to our crew."
-      : t === "once" || t === "lapsed" ? "It's been a while since your stay, and Park City has been busy: new restaurants, new trails, and the same mountains you loved."
-      : t === "xmas" ? "The holidays in Park City are something special, and we'd love to host you again this year."
-      : t === "thanks" ? "Thanksgiving in the mountains is a tradition for a lot of our guests, and we'd love to make it yours again."
-      : t === "summer" ? "Summer in Park City is our favorite secret: cool nights, open trails, concerts and the farmers market."
-      : t === "winter" ? "Snow is on the way, and the best homes for ski season go first."
-      : t === "coming" ? "We can't wait to have you. Here are a few things to make your stay even better."
-      : "Thank you for staying with Moose Management. We'd love to have you back.";
-    const utm = "?utm_source=brevo&utm_medium=email&utm_campaign=" + (t || "guests");
-    return [newBlock("header"), { t:"heading", text:t === "coming" ? "Your Park City stay is coming up" : "Park City misses you", size:26 },
-      { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n" + why + "\n\nBook direct on our website for the best price, and talk to our local team any time." },
-      { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/" + utm, color:"#5b8a1e" },
-      newBlock("spacer"), newBlock("footer")]; } };
+  blank: () => [newBlock("header"), newBlock("heading"), newBlock("text"), newBlock("footer")] };
 const escT = s => esc(s).replace(/\{\{\s*([\w. ]+?)\s*\}\}/g, (m, k) => "{{ " + k + " }}");
 const inline = s => escT(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
   .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" style="color:#3c5f12;font-weight:bold">$1</a>');
@@ -694,6 +683,13 @@ function blockHtml(b){
       return cell(b.href ? `<a href="${esc(b.href)}">${img}</a>` : img); }
     case "button": return cell(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${esc(b.color || "#5b8a1e")};border-radius:8px">
       <a href="${esc(b.href || "#")}" style="display:inline-block;padding:13px 26px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none">${esc(b.label || "Click here")}</a></td></tr></table>`, "10px 32px 18px");
+    case "voice": { const v = VOICES[b.who] || VOICES.patrick;
+      return cell(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:12px"><img src="${esc(v.pic)}" alt="${esc(v.name)}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:50%;border:0"></td>
+        <td style="${FONT};font-size:15px;line-height:1.35"><b>${esc(v.name)}</b><br><span style="color:#6b776f;font-size:13px">${esc(v.line)}</span></td></tr></table>`, "18px 32px 4px"); }
+    case "homes": { const it = (b.items || []).filter(x => x.url); if(!it.length) return "";
+      return cell(`${b.title ? `<h2 style="margin:0 0 10px;font-size:19px;${FONT}">${inline(b.title)}</h2>` : ""}<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${it.map(x => `<tr><td style="padding:0 0 14px">
+        <a href="${esc(x.url)}" style="text-decoration:none;color:#15201a">${x.photo ? `<img src="${esc(x.photo)}" alt="${esc(x.name)}" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:8px">` : ""}
+        <div style="${FONT};font-size:16px;font-weight:bold;margin-top:6px">${esc(x.name)}</div><div style="${FONT};font-size:14px;color:#6b776f">${esc(x.facts || "")} · <span style="color:#3c5f12;font-weight:bold">See this home →</span></div></a></td></tr>`).join("")}</table>`, "10px 32px"); }
     case "divider": return cell(`<hr style="border:0;border-top:1px solid #e1e7de;margin:0">`);
     case "spacer": return `<tr><td style="height:${Math.min(120, +b.h || 24)}px;line-height:1px;font-size:1px">&nbsp;</td></tr>`;
     case "html": return `<tr><td>${b.html || ""}</td></tr>`;
@@ -726,7 +722,9 @@ function drawDesigner(){
     ? `<label>${lab}<textarea data-b="${i}" data-k="${k}">${esc(b[k] || "")}</textarea></label>`
     : `<label>${lab}<input data-b="${i}" data-k="${k}" ${extra} value="${esc(b[k] ?? "")}"></label>`;
   const pics = (i, k) => `<div class="bar" style="margin:2px 0 6px"><button class="btn small" data-up="${i}" data-pk="${k}">📷 Upload a photo</button><button class="btn small" data-lib="${i}" data-pk="${k}">🖼 Our pictures</button></div>`;
-  const fields = (b, i) => ({ header:() => f(b,i,"logo","Logo picture URL") + pics(i, "logo") + f(b,i,"bg","Bar color","input",'type="color"'),
+  const fields = (b, i) => ({ voice:() => `<label>Who's talking <select data-b="${i}" data-k="who" data-redraw="1">${Object.entries(VOICES).map(([k, v]) => `<option value="${k}"${b.who === k ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label><p class="muted" style="font-size:12px;margin:2px 0 0">Changing it also changes the sign-off at the bottom.</p>`,
+    homes:() => f(b,i,"title","Heading over the homes") + f(b,i,"codes","Home codes, comma between (e.g. BHL 3307, PL 627)") + `<div class="bar" style="margin:2px 0 6px"><button class="btn small" data-hfill="${i}">🏠 Add these homes</button><span class="muted" style="font-size:12px">${(b.items || []).length ? (b.items || []).map(x => esc(x.code)).join(", ") : "none yet"}</span></div>`,
+    header:() => f(b,i,"logo","Logo picture URL") + pics(i, "logo") + f(b,i,"bg","Bar color","input",'type="color"'),
     heading:() => f(b,i,"text","Heading") + f(b,i,"size","Size","input",'type="number" min="16" max="44"'),
     text:() => f(b,i,"text","Text (blank line = new paragraph · **bold** · [words](https://link) · {{ contact.FIRSTNAME }})","textarea"),
     image:() => f(b,i,"src","Picture URL (https://…)") + pics(i, "src") + f(b,i,"alt","Describe the picture") + f(b,i,"href","Link when tapped (optional)"),
@@ -802,6 +800,18 @@ async function picLibrary(i, k){
     : `<p class="muted">No pictures uploaded yet. Use 📷 Upload a photo.</p>`;
   d.querySelectorAll("[data-pick]").forEach(btn => btn.onclick = () => { d.close(); setPic(i, k, btn.dataset.pick); });
 }
+async function fillHomes(i){   // home codes -> photo, name, bedrooms and the website page (hub_homes; Track's first listing photo)
+  const b = DES.d.design.blocks[i], codes = String(b.codes || "").split(",").map(x => x.trim()).filter(Boolean).slice(0, 6);
+  if(!codes.length){ $("#dst").textContent = "Type one or more home codes first."; return; }
+  const r = await sb.from("hub_homes").select("code,name,beds,baths,community,photo").in("code", codes);
+  if(r.error){ $("#dst").textContent = niceE(r.error); return; }
+  const by = Object.fromEntries((r.data || []).map(h => [h.code.toLowerCase(), h]));
+  b.items = codes.map(c => by[c.toLowerCase()]).filter(Boolean).map(h => ({ code:h.code, name:h.name, photo:h.photo || "",
+    facts:[h.beds ? h.beds + " bedrooms" : "", h.baths ? (+h.baths) + " baths" : "", h.community || ""].filter(Boolean).join(" · "),
+    url:unitUrl(h.name) + "?utm_source=brevo&utm_medium=email&utm_campaign=home-picks" }));
+  const miss = codes.filter(c => !by[c.toLowerCase()]);
+  DES.dirty = true; drawDesigner(); $("#dst").textContent = miss.length ? "Not found: " + miss.join(", ") : `${b.items.length} homes added (check each link opens the right home).`;
+}
 async function saveDraft(queue){
   const D = DES.d; if(!D.name.trim()){ D.name = D.subject || "New email"; }
   const row = { tab:D.tab, name:D.name.trim().slice(0, 200), subject:D.subject || null, preview_text:D.preview_text || null, list_ids:D.list_ids || [],
@@ -824,6 +834,7 @@ document.addEventListener("input", e => { const t = e.target; if(!DES.d || !t.cl
   DES.dirty = true; if(DES.d.status !== "queued") DES.d.status = "draft"; $("#dst").textContent = "Not saved"; clearTimeout(DES.tm); DES.tm = setTimeout(drawPreview, 250); });
 document.addEventListener("change", e => { const t = e.target; if(!DES.d || !t.closest("#big .ed")) return;
   if(t.dataset.list){ const id = +t.dataset.list; DES.d.list_ids = t.checked ? [...new Set([...(DES.d.list_ids || []), id])] : (DES.d.list_ids || []).filter(x => x !== id); DES.dirty = true; }
+  if(t.dataset.redraw && t.dataset.k === "who"){ const v = VOICES[t.value]; DES.d.design.blocks.forEach(x => { if(x.t === "footer") x.text = v.sign; }); DES.dirty = true; drawDesigner(); }
   if(t.id === "addb" && t.value){ DES.d.design.blocks.splice(Math.max(0, DES.d.design.blocks.length - (DES.d.design.blocks.at(-1)?.t === "footer" ? 1 : 0)), 0, newBlock(t.value)); DES.dirty = true; drawDesigner(); } });
 document.addEventListener("click", async e => { const b = e.target.closest("button"); if(!b || !b.closest("#big")) return;
   if(b.dataset.close){ if(DES.d && DES.dirty && !confirm("Close without saving your changes?")) return; DES.d = null; $("#big").close(); return; }
@@ -833,6 +844,7 @@ document.addEventListener("click", async e => { const b = e.target.closest("butt
   if(b.dataset.mv != null){ const i = +b.dataset.mv, j = i + +b.dataset.dir; [B[i], B[j]] = [B[j], B[i]]; DES.dirty = true; drawDesigner(); }
   if(b.dataset.rm != null){ B.splice(+b.dataset.rm, 1); DES.dirty = true; drawDesigner(); }
   if(b.dataset.up != null) return uploadPic(+b.dataset.up, b.dataset.pk);
+  if(b.dataset.hfill != null) return fillHomes(+b.dataset.hfill);
   if(b.dataset.lib != null) return picLibrary(+b.dataset.lib, b.dataset.pk);
   if(b.dataset.dsave) saveDraft(false);
   if(b.dataset.dbrevo){ if(!(DES.d.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
@@ -857,7 +869,7 @@ function brevoSure(){
 /* ---------- Guest: Find guests + email them (Brandon 2026-11-20; hub_mkt_guests.sql, hub_mkt_guest_find.sql, hub_mkt_area_trends.sql, hub_mkt_search_flights.sql) ----------
    The search runs in the database (mkt_guest_find): the page only gets counts, the first 250 guests and the ids we can email ("load after the search").
    Renter types stack (5-star + Christmas = both). Ideas pop up once a day from the search data; the data itself sits folded at the bottom. */
-const GF0 = () => ({ area:"", from:"", to:"", site:"any", comm:"", home:"", beds:"", stars:"any", stays:"any", last:"any", next:"any", hol:"", season:"any", state:"", nights:"", can:"yes", fresh:"14", q:"" });
+const GF0 = () => ({ area:"", tyf:"", tyt:"", from:"", to:"", site:"any", comm:"", home:"", beds:"", stars:"any", stays:"any", last:"any", next:"any", hol:"", season:"any", state:"", nights:"", can:"yes", fresh:"14", q:"" });
 const GF = { f:GF0(), types:[], res:null, busy:false, seq:0, err:"", fac:null, aud:[], sends:[], mode:null, sort:"last", more:false, audName:"", tile:"",
   tr:null, trNat:null, cal:[], routes:[], news:[], topics:[], tf:"all", ideas:null };
 const GTYPES = {
@@ -881,6 +893,18 @@ const SITE = { airbnb:"Airbnb", vrbo:"Vrbo", direct:"Direct", other:"Other site"
 const REGIONS = { west:["West Coast", ["CA","OR","WA"]], mtn:["Mountain West", ["CO","ID","MT","NV","WY"]], sw:["Southwest", ["AZ","NM"]], tx:["Texas & Oklahoma", ["TX","OK"]],
   mw:["Midwest", ["IL","IN","IA","KS","MI","MN","MO","NE","ND","OH","SD","WI"]], se:["Southeast", ["AL","AR","FL","GA","KY","LA","MS","NC","SC","TN","VA","WV"]],
   ne:["Northeast", ["CT","DC","DE","MA","MD","ME","NH","NJ","NY","PA","RI","VT"]], ut:["Utah (locals)", ["UT"]], hiak:["Hawaii & Alaska", ["HI","AK"]] };
+// Airports -> first 3 ZIP digits of the area around them (USPS prefixes; approximate metro areas). Guests with no ZIP in Track aren't matched.
+const AIRPORTS = { LAX:["Los Angeles area", [[900,918],[926,928],[930,935]]], SFO:["San Francisco Bay Area", [[940,951]]], SAN:["San Diego area", [[919,921]]],
+  DFW:["Dallas–Fort Worth area", [[750,754],[760,762]]], IAH:["Houston area", [[770,775]]], AUS:["Austin area", [[786,787]]], MIA:["Miami / South Florida", [[330,334]]],
+  MCO:["Orlando area", [[327,329],[347,347]]], TPA:["Tampa area", [[335,338],[346,346]]], JFK:["New York City area", [[100,119]]], EWR:["Northern New Jersey", [[70,79]]],
+  DEN:["Denver area", [[800,806]]], PHX:["Phoenix area", [[850,853]]], ORD:["Chicago area", [[600,608]]], LAS:["Las Vegas area", [[889,891]]], ATL:["Atlanta area", [[300,303],[305,306]]],
+  PHL:["Philadelphia area", [[189,191],[80,83]]], CLT:["Charlotte area", [[280,282]]], RDU:["Raleigh-Durham area", [[275,277]]], BOS:["Boston area", [[18,24]]],
+  SEA:["Seattle area", [[980,984]]], IAD:["Washington DC area", [[200,205],[206,209],[220,223]]], BWI:["Baltimore area", [[210,214]]], CMH:["Columbus area", [[430,433]]],
+  BOI:["Boise area", [[836,837]]], BNA:["Nashville area", [[370,372]]], DTW:["Detroit area", [[480,485]]], MSP:["Minneapolis area", [[550,554]]], STL:["St. Louis area", [[630,631]]],
+  PDX:["Portland area", [[970,972]]], MSY:["New Orleans area", [[700,701]]] };
+const zipsFor = code => (AIRPORTS[code] || ["", []])[1].flatMap(([a, b]) => Array.from({ length:b - a + 1 }, (_, i) => String(a + i).padStart(3, "0")));
+const md = d => String(d || "").slice(5, 10);
+const addDays = (d, n) => new Date(new Date(d + "T12:00:00").getTime() + n * 864e5).toISOString().slice(0, 10);
 const AIRLINE = { DAL:"Delta", SKW:"SkyWest (Delta/United/American)", UAL:"United", AAL:"American", SWA:"Southwest", JBU:"JetBlue", ASA:"Alaska", NKS:"Spirit", FFT:"Frontier",
   HAL:"Hawaiian", KLM:"KLM", AFR:"Air France", ACA:"Air Canada", WJA:"WestJet", AMX:"Aeroméxico", KAL:"Korean Air", VOI:"Volaris", SCX:"Sun Country", AAY:"Allegiant", BRZ:"Breeze", MXY:"Breeze" };
 const niceE = e => (window.top && window.top.niceErr ? window.top.niceErr(e) : (e && e.message) || String(e));
@@ -915,6 +939,9 @@ function gfParams(f, types, extra){   // filters + stacked renter types -> what 
   else if(a === "st:AU"){ p.area_kind = "country"; p.country = "AU"; }
   else if(a.startsWith("st:")){ p.area_kind = "states"; p.states = [a.slice(3)]; }
   else if(a === "intl" || a === "unknown") p.area_kind = a;
+  if(a.startsWith("air:")) p.zip3 = zipsFor(a.slice(4));
+  if(m.tyf && m.tyt){ p.md_from = md(m.tyf); p.md_to = md(m.tyt); }
+  delete p.tyf; delete p.tyt;
   return Object.assign(p, extra || {});
 }
 async function gfFind(f, types, extra){ const r = await sb.rpc("mkt_guest_find", { p:gfParams(f, types, extra) }); if(r.error) throw r.error; return r.data; }
@@ -927,7 +954,8 @@ async function gfSearch(){
 }
 function gfLabel(f, types){
   f = f || GF.f; types = types || GF.types; const bits = types.map(k => GTYPES[k] ? GTYPES[k][1] : k);
-  const a = f.area; if(a && !types.includes("hot")) bits.push(a === "hot" ? "live where searches are up" : a.startsWith("rg:") ? (REGIONS[a.slice(3)] || [""])[0] : a === "st:AU" ? "Australia" : a.startsWith("st:") ? "from " + a.slice(3) : a === "intl" ? "outside the US" : "no address");
+  const a = f.area; if(a && !types.includes("hot")) bits.push(a === "hot" ? "live where searches are up" : a.startsWith("air:") ? "live near " + a.slice(4) : a.startsWith("rg:") ? (REGIONS[a.slice(3)] || [""])[0] : a === "st:AU" ? "Australia" : a.startsWith("st:") ? "from " + a.slice(3) : a === "intl" ? "outside the US" : "no address");
+  if(f.tyf && f.tyt) bits.push(`stayed around ${fmtD(f.tyf).replace(/, \d{4}$/, "")}–${fmtD(f.tyt).replace(/, \d{4}$/, "")} (any year)`);
   if(f.from || f.to) bits.push(`stayed ${f.from ? fmtD(f.from) : "…"}–${f.to ? fmtD(f.to) : "…"}`);
   if(f.comm) bits.push(f.comm); if(f.home) bits.push(f.home); if(f.state) bits.push(f.state);
   return bits.join(" + ") || "All guests";
@@ -942,6 +970,7 @@ function findHtml(){
 function areaSelect(f){
   const n = (GF.fac && GF.fac.states) || {}, st = Object.keys(n).sort((a, b) => n[b] - n[a]), o = (v, l) => `<option value="${esc(v)}"${f.area === v ? " selected" : ""}>${esc(l)}</option>`;
   return `<select data-gff="area">${o("", "anywhere")}${o("hot", "📈 states where Park City searches are up")}
+    <optgroup label="Near an airport (by ZIP code)">${Object.entries(AIRPORTS).map(([k, r]) => o("air:" + k, `${r[0]} (${k})`)).join("")}</optgroup>
     <optgroup label="Regions">${Object.entries(REGIONS).map(([k, r]) => o("rg:" + k, r[0])).join("")}</optgroup>
     <optgroup label="States (our past guests)">${st.map(s => o("st:" + s, `${s} (${n[s].toLocaleString()})`)).join("")}</optgroup>
     ${o("st:AU", "Australia")}${o("intl", "outside the US")}${o("unknown", "no address in Track")}</select>`;
@@ -963,6 +992,7 @@ function findInner(){
     <label>Find <input data-gff="q" placeholder="name, home, city" value="${esc(f.q)}" style="width:150px"></label>
     <button class="btn small" data-gmore="1">${GF.more ? "Fewer filters ▴" : "More filters ▾"}</button></div>
     ${GF.more ? `<div class="bar" style="margin:0 0 8px">
+    <label>Same time of year (any year) <input type="date" data-gff="tyf" value="${esc(f.tyf)}"></label><label>to <input type="date" data-gff="tyt" value="${esc(f.tyt)}"></label>
     <label>Stays ${sel("stays", [["any","any"],["1","just 1"],["2","2 or more"],["3","3 or more"],["0","booked, not stayed yet"]])}</label>
     <label>Last stay ${sel("last", [["any","any time"],["1y","in the last year"],["1-2y","1–2 years ago"],["1y+","over a year ago"],["2y+","over 2 years ago"]])}</label>
     <label>Coming up ${sel("next", [["any","either"],["has","has a stay booked"],["none","nothing booked"]])}</label>
@@ -1042,7 +1072,7 @@ async function gfCsv(){
 }
 function gfApply(types, f, name){   // used by ideas, saved searches and the data section
   GF.types = (types || []).slice(); GF.f = Object.assign(GF0(), f || {}); GF.tile = ""; GF.audName = name || "";
-  if(GF.f.hol || GF.f.season !== "any" || GF.f.beds || GF.f.nights || GF.f.comm || GF.f.home || GF.f.stays !== "any" || GF.f.last !== "any") GF.more = true;
+  if(GF.f.tyf || GF.f.hol || GF.f.season !== "any" || GF.f.beds || GF.f.nights || GF.f.comm || GF.f.home || GF.f.stays !== "any" || GF.f.last !== "any") GF.more = true;
   gfSearch(); const g = document.getElementById("gfh"); if(g) g.scrollIntoView({ block:"start", behavior:"smooth" });
 }
 function gfEmail(start, name){   // open the designer with this search attached
@@ -1141,13 +1171,14 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-gtes
 
 /* ---------- starter words for emails from the data ---------- */
 const titleCase = s => String(s || "").replace(/\b(utah|park city|deer valley)\b/gi, "").replace(/\s+/g, " ").trim().replace(/\b\w/g, c => c.toUpperCase());
-START.topic = q => [newBlock("header"), { t:"heading", text:titleCase(q) + " in Park City", size:26 },
+const voiceStart = (who, blocks) => { const v = VOICES[who]; blocks.splice(1, 0, { t:"voice", who }); blocks.forEach(x => { if(x.t === "footer") x.text = v.sign; }); return blocks; };
+START.topic = q => voiceStart("patrick", [newBlock("header"), { t:"heading", text:titleCase(q) + " in Park City", size:26 },
   { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n[Write a few lines about " + q + ": what it is, where to do it near our homes, and why now. People are searching for it on Google this month.]\n\nBook direct on our website for the best price, and talk to our local team any time." },
-  { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=topic", color:"#5b8a1e" }, newBlock("spacer"), newBlock("footer")];
-START.flight = (m, price, dep, ret) => [newBlock("header"), { t:"heading", text:`Flights from ${m} to Park City from $${price}`, size:26 },
-  { t:"text", text:`Hi {{ contact.FIRSTNAME }},\n\nRound-trip flights from ${m} to Salt Lake City are about $${price} right now for ${fmtD(dep)} to ${fmtD(ret)} (Google Flights, ${fmtD(today())}). Salt Lake's airport is about 40 minutes from our homes.\n\nFares change fast, so if you've been thinking about a Park City trip, this is a good week to look.` },
-  { t:"button", label:"See homes for those dates", href:`https://www.vacationrentalsparkcity.com/booking-engine/results/?arrival_date=${dep}&departure_date=${ret}&utm_source=brevo&utm_medium=email&utm_campaign=flights`, color:"#5b8a1e" },
-  newBlock("spacer"), newBlock("footer")];
+  { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/?utm_source=brevo&utm_medium=email&utm_campaign=topic", color:"#5b8a1e" }, newBlock("spacer"), newBlock("footer")]);
+START.flight = (m, price, dep, ret) => voiceStart("patrick", [newBlock("header"), { t:"heading", text:`Flights from ${m} to Park City from $${price}`, size:26 },
+  { t:"text", text:`Hi {{ contact.FIRSTNAME }},\n\nRound-trip flights from ${m} to Salt Lake City are about $${price} right now for ${fmtD(dep)} to ${fmtD(ret)} (Google Flights, ${fmtD(today())}).\n\nFares change fast, so if you've been thinking about a Park City trip, this is a good week to look.` },
+  { t:"button", label:"See homes open those dates", href:`https://www.vacationrentalsparkcity.com/booking-engine/results/?arrival_date=${dep}&departure_date=${ret}&utm_source=brevo&utm_medium=email&utm_campaign=flights`, color:"#5b8a1e" },
+  { t:"homes", codes:"", title:"A few homes I'd pick", items:[] }, newBlock("spacer"), newBlock("footer")]);
 START.find = f => { const t = f && f.type, why = t === "five" || t === "good" ? "Thank you again for the great review. It means a lot to our whole crew."
     : t === "ota" ? "Thank you for staying with us. Next time, book with us directly: same homes, same local team, and no booking-site fees."
     : t === "repeat" ? "You've stayed with us more than once, and that means the world to our crew."
@@ -1159,9 +1190,9 @@ START.find = f => { const t = f && f.type, why = t === "five" || t === "good" ? 
     : t === "coming" ? "We can't wait to have you. Here are a few things to make your stay even better."
     : "Thank you for staying with Moose Management. We'd love to have you back.";
   const utm = "?utm_source=brevo&utm_medium=email&utm_campaign=" + (t || "guests");
-  return [newBlock("header"), { t:"heading", text:t === "coming" ? "Your Park City stay is coming up" : "Park City misses you", size:26 },
+  return voiceStart(t === "coming" ? "penny" : "patrick", [newBlock("header"), { t:"heading", text:t === "coming" ? "Your Park City stay is coming up" : "Park City misses you", size:26 },
     { t:"text", text:"Hi {{ contact.FIRSTNAME }},\n\n" + why + "\n\nBook direct on our website for the best price, and talk to our local team any time." },
-    { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/" + utm, color:"#5b8a1e" }, newBlock("spacer"), newBlock("footer")]; };
+    { t:"button", label:"See homes & book", href:"https://www.vacationrentalsparkcity.com/" + utm, color:"#5b8a1e" }, { t:"homes", codes:"", title:"Homes we'd pick for you", items:[] }, newBlock("spacer"), newBlock("footer")]); };
 
 /* ---------- ideas for this week (pop-up) ---------- */
 function fareMarkets(){   // per airport: middle price, best day 14-90 days out, change vs last week
@@ -1176,14 +1207,16 @@ function fareMarkets(){   // per airport: middle price, best day 14-90 days out,
     return { origin:o, market:cs[0].market, state:cs[0].state, mid, best, drop, lows, off:best && mid ? Math.round((1 - best.price / mid) * 100) : 0, checked:cs[0].checked_at };
   }).filter(m => m.best);
 }
+const fareF = m => ({ area:"air:" + m.origin, tyf:addDays(m.best.depart, -7), tyt:addDays(m.best.ret, 7) });   // near that airport + stayed then (any year), a week either side
 function ideasBuild(){
   const I = [], can = (GF.fac && GF.fac.states_can) || {};
   // 1. cheap fares from where our guests live
-  fareMarkets().filter(m => m.off >= 20 && (can[m.state] || 0) >= 15).sort((a, b) => b.off * Math.sqrt(can[b.state] || 1) - a.off * Math.sqrt(can[a.state] || 1)).slice(0, 2).forEach(m => I.push({
-    icon:"✈️", title:`Cheap flights from ${m.market}: $${Math.round(m.best.price)} round trip`,
-    why:`Leaving ${fmtD(m.best.depart)}, back ${fmtD(m.best.ret)} (7 nights). The usual fare from ${m.origin} over the next 4 months is about $${Math.round(m.mid)}, so this is ${m.off}% under. ${(can[m.state] || 0).toLocaleString()} past guests in ${m.state} we can email.`,
-    src:`Google Flights via SerpApi, ${fmtD(m.checked)}`, types:[], f:{ area:"st:" + m.state }, name:`Guests from ${m.state} (cheap flights)`,
-    start:() => START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret) }));
+  fareMarkets().filter(m => m.off >= 20 && AIRPORTS[m.origin] && (can[m.state] || 0) >= 15).sort((a, b) => b.off * Math.sqrt(can[b.state] || 1) - a.off * Math.sqrt(can[a.state] || 1)).slice(0, 3).forEach(m => {
+    const area = AIRPORTS[m.origin][0], f = fareF(m);
+    I.push({ icon:"✈️", title:`Cheap flights from ${m.market}: $${Math.round(m.best.price)} round trip`,
+      why:`Leaving ${fmtD(m.best.depart)}, back ${fmtD(m.best.ret)} (7 nights). The usual fare from ${m.origin} over the next 4 months is about $${Math.round(m.mid)}, so this is ${m.off}% under. Email ${area} guests who stayed with us around those dates in past years and tell them.`,
+      src:`Google Flights via SerpApi, ${fmtD(m.checked)}; guests by ZIP code (Track)`, types:[], f, name:`${area} guests, around ${fmtD(m.best.depart).replace(/, \d{4}$/, "")} (cheap flights)`,
+      start:() => START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret) }); });
   // 2. rising searches = topics
   const wk = GF.topics.reduce((m, t) => t.last_seen > m ? t.last_seen : m, "");
   const num = v => /breakout/i.test(v || "") ? 1e6 : +String(v || "").replace(/\D/g, "") || 0;
@@ -1318,7 +1351,7 @@ function dataInner(){
         <td>$${Math.round(m.best.price)} <span class="muted" style="font-size:11.5px">${esc(fmtD(m.best.depart).replace(/, \d{4}$/, ""))}–${esc(fmtD(m.best.ret).replace(/, \d{4}$/, ""))}</span>${m.off >= 20 ? ` <span class="pill green">${m.off}% under</span>` : ""}</td>
         <td class="n">${m.drop == null ? "—" : `<span class="pill ${m.drop <= -5 ? "green" : m.drop >= 5 ? "red" : ""}">${m.drop > 0 ? "+" : ""}${m.drop}%</span>`}</td>
         <td class="n">${(all[m.state] || 0).toLocaleString()}<div class="muted" style="font-size:11px">${m.state} · ${(can[m.state] || 0).toLocaleString()} can email</div></td>
-        <td style="white-space:nowrap"><button class="btn small" data-tarea="st:${esc(m.state)}">Find</button> <button class="btn small" data-fwrite="${esc(m.origin)}">✏️</button></td></tr>`).join("") || `<tr><td colspan="6" class="empty">Fares load every Monday.</td></tr>`}</tbody></table></div>
+        <td style="white-space:nowrap"><button class="btn small" data-ffind="${esc(m.origin)}" title="${esc((AIRPORTS[m.origin] || [m.market])[0])} guests who stayed with us around those dates">Find</button> <button class="btn small" data-fwrite="${esc(m.origin)}" title="Write the email">✏️</button></td></tr>`).join("") || `<tr><td colspan="6" class="empty">Fares load every Monday.</td></tr>`}</tbody></table></div>
       <p class="src">Usual = the middle fare over every departure day in the next 4 months. vs last week = the same days' fares a week ago (green = cheaper now). Source: Google Flights calendar via SerpApi, read every Monday${GF.cal[0] ? `, last ${esc(fmtDT(GF.cal[0].checked_at))}` : ""}.</p></div>
   <div class="tgrid">
     <div class="box tcard"><b>Where Park City searches are up or down</b> <span class="muted" style="font-size:12px">(each state vs its own searches a year ago${GF.trNat != null ? `; whole US ${sgn(GF.trNat)}` : ""})</span>
@@ -1339,8 +1372,9 @@ document.addEventListener("click", e => {
   const tf = e.target.closest("[data-tf]"); if(tf){ GF.tf = tf.dataset.tf; const d = $("#gdata"); if(d) d.innerHTML = dataInner(); return; }
   const tw = e.target.closest("[data-twrite]"); if(tw){ const q = tw.dataset.twrite, w = /ski|snow|sled|winter|christmas|epic|ikon|board|powder/i.test(q) ? "winter" : /summer|hike|bike|golf|lake|concert/i.test(q) ? "summer" : "good";
     GF.types = [w]; GF.f = GF0(); GF.audName = `${GTYPES[w][1]}: ${q}`; gfSearch(); return gfEmail(START.topic(q), GF.audName); }
+  const ff = e.target.closest("[data-ffind]"); if(ff){ const m = fareMarkets().find(x => x.origin === ff.dataset.ffind); if(m) gfApply([], fareF(m), `${(AIRPORTS[m.origin] || [m.market])[0]} guests (cheap flights)`); return; }
   const fw = e.target.closest("[data-fwrite]"); if(fw){ const m = fareMarkets().find(x => x.origin === fw.dataset.fwrite); if(!m) return;
-    GF.types = []; GF.f = Object.assign(GF0(), { area:"st:" + m.state }); GF.audName = `Guests from ${m.state} (cheap flights)`; gfSearch();
+    GF.types = []; GF.f = Object.assign(GF0(), fareF(m)); GF.audName = `${(AIRPORTS[m.origin] || [m.market])[0]} guests (cheap flights)`; GF.more = true; gfSearch();
     return gfEmail(START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret), GF.audName); }
 });
 document.addEventListener("change", async e => { const s = e.target.closest("[data-tstat]"); if(!s || !s.value) return;
