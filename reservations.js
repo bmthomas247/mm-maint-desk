@@ -160,7 +160,7 @@ function uaaPanel(s){
   document.body.appendChild(m);
   const f = uaaFields(s);
   m.onclick = e => { if(e.target === m || e.target.id === "ruaa_x") m.remove(); };
-  m.querySelectorAll("[data-uv]").forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(f[+b.dataset.uv][1]); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", f[+b.dataset.uv][1]); } });
+  m.querySelectorAll("[data-uv]").forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(f[+b.dataset.uv][1]); b.textContent = "Copied ✓"; } catch(_){ await mmAsk("Copy this:", f[+b.dataset.uv][1]); } });
 }
 let B = null, loadedAt = 0;
 const money = v => v == null ? "—" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -829,14 +829,14 @@ async function card(v, res){
   v.querySelectorAll("[data-step]").forEach(cb => cb.onchange = async () => {
     cb.disabled = true;
     let note = null;
-    if(cb.checked && cb.dataset.note){ note = prompt("Write the reason (it's saved on this check list and in the Track notes):"); if(!note || !note.trim()){ cb.checked = false; cb.disabled = false; return; } }
+    if(cb.checked && cb.dataset.note){ note = await mmAsk("Write the reason (it's saved on this check list and in the Track notes):"); if(!note || !note.trim()){ cb.checked = false; cb.disabled = false; return; } }
     const r = await sb.rpc("res_tick", { p_res:s.res, p_step:cb.dataset.step, p_done:cb.checked, p_note:note });
     if(r.error){ cb.checked = !cb.checked; cb.disabled = false; return msg("Couldn't save: " + r.error.message); }
     s.ticks = { ...(s.ticks || {}), [cb.dataset.step]:r.data }; prep(s); card(v, res);
     if(note) ntPush(s.res, `Check list: "${stepLabel(cb.dataset.step)}" done. ${note.trim()}`);
   });
   v.querySelectorAll("[data-ask]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
-    const note = prompt("What do you need from the manager? (sent to the managers on shift in Slack)");
+    const note = await mmAsk("What do you need from the manager? (sent to the managers on shift in Slack)");
     if(!note || !note.trim()) return;
     b.disabled = true;
     const r = await sb.rpc("res_ask", { p_res:s.res, p_step:b.dataset.ask, p_note:note });
@@ -851,13 +851,13 @@ async function card(v, res){
   v.querySelectorAll("[data-why]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const x = v.querySelector(`[data-whyt="${b.dataset.why}"]`); if(x) x.hidden = !x.hidden; });
   v.querySelectorAll("[data-uaa]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); uaaPanel(s); });
   v.querySelectorAll("[data-copyform]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
-    try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
+    try { await navigator.clipboard.writeText(formText(s, b.dataset.copyform === "wg_form")); b.textContent = "Copied ✓"; } catch(_){ await mmAsk("Copy this:", formText(s, b.dataset.copyform === "wg_form")); } });
   // Note on a Breezeway cleaning / inspection task (Brandon 2026-11-06: checkout clean, owner pre-clean): res_bw_note -> Breezeway comment within a minute
   const bwNotes = async () => { const r = await sb.rpc("res_bw_notes", { p_res:s.res }); (r.data || []).forEach(n => { const box = v.querySelector(`[data-bwnotes="${n.task}"]`); if(!box) return;
     box.insertAdjacentHTML("beforeend", `<div class="muted" style="font-size:12.5px;padding:0 0 3px 100px">📝 “${esc(n.text)}” · ${esc(n.by || "")} · ${esc(when(n.at))} · ${n.status === "done" ? "in Breezeway ✓" : n.status === "failed" ? `<span style="color:var(--red,#c33)">not sent: ${esc(n.result || "")}</span>` : "on its way to Breezeway…"}</div>`); }); };
   bwNotes();
   v.querySelectorAll("[data-bwnote]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
-    const txt = prompt(`Note for the Breezeway task "${b.dataset.bwn}" (the cleaners see it in Breezeway):`); if(!txt || !txt.trim()) return;
+    const txt = await mmAsk(`Note for the Breezeway task "${b.dataset.bwn}" (the cleaners see it in Breezeway):`); if(!txt || !txt.trim()) return;
     b.disabled = true; const r = await sb.rpc("res_bw_note", { p_res:s.res, p_task:Number(b.dataset.bwnote), p_text:txt.trim() }); b.disabled = false;
     if(r.error) return msg("Couldn't send the note: " + (window.niceErr ? niceErr(r.error) : r.error.message));
     msg("Note sent to Breezeway ✓ (it shows on the task within a minute)"); v.querySelectorAll("[data-bwnotes]").forEach(x => x.innerHTML = ""); bwNotes(); });
@@ -1063,9 +1063,9 @@ function extendBox(s, v, res){
     const msg = t => m.querySelector("#rex_m").textContent = t;
     m.querySelector("#rex_disc").oninput = () => { clearTimeout(draw.t); draw.t = setTimeout(() => { const el = m.querySelector("#rex_disc"), pos = el.selectionStart; draw(); const n = m.querySelector("#rex_disc"); n.focus(); try { n.setSelectionRange(pos, pos); } catch(_){ } }, 400); };
     m.querySelector("#rex_as").onchange = draw;
-    m.querySelectorAll("[data-ask]").forEach(b => b.onclick = async () => { const note = prompt("What do you need from the manager?", `Extension discount of ${usd(dv)} on ${usd(q.total)} (budget ${usd(q.discountBudget)})`); if(!note) return;
+    m.querySelectorAll("[data-ask]").forEach(b => b.onclick = async () => { const note = await mmAsk("What do you need from the manager?", `Extension discount of ${usd(dv)} on ${usd(q.total)} (budget ${usd(q.discountBudget)})`); if(!note) return;
       const r = await sb.rpc("res_ask", { p_res:s.res, p_step:"x_rule", p_note:note }); msg(r.error ? "Couldn't ask: " + r.error.message : "Asked ✓ (the manager on shift gets a Slack message)"); });
-    const cp = async (t, b) => { try { await navigator.clipboard.writeText(t); b.textContent = "Copied ✓"; } catch(_){ prompt("Copy this:", t); } };
+    const cp = async (t, b) => { try { await navigator.clipboard.writeText(t); b.textContent = "Copied ✓"; } catch(_){ await mmAsk("Copy this:", t); } };
     const quote = () => ({ at:new Date().toISOString(), from:q.from, to:q.to, added:q.addedNights, rent:q.rentNew, fees:q.feesTotal, taxes:q.taxTotal,
       discount:dv, discountAs:dv ? as : null, total, adminNew:q.adminNew, chargeNow:q.chargeNow,
       summary:`Extension quote: ${q.addedNights} more night${q.addedNights > 1 ? "s" : ""} to ${q.to}${q.from < q.arrive ? " (from " + q.from + ")" : ""}, ${usd(total)} all in${dv ? " incl. " + usd(dv) + " discount" : ""}` });
@@ -1221,7 +1221,7 @@ async function asanaCheck(v){
     v.querySelector("#raq_w").onchange = e => { fWhen = e.target.value; draw(); };
     v.querySelector("#raq_k").onchange = e => { fKind = e.target.value; draw(); };
     v.querySelectorAll("[data-raq]").forEach(b => b.onclick = async () => {
-      const note = prompt("Anything to note? (optional — e.g. \"ticked it\", \"not really done\")", "");
+      const note = await mmAsk("Anything to note? (optional — e.g. \"ticked it\", \"not really done\")", "");
       if(note === null) return;
       b.disabled = true;
       const r = await sb.rpc("res_asana_look", { p_res:b.dataset.raq, p_item:b.dataset.it, p_note:note || null });
