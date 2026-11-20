@@ -4183,34 +4183,34 @@ async function loadCompSets() {
   if (!CS.set) { try { CS.set = localStorage.getItem("mmCompSet"); } catch (e) {} }
   if (!CS.set || !CS.sets.some(x => x.id === CS.set)) CS.set = (CS.sets.find(x => x.ours.some(h => h.live)) || CS.sets[0] || {}).id;
   const nm = id => (CS.sets.find(x => x.id === id) || {}).name || "";
+  // Brandon 2026-11-20: pick Neighborhood, then Bedrooms, then Sleeping (each narrows the next) instead of one long list of comp sets
+  const kind = h => h.live ? "Live" : h.test ? "Test" : "Beyond";
+  const nbOf = x => String(x.name || "").replace(/\s*[·-]?\s*(sleeps\b.*|\d+\s*BR\b.*|Studio\b.*|up to \d+.*|\d+\s*[-–]\s*\d+ guests.*|\d+\+ guests.*)$/i, "").trim() || x.name;
+  const bdOf = x => { const v = x.ours.map(h => h.beds).filter(n => n != null).map(Number); if (v.length) { const m = {}; v.forEach(n => m[n] = (m[n] || 0) + 1); return +Object.entries(m).sort((a, b) => b[1] - a[1])[0][0]; }
+    const g = String(x.name).match(/(\d+)\s*BR/i); return g ? +g[1] : /studio/i.test(x.name) ? 0 : null; };
+  const slOf = x => { const v = x.ours.map(h => h.sleeps).filter(n => n != null); if (!v.length) return "sleeps ?"; const lo = Math.min(...v), hi = Math.max(...v); return "sleeps " + (lo === hi ? lo : lo + "–" + hi); };
+  const bdTxt = b => b == null ? "Size unknown" : b === 0 ? "Studio" : b + " bedrooms";
+  const liveN = x => x.ours.filter(h => h.live).length;
+  const cur = CS.sets.find(x => x.id === CS.set) || {};
+  if (CS.nb == null && cur.id) { CS.nb = nbOf(cur); CS.bd = bdOf(cur); }
+  const nbs = [...new Set(CS.sets.map(nbOf))].sort((a, b) => a.localeCompare(b));
+  const inNb = CS.sets.filter(x => nbOf(x) === CS.nb);
+  const bds = [...new Set(inNb.map(bdOf))].sort((a, b) => (a ?? 99) - (b ?? 99));
+  if (!bds.includes(CS.bd)) CS.bd = bds[0];
+  const inBd = inNb.filter(x => bdOf(x) === CS.bd).sort((p, q) => slOf(p).localeCompare(slOf(q), undefined, { numeric: true }));
+  if (!inBd.some(x => x.id === CS.set) && inBd[0]) { CS.set = inBd[0].id; try { localStorage.setItem("mmCompSet", CS.set); } catch (e) {} }
+  const dupe = x => inBd.filter(y => slOf(y) === slOf(x)).length > 1;
   $("csCtl").innerHTML = `<div class="pcctl">
-    <label style="position:relative">Our comp set <input type="search" id="csHq" autocomplete="off" placeholder="Type a comp set, or one of our homes" style="min-width:360px" value="${pcEsc(nm(CS.set))}">
-      <div id="csHl" class="cshl" hidden></div></label>
+    <label>Neighborhood<select id="csNb">${nbs.map(n => `<option${n === CS.nb ? " selected" : ""}>${pcEsc(n)}</option>`).join("")}</select></label>
+    <label>Bedrooms<select id="csBd" style="min-width:150px">${bds.map(b => `<option value="${b ?? ""}"${b === CS.bd ? " selected" : ""}>${bdTxt(b)}</option>`).join("")}</select></label>
+    <label>Sleeping<select id="csSl" style="min-width:240px">${inBd.map(x => `<option value="${pcEsc(x.id)}"${x.id === CS.set ? " selected" : ""}>${pcEsc(slOf(x))} · ${x.comps} comps${liveN(x) ? ` · ${liveN(x)} live` : ""}${dupe(x) ? " · " + pcEsc(x.name) : ""}</option>`).join("")}</select></label>
     <label style="position:relative">Find a home<input type="search" id="csFh" autocomplete="off" placeholder="One of our homes, e.g. BHL 1403" style="min-width:240px">
       <div id="csFl" class="cshl" hidden></div></label></div>`;
-  const hq = $("csHq"), hl = $("csHl"); let pick = 0, hits = [];
-  const kind = h => h.live ? "Live" : h.test ? "Test" : "Beyond";
-  const show = () => {   // comp set in bold black, our homes in it greyed out behind it
-    const q = hq.value.trim().toLowerCase(), qn = q.replace(/\s+/g, "");
-    hits = CS.sets.filter(x => !q || x.name.toLowerCase().includes(q) || x.ours.some(h => h.code.toLowerCase().includes(q) || h.code.replace(/\s+/g, "").toLowerCase().includes(qn)))
-      .sort((x, y) => (+y.ours.some(h => h.live) - +x.ours.some(h => h.live)) || x.name.localeCompare(y.name));
-    pick = Math.min(pick, Math.max(0, hits.length - 1));
-    hl.innerHTML = hits.length ? hits.map((x, i) => `<div class="csgr${i === pick ? " on" : ""}${x.id === CS.set ? " cur" : ""}" data-i="${i}"><div class="csgn">${pcEsc(x.name)} <small class="muted" style="font-weight:600">· ${x.comps} comps${(() => { const v = x.ours.map(h => h.sleeps).filter(n => n != null); if (!v.length) return ""; const lo = Math.min(...v), hi = Math.max(...v); return ` · sleeps ${lo === hi ? lo : lo + "–" + hi}`; })()}${x.paused ? ` · ${x.paused} paused` : ""}</small></div>` +
-      (() => { const lv = x.ours.filter(h => h.live), sh = lv.slice(0, 4), more = x.ours.length - sh.length;   // live homes only, about 2 lines, then "and N more"
-        return sh.map(h => `<span class="cshm">${pcEsc(h.code)}<small class="cshk live">Live</small></span>`).join("") +
-          (more ? `<span class="cshm muted">${sh.length ? "and " : ""}${more} more</span>` : ""); })() + `</div>`).join("")
-      : `<div class="cshi muted">No comp set matches</div>`;
-    hl.hidden = false;
-    const on = hl.querySelector(".csgr.on"); if (on) on.scrollIntoView({ block: "nearest" });
-  };
-  const go = x => { if (!x) return; CS.set = x.id; hq.value = x.name; hl.hidden = true; try { localStorage.setItem("mmCompSet", CS.set); } catch (e) {} csFetch(); };
-  hq.onfocus = () => { hq.select(); pick = 0; show(); };
-  hq.oninput = () => { pick = 0; show(); };
-  hq.onkeydown = e => { if (e.key === "ArrowDown") { pick = Math.min(pick + 1, hits.length - 1); show(); e.preventDefault(); }
-    else if (e.key === "ArrowUp") { pick = Math.max(pick - 1, 0); show(); e.preventDefault(); }
-    else if (e.key === "Enter") { go(hits[pick]); e.preventDefault(); } else if (e.key === "Escape") { hl.hidden = true; hq.value = nm(CS.set); } };
-  hl.onmousedown = e => { const d = e.target.closest("[data-i]"); if (d) { e.preventDefault(); go(hits[+d.dataset.i]); } };
-  hq.onblur = () => setTimeout(() => { hl.hidden = true; hq.value = nm(CS.set); }, 150);
+  const best = a => a.slice().sort((p, q) => liveN(q) - liveN(p))[0];
+  const go = x => { if (!x) return; CS.set = x.id; CS.nb = nbOf(x); CS.bd = bdOf(x); try { localStorage.setItem("mmCompSet", CS.set); } catch (e) {} loadCompSets(); };
+  $("csNb").onchange = e => { const f = CS.sets.filter(x => nbOf(x) === e.target.value); const b = [...new Set(f.map(bdOf))].sort((a, b2) => (a ?? 99) - (b2 ?? 99))[0]; go(best(f.filter(x => bdOf(x) === b))); };
+  $("csBd").onchange = e => { const b = e.target.value === "" ? null : +e.target.value; go(best(inNb.filter(x => bdOf(x) === b))); };
+  $("csSl").onchange = e => go(CS.sets.find(x => x.id === e.target.value));
   // Find a home: type one of our homes, pick it = open the comp set it's in (that home is highlighted)
   const fh = $("csFh"), fl = $("csFl"); let fp = 0, fhits = [];
   const allH = []; CS.sets.forEach(x => x.ours.forEach(h => allH.push({ ...h, set: x })));
