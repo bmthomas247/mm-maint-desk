@@ -41,7 +41,7 @@ function itemsTable(items){
       ${known ? `<td>${esc(i.known || "")}</td>` : ""}${adv ? `<td>${esc(i.advantageFile || "")}</td>` : ""}${task ? `<td>${i.task ? `<a href="${esc(i.task)}" target="_blank" rel="noopener">task</a>` : esc(i.taskStatus || "")}</td>` : ""}</tr>`).join("")}</table></div></details>`;
 }
 async function doneBtn(b, after){
-  const note = prompt("Mark done. Anything to note? (optional)", "");
+  const note = await mmAsk("Mark done. Anything to note? (optional)", "");
   if(note === null) return;
   b.disabled = true;
   const r = await sb.rpc("check_done", { p_key:b.dataset.done, p_day:b.dataset.day, p_note:note });
