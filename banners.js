@@ -105,12 +105,12 @@ window.gatewayView = async function(v){
     ${done.length ? `<h3 style="margin:18px 0 8px">Last 14 days</h3>${done.map(card).join("")}` : ""}`;
   if(!many) v.querySelectorAll("[data-gwk]").forEach(x => x.remove());
   const go = async (id, act, due) => { const pp = v.querySelector(`[data-gwp="${id}"]`);
-    const r = await sb.rpc("gateway_alert_act", { p_id:id, p_act:act, p_due:due || null, p_person:pp && pp.value ? +pp.value : null }); if(r.error) alert((window.niceErr ? niceErr(r.error) : r.error.message).replace(/^.*?: /, "")); };
+    const r = await sb.rpc("gateway_alert_act", { p_id:id, p_act:act, p_due:due || null, p_person:pp && pp.value ? +pp.value : null }); if(r.error) await mmAlert((window.niceErr ? niceErr(r.error) : r.error.message).replace(/^.*?: /, "")); };
   window.mmChipWire(v, "gwc2", "data-gwd");
   v.querySelectorAll("[data-gws]").forEach(x => x.onclick = async () => { const d = v.querySelector(`[data-gwd="${x.dataset.gws}"]`); x.disabled = true; await go(+x.dataset.gws, "schedule", d && d.value); gatewayView(v); });
   v.querySelectorAll("[data-gwc]").forEach(x => x.onclick = async () => { x.disabled = true; await go(+x.dataset.gwc, "clear"); gatewayView(v); });
   const all = v.querySelector("#gwall");
-  if(all) all.onclick = async () => { const ids = [...v.querySelectorAll("[data-gwk]:checked")].map(x => +x.dataset.gwk); if(!ids.length) return alert("Tick the homes to schedule first.");
+  if(all) all.onclick = async () => { const ids = [...v.querySelectorAll("[data-gwk]:checked")].map(x => +x.dataset.gwk); if(!ids.length) return await mmAlert("Tick the homes to schedule first.");
     all.disabled = true; for(const id of ids) await go(id, "schedule", v.querySelector("#gwalld").value); gatewayView(v); };
   clearTimeout(window._gwT); if(open.some(g => g.status === "queued")) window._gwT = setTimeout(() => { if(location.hash.startsWith("#/gateways")) gatewayView(v); }, 20e3);
   drawGw();
