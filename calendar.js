@@ -766,8 +766,8 @@ async function evCal(v, key, fresh){
       const staff = picked("sm_st"), d = $("#sm_d").value, st = $("#sm_s").value, len = +$("#sm_l").value;
       if(!d) return $("#sm_m").textContent = "Pick a day.";
       if(F.free && d >= F.from && d <= addD(F.from, 6)){ const bz = F.free.people.filter(p => !freeAt(p, d, toMin(st), len)).map(p => p.me ? "you" : first(p.name));
-        if(bz.length && !confirm(bz.join(", ") + (bz.length === 1 && bz[0] !== "you" ? " looks" : " look") + " busy or off then. Make it anyway?")) return; }
-      if(!staff.length && !confirm("No coworkers picked. Make it just for you?")) return;
+        if(bz.length && !await mmConfirm(bz.join(", ") + (bz.length === 1 && bz[0] !== "you" ? " looks" : " look") + " busy or off then. Make it anyway?")) return; }
+      if(!staff.length && !await mmConfirm("No coworkers picked. Make it just for you?")) return;
       $("#sm_go").disabled = true; $("#sm_m").textContent = F.virt ? "Making the meeting and the Zoom link…" : "Making the meeting…";
       let id = null;
       if(F.virt){ const r = await fnCall({ action:"create", title:t, day:d, start:st, minutes:len, note:$("#sm_n").value, staff });
@@ -792,7 +792,7 @@ async function evCal(v, key, fresh){
     $("#pk_mv").onclick = () => moveBox({ day:e.day, start:e.start_time ? e.start_time.slice(0, 5) : "", minutes:e.start_time && e.end_time ? toMin(e.end_time) - toMin(e.start_time) : 60, title:ttl },
       async (d, st, mins) => { const len = e.end_day ? (D(e.end_day) - D(e.day)) / 864e5 : null;
         return save(e, { p_day:d, p_end_day:len != null ? addD(d, len) : null, p_start:st || null, p_end:st ? endTime(st, mins) : null }); });
-    $("#pk_cx").onclick = async () => { if(!confirm((k === "event" ? "Cancel “" + ttl + "”?" : "Remove this?") + " It comes off the calendar for everyone.")) return;
+    $("#pk_cx").onclick = async () => { if(!await mmConfirm((k === "event" ? "Cancel “" + ttl + "”?" : "Remove this?") + " It comes off the calendar for everyone.")) return;
       const r = await save(e, { p_off:true }); if(!r.error){ $("#evm").classList.remove("on"); evCal(v, key, true); } };
   }
   // pick a new day + time (keeps the length unless changed)
@@ -870,7 +870,7 @@ async function evCal(v, key, fresh){
           ${x.answer === "suggest" && canCx ? ` <button class="btn small" data-mvto="${esc(x.sug_day)}|${esc(x.sug_start)}">Move to this time</button>` : ""}
           ${x.note ? `<div class="muted" style="font-size:12.5px;margin-left:24px">“${esc(x.note)}”</div>` : ""}</div>`).join("")}`;
       el.querySelectorAll("[data-mvto]").forEach(bt => bt.onclick = async () => { const [d, st] = bt.dataset.mvto.split("|");
-        if(!confirm("Move it to " + fday(d) + " " + ftime(st) + "? Everyone is asked to answer again.")) return;
+        if(!await mmConfirm("Move it to " + fday(d) + " " + ftime(st) + "? Everyone is asked to answer again.")) return;
         const x = await sb.rpc("meet_move", { p_id:m.id, p_day:d, p_start:st, p_minutes:m.minutes }); if(x.error) return $("#mm").textContent = "Couldn't move it: " + x.error.message;
         ST.sel[key] = d; again(); }); });
   }
@@ -979,7 +979,7 @@ async function evCal(v, key, fresh){
     // 🎥 Make a Zoom link (2026-11-19): Edge Function meet action event_zoom makes the Zoom meeting for this day + time and fills the box; Save keeps it
     if($("#ev_zoom")) $("#ev_zoom").onclick = async () => { const zb = $("#ev_zoom"), zm = $("#ev_zm"), d = $("#ev_d").value;
       if(!d) return zm.textContent = "Pick the day first.";
-      if($("#ev_link").value.trim() && !confirm("Replace the link that's there with a new Zoom link?")) return;
+      if($("#ev_link").value.trim() && !await mmConfirm("Replace the link that's there with a new Zoom link?")) return;
       const st = $("#ev_s").value, len = st && $("#ev_f").value ? toMin($("#ev_f").value) - toMin(st) : 60;
       zb.disabled = true; zm.textContent = "Making the Zoom meeting…";
       const r = await fnCall({ action:"event_zoom", title:$("#ev_t").value.trim(), day:d, start:st || "", minutes:len > 0 ? len : 60 });
