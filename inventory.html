@@ -92,7 +92,7 @@ body:not(.ro) .ro-only{display:none}
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
 <datalist id="dl-cat"></datalist><datalist id="dl-name"></datalist><datalist id="dl-loc"></datalist><datalist id="dl-unit"></datalist>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -203,7 +203,7 @@ async function save(id, patch){
   return r.data;
 }
 async function quick(id, patch){
-  try { await save(id, patch); render(); } catch(e){ alert("Couldn't save: " + errText(e)); load(); }
+  try { await save(id, patch); render(); } catch(e){ await mmAlert("Couldn't save: " + errText(e)); load(); }
 }
 
 function form(r, cat){
