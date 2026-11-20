@@ -158,10 +158,10 @@
       ask(b.getAttribute("data-home"), b.getAttribute("data-src") === "meeting" ? x : { src:"home" }); return; }
     if(k === "off"){ if(!await mmConfirm("Take this owner note off? It stays in the history for admins.")) return;
       const key = b.getAttribute("data-key"), r = await SB().rpc("owner_note_off", { p_id:+b.getAttribute("data-id"), p_why:null });
-      if(r.error) return alert(nice(r.error)); delete ST.notes[key]; load(key, key); return; }
+      if(r.error) return await mmAlert(nice(r.error)); delete ST.notes[key]; load(key, key); return; }
     const x = (ST.asks || [])[+b.getAttribute("data-i")]; if(!x) return;
     if(k === "ask") ask(x.home, { src:"calendar", ref:String(x.event), on:x.day, how:"meeting", title:x.title });
-    if(k === "skip"){ b.disabled = true; const r = await SB().rpc("owner_note_skip", { p_event:x.event }); if(r.error){ b.disabled = false; return alert(nice(r.error)); }
+    if(k === "skip"){ b.disabled = true; const r = await SB().rpc("owner_note_skip", { p_event:x.event }); if(r.error){ b.disabled = false; return await mmAlert(nice(r.error)); }
       ST.asks = null; if(ST.homeEl) homeCard(ST.homeEl); }
   }, true);
 
