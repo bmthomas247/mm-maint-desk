@@ -369,7 +369,7 @@ function moveOne(m, day, done){
   q("#mo_s").onclick = async () => { const k = q("#mo_k").value, st2 = q("#mo_t").value, sv = q("#mo_s"); sv.disabled = true; sv.textContent = "Saving…";
     const r = await sb.rpc("meeting_move", { p_meet:m.meet, p_from:q("#mo_f").value, p_kind:k, p_to:k === "move" ? q("#mo_d").value || null : null,
       p_start:k === "move" && st2 ? st2 : null, p_minutes:k === "move" && st2 ? +q("#mo_m").value : null, p_note:q("#mo_n").value || null });
-    if(r.error){ sv.disabled = false; sv.textContent = "Save"; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+    if(r.error){ sv.disabled = false; sv.textContent = "Save"; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
     close(); ST.meets = null; if(done) done(); };
 }
 async function meetTiles(v){
@@ -418,7 +418,7 @@ async function meetTiles(v){
     ["#ms_d","#ms_r","#ms_t","#ms_m"].forEach(s => { q(s).onchange = prev; q(s).oninput = prev; }); prev();
     q("#ms_s").onclick = async () => { const st = q("#ms_t").value, sv = q("#ms_s"); sv.disabled = true; sv.textContent = "Saving…";
       const r = await sb.rpc("meeting_sched_set2", { p_meet:m.meet, p_day:q("#ms_d").value || null, p_repeat:q("#ms_r").value, p_start:st || null, p_minutes:st ? +q("#ms_m").value : null });
-      if(r.error){ sv.disabled = false; sv.textContent = "Save"; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      if(r.error){ sv.disabled = false; sv.textContent = "Save"; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       close(); meetTiles(v); };
   });
   v.querySelectorAll("[data-jlink]").forEach(b => b.onclick = async () => {
@@ -426,9 +426,9 @@ async function meetTiles(v){
     const u = await mmAsk(`Paste the Zoom / Google Meet / Teams link for ${NAMES[m.meet] || "this meeting"}.
 It shows as ▶ Join for everyone who can open the meeting.`, "");
     if (u == null || !u.trim()) return;
-    if (!/^https:\/\//.test(u.trim())) { alert("The link must start with https://"); return; }
+    if (!/^https:\/\//.test(u.trim())) { await mmAlert("The link must start with https://"); return; }
     const r = await sb.rpc("meeting_link_set", { p_meet:m.meet, p_url:u.trim(), p_label:/meet\.google/.test(u) ? "Google Meet" : /zoom\.us/.test(u) ? "Zoom" : /teams\./.test(u) ? "Teams" : "" });
-    if (r.error) { alert((window.niceErr ? niceErr(r.error) : r.error.message)); return; }
+    if (r.error) { await mmAlert((window.niceErr ? niceErr(r.error) : r.error.message)); return; }
     meetTiles(v);
   });
   v.querySelectorAll("[data-mvone]").forEach(b => b.onclick = () => moveOne(ms.find(x => x.meet === b.dataset.mvone), null, () => meetTiles(v)));
@@ -547,7 +547,7 @@ async function evCal(v, key, fresh){
     wireGrid(v, canAdd && !isRes ? (d, s) => form(null, { day:d, start:s, kind:isOff ? (boss ? "event" : "working") : "event" }) : null,
       async (id, to) => { if(typeof id === "string" && id[0] === "o") return; if(typeof id === "string"){ const m = hubMeets.find(y => "m" + y.id === id); if(!m) return;
           const r = await sb.rpc("meet_move", { p_id:m.id, p_day:to.day, p_start:to.start || m.start, p_minutes:m.minutes });
-          if(r.error) return alert("Couldn't move it: " + r.error.message); ST.sel[key] = to.day; return evCal(v, key, true); }
+          if(r.error) return await mmAlert("Couldn't move it: " + r.error.message); ST.sel[key] = to.day; return evCal(v, key, true); }
         const e = evs.find(x => x.id === id); if(!e || !canEdit(e)) return;
         const len = e.end_day ? (D(e.end_day) - D(e.day)) / 864e5 : null, dur = e.start_time && e.end_time ? toMin(e.end_time) - toMin(e.start_time) : null;
         const st = to.start || (e.start_time ? e.start_time.slice(0, 5) : null);
@@ -560,10 +560,10 @@ async function evCal(v, key, fresh){
     if(qaOk) wireQuick();
     v.querySelectorAll("[data-olgo]").forEach(bt => bt.onclick = () => olConnect(bt));
     v.querySelectorAll("[data-ogo]").forEach(bt => bt.onclick = async () => { bt.disabled = true; bt.textContent = "Opening Microsoft…";
-      const r = await olCall({ action:"start", office:true }); if(!r.ok){ bt.disabled = false; bt.textContent = "🔗 Connect the office Outlook"; return alert(r.error); } location.href = r.url; });
+      const r = await olCall({ action:"start", office:true }); if(!r.ok){ bt.disabled = false; bt.textContent = "🔗 Connect the office Outlook"; return await mmAlert(r.error); } location.href = r.url; });
     v.querySelectorAll("[data-osort]").forEach(bt => bt.onclick = () => sortBox());
     v.querySelectorAll("[data-olsync]").forEach(bt => bt.onclick = async () => { bt.disabled = true; bt.textContent = "Reading Outlook…";
-      const r = await olCall({ action:"sync" }); if(!r.ok) alert("Couldn't read Outlook: " + r.error); evCal(v, key, true); });
+      const r = await olCall({ action:"sync" }); if(!r.ok) await mmAlert("Couldn't read Outlook: " + r.error); evCal(v, key, true); });
     v.querySelectorAll("[data-olans]").forEach(bt => bt.onclick = () => olAnswer(bt.dataset.oid, bt.dataset.olans, bt));
     clearInterval(ST.tick);   // new emailed invites + others' changes show up by themselves (every 2 min while this page is open)
     ST.tick = setInterval(() => { if(current() !== key || document.hidden || $("#evm.on") || ($("#qa") && $("#qa").value)) return;
@@ -585,7 +585,7 @@ async function evCal(v, key, fresh){
     const r = await fetch(MM_CONFIG.url + "/functions/v1/ms-cal", { method:"POST", headers:{ "content-type":"application/json", apikey:MM_CONFIG.anonKey, authorization:"Bearer " + (ss ? ss.access_token : MM_CONFIG.anonKey) }, body:JSON.stringify(o) });
     return r.json().catch(() => ({ ok:false, error:"No answer from the server." })); }
   async function olConnect(bt){ if(bt){ bt.disabled = true; bt.textContent = "Opening Microsoft…"; }
-    const r = await olCall({ action:"start" }); if(!r.ok){ if(bt){ bt.disabled = false; bt.textContent = "🔗 Connect my Outlook"; } return alert(r.error); }
+    const r = await olCall({ action:"start" }); if(!r.ok){ if(bt){ bt.disabled = false; bt.textContent = "🔗 Connect my Outlook"; } return await mmAlert(r.error); }
     location.href = r.url; }
   async function olAnswer(id, ans, bt){
     const o = ol.find(y => y.ms_id === id), word = { accept:"Accept", tentativelyAccept:"Maybe", decline:"Decline" }[ans];
@@ -593,7 +593,7 @@ async function evCal(v, key, fresh){
     if(note === null) return;
     if(bt){ bt.disabled = true; bt.textContent = "Sending…"; }
     const r = await olCall({ action:"answer", id, answer:ans, comment:note || "" });
-    if(!r.ok){ if(bt){ bt.disabled = false; bt.textContent = word; } return alert("Couldn't send it: " + r.error); }
+    if(!r.ok){ if(bt){ bt.disabled = false; bt.textContent = word; } return await mmAlert("Couldn't send it: " + r.error); }
     $("#evm").classList.remove("on"); evCal(v, key, true); }
   function olPeek(o){
     const when = fday(o.day) + (o.end_day && o.end_day !== o.day ? " – " + fday(o.end_day) : "") + (o.start_time ? " · " + ftime(o.start_time.slice(0, 5)) + (o.end_time ? "–" + ftime(o.end_time.slice(0, 5)) : "") : " · all day");
@@ -624,7 +624,7 @@ async function evCal(v, key, fresh){
     box.querySelectorAll("[data-sp]").forEach(c => c.onchange = () => { const [id, u] = c.dataset.sp.split("|"); if(c.checked) sel[id].add(u); else sel[id].delete(u); });
     const done = async (id, keep, btn) => { if(btn){ btn.disabled = true; btn.textContent = "…"; }
       const x = await sb.rpc("cal_event_sort", { p_id:+id, p_attendees:[...sel[id]], p_keep:keep });
-      if(x.error){ if(btn) btn.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(x.error) : x.error.message)); }
+      if(x.error){ if(btn) btn.disabled = false; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(x.error) : x.error.message)); }
       const el = box.querySelector(`[data-sid="${id}"]`); if(el) el.remove(); ST.cache = {}; };
     box.querySelectorAll("[data-skeep]").forEach(bt => bt.onclick = () => done(bt.dataset.skeep, true, bt));
     box.querySelectorAll("[data-sdrop]").forEach(bt => bt.onclick = () => done(bt.dataset.sdrop, false, bt));
@@ -1083,7 +1083,7 @@ function sqCards(rs){
     + (done.length ? `<details class="card"><summary><b style="font-size:16px">Shift changes decided lately</b></summary>${done.map(r => sqRow(r)).join("")}</details>` : "");
 }
 function sqWire(v, reload){
-  const go = async (fn, args) => { const r = await sb.rpc(fn, args); if(r.error) alert(window.niceErr ? niceErr(r.error) : r.error.message); else reload(); };
+  const go = async (fn, args) => { const r = await sb.rpc(fn, args); if(r.error) await mmAlert(window.niceErr ? niceErr(r.error) : r.error.message); else reload(); };
   v.querySelectorAll("[data-sqyes]").forEach(b => b.onclick = () => go("sched_req_answer", { p_id:+b.dataset.sqyes, p_yes:true, p_note:null }));
   v.querySelectorAll("[data-sqno]").forEach(b => b.onclick = () => { const n = prompt("Want to say why? (optional)"); if(n !== null) go("sched_req_answer", { p_id:+b.dataset.sqno, p_yes:false, p_note:n }); });
   v.querySelectorAll("[data-sqok]").forEach(b => b.onclick = () => go("sched_req_decide", { p_id:+b.dataset.sqok, p_ok:true, p_response:null }));
@@ -1198,7 +1198,7 @@ async function timeOff(v){
       : approver && others.some(r => r.status !== "pending") ? `<div class="card"><b style="font-size:16px">Requests you approved or denied</b>${table(others.filter(r => r.status !== "pending" && r.decided_by === ME.name).slice(0, 30), "team")}</div>` : ""}
     <p class="muted" style="font-size:12px">Balances: worked out by the hub from hours worked (hub clock-ins from Nov 1, 2026; Hubstaff tracked hours before) (updated ${esc(bals[0] ? new Date(bals[0].as_of).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—")}). Approved time off is kept here in the hub and taken off your balance. Your reason is seen only by you, the person who approves, and Brandon or Kim.</p>
     <div class="modal" id="tom"><div class="card" id="tocard"></div></div></div>`;
-  const reload = () => timeOff(v), act = async (fnm, args) => { const r = await sb.rpc(fnm, args); if(r.error) alert(r.error.message); else reload(); };
+  const reload = () => timeOff(v), act = async (fnm, args) => { const r = await sb.rpc(fnm, args); if(r.error) await mmAlert(r.error.message); else reload(); };
   const pd = v.querySelector("#ptoby"); if(pd) pd.onchange = () => { ST.ptoBy = pd.value || null; reload(); };
   v.querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => confirm("Cancel this request?") && act("timeoff_decide", { p_id:+b.dataset.cancel, p_status:"cancelled", p_response:null }));
   v.querySelectorAll("[data-ok]").forEach(b => b.onclick = () => act("timeoff_decide", { p_id:+b.dataset.ok, p_status:"approved", p_response:null }));
@@ -1368,7 +1368,7 @@ window.workCheck = async function(v){
   v.querySelector("#wconly").onchange = e => { ST.wcOnly = e.target.checked; workCheck(v); };
   v.querySelectorAll("[data-wshots]").forEach(b => b.onclick = () => { const [u, d] = b.dataset.wshots.split("|"); wcShots(u, d, who(u)); });
   v.querySelectorAll("[data-rv]").forEach(b => b.onclick = async () => { const [u, d] = b.dataset.rv.split("|"), note = await mmAsk("Note (optional):");
-    if(note === null) return; const r = await sb.rpc("work_check_review", { p_user:u, p_day:d, p_note:note }); if(r.error) alert(r.error.message); else workCheck(v); });
+    if(note === null) return; const r = await sb.rpc("work_check_review", { p_user:u, p_day:d, p_note:note }); if(r.error) await mmAlert(r.error.message); else workCheck(v); });
 };
 
 /* ---------- Home: your next 7 days (meetings you can open, office events, your own events) ---------- */
