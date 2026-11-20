@@ -105,6 +105,7 @@ table.ct{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--c
 </head>
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -183,12 +184,12 @@ function list(el){
     const id = +b.dataset.save, st = $(`[data-st="${id}"]`).value, nt = $(`[data-nt="${id}"]`).value.trim(), r = rows.find(x => x.id === id);
     if(st === r.status && !nt) return;
     b.disabled = true; const x = await sb.rpc("improvement_set", { p_id:id, p_status:st === r.status ? null : st, p_note:nt || null });
-    if(x.error){ alert("Couldn't save: " + errText(x.error)); b.disabled = false; return; }
+    if(x.error){ await mmAlert("Couldn't save: " + errText(x.error)); b.disabled = false; return; }
     await load(); list(el); });
   $$("[data-sch]").forEach(b => b.onclick = async () => {
     const id = +b.dataset.sch, due = $(`[data-due="${id}"]`).value, pp = $(`[data-pp="${id}"]`);
     b.disabled = true; const x = await sb.rpc("improvement_schedule", { p_id:id, p_due:due, p_person:pp && pp.value ? +pp.value : null });
-    if(x.error){ alert(errText(x.error)); b.disabled = false; return; }
+    if(x.error){ await mmAlert(errText(x.error)); b.disabled = false; return; }
     await load(); list(el); poll(el); });
   $$("[data-more]").forEach(b => b.onclick = () => { S.open[b.dataset.more] = !S.open[b.dataset.more]; list(el); });
   $$("[data-fd]").forEach(b => b.onclick = () => { const i = $(`[data-due="${b.dataset.fd}"]`); if(i) i.value = b.dataset.day; });
