@@ -742,6 +742,11 @@ function adrDay(k) {
   return { adr: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, n: vals.length, closed, total: vals.length + closed };
 }
 const adrMode = () => (state.calMode || "adr") === "adr" && (state.nightly || []).length > 0;
+// 2026-11-20: Set rates prices from the whole neighborhood (rates_group_sets) like the morning re-price; other sets' Ours rows left out.
+const _gidCache = {};
+async function srGids(sid) { if (_gidCache[sid]) return _gidCache[sid]; const r = await sb.rpc("rates_group_sets", { p_set: sid }); const g = !r.error && Array.isArray(r.data) && r.data.length ? r.data : [sid]; _gidCache[sid] = g; return g; }
+async function srGrpNightly(sid) { const g = await srGids(sid); const rs = await Promise.all(g.map(id => setNightly(id))); return { data: rs.flatMap((r, i) => (r.data || []).filter(x => g[i] === sid || x.tier !== "Ours")) }; }
+async function srGrpChecks(sid, today) { const g = await srGids(sid); const rs = await Promise.all(g.map(id => setChecks(id, today))); return { data: rs.flatMap((r, i) => (r.data || []).filter(x => g[i] === sid || x.tier !== "Ours")) }; }
 async function setChecks(setId, today) {
   const c = _setCache[setId]; if (c && Date.now() - c.t < 6e5) return c.r;
   const r = await sb.rpc("set_latest_checks", { p_set: setId, p_from: today });
@@ -1130,7 +1135,7 @@ async function loadSetRates() {
     allRows(() => sb.from("rates_set_track").select("*", { count: "exact" }).eq("code", SR.code).order("night")),
     sb.from("rates_set_pushes").select("id,status,nights,error,requested_by,requested_at,sent_at,cancelled_by").eq("code", SR.code).order("id", { ascending: false }).limit(12),
     h.comp_id ? sb.from("latest_beyond").select("start_date,price,min_stay,enabled,captured_at,base_price,min_price").eq("comp_id", h.comp_id).limit(1) : Promise.resolve({ data: [] }),
-    comp ? setNightly(comp.set_id) : Promise.resolve({ data: [] })]);
+    comp ? srGrpNightly(comp.set_id) : Promise.resolve({ data: [] })]);
   // Home review (2026-11-08): our pricing engine's suggestion, Home Rater, guest reviews, booking-site listings. All read with the person's sign-in.
   const none = Promise.resolve({ data: null }), cid = h.comp_id;
   const [sh, hq, ai, hr, kd, rv, lk] = await Promise.all([
@@ -1141,7 +1146,7 @@ async function loadSetRates() {
     cid ? sb.from("kd_listing_details").select("captured_at,listing_id,raw").eq("comp_id", cid).order("captured_at", { ascending: false }).limit(12) : none,
     cid ? sb.rpc("analytics_reviews", { p_home: cid }) : none,
     cid ? sb.from("comp_links").select("channel,kind,url,active").eq("comp_id", cid) : none]);
-  const ck = comp ? await setChecks(comp.set_id, today) : { data: [] };
+  const ck = comp ? await srGrpChecks(comp.set_id, today) : { data: [] };
   const oc = cid ? await sb.from("latest_calendar").select("start_date,avail").eq("comp_id", cid).limit(1) : { data: [] };
   SR.ourCal = oc.data?.[0] || null;
   SR.ck = ck.data || [];
@@ -1149,10 +1154,10 @@ async function loadSetRates() {
   SR.ours_n = {}; for (const r of ns.data || []) SR.ours_n[r.night] = r;    // id order: the latest row for a night wins
   SR.track = {}; for (const r of tr.data || []) SR.track[r.night] = r;
   SR.trackAt = (tr.data || []).map(r => r.captured_at).sort().pop();
-  SR.pushes = ps.data || []; SR.bey = {}; try { const bq = await sb.from("rates_set_pushes").select("before").eq("code", SR.code).eq("status", "sent").order("id", { ascending: true }).limit(3); for (const p of bq.data || []) for (const [d, b] of Object.entries(p.before || {})) if (!(d in SR.bey) && b && b.rate != null) SR.bey[d] = +b.rate; } catch (e) {} SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {}; SR.same = null; try { if (comp) { const cs = (await sb.from("comps").select("id,tier,bedrooms,sleeps").eq("set_id", comp.set_id).eq("active", true)).data || []; const mb = cs.find(c => c.id === comp.id)?.bedrooms; const same = new Set(cs.filter(c => c.tier === "Primary" && mb != null && c.bedrooms != null && Math.round(+c.bedrooms) === Math.round(+mb)).map(c => c.id)); const Y0 = h.dyn || {}, ms = cs.find(c => c.id === comp.id)?.sleeps, fac = new Map(); if (Y0.matchSleeps && mb != null && ms) { const off = (Y0.bedOff === "" || Y0.bedOff == null ? 5 : +Y0.bedOff) / 100; const xbs = new Map(); for (const c of cs) { if (c.tier !== "Primary" || c.bedrooms == null || !c.sleeps) continue; const xb = Math.round(+c.bedrooms) - Math.round(+mb); if (xb >= 0 && xb <= 3 && Math.abs(+c.sleeps - +ms) <= (Y0.sleepsWin === "" || Y0.sleepsWin == null ? 2 : +Y0.sleepsWin)) xbs.set(c.id, xb); } for (const i of same) if (!xbs.has(i)) xbs.set(i, 0); /* Brandon 2026-11-11 "learn it per group": discount per extra bedroom from this group's own comps (next 120 nights, Airbnb else Vrbo, 3+ a side) - same as rates_set_auto.py */ const td = iso(new Date(new Date().setHours(12, 0, 0, 0))), crate = id => { const n = SR.nightly.find(r => r.comp_id === id && r.channel === "Airbnb") || SR.nightly.find(r => r.comp_id === id && r.channel === "VRBO"); if (!n) return null; const o = Math.max(0, Math.round((new Date(td + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5)); const v = (n.rates || []).slice(o, o + 120).filter(x => x).map(Number).sort((p, q) => p - q); return v.length ? v[v.length >> 1] : null; }; const rt = {}; for (const [id, xb] of xbs) { const r_ = crate(id); if (r_) (rt[xb] = rt[xb] || []).push(r_); } const md = {}; for (const [xb, v] of Object.entries(rt)) if (v.length >= 3) { v.sort((p, q) => p - q); md[xb] = v[v.length >> 1]; } const learned = {}; for (const [id, xb] of xbs) { if (xb === 0) fac.set(id, 1); else if (md[0] && md[xb]) { const f = Math.max(0.35, Math.min(1, md[0] / md[xb])); fac.set(id, f); learned[xb] = Math.round(f * 100) / 100; } else fac.set(id, Math.pow(1 - off, xb)); } SR.learnedBed = learned; } if (fac.size >= 4) { const scl = (r, f) => { const o = { ...r }; for (const k of ["total", "rent", "fees", "cleaning"]) if (o[k] != null) o[k] = +o[k] * f; return o; }; SR.nightly = SR.nightly.filter(r => r.tier !== "Primary" || fac.has(r.comp_id)).map(r => r.tier !== "Primary" ? r : { ...r, rates: (r.rates || []).map(x => x == null ? x : +x * fac.get(r.comp_id)) }); SR.ck = SR.ck.filter(r => r.tier !== "Primary" || fac.has(r.comp_id)).map(r => r.tier !== "Primary" ? r : scl(r, fac.get(r.comp_id))); SR.same = { n: fac.size, sleeps: ms, bigger: [...fac.values()].filter(f => f < 1).length }; } else if (same.size >= 4) { const keep = r => r.tier !== "Primary" || same.has(r.comp_id); SR.nightly = SR.nightly.filter(keep); SR.ck = SR.ck.filter(keep); SR.same = { n: same.size, of: cs.filter(c => c.tier === "Primary").length, beds: Math.round(+mb) }; } } } catch (e) {} /* Brandon 2026-11-11: same-size comps only when the group has 4+ (same as rates_set_auto.py) */
+  SR.pushes = ps.data || []; SR.bey = {}; try { const bq = await sb.from("rates_set_pushes").select("before").eq("code", SR.code).eq("status", "sent").order("id", { ascending: true }).limit(3); for (const p of bq.data || []) for (const [d, b] of Object.entries(p.before || {})) if (!(d in SR.bey) && b && b.rate != null) SR.bey[d] = +b.rate; } catch (e) {} SR.beyond = by.data?.[0] || null; SR.nightly = nt.data || []; SR.edits = {}; SR.same = null; try { if (comp) { const cs = (await sb.from("comps").select("id,tier,bedrooms,sleeps").in("set_id", await srGids(comp.set_id)).eq("active", true)).data || []; const mb = cs.find(c => c.id === comp.id)?.bedrooms; const same = new Set(cs.filter(c => c.tier === "Primary" && mb != null && c.bedrooms != null && Math.round(+c.bedrooms) === Math.round(+mb)).map(c => c.id)); const Y0 = h.dyn || {}, ms = cs.find(c => c.id === comp.id)?.sleeps, fac = new Map(); if (Y0.matchSleeps && mb != null && ms) { const off = (Y0.bedOff === "" || Y0.bedOff == null ? 5 : +Y0.bedOff) / 100; const xbs = new Map(); for (const c of cs) { if (c.tier !== "Primary" || c.bedrooms == null || !c.sleeps) continue; const xb = Math.round(+c.bedrooms) - Math.round(+mb); if (xb >= 0 && xb <= 3 && Math.abs(+c.sleeps - +ms) <= (Y0.sleepsWin === "" || Y0.sleepsWin == null ? 2 : +Y0.sleepsWin)) xbs.set(c.id, xb); } for (const i of same) if (!xbs.has(i)) xbs.set(i, 0); /* Brandon 2026-11-11 "learn it per group": discount per extra bedroom from this group's own comps (next 120 nights, Airbnb else Vrbo, 3+ a side) - same as rates_set_auto.py */ const td = iso(new Date(new Date().setHours(12, 0, 0, 0))), crate = id => { const n = SR.nightly.find(r => r.comp_id === id && r.channel === "Airbnb") || SR.nightly.find(r => r.comp_id === id && r.channel === "VRBO"); if (!n) return null; const o = Math.max(0, Math.round((new Date(td + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5)); const v = (n.rates || []).slice(o, o + 120).filter(x => x).map(Number).sort((p, q) => p - q); return v.length ? v[v.length >> 1] : null; }; const rt = {}; for (const [id, xb] of xbs) { const r_ = crate(id); if (r_) (rt[xb] = rt[xb] || []).push(r_); } const md = {}; for (const [xb, v] of Object.entries(rt)) if (v.length >= 3) { v.sort((p, q) => p - q); md[xb] = v[v.length >> 1]; } const learned = {}; for (const [id, xb] of xbs) { if (xb === 0) fac.set(id, 1); else if (md[0] && md[xb]) { const f = Math.max(0.35, Math.min(1, md[0] / md[xb])); fac.set(id, f); learned[xb] = Math.round(f * 100) / 100; } else fac.set(id, Math.pow(1 - off, xb)); } SR.learnedBed = learned; } if (fac.size >= 4) { const scl = (r, f) => { const o = { ...r }; for (const k of ["total", "rent", "fees", "cleaning"]) if (o[k] != null) o[k] = +o[k] * f; return o; }; SR.nightly = SR.nightly.filter(r => r.tier !== "Primary" || fac.has(r.comp_id)).map(r => r.tier !== "Primary" ? r : { ...r, rates: (r.rates || []).map(x => x == null ? x : +x * fac.get(r.comp_id)) }); SR.ck = SR.ck.filter(r => r.tier !== "Primary" || fac.has(r.comp_id)).map(r => r.tier !== "Primary" ? r : scl(r, fac.get(r.comp_id))); SR.same = { n: fac.size, sleeps: ms, bigger: [...fac.values()].filter(f => f < 1).length }; } else if (same.size) { /* 2026-11-20 (Brandon): same bedrooms, sleeping within 2 of ours when any fit (same as rates_set_auto.py) */ const ss = new Set([...same].filter(i => { const c = cs.find(x => x.id === i); return ms && c && c.sleeps && Math.abs(+c.sleeps - +ms) <= 2; })); const use = ss.size ? ss : same; const keep = r => r.tier !== "Primary" || use.has(r.comp_id); SR.nightly = SR.nightly.filter(keep); SR.ck = SR.ck.filter(keep); SR.same = { n: use.size, of: cs.filter(c => c.tier === "Primary").length, beds: Math.round(+mb), sleeps: ss.size ? ms : null }; } } } catch (e) {} /* Brandon 2026-11-11: same-size comps only when the group has 4+ (same as rates_set_auto.py) */
   { const pre = (h.comp_id || "").match(/^[a-z]+-/)?.[0], tests = (SR.homes || []).map(x => x.comp_id).filter(Boolean);
     SR.grpPre = (h.code || "").split(" ")[0]; SR.grp = [];
-    SR.compName = {}; SR.compKd = []; if (comp?.set_id) { const cn = await sb.from("comps").select("id,label:label_public,tier,active").eq("set_id", comp.set_id); for (const c of cn.data || []) SR.compName[c.id] = c.label;
+    SR.compName = {}; SR.compKd = []; if (comp?.set_id) { const cn = await sb.from("comps").select("id,label:label_public,tier,active").in("set_id", await srGids(comp.set_id)); for (const c of cn.data || []) SR.compName[c.id] = c.label;
       const pids = (cn.data || []).filter(c => c.tier === "Primary" && c.active !== false).map(c => c.id);
       if (pids.length) { const kq = await sb.from("kd_listing_details").select("comp_id,captured_at,lb:raw->listing->>last_booking_on,ota:raw->listing->>ota,ms:raw->listing->>min_stay,ht:raw->listing->amenity->>hot_tub,perf:raw->listing->performance->last_12_months").in("comp_id", pids).gte("captured_at", addD(today, -45)).order("captured_at", { ascending: false }).limit(pids.length * 6);
         const seen = {}; for (const r of kq.data || []) { const k = r.comp_id; if (!seen[k] || (seen[k].ota !== "airbnb" && r.ota === "airbnb")) seen[k] = r; } SR.compKd = Object.values(seen); } }
@@ -4189,31 +4194,32 @@ async function loadCompSets() {
   const nm = id => (CS.sets.find(x => x.id === id) || {}).name || "";
   // Brandon 2026-11-20: pick Neighborhood, then Bedrooms, then Sleeping (each narrows the next) instead of one long list of comp sets
   const kind = h => h.live ? "Live" : h.test ? "Test" : "Beyond";
-  const nbOf = x => x.grp;
-  const bdOf = x => x.beds; const bdOfOld = x => { const v = x.ours.map(h => h.beds).filter(n => n != null).map(Number); if (v.length) { const m = {}; v.forEach(n => m[n] = (m[n] || 0) + 1); return +Object.entries(m).sort((a, b) => b[1] - a[1])[0][0]; }
+  const nbOf = x => String(x.grp).split(" · ")[0]; const layOf = x => String(x.grp).split(" · ")[1] || "";
+  const bdOf = x => layOf(x) ? "L:" + layOf(x) : x.beds; const bdOfOld = x => { const v = x.ours.map(h => h.beds).filter(n => n != null).map(Number); if (v.length) { const m = {}; v.forEach(n => m[n] = (m[n] || 0) + 1); return +Object.entries(m).sort((a, b) => b[1] - a[1])[0][0]; }
     const g = String(x.name).match(/(\d+)\s*BR/i); return g ? +g[1] : /studio/i.test(x.name) ? 0 : null; };
   const slOf = x => "sleeps " + (x.sleeps ?? "?");
-  const bdTxt = b => b == null ? "Size unknown" : b === 0 ? "Studio" : b + " bedrooms";
+  const bdTxt = b => b == null ? "Size unknown" : typeof b === "string" && b.startsWith("L:") ? b.slice(2) : b === 0 ? "Studio" : b + " bedrooms";
   const liveN = x => x.ours.filter(h => h.live).length;
   const cur = CS.sets.find(x => x.id === CS.set) || {};
   if (CS.nb == null && cur.id) { CS.nb = nbOf(cur); CS.bd = bdOf(cur); }
   const nbs = [...new Set(CS.sets.map(nbOf))].sort((a, b) => a.localeCompare(b));
   const inNb = CS.sets.filter(x => nbOf(x) === CS.nb);
-  const bds = [...new Set(inNb.map(bdOf))].sort((a, b) => (a ?? 99) - (b ?? 99));
+  const bk = b => typeof b === "string" ? 1000 + b.charCodeAt(2) : (b ?? 99);
+  const bds = [...new Set(inNb.map(bdOf))].sort((a, b) => bk(a) - bk(b) || String(a).localeCompare(String(b)));
   if (!bds.includes(CS.bd)) CS.bd = bds[0];
   const inBd = inNb.filter(x => bdOf(x) === CS.bd).sort((p, q) => (p.sleeps ?? 99) - (q.sleeps ?? 99));
   if (!inBd.some(x => x.id === CS.set) && inBd[0]) { CS.set = inBd[0].id; try { localStorage.setItem("mmCompSet", CS.set); } catch (e) {} }
   const dupe = x => inBd.filter(y => slOf(y) === slOf(x)).length > 1;
   $("csCtl").innerHTML = `<div class="pcctl csctl">
     <label>Neighborhood<select id="csNb">${nbs.map(n => `<option${n === CS.nb ? " selected" : ""}>${pcEsc(n)}</option>`).join("")}</select></label>
-    <label>Bedrooms<select id="csBd" style="min-width:150px">${bds.map(b => `<option value="${b ?? ""}"${b === CS.bd ? " selected" : ""}>${bdTxt(b)}</option>`).join("")}</select></label>
+    <label>Bedrooms<select id="csBd" style="min-width:150px">${bds.map(b => `<option value="${pcEsc(String(b ?? ""))}"${b === CS.bd ? " selected" : ""}>${bdTxt(b)}</option>`).join("")}</select></label>
     <label>Sleeping<select id="csSl" style="min-width:240px">${inBd.map(x => `<option value="${pcEsc(x.id)}"${x.id === CS.set ? " selected" : ""}>${pcEsc(slOf(x))} · ${x.comps} comps (${x.sleeps != null ? (x.sleeps - 2) + "–" + (x.sleeps + 2) : "?"}) · ${x.ours.length} home${x.ours.length === 1 ? "" : "s"}${liveN(x) ? `, ${liveN(x)} live` : ""}</option>`).join("")}</select></label>
     <label style="position:relative">Find a home<input type="search" id="csFh" autocomplete="off" placeholder="One of our homes, e.g. BHL 1403" style="min-width:240px">
       <div id="csFl" class="cshl" hidden></div></label></div>`;
   const best = a => a.slice().sort((p, q) => liveN(q) - liveN(p))[0];
   const go = x => { if (!x) return; CS.set = x.id; CS.nb = nbOf(x); CS.bd = bdOf(x); try { localStorage.setItem("mmCompSet", CS.set); } catch (e) {} loadCompSets(); };
   $("csNb").onchange = e => { const f = CS.sets.filter(x => nbOf(x) === e.target.value); go(liveN(best(f) || {ours: []}) ? best(f) : best(f.filter(x => bdOf(x) === [...new Set(f.map(bdOf))].sort((a, b2) => (a ?? 99) - (b2 ?? 99))[0]))); };
-  $("csBd").onchange = e => { const b = e.target.value === "" ? null : +e.target.value; go(best(inNb.filter(x => bdOf(x) === b))); };
+  $("csBd").onchange = e => { const v = e.target.value, b = v === "" ? null : v.startsWith("L:") ? v : +v; go(best(inNb.filter(x => bdOf(x) === b))); };
   $("csSl").onchange = e => go(CS.sets.find(x => x.id === e.target.value));
   // Find a home: type one of our homes, pick it = open the comp set it's in (that home is highlighted)
   const fh = $("csFh"), fl = $("csFl"); let fp = 0, fhits = [];
@@ -4375,17 +4381,17 @@ function csDraw() {
   W.querySelectorAll("[data-cst]").forEach(b => b.onclick = async () => {
     const x = rows.find(r => r.id === b.dataset.c), stt = b.dataset.cst; let note = null;
     if (stt === "delete") { note = prompt(`Delete "${x.label}" from ${d.name}? It's switched off (history kept). Why?`); if (note === null) return; }
-    if (stt === "paused" && !await mmConfirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
+    if (stt === "paused" && !confirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
     const r = await sb.rpc("rates_comp_state", { p_comp: x.id, p_state: stt, p_note: note });
     if (r.error) alert(r.error.message); else { CS.sets = null; await csFetch(true); rateSetsRefresh(); } });
   W.querySelectorAll("[data-mvs]").forEach(s0 => s0.onchange = async () => {
     const to = s0.value; if (!to) return; const tn = (CS.sets.find(x => x.id === to) || {}).name;
-    if (!await mmConfirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
+    if (!confirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
     const r = await sb.rpc("rates_home_move", { p_code: s0.dataset.mvs, p_to_set: to, p_note: null });
     if (r.error) { alert(r.error.message); s0.value = ""; return; }
     CS.sets = null; await rateSetsRefresh(); loadCompSets(); });
   W.querySelectorAll("[data-req]").forEach(b => b.onclick = async () => {
-    if (b.dataset.d === "Primary" && !await mmConfirm("Add this listing to the comp set as in use?")) return;
+    if (b.dataset.d === "Primary" && !confirm("Add this listing to the comp set as in use?")) return;
     const r = await sb.rpc("decide_comp_request", { req_id: +b.dataset.req, decision: b.dataset.d });
     if (r.error) alert(r.error.message); else { await rateSetsRefresh(); csFetch(); } });
   const rq = W.querySelector("details.csreq"); if (rq) rq.ontoggle = () => { CS.reqOpen = rq.open; };
