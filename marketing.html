@@ -674,16 +674,17 @@ const escT = s => String(s == null ? "" : s).split(/(\{\{[^{}]{1,120}\}\})/).map
 const inline = s => escT(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
   .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" style="color:#3c5f12;font-weight:bold">$1</a>');
 const FONT = "font-family:Helvetica,Arial,sans-serif;color:#15201a";
-function blockHtml(b){
+function blockHtml(b, i, mark){   // mark = the preview being edited: editable parts carry data-bi (never in what goes to Brevo)
+  const MK = mark ? ` data-bi="${i}"` : "";
   const cell = (inner, pad = "12px 32px") => `<tr><td style="padding:${pad};${FONT}">${inner}</td></tr>`;
   switch(b.t){
     case "header": return `<tr><td style="background:${esc(b.bg || "#3c5f12")};padding:18px 32px" align="left">${b.logo ? `<img src="${esc(b.logo)}" alt="Moose Management" height="64" style="display:block;height:64px;border:0">` : ""}</td></tr>`;
-    case "heading": return cell(`<h1 style="margin:0;font-size:${+b.size || 26}px;line-height:1.25;${FONT}">${inline(b.text)}</h1>`, "24px 32px 6px");
-    case "text": return cell(String(b.text || "").split(/\n{2,}/).map(p => `<p style="margin:0 0 14px;font-size:16px;line-height:1.55">${inline(p).replace(/\n/g, "<br>")}</p>`).join(""), "8px 32px");
+    case "heading": return cell(`<h1${MK} style="margin:0;font-size:${+b.size || 26}px;line-height:1.25;${FONT}">${inline(b.text)}</h1>`, "24px 32px 6px");
+    case "text": return cell(`<div${MK}>` + String(b.text || "").split(/\n{2,}/).map(p => `<p style="margin:0 0 14px;font-size:16px;line-height:1.55">${inline(p).replace(/\n/g, "<br>")}</p>`).join("") + `</div>`, "8px 32px");
     case "image": { if(!b.src) return ""; const img = `<img src="${esc(b.src)}" alt="${esc(b.alt || "")}" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:8px">`;
       return cell(b.href ? `<a href="${esc(b.href)}">${img}</a>` : img); }
     case "button": return cell(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${esc(b.color || "#5b8a1e")};border-radius:8px">
-      <a href="${esc(b.href || "#")}" style="display:inline-block;padding:13px 26px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none">${esc(b.label || "Click here")}</a></td></tr></table>`, "10px 32px 18px");
+      <a href="${esc(b.href || "#")}" style="display:inline-block;padding:13px 26px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none"${MK}>${esc(b.label || "Click here")}</a></td></tr></table>`, "10px 32px 18px");
     case "voice": { const v = VOICES[b.who] || VOICES.patrick;
       return cell(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:12px"><img src="${esc(v.pic)}" alt="${esc(v.name)}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:50%;border:0"></td>
         <td style="${FONT};font-size:15px;line-height:1.35"><b>${esc(v.name)}</b><br><span style="color:#6b776f;font-size:13px">${esc(v.line)}</span></td></tr></table>`, "18px 32px 4px"); }
@@ -699,12 +700,12 @@ function blockHtml(b){
   }
   return "";
 }
-function emailHtml(D){
+function emailHtml(D, mark){
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(D.subject || "")}</title></head>
 <body style="margin:0;padding:0;background:#f5f7f0">${D.preview_text ? `<div style="display:none;max-height:0;overflow:hidden">${esc(D.preview_text)}</div>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7f0"><tr><td align="center" style="padding:20px 10px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden">
-${(D.design.blocks || []).map(blockHtml).join("\n")}
+${(D.design.blocks || []).map((b, i) => blockHtml(b, i, mark)).join("\n")}
 </table></td></tr></table></body></html>`;
 }
 const DES = { d:null, phone:false, dirty:false };
@@ -735,7 +736,7 @@ function drawDesigner(){
   const B = D.design.blocks || [];
   d.innerHTML = `<div class="dhead"><h3>✏️ ${esc(D.name || "New email")}</h3>
       <span class="status" id="dst">${D.status === "in_brevo" ? `In Brevo as draft #${esc(D.brevo_id)}` : D.status === "queued" ? "Sending to Brevo…" : D.status === "error" ? "Not saved to Brevo: " + esc(D.brevo_note || "") : DES.dirty ? "Not saved" : "Saved in the hub"}</span>
-      <button class="chip ${DES.phone ? "" : "on"}" data-dw="desk">Desktop</button><button class="chip ${DES.phone ? "on" : ""}" data-dw="phone">Phone</button>
+      <button class="chip ${DES.phone ? "" : "on"}" data-dw="desk">Desktop</button><button class="chip ${DES.phone ? "on" : ""}" data-dw="phone">Phone</button><button class="chip ${DES.pedit ? "on" : ""}" data-pedit="1" title="Click the words on the email to change them">✏️ Edit on the email</button>
       <button class="btn" data-dsave="1">💾 Save</button><button class="btn primary" data-dbrevo="1">Save to Brevo</button><button class="btn" data-close="1">Close</button></div>
     <div class="des"><div class="ed">
       <label>Name (only we see this)<input data-top="name" maxlength="200" value="${esc(D.name)}"></label>
@@ -752,7 +753,30 @@ function drawDesigner(){
     </div><div id="dpv"></div></div>`;
   drawPreview();
 }
-function drawPreview(){ const box = $("#dpv"); if(box) box.innerHTML = frame(emailHtml(DES.d), DES.phone); }
+function drawPreview(){ const box = $("#dpv"); if(!box) return;
+  if(!DES.pedit){ box.innerHTML = frame(emailHtml(DES.d), DES.phone); return; }
+  // edit mode: same email, tags shown as written, click the words to change them (Brandon 2026-11-20: "edit the emails in here")
+  box.innerHTML = `<div class="pv ${DES.phone ? "phone" : ""}" style="flex-direction:column;align-items:center;gap:6px"><p class="muted" style="margin:0;font-size:12.5px;max-width:760px;width:100%">✏️ Click the heading, the words or the button text to change them. Tags like {{ contact.FIRSTNAME }} stay as they are; Brevo fills them in.</p>
+    <iframe id="pedf" sandbox="allow-same-origin" title="Edit the email" style="flex:1" srcdoc="${esc(emailHtml(DES.d, true))}"></iframe></div>`;
+  const f = $("#pedf"); f.onload = () => { const doc = f.contentDocument; if(!doc) return;
+    doc.querySelectorAll("[data-bi]").forEach(el => { el.contentEditable = "true"; el.style.outline = "1px dashed #88B535"; el.style.outlineOffset = "3px"; el.style.cursor = "text"; });
+    doc.querySelectorAll("a").forEach(a => a.addEventListener("click", ev => ev.preventDefault()));
+    doc.addEventListener("input", ev => { const el = ev.target.closest && ev.target.closest("[data-bi]"); if(!el) return;
+      const bl = DES.d.design.blocks[+el.dataset.bi]; if(!bl) return;
+      if(bl.t === "heading") bl.text = el.innerText.trim();
+      else if(bl.t === "button") bl.label = el.innerText.trim();
+      else if(bl.t === "text") bl.text = htmlToText(el);
+      const k = bl.t === "button" ? "label" : "text", side = $(`#big .ed [data-b="${el.dataset.bi}"][data-k="${k}"]`); if(side) side.value = bl[k];   // keep the left side in step
+      DES.dirty = true; if(DES.d.status !== "queued") DES.d.status = "draft"; const st = $("#dst"); if(st) st.textContent = "Not saved"; }); }; }
+function htmlToText(el){   // the edited paragraphs back into the text block's format: blank line = paragraph, **bold**, [words](link)
+  const c = el.cloneNode(true);
+  c.querySelectorAll("b,strong").forEach(x => x.replaceWith("**" + x.textContent + "**"));
+  c.querySelectorAll("a").forEach(x => x.replaceWith(/^https?:/.test(x.getAttribute("href") || "") ? `[${x.textContent}](${x.getAttribute("href")})` : x.textContent));
+  c.querySelectorAll("br").forEach(x => x.replaceWith("\n"));
+  const ps = [...c.querySelectorAll("p, div > div")];
+  const out = ps.length ? ps.map(p => p.textContent.trim()).filter(Boolean).join("\n\n") : c.textContent.trim();
+  return out.replace(/\u00a0/g, " ");
+}
 /* ---------- pictures: upload to the public mkt-images bucket (hub_marketing_images.sql), or pick one already uploaded ---------- */
 const BUCKET = "mkt-images";
 async function shrink(file){   // photos -> max 1200 px wide; PNG stays PNG (logos keep their see-through parts); GIF untouched (may be animated)
@@ -842,6 +866,7 @@ document.addEventListener("click", async e => { const b = e.target.closest("butt
   if(!DES.d) return;
   const B = DES.d.design.blocks;
   if(b.dataset.dw){ DES.phone = b.dataset.dw === "phone"; drawDesigner(); }
+  if(b.dataset.pedit){ DES.pedit = !DES.pedit; drawDesigner(); return; }
   if(b.dataset.mv != null){ const i = +b.dataset.mv, j = i + +b.dataset.dir; [B[i], B[j]] = [B[j], B[i]]; DES.dirty = true; drawDesigner(); }
   if(b.dataset.rm != null){ B.splice(+b.dataset.rm, 1); DES.dirty = true; drawDesigner(); }
   if(b.dataset.up != null) return uploadPic(+b.dataset.up, b.dataset.pk);
@@ -852,6 +877,7 @@ document.addEventListener("click", async e => { const b = e.target.closest("butt
   if(b.dataset.dsave) saveDraft(false);
   if(b.dataset.dbrevo){ if(!(DES.d.subject || "").trim()){ $("#dst").textContent = "Add a subject line first."; return; }
     if(!B.some(x => x.t === "footer" || (x.t === "html" && /unsubscribe/i.test(x.html || "")))){ $("#dst").textContent = "Add the footer block (it has the unsubscribe link)."; return; }
+    if(DES.d.design && DES.d.design.aud) return gfAsk("draft");
     brevoSure(); }
 });
 
@@ -1084,12 +1110,12 @@ function gfApply(types, f, name){   // used by ideas, saved searches and the dat
   if(GF.f.tyf || GF.f.hol || GF.f.season !== "any" || GF.f.beds || GF.f.nights || GF.f.comm || GF.f.home || GF.f.stays !== "any" || GF.f.last !== "any") GF.more = true;
   gfSearch(); const g = document.getElementById("gfh"); if(g) g.scrollIntoView({ block:"start", behavior:"smooth" });
 }
-function gfEmail(start, name){   // open the designer with this search attached
+function gfEmail(start, name, ctx){   // open the designer with this search attached (ctx = the idea behind it: a fare, a topic)
   name = name || GF.audName || gfLabel();
   const fl = Object.assign({}, GF.f); let auto = false;
   if(!GF.types.includes("coming") && !GF.types.includes("rrdue") && fl.next === "any"){ fl.next = "none"; auto = true; }   // they're coming anyway: no "come back" email
   design("new"); DES.d.name = name + " · " + fmtD(today()); DES.d.design.blocks = start || START.find({ type:GF.types[0] });
-  DES.d.design.aud = { name, filters:fl, types:GF.types.slice(), auto_next:auto }; DES.audInfo = null; drawDesigner(); audCount();
+  DES.d.design.aud = { name, filters:fl, types:GF.types.slice(), auto_next:auto, ctx:ctx || null }; DES.audInfo = null; DES.facts = null; drawDesigner(); audCount();
 }
 document.addEventListener("click", async e => {
   const sa = e.target.closest("[data-gall]"); if(sa && sa.closest("#gfind")){ e.preventDefault(); GF.showAll = !GF.showAll; return gfDraw(); }
@@ -1145,7 +1171,11 @@ function audBox(){
   return `<div class="audbox"><b>To: ${I.loading ? "…" : ids.length.toLocaleString()} guests</b> from the search “${esc(A.name)}”
     <div class="muted" style="font-size:12.5px">${I.err ? esc(I.err) : `Guests with an email, not unsubscribed, not Do Not Rent${A.filters.fresh !== "any" ? `, not emailed by the hub in the last ${esc(A.filters.fresh)} days` : ""}${A.filters.next === "none" ? ", and no stay already booked" : ""}. The hub reads their emails from Track and puts them on a new Brevo list when you send.`}</div>
     ${last ? `<div style="margin-top:6px">${last.status === "asked" || last.status === "sending" ? `<span class="pill blue">⏳ ${last.kind === "test" ? "Test" : "Send"} ${last.status === "asked" ? "waiting for the office PC" : "going out"}…</span>`
-      : last.status === "sent" ? `<span class="pill green">${last.kind === "test" ? "✓ Test sent" : "✓ Sent"}</span>` : `<span class="pill red">${esc(last.status)}</span>`} <span class="muted" style="font-size:12.5px">${esc(last.note || "")}</span></div>` : ""}
+      : last.status === "sent" ? `<span class="pill green">${last.kind === "test" ? "✓ Test sent" : last.kind === "draft" ? "✓ In Brevo as a draft" : "✓ Sent"}</span>` : `<span class="pill red">${esc(last.status)}</span>`} <span class="muted" style="font-size:12.5px">${esc(last.note || "")}</span></div>` : ""}
+    <div class="bar" style="margin:8px 0 0"><button class="btn primary" data-gwrite="1" ${DES.writing ? "disabled" : ""}>${DES.writing ? "✨ Writing… (about 30 seconds)" : "✨ Write it from the data"}</button>
+      <button class="btn" data-gdraft="1" ${ids.length ? "" : "disabled"} title="Puts these guests on a new Brevo list and this email in Brevo as a draft. Nobody gets an email.">💾 Save to Brevo as a draft</button></div>
+    ${DES.facts && DES.facts.length ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:12.5px">✔ Check these ${DES.facts.length} facts before sending</summary>
+      <ul style="margin:6px 0 0;padding-left:18px;font-size:12.5px">${DES.facts.map(f => `<li>${esc(f.fact)} <span class="muted">— ${/^https?:/.test(f.source) ? `<a href="${esc(f.source)}" target="_blank" rel="noopener">${esc(f.source.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60))}</a>` : esc(f.source)}</span></li>`).join("")}</ul></details>` : ""}
     ${sent ? "" : M.can_send ? `<div class="bar" style="margin:8px 0 0"><button class="btn" data-gtest="1" ${ids.length ? "" : "disabled"}>📧 Send me a test</button>
       <button class="btn primary" data-gsend="1" ${ids.length ? "" : "disabled"}>🚀 Send to ${ids.length.toLocaleString()} guests</button></div>`
       : `<div class="muted" style="margin-top:6px;font-size:12.5px">Sending to a search from the hub is on for hub admins (Brandon, Kim, Jeff). Ask one of them to send it.</div>`}</div>`;
@@ -1156,14 +1186,16 @@ async function gfAsk(kind){
   if(!D.design.blocks.some(x => x.t === "footer" || (x.t === "html" && /unsubscribe/i.test(x.html || "")))){ $("#dst").textContent = "Add the footer block (it has the unsubscribe link)."; return; }
   let ids; try { ids = ((await gfFind(A.filters, A.types || [], { limit:0 })).ids || []).map(Number); } catch(e){ $("#dst").textContent = niceE(e); return; }
   const dl = $("#dlg"), test = kind === "test", M = GF.mode || {};
-  dl.innerHTML = `<h3 style="margin:0 0 8px">${test ? "Send yourself a test?" : `Send this email to ${ids.length.toLocaleString()} guests?`}</h3>
+  const draft = kind === "draft";
+  dl.innerHTML = `<h3 style="margin:0 0 8px">${draft ? "Put this email in Brevo as a draft?" : test ? "Send yourself a test?" : `Send this email to ${ids.length.toLocaleString()} guests?`}</h3>
     <p style="margin:0"><b>${esc(D.subject)}</b></p><p class="muted" style="margin:2px 0 0">${esc(D.name)} · search “${esc(A.name)}”</p>
-    <p style="margin:10px 0 0">${test ? `A test goes only to <b>${esc(M.my_email || "your email")}</b>. The office PC also builds the Brevo list for these ${ids.length.toLocaleString()} guests, so the real send is ready after.`
+    <p style="margin:10px 0 0">${draft ? `The office PC puts these ${ids.length.toLocaleString()} guests on a new Brevo list (in the "Moose Hub" folder) and this email in Brevo as a <b>draft</b> going to that list. <b>Nobody gets an email.</b> Finish, schedule or send it in Brevo.`
+      : test ? `A test goes only to <b>${esc(M.my_email || "your email")}</b>. The office PC also builds the Brevo list for these ${ids.length.toLocaleString()} guests, so the real send is ready after.`
       : `It goes out from Brevo right away to the guests on the list your test made. <b>This can't be taken back.</b>`}</p>
-    ${test ? "" : `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:700"><input type="checkbox" id="gaOk"> I opened my test email and it looks right</label>`}
-    <div class="bar" style="justify-content:flex-end;margin-top:14px"><button class="btn" id="gaNo">Not yet</button><button class="btn primary" id="gaGo" ${test ? "" : "disabled"}>${test ? "Yes, send me a test" : "Yes, send it"}</button></div>`;
+    ${test || draft ? "" : `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:700"><input type="checkbox" id="gaOk"> I opened my test email and it looks right</label>`}
+    <div class="bar" style="justify-content:flex-end;margin-top:14px"><button class="btn" id="gaNo">Not yet</button><button class="btn primary" id="gaGo" ${test || draft ? "" : "disabled"}>${draft ? "Yes, put it in Brevo" : test ? "Yes, send me a test" : "Yes, send it"}</button></div>`;
   dl.showModal(); $("#gaNo", dl).focus(); $("#gaNo", dl).onclick = () => dl.close();
-  if(!test) $("#gaOk", dl).onchange = e => { $("#gaGo", dl).disabled = !e.target.checked; };
+  if(!test && !draft) $("#gaOk", dl).onchange = e => { $("#gaGo", dl).disabled = !e.target.checked; };
   $("#gaGo", dl).onclick = async () => { dl.close();
     if(DES.dirty || !D.id){ await saveDraft(false); }
     const r = await sb.rpc("mkt_guest_ask", { p_draft:DES.d.id, p_kind:kind, p_contacts:ids, p_name:A.name, p_filters:{ f:A.filters, types:A.types || [] } });
@@ -1178,8 +1210,43 @@ async function gfPollSends(id, n){
   if(last && (last.status === "asked" || last.status === "sending") && n < 120) setTimeout(() => gfPollSends(id, n + 1), 6000);
   else gfDraw();
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-gtest],[data-gsend]"); if(!b || !b.closest("#big") || !DES.d) return;
-  gfAsk(b.dataset.gtest ? "test" : "send"); });
+document.addEventListener("click", e => { const b = e.target.closest("[data-gtest],[data-gsend],[data-gdraft],[data-gwrite]"); if(!b || !b.closest("#big") || !DES.d) return;
+  if(b.dataset.gwrite) return writeFromData();
+  gfAsk(b.dataset.gtest ? "test" : b.dataset.gdraft ? "draft" : "send"); });
+// "✨ Write it from the data" (functions/mkt-email-write): what these guests have in common + the idea (fare / topic) + homes open those
+// dates + what's on in town + what people search now -> subject, words, button, home picks in Patrick's or Penny's voice.
+function segmentOf(rows){
+  const cnt = a => { const m = {}; a.forEach(x => { if(x) m[x] = (m[x] || 0) + 1; }); return Object.entries(m).sort((p, q) => q[1] - p[1]).map(x => x[0]); };
+  const beds = rows.map(x => +x.max_beds || 0).filter(Boolean).sort((a, b) => a - b), n = rows.length || 1;
+  return { typical_beds:beds.length ? beds[Math.floor(beds.length / 2)] : null, top_homes:cnt(rows.flatMap(x => x.homes || [])).slice(0, 12),
+    top_communities:cnt(rows.flatMap(x => x.communities || [])).slice(0, 5), top_states:cnt(rows.map(x => x.state)).slice(0, 5),
+    avg_nights:Math.round(rows.reduce((s, x) => s + (+x.avg_nights || 0), 0) / n * 10) / 10,
+    five_star_share:Math.round(rows.filter(x => x.five).length / n * 100) / 100, came_back_share:Math.round(rows.filter(x => x.stays >= 2).length / n * 100) / 100,
+    holidays:cnt(rows.flatMap(x => x.holidays || [])).slice(0, 3), booking_sites:cnt(rows.flatMap(x => x.channels || [])) };
+}
+async function writeFromData(){
+  const D = DES.d, A = D.design.aud; if(!A || DES.writing) return;
+  const edited = D.design.blocks.some(b => b.t === "text" && !/^Hi \{\{ contact\.FIRSTNAME \}\},\n\n(Thank you|It's been|You've stayed|The holidays|Thanksgiving|Summer|Snow is|We can't wait|We loved|Round-trip|\[Write)/.test(b.text || ""));
+  if(edited && !confirm("Replace the words in this email with a new draft written from the data?")) return;
+  DES.writing = true; drawDesigner();
+  try {
+    const seg = segmentOf(((await gfFind(A.filters, A.types || [], { limit:250, lite:true })).rows) || []);
+    const v = (D.design.blocks.find(b => b.t === "voice") || {}).who || "patrick", ctx = A.ctx || {};
+    const r = await sb.functions.invoke("mkt-email-write", { body:{ name:A.name, label:gfLabel(A.filters, A.types || []), count:(DES.audInfo && DES.audInfo.ids || []).length,
+      types:A.types || [], segment:seg, voice:v, flight:ctx.flight || null, topic:ctx.topic || null,
+      from:A.filters.tyf || A.filters.from || "", to:A.filters.tyt || A.filters.to || "", allow_home_tags:!(A.types || []).includes("coming") } });
+    if(r.error || !r.data || !r.data.ok) throw new Error((r.data && r.data.error) || (r.error && r.error.message) || "The writer didn't answer.");
+    const E = r.data.email, V = VOICES[v];
+    const blocks = [newBlock("header"), { t:"voice", who:v }, { t:"heading", text:E.heading, size:26 }, { t:"text", text:(E.paragraphs || []).join("\n\n") },
+      { t:"button", label:E.button_label || "See homes", href:E.button_url + (E.button_url.includes("?") ? "&" : "?") + "utm_source=brevo&utm_medium=email&utm_campaign=hub-guests", color:"#5b8a1e" }];
+    if((E.home_codes || []).length) blocks.push({ t:"homes", codes:E.home_codes.join(", "), title:E.homes_title || "Homes I'd pick", items:[] });
+    blocks.push(newBlock("spacer"), Object.assign(newBlock("footer"), { text:V.sign }));
+    D.design.blocks = blocks; D.subject = E.subject; D.preview_text = E.preview_text; DES.facts = E.facts_used || []; DES.dirty = true;
+    DES.writing = false; drawDesigner();
+    const hi = blocks.findIndex(b => b.t === "homes"); if(hi >= 0) await fillHomes(hi);
+    $("#dst").textContent = `Written from the data (${r.data.data && r.data.data.open_homes ? r.data.data.open_homes.count + " homes open those dates, " : ""}cost about $${r.data.cost}). Read it and check the facts, then Save.`;
+  } catch(e){ DES.writing = false; drawDesigner(); $("#dst").textContent = "Couldn't write it: " + niceE(e); }
+}
 
 /* ---------- starter words for emails from the data ---------- */
 const titleCase = s => String(s || "").replace(/\b(utah|park city|deer valley)\b/gi, "").replace(/\s+/g, " ").trim().replace(/\b\w/g, c => c.toUpperCase());
@@ -1223,6 +1290,7 @@ function fareMarkets(){   // per airport: middle price, best day 14-90 days out,
     return { origin:o, market:cs[0].market, state:cs[0].state, mid, best, drop, lows, off:best && mid ? Math.round((1 - best.price / mid) * 100) : 0, checked:cs[0].checked_at };
   }).filter(m => m.best);
 }
+const fareCtx = m => ({ flight:{ market:m.market, origin:m.origin, price:Math.round(m.best.price), usual:Math.round(m.mid), depart:m.best.depart, ret:m.best.ret, checked:String(m.checked || "").slice(0, 10) } });
 const fareF = m => ({ area:"air:" + m.origin, tyf:addDays(m.best.depart, -7), tyt:addDays(m.best.ret, 7) });   // near that airport + stayed then (any year), a week either side
 function ideasBuild(){
   const I = [], can = (GF.fac && GF.fac.states_can) || {};
@@ -1232,14 +1300,14 @@ function ideasBuild(){
     I.push({ icon:"✈️", title:`Cheap flights from ${m.market}: $${Math.round(m.best.price)} round trip`,
       why:`Leaving ${fmtD(m.best.depart)}, back ${fmtD(m.best.ret)} (7 nights). The usual fare from ${m.origin} over the next 4 months is about $${Math.round(m.mid)}, so this is ${m.off}% under. Email ${area} guests who stayed with us around those dates in past years and tell them.`,
       src:`Google Flights via SerpApi, ${fmtD(m.checked)}; guests by ZIP code (Track)`, types:[], f, name:`${area} guests, around ${fmtD(m.best.depart).replace(/, \d{4}$/, "")} (cheap flights)`,
-      start:() => START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret) }); });
+      start:() => START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret), ctx:fareCtx(m) }); });
   // 2. rising searches = topics
   const wk = GF.topics.reduce((m, t) => t.last_seen > m ? t.last_seen : m, "");
   const num = v => /breakout/i.test(v || "") ? 1e6 : +String(v || "").replace(/\D/g, "") || 0;
   GF.topics.filter(t => t.last_seen === wk && t.kind === "rising" && t.status !== "skip" && t.status !== "used").sort((a, b) => num(b.last_value) - num(a.last_value)).slice(0, 2).forEach(t => {
     const w = /ski|snow|sled|winter|christmas|epic|ikon|board|powder/i.test(t.query) ? "winter" : /summer|hike|bike|golf|lake|concert|july/i.test(t.query) ? "summer" : "good";
     I.push({ icon:"🔥", title:`People are searching “${t.query}”`, why:`${/breakout/i.test(t.last_value) ? "A breakout search on Google (more than 5,000% up)" : `Up ${t.last_value} on Google`} in the last month${t.first_seen === wk ? ", new this week" : ""}. Write an email about it to ${GTYPES[w][1].toLowerCase()}.`,
-      src:"Google Trends via SerpApi, related searches", types:[w], f:{}, name:`${GTYPES[w][1]}: ${t.query}`, start:() => START.topic(t.query), topic:t.query });
+      src:"Google Trends via SerpApi, related searches", types:[w], f:{}, name:`${GTYPES[w][1]}: ${t.query}`, start:() => START.topic(t.query), ctx:{ topic:t.query }, topic:t.query });
   });
   // 3. timing: is next month bigger than this month (5-year average)?
   const nat = GF.tr.find(r => r.kind === "national" && r.key === "Park City Utah");
@@ -1285,7 +1353,7 @@ async function ideasOpen(){
   d.querySelectorAll("[data-igo]").forEach(b => b.onclick = () => { const x = GF.ideas[+b.dataset.igo]; d.close();
     if(x.scroll){ const g = $(x.scroll); if(g) g.scrollIntoView({ block:"start", behavior:"smooth" }); return; } gfApply(x.types, x.f, x.name); });
   d.querySelectorAll("[data-iwrite]").forEach(b => b.onclick = () => { const x = GF.ideas[+b.dataset.iwrite]; d.close();
-    GF.types = x.types.slice(); GF.f = Object.assign(GF0(), x.f); GF.audName = x.name; gfSearch(); gfEmail(x.start ? x.start() : START.find({ type:x.types[0] }), x.name); });
+    GF.types = x.types.slice(); GF.f = Object.assign(GF0(), x.f); GF.audName = x.name; gfSearch(); gfEmail(x.start ? x.start() : START.find({ type:x.types[0] }), x.name, x.ctx); });
   d.querySelectorAll("[data-iskip]").forEach(b => b.onclick = async () => { const x = GF.ideas[+b.dataset.iskip];
     const r = await sb.rpc("mkt_topic_set", { p_query:x.topic, p_status:"skip", p_note:null }); if(r.error) return alert(niceE(r.error));
     GF.topics.forEach(t => { if(t.query === x.topic) t.status = "skip"; }); ideasBuild(); ideasOpen(); });
@@ -1387,11 +1455,11 @@ document.addEventListener("click", e => {
   const a = e.target.closest("[data-tarea]"); if(a){ e.preventDefault(); return gfApply([], { area:a.dataset.tarea }, "Guests from " + a.dataset.tarea.slice(3)); }
   const tf = e.target.closest("[data-tf]"); if(tf){ GF.tf = tf.dataset.tf; const d = $("#gdata"); if(d) d.innerHTML = dataInner(); return; }
   const tw = e.target.closest("[data-twrite]"); if(tw){ const q = tw.dataset.twrite, w = /ski|snow|sled|winter|christmas|epic|ikon|board|powder/i.test(q) ? "winter" : /summer|hike|bike|golf|lake|concert/i.test(q) ? "summer" : "good";
-    GF.types = [w]; GF.f = GF0(); GF.audName = `${GTYPES[w][1]}: ${q}`; gfSearch(); return gfEmail(START.topic(q), GF.audName); }
+    GF.types = [w]; GF.f = GF0(); GF.audName = `${GTYPES[w][1]}: ${q}`; gfSearch(); return gfEmail(START.topic(q), GF.audName, { topic:q }); }
   const ff = e.target.closest("[data-ffind]"); if(ff){ const m = fareMarkets().find(x => x.origin === ff.dataset.ffind); if(m) gfApply([], fareF(m), `${(AIRPORTS[m.origin] || [m.market])[0]} guests (cheap flights)`); return; }
   const fw = e.target.closest("[data-fwrite]"); if(fw){ const m = fareMarkets().find(x => x.origin === fw.dataset.fwrite); if(!m) return;
     GF.types = []; GF.f = Object.assign(GF0(), fareF(m)); GF.audName = `${(AIRPORTS[m.origin] || [m.market])[0]} guests (cheap flights)`; GF.more = true; gfSearch();
-    return gfEmail(START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret), GF.audName); }
+    return gfEmail(START.flight(m.market, Math.round(m.best.price), m.best.depart, m.best.ret), GF.audName, fareCtx(m)); }
 });
 document.addEventListener("change", async e => { const s = e.target.closest("[data-tstat]"); if(!s || !s.value) return;
   const r = await sb.rpc("mkt_topic_set", { p_query:s.dataset.tstat, p_status:s.value, p_note:null }); if(r.error) return alert(niceE(r.error));
