@@ -113,7 +113,7 @@ body.inhub .wrap{padding-top:10px}
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -222,11 +222,11 @@ function fchip(f, near){
     <span class="nm">${g ? `${esc(kindShort(g.kind || f.kind))} given to ${esc(g.who.split(" ")[0])} for ${esc(dLabel(g.day))}${g.how !== "manual" ? " (automatic)" : ""}` : esc(fLast(f))}</span></button>`;
 }
 async function giveFill(f, c, day, kind){
-  if(!S.F || !S.F.canAct){ alert("Handing out is switched off right now."); return; }
+  if(!S.F || !S.F.canAct){ await mmAlert("Handing out is switched off right now."); return; }
   const st = fStayOn(f, day);
-  if(st){ alert(`${st[2] === "owner" ? "The owner is" : st[2] === "tenant" ? "A tenant is" : "A guest is"} staying at ${f.home} on ${dLabel(day)}. Pick another day.`); return; }
+  if(st){ await mmAlert(`${st[2] === "owner" ? "The owner is" : st[2] === "tenant" ? "A tenant is" : "A guest is"} staying at ${f.home} on ${dLabel(day)}. Pick another day.`); return; }
   const r = await sb.rpc("crew_fill_give", { p_code: f.home, p_kind: kind || fDo(f), p_user: c.uid, p_day: day });
-  if(r.error){ alert(errText(r.error)); return; }
+  if(r.error){ await mmAlert(errText(r.error)); return; }
   f.given = { who: c.bwName || c.name, day, how: "manual", kind: kind || fDo(f) }; render();
   setTimeout(() => load(true), 20000); setTimeout(() => load(true), 75000);
 }
@@ -368,10 +368,10 @@ function render(){
 
 /* ---------- changes ---------- */
 async function send(t, { day, who }){
-  if(!S.B.canAct){ alert("Changes to Breezeway are switched off right now."); return; }
+  if(!S.B.canAct){ await mmAlert("Changes to Breezeway are switched off right now."); return; }
   const ppl = S.B.people || [], ids = names => names.map(n => (ppl.find(p => p.name === n) || {}).id).filter(Boolean);
   const steps = [];
-  if(who && !sameSet(who, t.who)){ const pid = ids(who); if(pid.length !== who.length){ alert("Someone picked isn't a Breezeway person."); return; } steps.push(["assign", { people: pid }]); }
+  if(who && !sameSet(who, t.who)){ const pid = ids(who); if(pid.length !== who.length){ await mmAlert("Someone picked isn't a Breezeway person."); return; } steps.push(["assign", { people: pid }]); }
   if(day && day !== t.date) steps.push(["reschedule", { date: day, time: t.time ? String(t.time).slice(0, 5) : null }]);
   if(!steps.length) return;
   if(day && day !== t.date && t.home){ const st = stayOn(t.home, day);
@@ -379,7 +379,7 @@ async function send(t, { day, who }){
   S.pend[t.id] = { date: day && day !== t.date ? day : null, who: who && !sameSet(who, t.who) ? who : null };
   if(day) t.date = day; if(who) t.who = who; render();
   for(const [k, d] of steps){ const r = await sb.rpc("crew_plan_act", { p_task: t.id, p_kind: k, p_data: d });
-    if(r.error){ S.pend[t.id] = { fail: errText(r.error) }; render(); alert(errText(r.error)); return; } }
+    if(r.error){ S.pend[t.id] = { fail: errText(r.error) }; render(); await mmAlert(errText(r.error)); return; } }
   setTimeout(() => load(true), 20000); setTimeout(() => load(true), 75000);
 }
 /* moving between rows: take the tech the task came from off, put the new one on; Chris stays on it when he was */
