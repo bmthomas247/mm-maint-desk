@@ -309,7 +309,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 </head>
 <body>
 <div id="app"></div>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="offline.js"></script>
@@ -2937,8 +2937,8 @@ async function patrickView(v){
       : `<p class="muted">Nothing matches.</p>`);
     $("#plist").querySelectorAll("[data-pa]").forEach(b => b.onclick = async () => { const x = all.find(y => y.id === +b.dataset.id), kind = b.dataset.pa, m = $(`[data-pm="${x.id}"]`);
       let answer = "", note = "";
-      if(kind === "crew"){ answer = prompt("The answer Patrick should give for:\n\n" + (x.question || "") + "\n\n(no codes or passwords)", ""); if(!answer) return; }
-      if(kind === "note" || kind === "wrong"){ note = prompt(kind === "wrong" ? "What's wrong with it? (optional)" : "Note", "") || ""; if(kind === "note" && !note) return; }
+      if(kind === "crew"){ answer = await mmAsk("The answer Patrick should give for:\n\n" + (x.question || "") + "\n\n(no codes or passwords)", ""); if(!answer) return; }
+      if(kind === "note" || kind === "wrong"){ note = await mmAsk(kind === "wrong" ? "What's wrong with it? (optional)" : "Note", "") || ""; if(kind === "note" && !note) return; }
       m.textContent = "Saving…";
       const r = await sb.functions.invoke("patrick-desk", { body:{ action:"apply", kind, chat_id:x.id, question:x.question, answer, note } });
       const err = r.error ? ((await r.error.context?.json?.().catch(() => null)) || {}).error || niceErr(r.error) : r.data && r.data.error;
