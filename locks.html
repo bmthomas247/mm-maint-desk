@@ -213,6 +213,7 @@ details.status>summary::after{position:absolute;right:4px;top:12px} details.stat
 </head>
 <body>
 <div id="app"></div>
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="idle.js"></script>
@@ -327,7 +328,7 @@ const bars = rssi => rssi==null || rssi===127 ? "" : (() => { const n = rssi >= 
   return `<span title="Signal ${rssi} dBm" style="display:inline-flex;gap:1.5px;align-items:flex-end;vertical-align:middle">${[1,2,3,4].map(i=>`<i style="width:3px;height:${3+i*2.5}px;border-radius:1px;background:${i<=n?c:"var(--line-2)"}"></i>`).join("")}</span>`; })();
 async function allDoors(ls, act, code){
   if(!ls.length) return toast("No doors paired here yet");
-  if(act==="unlock" && !confirm(`Unlock all ${ls.length} door${ls.length>1?"s":""} at ${code}? Only do this when someone is there or about to be.`)) return;
+  if(act==="unlock" && !await mmConfirm(`Unlock all ${ls.length} door${ls.length>1?"s":""} at ${code}? Only do this when someone is there or about to be.`)) return;
   toast((act==="lock"?"Locking ":"Unlocking ") + ls.length + " door" + (ls.length>1?"s":"") + "…");
   const ids = await Promise.all(ls.map(l => command(l.hub_id, l.id, act)));
   const res = await Promise.all(ids.map(id => waitCmd(id, 40)));
@@ -675,7 +676,7 @@ function signal(rssi){
   return `<span title="${rssi} dBm" style="display:inline-flex;gap:2px;align-items:flex-end;vertical-align:middle">${[1,2,3,4].map(i=>`<i style="width:4px;height:${4+i*3}px;border-radius:1px;background:${i<=bars?col:"var(--line-2)"}"></i>`).join("")}</span> <span class="muted" style="font-size:12px">${rssi}</span>`;
 }
 function wireHeal(hub){
-  $$("[data-heal]").forEach(b=>b.onclick=async()=>{ if(!confirm("Rebuild Z-Wave routes? Takes a few minutes; doors keep working. Do it once - not again and again.")) return;
+  $$("[data-heal]").forEach(b=>b.onclick=async()=>{ if(!await mmConfirm("Rebuild Z-Wave routes? Takes a few minutes; doors keep working. Do it once - not again and again.")) return;
     const box = $("[data-healmsg]", b.closest(".card")); b.disabled = true;
     try{ const id = await command(hub.id, null, "heal"); box.innerHTML = '<div class="pill amber" style="margin-top:8px">⏳ Rebuilding… stay nearby</div>';
       const r = await waitCmd(id, 240);
@@ -1226,14 +1227,14 @@ async function installHome(pid){
       if(items.includes("Other") && !r.other) return toast("Say what the Other item is");
       try{ await rpc("lock_spot_save",{p_property:pid,p_kind:k,r}); delete S.spotPhoto[k]; S.dirty = false; toast("Saved ✓"); await loadBase(); again(); }catch(e){ fail(e); } }; });
   $$("[data-newmaster]").forEach(b=>b.onclick=async()=>{
-    if(homeMaster && !confirm("Make a NEW master code for "+dc(p.code)+"?\n\nThe old one ("+homeMaster+") stops being the one on file. If you already typed the old one into a lock, change it on that lock too: old code ⚙ 1 ⚙, then the new code.")) return;
+    if(homeMaster && !await mmConfirm("Make a NEW master code for "+dc(p.code)+"?\n\nThe old one ("+homeMaster+") stops being the one on file. If you already typed the old one into a lock, change it on that lock too: old code ⚙ 1 ⚙, then the new code.")) return;
     try{ const c = await rpc("lock_master_new",{p_property:pid,p_replace:!!homeMaster}); await loadBase(); toast("New master code: "+c); again(); }catch(e){ fail(e); } });
   const mk = $("#mkmaster"); if(mk) mk.onclick = async () => { try{ const c = await rpc("lock_master_new",{p_property:pid}); await loadBase(); toast("Master code "+c+" made for "+dc(p.code)); again(); }catch(e){ fail(e); } };
   wireHeal(hub);
   const hg = $("#heatgo"); if(hg) hg.onclick = async () => { try{ const r = await rpc("lock_heat_test",{p_property:pid,p_step:"start"}); hub && wake(hub.id); toast("Heat turned up on "+r.thermostats+" thermostat"+(r.thermostats>1?"s":"")); again(); }catch(e){ fail(e); } };
-  $$("[data-heat]").forEach(b=>b.onclick=async()=>{ if(b.dataset.heat==="fail" && !confirm("No warm air at all? This alerts the office.")) return;
+  $$("[data-heat]").forEach(b=>b.onclick=async()=>{ if(b.dataset.heat==="fail" && !await mmConfirm("No warm air at all? This alerts the office.")) return;
     try{ await rpc("lock_heat_test",{p_property:pid,p_step:b.dataset.heat}); hub && wake(hub.id); toast(b.dataset.heat==="pass"?"Heat works - set back to normal":"Office alerted - don't leave yet"); await loadBase(); again(); }catch(e){ fail(e); } });
-  const tg = $("#trackgo"); if(tg) tg.onclick = async () => { if(!confirm("Switch "+dc(p.code)+" off Brivo in Track? From now on guests get our door codes.")) return;
+  const tg = $("#trackgo"); if(tg) tg.onclick = async () => { if(!await mmConfirm("Switch "+dc(p.code)+" off Brivo in Track? From now on guests get our door codes.")) return;
     const box = $("#trackmsg"); tg.disabled = true; S.dirty = true; const since = new Date().toISOString();
     try{ await rpc("lock_request_sync");
       box.innerHTML = '<div class="card" style="border-color:var(--amber);margin-top:8px"><b>⏳ Switching in Track…</b><div class="muted">The office computer does it within a minute or two. Stay on this page for the confirmation.</div></div>';
@@ -1277,9 +1278,9 @@ async function installHome(pid){
     try{ const l = locks.find(x=>x.id===r.dataset.lock); await rpc("lock_update",{p_lock:l.id,p_name:$("input",r).value.trim(),p_for_guests:l.for_guests,p_active:true}); toast("Saved"); again(); }catch(e){ fail(e); } }; });
   $$("[data-test]").forEach(b=>b.onclick=async()=>{ const code = String(Math.floor(1000+Math.random()*9000)); try{ await command(null, b.dataset.test, "refresh", {code}); toast("Test code "+code+" going on the lock (10 min)"); setTimeout(()=>installHome(pid), 15000); }catch(e){ fail(e); } });
   $$("[data-unlock]").forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ const r = await waitCmd(await command(null, b.dataset.unlock, "unlock"), 30); toast(r? (r.ok?"Unlocked":"The lock didn't answer") : "No answer from the hub"); }catch(e){ fail(e); } b.disabled=false; });
-  const wa = $("#wipeall"); if(wa) wa.onclick = async () => { if(!confirm("Clear every old (Brivo) code on all "+locks.length+" door"+(locks.length>1?"s":"")+"? Our crew, vendor and guest codes stay, and so does the master code.")) return;
+  const wa = $("#wipeall"); if(wa) wa.onclick = async () => { if(!await mmConfirm("Clear every old (Brivo) code on all "+locks.length+" door"+(locks.length>1?"s":"")+"? Our crew, vendor and guest codes stay, and so does the master code.")) return;
     try{ for(const l of locks) await command(null, l.id, "wipe"); toast("Clearing - each door turns green when it's confirmed"); again(); }catch(e){ fail(e); } };
-  $$("[data-wipe]").forEach(b=>b.onclick=async()=>{ if(!confirm("Clear every code on this lock that isn't ours (old Brivo codes)? Crew, vendor and guest codes from our system stay.")) return;
+  $$("[data-wipe]").forEach(b=>b.onclick=async()=>{ if(!await mmConfirm("Clear every code on this lock that isn't ours (old Brivo codes)? Crew, vendor and guest codes from our system stay.")) return;
     try{ await command(null, b.dataset.wipe, "wipe"); toast("Reading the lock - old codes will be cleared"); again(); }catch(e){ fail(e); } });
   $("#wsave") && ($("#wsave").onclick = async () => {
     const { error } = await sb.from("property_access").upsert({ property_id:pid, wifi_name:$("#wn").value.trim()||null, wifi_password:$("#wp").value.trim()||null,
@@ -1306,7 +1307,7 @@ let HC_CODES = [];
 document.addEventListener("click", async e => { const b = e.target.closest && e.target.closest("[data-hcrm]"); if(!b) return; e.preventDefault();
   const c = HC_CODES.find(x => String(x.id) === b.dataset.hcrm); if(!c) return;
   const n = (c.property_ids||[]).length;
-  if(!confirm(`Take ${c.person||c.company||c.label}'s code ${c.code||""} off${n>1?" all "+n+" homes it's on":" this home"}? It comes off the doors within a minute. It stays in the history.`)) return;
+  if(!await mmConfirm(`Take ${c.person||c.company||c.label}'s code ${c.code||""} off${n>1?" all "+n+" homes it's on":" this home"}? It comes off the doors within a minute. It stays in the history.`)) return;
   b.disabled = true;
   try{ await rpc("lock_staff_remove", {p_id:c.id, p_remove:true}); toast("Taken off - coming off the doors now"); route(); }catch(er){ b.disabled = false; fail(er); } });
 async function homeCodes(pid, locks, stays){
@@ -1562,8 +1563,8 @@ async function homeView(pid){
         if(act==="save"){ const mi = $('[data-f="master"]',card), mc = mi ? mi.value.trim() : ""; await rpc("lock_update",{p_lock:id,p_name:$('[data-f="name"]',card).value.trim(),p_for_guests:$('[data-f="guests"]',card).checked,p_active:true,p_master:mc||null,
           p_installed:$('[data-f="installed"]',card).value||null,p_replace_years:+$('[data-f="years"]',card).value||null,p_shared:$('[data-f="shared"]',card).checked}); toast("Saved"); homeView(pid); }
         if(act==="test"){ const code = String(Math.floor(1000+Math.random()*9000)); await command(null, id, "refresh", {code}); toast("Test code "+code+" is going on the lock (10 min)"); setTimeout(()=>homeView(pid), 15000); }
-        if(act==="wipe"){ if(!confirm("Clear every code on this lock that isn't one of ours (old Brivo codes)? Our codes stay.")) return; await command(null, id, "wipe"); toast("Reading the lock… old codes will be cleared"); }
-        if(act==="remove"){ if(!confirm("Remove "+l.name+" from the hub? Put the lock in remove mode after you tap OK.")) return; await command(hub.id, id, "exclude"); toast("Remove mode on for 5 minutes"); }
+        if(act==="wipe"){ if(!await mmConfirm("Clear every code on this lock that isn't one of ours (old Brivo codes)? Our codes stay.")) return; await command(null, id, "wipe"); toast("Reading the lock… old codes will be cleared"); }
+        if(act==="remove"){ if(!await mmConfirm("Remove "+l.name+" from the hub? Put the lock in remove mode after you tap OK.")) return; await command(hub.id, id, "exclude"); toast("Remove mode on for 5 minutes"); }
       }catch(e){ fail(e); } }; });
   // thermostats
   $$("[data-th]").forEach(card => { const id = card.dataset.th; let mode = (thermos.find(t=>t.id===id)||{}).mode;
@@ -1584,7 +1585,7 @@ async function homeView(pid){
     const ask = {resend:"Send every code to this home's doors again?", wipe:"Clear every code on these doors that isn't ours (old Brivo codes)? Ours and the master stay.",
       backup:"Make new backup codes for every upcoming stay here? The old backup codes stop working.", master_new:"Make a new master code for "+dc(p.code)+"? You'll then change it on each door.",
       master_done:"Is the new master code set on EVERY door? The old one will be forgotten here.", master_cancel:"Cancel the new master code?"}[k];
-    if(!confirm(ask)) return;
+    if(!await mmConfirm(ask)) return;
     try{
       if(k==="resend"){ const n = await rpc("lock_codes_resend",{p_property:pid}); hub && wake(hub.id); msg(n+" code"+(n===1?"":"s")+" going on the doors again"); }
       if(k==="wipe"){ for(const l of locks) await command(null, l.id, "wipe"); msg("Clearing old codes on "+locks.length+" door"+(locks.length===1?"":"s")); }
@@ -1605,7 +1606,7 @@ async function homeView(pid){
 
 /* backup (emergency) code: already on the guest doors for this stay's dates - give it when the lock/hub is offline */
 async function showBackup(s){
-  if(!confirm("Show the BACKUP code for "+(s.guest||"this guest")+"?\n\nUse it only when their normal code isn't working (lock or hub offline). This is logged.")) return;
+  if(!await mmConfirm("Show the BACKUP code for "+(s.guest||"this guest")+"?\n\nUse it only when their normal code isn't working (lock or hub offline). This is logged.")) return;
   try{ const r = await rpc("lock_backup_give",{p_res:s.res_id}); const d = document.createElement("div"); d.className = "modal";
     const ok = (r.doors||[]).filter(x=>x.on).length, n = (r.doors||[]).length;
     d.innerHTML = `<div class="card" style="max-width:440px;margin:12vh auto;padding:20px"><b>🆘 Backup code - ${esc(s.guest||"Guest")}</b>
@@ -1740,7 +1741,7 @@ async function codesView(){
   };
   // front desk sees '••••'; View is logged in History and DMs the managers (lock_staff_reveal)
   const reveal = async c => { if(!c || !c.masked) return true;
-    if(!confirm("Viewing this code is logged, and Janae, Pyper, Brandon and Kim get a Slack message. View it?")) return false;
+    if(!await mmConfirm("Viewing this code is logged, and Janae, Pyper, Brandon and Kim get a Slack message. View it?")) return false;
     try{ c.code = await rpc("lock_staff_reveal",{p_id:c.id}); c.masked = false; return true; }catch(e){ fail(e); return false; } };
   const ps = pref("csort"); if(ps) $("#csort").value = ps;
   $$("#cshow .chip").forEach(x=>x.onclick=()=>{ pref("cshow", x.dataset.show); drawCodes(); });
@@ -1796,7 +1797,7 @@ async function codesView(){
       try{ await rpc("lock_staff_code",{r}); toast("Saved - going on the locks"); codesView(); }catch(e){ fail(e); } };
     $("#f_save").onclick = () => save(c.id ? c.active : true);
     const off = $("#f_off"); if(off) off.onclick = () => save(!c.active);
-    const rm = $("#f_rm"); if(rm) rm.onclick = async () => { if(!confirm(`Remove ${topName(c)}? Their code comes off every lock. You can bring them back from "Removed" at the bottom.`)) return;
+    const rm = $("#f_rm"); if(rm) rm.onclick = async () => { if(!await mmConfirm(`Remove ${topName(c)}? Their code comes off every lock. You can bring them back from "Removed" at the bottom.`)) return;
       try{ await rpc("lock_staff_remove",{p_id:c.id,p_remove:true}); toast("Removed - code coming off the locks"); codesView(); }catch(e){ fail(e); } };
     $("#form").scrollIntoView({behavior:"smooth"});
   };
@@ -1885,7 +1886,7 @@ async function accountView(){
     $("#npmsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Use the new password next time you sign in.";
     if(!error){ $("#np1").value = $("#np2").value = ""; } };
   $("#signout").onclick = async () => { await sb.auth.signOut(); S.me = null; S.aal2 = false; S.mustChange = undefined; location.hash = "#/"; route(); };
-  $("#mfareset").onclick = async () => { if(!confirm("Remove 2-step from your old phone? You'll set it up again right away.")) return;
+  $("#mfareset").onclick = async () => { if(!await mmConfirm("Remove 2-step from your old phone? You'll set it up again right away.")) return;
     try{ const { data:f } = await sb.auth.mfa.listFactors(); for(const x of (f.all||[])) await sb.auth.mfa.unenroll({ factorId: x.id });
       S.aal2 = false; await sb.auth.refreshSession(); mfaSetupView(); }catch(e){ fail(e); } };
 }
@@ -1919,7 +1920,7 @@ async function rulesView(){
         :'<p class="muted">None - every home follows the company-wide rules.</p>'}</div>`, "Company rules", "Applies to every home");
   const sv = $("#crsave"); if(sv) sv.onclick = async () => { const nr = {}; $$("[data-cr]").forEach(i=>{ nr[i.dataset.cr] = i.value===""?null:(i.type==="time"?i.value:+i.value); });
     const all = $("#creveryone") && $("#creveryone").checked;
-    if(!confirm("Apply these rules to "+(all?"every home":"every home that follows the company rules")+"?")) return;
+    if(!await mmConfirm("Apply these rules to "+(all?"every home":"every home that follows the company rules")+"?")) return;
     try{ const n = await rpc("lock_company_rules_save",{r:nr,p_everyone:!!all}); toast("Saved - applied to "+n+" homes"); await loadBase(); rulesView(); }catch(e){ fail(e); } };
   $$("[data-follow]").forEach(b=>b.onclick=async()=>{ try{ await rpc("lock_home_rules_reset",{p_property:b.dataset.follow}); toast("Now follows the company rules"); await loadBase(); rulesView(); }catch(e){ fail(e); } });
 }
@@ -2128,7 +2129,7 @@ async function officeHomeView(pid){
       ${st.code?`<span class="code" style="font-size:20px;font-weight:800;letter-spacing:4px">${esc(st.code)}</span>`:`<span class="muted">No code yet</span>`}</div></div>`).join("") : `<p class="muted">No stays coming up.</p>`}
     <p class="muted">Need a backup code for a guest? Use <a href="#/stays">Stays & guest codes</a>.</p>`, p.code);
   document.querySelectorAll("[data-oact]").forEach(b => b.onclick = async () => { const act = b.dataset.oact, l = locks.find(x=>x.id===b.dataset.lid);
-    if(act==="unlock" && !confirm(`Unlock ${l.name} at ${p.code}? Only do this when someone is there or about to be.`)) return;
+    if(act==="unlock" && !await mmConfirm(`Unlock ${l.name} at ${p.code}? Only do this when someone is there or about to be.`)) return;
     b.disabled = true; try{ const r = await waitCmd(await command(l.hub_id, l.id, act), 30); toast(r ? (r.ok ? (act==="unlock"?"Unlocked":"Locked") : "The lock didn't answer") : "No answer from the hub"); }catch(e){ fail(e); } b.disabled = false; });
 }
 
@@ -2180,19 +2181,19 @@ async function peopleView(){
   $("#tempall").onclick = async () => { const who = ppl.filter(u => !u.two_step && u.email && u.lock_role !== "none" && u.lock_role !== null || (!u.two_step && u.email && u.desk_role === "tech" && u.lock_role === null));
     const list = who.filter(u => S.me.role === "admin" || u.lock_role !== "admin");
     if(!list.length) return toast("Everyone is already set up");
-    if(!confirm("Make temporary passwords for " + list.length + " people: " + list.map(u=>u.name).join(", ") + "?\n\nTheir current passwords stop working.")) return;
+    if(!await mmConfirm("Make temporary passwords for " + list.length + " people: " + list.map(u=>u.name).join(", ") + "?\n\nTheir current passwords stop working.")) return;
     const rows = [];
     for(const u of list){ try{ rows.push([u.name, u.email, await rpc("lock_person_temp_password", { p_id:u.id })]); }catch(e){ rows.push([u.name, u.email, "✗ " + (e.message||e)]); } }
     $("#templist").innerHTML = `<table class="tbl" style="margin-top:10px"><tr><th>Name</th><th>Sign in with</th><th>Temporary password</th></tr>${rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td><b style="user-select:all">${esc(r[2])}</b></td></tr>`).join("")}</table>
       <p class="muted">Sign in at crew.moosemanagement.com/office (phones: /locks) → set up the authenticator app → pick their own password.</p>`; };
   document.querySelectorAll("[data-temp]").forEach(b => b.onclick = async () => { const id = b.dataset.temp, u = ppl.find(x=>x.id===id);
-    if(!confirm("Make a temporary password for " + u.name + "? Their old password stops working. They must pick a new one when they sign in.")) return;
+    if(!await mmConfirm("Make a temporary password for " + u.name + "? Their old password stops working. They must pick a new one when they sign in.")) return;
     try{ const pw = await rpc("lock_person_temp_password", { p_id:id });
       const m = document.querySelector(`[data-msg="${id}"]`);
       m.innerHTML = `Temporary password: <b style="font-size:18px;letter-spacing:1px;user-select:all">${esc(pw)}</b> - give it to ${esc(u.name)} (shown once). They sign in with ${esc(u.email)} + this, then must set their own.`;
     }catch(e){ fail(e); } });
   document.querySelectorAll("[data-2fa]").forEach(b => b.onclick = async () => { const id = b.dataset["2fa"], u = ppl.find(x=>x.id===id);
-    if(!confirm("Reset 2-step for " + u.name + "? They'll scan a new QR code next time they sign in.")) return;
+    if(!await mmConfirm("Reset 2-step for " + u.name + "? They'll scan a new QR code next time they sign in.")) return;
     try{ await rpc("lock_person_2step_reset", { p_id:id }); toast("2-step reset for " + u.name); route(); }catch(e){ fail(e); } });
 }
 
