@@ -35,6 +35,7 @@ main{padding:16px}
 </head>
 <body>
 <div id="app"><div class="hero"><div class="in"><small>Moose Management</small><h1>Loading your stay…</h1></div></div></div>
+<script src="confirm.js?v=20261120"></script>
 <script src="config.js"></script>
 <script>
 (function(){
@@ -96,7 +97,7 @@ async function load(){
   });
   const kb = document.getElementById("kb");
   if(kb) kb.onclick = async () => {
-    if(!confirm("Show the emergency key box code? Our team will be told so we can check on you and the key.")) return;
+    if(!await mmConfirm("Show the emergency key box code? Our team will be told so we can check on you and the key.")) return;
     const m = document.getElementById("kbm"); kb.disabled = true; m.className = "msg"; m.textContent = "One moment…";
     try{
       const r = await fetch(FN, { method:"POST", headers:H, body:JSON.stringify({ t, action:"keybox" }) }); const j = await r.json();
