@@ -64,7 +64,7 @@ details.fold>summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--i
 </head><body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <div id="printcard"></div>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="config.js"></script>
@@ -271,7 +271,7 @@ document.addEventListener("click", async e => {
       toast(r && r.started ? "Reading Track… this takes about half a minute" : "Track was read in the last 2 minutes");
       if(r && r.started){ const was = S.cur.read_at; for(let i = 0; i < 12; i++){ await new Promise(ok => setTimeout(ok, 5000)); const c = await rpc("guest_book_staff", { p_home:S.home }); if(c.read_at !== was){ S.cur = c; draw(); toast("Track's text is up to date ✓"); break; } } }
       return; }
-    if(b.hasAttribute("data-copylink")){ const l = linkOf(S.cur.token); try { await navigator.clipboard.writeText(l); toast("Link copied ✓"); } catch(_){ prompt("Copy this link:", l); } return; }
+    if(b.hasAttribute("data-copylink")){ const l = linkOf(S.cur.token); try { await navigator.clipboard.writeText(l); toast("Link copied ✓"); } catch(_){ await mmAsk("Copy this link:", l); } return; }
     if(b.hasAttribute("data-qrpng")){ const q = qrOf(linkOf(S.cur.token)), cv = document.createElement("canvas"); paint(cv, q, 1024);
       cv.toBlob(bl => { const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = "Guest-book-QR-" + S.home.replace(/[^\w-]+/g, "-") + ".png"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }); return; }
     if(b.hasAttribute("data-qrprint")){ const q = qrOf(linkOf(S.cur.token)), cv = document.createElement("canvas"); paint(cv, q, 900);
