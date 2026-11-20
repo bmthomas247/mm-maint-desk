@@ -45,7 +45,7 @@ async function doneBtn(b, after){
   if(note === null) return;
   b.disabled = true;
   const r = await sb.rpc("check_done", { p_key:b.dataset.done, p_day:b.dataset.day, p_note:note });
-  if(r.error){ b.disabled = false; alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); return; }
+  if(r.error){ b.disabled = false; await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); return; }
   after();
 }
 window.checksHome = async function(el){
