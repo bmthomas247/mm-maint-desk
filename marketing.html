@@ -110,7 +110,6 @@ dialog.big[open]{display:flex}
 <dialog id="big" class="big"></dialog>
 <dialog id="osd" class="big"></dialog>
 <input type="file" id="picfile" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" aria-label="Upload a photo" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
-<script src="confirm.js?v=20261120b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -526,7 +525,7 @@ document.addEventListener("click", async e => {
   if(b.dataset.osre) return osRecompose();
   if(b.dataset.ossave) return osSave();
   if(b.dataset.ossend) return osSend();
-  if(b.dataset.osskip || b.dataset.osback){ const skip = !!b.dataset.osskip, note = skip ? await mmAsk("Why skip this one? (optional)") : "";
+  if(b.dataset.osskip || b.dataset.osback){ const skip = !!b.dataset.osskip, note = skip ? prompt("Why skip this one? (optional)") : "";
     if(skip && note === null) return;
     const q = await sb.rpc("mkt_owner_email_skip", { p_id:OS.row.id, p_skip:skip, p_note:note || "" });
     if(q.error){ $("#osst").innerHTML = `<span class="err">${esc(q.error.message)}</span>`; return; }
@@ -1037,7 +1036,7 @@ function resultsHtml(R){
     ${gfTile("uns", "Unsubscribed", R.uns, "Brevo won't email them", "Only guests who unsubscribed in Brevo")}
   </div>
   <div class="bar">
-    <button class="btn primary" data-gmail="1" ${ids.length ? "" : "disabled"}>✉️ Email these ${ids.length.toLocaleString()} guests</button>
+    <button class="btn primary" data-gmail="1" ${ids.length ? "" : "disabled"}>✏️ Start designing an email for these ${ids.length.toLocaleString()} guests</button>
     <button class="btn" data-gsave="1">💾 Save this search</button>
     <button class="btn" data-gcsv="1">⬇ Download CSV</button>
     <label class="muted" style="font-size:13px">Sort <select data-gsort="1">${[["last","newest stay first"],["stays","most stays"],["stars","best reviews"],["next","next stay"],["name","name A–Z"]].map(([v, l]) => `<option value="${v}"${GF.sort === v ? " selected" : ""}>${l}</option>`).join("")}</select></label></div>
@@ -1111,7 +1110,7 @@ document.addEventListener("click", async e => {
   if(t.dataset.gaud){ const a = GF.aud.find(x => x.id == t.dataset.gaud); if(a){ const fl = a.filters || {}; gfApply(fl.types || [], fl.f || fl, a.name); } return; }
   if(t.dataset.gaudx){ const a = GF.aud.find(x => x.id == t.dataset.gaudx); if(!a || !confirm(`Take "${a.name}" off the saved searches?`)) return;
     const r = await sb.rpc("mkt_audience_off", { p_id:a.id }); if(r.error) return alert(niceE(r.error)); GF.aud = GF.aud.filter(x => x.id !== a.id); return gfDraw(); }
-  if(t.dataset.gsave){ const name = await mmAsk("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
+  if(t.dataset.gsave){ const name = prompt("Name this search (only we see it):", GF.audName || gfLabel()); if(!name) return;
     const ex = GF.aud.find(x => x.name.toLowerCase() === name.trim().toLowerCase());
     const r = await sb.rpc("mkt_audience_save", { p_id:ex ? ex.id : null, p_name:name, p_filters:{ f:Object.assign({}, GF.f), types:GF.types.slice() }, p_count:(GF.res || {}).shown || 0, p_note:null });
     if(r.error) return alert(niceE(r.error));
