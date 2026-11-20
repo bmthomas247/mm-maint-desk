@@ -208,7 +208,7 @@ async function openItem(v, id, edit){
     const r = await sb.rpc("build_item_save", { p_id:id, p_note:(cur ? cur + "\n" : "") + line }); if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
   if(q("[data-see]")) q("[data-see]").onchange = async e => { const val = e.target.value; const r = await sb.rpc("build_item_staff", { p_id:id, p_see:val === "" ? null : val === "1" });
     if(r.error) return alert("Didn't save: " + err(r.error)); delete BL.hist[id]; again(); };
-  if(q("[data-off]")) q("[data-off]").onclick = async () => { if(!confirm("Take this item off the list? (It's kept in the history, not deleted.)")) return;
+  if(q("[data-off]")) q("[data-off]").onclick = async () => { if(!await mmConfirm("Take this item off the list? (It's kept in the history, not deleted.)")) return;
     const r = await sb.rpc("build_item_save", { p_id:id, p_off:true }); if(r.error) return alert("Didn't save: " + err(r.error)); close(); await load(); show(v); };
   wireItem(v, d, i, again);
 }
@@ -301,13 +301,13 @@ function wireItem(v, el, it, after){
   if(b("[data-st]")) b("[data-st]").onchange = async e => { const r = await sb.rpc("build_item_save", { p_id:id, p_status:e.target.value }); if(r.error) alert("Didn't save: " + err(r.error)); after(); };
   if(b("[data-claim]")) b("[data-claim]").onclick = async () => {
     const r = await sb.rpc("build_item_claim", { p_id:id, p_together:false }); if(r.error) return alert("Didn't save: " + err(r.error));
-    if(r.data && r.data.ok === false){ if(!confirm(`${(r.data.busy || []).join(" + ")} just took this one. Work on it together?`)) return after();
+    if(r.data && r.data.ok === false){ if(!await mmConfirm(`${(r.data.busy || []).join(" + ")} just took this one. Work on it together?`)) return after();
       const j = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(j.error) return alert("Didn't save: " + err(j.error)); }
     await copyGo(it); after(); };
-  if(b("[data-join]")) b("[data-join]").onclick = async () => { if(!confirm(`${(it.worker_names || []).join(" + ")} ${it.worker_names.length > 1 ? "are" : "is"} already on this. Work on it together?`)) return;
+  if(b("[data-join]")) b("[data-join]").onclick = async () => { if(!await mmConfirm(`${(it.worker_names || []).join(" + ")} ${it.worker_names.length > 1 ? "are" : "is"} already on this. Work on it together?`)) return;
     const r = await sb.rpc("build_item_claim", { p_id:id, p_together:true }); if(r.error) return alert("Didn't save: " + err(r.error)); await copyGo(it); after(); };
   if(b("[data-rel]")) b("[data-rel]").onclick = async () => { const r = await sb.rpc("build_item_release", { p_id:id }); if(r.error) alert("Didn't save: " + err(r.error)); after(); };
-  if(b("[data-free]")) b("[data-free]").onclick = async () => { if(!confirm(`Take ${it.worker_names.join(" + ")} off this item?`)) return;
+  if(b("[data-free]")) b("[data-free]").onclick = async () => { if(!await mmConfirm(`Take ${it.worker_names.join(" + ")} off this item?`)) return;
     for(const u of it.workers){ const r = await sb.rpc("build_item_release", { p_id:id, p_user:u }); if(r.error){ alert("Didn't save: " + err(r.error)); break; } } after(); };
   // Open in Claude Code also puts you on the item (Brandon 2026-11-06); copy first so the clipboard keeps the tap
   if(b("[data-copy]")) b("[data-copy]").onclick = async () => { await copyGo(it);
