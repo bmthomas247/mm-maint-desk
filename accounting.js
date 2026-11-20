@@ -378,7 +378,7 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
   const offAll = async (ids, label) => {
     const er = d.querySelector("#sdErr"), why = d.querySelector("#sdWhy").value.trim();
     if(!why){ er.textContent = "Say why in the box above (they and the managers see it)."; return; }
-    if(!confirm(label)) return;
+    if(!await mmConfirm(label)) return;
     try { for(const id of ids.filter(Boolean)){ const r = await sb.rpc("clock_decide", { p_id:Number(id), p_status:"off", p_note:why }); if(r.error) throw r.error; }
       close(); forget(); refresh(v);
     } catch(e) { er.textContent = "Not saved: " + err(e); } };
@@ -400,7 +400,7 @@ function shiftDlg(v, o){   // o = {user, inId, outId, inAt, outAt} ; no ids = ad
     if(!p.salaried){   // warn when the change pushes a workweek past 40 (Brandon 2026-11-18)
       const newH = outIso ? (new Date(outIso) - new Date(inIso)) / 36e5 : 0, tw = wkStartOf(p, day);
       const before = tw ? +tw.hub_h : 0, after = before - (wk0 && tw && wk0.start === tw.start ? oldH : 0) + newH;
-      if(after > 40.009 && after > before + 0.009 && !confirm(`This makes ${tw ? `the week of ${fday(tw.start)}` : "that week"} ${hh(after)} h, which is ${hh(after - 40)} h of overtime${tw && otPlan(o.user, tw.start) && otPlan(o.user, tw.start).kind === "approved" ? ` (approved up to ${hh(otPlan(o.user, tw.start).up_to)} h)` : " that nobody has approved"}. Save anyway?`)) return;
+      if(after > 40.009 && after > before + 0.009 && !await mmConfirm(`This makes ${tw ? `the week of ${fday(tw.start)}` : "that week"} ${hh(after)} h, which is ${hh(after - 40)} h of overtime${tw && otPlan(o.user, tw.start) && otPlan(o.user, tw.start).kind === "approved" ? ` (approved up to ${hh(otPlan(o.user, tw.start).up_to)} h)` : " that nobody has approved"}. Save anyway?`)) return;
     }
     const btn = d.querySelector("#sdOk"); btn.disabled = true; btn.textContent = "Saving…"; er.textContent = "";
     try {
@@ -605,17 +605,17 @@ async function fill(v, body){
     shiftDlg(v, { user, inId, outId, inAt, outAt }); });
   body.querySelectorAll("[data-addsh]").forEach(b => b.onclick = e => { e.stopPropagation(); shiftDlg(v, { user:b.dataset.addsh }); });
   body.querySelectorAll("[data-sign]").forEach(b => b.onclick = async e => { e.stopPropagation(); const ok = b.dataset.sign === "1";
-    if(ok && !confirm(`Sign off that your team's hours for ${fdate(A.from)} – ${fdate(A.to)} are ready? When all three sign off, the accountant is told.`)) return;
+    if(ok && !await mmConfirm(`Sign off that your team's hours for ${fdate(A.from)} – ${fdate(A.to)} are ready? When all three sign off, the accountant is told.`)) return;
     if(await rpc("pay_signoff", { p_from:A.from, p_to:A.to, p_ok:ok }, b) === false) return;
     delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
   body.querySelectorAll("[data-paid]").forEach(b => b.onclick = async e => { e.stopPropagation(); const paid = b.dataset.paid === "1";
     let note = null;
-    if(paid){ if(!confirm(`Mark ${fdate(A.from)} – ${fdate(A.to)} paid? The hours lock: any change after this needs a note and shows as a correction.`)) return; }
+    if(paid){ if(!await mmConfirm(`Mark ${fdate(A.from)} – ${fdate(A.to)} paid? The hours lock: any change after this needs a note and shows as a correction.`)) return; }
     else { note = prompt("Why unlock this pay period?"); if(!note) return; }
     if(await rpc("pay_period_set", { p_from:A.from, p_to:A.to, p_paid:paid, p_note:note }, b) === false) return;
     delete A.stc[`${A.from}|${A.to}`]; refresh(v); });
   body.querySelectorAll("[data-ext]").forEach(b => b.onclick = async e => { e.stopPropagation(); const [u, on] = b.dataset.ext.split("|");
-    if(!confirm(on === "1" ? "Move them to the extended team? Their hours leave the totals, the QuickBooks sheet and the CSVs." : "Put them back on Moose payroll?")) return;
+    if(!await mmConfirm(on === "1" ? "Move them to the extended team? Their hours leave the totals, the QuickBooks sheet and the CSVs." : "Put them back on Moose payroll?")) return;
     if(await rpc("pay_extended_set", { p_user:u, p_on:on === "1", p_note:null }, b) === false) return; forget(); refresh(v); });
 }
 window.payrollView = function(v){   // Staffing ▸ Payroll: accountant, admins, managers (desk payroll; acct_payroll limits managers to their people)
