@@ -4173,22 +4173,25 @@ function renderHotels() {
 // follows at the next morning re-price), every comp with In use / Paused / Delete, add a comp by link, Airbnb / VRBO / Direct tabs.
 // rates_comp_sets_list(), rates_set_comps(set), rates_comp_state(comp, inuse|paused|delete), rates_home_move(code, set),
 // rates_comp_add_url(set, url), decide_comp_request(id, 'Primary'|'reject'). Fit rule = rates_set_auto.py (beds, sleeps ±win once min exist).
-const CS = { sets: null, set: null, data: null, ask: {}, tot: {}, f: "all", ch: "Airbnb", q: "" };
+const CS = { sets: null, set: null, data: null, ask: {}, tot: {}, f: "inuse", ch: "Airbnb", q: "" };
 async function loadCompSets() {
   if (!CS.sets) {
-    const r = await sb.rpc("rates_comp_sets_list");
+    const [r, r2] = await Promise.all([sb.rpc("rates_sleep_sets"), sb.rpc("rates_comp_sets_list")]);
     if (r.error) { $("csOut").innerHTML = `<p class="small muted">Couldn't load: ${pcEsc(r.error.message)}</p>`; return; }
-    CS.sets = r.data || [];
+    // Brandon 2026-11-20: a comp set = neighborhood + bedrooms + our exact sleep count (rates_sleep_sets); comps come from the whole
+    // neighborhood and only those within the sleeps window count. CS.rsets = the stored rate_sets (for moving a home).
+    CS.sets = (r.data || []).map(x => ({ ...x, id: `${x.grp}|${x.beds}|${x.sleeps ?? ""}`, name: `${x.grp} · ${x.beds === 0 ? "Studio" : x.beds + "BR"} · sleeps ${x.sleeps ?? "?"}`, paused: 0 }));
+    CS.rsets = r2.data || [];
   }
   if (!CS.set) { try { CS.set = localStorage.getItem("mmCompSet"); } catch (e) {} }
   if (!CS.set || !CS.sets.some(x => x.id === CS.set)) CS.set = (CS.sets.find(x => x.ours.some(h => h.live)) || CS.sets[0] || {}).id;
   const nm = id => (CS.sets.find(x => x.id === id) || {}).name || "";
   // Brandon 2026-11-20: pick Neighborhood, then Bedrooms, then Sleeping (each narrows the next) instead of one long list of comp sets
   const kind = h => h.live ? "Live" : h.test ? "Test" : "Beyond";
-  const nbOf = x => String(x.name || "").replace(/\s*[·-]?\s*(sleeps\b.*|\d+\s*BR\b.*|Studio\b.*|up to \d+.*|\d+\s*[-–]\s*\d+ guests.*|\d+\+ guests.*)$/i, "").trim() || x.name;
-  const bdOf = x => { const v = x.ours.map(h => h.beds).filter(n => n != null).map(Number); if (v.length) { const m = {}; v.forEach(n => m[n] = (m[n] || 0) + 1); return +Object.entries(m).sort((a, b) => b[1] - a[1])[0][0]; }
+  const nbOf = x => x.grp;
+  const bdOf = x => x.beds; const bdOfOld = x => { const v = x.ours.map(h => h.beds).filter(n => n != null).map(Number); if (v.length) { const m = {}; v.forEach(n => m[n] = (m[n] || 0) + 1); return +Object.entries(m).sort((a, b) => b[1] - a[1])[0][0]; }
     const g = String(x.name).match(/(\d+)\s*BR/i); return g ? +g[1] : /studio/i.test(x.name) ? 0 : null; };
-  const slOf = x => { const v = x.ours.map(h => h.sleeps).filter(n => n != null); if (!v.length) return "sleeps ?"; const lo = Math.min(...v), hi = Math.max(...v); return "sleeps " + (lo === hi ? lo : lo + "–" + hi); };
+  const slOf = x => "sleeps " + (x.sleeps ?? "?");
   const bdTxt = b => b == null ? "Size unknown" : b === 0 ? "Studio" : b + " bedrooms";
   const liveN = x => x.ours.filter(h => h.live).length;
   const cur = CS.sets.find(x => x.id === CS.set) || {};
@@ -4197,13 +4200,13 @@ async function loadCompSets() {
   const inNb = CS.sets.filter(x => nbOf(x) === CS.nb);
   const bds = [...new Set(inNb.map(bdOf))].sort((a, b) => (a ?? 99) - (b ?? 99));
   if (!bds.includes(CS.bd)) CS.bd = bds[0];
-  const inBd = inNb.filter(x => bdOf(x) === CS.bd).sort((p, q) => slOf(p).localeCompare(slOf(q), undefined, { numeric: true }));
+  const inBd = inNb.filter(x => bdOf(x) === CS.bd).sort((p, q) => (p.sleeps ?? 99) - (q.sleeps ?? 99));
   if (!inBd.some(x => x.id === CS.set) && inBd[0]) { CS.set = inBd[0].id; try { localStorage.setItem("mmCompSet", CS.set); } catch (e) {} }
   const dupe = x => inBd.filter(y => slOf(y) === slOf(x)).length > 1;
   $("csCtl").innerHTML = `<div class="pcctl csctl">
     <label>Neighborhood<select id="csNb">${nbs.map(n => `<option${n === CS.nb ? " selected" : ""}>${pcEsc(n)}</option>`).join("")}</select></label>
     <label>Bedrooms<select id="csBd" style="min-width:150px">${bds.map(b => `<option value="${b ?? ""}"${b === CS.bd ? " selected" : ""}>${bdTxt(b)}</option>`).join("")}</select></label>
-    <label>Sleeping<select id="csSl" style="min-width:240px">${inBd.map(x => `<option value="${pcEsc(x.id)}"${x.id === CS.set ? " selected" : ""}>${pcEsc(slOf(x))} · ${x.comps} comps${liveN(x) ? ` · ${liveN(x)} live` : ""}${dupe(x) ? " · " + pcEsc(x.name) : ""}</option>`).join("")}</select></label>
+    <label>Sleeping<select id="csSl" style="min-width:240px">${inBd.map(x => `<option value="${pcEsc(x.id)}"${x.id === CS.set ? " selected" : ""}>${pcEsc(slOf(x))} · ${x.comps} comps (${x.sleeps != null ? (x.sleeps - 2) + "–" + (x.sleeps + 2) : "?"}) · ${x.ours.length} home${x.ours.length === 1 ? "" : "s"}${liveN(x) ? `, ${liveN(x)} live` : ""}</option>`).join("")}</select></label>
     <label style="position:relative">Find a home<input type="search" id="csFh" autocomplete="off" placeholder="One of our homes, e.g. BHL 1403" style="min-width:240px">
       <div id="csFl" class="cshl" hidden></div></label></div>`;
   const best = a => a.slice().sort((p, q) => liveN(q) - liveN(p))[0];
@@ -4236,7 +4239,9 @@ async function loadCompSets() {
 async function csFetch(keep) {
   if (!CS.set) { $("csOut").innerHTML = `<p class="small muted">No comp sets yet.</p>`; return; }
   const tok = CS.tok = Math.random(); if (!keep) $("csOut").innerHTML = `<p class="small muted">Loading…</p>`;
-  const r = await sb.rpc("rates_set_comps", { p_set: CS.set });
+  const [g0, b0, s0] = CS.set.split("|");
+  const r = await sb.rpc("rates_sleep_set", { p_grp: g0, p_beds: +b0, p_sleeps: s0 === "" ? null : +s0 });
+  if (r.data) { r.data.id = CS.set; r.data.name = (CS.sets.find(x => x.id === CS.set) || {}).name || g0; r.data.min = 1; }
   if (tok !== CS.tok) return;
   if (r.error || !r.data) { $("csOut").innerHTML = `<p class="small muted">Couldn't load: ${pcEsc(r.error ? r.error.message : "no such comp set")}</p>`; return; }
   CS.data = r.data;
@@ -4246,8 +4251,10 @@ async function csFetch(keep) {
     const end = new Date(t.getTime() + 120 * 864e5).toISOString().slice(0, 10);
     const mid = a => { a = a.slice().sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
     const chOf = c => /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
-    const [n, c] = await Promise.all([sb.rpc("set_latest_nightly", { p_set: CS.set }), sb.rpc("set_latest_checks", { p_set: CS.set, p_from: today })]);
+    const sids = r.data.set_ids || [];
+    const parts = await Promise.all(sids.flatMap(id => [sb.rpc("set_latest_nightly", { p_set: id }), sb.rpc("set_latest_checks", { p_set: id, p_from: today })]));
     if (tok !== CS.tok) return;
+    const n = { data: parts.filter((_, i) => i % 2 === 0).flatMap(p => p.data || []) }, c = { data: parts.filter((_, i) => i % 2 === 1).flatMap(p => p.data || []) };
     (n.data || []).forEach(x => {   // asking daily rate, open nights in the next 120 days
       const o = Math.round((t - new Date(String(x.start_date).slice(0, 10) + "T12:00")) / 864e5);
       const v = (x.rates || []).slice(Math.max(0, o), Math.max(0, o) + 120).filter(Boolean).map(Number);
@@ -4285,12 +4292,12 @@ function csLogos(id, links, ours) {
     return u ? `<a href="${pcEsc(u)}" target="_blank" rel="noopener">${b}</a>` : b; }).join("") + `</span>`;
 }
 function csFits(d) {   // per our home: which in-use comps its pricing reads (same rule as rates_set_auto.py)
-  const inuse = d.rows.filter(x => x.tier === "Primary"), out = {};
+  const inuse = d.rows.filter(x => x.tier === "Primary" && x.fits), out = {};
   for (const h of d.ours) {
     const same = inuse.filter(x => x.bedrooms != null && +x.bedrooms === +h.beds);
     const win = same.filter(x => x.sleeps != null && h.sleeps != null && Math.abs(x.sleeps - h.sleeps) <= d.win);
-    const use = win.length >= d.min ? win : same.length >= 4 ? same : inuse;
-    out[h.code] = { use: new Set(use.map(x => x.id)), win: win.length, same: same.length, rule: win.length >= d.min ? "sleeps" : same.length >= 4 ? "beds" : "all" };
+    const all = d.rows.filter(x => x.tier === "Primary" && +x.bedrooms === +h.beds), use = win.length ? win : all;
+    out[h.code] = { use: new Set(use.map(x => x.id)), win: win.length, same: all.length, rule: win.length ? "sleeps" : "beds" };
   }
   return out;
 }
@@ -4300,17 +4307,17 @@ function csDraw() {
   const NA = '<span class="csna">N/A</span>', money = v => v == null ? NA : "$" + Math.round(v).toLocaleString();
   const CH = CS.ch, otaOk = x => x.ota && (CH === "Airbnb" ? /airbnb/i.test(x.ota) : CH === "VRBO" ? /vrbo|homeaway/i.test(x.ota) : false);
   const askOf = id => (CS.ask[id] || {})[CH], totOf = id => (CS.tot[id] || {})[CH];
-  const F = csFits(d), rows = d.rows, inuse = rows.filter(x => x.tier === "Primary"), paused = rows.filter(x => x.tier === "Paused"), sec = rows.filter(x => x.tier === "Secondary");
+  const F = csFits(d), rows = d.rows, inuse = rows.filter(x => x.tier === "Primary" && x.fits), paused = rows.filter(x => x.tier === "Paused"), sec = rows.filter(x => x.tier === "Secondary"), out = rows.filter(x => x.tier === "Primary" && !x.fits);
   const kind = h => h.live ? "Live" : h.test ? "Test" : "Beyond";
   const tile = (l, v, s) => `<div class="pctile"><small>${l}</small><b>${v}</b><small>${s || ""}</small></div>`;
   const ed = d.can_edit;
-  const setOpts = cur => CS.sets.filter(x => x.id !== cur).map(x => `<option value="${pcEsc(x.id)}">${pcEsc(x.name)}</option>`).join("");
+  const setOpts = cur => (CS.rsets || []).filter(x => x.id !== cur).map(x => `<option value="${pcEsc(x.id)}">${pcEsc(x.name)}</option>`).join("");
   const homes = d.ours.map(h => { const f = F[h.code], low = f.rule !== "sleeps";
     return `<tr${CS.hl === h.code ? ' class="cshl1"' : ""}><td><b>${pcEsc(h.code)}</b> <small class="cshk ${kind(h).toLowerCase()}">${kind(h)}</small></td><td>${csLogos(h.comp_id, h.links, true)}</td><td>${h.beds ?? NA} bd</td><td>sleeps ${h.sleeps ?? NA}</td>
-      <td>${f.use.size} comps <small class="${low ? "csbad" : "muted"}">${f.rule === "sleeps" ? `same bedrooms, sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}` : `only ${f.win} sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}, needs ${d.min}: using ${f.rule === "beds" ? "every " + h.beds + "-bedroom comp" : "every comp"}`}</small></td>
+      <td>${f.use.size} comps <small class="${low ? "csbad" : "muted"}">${f.rule === "sleeps" ? `same bedrooms, sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}` : `no comps sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}: using every ${h.beds}-bedroom comp until some are added`}</small></td>
       <td>${totOf(h.comp_id) ? money(totOf(h.comp_id).v) + " <small class='muted'>guest total</small>" : NA}</td>
-      <td>${ed ? `<select data-mvs="${pcEsc(h.code)}"><option value="">Move to another comp set…</option>${setOpts(d.id)}</select>` : ""}</td></tr>`; }).join("");
-  let pick = CS.f === "inuse" ? inuse : CS.f === "paused" ? paused : CS.f === "sec" ? sec : rows;
+      <td>${ed ? `<select data-mvs="${pcEsc(h.code)}"><option value="">Move to another comp set…</option>${setOpts(h.set_id)}</select>` : ""}</td></tr>`; }).join("");
+  let pick = CS.f === "inuse" ? inuse : CS.f === "paused" ? paused : CS.f === "sec" ? sec : CS.f === "out" ? out : rows;
   let list = pick.slice();
   if (CS.sort) {   // tap a column header to sort (again = reverse); empty values always last
     const k = CS.sort.k, dir = CS.sort.d;
@@ -4324,7 +4331,7 @@ function csDraw() {
   const fitsOf = x => d.ours.filter(h => F[h.code].use.has(x.id)).map(h => h.code);
   const sleepsTxt = x => { if (x.sleeps == null) return NA; const ds = d.ours.map(h => h.sleeps).filter(v => v != null);
     const near = ds.some(v => Math.abs(x.sleeps - v) <= d.win); return `${x.sleeps}${ds.length && !near ? ' <small class="csbad">±' + d.win + ' off</small>' : ""}`; };
-  const st = x => x.tier === "Primary" ? '<span class="csuse y">In use</span>' : x.tier === "Paused" ? `<span class="csuse p">Paused</span>${x.paused_at ? `<br><small class="muted">${pcEsc(x.paused_at)}</small>` : ""}` : '<span class="csuse n">Secondary</span>';
+  const st = x => x.tier === "Primary" && !x.fits ? `<span class="csuse n">Out of range</span>` : x.tier === "Primary" ? '<span class="csuse y">In use</span>' : x.tier === "Paused" ? `<span class="csuse p">Paused</span>${x.paused_at ? `<br><small class="muted">${pcEsc(x.paused_at)}</small>` : ""}` : '<span class="csuse n">Secondary</span>';
   const act = x => !ed ? "" : (x.tier === "Primary" ? `<button class="csbtn" data-cst="paused" data-c="${pcEsc(x.id)}">⏸ Pause</button>` : `<button class="csbtn" data-cst="inuse" data-c="${pcEsc(x.id)}">▶ Use</button>`) +
     `<button class="csbtn del" data-cst="delete" data-c="${pcEsc(x.id)}">🗑 Delete</button>`;
   const reqs = (d.requests || []).map(r => { const i = r.info || {};
@@ -4334,7 +4341,7 @@ function csDraw() {
       <td>${ed ? `<button class="csbtn" data-req="${r.id}" data-d="Primary">✓ Add as in use</button><button class="csbtn del" data-req="${r.id}" data-d="reject">✕ Reject</button>` : ""}</td></tr>`; }).join("");
   $("csOut").innerHTML = `
     <div class="pctiles">
-      ${tile("Comp set", pcEsc(d.name), d.ours.length + " of our homes")}
+      ${tile("Comp set", `${pcEsc(d.grp)}<br><span style="font-size:15px">${d.beds === 0 ? "Studio" : d.beds + " bedrooms"} · sleeps ${d.sleeps ?? "?"}</span>`, `${d.ours.length} of our homes · comps sleeping ${d.sleeps - d.win}–${d.sleeps + d.win}`)}
       ${tile("Comps", `${inuse.length} in use`, `${paused.length} paused · ${sec.length} secondary · ${(d.requests || []).length} waiting to add`)}
       ${tile(`${CH} guest total / night`, `${money(mid(d.ours.map(h => (totOf(h.comp_id) || {}).v)))} <span style="font-size:13px;font-weight:600">ours</span>`, `in-use comps ${money(mid(inuse.map(x => (totOf(x.id) || {}).v)))} · next 120 nights, short stays`)}
       ${tile(`${CH} asking, daily rate`, money(mid(inuse.map(x => (askOf(x.id) || {}).v))), CH === "Direct" ? "we don't read comps' own websites' calendars" : "middle of the in-use comps, before fees + cleaning")}
@@ -4347,10 +4354,10 @@ function csDraw() {
       ${reqs ? `<details class="csreq" style="margin-top:10px"${CS.reqOpen ? " open" : ""}><summary><b>Suggested comps (${(d.requests || []).length})</b></summary><div style="overflow:auto"><table class="cshome">${reqs}</table></div></details>` : ""}</div>` : ""}
     <div class="pccard">
       <div class="cstabs">${["Airbnb", "VRBO", "Direct"].map(c => `<button class="cstab${CH === c ? " on" : ""}" data-csch="${c}">${c}</button>`).join("")}</div>
-      <div class="pcchips" style="margin:8px 0">${chip("all", "All", rows.length)}${chip("inuse", "In use", inuse.length)}${chip("paused", "Paused", paused.length)}${chip("sec", "Secondary", sec.length)}</div>
+      <div class="pcchips" style="margin:8px 0">${chip("inuse", `In use (sleeps ${d.sleeps - d.win}–${d.sleeps + d.win})`, inuse.length)}${chip("out", "Out of range", out.length)}${chip("paused", "Paused", paused.length)}${chip("sec", "Secondary", sec.length)}${chip("all", "All in " + d.grp, rows.length)}</div>
     <div style="overflow:auto"><table id="csTbl"><tr><th></th>${[["label","Comp"],["miles","Neighborhood"],["bedrooms","Bd"],["sleeps","Sleeps"],["baths","Baths"],["ask","Asking (daily)"],["tot","Guest total / night"],["adr12","Booked rate (12 mo)"],["occ12","Booked"],["rating","Rating"]].map(([k, l]) => `<th class="cssort${CS.sort && CS.sort.k === k ? " on" : ""}" data-sort="${k}" title="Tap to sort">${l}${CS.sort && CS.sort.k === k ? (CS.sort.d > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}<th></th></tr>
     ${list.map(x => { const ok = otaOk(x), a = askOf(x.id), tt = totOf(x.id), fi = fitsOf(x);
-      return `<tr class="${x.tier === "Primary" ? "" : "no"}"><td>${st(x)}</td>
+      return `<tr class="${x.tier === "Primary" && x.fits ? "" : "no"}"><td>${st(x)}</td>
       <td>${pcEsc(x.label)}<br>${csLogos(x.id, x.links)}${x.added ? `<br><small class="muted">added ${pcEsc(x.added)}</small>` : ""}</td>
       <td>${x.nbhd || x.city ? pcEsc(x.nbhd || x.city) : NA}${x.miles != null ? `<br><small class="${x.miles > 0.2 ? "csbad" : "muted"}" title="miles from the middle of our homes in this set">${x.miles} mi</small>` : ""}</td>
       <td>${x.bedrooms ?? NA}</td><td>${sleepsTxt(x)}</td><td>${x.baths ?? NA}</td>
@@ -4375,18 +4382,18 @@ function csDraw() {
     if (!confirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
     const r = await sb.rpc("rates_home_move", { p_code: s0.dataset.mvs, p_to_set: to, p_note: null });
     if (r.error) { alert(r.error.message); s0.value = ""; return; }
-    CS.sets = null; await rateSetsRefresh(); CS.set = to; try { localStorage.setItem("mmCompSet", to); } catch (e) {} loadCompSets(); });
+    CS.sets = null; await rateSetsRefresh(); loadCompSets(); });
   W.querySelectorAll("[data-req]").forEach(b => b.onclick = async () => {
     if (b.dataset.d === "Primary" && !confirm("Add this listing to the comp set as in use?")) return;
     const r = await sb.rpc("decide_comp_request", { req_id: +b.dataset.req, decision: b.dataset.d });
     if (r.error) alert(r.error.message); else { await rateSetsRefresh(); csFetch(); } });
   const rq = W.querySelector("details.csreq"); if (rq) rq.ontoggle = () => { CS.reqOpen = rq.open; };
   const add = $("csAdd"); if (add) add.onclick = async () => {
-    const u = $("csUrl").value.trim(); const r = await sb.rpc("rates_comp_add_url", { p_set: d.id, p_url: u });
+    const u = $("csUrl").value.trim(); const r = await sb.rpc("rates_comp_add_url", { p_set: d.add_set || (d.set_ids || [])[0], p_url: u });
     if (r.error) { $("csAddMsg").textContent = r.error.message; return; }
     $("csAddMsg").textContent = "Added. The ThinkStation reads it in about 30 minutes, then press ✓ Add as in use."; csFetch(true); };
 }
-async function rateSetsRefresh() { const r = await sb.rpc("rates_comp_sets_list"); if (!r.error) CS.sets = r.data || []; }
+async function rateSetsRefresh() { CS.sets = null; }
 // ===== Market pacing (Brandon 2026-11-18: grow off Cathy's Key Data dashboard "Winter 11/20-4/18", one view per neighborhood + size).
 // Data = rates_pacing(set, from, to): Key Data calendars of the group's Primary comps (now vs ~2 weeks ago), our homes from Track bookings,
 // Key Data neighborhood market KPIs (all sizes) + last year = Key Data's final numbers for the same weeks.
