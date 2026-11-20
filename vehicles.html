@@ -89,6 +89,7 @@ dialog input:where(:not([type=checkbox],[type=radio])){display:block;width:100%;
 <body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <dialog id="dlg"></dialog>
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="config.js"></script>
@@ -431,7 +432,7 @@ async function openFile(id){
 }
 async function hideSvc(id){
   const s = S.service.find(x => x.id === id); if(!s) return;
-  if(!confirm("Hide this record? It stays in the history log and an admin can bring it back.")) return;
+  if(!await mmConfirm("Hide this record? It stays in the history log and an admin can bring it back.")) return;
   const r = await sb.rpc("vehicle_service_set", { p_id: id, p_kind: null, p_items: null, p_done: s.done_on, p_odometer: s.odometer, p_vendor: null,
     p_cost: s.cost, p_invoice: null, p_note: null, p_off: true });
   if(r.error){ alert(errText(r.error)); return; }
