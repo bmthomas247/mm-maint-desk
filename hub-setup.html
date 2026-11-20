@@ -67,6 +67,7 @@ label{display:block;font-weight:700;font-size:14px;margin-top:10px}
 <header><div class="in"><h1>🔧 Lock hub setup</h1><p>Get a hub ready, test it here, then send it to a home.</p></div></header>
 <div class="tabs"><button data-tab="hub">🧰 Get a hub ready</button><button data-tab="hubs">📦 Our hubs</button></div>
 <main id="app"><div class="card muted">Loading…</div></main>
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="idle.js"></script>
@@ -285,7 +286,7 @@ async function findHubs(){
       const c = (HOMES.find(h => h.id === s.value) || {}).code; claim(b.dataset.claim, s.value, "Hub " + c); });
     $$("[data-move]").forEach(b => b.onclick = async () => { const s = $(`[data-move-home="${b.dataset.move}"]`); if(!s.value) return toast("Pick the home first");
       const c = (HOMES.find(h => h.id === s.value) || {}).code;
-      if(!confirm(`Send this hub to ${c}? Anything you tested with it at the office is switched off in our list (nothing is deleted).`)) return;
+      if(!await mmConfirm(`Send this hub to ${c}? Anything you tested with it at the office is switched off in our list (nothing is deleted).`)) return;
       try{ await addHome(s.value); const pc = await rpc("lock_hub_release", { p_hub: b.dataset.move, p_note: "office test done" });
         await rpc("lock_claim_hub", { p_hub: null, p_pair: pc, p_property: s.value, p_name: "Hub " + c });
         MOVED = { id: s.value, code: c }; HOMES = null; toast(`Hub moved to ${c} ✓`); DONE.find = true; saveDone(); hubView(); }catch(e){ fail(e); } });
@@ -343,7 +344,7 @@ async function hubsView(){
       </div>`; }).join("") : `<div class="card muted" style="margin-top:8px">No hubs yet. Set one up in "Get a hub ready".</div>`}`;
   const move = async (hub, pid, from, n) => {
     const to = pid === OFFICE ? "the office test bench" : ((HOMES||[]).find(h => h.id === pid) || {}).code || pid;
-    if(!confirm(`Move this hub from ${from} to ${to}?${+n ? `\n\n${n} paired lock(s) will be switched off at ${from} (nothing is deleted).` : ""}`)) return;
+    if(!await mmConfirm(`Move this hub from ${from} to ${to}?${+n ? `\n\n${n} paired lock(s) will be switched off at ${from} (nothing is deleted).` : ""}`)) return;
     try{ await addHome(pid); const pc = await rpc("lock_hub_release", { p_hub: hub, p_note: `moved from ${from} on Hub setup` });
       await rpc("lock_claim_hub", { p_hub: null, p_pair: pc, p_property: pid, p_name: pid === OFFICE ? "Office test hub" : "Hub " + to });
       HOMES = null; toast(`Hub moved to ${to} ✓ Write "${to}" on it.`); hubsView(); }catch(e){ fail(e); } };
