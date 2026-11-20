@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Lost &amp; found</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Guest ▸ Lost & found (hub key 'lost_found'; hub_lost_found.sql, Brandon 2026-11-20). Replaces the Asana LOST and FOUND project.
+     Access is enforced in Supabase (hub_can('lost_found') = front desk + the 4 manager teams + admins) - this page only shows what RLS allows.
+     Nothing is deleted: Remove sets off = true; every change is in hub_lost_found_log, notes in hub_lost_found_notes (append-only). -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1200px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:38px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.sm{min-height:32px;padding:0 9px;font-size:12.5px} .btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.looking{background:var(--amber-soft);color:var(--amber)} .pill.found{background:var(--moose-soft);color:var(--moose-ink)}
+.pill.shipping{background:var(--blue-soft);color:var(--blue)} .pill.shipped,.pill.picked_up{background:var(--violet-soft);color:var(--violet)}
+.pill.not_found,.pill.closed{background:var(--line);color:var(--muted)} .pill.home{background:var(--forest);color:#fff}
+.head{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tile b{display:block;font-size:22px;font-weight:800;line-height:1.2} .tile span{font-size:12.5px;color:var(--muted);font-weight:700}
+.tile.on{outline:2px solid var(--forest-2)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}
+.bar input:where(:not([type=checkbox],[type=radio])),.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 9px;background:var(--card);color:var(--ink);min-height:38px}
+.bar input[type=search]{flex:1;min-width:200px}
+.bar label{font-size:13px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;cursor:pointer;text-align:left;font:inherit;color:var(--ink);display:block;width:100%}
+.card:hover{border-color:var(--line-2)}
+.card .top{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.card .it{font-weight:800;font-size:15px;overflow-wrap:anywhere}
+.card .ln{font-size:13px;color:var(--ink-2);margin-top:4px;overflow-wrap:anywhere}
+.card .ln small{color:var(--muted)}
+.card .last{font-size:12.5px;color:var(--muted);margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .age{margin-left:auto;font-size:12px;color:var(--muted);font-weight:700}
+.empty{padding:22px;color:var(--muted);font-size:14px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.showing{font-size:13px;color:var(--ink-2);margin:-4px 0 10px} .showing button{font:inherit;font-weight:800;color:var(--forest-2);background:none;border:0;cursor:pointer;padding:0}
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:720px;width:calc(100% - 24px);background:var(--card);color:var(--ink);max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog .dbody{padding:18px 20px;overflow:auto;max-height:calc(100vh - 100px)}
+dialog h3{margin:0 0 6px;font-size:18px}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog label.ck{display:inline-flex;align-items:center;gap:8px;margin:6px 16px 6px 0}
+dialog input:where(:not([type=checkbox],[type=radio])),dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog input[type=checkbox]{width:18px;height:18px;flex:none}
+dialog textarea{min-height:64px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px} .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+.dfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line);background:var(--card);position:sticky;bottom:0;flex-wrap:wrap}
+.err{color:var(--red);font-size:13px;min-height:1em}
+.notes{list-style:none;padding:0;margin:8px 0} .notes li{border-left:3px solid var(--line-2);padding:4px 10px;margin:8px 0;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.notes li small{display:block;color:var(--muted);font-size:12px;white-space:normal}
+.sec{font-size:13px;font-weight:800;color:var(--ink-2);margin:16px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+.toast{position:fixed;bottom:16px;right:16px;background:var(--forest);color:#fff;padding:8px 14px;border-radius:10px;font-weight:800;font-size:13.5px;z-index:9}
+@media (max-width:700px){ .two,.three{grid-template-columns:1fr} }
+body.inhub .wrap{padding-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<datalist id="dl-home"></datalist>
+<script src="confirm.js?v=20261120"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const fmtD = d => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+const TRACK = res => `https://moosemanagement.trackhs.com/pms/reservations/view/${encodeURIComponent(res)}/`;
+if(window.top !== window) document.body.classList.add("inhub");
+
+const STATUS = [["looking","Looking"],["found","Found - we have it"],["not_found","Not found"],["shipping","Shipping - form sent / waiting on payment"],["shipped","Shipped"],["picked_up","Picked up"],["closed","Closed"]];
+const SL = { looking:"Looking", found:"Found", not_found:"Not found", shipping:"Shipping", shipped:"Shipped", picked_up:"Picked up", closed:"Closed" };
+const OPEN = new Set(["looking","found","shipping"]);
+/* Moose fee answer (Asana LOST and FOUND "EMAIL TEMPLATE: Fee Objection") */
+const FEE = "There is only a small $25 fee + shipping to return a lost and found item. It is standard industry pricing and practice. Items are many times left by guests and there are time and costs involved in communication and recovery, packaging and materials, travel to the post office, waiting in line, paying for postage, etc.";
+const S = { rows:[], last:{}, homes:[], q:"", show:"open", home:"" };
+
+function toast(t){ const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
+async function load(){
+  const r = await sb.from("hub_lost_found").select("*").eq("off", false).order("reported_on", { ascending:false }).order("id", { ascending:false }).limit(3000);
+  if(r.error){ $("#app").innerHTML = `<h1>Lost &amp; found</h1><p class="err">${esc(niceErr(r.error))}</p>`; return; }
+  S.rows = r.data || [];
+  const n = await sb.from("hub_lost_found_notes").select("item_id,note,by_name,at").order("at", { ascending:false }).limit(5000);
+  S.last = {}; (n.data || []).forEach(x => { if(!S.last[x.item_id]) S.last[x.item_id] = x; });
+  render();
+}
+function niceErr(e){ const t = errText(e); return /fetch|network/i.test(t) ? "Couldn't load. Check your signal and reload the page." : t; }
+const daysAgo = d => d ? Math.round((Date.now() - new Date(d + "T12:00:00")) / 864e5) : null;
+
+function render(){
+  const all = S.rows, q = S.q.trim().toLowerCase();
+  const cnt = f => all.filter(f).length;
+  const tiles = [["open","Open",cnt(r => OPEN.has(r.status))],["looking","Looking",cnt(r => r.status === "looking")],["found","Found - we have it",cnt(r => r.status === "found")],
+    ["shipping","Shipping",cnt(r => r.status === "shipping")],["done","Done",cnt(r => !OPEN.has(r.status))],["all","All",all.length]];
+  const pass = r => S.show === "all" || (S.show === "open" ? OPEN.has(r.status) : S.show === "done" ? !OPEN.has(r.status) : r.status === S.show);
+  const show = all.filter(r => pass(r) && (!S.home || r.home === S.home) &&
+    (!q || [r.item, r.home, r.res, r.guest, r.where_now, r.tracking, (S.last[r.id] || {}).note].join(" ").toLowerCase().includes(q)));
+  const homes = [...new Set(all.map(r => r.home).filter(Boolean))].sort();
+  $("#dl-home").innerHTML = [...new Set(S.homes.concat(homes))].sort().map(h => `<option value="${esc(h)}">`).join("");
+  const lbl = (tiles.find(t => t[0] === S.show) || [0, ""])[1];
+  $("#app").innerHTML = `
+    <div class="head"><div><h1>Lost &amp; found</h1><p class="muted" style="margin:0">Things guests leave behind: who, where, and where it is now. Tap an item to update it or add a note.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="fee">💬 Copy the $25 fee answer</button><button class="btn" id="csv">⬇ CSV</button><button class="btn primary" id="add">+ Add item</button></div></div>
+    <div class="tiles">${tiles.map(([k, l, n]) => `<button class="tile${S.show === k ? " on" : ""}" data-show="${k}"><b>${n}</b><span>${esc(l)}</span></button>`).join("")}</div>
+    <div class="bar"><input type="search" id="q" placeholder="Search item, home, res #, guest, note…" value="${esc(S.q)}" aria-label="Search">
+      <select id="fhome" aria-label="Home"><option value="">Every home</option>${homes.map(h => `<option${h === S.home ? " selected" : ""}>${esc(h)}</option>`).join("")}</select></div>
+    <p class="showing">Showing ${show.length} ${show.length === 1 ? "item" : "items"} · ${esc(lbl)}${S.show !== "open" || S.home || q ? ` · <button id="clr">show open items</button>` : ""}</p>
+    ${show.length ? `<div class="grid">${show.map(card).join("")}</div>` : `<div class="empty">${all.length ? "Nothing matches." : "Nothing here yet. Tap + Add item when a guest reports something."}</div>`}`;
+}
+function card(r){
+  const l = S.last[r.id], a = daysAgo(r.reported_on);
+  return `<button class="card" data-id="${r.id}">
+    <div class="top">${r.home ? `<span class="pill home">${esc(r.home)}</span>` : ""}<span class="pill ${r.status}">${esc(SL[r.status])}</span>
+      ${r.form_sent ? `<span class="pill">Form sent</span>` : ""}${r.paid ? `<span class="pill">Paid</span>` : ""}<span class="age">${a == null ? "" : a === 0 ? "today" : a + " d ago"}</span></div>
+    <div class="it">${esc(r.item)}</div>
+    <div class="ln">${r.guest ? esc(r.guest) + " · " : ""}${r.res ? "Res #" + esc(r.res) : ""}${r.where_now ? ` · <small>Now at:</small> ${esc(r.where_now)}` : ""}${r.tracking ? ` · <small>Tracking:</small> ${esc(r.tracking)}` : ""}</div>
+    ${l ? `<div class="last">${esc(l.by_name || "")}: ${esc(l.note)}</div>` : ""}</button>`;
+}
+
+function open(id){
+  const r = id ? S.rows.find(x => x.id === id) : { item:"", home:"", res:"", guest:"", status:"looking", where_now:"", form_sent:false, paid:false, tracking:"", reported_on:new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" }) };
+  const d = $("#dlg");
+  d.innerHTML = `<div class="dbody"><form id="f" onsubmit="return false">
+    <h3>${id ? "Lost item" : "Add a lost item"}</h3>
+    ${r.asana_url ? `<p class="muted" style="margin:0">Copied from Asana on Nov 20, 2026 - status is a best guess, please check it. <a href="${esc(r.asana_url)}" target="_blank" rel="noopener">Open in Asana ↗</a></p>` : ""}
+    <label>What was lost<input name="item" required maxlength="200" value="${esc(r.item)}" placeholder="e.g. Grey AirPods case"></label>
+    <div class="three"><label>Home<input name="home" list="dl-home" maxlength="40" value="${esc(r.home || "")}" placeholder="e.g. BHV 5534"></label>
+      <label>Reservation #<input name="res" maxlength="20" inputmode="numeric" value="${esc(r.res || "")}"></label>
+      <label>Guest<input name="guest" maxlength="120" value="${esc(r.guest || "")}"></label></div>
+    <div class="two"><label>Status<select name="status">${STATUS.map(([k, l]) => `<option value="${k}"${k === r.status ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+      <label>Where it is now<input name="where_now" maxlength="120" value="${esc(r.where_now || "")}" placeholder="Office, cleaner has it, still at the home…"></label></div>
+    <div class="two"><label>Reported on<input name="reported_on" type="date" value="${esc(r.reported_on || "")}"></label>
+      <label>Shipping tracking #<input name="tracking" maxlength="120" value="${esc(r.tracking || "")}"></label></div>
+    <label class="ck"><input type="checkbox" name="form_sent"${r.form_sent ? " checked" : ""}> Lost & found form sent to the guest</label>
+    <label class="ck"><input type="checkbox" name="paid"${r.paid ? " checked" : ""}> Guest paid the fee + shipping</label>
+    ${r.res ? `<p style="margin:6px 0 0"><a class="btn sm" href="${TRACK(r.res)}" target="_blank" rel="noopener">Open reservation in Track ↗</a></p>` : ""}
+    <label>${id ? "Add a note" : "Note (what the guest said, who you asked)"}<textarea name="note" maxlength="4000" placeholder="e.g. Asked Cheree to check with the cleaners"></textarea></label>
+    <p class="err" id="ferr"></p></form>
+    ${id ? `<div class="sec">Notes</div><ul class="notes" id="nl"><li class="muted">Loading…</li></ul><div class="sec">History</div><ul class="notes" id="hl"><li class="muted">Loading…</li></ul>` : ""}</div>
+    <div class="dfoot">${id ? `<button class="btn ghost" id="frm" type="button" style="margin-right:auto;color:var(--red)">Remove</button>` : ""}
+      <button class="btn" id="fx" type="button">Close</button><button class="btn primary" id="fok" type="button">${id ? "Save" : "Add"}</button></div>`;
+  d.showModal();
+  $("#fx").onclick = () => d.close();
+  $("#fok").onclick = async () => {
+    const f = $("#f"); if(!f.reportValidity()) return;
+    const p = { item:f.item.value.trim(), home:f.home.value.trim() || null, res:f.res.value.trim() || null, guest:f.guest.value.trim() || null,
+      status:f.status.value, where_now:f.where_now.value.trim() || null, reported_on:f.reported_on.value || null, tracking:f.tracking.value.trim() || null,
+      form_sent:f.form_sent.checked, paid:f.paid.checked };
+    const note = f.note.value.trim();
+    $("#fok").disabled = true;
+    try {
+      const x = id ? await sb.from("hub_lost_found").update(p).eq("id", id).select().single() : await sb.from("hub_lost_found").insert(p).select().single();
+      if(x.error) throw x.error;
+      if(note){ const y = await sb.from("hub_lost_found_notes").insert({ item_id:x.data.id, note }); if(y.error) throw y.error; }
+      d.close(); toast("Saved ✓"); load();
+    } catch(e){ $("#ferr").textContent = "Couldn't save: " + niceErr(e); $("#fok").disabled = false; }
+  };
+  if(id){
+    $("#frm").onclick = async () => {
+      if(!await mmConfirm(`Remove "${r.item}" from the list? It's kept in the history.`)) return;
+      const x = await sb.from("hub_lost_found").update({ off:true }).eq("id", id);
+      if(x.error){ $("#ferr").textContent = "Couldn't remove: " + niceErr(x.error); return; }
+      d.close(); load();
+    };
+    notesAndHistory(id);
+  }
+}
+const FL = { item:"What", home:"Home", res:"Res #", guest:"Guest", status:"Status", where_now:"Where", reported_on:"Reported", form_sent:"Form sent", paid:"Paid", tracking:"Tracking", off:"Removed" };
+const fv = (k, v) => v == null || v === "" ? "—" : k === "status" ? (SL[v] || v) : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
+async function notesAndHistory(id){
+  const [n, h] = await Promise.all([
+    sb.from("hub_lost_found_notes").select("note,by_name,at").eq("item_id", id).order("at", { ascending:false }),
+    sb.from("hub_lost_found_log").select("op,old_row,new_row,by_name,at").eq("item_id", id).order("at", { ascending:false }).limit(100)]);
+  const nl = $("#nl"), hl = $("#hl"); if(!nl) return;
+  nl.innerHTML = (n.data || []).map(x => `<li>${esc(x.note)}<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`).join("") || `<li class="muted">No notes yet.</li>`;
+  hl.innerHTML = (h.data || []).map(x => {
+    if(x.op === "insert") return `<li>Added<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`;
+    const ch = Object.keys(FL).filter(k => JSON.stringify(x.old_row[k]) !== JSON.stringify(x.new_row[k])).map(k => `${FL[k]}: ${fv(k, x.old_row[k])} → ${fv(k, x.new_row[k])}`);
+    return ch.length ? `<li>${esc(ch.join("\n"))}<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>` : "";
+  }).join("") || `<li class="muted">No changes yet.</li>`;
+}
+
+function csv(){
+  const cols = ["reported_on","home","res","guest","item","status","where_now","form_sent","paid","tracking","updated_at","updated_name"];
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const txt = [cols.join(",")].concat(S.rows.map(r => cols.map(c => q(c === "status" ? SL[r.status] : r[c])).join(","))).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type:"text/csv" }));
+  a.download = `lost-and-found-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("button"); if(!t || t.closest("dialog")) return;
+  if(t.dataset.show){ S.show = S.show === t.dataset.show && t.dataset.show !== "open" ? "open" : t.dataset.show; render(); return; }
+  if(t.dataset.id){ open(+t.dataset.id); return; }
+  if(t.id === "add"){ open(null); return; }
+  if(t.id === "csv"){ csv(); return; }
+  if(t.id === "clr"){ S.show = "open"; S.home = ""; S.q = ""; render(); return; }
+  if(t.id === "fee"){ try { await navigator.clipboard.writeText(FEE); toast("Copied ✓"); } catch(_){ prompt("Copy this:", FEE); } }
+});
+document.addEventListener("change", e => { if(e.target.id === "fhome"){ S.home = e.target.value; render(); } });
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; const p = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(p, p); } });
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"lost_found" });
+  if(ok.error){ $("#app").innerHTML = `<h1>Lost &amp; found</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
+  if(ok.data !== true){ try { top.location.hash = "#/home"; } catch(_){ location.href = "hub.html"; } return; }
+  try { const h = await sb.from("hub_homes").select("code").eq("active", true).limit(2000); S.homes = (h.data || []).map(x => x.code).filter(Boolean); } catch(_){}
+  load();
+})();
+window.__lf = { S, render };
+</script>
+</body>
+</html>
