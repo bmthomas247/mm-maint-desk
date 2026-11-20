@@ -423,7 +423,7 @@ async function meetTiles(v){
   });
   v.querySelectorAll("[data-jlink]").forEach(b => b.onclick = async () => {
     const m = ms.find(x => x.meet === b.dataset.jlink);
-    const u = prompt(`Paste the Zoom / Google Meet / Teams link for ${NAMES[m.meet] || "this meeting"}.
+    const u = await mmAsk(`Paste the Zoom / Google Meet / Teams link for ${NAMES[m.meet] || "this meeting"}.
 It shows as ▶ Join for everyone who can open the meeting.`, "");
     if (u == null || !u.trim()) return;
     if (!/^https:\/\//.test(u.trim())) { alert("The link must start with https://"); return; }
@@ -589,7 +589,7 @@ async function evCal(v, key, fresh){
     location.href = r.url; }
   async function olAnswer(id, ans, bt){
     const o = ol.find(y => y.ms_id === id), word = { accept:"Accept", tentativelyAccept:"Maybe", decline:"Decline" }[ans];
-    const note = ans === "accept" ? "" : prompt(word + " “" + (o ? o.title : "this meeting") + "”. Add a note for the organizer? (optional)", "");
+    const note = ans === "accept" ? "" : await mmAsk(word + " “" + (o ? o.title : "this meeting") + "”. Add a note for the organizer? (optional)", "");
     if(note === null) return;
     if(bt){ bt.disabled = true; bt.textContent = "Sending…"; }
     const r = await olCall({ action:"answer", id, answer:ans, comment:note || "" });
@@ -655,7 +655,7 @@ async function evCal(v, key, fresh){
   // ---- Schedule a meeting / booking links (hub_meet_book.sql + Edge Function `meet`; public pages meet.html + book.html) ----
   const pageUrl = (f, q) => new URL(f + "?" + q, location.href).href;
   const copy = async (txt, btn) => { try { await navigator.clipboard.writeText(txt); if(btn){ const o = btn.textContent; btn.textContent = "Copied ✓"; setTimeout(() => btn.textContent = o, 1500); } }
-    catch(_){ prompt("Copy this link:", txt); } };
+    catch(_){ await mmAsk("Copy this link:", txt); } };
   const fnCall = async o => { const ss = (await sb.auth.getSession()).data.session;
     const r = await fetch(MM_CONFIG.url + "/functions/v1/meet", { method:"POST", headers:{ "content-type":"application/json", apikey:MM_CONFIG.anonKey, authorization:"Bearer " + (ss ? ss.access_token : MM_CONFIG.anonKey) }, body:JSON.stringify(o) });
     return r.json().catch(() => ({ ok:false, error:"No answer from the server." })); };
@@ -849,7 +849,7 @@ async function evCal(v, key, fresh){
       const l = await sb.rpc("meet_mine", { p_from:m.day, p_to:m.day }); const n = ((l && l.data) || []).find(x => x.id === m.id); if(n) meetBox(n); };
     if($("#mmv")) $("#mmv").onclick = () => moveBox({ day:m.day, start:m.start, minutes:m.minutes, title:m.title, note:(m.staff || []).length ? "Everyone on it is asked to answer again for the new time." + (showLink ? " The link you sent stays the same." : "") : "The link you sent stays the same and shows the new time." },
       async (d, st, mins) => sb.rpc("meet_move", { p_id:m.id, p_day:d, p_start:st, p_minutes:mins }));
-    if($("#mx")) $("#mx").onclick = async () => { const why = prompt("Cancel this meeting? It comes off everyone's calendar. Add a note (optional):", ""); if(why === null) return;
+    if($("#mx")) $("#mx").onclick = async () => { const why = await mmAsk("Cancel this meeting? It comes off everyone's calendar. Add a note (optional):", ""); if(why === null) return;
       const r = await sb.rpc("meet_cancel", { p_id:m.id, p_note:why }); if(r.error) return $("#mm").textContent = "Couldn't cancel: " + r.error.message;
       $("#evm").classList.remove("on"); evCal(v, key, true); };
     // answer (only the coworkers on it)
@@ -1367,7 +1367,7 @@ window.workCheck = async function(v){
   v.querySelectorAll("[data-wd]").forEach(b => b.onclick = () => { ST.wcDays = +b.dataset.wd; workCheck(v); });
   v.querySelector("#wconly").onchange = e => { ST.wcOnly = e.target.checked; workCheck(v); };
   v.querySelectorAll("[data-wshots]").forEach(b => b.onclick = () => { const [u, d] = b.dataset.wshots.split("|"); wcShots(u, d, who(u)); });
-  v.querySelectorAll("[data-rv]").forEach(b => b.onclick = async () => { const [u, d] = b.dataset.rv.split("|"), note = prompt("Note (optional):");
+  v.querySelectorAll("[data-rv]").forEach(b => b.onclick = async () => { const [u, d] = b.dataset.rv.split("|"), note = await mmAsk("Note (optional):");
     if(note === null) return; const r = await sb.rpc("work_check_review", { p_user:u, p_day:d, p_note:note }); if(r.error) alert(r.error.message); else workCheck(v); });
 };
 
