@@ -293,7 +293,7 @@ window.followupsView = async function(v){
     $("#fbody").innerHTML = list.length ? list.slice(0, 200).map(card).join("") : `<div class="card"><p class="muted">${F.tab === "todo" ? "Nothing to follow up right now." : "Nothing here yet."}</p></div>`;
   }
   $("#fbody").querySelectorAll("[data-fu]").forEach(b => b.onclick = async () => {
-    const note = b.dataset.s === "open" ? "" : prompt(b.dataset.s === "done" ? "What did you do? (optional)" : "Why isn't it needed? (optional)", "");
+    const note = b.dataset.s === "open" ? "" : await mmAsk(b.dataset.s === "done" ? "What did you do? (optional)" : "Why isn't it needed? (optional)", "");
     if(note === null) return;
     b.disabled = true;
     const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
@@ -595,7 +595,7 @@ window.guestCallsView = async function(v){
       : `<div class="card"><p class="muted">${empty}</p></div>`;
     $("#gbody").querySelectorAll("[data-call]").forEach(b => b.onclick = () => { const c = calls.find(x => x.call_id === +b.dataset.call); showCall(c, T[c.call_id]); });
     $("#gbody").querySelectorAll("[data-fu]").forEach(b => b.onclick = async () => {
-      const note = b.dataset.s === "open" ? "" : prompt(b.dataset.s === "done" ? "How did you reach out? (optional)" : "Why isn't a reach-out needed? (optional)", "");
+      const note = b.dataset.s === "open" ? "" : await mmAsk(b.dataset.s === "done" ? "How did you reach out? (optional)" : "Why isn't a reach-out needed? (optional)", "");
       if(note === null) return;
       b.disabled = true;
       const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
