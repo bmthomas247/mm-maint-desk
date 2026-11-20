@@ -297,7 +297,7 @@ window.followupsView = async function(v){
     if(note === null) return;
     b.disabled = true;
     const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
-    if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+    if(r.error){ b.disabled = false; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
     followupsView(v); });
   $("#fbody").querySelectorAll("[data-call]").forEach(b => b.onclick = () => { const id = +b.dataset.call; showCall({ ...C[id], call_id:id }, { status:"ok" }); });
 };
@@ -418,7 +418,7 @@ window.ownerCallsView = async function(v){
   async function mark(id, s, note, btn){
     if(btn) btn.disabled = true;
     const r = await sb.rpc("followup_set", { p_call:id, p_status:s, p_note:note || "" });
-    if(r.error){ if(btn) btn.disabled = false; alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); return false; }
+    if(r.error){ if(btn) btn.disabled = false; await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); return false; }
     const f = { call_id:id, status:s, note:note || "", by_name:(ME && ME.name) || "", at:new Date().toISOString() };
     FU[id] = f; (FUH[id] = FUH[id] || []).unshift(f); return true;
   }
@@ -599,7 +599,7 @@ window.guestCallsView = async function(v){
       if(note === null) return;
       b.disabled = true;
       const r = await sb.rpc("followup_set", { p_call:+b.dataset.fu, p_status:b.dataset.s, p_note:note });
-      if(r.error){ b.disabled = false; return alert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
+      if(r.error){ b.disabled = false; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       FU[+b.dataset.fu] = { status:b.dataset.s, note, by_name:(ME && ME.name) || "", at:new Date().toISOString() }; draw(); });
   }
   draw();
