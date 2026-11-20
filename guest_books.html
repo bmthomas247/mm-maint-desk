@@ -64,6 +64,7 @@ details.fold>summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--i
 </head><body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
 <div id="printcard"></div>
+<script src="confirm.js?v=20261120"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="config.js"></script>
@@ -262,9 +263,9 @@ document.addEventListener("click", async e => {
     if(d.usetrack){ const s = S.cur.sections.find(x => x.key === d.usetrack); await rpc("guest_book_save", { p_home:S.home, p_section:d.usetrack, p_body:"", p_hidden:!!(s && s.hidden) }); await reload("Back to Track's text"); return; }
     if(d.hide){ const s = S.cur.sections.find(x => x.key === d.hide), keep = s && s.from === "hub" && s.edit ? s.edit.body : "";
       await rpc("guest_book_save", { p_home:S.home, p_section:d.hide, p_body:keep || "", p_hidden:d.on === "1" }); await reload(d.on === "1" ? "Hidden from guests" : "Shown to guests"); return; }
-    if(d.pub){ if(d.pub === "1" && !confirm(`Publish ${S.home}'s guest book? Anyone with its link or QR code can open it (Wi-Fi included, never codes).`)) return;
+    if(d.pub){ if(d.pub === "1" && !await mmConfirm(`Publish ${S.home}'s guest book? Anyone with its link or QR code can open it (Wi-Fi included, never codes).`)) return;
       await rpc("guest_book_publish", { p_home:S.home, p_on:d.pub === "1" }); await reload(d.pub === "1" ? "Published ✓" : "Taken down"); return; }
-    if(b.hasAttribute("data-newlink")){ if(!confirm("Make a new link? The old link and any printed QR code for this home stop working.")) return;
+    if(b.hasAttribute("data-newlink")){ if(!await mmConfirm("Make a new link? The old link and any printed QR code for this home stop working.")) return;
       await rpc("guest_book_new_link", { p_home:S.home }); await reload("New link made. Print a new QR card."); return; }
     if(b.hasAttribute("data-refresh")){ const r = await rpc("guest_book_refresh", { p_home:S.home });
       toast(r && r.started ? "Reading Track… this takes about half a minute" : "Track was read in the last 2 minutes");
