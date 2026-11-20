@@ -1,4 +1,4 @@
-/* Moose Hub: "Are you sure?" pop-ups inside the hub instead of the browser's own box.
+/* Moose Hub: "Are you sure?" + "type an answer" pop-ups inside the hub instead of the browser's own box.
    - window.mmConfirm(text, opts) -> Promise<true|false>   (use with await in new code)
        opts: { title, yes, no, danger }   danger = red Yes button
    - window.mmAsk(text, opts) -> Promise<string|null>      (a box to type in; opts.value, opts.placeholder)
@@ -84,29 +84,50 @@
     });
   }
   window.mmConfirm = (text, opts) => open(text, opts, false);
-  window.mmAsk = (text, opts) => open(text, opts, true);
+  // mmAsk(text, default) or mmAsk(text, {value, placeholder, multiline, title, yes, no}) -> text or null
+  window.mmAsk = (text, opts) => {
+    if (opts == null || typeof opts !== "object") opts = { value: opts == null ? "" : String(opts) };
+    if (opts.danger == null) opts = Object.assign({ danger: false }, opts);
+    return open(text, opts, true);
+  };
 
-  // Old confirm() calls: show the pop-up, then run the same click/change again if they say Yes.
-  const PASS = new Map();   // text -> time it was approved
-  window.confirm = function(text){
-    const k = String(text == null ? "" : text), now = Date.now();
-    for (const [t, at] of PASS) if (now - at > 4000) PASS.delete(t);
-    if (PASS.has(k)){ PASS.delete(k); return true; }
+  // Old confirm()/prompt() calls: show the pop-up and answer "no" at once; if the person answers,
+  // the same click/change runs again and that call gets their answer.
+  const PASS = new Map();   // "c|text" or "p|text" -> { at, v }
+  function sweep(){ const now = Date.now(); for (const [t, x] of PASS) if (now - x.at > 4000) PASS.delete(t); }
+  function replayable(){
     const ev = window.event;
-    const replay = ev && ev.target && ev.target.nodeType === 1 && /^(click|change|input|submit|keydown|keyup)$/.test(ev.type);
-    if (!replay) return nativeConfirm(text);
+    return ev && ev.target && ev.target.nodeType === 1 && /^(click|change|input|submit|keydown|keyup)$/.test(ev.type) ? ev : null;
+  }
+  function replay(ev){
     const target = ev.target, type = ev.type;
+    if (!target.isConnected) return;
     const init = { bubbles: true, cancelable: true, composed: true };
-    open(k, {}, false).then(yes => {
-      if (!yes || !target.isConnected) return;
-      PASS.set(k, Date.now());
-      let e2;
-      if (type === "click") e2 = new MouseEvent("click", init);
-      else if (/^key/.test(type)) e2 = new KeyboardEvent(type, Object.assign({ key: ev.key, code: ev.code }, init));
-      else e2 = new Event(type, init);
-      target.dispatchEvent(e2);
-      setTimeout(() => PASS.delete(k), 4000);
+    let e2;
+    if (type === "click") e2 = new MouseEvent("click", init);
+    else if (/^key/.test(type)) e2 = new KeyboardEvent(type, Object.assign({ key: ev.key, code: ev.code }, init));
+    else e2 = new Event(type, init);
+    target.dispatchEvent(e2);
+  }
+  const nativePrompt = window.prompt.bind(window);
+  window.confirm = function(text){
+    sweep(); const k = "c|" + String(text == null ? "" : text);
+    if (PASS.has(k)) return true;
+    const ev = replayable(); if (!ev) return nativeConfirm(text);
+    open(k.slice(2), {}, false).then(yes => {
+      if (!yes) return;
+      PASS.set(k, { at: Date.now(), v: true }); replay(ev); setTimeout(() => PASS.delete(k), 4000);
     });
     return false;
+  };
+  window.prompt = function(text, def){
+    sweep(); const k = "p|" + String(text == null ? "" : text);
+    if (PASS.has(k)) return PASS.get(k).v;
+    const ev = replayable(); if (!ev) return nativePrompt(text, def);
+    window.mmAsk(k.slice(2), def).then(v => {
+      if (v == null) return;
+      PASS.set(k, { at: Date.now(), v: v }); replay(ev); setTimeout(() => PASS.delete(k), 4000);
+    });
+    return null;
   };
 })();
