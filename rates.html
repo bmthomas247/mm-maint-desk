@@ -1444,7 +1444,7 @@ function srCompTot(k) { const a = SR.compAll?.[k]; if (a) return { v: a.v, nt: a
 // The rack rate (what we type in Track) that makes OUR Airbnb guest pay `tot` per night on a stay of `nt` nights (reverse of srGuest)
 // Brandon 2026-11-08: "somewhat split the rate on airbnb and our site" -> the comps' all-in sits halfway between our Airbnb all-in
 // and our own-site all-in (SR_SPLIT = our site's share). A home with no own-site quotes uses Airbnb only.
-const SR_SPLIT = 0.5;   // Brandon 2026-11-09: halfway between our Airbnb and our-site all-in = the comps' all-in (Airbnb a little above, our site a little below)
+const SR_SPLIT = 0;   // Brandon 2026-11-20 "Yes, switch it": our Airbnb total = the comps' Airbnb total (was 0.5). 2026-11-09: halfway between our Airbnb and our-site all-in = the comps' all-in (Airbnb a little above, our site a little below)
 function srRackFor(tot, nt) { const A = SR.fee?.Airbnb; if (!A || tot == null) return null;
   const D = SR.fee?.Direct, w = D ? SR_SPLIT : 0, n = SR_STAY, lin = f => [f.mult * (1 + f.feeR) * (1 + f.taxR), f.clean / n * (1 + f.taxR)];
   const [a1, b1] = lin(A), [a2, b2] = D ? lin(D) : [0, 0];
