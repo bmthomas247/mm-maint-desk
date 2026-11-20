@@ -309,7 +309,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 </head>
 <body>
 <div id="app"></div>
-<script src="confirm.js?v=20261120b"></script>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="offline.js"></script>
@@ -2163,7 +2163,7 @@ async function homeView(v){
   $("#solist").innerHTML = so.length ? so.map(x => `<div class="fb"><div class="hd"><b>${esc(x.about_name||"")}</b><span class="muted">${x.source === "Guest review" ? "⭐ from a guest review" : "from " + esc(x.author_name||"")} · ${when(x.created_at)}</span>${ME.admin ? `<button class="btn small" data-sohide="${x.id}" style="margin-left:auto">Hide</button>` : ""}</div><p>${esc(x.body)}</p></div>`).join("") : `<p class="muted">No shout-outs yet. Be the first.</p>`;
   $("#nwlist").innerHTML = nw.length ? nw.map(x => `<div class="fb"><div class="hd">${x.pinned ? `<span class="pill green">Pinned</span>` : ""}<b>${esc(x.title||"")}</b><span class="muted">${esc(x.author_name||"")} · ${when(x.created_at)}</span></div><p>${esc(x.body)}</p></div>`).join("") : `<p class="muted">No news yet.</p>`;
   document.querySelectorAll("[data-sohide]").forEach(b => b.onclick = async () => { if(!await mmConfirm("Hide this shout-out from Home? (It's kept, not deleted.)")) return;
-    const u = await sb.from("hub_posts").update({ hidden:true }).eq("id", +b.dataset.sohide); if(u.error) alert("Couldn't hide: " + niceErr(u.error)); else homeView(v); });   // admins (hub_posts hub_admin_upd)
+    const u = await sb.from("hub_posts").update({ hidden:true }).eq("id", +b.dataset.sohide); if(u.error) await mmAlert("Couldn't hide: " + niceErr(u.error)); else homeView(v); });   // admins (hub_posts hub_admin_upd)
   $("#soadd").onclick = () => { $("#soform").style.display = "block"; $("#soabout").focus(); };
   $("#sosend").onclick = async () => { const p = await sb.rpc("hub_post", { p_kind:"shoutout", p_title:"", p_body:$("#sobody").value, p_about:$("#soabout").value });
     if(p.error) $("#somsg").textContent = "Couldn't post: " + niceErr(p.error); else homeView(v); };
@@ -2570,12 +2570,12 @@ async function pennyTips(box){
   box.querySelectorAll("[data-mk]").forEach(b => b.onclick = async () => { const row = b.closest("[data-tip]"); b.disabled = true;
     const ids = row.dataset.tip.split(",").map(Number); let err = null;
     for(const id of ids){ const x = await sb.rpc("penny_tip_mark", { p_id:id, p_status:b.dataset.mk }); if(x.error) err = x.error; }
-    if(err){ b.disabled = false; return alert("Couldn't save: " + err.message); }
+    if(err){ b.disabled = false; return await mmAlert("Couldn't save: " + err.message); }
     row.innerHTML = `<p class="muted" style="margin:0">${{ done:"Marked done ✓", useful:"Thanks, that helps Penny learn 👍", not_useful:"Got it, Penny will learn from that 👎", dismissed:"Hidden" }[b.dataset.mk]}</p>`; });
   // signals.js rules (2026-10-29): "✅ Do it" approves the action; the hub does it within ~30 minutes (Breezeway task / Rates Findings)
   box.querySelectorAll("[data-do]").forEach(b => b.onclick = async () => { b.disabled = true;
     const x = await sb.rpc("signal_do", { p_tip:+b.dataset.do });
-    if(x.error){ b.disabled = false; return alert("Couldn't do it: " + niceErr(x.error)); }
+    if(x.error){ b.disabled = false; return await mmAlert("Couldn't do it: " + niceErr(x.error)); }
     b.outerHTML = `<p class="muted" style="margin:0">On it ✓ The hub will do this within about 30 minutes.</p>`; });
   box.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => { const ts = b.dataset.ask.split(",").map(Number).map(id => T.find(x => x.id === id)).filter(Boolean);
     pennyOpen(true);
@@ -2587,7 +2587,7 @@ async function pennyTips(box){
     const ta = bx.querySelector("textarea"); ta.focus(); bx.querySelector("[data-x]").onclick = () => bx.innerHTML = "";
     bx.querySelector(".primary").onclick = async e => { const v = ta.value.trim(); if(!v) return ta.focus(); e.target.disabled = true;
       const x = await sb.rpc("tip_note_add", { p_tip:t.id, p_note:v });
-      if(x.error){ e.target.disabled = false; return alert("Couldn't save: " + niceErr(x.error)); }
+      if(x.error){ e.target.disabled = false; return await mmAlert("Couldn't save: " + niceErr(x.error)); }
       (NOTES[t.key] = NOTES[t.key] || []).push({ by_name:(ME && ME.name) || "You", note:v, at:new Date().toISOString() });
       box.querySelectorAll(`[data-notes="${t.id}"]`).forEach(n => n.innerHTML = noteList(t)); bx.innerHTML = ""; }; });
   let PEOPLE = null;
@@ -2797,7 +2797,7 @@ async function pennyKnowView(v){
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px"><button class="btn primary" id="pksave">${x.id ? "Save changes" : "Add to Penny"}</button>${x.id ? `<button class="btn" id="pkcancel">Cancel</button>` : ""}<span class="muted" id="pkmsg"></span></div>`;
     $("#pksave").onclick = async () => { const b = $("#pksave"); b.disabled = true; $("#pkmsg").textContent = "Saving…";
       const w = await sb.rpc("penny_know_save", { p_id:x.id || null, p_title:$("#pkt").value, p_body:$("#pkb").value, p_desk:$("#pkd").value || null, p_source:$("#pks").value || null, p_url:$("#pku").value || null });
-      b.disabled = false; if(w.error){ $("#pkmsg").textContent = ""; return alert("Couldn't save: " + niceErr(w.error)); }
+      b.disabled = false; if(w.error){ $("#pkmsg").textContent = ""; return await mmAlert("Couldn't save: " + niceErr(w.error)); }
       pennyKnowView(v); };
     if($("#pkcancel")) $("#pkcancel").onclick = () => form(); };
   form();
@@ -2811,7 +2811,7 @@ async function pennyKnowView(v){
     ${taught.length ? `<details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Taught from Penny's past answers (${taught.length})</summary>${taught.map(card).join("")}</details>` : ""}`;
   $("#pklist").querySelectorAll("[data-pke]").forEach(b => b.onclick = () => { form((D.notes || []).find(n => n.id === +b.dataset.pke)); window.scrollTo(0, 0); });
   $("#pklist").querySelectorAll("[data-pko]").forEach(b => b.onclick = async () => {
-    const w = await sb.rpc("penny_know_off", { p_id:+b.dataset.pko, p_off:b.dataset.off === "1" }); if(w.error) return alert("Couldn't: " + niceErr(w.error)); pennyKnowView(v); });
+    const w = await sb.rpc("penny_know_off", { p_id:+b.dataset.pko, p_off:b.dataset.off === "1" }); if(w.error) return await mmAlert("Couldn't: " + niceErr(w.error)); pennyKnowView(v); });
 }
 /* admins: what staff asked Penny + edit what she knows (#/penny) */
 async function pennyView(v){
