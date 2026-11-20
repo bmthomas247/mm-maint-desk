@@ -213,7 +213,7 @@ details.status>summary::after{position:absolute;right:4px;top:12px} details.stat
 </head>
 <body>
 <div id="app"></div>
-<script src="confirm.js?v=20261120"></script>
+<script src="confirm.js?v=20261120b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="idle.js"></script>
@@ -494,7 +494,7 @@ function guestLinkPop(s){
     if(c.phone && ph && !ph.value) ph.value = c.phone; if(c.email && em && !em.value) em.value = c.email; }).catch(()=>{});
   $$("[data-gl]", d).forEach(b => b.onclick = async () => {
     const m = $("#gl_msg", d).value, k = b.dataset.gl;
-    if(k==="copy"){ try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ prompt("Guest link", u); } return; }
+    if(k==="copy"){ try{ await navigator.clipboard.writeText(u); toast("Guest link copied"); }catch(e){ await mmAsk("Guest link", u); } return; }
     if(k==="sms"){ const ph = $("#gl_ph", d).value.replace(/[^\d+]/g,"");
       location.href = "sms:" + ph + (/iPhone|iPad|Mac/.test(navigator.userAgent) ? "&" : "?") + "body=" + encodeURIComponent(m); return; }
     if(k==="mail"){ const em = $("#gl_em", d).value.trim();
@@ -627,7 +627,7 @@ async function homesView(){
     const ls = locks.filter(x=>x.property_id===pid), ts = thermos.filter(x=>x.property_id===pid);
     b.disabled = true;
     try{
-      if(b.dataset.hact==="temp"){ const cur = ts.find(t=>t.heat_sp!=null); const v = prompt("Heat every thermostat at "+code+" to (°F):", cur?Math.round(cur.heat_sp):68);
+      if(b.dataset.hact==="temp"){ const cur = ts.find(t=>t.heat_sp!=null); const v = await mmAsk("Heat every thermostat at "+code+" to (°F):", cur?Math.round(cur.heat_sp):68);
         if(v && +v) await setHomeTemp(ts, "heat", +v, null); }
       else await allDoors(ls, b.dataset.hact, code);
     }catch(e){ fail(e); }
@@ -1513,7 +1513,7 @@ async function homeView(pid){
   wireTools(hub, null); wireHeal(hub);
   const tvCmd = async (tv, action, value) => { const id = await command(tv.hub_id, null, "tv", {entity:tv.entity, action, value}); return waitCmd(id, 20); };
   $$("[data-tv]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-tvact]"); if(!b) return; const tv = tvs.find(t=>t.id===row.dataset.tv);
-    try{ if(b.dataset.tvact==="rename"){ const n = prompt("Name for this TV", tv.name); if(n){ await rpc("lock_tv_update",{p_tv:tv.id,p_name:n}); homeView(pid); } return; }
+    try{ if(b.dataset.tvact==="rename"){ const n = await mmAsk("Name for this TV", tv.name); if(n){ await rpc("lock_tv_update",{p_tv:tv.id,p_name:n}); homeView(pid); } return; }
       b.disabled = true; const r = await tvCmd(tv, b.dataset.tvact); toast(r ? (r.ok ? tv.name+": done" : (r.result||{}).msg || "TV didn't answer") : "No answer from the hub"); b.disabled = false; setTimeout(()=>homeView(pid), 2500);
     }catch(e){ fail(e); } });
   const tvAll = $("[data-tvall]"); if(tvAll) tvAll.onclick = async () => { tvAll.disabled = true;
@@ -1599,7 +1599,7 @@ async function homeView(pid){
   $$(".reveal").forEach(x => x.onclick = ev => { ev.stopPropagation(); x.outerHTML = `<div class="big" style="font-size:20px">${esc(x.dataset.c)}</div>`; });
   $$("[data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = stays.find(x=>x.res_id===row.dataset.res);
     if(b.dataset.act==="link"){ guestLinkPop({...s, property_id: s.property_id || pid}); }
-    if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
+    if(b.dataset.act==="code"){ const c = await mmAsk("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
       try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); homeView(pid); }catch(e){ fail(e); } }
     if(b.dataset.act==="backup") showBackup(s); });
 }
@@ -1672,7 +1672,7 @@ async function staysView(){
       || `<tr><td colspan="8" class="muted">${t||hd||hm||S.sf?"No stays match.":"No upcoming stays from Track."}</td></tr>`}</table>`;
     $$("#stable [data-res]").forEach(row => row.onclick = async ev => { const b = ev.target.closest("[data-act]"); if(!b) return; const s = all.find(x=>x.res_id===row.dataset.res);
       if(b.dataset.act==="link"){ guestLinkPop(s); }
-      if(b.dataset.act==="code"){ const c = prompt("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
+      if(b.dataset.act==="code"){ const c = await mmAsk("New 4–6 digit code for "+(s.guest||"this guest"), s.code); if(!c) return;
         try{ await rpc("lock_stay_code",{p_res:s.res_id,p_code:c.trim()}); toast("Code changed - going on the lock"); staysView(); }catch(e){ fail(e); } }
       if(b.dataset.act==="backup") showBackup(s); });
   };
@@ -1881,7 +1881,7 @@ async function accountView(){
       if(!ok) return $("#npmsg").textContent = "Type your current password. Forgot it? Sign out and use \"Email me a link\", then come back here within 15 minutes."; }
     let { error } = await sb.auth.updateUser(old ? { password: a, current_password: old } : { password: a });   // Supabase checks the current password too (2026-11-02)
     if(error && (error.code === "reauthentication_needed" || /reauthenticat/i.test(error.message))){   // signed in 24h+ ago: Supabase emails a 6-digit code first
-      await sb.auth.reauthenticate(); const n = (prompt("For safety we just emailed you a 6-digit code. Type it here:") || "").replace(/\D/g,"");
+      await sb.auth.reauthenticate(); const n = (await mmAsk("For safety we just emailed you a 6-digit code. Type it here:") || "").replace(/\D/g,"");
       if(n) ({ error } = await sb.auth.updateUser(old ? { password: a, nonce: n, current_password: old } : { password: a, nonce: n })); }
     $("#npmsg").textContent = error ? "Couldn't save: " + error.message : "Saved. Use the new password next time you sign in.";
     if(!error){ $("#np1").value = $("#np2").value = ""; } };
