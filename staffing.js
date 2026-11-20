@@ -321,8 +321,8 @@ window.staffingView = async function(v){
     if(err(await sb.rpc("timeoff_add_for", { p_user:u, p_kind:k, p_day:d, p_end_day:e, p_all_day:true, p_start:null, p_end:null, p_reason:n || null }))) { b.disabled = false; return; }
     re(); });
   v.querySelectorAll("[data-ok]").forEach(b => b.onclick = async () => { if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.ok, p_status:"ok", p_note:null }))) re(); });
-  v.querySelectorAll("[data-no]").forEach(b => b.onclick = async () => { const n = prompt("Why? (they'll see it)"); if(n === null) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.no, p_status:"denied", p_note:n }))) re(); });
-  v.querySelectorAll("[data-off]").forEach(b => b.onclick = async () => { const n = prompt("Why should this punch stop counting? (kept in the log)"); if(!n) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.off, p_status:"off", p_note:n }))) re(); });
+  v.querySelectorAll("[data-no]").forEach(b => b.onclick = async () => { const n = await mmAsk("Why? (they'll see it)"); if(n === null) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.no, p_status:"denied", p_note:n }))) re(); });
+  v.querySelectorAll("[data-off]").forEach(b => b.onclick = async () => { const n = await mmAsk("Why should this punch stop counting? (kept in the log)"); if(!n) return; if(!err(await sb.rpc("clock_decide", { p_id:+b.dataset.off, p_status:"off", p_note:n }))) re(); });
   v.querySelectorAll("[data-wok]").forEach(b => b.onclick = async () => { if(!await mmConfirm(`Approve ${hm(+b.dataset.h)} for the week of ${dnm(w)}?`)) return;
     if(!err(await sb.rpc("clock_week_ok", { p_user:b.dataset.wok, p_week:w, p_hours:+b.dataset.h, p_note:null }))) re(); });
 };
@@ -646,7 +646,7 @@ function otMeHtml(){
     ${m.asked_at ? ` · Asked for overtime ${tm(m.asked_at)}, waiting for your manager.` : m.plan_kind !== "approved" ? ` <a href="#" data-otask>Ask for overtime</a>` : ""}</div>`;
 }
 document.addEventListener("click", async e => { const a = e.target.closest && e.target.closest("[data-otask]"); if(!a) return; e.preventDefault();
-  const n = prompt("Why do you need overtime this week? (your manager sees this)"); if(n === null) return;
+  const n = await mmAsk("Why do you need overtime this week? (your manager sees this)"); if(n === null) return;
   const r = await sb.rpc("overtime_ask", { p_note:n }); if(r.error) return alert((window.niceErr ? niceErr(r.error) : r.error.message)); await otBanner(true);
   if(location.hash.startsWith("#/staffing") && window.staffingView) staffingView(document.getElementById("view")); });
 function otDraw(){
