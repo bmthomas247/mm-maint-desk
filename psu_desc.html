@@ -105,6 +105,32 @@ async function shrinkImg(file){
   c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close();
   return c.toDataURL("image/jpeg", 0.85).split(",")[1];
 }
+/* Fillable PDFs (the Home Amenities Questionnaires, 2026-11-20): typed answers and ticks live in form fields, not in the page text,
+   so read them here. Codes, passwords, Wi-Fi, logins, account numbers and contact details are left out by field name before anything
+   is sent; typed answers still get psu-describe's code-line filter. Ticks are our own fixed box labels. Typed notes (Adobe "Fill & Sign"
+   on a flat PDF) are FreeText notes: added to the page text. */
+const FORM_HIDE = /(password|passcode|code|alarm|wifi|wi_fi|streaming|_user\b|^owner_|^emergency_|^insurance_|^utility_|^hoa_(company|contact|phone|email)|phone|email|^filled_|access_before|_number\b|_tag\b|policy|account)/i;
+async function pdfForm(pdf){
+  const text = [], ticks = [], free = []; let fields = 0;
+  for(let i = 1; i <= Math.min(pdf.numPages, 80); i++){
+    const an = await (await pdf.getPage(i)).getAnnotations();
+    for(const a of an){
+      if(a.subtype === "FreeText"){ const v = String((a.contentsObj && a.contentsObj.str) || "").trim(); if(v) free.push(v); continue; }
+      if(a.subtype !== "Widget" || !a.fieldName) continue;
+      fields++;
+      if(FORM_HIDE.test(a.fieldName)) continue;
+      const lab = String(a.alternativeText || a.fieldName.replace(/_/g, " ")).trim();
+      if(a.checkBox){ if(a.fieldValue && a.fieldValue !== "Off") ticks.push(lab); }
+      else if(a.radioButton){ if(a.fieldValue && a.fieldValue === a.buttonValue) ticks.push(lab); }
+      else if(a.fieldType === "Tx" || a.fieldType === "Ch"){
+        const v = (Array.isArray(a.fieldValue) ? a.fieldValue.join(", ") : String(a.fieldValue || "")).trim();
+        // one line per sentence, so a sentence with a code in it is dropped by itself, not the whole answer
+        if(v) for(const part of v.replace(/([.!?])\s+/g, "$1\n").split(/\s*\n\s*/)) if(part) text.push(`${lab}: ${part}`);
+      }
+    }
+  }
+  return { fields, n: text.length + ticks.length, text: text.join("\n"), ticks: ticks.join("\n"), free: free.join("\n") };
+}
 async function readOne(f){
   const n = f.name, ext = (n.split(".").pop() || "").toLowerCase();
   if(f.size > 10 * 1048576) return { name:n, how:"too big (10 MB max) — not used", skip:true };
@@ -112,7 +138,12 @@ async function readOne(f){
   if(ext === "docx"){ const r = await mammoth.extractRawText({ arrayBuffer:await f.arrayBuffer() }); return { name:n, text:r.value, how:`Word · ${r.value.length.toLocaleString()} characters` }; }
   if(ext === "pdf"){
     const buf = await f.arrayBuffer(), pdf = await pdfjsLib.getDocument({ data:buf.slice(0) }).promise; let t = "";
+    let form = { n:0, fields:0, free:"" }; try { form = await pdfForm(pdf); } catch(e){}
+    if(form.n) return { name:n, text:form.text + (form.free ? "\nTyped notes on the form:\n" + form.free : ""), ticks:form.ticks,
+      how:`PDF form · ${form.n} answers read (codes, passwords and contact details left out)` };
     for(let i = 1; i <= Math.min(pdf.numPages, 80); i++){ const c = await (await pdf.getPage(i)).getTextContent(); t += c.items.map(x => x.str + (x.hasEOL ? "\n" : " ")).join("") + "\n"; }
+    if(form.free) t += "\nTyped notes on the form:\n" + form.free;
+    if(form.fields >= 50 && !form.free) return { name:n, how:"PDF form with nothing filled in yet — not used", skip:true };
     if(t.replace(/\s/g, "").length > 200) return { name:n, text:t, how:`PDF · ${pdf.numPages} pages · ${t.length.toLocaleString()} characters` };
     if(buf.byteLength > 9 * 1048576) return { name:n, how:"scanned PDF over 9 MB — split it or take photos", skip:true };
     return { name:n, file:{ name:n, media_type:"application/pdf", data:b64(buf) }, how:`scanned PDF · ${pdf.numPages} pages · Claude reads the pages` };
@@ -127,7 +158,7 @@ async function write(){
   S.busy = true; S.err = ""; draw();
   const use = S.up.filter(u => !u.skip);
   const r = await sb.functions.invoke("psu-describe", { body:{ job_id:S.job.id, notes:S.notes || "",
-    photos:S.photos !== false, docs:use.filter(u => u.text).map(u => ({ name:u.name, text:u.text })), files:use.filter(u => u.file).map(u => u.file) } });
+    photos:S.photos !== false, docs:use.filter(u => u.text || u.ticks).map(u => ({ name:u.name, text:u.text || "", ticks:u.ticks || "" })), files:use.filter(u => u.file).map(u => u.file) } });
   S.busy = false;
   if(r.error || !r.data || !r.data.ok){ S.err = (r.data && r.data.error) || "Couldn't reach Claude — try again."; let m = ""; try { m = (await r.error.context.json()).error; } catch(e){} if(m) S.err = m; draw(); return; }
   S.res = r.data; draw();
