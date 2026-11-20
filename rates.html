@@ -6,7 +6,7 @@
 <title>Rates · Moose Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-<script src="confirm.js?v=20261120b"></script>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -1953,7 +1953,7 @@ function srStaleCheck() { const st = srStale(); SR.stale = st; if (!st.stale) re
     `<span class="sp"></span><button class="ovbtn dygo" data-mclose>Got it</button>`); }
 // ---- price history: one night, or everything saved for this home
 async function srHistory(k) { const q = sb.from("rates_set_nights").select("night,rate,min_nights,by,at,note").eq("code", SR.code).order("id", { ascending: false }).limit(k ? 200 : 1500);
-  const r = await (k ? q.eq("night", k) : q.gte("at", new Date(Date.now() - 30 * 864e5).toISOString())); if (r.error) return alert(niceE(r.error));
+  const r = await (k ? q.eq("night", k) : q.gte("at", new Date(Date.now() - 30 * 864e5).toISOString())); if (r.error) return await mmAlert(niceE(r.error));
   const rows = r.data || [], t = k ? SR.track?.[k] : null, d = x => new Date(x + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   const who = b => /^Auto re-price/.test(b || "") ? "Morning re-price" : (b || "");
   const body = rows.length ? `<table class="srt"><tr>${k ? "" : "<th>Night</th>"}<th>Saved</th><th>Price</th><th>Min</th><th>By</th><th>Why</th></tr>${rows.map(x => `<tr>${k ? "" : `<td>${d(x.night)}</td>`}<td>${new Date(x.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td><td><b>${fmt(+x.rate)}</b></td><td>${x.min_nights ?? "—"}</td><td>${escH(who(x.by))}</td><td class="sdwhy" title="${escH(x.note || "")}">${escH((x.note || "").slice(0, 110))}</td></tr>`).join("")}</table>`
@@ -1971,7 +1971,7 @@ async function srCopyFrom(R) { const h = SR.homes.find(x => x.code === SR.code);
     `<span class="sp"></span><button class="ovbtn" data-mclose>Cancel</button><button class="ovbtn dygo" id="cpGo">Copy</button>`);
   m.el.querySelector("#cpGo").onclick = async () => { const id = m.el.querySelector("#cpFrom").value, what = m.el.querySelector("[name=cpw]:checked").value, pct = +m.el.querySelector("#cpPct").value || 0;
     const src = SR.homes.find(x => x.comp_id === id), code = SR.ours.find(c => c.id === id)?.code;
-    if (what === "set") { if (!src?.dyn) return alert(`${code} isn't on the test, so it has no settings to copy.`);
+    if (what === "set") { if (!src?.dyn) return await mmAlert(`${code} isn't on the test, so it has no settings to copy.`);
       const keep = { floorStay: SR.dyn?.floorStay ?? "", floorStayHol: SR.dyn?.floorStayHol ?? "", floor: SR.dyn?.floor ?? "", learn: SR.dyn?.learn };
       SR.dyn = Object.assign({}, src.dyn, keep); SR.dynMsg = `Copied ${code}'s settings. Press "Save settings for the morning" to keep them.`; m.close(); return srDraw(); }
     let price = {};
@@ -1983,7 +1983,7 @@ async function srCopyFrom(R) { const h = SR.homes.find(x => x.code === SR.code);
     for (const r of R) { const p = price[r.k]; if (p == null) continue; const rate = Math.max(25, Math.round(p * (1 + pct / 100))), sv = SR.ours_n[r.k], tk = SR.track?.[r.k];
       SR.diff.push({ k: r.k, before: sv ? +sv.rate : tk ? +tk.rate : null, after: rate, bmin: sv ? sv.min_nights ?? null : tk?.min_nights ?? null, amin: r.v.min, src: sv ? "saved" : tk ? "Track" : "", why: [`copied from ${code}`, `${fmt(p)}${pct ? ` ${pct > 0 ? "+" : ""}${pct}%` : ""}`] });
       SR.edits[r.k] = { rate, min: r.v.min, why: [`copied from ${code} ${fmt(p)}${pct ? ` ${pct > 0 ? "+" : ""}${pct}%` : ""}`] }; }
-    m.close(); if (!SR.diff.length) return alert(`No prices found for ${code} in these dates.`);
+    m.close(); if (!SR.diff.length) return await mmAlert(`No prices found for ${code} in these dates.`);
     SR.dynMsg = `Copied ${SR.diff.length} nights from ${code}. Not saved yet.`; srDraw(); setTimeout(srDiffOpen, 0); }; }
 // Fill in Our rate for every night in the dates from one source; opens the What-changed list; nothing saved until Save
 function srFillIn(R) {
@@ -2030,18 +2030,18 @@ function srWire(R) {
       const on = $("auOn").checked, send = $("auSend").checked;
       if (send && !await mmConfirm(`Send ${srName(SR.code)}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
       const r = await sb.rpc("rates_set_auto", { p_code: SR.code, p_dyn: SR.dyn, p_on: on, p_days: +$("auDays").value, p_send: send });
-      if (r.error) return alert(niceE(r.error)); SR.dynFor = null; loadSetRates(); }; }
+      if (r.error) return await mmAlert(niceE(r.error)); SR.dynFor = null; loadSetRates(); }; }
   const on = (id, ev, f) => { const e = $(id); if (e) e[ev] = f; };
   on("srHome", "onchange", e => { SR.code = e.target.value; loadSetRates(); });
   on("srAdd", "onchange", async e => { const c = e.target.value; if (!c) return;
     if (!await mmConfirm(`Add ${c} to the Set rates test? Nothing is sent to Track until someone presses Send and Beyond is marked off for it.`)) { e.target.value = ""; return; }
-    const r = await sb.rpc("rates_set_home", { p_code: c, p_on: true }); if (r.error) return alert(niceE(r.error)); SR.code = c; loadSetRates(); });
+    const r = await sb.rpc("rates_set_home", { p_code: c, p_on: true }); if (r.error) return await mmAlert(niceE(r.error)); SR.code = c; loadSetRates(); });
   on("srPick", "onclick", srCal);
   document.querySelectorAll("[data-srmore]").forEach(b => b.onclick = () => { const w = b.closest(".wrap"), y = w?.scrollTop; SR.to = addD(SR.to, +b.dataset.srmore); srDraw(); const w2 = document.querySelector("#srBody .wrap"); if (w2 && y != null) w2.scrollTop = y; });
   document.querySelectorAll("[data-srd]").forEach(b => b.onclick = () => { const t = iso(new Date(new Date().setHours(12, 0, 0, 0))); SR.from = t; SR.to = addD(t, +b.dataset.srd - 1); srDraw(); });
   on("srBoff", "onchange", async e => { const v = e.target.checked;
     if (v && !await mmConfirm(`Confirm Beyond Pricing is turned OFF for ${srName(SR.code)} (in Beyond, or Kolleen did it)? If it's still on, Beyond will write over our rates in Track.`)) { e.target.checked = false; return; }
-    const r = await sb.rpc("rates_set_home", { p_code: SR.code, p_beyond_off: v }); if (r.error) { alert(niceE(r.error)); e.target.checked = !v; return; } loadSetRates(); });
+    const r = await sb.rpc("rates_set_home", { p_code: SR.code, p_beyond_off: v }); if (r.error) { await mmAlert(niceE(r.error)); e.target.checked = !v; return; } loadSetRates(); });
   document.querySelectorAll("[data-srr],[data-srm]").forEach(i => i.onchange = () => { const k = i.dataset.srr || i.dataset.srm, cur = srVal(k), e = (SR.edits[k] ||= { rate: cur.rate, min: cur.min });   // starts from what's shown (saved, or Track's current rate)
     const v = i.value === "" ? null : Math.round(+i.value); if (i.dataset.srr) { e.rate = v; delete e.why; } else e.min = v;
     const tr = i.closest("tr"); tr.classList.add("chg");
@@ -2159,19 +2159,19 @@ function srWire(R) {
     if (n && !confirm(`Throw away ${n} unsaved night${n > 1 ? "s" : ""} and go back to the saved prices and settings?`)) return;
     SR.edits = {}; SR.dyn = null; SR.dynMsg = ""; srDraw(); });
   on("srSave", "onclick", async () => { const rows = Object.entries(SR.edits).filter(([k, e]) => e.rate != null && !SR.bkd?.[k]).map(([k, e]) => ({ date: k, rate: e.rate, min: e.min, note: e.why ? e.why.join(" → ").slice(0, 300) : null }));
-    if (rows.some(r => r.rate < 25 || r.rate > 20000)) return alert("A rate is outside $25 – $20,000.");
-    if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return alert("Minimum nights must be 1 – 60.");
-    const r = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
+    if (rows.some(r => r.rate < 25 || r.rate > 20000)) return await mmAlert("A rate is outside $25 – $20,000.");
+    if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return await mmAlert("Minimum nights must be 1 – 60.");
+    const r = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (r.error) return await mmAlert(niceE(r.error)); loadSetRates(); });
   on("srPush", "onclick", async () => {
     // Brandon 2026-11-09: "if we click send these dates to track we can automatically save it" = save unsaved changes first, then the send pop-up
     if (Object.keys(SR.edits).length) { const rows = Object.entries(SR.edits).filter(([k, e]) => e.rate != null && !SR.bkd?.[k]).map(([k, e]) => ({ date: k, rate: e.rate, min: e.min, note: e.why ? e.why.join(" → ").slice(0, 300) : null }));
-      if (rows.some(r => r.rate < 25 || r.rate > 20000)) return alert("A rate is outside $25 – $20,000.");
-      if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return alert("Minimum nights must be 1 – 60.");
-      if (rows.length) { const sv = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (sv.error) return alert(niceE(sv.error)); }
+      if (rows.some(r => r.rate < 25 || r.rate > 20000)) return await mmAlert("A rate is outside $25 – $20,000.");
+      if (rows.some(r => r.min != null && (r.min < 1 || r.min > 60))) return await mmAlert("Minimum nights must be 1 – 60.");
+      if (rows.length) { const sv = await sb.rpc("rates_set_save", { p_code: SR.code, p_nights: rows }); if (sv.error) return await mmAlert(niceE(sv.error)); }
       SR.edits = {}; await loadSetRates(); return document.getElementById("srPush")?.click(); }
-    const n = R.filter(r => r.v.saved).length; if (!n) return alert("No saved suggestions in these dates. Save first.");
-    srSendOpen(R, async () => { const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return alert(niceE(r.error)); loadSetRates(); }); });
-  document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!await mmConfirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return alert(niceE(r.error)); loadSetRates(); });
+    const n = R.filter(r => r.v.saved).length; if (!n) return await mmAlert("No saved suggestions in these dates. Save first.");
+    srSendOpen(R, async () => { const r = await sb.rpc("rates_set_push", { p_code: SR.code, p_from: SR.from, p_to: SR.to }); if (r.error) return await mmAlert(niceE(r.error)); loadSetRates(); }); });
+  document.querySelectorAll("[data-srx]").forEach(b => b.onclick = async () => { if (!await mmConfirm("Cancel this send?")) return; const r = await sb.rpc("rates_set_cancel", { p_id: +b.dataset.srx }); if (r.error) return await mmAlert(niceE(r.error)); loadSetRates(); });
   on("srCsv", "onclick", () => { if (!R) return; const q = v => v == null ? "" : String(v);
     const lines = [["Night", "Track now", "Track min", srGrpName() + " avg", "Comps daily rate", "Our rate", "Our min"].join(",")].concat(R.map(r => [r.k, q(r.t?.rate), q(r.t?.min_nights), q(r.b), r.c ? Math.round(r.c.adr) : "", q(r.v.rate), q(r.v.min)].join(",")));
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" })); a.download = `set_rates_${SR.code.replace(/\s+/g, "_")}_${SR.from}_${SR.to}.csv`; a.click(); });
@@ -2835,7 +2835,7 @@ function render() {
     const c = state.comps.find(x => x.id === b.dataset.rm);
     if (!await mmConfirm(`Remove ${c.label} from this comp set? Its price history is kept.`)) return;
     const { error } = await sb.rpc("remove_comp", { cid: c.id });
-    if (error) alert(error.message); else load(state.set.id);
+    if (error) await mmAlert(error.message); else load(state.set.id);
   };
 }
 
@@ -3475,7 +3475,7 @@ async function ownerReport() {
       ${stays.length ? `<div class="sec"><h2>Upcoming guest stays</h2><table><tr><th>Dates</th><th>Nights</th><th>Booked through</th><th>Rent</th></tr>${stays.map(b => `<tr><td>${fd(b.arrival)} – ${fd(b.departure)}</td><td>${b.nights}</td><td>${escH(ppChName(b.channel) === "Direct / other" ? "Moose direct" : ppChName(b.channel))}</td><td>${fmt(b.gross_rent)}</td></tr>`).join("")}</table></div>` : ""}
       <div class="sec"><h2>What Moose does for your home</h2><ul class="hl"><li>Prices your home every day using live data on similar homes nearby, local events, flights and search demand.</li><li>Holds holiday and peak-week rates at the top of the market and watches them nightly.</li><li>Lists your home on Airbnb, VRBO and our own website, and checks where it shows up in Airbnb search every night.</li><li>Inspects, cleans and cares for your home between every stay with our local Park City team.</li></ul></div>
       <div class="foot">Prepared by Moose Management · Vacation Rentals Park City · vacationrentalsparkcity.com<br>Rent = nightly rent paid by guests before cleaning, fees and taxes, from our reservation system (Track). "Booked" counts guest nights only; owner stays and owner holds are left out. Comparisons with similar homes use published nightly rates of comparable homes nearby (shown only as averages). Figures as of ${fd(T)}; upcoming stays can still change.</div></div></body></html>`;
-    if (wnd) { wnd.document.open(); wnd.document.write(html); wnd.document.close(); } else alert("Allow pop-ups for the Desk to open the owner report.");
+    if (wnd) { wnd.document.open(); wnd.document.write(html); wnd.document.close(); } else await mmAlert("Allow pop-ups for the Desk to open the owner report.");
   } catch (e) { if (wnd) wnd.document.write(`<p style="font:14px system-ui;color:#b00">Couldn't build the report: ${escH(e.message || e)}</p>`); }
 }
 function ppRender() {
@@ -4460,20 +4460,20 @@ function csDraw() {
   W.querySelectorAll("[data-csch]").forEach(b => b.onclick = () => { CS.ch = b.dataset.csch; csDraw(); });
   W.querySelectorAll("[data-cst]").forEach(b => b.onclick = async () => {
     const x = rows.find(r => r.id === b.dataset.c), stt = b.dataset.cst; let note = null;
-    if (stt === "delete") { note = prompt(`Delete "${x.label}" from ${d.name}? It's switched off (history kept). Why?`); if (note === null) return; }
-    if (stt === "paused" && !confirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
+    if (stt === "delete") { note = await mmAsk(`Delete "${x.label}" from ${d.name}? It's switched off (history kept). Why?`); if (note === null) return; }
+    if (stt === "paused" && !await mmConfirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
     const r = await sb.rpc("rates_comp_state", { p_comp: x.id, p_state: stt, p_note: note });
-    if (r.error) alert(r.error.message); else { CS.sets = null; await csFetch(true); rateSetsRefresh(); } });
+    if (r.error) await mmAlert(r.error.message); else { CS.sets = null; await csFetch(true); rateSetsRefresh(); } });
   W.querySelectorAll("[data-mvs]").forEach(s0 => s0.onchange = async () => {
     const to = s0.value; if (!to) return; const tn = (CS.sets.find(x => x.id === to) || {}).name;
-    if (!confirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
+    if (!await mmConfirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
     const r = await sb.rpc("rates_home_move", { p_code: s0.dataset.mvs, p_to_set: to, p_note: null });
-    if (r.error) { alert(r.error.message); s0.value = ""; return; }
+    if (r.error) { await mmAlert(r.error.message); s0.value = ""; return; }
     CS.sets = null; await rateSetsRefresh(); loadCompSets(); });
   W.querySelectorAll("[data-req]").forEach(b => b.onclick = async () => {
-    if (b.dataset.d === "Primary" && !confirm("Add this listing to the comp set as in use?")) return;
+    if (b.dataset.d === "Primary" && !await mmConfirm("Add this listing to the comp set as in use?")) return;
     const r = await sb.rpc("decide_comp_request", { req_id: +b.dataset.req, decision: b.dataset.d });
-    if (r.error) alert(r.error.message); else { await rateSetsRefresh(); csFetch(); } });
+    if (r.error) await mmAlert(r.error.message); else { await rateSetsRefresh(); csFetch(); } });
   const rq = W.querySelector("details.csreq"); if (rq) rq.ontoggle = () => { CS.reqOpen = rq.open; };
   const add = $("csAdd"); if (add) add.onclick = async () => {
     const u = $("csUrl").value.trim(); const r = await sb.rpc("rates_comp_add_url", { p_set: d.add_set || (d.set_ids || [])[0], p_url: u });
@@ -5375,7 +5375,7 @@ $("market").onclick = async e => {
   const c = e.target.closest(".mkchip"); if (c) { MK[c.dataset.mk] = !MK[c.dataset.mk]; mkSave(); renderMarketBar(); if (state.set) render(); return; }
   const hb = e.target.closest("button[data-hide]");
   if (hb) { if (!await mmConfirm("Hide this note from the Desk? It stays in the history.")) return;
-    const { error } = await sb.rpc("hide_market_event", { eid: +hb.dataset.hide }); if (error) alert(error.message); else loadMarket(); }
+    const { error } = await sb.rpc("hide_market_event", { eid: +hb.dataset.hide }); if (error) await mmAlert(error.message); else loadMarket(); }
 };
 $("mkSlc").onchange = () => { MK.slc = $("mkSlc").checked; mkSave(); renderMarketBar(); if (state.set) render(); };
 $("mkList").onclick = () => { const p = $("mkPanel"); p.classList.toggle("hidden"); $("mkList").textContent = p.classList.contains("hidden") ? "Show list" : "Hide list"; if (!p.classList.contains("hidden")) renderMarketList(); };
@@ -5576,7 +5576,7 @@ $("reqs").onclick = async e => {
   const b = e.target.closest("button[data-r]"); if (!b) return;
   if (b.dataset.d !== "reject" && !await mmConfirm(`Add this home to the comp set?`)) return;
   const { error } = await sb.rpc("decide_comp_request", { req_id: +b.dataset.r, decision: b.dataset.d });
-  if (error) alert(error.message); else load(state.set.id);
+  if (error) await mmAlert(error.message); else load(state.set.id);
 };
 $("addcomp").onclick = async () => {
   const url = $("newurl").value.trim();
