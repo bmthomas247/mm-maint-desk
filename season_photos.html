@@ -7,7 +7,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <!-- Tools ▸ Seasonal photos (hub key season_photos; hub admins only). Jeff 2026-11-16: "a flip of a switch from winter to summer".
      Reads season_status() / season_listings(); starts a switch with season_request() (one listing first, then all); the work is done
-     by Edge Function season-switch (hub_season_photos.sql). Nothing on this page talks to Track directly. -->
+     by Edge Function season-switch (hub_season_photos.sql). Nothing on this page talks to Track directly.
+     2026-11-22 (Jeff: "And this built into the HUB"): "Add a winter photo" card = pick a listing, see its Track photos (Edge Function
+     season-add, read only), tap the summer photo, upload the winter picture, check side by side, save (hub_season_photo_add.sql).
+     The photo goes on Track with the normal switch. -->
 <style>
 :root{--forest:#3c5f12;--forest-2:#4e7a1a;--ground:#f5f7f0;--card:#fff;--ink:#15201a;--ink-2:#3d4a42;--muted:#6b776f;--line:#e1e7de;--line-2:#cfd8cb;
   --blue:#185fa5;--blue-bg:#e6f1fb;--amber:#854f0b;--amber-bg:#faeeda;--red:#c8382b;--red-bg:#fcebeb;--green-bg:#eaf3de;--radius:16px;
@@ -37,9 +40,28 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 details>summary{cursor:pointer;font-weight:800;list-style:none}details>summary::-webkit-details-marker{display:none}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
 .dlg{background:var(--card);border-radius:var(--radius);max-width:520px;width:100%;padding:18px;border:1px solid var(--line)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px;max-height:540px;overflow:auto;padding:3px}
+.ph{position:relative;border:2px solid transparent;border-radius:12px;overflow:hidden;background:var(--ground);cursor:pointer;padding:0;font:inherit;color:inherit;text-align:left}
+.ph img{display:block;width:100%;aspect-ratio:3/2;object-fit:cover;background:var(--line)}
+.ph .sp{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.68);color:#fff;font-size:12px;font-weight:800;border-radius:999px;padding:2px 9px}
+.ph .tag{position:absolute;bottom:6px;left:6px;right:6px;font-size:11.5px;font-weight:800;border-radius:8px;padding:3px 7px;background:var(--blue-bg);color:var(--blue)}
+.ph .tag.has{background:var(--amber-bg);color:var(--amber)}
+.ph.sel{border-color:var(--forest-2);box-shadow:0 0 0 3px var(--green-bg)}.ph:disabled{cursor:default;opacity:.7}
+@media (max-width:520px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.side{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}@media (max-width:700px){.side{grid-template-columns:1fr}}
+.side figure,.flipbox figure{margin:0}.side img,.flipbox img{width:100%;border-radius:12px;background:var(--ground);display:block}
+.side figcaption,.flipbox figcaption{font-size:12.5px;font-weight:800;color:var(--muted);margin-top:4px}
+.flipbox{margin-top:12px;max-width:760px}
+.drop{display:block;border:2px dashed var(--line-2);border-radius:14px;padding:18px;text-align:center;margin-top:12px;cursor:pointer;font-weight:700}
+.drop.on{border-color:var(--forest-2);background:var(--green-bg)}
+.wl{display:grid;gap:8px;margin-top:10px}.wr{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;padding:8px}
+.wr img{width:112px;height:75px;object-fit:cover;border-radius:8px;background:var(--ground)}.wr .grow{flex:1;min-width:180px}
+.note{background:var(--amber-bg);color:var(--amber);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600;margin-top:10px}
+.okbox{background:var(--green-bg);color:var(--forest-2);border-radius:10px;padding:10px 12px;font-size:14px;font-weight:700;margin-top:12px}
 </style>
 </head><body>
 <div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="confirm.js?v=20261120c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -111,6 +133,7 @@ function draw(){
       <div class="bar"><i style="width:${pct}%"></i></div></div>` : ""}
     ${S.msg ? `<p class="${/^✅/.test(S.msg) ? "small" : "err"}">${esc(S.msg)}</p>` : ""}
     <div class="two">${card("summer")}${card("winter")}</div>
+    <div id="addslot"></div>
     <div class="card"><h2>🔔 Reminder</h2>
       <p class="small muted" style="margin:0">On this day, while winter photos are still on, each hub admin gets a tip on Home and in the bell to switch to summer.</p>
       <div class="row"><input type="date" id="rem" value="${esc(st.remind_on || "")}" aria-label="Reminder day"><button class="btn" id="remsave">Save reminder</button>
@@ -134,17 +157,18 @@ function draw(){
   $("#ls").ontoggle = e => { S.open = e.target.open; };
   $("#lfbtn").onclick = () => { S.lf = !S.lf; if(S.lf) S.open = true; draw(); if(S.lf) $("#ls").scrollIntoView({ block:"start", behavior:"smooth" }); };
   const la = $("#lfall"); if(la) la.onclick = e => { e.preventDefault(); S.lf = false; draw(); };
+  addMount();
 }
 
-function ask(dir, scope){
+function ask(dir, scope, forced){
   const list = dir === "summer" ? S.ls.filter(l => l.photos_on > 0) : S.ls.filter(l => l.photos_on < l.photos);
-  const unit = scope === "test" ? +$("#u_" + dir).value : null;
+  const unit = scope === "test" ? (forced || +$("#u_" + dir).value) : null;
   const pick = unit ? list.filter(l => l.unit === unit) : list;
   const photos = pick.reduce((s, l) => s + (dir === "summer" ? l.photos_on : l.photos - l.photos_on), 0);
-  const tops = pick.reduce((s, l) => s + (l.top_spots || 0), 0);
+  const tops = pick.reduce((s, l) => s + (dir === "winter" && l.photos_on ? 0 : (l.top_spots || 0)), 0);
   const what = dir === "summer"
-    ? `${photos} winter photo${photos === 1 ? "" : "s"} come off ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? ` and ${tops} summer photo${tops === 1 ? "" : "s"} go back into ${tops === 1 ? "its" : "their"} old top spot${tops === 1 ? "" : "s"}` : ""}. Nothing else on ${unit ? "the listing" : "the listings"} moves.`
-    : `${photos} winter photo${photos === 1 ? "" : "s"} go back on ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? `, ${tops} of them into a summer photo's top spot` : ""}.`;
+    ? `${photos} winter photo${photos === 1 ? " comes" : "s come"} off ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? ` and ${tops} summer photo${tops === 1 ? "" : "s"} go back into ${tops === 1 ? "its" : "their"} old top spot${tops === 1 ? "" : "s"}` : ""}. Nothing else on ${unit ? "the listing" : "the listings"} moves.`
+    : `${photos} winter photo${photos === 1 ? " goes" : "s go"} back on ${unit ? esc(pick[0].code) : pick.length + " listings"}${tops ? `, ${tops} of them into a summer photo's top spot` : ""}.`;
   const div = document.createElement("div"); div.className = "scrim";
   div.innerHTML = `<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="sure_h"><h2 id="sure_h">Are you sure?</h2>
     <p style="margin:6px 0 0"><b>Switch ${unit ? esc(pick[0].code) : "all " + pick.length + " listings"} to ${dir}.</b> ${what}</p>
@@ -183,6 +207,202 @@ async function remind(){
   const r = await sb.rpc("season_remind_set", { p_day:v });
   S.msg = r.error ? nice(r.error) : (v ? "✅ Reminder saved for " + day(v) + "." : "✅ Reminder cleared.");
   load();
+}
+
+// ------------------------------------------------------------------ Add a winter photo (2026-11-22)
+const ADD = { el:null, homes:null, code:"", data:null, sel:null, extra:false, img:null, busy:"", msg:"", flip:false, done:null, note:"" };
+const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+
+async function fx(body){
+  try {
+    const r = await sb.functions.invoke("season-add", { body });
+    if(r.error) return { ok:false, error: /403|not allowed/i.test(String(r.error.message || r.error)) ? "Not allowed." : "Couldn't reach the hub. Check your signal and try again." };
+    return r.data || { ok:false, error:"No answer from the hub." };
+  } catch(e){ return { ok:false, error:"Couldn't reach the hub. Check your signal and try again." }; }
+}
+
+function addMount(){
+  if(!ADD.el){ ADD.el = document.createElement("div"); addDraw(); if(ADD.homes === null) addHomes(); }
+  const slot = $("#addslot"); if(slot && ADD.el.parentNode !== slot) slot.appendChild(ADD.el);
+  const busy = !!(S.st && S.st.active), pu = ADD.el.querySelector("#a_put"); if(pu) pu.disabled = busy;
+  if(ADD.done && !ADD.done.on && ADD.data && !busy){            // the switch finished: show it's on and read Track again
+    const l = S.ls.find(x => x.unit === ADD.data.unit);
+    if(l && l.photos_on === l.photos){ ADD.done.on = true; fx({ action:"photos", unit:ADD.data.unit }).then(p => { if(p.ok) ADD.data = p; addDraw(); }); }
+  }
+}
+
+async function addHomes(){
+  ADD.homes = [];
+  const r = await fx({ action:"homes" });
+  if(!r.ok){ ADD.msg = r.error; addDraw(); return; }
+  ADD.homes = r.homes || []; addDraw();
+}
+
+async function addLoad(code){
+  const h = (ADD.homes || []).find(x => x.code.toLowerCase() === String(code || "").trim().toLowerCase());
+  if(!h){ ADD.msg = "Pick a listing from the list (type its code, e.g. RJ 912)."; addDraw(); return; }
+  Object.assign(ADD, { code:h.code, data:null, sel:null, extra:false, img:null, msg:"", flip:false, done:null, busy:"Reading " + h.code + "'s photos from Track…" });
+  addDraw();
+  const r = await fx({ action:"photos", unit:h.unit });
+  ADD.busy = "";
+  if(!r.ok){ ADD.msg = r.error; addDraw(); return; }
+  ADD.data = r; addDraw();
+}
+
+const selPhoto = () => ADD.data && ADD.sel ? ADD.data.photos.find(p => p.id === ADD.sel) : null;
+
+function addDraw(){
+  if(!ADD.el) return;
+  const st = S.st || {}, winter = st.season === "winter", D = ADD.data;
+  const homeOpts = (ADD.homes || []).map(h => `<option value="${esc(h.code)}">${esc(h.name || "")}${h.winter ? ` · ${h.winter} winter photo${h.winter === 1 ? "" : "s"}` : ""}</option>`).join("");
+  let body = "";
+  if(D){
+    const live = D.rows.filter(r => !r.retired), gone = D.rows.filter(r => r.retired);
+    const sp = p => p.spot === 1 ? "#1 · cover" : "#" + p.spot;
+    body += `<div class="step">2 · Tap the summer photo the winter one replaces <span class="muted">(${D.photos.length} photos in Track, in guest order)</span></div>
+      <div class="pgrid">${D.photos.map(p => {
+        const tag = p.ours ? `<span class="tag">❄ our winter photo</span>` : p.winter ? `<span class="tag has">❄ has a winter photo</span>` : "";
+        return `<button type="button" class="ph${ADD.sel === p.id ? " sel" : ""}" data-ph="${p.id}" ${p.ours ? "disabled" : ""} title="${esc(p.caption || "")}">
+          <img loading="lazy" src="${esc(p.url)}" alt="${esc(D.code)} photo ${p.spot}"><span class="sp">${sp(p)}</span>${tag}</button>`; }).join("")}</div>
+      <div class="row"><button class="btn${ADD.extra ? " pri" : ""}" id="a_extra">Or add it as an extra winter photo after the real ones</button></div>`;
+    const s = selPhoto(), has = s && s.winter ? live.find(r => r.id === s.winter) : null;
+    if(s || ADD.extra){
+      body += `<div class="step">3 · The winter picture ${s ? `for photo ${sp(s)}` : "(extra photo)"}</div>`;
+      if(has){
+        body += `<div class="note">Photo ${sp(s)} already has a winter photo in the hub (#${has.id}, ${has.is_on ? "on Track now" : "waiting for the next switch to winter"}).
+          ${has.is_on ? `To change it: switch ${esc(D.code)} back to summer (☀️ Try this listing), take #${has.id} off the list below, then add the new one.` : `Take #${has.id} off the list below first, then add the new one.`}</div>`;
+      } else {
+        body += `<label class="drop${ADD.img ? " on" : ""}" id="a_drop"><input type="file" id="a_file" accept="image/jpeg,image/png,image/webp" hidden>
+          ${ADD.img ? `✅ ${esc(ADD.img.name)} · ${ADD.img.w} × ${ADD.img.h} · ${kb(ADD.img.blob.size)} · tap to pick another` : "📷 Tap to pick the winter picture, or drag it here (JPEG, PNG or WebP)"}</label>`;
+        if(ADD.img){
+          const I = ADD.img, notes = [];
+          if(s && s.w && s.h){
+            const r1 = s.w / s.h, r2 = I.w / I.h;
+            if(Math.abs(r1 - r2) / r1 > 0.03) notes.push(`It isn't the same shape as the summer photo (${s.w} × ${s.h} vs ${I.w} × ${I.h}), so the listing will crop it differently.`);
+            if(I.w < s.w * 0.9) notes.push(`It's smaller than the summer photo (${I.w} px wide vs ${s.w}).`);
+          }
+          const sumFig = s ? `<figure><img src="${esc(s.url)}" alt="Summer photo"><figcaption>☀️ Summer now · Track photo ${s.id}</figcaption></figure>` : "";
+          const winFig = `<figure><img src="${esc(I.url)}" alt="Winter photo"><figcaption>❄️ Winter · what goes on Track</figcaption></figure>`;
+          body += !s ? `<div class="flipbox">${winFig}</div>`
+            : ADD.flip ? `<div class="flipbox" id="a_flipbox" title="Tap to flip">${ADD.flip === "s" ? sumFig : winFig}</div>`
+            : `<div class="side">${sumFig}${winFig}</div>`;
+          body += notes.map(n => `<div class="note">${esc(n)}</div>`).join("");
+          body += `<div class="row">${s ? `<button class="btn" id="a_flip">${ADD.flip ? "Side by side" : "⇄ Flip back and forth"}</button>` : ""}
+            <input id="a_note" maxlength="200" placeholder="Where it came from (optional), e.g. ChatGPT winter edit of the cover" value="${esc(ADD.note)}" style="flex:1;min-width:240px"></div>
+            <div class="row"><button class="btn pri" id="a_save" ${ADD.busy ? "disabled" : ""}>Save it to the hub</button><button class="btn" id="a_reset">Start over</button>
+            <span class="small muted">Nothing changes on Track until the listing is switched to winter.</span></div>`;
+        }
+      }
+    }
+    if(ADD.done){
+      const busy = !!(S.st && S.st.active);
+      body += ADD.done.on ? `<div class="okbox">✅ <b>${esc(ADD.done.name)}</b> is on Track now. Check the listing in Track; Airbnb and Vrbo pick it up from there.</div>`
+      : `<div class="okbox">✅ Added to the hub as <b>${esc(ADD.done.name)}</b>${ADD.done.kind === "swap" ? ` (replaces photo #${ADD.done.spot})` : " (extra photo)"}. It isn't on Track yet.
+        ${winter ? `<div class="row"><button class="btn pri" id="a_put" ${busy ? "disabled" : ""}>❄️ Put it on Track now (switch ${esc(D.code)} to winter)</button>
+          ${busy ? `<span class="small">Wait for the switch that's running to finish.</span>` : `<span class="small muted">Only the photos still off go up. Takes a minute or two.</span>`}</div>`
+        : `<div class="small" style="margin-top:4px">It goes on Track with the next switch to winter.</div>`}</div>`;
+    }
+    body += `<div class="step">❄ Winter photos the hub has for ${esc(D.code)} (${live.length})</div>
+      ${live.length ? `<div class="wl">${live.map(r => {
+        const sm = D.photos.find(p => p.id === r.summer_id);
+        return `<div class="wr">${r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener"><img src="${esc(r.link)}" alt="Winter photo ${r.id}"></a>` : ""}
+          ${sm ? `<span class="small muted">replaces</span><img src="${esc(sm.url)}" alt="Summer photo ${sm.id}">` : ""}
+          <div class="grow"><b>#${r.id}</b> · ${r.kind === "swap" ? (r.spot === 1 ? "replaces the cover" : r.spot ? "replaces spot " + r.spot : "") + (sm ? "" : r.summer_id ? " · its summer photo is no longer in Track" : "") : "extra photo"}
+            · <span class="pill ${r.is_on ? "ok" : "summer"}">${r.is_on ? "On Track" : "Waiting for the switch to winter"}</span>
+            <div class="small muted">${esc(r.added_by ? "Added by " + r.added_by + " · " + day(String(r.created_at).slice(0, 10)) : r.batch || "")}${r.source ? " · " + esc(r.source) : ""}</div></div>
+          ${r.is_on ? "" : `<button class="btn warn" data-retire="${r.id}">Take it off the list</button>`}</div>`; }).join("")}</div>`
+        : `<p class="small muted" style="margin:6px 0 0">None yet.</p>`}
+      ${gone.length ? `<details style="margin-top:10px"><summary class="small">Taken off the list (${gone.length})</summary>
+        <div class="wl">${gone.map(r => `<div class="wr">${r.link ? `<img src="${esc(r.link)}" alt="Old winter photo ${r.id}">` : ""}<div class="grow small"><b>#${r.id}</b> · ${esc(r.name)}
+          <div class="muted">${esc([r.retired_by ? "Taken off by " + r.retired_by : "", r.retired_at ? fmt(r.retired_at) : "", r.retired_why || ""].filter(Boolean).join(" · "))}</div></div></div>`).join("")}</div></details>` : ""}`;
+  }
+  ADD.el.innerHTML = `<div class="card" id="addcard"><h2>➕ Add a winter photo</h2>
+    <p class="small muted" style="margin:0">Pick a listing, tap the summer photo the winter one replaces, add the winter picture and check them side by side.
+      While winter is on, it takes that photo's spot and the summer photo moves to the end of the listing.</p>
+    <div class="step">1 · Listing</div>
+    <div class="row"><input id="a_q" list="a_homes" placeholder="Type a home, e.g. RJ 912" value="${esc(ADD.code)}" autocomplete="off" style="flex:1;min-width:200px" ${ADD.homes === null || (ADD.homes && !ADD.homes.length && !ADD.msg) ? "disabled" : ""}>
+      <datalist id="a_homes">${homeOpts}</datalist><button class="btn" id="a_load">Show its photos</button>${D ? `<button class="btn" id="a_reload" title="Read Track again">↻</button>` : ""}</div>
+    ${ADD.busy ? `<p class="small muted">${esc(ADD.busy)}</p>` : ""}${ADD.msg ? `<p class="${/^✅/.test(ADD.msg) ? "small" : "err"}">${esc(ADD.msg)}</p>` : ""}
+    ${body}</div>`;
+  addWire();
+}
+
+function addWire(){
+  const q = ADD.el.querySelector("#a_q");
+  if(q){ q.onchange = () => addLoad(q.value); q.onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); addLoad(q.value); } }; }
+  ADD.el.querySelector("#a_load").onclick = () => addLoad(q.value);
+  const rl = ADD.el.querySelector("#a_reload"); if(rl) rl.onclick = () => addLoad(ADD.code);
+  ADD.el.querySelectorAll("[data-ph]").forEach(b => b.onclick = () => { ADD.sel = +b.dataset.ph; ADD.extra = false; ADD.flip = false; ADD.done = null; ADD.msg = ""; addDraw();
+    const dz = ADD.el.querySelector("#a_drop") || ADD.el.querySelector(".note"); if(dz) dz.scrollIntoView({ block:"nearest", behavior:"smooth" }); });
+  const ex = ADD.el.querySelector("#a_extra"); if(ex) ex.onclick = () => { ADD.extra = !ADD.extra; ADD.sel = null; ADD.flip = false; ADD.done = null; addDraw(); };
+  const dz = ADD.el.querySelector("#a_drop"), fi = ADD.el.querySelector("#a_file");
+  if(fi) fi.onchange = () => fi.files && fi.files[0] && addFile(fi.files[0]);
+  if(dz){
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add("on"); };
+    dz.ondragleave = () => dz.classList.toggle("on", !!ADD.img);
+    dz.ondrop = e => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) addFile(f); };
+  }
+  const fl = ADD.el.querySelector("#a_flip"); if(fl) fl.onclick = () => { ADD.flip = ADD.flip ? false : "w"; addDraw(); };
+  const fb = ADD.el.querySelector("#a_flipbox"); if(fb) fb.onclick = () => { ADD.flip = ADD.flip === "s" ? "w" : "s"; addDraw(); };
+  const nt = ADD.el.querySelector("#a_note"); if(nt) nt.oninput = () => { ADD.note = nt.value; };
+  const sv = ADD.el.querySelector("#a_save"); if(sv) sv.onclick = addSave;
+  const rs = ADD.el.querySelector("#a_reset"); if(rs) rs.onclick = () => { ADD.sel = null; ADD.extra = false; ADD.img = null; ADD.flip = false; ADD.note = ""; addDraw(); };
+  const pu = ADD.el.querySelector("#a_put"); if(pu) pu.onclick = () => ask("winter", "test", ADD.data.unit);
+  ADD.el.querySelectorAll("[data-retire]").forEach(b => b.onclick = () => addRetire(+b.dataset.retire));
+}
+
+// the picture goes through a canvas: the browser turns it the right way up, it becomes a JPEG at most 2560 px on its long side,
+// and the phone's hidden extras (location, camera details) are left behind
+async function addFile(f){
+  if(!/^image\/(jpeg|png|webp)$/.test(f.type)){ ADD.msg = "Pick a JPEG, PNG or WebP picture."; addDraw(); return; }
+  ADD.msg = ""; ADD.busy = "Getting the picture ready…"; addDraw();
+  try {
+    const bmp = await createImageBitmap(f);
+    const k = Math.min(1, 2560 / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * k), h = Math.round(bmp.height * k);
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    let blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.92));
+    if(blob && blob.size > 8 * 1048576) blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.82));
+    if(!blob) throw new Error("no picture");
+    if(ADD.img && ADD.img.url) URL.revokeObjectURL(ADD.img.url);
+    ADD.img = { name:f.name, w, h, blob, url:URL.createObjectURL(blob) };
+  } catch(e){ ADD.msg = "Couldn't read that picture. Save it as a JPEG and try again."; }
+  ADD.busy = ""; ADD.done = null; addDraw();
+}
+
+async function addSave(){
+  const D = ADD.data, s = selPhoto(), I = ADD.img;
+  if(!D || !I || (!s && !ADD.extra)) return;
+  const winter = S.st && S.st.season === "winter";
+  const ok = await mmConfirm(s
+    ? `Add this winter photo to ${D.code} for photo #${s.spot}${s.spot === 1 ? " (the cover)" : ""}? While winter is on it takes that spot; the summer photo stays in Track, moves to the end and comes back in spring. ${winter ? "Nothing changes on Track until you put it on." : "It goes on Track with the next switch to winter."}`
+    : `Add this as an extra winter photo on ${D.code}? It goes after the listing's real photos while winter is on. ${winter ? "Nothing changes on Track until you put it on." : "It goes on Track with the next switch to winter."}`,
+    { title:"Are you sure?", yes:"Yes, add it", no:"Not yet" });
+  if(!ok) return;
+  ADD.busy = "Saving the picture to the hub…"; ADD.msg = ""; addDraw();
+  const data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1]); fr.onerror = rej; fr.readAsDataURL(I.blob); });
+  const r = await fx({ action:"add", unit:D.unit, summer_id:s ? s.id : null, data, note:ADD.note, filename:I.name });
+  ADD.busy = "";
+  if(!r.ok){ ADD.msg = r.error || "Couldn't save it."; addDraw(); return; }
+  URL.revokeObjectURL(I.url);
+  Object.assign(ADD, { img:null, sel:null, extra:false, flip:false, note:"", done:{ id:r.id, name:r.name, spot:r.spot, kind:r.kind } });
+  const p = await fx({ action:"photos", unit:D.unit });
+  if(p.ok) ADD.data = p;
+  await load();
+  addDraw();
+}
+
+async function addRetire(id){
+  const why = await mmAsk(`Why does winter photo #${id} come off the list? (e.g. wrong picture, made a better one)`, { title:"Take it off the list" });
+  if(why == null) return;
+  const r = await sb.rpc("season_photo_retire", { p_id:id, p_why:why });
+  if(r.error){ ADD.msg = nice(r.error); addDraw(); return; }
+  ADD.msg = `✅ #${id} is off the list. It won't go on Track again.`; ADD.done = null;
+  const p = await fx({ action:"photos", unit:ADD.data.unit });
+  if(p.ok) ADD.data = p;
+  await load();
+  addDraw();
 }
 
 boot();
