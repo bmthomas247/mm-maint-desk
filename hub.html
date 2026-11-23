@@ -2215,7 +2215,7 @@ async function hubReportsView(v){
   const name = k => k === "g_reviews" ? "Guest reviews" : k === "g_team" ? "Team" : k === "home" ? "Hub" : k === "patrick_log" ? "Ask Patrick & Penny" : k === "sync" ? "Admin" : k === "sync_status" ? "Sync" : k === "maint_money" ? "Maintenance · Expenses & Time" : k === "competitor" ? "Competitor Playbook" : ((DESKS.find(x => x.key === k) || {}).label || k);
   // Expenses & Time reports sit as a small section inside the Maintenance card (Brandon 2026-10-28); access still follows maint_money
   const SUB = { maint_money:["maintenance","Expenses & Time"] }, SUBWHO = { "Expenses & Time":"maintenance managers" };
-  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team", work_check:"g_team", staff_calls:"g_team", cmp_open:"competitor", cmp_add:"competitor" };   // Guest reviews section (Brandon 2026-10-29)
+  const GRP = { reviews_good:"g_reviews", reviews_staff_bad:"g_reviews", people_scores:"g_team", pto_balances:"g_team", pto_check:"g_team", work_check:"g_team", staff_calls:"g_team", cmp_open:"competitor", cmp_add:"competitor", hub_usage:"sync" };   // Guest reviews section (Brandon 2026-10-29)
   const groups = {}; r.data.filter(x => ME.admin || x.status === "live").forEach(x => { const sb = SUB[x.desk_key], g = GRP[x.key] || (sb ? sb[0] : x.desk_key); (groups[g] = groups[g] || []).push(Object.assign({}, x, { _sub: sb ? sb[1] : "" })); });
   const keys = Object.keys(groups).sort((a, b) => (b === "analytics") - (a === "analytics") || name(a).localeCompare(name(b)));   // Analytics first
   const link = x => x.status === "live"
