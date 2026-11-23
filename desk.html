@@ -2674,7 +2674,7 @@ function vMoney(){
   G.pb+=projectedPanel(m); var billP=billingPanel(m,bwDone);
   if(tm.length) G.vis+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Visits logged</h3><span class="ct">'+tm.length+'</span></div><div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Date</th><th>Who</th><th>Home</th><th class="num">Time</th><th class="num">Trips</th><th class="num">Miles</th><th>Note</th><th></th></tr></thead><tbody>'+
     tm.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(e.date))+'</td><td>'+esc(e.who||"")+'</td><td>'+propLink(e.prop)+'</td><td class="num">'+((+e.minutes||0)/60).toFixed(1)+'h</td><td class="num">'+(+e.trips||0)+'</td><td class="num">'+(+e.miles||0)+'</td><td>'+esc(e.note||"")+'</td><td><button class="btn sm ghost" data-tmedit="'+esc(e.id)+'">Edit</button></td></tr>'; }).join("")+'</tbody></table></div></section>';
-  h+='<div class="crewcharts">'+crewEffPanel(m,1)+hsGainPanel(m,1)+'</div>'+G.bw+'<div style="height:14px"></div>'+readyPanel(m)+'<div style="height:14px"></div>'+courtesyPanel(m)+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew+billP;
+  h+='<div class="crewcharts">'+crewEffPanel(m,1)+hsGainPanel(m,1)+'</div>'+G.bw+'<div style="height:14px"></div>'+readyPanel(m)+'<div style="height:14px"></div>'+courtesyPanel(m)+'<div style="height:14px"></div>'+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew+billP;
   return h;
 }
 
