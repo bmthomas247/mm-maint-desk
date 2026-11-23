@@ -4385,6 +4385,8 @@ function csDraw() {
   const CH = CS.ch, otaOk = x => x.ota && (CH === "Airbnb" ? /airbnb/i.test(x.ota) : CH === "VRBO" ? /vrbo|homeaway/i.test(x.ota) : false);
   const askOf = id => (CS.ask[id] || {})[CH], totOf = id => (CS.tot[id] || {})[CH];
   const F = csFits(d), rows = d.rows, inuse = rows.filter(x => x.tier === "Primary" && x.fits), paused = rows.filter(x => x.tier === "Paused"), sec = rows.filter(x => x.tier === "Secondary"), out = rows.filter(x => x.tier === "Primary" && !x.fits);
+  // Brandon 2026-11-23: "add the airbnb only filter chip" - comps (not paused) with an Airbnb link but no Vrbo and no direct-site link
+  const hasCh = (x, c) => (x.links || []).some(l => (l.channel || "").toUpperCase() === c.toUpperCase()), abOnly = rows.filter(x => x.tier !== "Paused" && hasCh(x, "Airbnb") && !hasCh(x, "VRBO") && !hasCh(x, "Direct"));
   const kind = h => h.live ? "Live" : h.test ? "Test" : "Beyond";
   const tile = (l, v, s) => `<div class="pctile"><small>${l}</small><b>${v}</b><small>${s || ""}</small></div>`;
   const avg0 = a => { a = a.filter(v => v != null && !isNaN(v)).map(Number); return a.length ? a.reduce((p, q) => p + q, 0) / a.length : null; };
@@ -4395,7 +4397,7 @@ function csDraw() {
       <td>${f.use.size} comps <small class="${low ? "csbad" : "muted"}">${f.rule === "sleeps" ? `same bedrooms, sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}` : `no comps sleep ${h.sleeps - d.win}–${+h.sleeps + d.win}: using every ${h.beds}-bedroom comp until some are added`}</small></td>
       <td>${totOf(h.comp_id) ? money(totOf(h.comp_id).v) + ` <small class='muted'>guest pays${totOf(h.comp_id).src === "airbnb" ? " · from Airbnb" : totOf(h.comp_id).src === "track" ? " · Track's price" : ""}</small>` : NA}</td>
       <td>${ed ? `<select class="csmv" data-mvs="${pcEsc(h.code)}"><option value="">Move to another comp set…</option>${setOpts(h.set_id)}</select>` : ""}</td></tr>`; }).join("");
-  let pick = CS.f === "inuse" ? inuse : CS.f === "paused" ? paused : CS.f === "sec" ? sec : CS.f === "out" ? out : rows;
+  let pick = CS.f === "inuse" ? inuse : CS.f === "abonly" ? abOnly : CS.f === "paused" ? paused : CS.f === "sec" ? sec : CS.f === "out" ? out : rows;
   let list = pick.slice();
   if (CS.sort) {   // tap a column header to sort (again = reverse); empty values always last
     const k = CS.sort.k, dir = CS.sort.d;
@@ -4445,7 +4447,7 @@ function csDraw() {
     </div>
     <div class="pccard">
       <div class="cstabs">${["Airbnb", "VRBO", "Direct"].map(c => `<button class="cstab${CH === c ? " on" : ""}" data-csch="${c}"><img src="https://www.google.com/s2/favicons?domain=${c === "Airbnb" ? "airbnb.com" : c === "VRBO" ? "vrbo.com" : "vacationrentalsparkcity.com"}&sz=64" alt="">${c}</button>`).join("")}<button class="cstab" data-csch="All">⇆ Side by side</button></div>
-      <div class="pcchips" style="margin:8px 0">${chip("inuse", `In use (sleeps ${d.sleeps - d.win}–${d.sleeps + d.win})`, inuse.length)}${chip("out", "Out of range", out.length)}${chip("paused", "Paused", paused.length)}${chip("sec", "Secondary", sec.length)}${chip("all", "All in " + d.grp, rows.length)}</div>
+      <div class="pcchips" style="margin:8px 0">${chip("inuse", `In use (sleeps ${d.sleeps - d.win}–${d.sleeps + d.win})`, inuse.length)}${chip("out", "Out of range", out.length)}${chip("abonly", "Airbnb only", abOnly.length)}${chip("paused", "Paused", paused.length)}${chip("sec", "Secondary", sec.length)}${chip("all", "All in " + d.grp, rows.length)}</div>
     <div style="overflow:auto"><table id="csTbl"><tr><th></th>${[["label","Comp"],["miles","Neighborhood"],["bedrooms","Bd"],["sleeps","Sleeps"],["baths","Baths"],["ask","Asking (daily)"],["tot","Guest pays / night"],["adr12","Booked rate (12 mo)"],["occ12","Booked"],["last_booked","Last booked"],["rating","Rating"]].map(([k, l]) => `<th class="cssort${CS.sort && CS.sort.k === k ? " on" : ""}" data-sort="${k}" title="Tap to sort">${l}${CS.sort && CS.sort.k === k ? (CS.sort.d > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}<th></th></tr>
     ${list.map(x => { const ok = otaOk(x), a = askOf(x.id), tt = totOf(x.id), fi = fitsOf(x);
       return `<tr class="${x.tier === "Primary" && x.fits ? "" : "no"}"><td>${st(x)}</td>
