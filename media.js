@@ -55,7 +55,9 @@
       return { src: ST + "/render/image/public/" + u.pathname.slice("/storage/v1/object/public/".length) + "?width=" + w2 + "&quality=75" };
     }
     if(u.origin === SB && u.pathname.indexOf("/storage/v1/object/sign/") === 0 && u.searchParams.get("token") && !/\.(gif|svg|heic|heif|pdf)$/i.test(u.pathname)){
-      return { src: ST + "/render/image/sign/" + u.pathname.slice("/storage/v1/object/sign/".length) + u.search };
+      var rest = u.pathname.slice("/storage/v1/object/sign/".length), cut = rest.indexOf("/");
+      return { src: ST + "/render/image/sign/" + rest + u.search,
+               sign: cut > 0 ? { bucket: decodeURIComponent(rest.slice(0, cut)), path: decodeURIComponent(rest.slice(cut + 1)), w: width(img) } : null };
     }
     if(/(^|\.)muscache\.com$/.test(u.hostname) && !u.searchParams.has("im_w")){
       var w3 = width(img); if(!w3) return null;
@@ -64,6 +66,29 @@
     return null;
   }
   function set(img, src){ img.setAttribute("data-mset", src); img.setAttribute("src", src); }
+  /* Private photos (signed links): a real small copy needs the size inside the signed token, so the page's own sign-in asks
+     Supabase for a new link with that size, only when the photo is about to come on screen. Links are reused for 50 minutes. */
+  var BLANK = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", SIGNED = {};
+  function client(){
+    var c = window.MM_SB || window.__sb; if(c && c.storage) return c;
+    try { if(typeof sb !== "undefined" && sb && sb.storage) return sb; } catch(e){}
+    return null;
+  }
+  var IO = ("IntersectionObserver" in window) ? new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ IO.unobserve(e.target); thumb(e.target); } });
+  }, { rootMargin: "600px" }) : null;
+  function thumb(img){
+    var d = img.__mmsign; if(!d) return; img.__mmsign = null;
+    var k = d.bucket + "/" + d.path + "@" + d.w, hit = SIGNED[k];
+    if(hit && Date.now() - hit.t < 50 * 60000){ set(img, hit.u); return; }
+    var c = client();
+    if(!c){ set(img, d.swap); return; }
+    c.storage.from(d.bucket).createSignedUrl(d.path, 3600, { transform: { width: d.w, quality: 72 } }).then(function(r){
+      var u = r && r.data && r.data.signedUrl;
+      if(img.getAttribute("src") !== BLANK) return;                       // the page moved on to another photo
+      if(u){ SIGNED[k] = { u: u, t: Date.now() }; set(img, u); } else set(img, d.swap);
+    }, function(){ if(img.getAttribute("src") === BLANK) set(img, d.swap); });
+  }
   function done(img){ img.classList.remove("mm-ld"); }
 
   function fix(img){
@@ -81,6 +106,11 @@
     }
     if(keep(img)) return;
     var b = better(src, img);
+    if(b && b.sign && b.sign.w && client()){
+      img.classList.add("mm-ld"); b.sign.swap = b.src; img.__mmsign = b.sign; set(img, BLANK);
+      if(IO) IO.observe(img); else thumb(img);
+      return;
+    }
     if(b){ if(b.fill) img.setAttribute("data-mfill", b.fill); set(img, b.src); }
   }
   function err(img){
@@ -115,7 +145,7 @@
   }
   function scan(root){ var imgs = []; collect(root, imgs); run(imgs); }
 
-  document.addEventListener("load", function(e){ var t = e.target; if(t && t.tagName === "IMG" && t.getAttribute("src") !== FAIL) done(t); }, true);
+  document.addEventListener("load", function(e){ var t = e.target; if(t && t.tagName === "IMG" && t.getAttribute("src") !== FAIL && t.getAttribute("src") !== BLANK) done(t); }, true);
   document.addEventListener("error", function(e){ var t = e.target; if(t && t.tagName === "IMG") err(t); }, true);
   document.addEventListener("click", function(e){
     var t = e.target; if(!t || t.tagName !== "IMG" || !t.classList.contains("mm-fail")) return;
