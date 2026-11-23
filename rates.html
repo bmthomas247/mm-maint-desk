@@ -4278,7 +4278,7 @@ async function csFetch(keep) {
     const t = new Date(); t.setHours(12, 0, 0, 0); const today = t.toISOString().slice(0, 10);
     const end = new Date(t.getTime() + 120 * 864e5).toISOString().slice(0, 10);
     const mid = a => { a = a.slice().sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
-    const chOf = c => c === "ABNB" ? "ABNB" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
+    const chOf = c => c === "ABNB" ? "ABNB" : c === "SITE" ? "SITE" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
     const sids = r.data.set_ids || [];
     const parts = await Promise.all(sids.flatMap(id => [sb.rpc("set_latest_nightly", { p_set: id }), sb.rpc("set_latest_checks", { p_set: id, p_from: today })]));
     if (tok !== CS.tok) return;
@@ -4309,7 +4309,7 @@ function csRange() { const t = new Date(); t.setHours(12, 0, 0, 0); const today 
 function csCalc() {
   const [a, b] = csRange(); CS.ask = {}; CS.tot = {}; CS.bk = {};
   const mid = v => { v = v.slice().sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
-  const chOf = c => c === "ABNB" ? "ABNB" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
+  const chOf = c => c === "ABNB" ? "ABNB" : c === "SITE" ? "SITE" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
   for (const x of CS.nl || []) {   // asking = open nights in the dates; booked % = nights not open
     const o0 = Math.round((new Date(a + "T12:00") - new Date(String(x.start_date).slice(0, 10) + "T12:00")) / 864e5), n0 = Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5) + 1;
     const v = [], av = String(x.avail || ""); let bk = 0, seen = 0;
@@ -4347,6 +4347,8 @@ function csCalc() {
     for (const M of [CS.ask, CS.tot]) { const m = M[id]; if (!m) continue;
       if (m.ABNB) { m.AirbnbTrack = m.Airbnb; m.Airbnb = { ...m.ABNB, src: "airbnb" }; } else if (m.Airbnb) m.Airbnb = { ...m.Airbnb, src: "track" };
       if (m.VRBO) m.VRBO = { ...m.VRBO, src: "track" }; } }
+  // Brandon 2026-11-23 ("Yes, read our site"): our homes' Direct guest total = what our website's checkout quotes (site_quotes.py, 'SITE'), else Track's direct quote
+  for (const o of (CS.data && CS.data.ours) || []) { const m = CS.tot[o.comp_id]; if (m && m.SITE) { m.DirectTrack = m.Direct; m.Direct = { ...m.SITE, src: "site" }; } }
   // Brandon 2026-11-23 ("Yes, use them"): direct guest total estimate = Airbnb guest total x the manager's measured gap (rates_direct_factor,
   // re-measured weekly from same-stay price checks), only when there's no real direct quote; marked est., left out of the comps' middle
   for (const [id, dom] of Object.entries(CS.mgr || {})) { const f = (CS.dfac || {})[dom], A0 = (CS.tot[id] || {}).Airbnb;
@@ -4564,7 +4566,7 @@ function csSide(d) {
 // weekly rates (Mon–Sun weeks inside the dates): comps' middle asking (open nights), comps booked %, our booked %, comps' guest total
 function csWeekly(d, inuse, CH) {
   const [a, b] = csRange(), mid = v => { v = v.filter(x => x != null).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
-  const chOf = c => c === "ABNB" ? "ABNB" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
+  const chOf = c => c === "ABNB" ? "ABNB" : c === "SITE" ? "SITE" : /vrbo/i.test(c) ? "VRBO" : /airbnb/i.test(c) ? "Airbnb" : "Direct";
   const ids = new Set(inuse.map(x => x.id)), wkS = k => { const dd = new Date(k + "T12:00"); dd.setDate(dd.getDate() - ((dd.getDay() + 6) % 7)); return dd.toISOString().slice(0, 10); };
   const W = {}; for (let k = a; k <= b; k = csDay(k, 1)) (W[wkS(k)] ||= { ask: [], bk: 0, n: 0, obk: 0, on: 0, tot: [] });
   const at = (x, k) => Math.round((new Date(k + "T12:00") - new Date(String(x.start_date).slice(0, 10) + "T12:00")) / 864e5);
