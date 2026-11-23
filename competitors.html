@@ -44,7 +44,7 @@ a{color:var(--pine)}
 .muted{color:var(--muted);font-size:14px}
 .pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:3px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
 .pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.red{background:var(--red-soft);color:var(--red)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
-label.f{display:block;margin:12px 0} label.f>span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800}
+label.f{display:block;margin:12px 0} label.f[hidden]{display:none} label.f>span{display:block;font-size:13px;color:var(--ink-2);margin-bottom:5px;font-weight:800}
 label.f small{display:block;color:var(--muted);font-size:12.5px;margin-top:4px;font-weight:600}
 input:where(:not([type=checkbox],[type=radio])),select,textarea{font:inherit;font-size:16px;width:100%;min-height:var(--tap);border:1px solid var(--line-2);border-radius:12px;padding:10px 12px;background:var(--card);color:var(--ink)}
 textarea{min-height:110px;resize:vertical} textarea.code{font-family:ui-monospace,Consolas,monospace;font-size:13.5px}
@@ -487,6 +487,7 @@ function captureHTML(c, editor){
       <span class="pill ${st[1]}">${esc(st[0])}</span><span class="pill ${SURE_PILL[c.confidence] || ""}">${esc((SURE.find(s => s[0] === c.confidence) || [, c.confidence])[1])}</span>
       <span class="muted" style="margin-left:auto">#${c.id}</span></div>
     <div class="what">${esc(c.what)}</div>
+    ${(c.more || []).map(m => `<div class="sub" style="margin:8px 0 0;font-size:14px"><b>➕ Added ${esc(fmtDT(m.at))} by ${esc(m.by || "")}</b>${m.text ? `<div style="white-space:pre-wrap;margin-top:3px">${esc(m.text)}</div>` : ""}${[m.where ? "Where: " + m.where : "", m.who ? "Who told us: " + m.who : "", m.freshdesk ? "Freshdesk: " + m.freshdesk : ""].filter(Boolean).map(x => `<div class="muted" style="font-size:13px">${esc(x)}</div>`).join("")}</div>`).join("")}
     <dl class="meta">
       <dt>When</dt><dd>${esc(fmtD(c.heard_on))}</dd>
       <dt>How</dt><dd>${esc(CHANNEL[c.channel] || c.channel)}</dd>
@@ -498,6 +499,7 @@ function captureHTML(c, editor){
     </dl>
     ${files ? `<div class="files">${files}</div>` : ""}
     <div class="acts">
+      <button class="btn small" data-more="${c.id}">+ Add more info</button>
       <button class="btn small" data-addfile="${c.id}">+ Add files</button>
       ${editor ? `${c.status !== "reviewed" ? `<button class="btn small" data-rv="${c.id}" data-to="reviewed">Mark reviewed</button>` : ""}
         ${c.company_id ? `<button class="btn small primary" data-tocard="${c.id}">Put on the card…</button>` : `<button class="btn small" data-rv="${c.id}" data-to="${c.status}" data-pickco>Link to a company…</button>`}
@@ -513,6 +515,7 @@ function wireCaptures(el, list, reload){
       b.disabled = true; b.textContent = "Uploading…"; const failed = await uploadFiles(+b.dataset.addfile, ok);
       if(failed.length || skip) alert(`${failed.length + skip} file(s) didn't attach (photos, PDF or email files, 15 MB max).`); reload(); };
     inp.click(); });
+  $$("[data-more]", el).forEach(b => b.onclick = () => moreDialog(list.find(c => c.id === +b.dataset.more), reload));
   $$("[data-rv]", el).forEach(b => b.onclick = () => reviewDialog(list.find(c => c.id === +b.dataset.rv), b.dataset.to, b.hasAttribute("data-pickco"), reload));
   $$("[data-tocard]", el).forEach(b => b.onclick = () => { const c = list.find(x => x.id === +b.dataset.tocard); editCard(c.company_id, c); });
 }
@@ -536,19 +539,65 @@ async function reviewView(which){
     ${list.length ? list.map(c => captureHTML(c, true)).join("") : `<div class="item"><p class="muted">Nothing here.</p></div>`}</div>`;
   wireCaptures($("#app"), list, () => reviewView(which));
 }
+function moreDialog(c, reload){
+  const d = $("#dlg");
+  d.innerHTML = `<div class="dh"><b>Add more info · #${c.id}</b><button class="btn small" data-x>Close</button></div>
+    <div class="db">
+      <div class="muted" style="font-size:13px;white-space:pre-wrap;max-height:120px;overflow:auto;border-left:3px solid var(--line,#ddd);padding-left:8px">${esc(c.what)}</div>
+      <label class="f"><span>What else did you find out?</span><textarea id="mrtext" maxlength="6000" style="min-height:110px" placeholder="e.g. Their website is beecave.com. Greg says they manage 12 homes in Deer Valley."></textarea></label>
+      <div class="row2">
+        ${c.where_heard ? "" : `<label class="f"><span>Where? <span class="muted" style="font-weight:600">(optional)</span></span><input id="mrwhere" maxlength="500"></label>`}
+        ${c.source_person ? "" : `<label class="f"><span>Who told us? <span class="muted" style="font-weight:600">(optional)</span></span><input id="mrwho" maxlength="200"><small>Business contacts only: no personal phone numbers or home addresses.</small></label>`}
+        ${c.freshdesk ? "" : `<label class="f"><span>Freshdesk ticket # <span class="muted" style="font-weight:600">(optional)</span></span><input id="mrfd" maxlength="60" inputmode="numeric"></label>`}
+      </div>
+      <small class="muted">What was first sent stays as it was; this is added under it with your name and the date. Photos or PDFs: use “+ Add files”.</small>
+      <div id="mrmsg"></div></div>
+    <div class="df"><button class="btn primary" data-ok>Add it</button><button class="btn" data-x>Cancel</button></div>`;
+  d.showModal(); setTimeout(() => $("#mrtext").focus(), 50);
+  $$("[data-x]", d).forEach(b => b.onclick = () => d.close());
+  $("[data-ok]", d).onclick = async () => {
+    const g = id => (($("#" + id) || {}).value || "").trim();
+    if(!g("mrtext") && !g("mrwhere") && !g("mrwho") && !g("mrfd")){ $("#mrmsg").innerHTML = `<div class="msg err">Add a few words about what you found.</div>`; return; }
+    const btn = $("[data-ok]", d); btn.disabled = true; btn.textContent = "Adding…";
+    const r = await sb.rpc("cmp_capture_more", { p_id: c.id, p_text: g("mrtext") || null, p_where: g("mrwhere") || null, p_source_person: g("mrwho") || null, p_freshdesk: g("mrfd") || null });
+    if(r.error){ $("#mrmsg").innerHTML = `<div class="msg err">${esc(errText(r.error))}</div>`; btn.disabled = false; btn.textContent = "Add it"; return; }
+    d.close(); reload();
+  };
+}
+/* new company typed straight into "Link to a company" (fb-48): made on the Playbook, then linked */
+function coKey(name){ return name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60); }
+async function newCompanyFor(c, name){
+  name = (name || "").trim();
+  if(name.length < 2) throw new Error("Type the company's name.");
+  const same = S.companies.find(x => x.name.trim().toLowerCase() === name.toLowerCase());
+  if(same) return same.id;
+  const key = coKey(name);
+  if(key.length < 2) throw new Error("Type the company's name.");
+  if(byId(key)) return key;
+  const r = await sb.rpc("cmp_save", { p_table:"cmp_companies", p_key:key,
+    p_patch:{ name, tier:"local", status:"active", sort: Math.max(0, ...S.companies.map(x => x.sort || 0)) + 1 },
+    p_reason:`New company from intel #${c.id} (${c.added_by_name || "staff"}, ${fmtD(c.heard_on)})` });
+  if(r.error) throw r.error;
+  await loadPlaybook(true);
+  return key;
+}
 function reviewDialog(c, to, pickCo, reload){
   const d = $("#dlg"), opts = S.companies.map(x => `<option value="${esc(x.id)}" ${x.id === c.company_id ? "selected" : ""}>${esc(x.name)}</option>`).join("");
   d.innerHTML = `<div class="dh"><b>${esc(CSTATUS[to] ? (pickCo ? "Link to a company" : CSTATUS[to][0]) : to)} · #${c.id}</b><button class="btn small" data-x>Close</button></div>
     <div class="db">
-      ${pickCo || !c.company_id ? `<label class="f"><span>Company</span><select id="rvco"><option value="">(leave as typed: ${esc(c.company_text || "?")})</option>${opts}</select>
-        <small>Not on the list? Add it with “+ New company” on the Playbook first.</small></label>` : ""}
+      ${pickCo || !c.company_id ? `<label class="f"><span>Company</span><select id="rvco"><option value="">(leave as typed: ${esc(c.company_text || "?")})</option>${opts}<option value="__new">+ New company (type the name)</option></select>
+        <small>Not on the list? Pick “+ New company” and type the name: it's added to the Playbook (local tier, fill in its card later) and linked.</small></label>
+        <label class="f" id="rvnewl" hidden><span>New company name</span><input id="rvnew" maxlength="120" value="${esc(c.company_text && c.company_text !== "Not sure" ? c.company_text : "")}"></label>` : ""}
       <label class="f"><span>Note ${to === "set_aside" ? "(why it's set aside)" : "(optional)"}</span><textarea id="rvnote" style="min-height:80px">${esc(c.review_note || "")}</textarea></label>
       <div id="rvmsg"></div></div>
     <div class="df"><button class="btn primary" data-ok>Save</button><button class="btn" data-x>Cancel</button></div>`;
   d.showModal();
   $$("[data-x]", d).forEach(b => b.onclick = () => d.close());
+  if($("#rvco")) $("#rvco").onchange = () => { $("#rvnewl").hidden = $("#rvco").value !== "__new"; if($("#rvco").value === "__new") $("#rvnew").focus(); };
   $("[data-ok]", d).onclick = async () => {
-    const r = await sb.rpc("cmp_capture_review", { p_id: c.id, p_status: to, p_note: $("#rvnote").value.trim() || null, p_company: ($("#rvco") || {}).value || null });
+    let co = ($("#rvco") || {}).value || null;
+    if(co === "__new"){ try { co = await newCompanyFor(c, $("#rvnew").value); } catch(e){ $("#rvmsg").innerHTML = `<div class="msg err">${esc(errText(e))}</div>`; return; } }
+    const r = await sb.rpc("cmp_capture_review", { p_id: c.id, p_status: to, p_note: $("#rvnote").value.trim() || null, p_company: co });
     if(r.error){ $("#rvmsg").innerHTML = `<div class="msg err">${esc(errText(r.error))}</div>`; return; }
     d.close(); reload();
   };
