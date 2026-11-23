@@ -320,7 +320,7 @@ async function crewPlan(){
   if(P.B) return P.B;
   const r = await sb.rpc("crew_plan", { p_from: TODAY, p_to: addDays(TODAY, 14) });
   if(r.error) throw r.error;
-  P.B = r.data; P.techs = (r.data.crew || []).filter(c => c.bw && !c.mgr); return P.B;
+  P.B = r.data; const cr = (r.data.crew || []).filter(c => c.bw); P.techs = cr.filter(c => !c.mgr).concat(cr.filter(c => c.mgr)); return P.B;
 }
 const onTask = (c, t) => (t.who || []).some(n => n === c.bwName || n.split(" ")[0].toLowerCase() === (c.first || "").toLowerCase());
 const loadOf = (c, day, extra) => (P.B.tasks || []).filter(t => t.date === day && t.stage !== "finished" && onTask(c, t)).length + ((extra && extra[c.uid + "|" + day]) || 0);
@@ -340,11 +340,11 @@ const DAYS = () => Array.from({ length: 14 }, (_, i) => addDays(TODAY, i));
 function suggest(r, extra, extraNear){
   for(const day of DAYS().slice(1)){
     if(stayOn(r, day) || isWkend(day)) continue;
-    const opts = P.techs.filter(c => !offOn(c, day)).map(c => ({ c, load: loadOf(c, day, extra), near: nearOf(c, day, r, extraNear) }))
+    const opts = P.techs.filter(c => !c.mgr && !offOn(c, day)).map(c => ({ c, load: loadOf(c, day, extra), near: nearOf(c, day, r, extraNear) }))
       .filter(o => o.load < MAX_DAY).sort((a, b) => (a.near ? 0 : 1) - (b.near ? 0 : 1) || a.load - b.load);
     if(opts.length) return { day, tech: opts[0].c, near: opts[0].near, load: opts[0].load };
   }
-  return { day: addDays(TODAY, 1), tech: P.techs[0], near: null, load: 0 };
+  return { day: addDays(TODAY, 1), tech: P.techs.find(c => !c.mgr) || P.techs[0], near: null, load: 0 };
 }
 const kindOpts = r => [{ kind:"biweekly", short:"Two-week check", last: r.b && r.b.lastKind }].concat(r.rot.map(x => ({ kind:x.kind, short:x.short, last:x.last, over:x.over })));
 
@@ -363,7 +363,7 @@ async function openGive(code){
       <span class="lbl">When</span><div class="chips">${DAYS().map(day => { const s = stayOn(r, day);
         return `<button class="ch day${G.day === day ? " on" : ""}" data-gd="${day}"${s ? " disabled" : ""} title="${s ? esc(s[2]) + " staying" : ""}">${esc(day === TODAY ? "Today" : new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { weekday:"short", timeZone:"UTC" }))}<small>${esc(new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { month:"short", day:"numeric", timeZone:"UTC" }))}${s ? " · " + esc(s[2]) : ""}</small></button>`; }).join("")}</div>
       <span class="lbl">Who</span><div class="chips">${P.techs.map(c => { const off = offOn(c, G.day), l = loadOf(c, G.day), n = nearOf(c, G.day, r);
-        return `<button class="ch${G.uid === c.uid ? " on" : ""}" data-gu="${esc(c.uid)}"${off ? " disabled" : ""}>${esc(c.bwName || c.name)}<small>${off ? "Off" : l + " job" + (l === 1 ? "" : "s") + " that day"}${n ? ` · <span class="nr">📍 at ${esc(n.home)}</span>` : ""}</small></button>`; }).join("")}</div>
+        return `<button class="ch${G.uid === c.uid ? " on" : ""}" data-gu="${esc(c.uid)}"${off ? " disabled" : ""}>${esc(c.bwName || c.name)}${c.mgr ? " (hands out)" : ""}<small>${off ? "Off" : l + " job" + (l === 1 ? "" : "s") + " that day"}${n ? ` · <span class="nr">📍 at ${esc(n.home)}</span>` : ""}</small></button>`; }).join("")}</div>
       ${st ? `<div class="err">Someone is staying that night. Pick another day.</div>` : ""}
       <div class="err" id="g_err"></div></div>
       <div class="foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="g_go"${st || !tech ? " disabled" : ""}>Send to Breezeway: ${esc(kindName(G.kind))} · ${esc(first(tech ? tech.bwName || tech.name : ""))} · ${esc(dLabel(G.day))}</button></div>`;
@@ -395,7 +395,8 @@ async function openPlan(codes){
     const byTech = {}; L.forEach(x => { const c = P.techs.find(c => c.uid === x.uid); const n = c ? first(c.bwName || c.name) : "?"; byTech[n] = (byTech[n] || 0) + 1; });
     d.innerHTML = `<div class="dbody"><h3>📋 Plan ${L.length} inspection${L.length === 1 ? "" : "s"}</h3>
       <div class="muted">The hub picked the first free weekday for each home and spread them across the crew, putting a tech next door when they're already there. Change anything, then send.</div>
-      <div class="sugg">${Object.entries(byTech).map(([n, c]) => `${esc(n)}: ${c}`).join(" · ")}</div>
+      <div class="sugg" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>${Object.entries(byTech).map(([n, c]) => `${esc(n)}: ${c}`).join(" · ")}</span>
+      <label style="margin:0 0 0 auto;font-size:12.5px">Give them all to <select id="p_all" style="display:inline-block;width:auto;margin:0 0 0 4px;padding:3px 6px;font-size:13px"><option value="">(keep the picks)</option>${P.techs.map(c => `<option value="${esc(c.uid)}">${esc(c.bwName || c.name)}</option>`).join("")}</select></label></div>
       <table class="ptab"><thead><tr><th>Home</th><th>What</th><th>Day</th><th>Who</th><th></th></tr></thead><tbody>
       ${L.map((x, i) => `<tr><td><b>${esc(x.r.home)}</b><span class="sm2">${x.r.lastVisit ? esc(ago(x.r.lastVisit.day)) : "no visit"}${x.near ? " · 📍 near " + esc(x.near.home) : ""}</span></td>
         <td><select data-pk="${i}">${kindOpts(x.r).map(k => `<option value="${esc(k.kind)}"${k.kind === x.kind ? " selected" : ""}>${esc(k.short)}</option>`).join("")}</select></td>
@@ -406,6 +407,7 @@ async function openPlan(codes){
     $$("[data-pk]", d).forEach(s => s.onchange = () => { L[+s.dataset.pk].kind = s.value; });
     $$("[data-pd]", d).forEach(s => s.onchange = () => { L[+s.dataset.pd].day = s.value; draw(); });
     $$("[data-pu]", d).forEach(s => s.onchange = () => { L[+s.dataset.pu].uid = s.value; draw(); });
+    $("#p_all").onchange = e => { const u = e.target.value; if(!u) return; L.forEach(x => { if(x.st !== "ok") x.uid = u; }); draw(); };
     $$("[data-px]", d).forEach(b => b.onclick = () => { L.splice(+b.dataset.px, 1); if(!L.length) d.close(); else draw(); });
     $("#p_go").onclick = async () => {
       $("#p_go").disabled = true;
