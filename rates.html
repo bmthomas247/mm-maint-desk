@@ -4332,7 +4332,7 @@ function csCalc() {
     if (seen) (CS.bk[id] ||= {}).All = bk / seen; }
   // Direct estimate: no real direct price, manager has a factor -> Airbnb asking x factor, marked est (never used by pricing)
   for (const [id, dom] of Object.entries(CS.mgr || {})) { const f = (CS.dfac || {})[dom], A0 = (CS.ask[id] || {}).Airbnb;
-    if (f && A0 && !(CS.ask[id] || {}).Direct) CS.ask[id].Direct = { v: A0.v * +f.factor, est: true, why: `ESTIMATE: Airbnb ${"$" + Math.round(A0.v)} x ${f.factor} (${dom} direct vs Airbnb, ${f.samples} hand-checked sample${f.samples > 1 ? "s" : ""}: ${f.source})` }; }
+    if (f && A0 && !(CS.ask[id] || {}).Direct) CS.ask[id].Direct = { v: A0.v * +f.factor, est: true, why: `ESTIMATE: Airbnb ${"$" + Math.round(A0.v)} x ${f.factor} = ${dom} is ${Math.round((1 - f.factor) * 100)}% under Airbnb (${f.source})` }; }
   const by = {};   // guest checkout total per night: quotes whose check-in is in the dates (2-4 nights when there are any)
   for (const x of CS.ckr || []) {
     if (!(+x.total > 0 && +x.nights > 0) || x.check_in < a || x.check_in > b) continue;
@@ -4347,6 +4347,11 @@ function csCalc() {
     for (const M of [CS.ask, CS.tot]) { const m = M[id]; if (!m) continue;
       if (m.ABNB) { m.AirbnbTrack = m.Airbnb; m.Airbnb = { ...m.ABNB, src: "airbnb" }; } else if (m.Airbnb) m.Airbnb = { ...m.Airbnb, src: "track" };
       if (m.VRBO) m.VRBO = { ...m.VRBO, src: "track" }; } }
+  // Brandon 2026-11-23 ("Yes, use them"): direct guest total estimate = Airbnb guest total x the manager's measured gap (rates_direct_factor,
+  // re-measured weekly from same-stay price checks), only when there's no real direct quote; marked est., left out of the comps' middle
+  for (const [id, dom] of Object.entries(CS.mgr || {})) { const f = (CS.dfac || {})[dom], A0 = (CS.tot[id] || {}).Airbnb;
+    if (f && A0 && !(CS.tot[id] || {}).Direct) CS.tot[id].Direct = { v: A0.v * +f.factor, n: A0.n, est: true,
+      why: `ESTIMATE: Airbnb guest total ${"$" + Math.round(A0.v)}/night x ${f.factor} = ${dom} is ${Math.round((1 - f.factor) * 100)}% under Airbnb (${f.source})` }; }
 }
 function csSeen(id, ch, at) { const t = Date.parse(at || ""); if (!t) return; const m = (CS.fresh[id] ||= {}); if (!m[ch] || t > m[ch]) m[ch] = t; }
 // Airbnb / Vrbo / our website logos: colored = we have prices from that site in the last 7 days; grey = no fresh data (needs fixing)
@@ -4454,7 +4459,7 @@ function csDraw() {
       <td>${pcEsc(x.label)}<br>${csLogos(x.id, x.links)}${x.added ? `<br><small class="muted">added ${pcEsc(x.added)}</small>` : ""}</td>
       <td>${x.nbhd || x.city ? pcEsc(x.nbhd || x.city) : NA}${x.miles != null ? `<br><small class="${x.miles > 0.2 ? "csbad" : "muted"}" title="miles from the middle of our homes in this set">${x.miles} mi</small>` : ""}</td>
       <td>${x.bedrooms ?? NA}</td><td>${sleepsTxt(x)}</td><td>${x.baths ?? NA}</td>
-      <td>${a ? (a.est ? `<span class="csest" title="${pcEsc(a.why)}">~${money(a.v)} <small>est.</small></span>` : money(a.v)) : NA}</td><td>${tt ? money(tt.v) + ` <small class="muted">(${tt.n})</small>` : NA}</td>
+      <td>${a ? (a.est ? `<span class="csest" title="${pcEsc(a.why)}">~${money(a.v)} <small>est.</small></span>` : money(a.v)) : NA}</td><td>${tt ? (tt.est ? `<span class="csest" title="${pcEsc(tt.why)}">~${money(tt.v)} <small>est.</small></span>` : money(tt.v) + ` <small class="muted">(${tt.n})</small>`) : NA}</td>
       <td>${ok ? money(x.adr12) : NA}</td><td>${ok && x.occ12 != null ? Math.round(x.occ12 * 100) + "%" : NA}</td>
       <td>${x.last_booked ? new Date(x.last_booked + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : NA}</td>
       <td>${ok && x.rating != null ? x.rating + (x.reviews ? ` <small class="muted">(${x.reviews})</small>` : "") : NA}</td><td class="csact">${act(x)}</td></tr>`; }).join("")}
@@ -4547,7 +4552,7 @@ function csSide(d) {
     <tr class="cssub"><th>Home</th>${S.map(() => "<th>Asking</th><th>Guest pays</th>").join("")}<th>Airbnb</th><th>Vrbo</th></tr>`;
   const ours = d.ours.map(h => { const id = h.comp_id;
     return `<tr${CS.hl === h.code ? ' class="cshl1"' : ""}><td><b>${pcEsc(h.code)}</b></td>${S.map(([c]) => cell(CS.ask, id, c) + cell(CS.tot, id, c)).join("")}<td>${pc(g(CS.tot, id, "Airbnb"), g(CS.tot, id, "Direct"))}</td><td>${pc(g(CS.tot, id, "VRBO"), g(CS.tot, id, "Direct"))}</td></tr>`; }).join("");
-  const cm = c => [mid(inuse.filter(x => !(CS.ask[x.id] || {})[c]?.est).map(x => g(CS.ask, x.id, c))), mid(inuse.map(x => g(CS.tot, x.id, c)))];   // estimates left out
+  const cm = c => [mid(inuse.filter(x => !(CS.ask[x.id] || {})[c]?.est).map(x => g(CS.ask, x.id, c))), mid(inuse.filter(x => !(CS.tot[x.id] || {})[c]?.est).map(x => g(CS.tot, x.id, c)))];   // estimates left out
   const om = c => [mid(d.ours.map(h => g(CS.ask, h.comp_id, c))), mid(d.ours.map(h => g(CS.tot, h.comp_id, c)))];
   const crow = `<tr class="cstot"><td><b>Comps</b> <small class="muted">(${inuse.length} in use, middle)</small></td>${S.map(([c]) => cm(c).map(v => `<td>${m(v)}</td>`).join("")).join("")}<td>${pc(cm("Airbnb")[1], cm("Direct")[1])}</td><td>${pc(cm("VRBO")[1], cm("Direct")[1])}</td></tr>`;
   const orow = d.ours.length > 1 ? `<tr class="cstot csours"><td><span class="csourlbl"><img src="moose-logo.png" alt="Moose Management"><b>Our homes</b> <small class="muted">(middle)</small></span></td>${S.map(([c]) => om(c).map(v => `<td>${m(v)}</td>`).join("")).join("")}<td>${pc(om("Airbnb")[1], om("Direct")[1])}</td><td>${pc(om("VRBO")[1], om("Direct")[1])}</td></tr>` : "";
