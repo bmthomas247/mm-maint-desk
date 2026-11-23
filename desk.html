@@ -2855,6 +2855,7 @@ function bwDoneFor(j){ if(j.bw&&j.bw.t&&j.bw.t.status==="done") return j.bw.t;
     if(hit>=need) return x; }
   return null; }
 document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-otherall]"); if(!b) return; ev.preventDefault(); ev.stopPropagation(); S.ui.otherAll=!S.ui.otherAll; render(); },true);
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-tsall]"); if(!b) return; ev.preventDefault(); ev.stopPropagation(); S.ui.tsAll=!S.ui.tsAll; render(); },true);
 function bwSelIds(){ var sel=S.ui.bwSel||{}; return Object.keys(sel).filter(function(k){ return sel[k] && D.byId["bw-"+k]; }); }
 function bwBulkBar(){ var n=bwSelIds().length; if(!n) return '';
   return '<div class="pad" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2">'+
@@ -3745,12 +3746,12 @@ function timesheetPanel(m){
         '<td class="num">'+(x.flags?'<span class="pill stop">'+x.flags+'</span>':'')+'</td><td class="num">'+(c?money(hrs*c):'<span class="muted">no rate</span>')+'</td><td class="num">'+money(hrs*R.billRate)+'</td></tr>'; }).join("")+'</tbody></table></div>';
   if(who && per[who]){ var x=per[who], days=Object.keys(x.days).sort();
     h+='<div class="pad"><div class="lbl">'+esc(who)+' — day by day</div>'+(days.length?'<div class="appl" style="margin-top:6px"><table class="t"><thead><tr><th>Day</th><th>Home · task</th><th class="num">Time</th></tr></thead><tbody>'+
-      days.concat(hsDays(who,m).filter(function(d){ return days.indexOf(d)<0; })).sort().map(function(d){ var list=x.days[d]||[], tot=0;
+      (function(){ var all=days.concat(hsDays(who,m).filter(function(d){ return days.indexOf(d)<0; })).sort(); S.ui.tsN=all.length; return S.ui.tsAll?all:all.slice(0,5); })().map(function(d){ var list=x.days[d]||[], tot=0;
         var body=list.map(function(it){ if(it.desk){ tot+=(+it.desk.minutes||0); return '<div>'+propLink(it.desk.prop)+' '+esc(it.desk.note||"Time logged on the desk")+' <span class="muted">'+(+it.desk.minutes||0)+'m · desk</span></div>'; }
           var mm=+it.minutes||0, bad=mm>720; if(!bad) tot+=mm;
           return '<div>'+propLink(it.prop)+' <a href="'+esc(it.srcUrl)+'" target="_blank" rel="noopener">'+esc(it.title)+'</a> <span class="muted">'+(bad?'<span class="pill stop">timer</span>':mm?mm+'m':isReceiptTask(it)?'<span class="pill">receipts</span>':'<span class="pill stop">no time</span>')+'</span></div>'; }).join("");
         return '<tr><td class="mono">'+esc(fmtD(d))+'</td><td>'+body+hsDayLine(who,d)+'</td><td class="num"><b>'+(tot/60).toFixed(1)+'h</b>'+(hsDay(who,d)?'<div class="muted">Hubstaff '+hsDay(who,d).hours.toFixed(1)+'h</div>':'')+'</td></tr>'; }).join("")+
-      '<tr><td></td><td><b>Total</b></td><td class="num"><b>'+(x.min/60).toFixed(1)+'h</b></td></tr></tbody></table></div>':'<div class="empty">No finished Breezeway tasks this month.</div>')+
+      '<tr><td></td><td><b>Total</b></td><td class="num"><b>'+(x.min/60).toFixed(1)+'h</b></td></tr></tbody></table></div>'+(S.ui.tsN>5?'<div style="text-align:center;margin-top:8px"><button class="btn sm" data-tsall="1">'+(S.ui.tsAll?'Show fewer':'See '+(S.ui.tsN-5)+' more days')+'</button></div>':''):'<div class="empty">No finished Breezeway tasks this month.</div>')+
       '<div style="margin-top:8px"><button class="btn sm" data-act="newtime">+ Add time for '+esc(who)+'</button></div></div>'; }
   return h+'</section>';
 }
