@@ -2144,14 +2144,23 @@ function ownerView(code){ var sb=window.MM_SB; if(!sb) return; D._ov=D._ov||{};
 function ownRow(p,i){ return '<div class="fields ownrow" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));align-items:end;border-top:1px solid var(--line-2);padding-top:8px;margin-top:8px">'+
   fld("on_n"+i,"Name",p.name||"")+fld("on_p"+i,"Phone",p.phone||"","tel")+fld("on_e"+i,"Email",p.email||"","email")+
   '<label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="on_x'+i+'" '+(p.off?"checked":"")+' style="width:auto;min-height:0"> Not an owner of this home</label></div>'; }
-function ownTrackIds(code){ var f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFeed(f,code)||[]):[]; return tr.map(function(o){ return o.trackOwnerId; }).filter(Boolean); }
+function ownTrackIds(code){ var f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFeed(f,code)||[]):[]; return tr.map(function(o){ return o.trackCompanyId; }).filter(Boolean); }   /* Track's owner page uses the company number, not the API owner id (2026-11-23) */
+function ownSendLoad(code){ var sb=window.MM_SB; if(!sb) return; D._ots=D._ots||{}; if(D._ots[code]&&Date.now()-D._ots[code].t<15000) return;
+  D._ots[code]={t:Date.now(),row:(D._ots[code]||{}).row};
+  sb.from("owner_track_sends").select("id,at,status,result,by_name,done_at").eq("home",code).order("id",{ascending:false}).limit(1).then(function(r){ D._ots[code]={t:Date.now(),row:((r&&r.data)||[])[0]||null}; var el=$("ownsend"); if(el) el.innerHTML=ownSendHtml(code); }); }
+function ownSendHtml(code){ var x=(D._ots&&D._ots[code]||{}).row; if(!x) return "";
+  var st={queued:"waiting to send",sending:"sending now",sent:"sent ✓",partly:"partly sent",nothing:"nothing needed changing",failed:"didn't go through"}[x.status]||x.status;
+  var ppl=((x.result||{}).people||[]).map(function(p){ return '<div>'+esc((p.name?p.name+": ":"")+p.did)+'</div>'; }).join("");
+  return '<div class="hint" style="border-left:3px solid var(--line-2);padding-left:8px"><b>Last change sent to Track:</b> '+esc(st)+' · '+esc(fmtD(String(x.done_at||x.at).slice(0,10)))+(x.by_name?' by '+esc(x.by_name):'')+ppl+'</div>'; }
 function mOwners(code){ var k=sid(code), oc=(S.ownercontacts||{})[k]||{}, o=ownerOf(code), ids=ownTrackIds(code);
   var rows=(o.list.length?o.list:[{}]).map(function(p,i){ return ownRow(p,i); }).join("");
   var tl=ids.map(function(id){ return '<a class="golink" href="https://moosemanagement.trackhs.com/pms/owner/profiles/view/'+encodeURIComponent(id)+'/" target="_blank" rel="noopener">Open this owner in Track ↗</a>'; }).join(" ");
-  openModal("Owners · "+code,'<div class="hint">Fix names, phones and emails here, tick <b>Not an owner of this home</b> for anyone who shouldn\'t be listed, or add an owner. The hub\'s list then replaces Track\'s on this home. '+
-    'Track isn\'t changed: fix it there too so owner statements and emails match'+(tl?' · '+tl:'')+'.</div><div id="ownrows">'+rows+'</div>'+
+  ownSendLoad(code);
+  openModal("Owners · "+code,'<div id="ownsend">'+ownSendHtml(code)+'</div><div class="hint">Fix names, phones and emails here, tick <b>Not an owner of this home</b> for anyone who shouldn\'t be listed, or add an owner. The hub\'s list then replaces Track\'s on this home. '+
+    'With <b>Also update Track</b> ticked, name, phone and email changes go to Track within a minute. Adding or removing an owner changes owner statements, so do that in Track'+(tl?' · '+tl:'')+'.</div><div id="ownrows">'+rows+'</div>'+
     '<div style="margin:8px 0"><button class="btn sm" data-act="ownadd">+ Add an owner</button>'+(Array.isArray(oc.people)?' <button class="btn sm ghost" data-act="ownreset" data-code="'+esc(code)+'">Use Track\'s list again</button>':'')+'</div>'+
-    area("o_notes2","Owner notes",oc.notes||"","e.g. prefers text, call Mike first"),
+    area("o_notes2","Owner notes",oc.notes||"","e.g. prefers text, call Mike first")+
+    '<label class="f" style="flex-direction:row;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="o_totrack" checked style="width:auto;min-height:0"> Also update Track (name, phone, email of owners already in Track)</label>',
   function(){ var n=$("ownrows")?$("ownrows").children.length:0, people=[], bad="";
     for(var i=0;i<n;i++){ var p={name:fv("on_n"+i),phone:fv("on_p"+i),email:fv("on_e"+i),off:!!($("on_x"+i)&&$("on_x"+i).checked)};
       if(!p.name&&!p.phone&&!p.email) continue;
@@ -2160,7 +2169,11 @@ function mOwners(code){ var k=sid(code), oc=(S.ownercontacts||{})[k]||{}, o=owne
       people.push(p); }
     if(bad){ toast(bad); return Promise.reject(); }
     if(!people.some(function(p){ return !p.off; })){ toast("Keep at least one owner, or use Track's list again."); return Promise.reject(); }
-    return put("ownercontacts",k,{code:code,people:people,notes:fv("o_notes2"),name:"",phone:"",email:""},oc).then(function(){ toast("Saved"); closeModal(); render(); }); },"Save owners"); }
+    var toTrack=!!($("o_totrack")&&$("o_totrack").checked);
+    return put("ownercontacts",k,{code:code,people:people,notes:fv("o_notes2"),name:"",phone:"",email:""},oc).then(function(){
+      if(!toTrack||!window.MM_SB){ toast("Saved"); closeModal(); render(); return; }
+      return window.MM_SB.rpc("owner_track_send",{p_home:code,p_people:people}).then(function(r){
+        toast(r&&r.error?"Saved in the hub. Track: "+(r.error.message||"not sent"):"Saved · sending to Track"); if(D._ots) delete D._ots[code]; closeModal(); render(); }); }); },"Save owners"); }
 function ownReset(code){ var k=sid(code), oc=(S.ownercontacts||{})[k]||{};
   Promise.resolve(window.mmConfirm?mmConfirm("Show Track's owner list for "+code+" again? The hub's edits are kept in the history."):true).then(function(ok){ if(!ok) return;
     put("ownercontacts",k,{code:code,people:null,name:"",phone:"",email:""},oc).then(function(){ toast("Back to Track's list"); closeModal(); render(); }); }); }
