@@ -168,3 +168,22 @@
 
   window.MMMedia = { better: better, scan: scan };
 })();
+
+/* Text boxes (Brandon 2026-11-23 from Kim's #45, every page): each <textarea> gets the corner grabber (drag it bigger) and grows as
+   you type, up to 60% of the screen, then scrolls. It never shrinks a box someone dragged bigger. A page that sets resize:none keeps
+   it (the rule is :where = lowest priority). Opt out: data-mm-keep on the box or a parent. Code editors (CodeMirror) are skipped. */
+(function(){
+  if(window.MMText) return; window.MMText = 1;
+  var st = document.createElement("style");
+  st.textContent = ":where(textarea){resize:vertical;max-height:60vh;overflow-y:auto}";
+  (document.head || document.documentElement).appendChild(st);
+  function grow(t){
+    if(!t || t.tagName !== "TEXTAREA" || t.offsetParent === null) return;
+    if(t.closest && t.closest("[data-mm-keep],.CodeMirror")) return;
+    var cs = getComputedStyle(t); if(cs.resize === "none" && t.dataset.mmGrow !== "1") return;
+    var max = Math.round(window.innerHeight * 0.6), need = t.scrollHeight + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    if(need > t.clientHeight + 2 && t.offsetHeight < max) t.style.height = Math.min(need, max) + "px";
+  }
+  document.addEventListener("input", function(e){ grow(e.target); }, true);
+  document.addEventListener("focusin", function(e){ grow(e.target); }, true);
+})();
