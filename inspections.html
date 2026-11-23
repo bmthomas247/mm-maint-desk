@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script src="media.js?v=20261123"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Inspection planner</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Maintenance ▸ Inspection planner (Brandon 2026-11-23: "an inspection planner section that allows the office to see what homes need
+     inspections and what homes have had some recently"). Reads crew_fill_list() (two-week promise, what's due, rotation, Breezeway task
+     already open, stays) + inspection_recent() (hub_inspection_plan.sql: finished + booked Breezeway inspection-department tasks).
+     Hands out with crew_fill_give() (managers/admins, same as the Crew planner). Access = crew_plan_ok() (every team but the accountant). -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.45}
+.wrap{max-width:1800px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:0;font-weight:800;letter-spacing:-.01em}
+.muted{color:var(--muted);font-size:13px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:34px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.sm{min-height:28px;padding:0 9px;font-size:12px}
+.hero{background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;border-radius:18px;padding:16px 18px;box-shadow:var(--shadow)}
+.hero .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.hero .top .right{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hero .btn{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff}
+.hero .sub{font-size:13px;opacity:.9;margin-top:2px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
+.tile{background:rgba(255,255,255,.96);color:var(--ink);border:0;border-radius:14px;padding:9px 13px;text-align:left;font:inherit;cursor:pointer}
+.tile b{display:block;font-size:22px;font-weight:800;line-height:1.15} .tile span{font-size:12px;color:var(--muted);font-weight:700}
+.tile.on{outline:3px solid var(--moose)} .tile.red b{color:var(--red)} .tile.amber b{color:var(--amber)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0 10px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.pt{border:1px solid var(--line-2);background:var(--card);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;font-weight:800;cursor:pointer;color:var(--ink)}
+.pt.on{background:var(--forest);border-color:var(--forest);color:#fff}
+.bar input,.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 10px;background:var(--card);color:var(--ink)}
+.bar input{flex:1 1 220px;min-width:180px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:980px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13.5px}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--card);position:sticky;top:0;cursor:pointer;white-space:nowrap}
+th.ns{cursor:default}
+tr:hover td{background:var(--ground)}
+td b.h{font-size:14.5px} .sm2{display:block;color:var(--muted);font-size:12px}
+.pill{display:inline-block;font-size:11.5px;font-weight:800;border-radius:999px;padding:1px 8px;white-space:nowrap}
+.pill.red{background:var(--red-soft);color:var(--red)} .pill.amber{background:var(--amber-soft);color:var(--amber)}
+.pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+.pill.violet{background:var(--violet-soft);color:var(--violet)} .pill.grey{background:var(--ground);color:var(--muted);border:1px solid var(--line-2)}
+a.bw{color:var(--blue);font-weight:700;text-decoration:none} a.bw:hover{text-decoration:underline}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+.note{margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:540px;width:calc(100% - 24px);background:var(--card);color:var(--ink);max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog .dbody{padding:18px 20px;overflow:auto;max-height:calc(100vh - 110px)}
+dialog h3{margin:0 0 4px;font-size:18px}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog input:where(:not([type=checkbox],[type=radio])),dialog select{display:block;width:100%;font:inherit;font-size:15px;border:1px solid var(--line-2);border-radius:10px;padding:7px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog .foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line)}
+.hist{margin:8px 0 0;padding:0;list-style:none;font-size:13px} .hist li{padding:5px 0;border-bottom:1px solid var(--line)}
+.err{color:var(--red);font-weight:700;font-size:13px;margin-top:8px}
+body.inhub .hero h1{font-size:20px}
+@media (max-width:640px){ .wrap{padding:10px 10px 30px} .tile b{font-size:19px} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">Loading…</div></div>
+<dialog id="dlg"></dialog>
+<script src="confirm.js?v=20261120c"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+window.MM_SB = sb;
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+if(window.top !== window) document.body.classList.add("inhub");
+const pcDay = (d = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone:"America/Denver", year:"numeric", month:"2-digit", day:"2-digit" }).format(d);
+const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const dayDiff = (a, b) => Math.round((new Date(a + "T12:00:00Z") - new Date(b + "T12:00:00Z")) / 864e5);
+const dLabel = iso => iso ? new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric", timeZone:"UTC" }) : "";
+const TODAY = pcDay();
+const WHAT = { housekeeping:"a cleaning", maintenance:"a maintenance job", inspection:"an inspection", vendors:"a vendor job", office:"an office task",
+  property_services:"a service visit", guest:"a guest stay", owner:"the owner staying", tenant:"a tenant" };
+const ago = iso => { if(!iso) return ""; const n = dayDiff(TODAY, iso); return n <= 0 ? "today" : n === 1 ? "yesterday" : n + " days ago"; };
+const short = n => String(n || "").replace(/^\d+\s*-\s*/, "").replace(/ Inspection$/i, "");
+const first = s => String(s || "").split(" ")[0];
+const bwLink = id => `https://app.breezeway.io/task/${id}`;
+
+const S = { F:null, R:null, err:"", view:"homes", tile:"all", q:"", comm:"", days:60, sort:"over", dir:-1, crew:null };
+try { const v = localStorage.getItem("mm_insp_view"); if(v) S.view = v; } catch(_){}
+
+async function load(){
+  const [f, r] = await Promise.all([sb.rpc("crew_fill_list", { p_day: TODAY }), sb.rpc("inspection_recent", { p_days: S.days })]);
+  if(f.error || r.error){ S.err = errText(f.error || r.error); render(); return; }
+  S.F = f.data; S.R = r.data; S.err = ""; build(); render();
+}
+
+/* one row per home: the two-week check row from crew_fill_list + its last inspection + what's already booked in Breezeway */
+function build(){
+  const fill = (S.F.homes || []), byHome = {};
+  fill.forEach(f => { (byHome[f.home] = byHome[f.home] || {})[f.kind] = f; });
+  const done = {}, open = {};
+  (S.R.done || []).forEach(t => (done[t.home] = done[t.home] || []).push(t));
+  (S.R.open || []).forEach(t => (open[t.home] = open[t.home] || []).push(t));
+  const homes = new Map();
+  (S.R.homes || []).forEach(h => homes.set(h.home, h));
+  Object.keys(byHome).forEach(c => { if(!homes.has(c)) homes.set(c, { home:c }); });
+  S.rows = [...homes.values()].map(h => {
+    const k = byHome[h.home] || {}, b = k.biweekly || null, u = k.utility || null;
+    const ds = done[h.home] || [], os = (open[h.home] || []).slice().sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+    const lastI = ds[0] || null;
+    const lastVisit = b && b.last ? { day: b.last, what: b.lastWhat } : (lastI ? { day: lastI.day, what: "inspection" } : null);
+    const next = os.find(t => t.date && t.date >= TODAY) || os.find(t => !t.date) || null;
+    const past = os.filter(t => t.date && t.date < TODAY);
+    const stayNow = b && b.stay;
+    return { home: h.home, community: h.community || "", beds: h.beds, b, u, rot: (b && b.rot) || [], pick: b && b.pick,
+      lastVisit, since: lastVisit ? dayDiff(TODAY, lastVisit.day) : 9999, lastI, done: ds, open: os, next, past,
+      over: b ? b.over : null, due: b ? b.due : null, given: b && b.given && b.given.day >= TODAY ? b.given : null,
+      stayNow, nextArrive: b && b.nextArrive, stays: (b && b.stays) || [], onList: !!b };
+  });
+}
+
+/* states */
+const isLate = r => r.onList && r.over > 0;                                   // nobody in for 14+ days
+const isWeek = r => r.onList && r.over <= 0 && r.over > -7;                   // two-week check due in the next 7 days
+const isBooked = r => !!r.next || !!r.given;
+const isRecent = r => r.lastI && dayDiff(TODAY, r.lastI.day) <= 30;
+const isNever = r => !r.lastI;
+const TILES = [
+  ["late", "Past 2 weeks", "no one in 14+ days", isLate, "red"],
+  ["week", "Due this week", "two-week check", isWeek, "amber"],
+  ["notbooked", "Due, not booked", "past due or this week, nothing in Breezeway", r => (isLate(r) || isWeek(r)) && !isBooked(r), "red"],
+  ["booked", "Booked in Breezeway", "inspection on the books", isBooked, ""],
+  ["recent", "Inspected last 30 days", "finished inspection", isRecent, ""],
+  ["never", "No inspection lately", "none in the days picked below", isNever, ""],
+];
+
+function filtered(){
+  const q = S.q.trim().toLowerCase().replace(/\s+/g, " ");
+  const t = TILES.find(x => x[0] === S.tile);
+  return S.rows.filter(r => (!t || t[3](r)) && (!S.comm || r.community === S.comm)
+    && (!q || (r.home + " " + r.home.replace(/\s/g, "") + " " + r.community).toLowerCase().includes(q)));
+}
+const SORTS = {
+  home: r => r.home, community: r => r.community + " " + r.home,
+  over: r => r.onList ? r.over : -999, last: r => r.since, insp: r => r.lastI ? dayDiff(TODAY, r.lastI.day) : 9999,
+  next: r => r.next && r.next.date ? dayDiff(r.next.date, TODAY) : 9999, arrive: r => r.nextArrive ? dayDiff(r.nextArrive, TODAY) : 9999,
+};
+
+function render(){
+  const a = $("#app");
+  if(S.err){ a.innerHTML = `<div class="hero"><h1>Inspection planner</h1></div><p class="err">Couldn't load: ${esc(S.err)}</p>`; return; }
+  if(!S.rows){ return; }
+  const canAct = S.F.canAct, comms = [...new Set(S.rows.map(r => r.community).filter(Boolean))].sort();
+  a.innerHTML = `
+  <div class="hero"><div class="top"><div><h1>🔎 Inspection planner</h1>
+    <div class="sub">Our promise: someone is in every home at least once every 2 weeks (cleaning, maintenance, vendor, inspection or a stay). Here's who needs one and who had one.</div></div>
+    <div class="right"><a class="btn" href="crew_plan.html">Crew planner →</a><button class="btn" id="rl">↻ Refresh</button></div></div>
+    <div class="tiles">${TILES.map(t => { const n = S.rows.filter(t[3]).length;
+      return `<button class="tile ${t[4]}${S.tile === t[0] ? " on" : ""}" data-tile="${t[0]}"><b>${n}</b><span>${esc(t[1])}</span><span style="display:block;font-weight:600">${esc(t[2])}</span></button>`; }).join("")}</div></div>
+  <div class="bar">
+    <div class="tabs">${[["homes","🏠 By home"],["recent","✅ Recent inspections"],["booked","📅 Booked"]].map(v => `<button class="pt${S.view === v[0] ? " on" : ""}" data-view="${v[0]}">${v[1]}</button>`).join("")}</div>
+    <input id="q" placeholder="Find a home or community" value="${esc(S.q)}">
+    <select id="comm"><option value="">All communities</option>${comms.map(c => `<option${c === S.comm ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
+    <select id="days" title="How far back to look for inspections">${[30,60,120,365].map(n => `<option value="${n}"${n === S.days ? " selected" : ""}>Inspections: last ${n} days</option>`).join("")}</select>
+    ${S.tile !== "all" ? `<button class="btn sm" data-tile="all">Show all homes</button>` : ""}
+  </div>
+  ${S.view === "recent" ? recentView() : S.view === "booked" ? bookedView() : homesView(canAct)}
+  <p class="note">Last visit = newest finished Breezeway task of any kind or a Track stay (last 120 days). Inspections = Breezeway inspection department.
+  ${canAct ? "" : S.F.canEdit ? "Handing out is switched off right now." : "Managers hand inspections out; you can look."}</p>`;
+  if(S._qf){ const q = $("#q"); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+
+function homesView(canAct){
+  const rows = filtered().slice().sort((a, b) => { const k = SORTS[S.sort] || SORTS.over, x = k(a), y = k(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * S.dir || a.home.localeCompare(b.home); });
+  if(!rows.length) return `<div class="card"><div class="empty">No homes match.</div></div>`;
+  const th = (k, t) => `<th data-sort="${k}">${t}${S.sort === k ? (S.dir > 0 ? " ▲" : " ▼") : ""}</th>`;
+  return `<div class="card"><table><thead><tr>${th("home","Home")}${th("last","Last someone was in")}${th("insp","Last inspection")}${th("over","Two-week check")}${th("next","Booked in Breezeway")}${th("arrive","Stays")}<th class="ns"></th></tr></thead><tbody>
+  ${rows.map(r => `<tr>
+    <td><b class="h">${esc(r.home)}</b><span class="sm2">${esc(r.community)}${r.beds ? " · " + r.beds + " BR" : ""}</span></td>
+    <td>${r.lastVisit ? `${esc(dLabel(r.lastVisit.day))} <span class="pill ${r.since > 14 ? "red" : r.since > 10 ? "amber" : "green"}">${esc(ago(r.lastVisit.day))}</span><span class="sm2">${esc(WHAT[r.lastVisit.what] || r.lastVisit.what || "")}</span>` : `<span class="pill red">Nothing on record</span>`}</td>
+    <td>${r.lastI ? `${esc(dLabel(r.lastI.day))}<span class="sm2">${esc(short(r.lastI.name))}${(r.lastI.who || []).length ? " · " + esc(r.lastI.who.map(first).join(", ")) : ""} · <a class="bw" href="${bwLink(r.lastI.id)}" target="_blank" rel="noopener">Breezeway ↗</a></span>` : `<span class="muted">None in ${S.days} days</span>`}</td>
+    <td>${!r.onList ? `<span class="pill grey">Not on the two-week list</span>` : r.over > 0 ? `<span class="pill red">${r.over} day${r.over === 1 ? "" : "s"} past due</span>` : r.over === 0 ? `<span class="pill red">Due today</span>` : `<span class="pill ${r.over > -7 ? "amber" : "green"}">Due ${esc(dLabel(r.due))}</span>`}
+      ${r.onList && r.pick && r.pick !== "biweekly" ? `<span class="sm2">Next in the rotation: ${esc(kindName(r.pick))}</span>` : ""}</td>
+    <td>${r.given ? `<span class="pill violet">Given to ${esc(first(r.given.who))} · ${esc(dLabel(r.given.day))}</span>` : ""}
+      ${r.next ? `<span class="pill blue">${r.next.date ? esc(dLabel(r.next.date)) : "No date"}</span><span class="sm2">${esc(short(r.next.name))} · ${(r.next.who || []).length ? esc(r.next.who.map(first).join(", ")) : "no one on it"} · <a class="bw" href="${bwLink(r.next.id)}" target="_blank" rel="noopener">↗</a></span>` : r.given ? "" : `<span class="muted">Nothing booked</span>`}
+      ${r.past.length ? `<span class="sm2" style="color:var(--amber)">${r.past.length} older one${r.past.length === 1 ? "" : "s"} never finished</span>` : ""}</td>
+    <td>${r.stayNow ? `<span class="pill amber">${esc(r.stayNow.owner ? "Owner in" : r.stayNow.lease ? "Tenant" : "Guest in")} to ${esc(dLabel(r.stayNow.depart))}</span>` : ""}
+      ${r.nextArrive ? `<span class="sm2">Next arrival ${esc(dLabel(r.nextArrive))}</span>` : r.stayNow ? "" : `<span class="muted">No stay in 30 days</span>`}</td>
+    <td style="white-space:nowrap"><button class="btn sm" data-open="${esc(r.home)}">Details</button>${canAct && r.onList ? ` <button class="btn sm primary" data-give="${esc(r.home)}">Hand out</button>` : ""}</td>
+  </tr>`).join("")}</tbody></table></div>`;
+}
+const kindName = k => (((S.F && S.F.kinds) || []).find(x => x.key === k) || {}).short || k;
+
+function recentView(){
+  const ok = new Set(filtered().map(r => r.home));
+  const list = (S.R.done || []).filter(t => ok.has(t.home));
+  if(!list.length) return `<div class="card"><div class="empty">No finished inspections in the last ${S.days} days for these homes.</div></div>`;
+  return `<div class="card"><table><thead><tr><th class="ns">Finished</th><th class="ns">Home</th><th class="ns">Inspection</th><th class="ns">Who</th><th class="ns">Time</th><th class="ns"></th></tr></thead><tbody>
+  ${list.map(t => `<tr><td>${esc(dLabel(t.day))}<span class="sm2">${esc(ago(t.day))}</span></td><td><b class="h">${esc(t.home)}</b></td><td>${esc(short(t.name))}</td>
+    <td>${esc((t.who || []).join(", ") || t.by || "")}</td><td>${t.min > 0 && t.min < 600 ? t.min + " min" : ""}</td>
+    <td><a class="bw" href="${bwLink(t.id)}" target="_blank" rel="noopener">Breezeway ↗</a></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function bookedView(){
+  const ok = new Set(filtered().map(r => r.home));
+  const list = (S.R.open || []).filter(t => ok.has(t.home));
+  if(!list.length) return `<div class="card"><div class="empty">No inspections booked for these homes.</div></div>`;
+  return `<div class="card"><table><thead><tr><th class="ns">Date</th><th class="ns">Home</th><th class="ns">Inspection</th><th class="ns">Who</th><th class="ns">Status</th><th class="ns"></th></tr></thead><tbody>
+  ${list.map(t => `<tr><td>${t.date ? esc(dLabel(t.date)) + (t.date < TODAY ? ` <span class="pill amber">past, not finished</span>` : "") : `<span class="pill grey">No date</span>`}</td>
+    <td><b class="h">${esc(t.home)}</b></td><td>${esc(short(t.name))}</td><td>${(t.who || []).length ? esc(t.who.join(", ")) : `<span class="pill red">No one on it</span>`}</td>
+    <td>${esc(t.status || t.stage || "")}</td><td><a class="bw" href="${bwLink(t.id)}" target="_blank" rel="noopener">Breezeway ↗</a></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function openHome(code){
+  const r = S.rows.find(x => x.home === code); if(!r) return; const d = $("#dlg");
+  d.innerHTML = `<div class="dbody"><h3>${esc(r.home)}</h3><div class="muted">${esc(r.community)}${r.beds ? " · " + r.beds + " bedrooms" : ""}</div>
+    <p>${r.lastVisit ? `Last someone was in: <b>${esc(dLabel(r.lastVisit.day))}</b> (${esc(WHAT[r.lastVisit.what] || r.lastVisit.what || "")}, ${esc(ago(r.lastVisit.day))}).` : "No visit on record in 120 days."}
+    ${r.onList ? (r.over > 0 ? ` Two-week check is <b>${r.over} days past due</b>.` : ` Two-week check due ${esc(dLabel(r.due))}.`) : " Not on the two-week list."}</p>
+    ${r.rot.length ? `<b style="font-size:13px">Detailed inspections (they rotate)</b><ul class="hist">${r.rot.map(x => `<li>${esc(x.short)} · ${x.last ? "last " + esc(dLabel(x.last)) : "none on record"} · every ${x.every} days${x.over > 0 ? ` · <span class="pill red">${x.over} days over</span>` : ""}${x.open ? ` · <span class="pill blue">booked ${x.open.date ? esc(dLabel(x.open.date)) : "no date"}</span>` : ""}</li>`).join("")}</ul>` : ""}
+    <b style="font-size:13px;display:block;margin-top:12px">Inspections finished (last ${S.days} days)</b>
+    ${r.done.length ? `<ul class="hist">${r.done.map(t => `<li>${esc(dLabel(t.day))} · ${esc(short(t.name))}${(t.who || []).length ? " · " + esc(t.who.join(", ")) : ""} · <a class="bw" href="${bwLink(t.id)}" target="_blank" rel="noopener">↗</a></li>`).join("")}</ul>` : `<div class="muted">None.</div>`}
+    <b style="font-size:13px;display:block;margin-top:12px">Booked in Breezeway</b>
+    ${r.open.length ? `<ul class="hist">${r.open.map(t => `<li>${t.date ? esc(dLabel(t.date)) : "No date"} · ${esc(short(t.name))} · ${(t.who || []).length ? esc(t.who.join(", ")) : "no one on it"} · <a class="bw" href="${bwLink(t.id)}" target="_blank" rel="noopener">↗</a></li>`).join("")}</ul>` : `<div class="muted">Nothing booked.</div>`}
+    ${r.stays.length ? `<b style="font-size:13px;display:block;margin-top:12px">Stays (next 30 days)</b><ul class="hist">${r.stays.map(s => `<li>${esc(s[2])} · ${esc(dLabel(s[0]))} → ${esc(dLabel(s[1]))}</li>`).join("")}</ul>` : ""}
+    </div><div class="foot"><button class="btn" data-close>Close</button>${S.F.canAct && r.onList ? `<button class="btn primary" data-give="${esc(r.home)}">Hand out an inspection</button>` : ""}</div>`;
+  d.showModal();
+}
+
+async function crew(){
+  if(S.crew) return S.crew;
+  const r = await sb.rpc("crew_plan", { p_from: TODAY, p_to: TODAY });
+  if(r.error) throw r.error;
+  S.crew = (r.data.crew || []).filter(c => c.bw && !c.mgr); return S.crew;
+}
+function firstFree(r){ let d = addDays(TODAY, 1); for(let i = 0; i < 30; i++, d = addDays(d, 1)){ if(!r.stays.some(s => s[0] <= d && d < s[1])) return d; } return addDays(TODAY, 1); }
+async function openGive(code){
+  const r = S.rows.find(x => x.home === code); if(!r || !r.b) return; const d = $("#dlg");
+  let techs; try { techs = await crew(); } catch(e){ await mmAlert("Couldn't load the crew: " + errText(e)); return; }
+  const pick = r.pick || "biweekly";
+  d.innerHTML = `<div class="dbody"><h3>Hand out an inspection · ${esc(r.home)}</h3>
+    <div class="muted">${r.lastVisit ? "Last someone was in " + esc(dLabel(r.lastVisit.day)) + " (" + esc(ago(r.lastVisit.day)) + ")" : "No visit on record"}.
+    ${r.next ? ` Breezeway already has ${esc(short(r.next.name))} ${r.next.date ? "on " + esc(dLabel(r.next.date)) : "with no date"}.` : ""}
+    If that same inspection is already open in Breezeway, the hub moves it to this person and day instead of making a second one.</div>
+    <label>Which inspection<select id="g_k"><option value="biweekly"${pick === "biweekly" ? " selected" : ""}>Two-week check (Bi-Weekly Inspection)</option>
+      ${r.rot.map(x => `<option value="${esc(x.kind)}"${pick === x.kind ? " selected" : ""}>${esc(x.short)} · ${x.last ? "last " + esc(dLabel(x.last)) : "none on record"}</option>`).join("")}</select></label>
+    <label>Who<select id="g_u">${techs.map(c => `<option value="${esc(c.uid)}">${esc(c.bwName || c.name)}</option>`).join("")}</select></label>
+    <label>Day<input type="date" id="g_d" value="${firstFree(r)}" min="${TODAY}"></label>
+    <div class="muted" id="g_st"></div><div class="err" id="g_err"></div></div>
+    <div class="foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="g_go">Send to Breezeway</button></div>`;
+  const chk = () => { const v = $("#g_d").value, s = r.stays.find(s => s[0] <= v && v < s[1]);
+    $("#g_st").textContent = s ? `⚠ ${s[2] === "owner" ? "The owner is" : s[2] === "tenant" ? "A tenant is" : "A guest is"} staying that night. Pick another day.` : ""; };
+  $("#g_d").addEventListener("change", chk); chk();
+  $("#g_go").onclick = async () => {
+    const day = $("#g_d").value; if(!day){ $("#g_err").textContent = "Pick a day."; return; }
+    if(r.stays.some(s => s[0] <= day && day < s[1])){ $("#g_err").textContent = "Someone is staying that night. Pick another day."; return; }
+    $("#g_go").disabled = true;
+    const res = await sb.rpc("crew_fill_give", { p_code: r.home, p_kind: $("#g_k").value, p_user: $("#g_u").value, p_day: day });
+    if(res.error){ $("#g_err").textContent = errText(res.error); $("#g_go").disabled = false; return; }
+    d.close(); await mmAlert(`Sent. It shows in Breezeway within a minute or two.`, { title: "Inspection handed out" });
+    load(); setTimeout(load, 75000);
+  };
+  if(!d.open) d.showModal();
+}
+
+document.addEventListener("click", async e => {
+  const d = $("#dlg"); if(e.target === d){ d.close(); return; }
+  const b = e.target.closest("button"); if(!b) { const th = e.target.closest("th[data-sort]"); if(th){ const k = th.dataset.sort; if(S.sort === k) S.dir = -S.dir; else { S.sort = k; S.dir = k === "over" ? -1 : 1; } render(); } return; }
+  if(b.dataset.tile){ S.tile = S.tile === b.dataset.tile ? "all" : b.dataset.tile; if(S.view !== "homes" && S.tile !== "all") S.view = "homes"; render(); return; }
+  if(b.dataset.view){ S.view = b.dataset.view; try { localStorage.setItem("mm_insp_view", S.view); } catch(_){} render(); return; }
+  if(b.id === "rl"){ load(); return; }
+  if(b.dataset.open){ openHome(b.dataset.open); return; }
+  if(b.dataset.give){ openGive(b.dataset.give); return; }
+  if(b.hasAttribute("data-close")){ d.close(); return; }
+});
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; S._qf = true; render(); S._qf = false; } });
+document.addEventListener("change", e => {
+  if(e.target.id === "comm"){ S.comm = e.target.value; render(); }
+  if(e.target.id === "days"){ S.days = +e.target.value; load(); }
+});
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("crew_plan_ok");
+  if(ok.error){ $("#app").innerHTML = `<h1>Inspection planner</h1><p class="muted">Couldn't load. Check your signal and try again.</p>`; return; }
+  if(ok.data !== true){ location.replace("hub.html#/home"); return; }
+  load();
+})();
+window.__ip = { S, render, build };
+</script>
+</body>
+</html>
