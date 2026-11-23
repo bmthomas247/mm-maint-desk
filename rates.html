@@ -4399,6 +4399,7 @@ function csDraw() {
     const near = ds.some(v => Math.abs(x.sleeps - v) <= d.win); return `${x.sleeps}${ds.length && !near ? ' <small class="csbad">±' + d.win + ' off</small>' : ""}`; };
   const st = x => x.tier === "Primary" && !x.fits ? `<span class="csuse n">Out of range</span>` : x.tier === "Primary" ? '<span class="csuse y">In use</span>' : x.tier === "Paused" ? `<span class="csuse p">Paused</span>${x.paused_at ? `<br><small class="muted">${pcEsc(x.paused_at)}</small>` : ""}` : '<span class="csuse n">Secondary</span>';
   const act = x => !ed ? "" : (x.tier === "Primary" ? `<button class="csbtn" data-cst="paused" data-c="${pcEsc(x.id)}">⏸ Pause</button>` : `<button class="csbtn" data-cst="inuse" data-c="${pcEsc(x.id)}">▶ Use</button>`) +
+    `<button class="csbtn" data-cslink="${pcEsc(x.id)}" title="Add this home's Airbnb, Vrbo or own booking-site link">🔗 Add link</button>` +
     `<button class="csbtn del" data-cst="delete" data-c="${pcEsc(x.id)}">🗑 Delete</button>`;
   const reqs = (d.requests || []).map(r => { const i = r.info || {};
     return `<tr><td style="text-align:left;white-space:normal"><a href="${pcEsc(r.url)}" target="_blank" rel="noopener">${pcEsc(i.title || r.url)}</a>${i.note ? `<br><small class="muted">${pcEsc(i.note)}</small>` : ""}</td>
@@ -4483,6 +4484,22 @@ function csDraw() {
     if (stt === "paused" && !await mmConfirm(`Pause "${x.label}"? Pricing stops using it; its prices keep being pulled.`)) return;
     const r = await sb.rpc("rates_comp_state", { p_comp: x.id, p_state: stt, p_note: note });
     if (r.error) await mmAlert(r.error.message); else { CS.sets = null; await csFetch(true); rateSetsRefresh(); } });
+  // Brandon 2026-11-23: one home on Airbnb + Vrbo + its own booking site = one comp. Add a link, or combine two comps that are the same home.
+  W.querySelectorAll("[data-cslink]").forEach(b => b.onclick = async () => {
+    const x = rows.find(r => r.id === b.dataset.cslink);
+    const u = await mmAsk(`Paste another link for "${x.label}": its Airbnb, its Vrbo, or the home's own booking site (Evolve, AvantStay, the manager's website...).`, { placeholder: "https://..." });
+    if (!u) return;
+    const r = await sb.rpc("rates_comp_link_add", { p_comp: x.id, p_url: u, p_note: null });
+    if (r.error) { await mmAlert(r.error.message); return; }
+    const j = r.data || {};
+    if (j.already) { await mmAlert(`That ${j.channel} link is already on this comp.`); return; }
+    if (j.other_comp) {
+      if (!await mmConfirm(`That ${j.channel} listing is already its own comp: "${j.other_label}" (${j.other_comp}). Same home? Combine them: all its links move onto "${x.label}" and the copy is switched off (history kept).`, { title: "Combine two comps?", yes: "Combine" })) return;
+      const c = await sb.rpc("rates_comp_combine", { p_keep: x.id, p_dup: j.other_comp, p_note: null });
+      if (c.error) { await mmAlert(c.error.message); return; }
+      await mmAlert(`Combined. ${c.data?.moved ?? 0} link(s) moved onto "${x.label}".`);
+    } else await mmAlert(`Added the ${j.channel} link to "${x.label}".` + (j.channel === "Direct" ? " Its own-site prices show once a reader for that site is built." : ""));
+    await csFetch(true); });
   W.querySelectorAll("[data-mvs]").forEach(s0 => s0.onchange = async () => {
     const to = s0.value; if (!to) return; const tn = (CS.sets.find(x => x.id === to) || {}).name;
     if (!await mmConfirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
