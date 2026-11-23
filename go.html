@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Moose Management</title>
+<style>body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f6f7f2;color:#1f2a1a;display:grid;place-items:center;min-height:100vh;text-align:center}
+a{color:#3c5f12}</style>
+<!-- go.html?c=CODE = the QR link on a Moose postcard (Advertising > Owners > Postcards, hub_owner_leads.sql).
+     Logs the scan (mkt_postcard_scan, public) and sends them to the page the batch points at (Revenue Estimator). -->
+<script src="config.js"></script>
+</head><body>
+<p>Taking you to Moose Management…<br><a id="go" href="https://www.vacationrentalsparkcity.com/revenue-estimator/">Tap here if nothing happens</a></p>
+<script>
+(function(){
+  var FALL = "https://www.vacationrentalsparkcity.com/revenue-estimator/";
+  var c = (new URLSearchParams(location.search).get("c") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12);
+  var done = false, go = function(u){ if(done) return; done = true;
+    if(!/^https:\/\/(www\.)?vacationrentalsparkcity\.com\//.test(u || "")) u = FALL;
+    document.getElementById("go").href = u; location.replace(u); };
+  setTimeout(function(){ go(FALL); }, 4000);
+  var C = window.MM_CONFIG || {};
+  if(!c || !C.url || !C.anonKey) return go(FALL);
+  fetch(C.url + "/rest/v1/rpc/mkt_postcard_scan", { method:"POST",
+    headers:{ "Content-Type":"application/json", apikey:C.anonKey, Authorization:"Bearer " + C.anonKey },
+    body:JSON.stringify({ p_code:c, p_ua:navigator.userAgent }) })
+  .then(function(r){ return r.ok ? r.json() : null; }).then(go).catch(function(){ go(FALL); });
+})();
+</script>
+</body></html>
