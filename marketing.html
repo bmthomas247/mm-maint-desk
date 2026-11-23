@@ -554,7 +554,7 @@ function hrHtml(){
   if(!OL.hr) return "";
   const L = OL.hr, f = OL.hrf || "due", q = (OL.hrq || "").toLowerCase();
   const cnt = fn => L.filter(fn).length;
-  const sets = { due:l => hrDue(l), warm:l => l.segment === "warm" && !HR_CLOSED.has(l.status), new_buyer:l => l.segment === "new_buyer" && !HR_CLOSED.has(l.status),
+  const sets = { due:l => hrDue(l) && !hrMail(l), cards:l => hrDue(l) && hrMail(l) && !!l.serp_key, warm:l => l.segment === "warm" && !HR_CLOSED.has(l.status), new_buyer:l => l.segment === "new_buyer" && !HR_CLOSED.has(l.status),
     our_building:l => l.segment === "our_building" && !HR_CLOSED.has(l.status), talking:l => l.status === "talking", proposal:l => l.status === "proposal",
     signed:l => l.status === "signed", closed:l => ["not_now","not_interested","dont_contact"].includes(l.status), all:() => true };
   const spend = (OL.hrS || []).reduce((n, x) => n + +x.amount, 0), signed = cnt(sets.signed);
@@ -589,10 +589,12 @@ function hrHtml(){
   const byCh = {}; (OL.hrS || []).forEach(x => byCh[x.channel] = (byCh[x.channel] || 0) + +x.amount);
   return `<h2>🏆 Home-run owner campaign</h2>
     <p class="muted">One card per owner and one follow-up plan: call first, then text, email, call (9 steps over 17 days), or 3 postcards for owners we only have a mailing address for. Log every touch with a button and the card moves to its next step and date. Judge it all by cost per signed home (ZPoint Fall 2025 ≈ $2,800).</p>
-    <div class="kpis">${tile("due", "Due now", cnt(sets.due), "call these first")}${tile("warm", "🔥 Warm (ZPoint)", cnt(sets.warm), "asked or scanned before")}${tile("new_buyer", "🏡 New buyers", cnt(sets.new_buyer), "bought in 120 days")}${tile("our_building", "🏢 Our buildings", cnt(sets.our_building), "absentee owners")}${tile("talking", "Talking", cnt(sets.talking))}${tile("proposal", "Proposal sent", cnt(sets.proposal))}${tile("signed", "✅ Signed", signed)}${tile("closed", "Closed", cnt(sets.closed))}${tile("all", "All", L.length)}
+    <div class="kpis">${tile("due", "📞 Due now", cnt(sets.due), "call / text / email")}${tile("cards", "📬 Ready for postcards", cnt(sets.cards), "mail-only owners")}${tile("warm", "🔥 Warm (ZPoint)", cnt(sets.warm), "asked or scanned before")}${tile("new_buyer", "🏡 New buyers", cnt(sets.new_buyer), "bought in 120 days")}${tile("our_building", "🏢 Our buildings", cnt(sets.our_building), "absentee owners")}${tile("talking", "Talking", cnt(sets.talking))}${tile("proposal", "Proposal sent", cnt(sets.proposal))}${tile("signed", "✅ Signed", signed)}${tile("closed", "Closed", cnt(sets.closed))}${tile("all", "All", L.length)}
       <div class="kpi"><small>Cost per signed home</small><b>${signed ? "$" + Math.round(spend / signed).toLocaleString() : "—"}</b><small>$${Math.round(spend).toLocaleString()} spent · ${signed} signed</small></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0"><input id="hrq" placeholder="Search name, address, building…" value="${esc(OL.hrq || "")}" style="flex:1;min-width:220px">
       <label style="font-size:13px"><input type="checkbox" data-hrmine="1" ${OL.hrMine ? "checked" : ""}> Mine only</label></div>
+    ${f === "cards" && R.length ? `<div class="box" style="padding:10px 12px;margin:0 0 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${R.length} owners ready for their next postcard</b>
+      <button class="btn small primary" data-hrcards="1">📬 Put these ${R.length} into a postcard batch</button><span class="muted" style="font-size:12px">Makes an ordinary batch under 📬 Postcards (design, preview and mail it there) and moves each owner to their next step.</span></div>` : ""}
     ${rows || `<p class="muted">Nobody here. Pick another tile.</p>`}
     ${R.length > 25 ? `<button class="btn small" data-hrmore="1">${OL.hrAll ? "Show less" : "See all " + R.length}</button>` : ""}
     <details class="box" style="padding:10px 12px;margin:10px 0"><summary><b>💵 Campaign spend</b> · $${Math.round(spend).toLocaleString()} so far</summary>
@@ -612,7 +614,7 @@ async function hrSet(id, st){ let home = "", note = "";
   if(st === "not_interested" || st === "dont_contact"){ note = await mmAsk("Why? (short)", { value:"" }); if(note === null) return; }
   const r = await sb.rpc("mkt_hr_set", { p_id:+id, p_status:st, p_owner:null, p_note:note || "", p_next:null, p_home:home || "" }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); }
 document.addEventListener("click", async e => {
-  const b = e.target.closest("[data-hrf],[data-hrt],[data-hrs],[data-hrn],[data-hrh],[data-hrmore],[data-hrsp]"); if(!b) return;
+  const b = e.target.closest("[data-hrf],[data-hrt],[data-hrs],[data-hrn],[data-hrh],[data-hrmore],[data-hrsp],[data-hrcards]"); if(!b) return;
   if(b.dataset.hrf){ OL.hrf = OL.hrf === b.dataset.hrf ? "due" : b.dataset.hrf; OL.hrAll = false; return render(); }
   if(b.dataset.hrmore){ OL.hrAll = !OL.hrAll; return render(); }
   if(b.dataset.hrh){ OL.hrOpen = OL.hrOpen === +b.dataset.hrh ? null : +b.dataset.hrh; return render(); }
@@ -621,6 +623,11 @@ document.addEventListener("click", async e => {
   if(b.dataset.hrn){ const t = await mmAsk("Note on this owner (never codes or passwords)", { multiline:true, value:"" }); if(!t || !t.trim()) return;
     const r = await sb.rpc("mkt_hr_touch", { p_id:+b.dataset.hrn, p_kind:"note", p_note:t.trim() }); if(r.error) return mmAlert(niceE(r.error));
     await sb.rpc("mkt_hr_set", { p_id:+b.dataset.hrn, p_status:null, p_owner:null, p_note:t.trim(), p_next:null, p_home:"" }); await olLoad(); return render(); }
+  if(b.dataset.hrcards){ const R = OL.hr.filter(l => hrDue(l) && hrMail(l) && l.serp_key && (!OL.hrq || [l.name, l.address, l.community, l.why].join(" ").toLowerCase().includes(OL.hrq.toLowerCase())));
+    const nm = await mmAsk(`Name for the batch (${R.length} owners)`, { value:"Home-run · " + today() }); if(!nm) return;
+    if(!await mmConfirm(`Make a postcard batch "${nm}" with ${R.length} owners? Nothing mails until someone presses Mail on the batch.`)) return;
+    const r = await sb.rpc("mkt_hr_card_batch", { p_ids:R.map(l => l.id), p_name:nm, p_card:"" }); if(r.error) return mmAlert(niceE(r.error));
+    await mmAlert(`Batch made: ${r.data.added} cards (${r.data.skipped} skipped). Design and mail it under 📬 Postcards.`); await olLoad(); return render(); }
   if(b.dataset.hrsp){ const a = +document.getElementById("hrsa").value; if(!(a > 0)) return mmAlert("Type the amount");
     const r = await sb.rpc("mkt_hr_spend_add", { p_day:document.getElementById("hrsd").value || null, p_channel:document.getElementById("hrsc").value, p_amount:a, p_note:document.getElementById("hrsn").value });
     if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); }
