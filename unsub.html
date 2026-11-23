@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Unsubscribe</title>
+<link rel="icon" href="moose-logo.png">
+<!-- Public opt-out page (2026-11-23, Brandon: "we will want to allow the unsubscribe from our emails ... set up legally").
+     Adds the email and/or the card code to the hub's do-not-contact list (mkt_unsub, hub_owner_dnc.sql). No sign-in. -->
+<style>
+:root{--forest:#3c5f12;--moose:#88B535;--ink:#15201a;--muted:#6b776f;--line:#e1e7de;--card:#fff;--ground:#f5f7f0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--ground)}
+@media (prefers-color-scheme: dark){:root{--ink:#e8efe9;--muted:#9aa89e;--line:#2c3c33;--card:#151f19;--ground:#0d1410}}
+body{margin:0;background:var(--ground)}
+main{max-width:520px;margin:40px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px}
+h1{font-size:22px;margin:10px 0 6px}
+p{line-height:1.5}
+label{display:block;font-weight:600;font-size:14px;margin:14px 0 4px}
+input{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+button{margin-top:16px;width:100%;font:inherit;font-weight:700;font-size:16px;padding:12px;border:0;border-radius:12px;background:var(--forest);color:#fff;cursor:pointer}
+button:disabled{opacity:.6}
+.muted{color:var(--muted);font-size:13px}
+.err{color:#c8382b;font-weight:600}
+.ok{font-size:18px;font-weight:700;color:var(--forest)}
+</style>
+</head>
+<body>
+<main><div class="card" id="box">
+  <img src="moose-logo.png" alt="Moose Management" width="56" height="56">
+  <h1>Stop hearing from us</h1>
+  <p>Enter your email (or the code on your postcard) and we'll stop sending you marketing emails, postcards, calls and texts. It takes effect right away.</p>
+  <label for="em">Email</label><input id="em" type="email" autocomplete="email" placeholder="you@example.com">
+  <label for="cd">Postcard code <span class="muted">(optional)</span></label><input id="cd" maxlength="6" placeholder="ABC123" style="text-transform:uppercase">
+  <button id="go">Unsubscribe me</button>
+  <p class="err" id="err"></p>
+  <p class="muted">Moose Management Vacation Rentals · 5519 Lillehammer Ln #1101, Park City, UT 84098 · hello@moosemanagement.com · 435-714-6544</p>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+const C = window.MM_CONFIG, sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:false } });
+const q = new URLSearchParams(location.search);
+if(q.get("c")) document.getElementById("cd").value = q.get("c").toUpperCase().slice(0, 6);
+if(q.get("e")) document.getElementById("em").value = q.get("e");
+document.getElementById("go").onclick = async e => {
+  const em = document.getElementById("em").value.trim(), cd = document.getElementById("cd").value.trim(), err = document.getElementById("err");
+  if(!em && !cd){ err.textContent = "Type your email, or the code on your card."; return; }
+  e.target.disabled = true; e.target.textContent = "Working…"; err.textContent = "";
+  const r = await sb.rpc("mkt_unsub", { p_code:cd || null, p_email:em || null });
+  if(r.error){ err.textContent = (r.error.message || "Something went wrong") + ". You can also email hello@moosemanagement.com."; e.target.disabled = false; e.target.textContent = "Unsubscribe me"; return; }
+  document.getElementById("box").innerHTML = `<img src="moose-logo.png" alt="Moose Management" width="56" height="56"><p class="ok">You're unsubscribed.</p><p>We won't send you marketing emails, postcards, calls or texts. Sorry to bother you, and thanks for letting us know.</p><p class="muted">Moose Management Vacation Rentals · 5519 Lillehammer Ln #1101, Park City, UT 84098</p>`;
+};
+</script>
+</body>
+</html>

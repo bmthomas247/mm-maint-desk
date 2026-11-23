@@ -100,7 +100,7 @@ const today = () => new Date().toLocaleDateString("en-CA", { timeZone:"America/D
 const addD = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const niceE = e => (window.top && window.top.niceErr ? window.top.niceErr(e) : (e && e.message) || String(e));
 const money = n => n == null ? "—" : "$" + Math.round(+n).toLocaleString();
-const TABS = [["overview","🏔 Overview"],["builder","🗺 Campaign builder"],["tpl","📋 Templates"],["leads","📞 Leads & follow-up"],["ctl","📅 Campaign timeline"],["stl","✍️ Signing timeline"],["past","📜 Past results"]];
+const TABS = [["overview","🏔 Overview"],["builder","🗺 Campaign builder"],["tpl","📋 Templates"],["leads","📞 Leads & follow-up"],["ctl","📅 Campaign timeline"],["stl","✍️ Signing timeline"],["past","📜 Past results"],["dnc","🚫 Do not contact"]];
 const S = { tab:new URLSearchParams(location.search).get("t") || "overview", owners:[], homes:[], lists:[], members:{}, areas:[], hr:[], hrT:[], hrS:[], camps:[], batches:[], items:[], scans:[], inq:[], rc:null,
   sel:{ poly:null, list:null, f:{ absentee:true, newOwner:false, outState:false, notInCampaign:true, type:"", beds:0 } }, hrf:"due" };
 const KIND = { mail:"📬", email:"✉️", call:"📞", text:"💬", ads_start:"📣", ads_end:"📣", task:"✅", review:"📊" };
@@ -112,7 +112,7 @@ async function pages(q){ let all = []; for(let f = 0; f < 50000; f += 1000){ con
 async function load(){
   const ok = await sb.rpc("hub_can", { p_desk:"advertising" });
   if(ok.error || !ok.data){ $("#app").innerHTML = `<div class="empty">Nothing to show.</div>`; return false; }
-  const [own, homes, lists, areas, hr, hrT, hrS, camps, bt, it, sc, inq, rc, tp] = await Promise.all([
+  const [own, homes, lists, areas, hr, hrT, hrS, camps, bt, it, sc, inq, rc, tp, dk] = await Promise.all([
     pages(() => sb.from("serp_finds").select("key,community,data").eq("kind", "area_owner").eq("gone", false).order("key")),
     sb.rpc("mkt_our_home_points"),
     sb.from("mkt_owner_lists").select("*").eq("off", false).order("created_at", { ascending:false }),
@@ -126,7 +126,9 @@ async function load(){
     pages(() => sb.from("mkt_postcard_scans").select("code,at").order("at")),
     pages(() => sb.from("mkt_owner_inquiries").select("*").eq("off", false).order("lead_on")),
     sb.from("mkt_pull_status").select("*").eq("key", "rentcast").maybeSingle(),
-    sb.from("mkt_campaign_templates").select("*").order("sort").order("name")]);
+    sb.from("mkt_campaign_templates").select("*").order("sort").order("name"),
+    sb.rpc("mkt_dnc_owner_keys")]);
+  S.dncKeys = new Set(dk.data || []);
   S.owners = own.map(o => ({ key:o.key, comm:o.community, ...o.data })).filter(o => o.lat != null || true);
   S.homes = homes.data || []; S.lists = lists.data || []; S.areas = areas.data || [];
   S.hr = hr; S.hrT = hrT; S.hrS = hrS.data || []; S.camps = camps.data || []; S.batches = bt.data || []; S.items = it; S.scans = sc; S.inq = inq; S.rc = rc.data || null; S.tpls = tp.data || [];
@@ -146,7 +148,7 @@ function render(){
         ${st("stl", "Signed this year", signedYr, signedAll + " from the board")}${st("stl", "Cost per signed home", signedAll ? money(spend / signedAll) : "—", money(spend) + " logged")}</div></div>
     <div class="tabs">${TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${l}</button>`).join("")}</div>
     <div id="view"></div>`;
-  ({ overview:vOverview, builder:vBuilder, tpl:vTemplates, leads:vLeads, ctl:vCampTL, stl:vSignTL, past:vPast }[S.tab] || vOverview)();
+  ({ overview:vOverview, builder:vBuilder, tpl:vTemplates, leads:vLeads, ctl:vCampTL, stl:vSignTL, past:vPast, dnc:vDnc }[S.tab] || vOverview)();
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if(!b) return; S.tab = b.dataset.tab; history.replaceState(null, "", "?t=" + S.tab); render(); window.scrollTo(0, 0); });
 
@@ -189,6 +191,7 @@ function selected(){
     if(f.outState && (o.mailing_state || (String(o.mailing || "").match(/,\s*([A-Z]{2})\s+\d{5}/) || [])[1]) === "UT") return false;
     if(f.type && o.type !== f.type) return false;
     if(f.beds && !(+o.beds >= f.beds)) return false;
+    if(S.dncKeys && S.dncKeys.has(o.key)) return false;
     if(f.notInCampaign && inCampaign.has(o.key)) return false;
     return true; });
 }
@@ -251,7 +254,7 @@ function drawSel(){
   const absent = sel.filter(o => !o.owner_occupied).length, newO = sel.filter(o => o.new_owner || (o.last_sale && o.last_sale >= yr)).length;
   const lu = S.rc ? +S.rc.calls || 0 : 0;
   $("#bsum").innerHTML = `<h2>${sel.length.toLocaleString()} owners selected</h2>
-    <div style="font-size:13px" class="muted">${absent} live elsewhere · ${newO} new owners${sel.length ? ` · 3 postcards ≈ ${money(sel.length * 3 * 0.9)} (PostGrid ~$0.90 a card)` : ""}</div>
+    <div style="font-size:13px" class="muted">${S.dncKeys && S.dncKeys.size ? `🚫 ${S.dncKeys.size} owners on the do-not-contact list are always left out · ` : ""}${absent} live elsewhere · ${newO} new owners${sel.length ? ` · 3 postcards ≈ ${money(sel.length * 3 * 0.9)} (PostGrid ~$0.90 a card)` : ""}</div>
     <div style="max-height:170px;overflow:auto;margin:8px 0;font-size:12.5px">${sel.slice(0, 60).map(o => `<div>• <b>${esc((o.owners || []).join(" & "))}</b> <span class="muted">${esc(o.address || "")}</span></div>`).join("")}${sel.length > 60 ? `<div class="muted">…and ${sel.length - 60} more</div>` : ""}</div>
     <div class="acts">
       <button class="btn small" id="bsave" ${sel.length ? "" : "disabled"}>💾 Save as list</button>
@@ -543,6 +546,49 @@ function vPast(){
       <li>Fall 2025 (with a landing page) got 152 inquiries; Spring 2025 (without) got 0.</li>
       <li>Follow-up stopped: none of the 88 landing-page inquiries was touched in the last 90 days in ContactPoint.</li></ul></div>`;
 }
+
+/* ------------------------------------------------------------------ do not contact */
+const DNC_CH = { all:"Everything", email:"Email", mail:"Postcards", phone:"Calls", text:"Texts" };
+async function vDnc(){
+  $("#view").innerHTML = `<div class="empty">Loading…</div>`;
+  if(!S.dnc){ try { S.dnc = await pages(() => sb.from("mkt_dnc").select("id,kind,shown,name,channels,source,reason,created_name,at,off,off_reason,off_name").order("id", { ascending:false })); } catch(e){ $("#view").innerHTML = `<div class="empty err">${esc(niceE(e))}</div>`; return; } }
+  const L = S.dnc, on = L.filter(x => !x.off), f = S.dncF || "all", q = (S.dncQ || "").toLowerCase();
+  const by = {}; on.forEach(x => by[x.source] = (by[x.source] || 0) + 1);
+  const tile = (k, l, n) => `<button class="kpi ${f === k ? "on" : ""}" data-dncf="${esc(k)}"><small>${esc(l)}</small><b>${n}</b></button>`;
+  let R = f === "taken_off" ? L.filter(x => x.off) : on.filter(x => f === "all" || x.source === f || x.kind === f);
+  if(q) R = R.filter(x => [x.shown, x.name, x.reason, x.source].join(" ").toLowerCase().includes(q));
+  const icon = { email:"✉️", phone:"📞", address:"📬" };
+  $("#view").innerHTML = `<div class="card"><h2>🚫 Do not contact</h2>
+      <p class="muted" style="margin:0 0 6px">One list every channel checks. Anyone here is left out of the map builder and postcard batches, and the hub refuses calls, texts, emails and cards to them. Emails and phones are kept only as a masked copy. Owners can add themselves at <a href="unsub.html" target="_blank">crew.moosemanagement.com/unsub.html</a>; put that link and our address in every marketing email.</p>
+      <div class="kpis">${tile("all", "On the list", on.length)}${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, n]) => tile(k, "From " + k, n)).join("")}${tile("email", "Emails", on.filter(x => x.kind === "email").length)}${tile("phone", "Phones", on.filter(x => x.kind === "phone").length)}${tile("address", "Mailing addresses", on.filter(x => x.kind === "address").length)}${L.some(x => x.off) ? tile("taken_off", "Taken off", L.filter(x => x.off).length) : ""}</div></div>
+    <div class="builder" style="grid-template-columns:1fr 1fr">
+      <div class="card"><h2>Is someone on it?</h2><p class="muted" style="margin:0 0 6px;font-size:13px">Type their full email, phone or mailing address.</p>
+        <div style="display:flex;gap:6px"><input id="dncq" style="flex:1" placeholder="name@example.com, 435-555-1234 or 123 Main St, Park City, UT 84060"><button class="btn" id="dncchk">Check</button></div><div id="dncres" style="margin-top:8px;font-size:13.5px"></div></div>
+      <div class="card"><h2>Add someone</h2><p class="muted" style="margin:0 0 6px;font-size:13px">Use this when an owner asks us to stop: on a call, by email, by letter.</p>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:6px"><select id="dnck"><option value="email">Email</option><option value="phone">Phone</option><option value="address">Mailing address</option></select><input id="dncv" placeholder="The email, phone or address"></div>
+        <input id="dncn" placeholder="Name (optional)" style="width:100%;margin-top:6px"><input id="dncr" placeholder="How they asked (e.g. said so on a call Nov 23)" style="width:100%;margin-top:6px">
+        <div style="margin-top:6px;font-size:13px">Stop: ${Object.entries(DNC_CH).map(([k, l]) => `<label class="ck" style="display:inline-flex;margin-right:8px"><input type="checkbox" data-dch="${k}" ${k === "all" ? "checked" : ""}> ${l}</label>`).join("")}</div>
+        <button class="btn primary" id="dncadd" style="margin-top:6px">Add to the list</button> <span class="err" id="dncerr"></span></div></div>
+    <div class="card"><input id="dncs" placeholder="Search the list (name, source, reason)" value="${esc(S.dncQ || "")}" style="width:100%;margin-bottom:8px">
+      <table><thead><tr><th>Who</th><th>What</th><th>Stops</th><th>From</th><th>Added</th><th></th></tr></thead><tbody>${R.slice(0, S.dncAll ? 5000 : 100).map(x => `<tr${x.off ? ' style="opacity:.55"' : ""}><td><b>${esc(x.name || "")}</b><div class="muted" style="font-size:12px">${esc(x.reason || "")}</div></td><td>${icon[x.kind] || ""} ${esc(x.shown || "")}</td>
+        <td>${(x.channels || []).map(c => `<span class="pill ${c === "all" ? "red" : "amber"}">${esc(DNC_CH[c] || c)}</span>`).join(" ")}</td><td>${esc(x.source)}</td><td>${esc(fmtS(x.at))}<div class="muted" style="font-size:11.5px">${esc(x.created_name || "")}</div></td>
+        <td>${x.off ? `<span class="muted" style="font-size:12px">Taken off by ${esc(x.off_name || "")}: ${esc(x.off_reason || "")}</span>` : `<button class="btn small" data-dncoff="${x.id}" title="Brandon or Kim only">Take off…</button>`}</td></tr>`).join("")}</tbody></table>
+      ${R.length > 100 ? `<button class="btn small" data-dncall="1" style="margin-top:8px">${S.dncAll ? "Show fewer" : "Show all " + R.length}</button>` : ""}
+      <p class="src">Sources: Brevo owner lists (blocked contacts + "Do Not Contact (Previous Owners)"), ContactPoint (tag "do not contact" + Email DND, read Nov 23, 2026; OwnerPoint placeholder emails left out), OwnerPoint "Do Not Solicit", the unsubscribe page, and owners marked "Don't contact" in the hub. Loaded by hub_site/mkt_dnc_load.py.</p></div>`;
+  const qs = $("#dncs"); qs.oninput = () => { S.dncQ = qs.value; clearTimeout(S.dncT); S.dncT = setTimeout(() => { const p = qs.selectionStart; vDnc(); const n = $("#dncs"); n.focus(); n.setSelectionRange(p, p); }, 300); };
+  $("#dncchk").onclick = async () => { const v = $("#dncq").value.trim(); if(!v) return; const r = await sb.rpc("mkt_dnc_check", { p_value:v });
+    $("#dncres").innerHTML = r.error ? `<span class="err">${esc(niceE(r.error))}</span>` : r.data.length ? r.data.map(x => `🚫 <b>On the list</b> · ${esc(x.shown)} · stops ${(x.channels || []).map(c => DNC_CH[c] || c).join(", ")} · from ${esc(x.source)} ${esc(fmtS(x.at))}`).join("<br>") : `✅ Not on the list.`; };
+  $("#dncadd").onclick = async () => { const ch = [...document.querySelectorAll("[data-dch]:checked")].map(c => c.dataset.dch);
+    const r = await sb.rpc("mkt_dnc_add", { p_kind:$("#dnck").value, p_value:$("#dncv").value, p_channels:ch.includes("all") || !ch.length ? ["all"] : ch, p_reason:$("#dncr").value, p_name:$("#dncn").value });
+    if(r.error){ $("#dncerr").textContent = niceE(r.error); return; } S.dnc = null; const dk = await sb.rpc("mkt_dnc_owner_keys"); S.dncKeys = new Set(dk.data || []); vDnc(); };
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-dncf],[data-dncoff],[data-dncall]"); if(!b) return;
+  if(b.dataset.dncf){ S.dncF = S.dncF === b.dataset.dncf ? "all" : b.dataset.dncf; S.dncAll = false; return vDnc(); }
+  if(b.dataset.dncall){ S.dncAll = !S.dncAll; return vDnc(); }
+  if(b.dataset.dncoff){ const why = await mmAsk("Why take them off the list? (for example: they asked us in writing to contact them again)", { value:"" }); if(!why) return;
+    const r = await sb.rpc("mkt_dnc_off", { p_id:+b.dataset.dncoff, p_reason:why }); if(r.error) return mmAlert(niceE(r.error)); S.dnc = null; vDnc(); }
+});
 
 (async () => {
   const s = await sb.auth.getSession(); if(!s.data.session){ location.href = "hub.html"; return; }
