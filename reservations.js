@@ -812,7 +812,7 @@ async function queue(v){
       <div class="grow"><h1>Moose Check lists</h1><div class="sub" id="rq_sub"></div></div>
       <div class="rhbtns"><div class="rsync" title="Steps tick themselves as these update">${RI.sync}<div><b>Data sync</b><small>Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""}</small></div></div>
       <button class="deskbtn" id="rq_new" type="button" style="cursor:pointer;font-family:inherit" title="Open the check list for a Track reservation, even one booked a minute ago">${RSV('<path d="M12 5v14M5 12h14"/>')}<span>Start a check list</span></button>
-      <a class="deskbtn" href="#/reservations/returning" title="Guests who have stayed with us before, and a guest look-up by name">${RSV('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>')}<span>Returning guests</span></a><a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a><a class="deskbtn" href="#/reservations/asana" title="Work done in Asana that the hub check list doesn't show yet">${RI.held}<span>Asana check</span></a></div></div>
+      <a class="deskbtn" href="#/reservations/returning" title="Guests who have stayed with us before, and a guest look-up by name">${RSV('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>')}<span>Returning guests</span></a><a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a><a class="deskbtn" href="#/reservations/returning" title="Look up a caller's past stays, and see guests coming back">${RI.held}<span>🔁 Returning guests</span></a><a class="deskbtn" href="#/reservations/asana" title="Work done in Asana that the hub check list doesn't show yet">${RI.held}<span>Asana check</span></a></div></div>
     ${B.canMgr && (B.asks || []).some(a => a.status === "open") ? `<div class="card" style="border-color:var(--amber)"><b>🙋 Waiting on a manager</b> <span class="muted">· reply in Slack or open the check list</span>
       ${B.asks.filter(a => a.status === "open").map(a => { const st = B.stays.find(x => x.res === a.res) || {};
         return `<div style="padding:5px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(a.res)}"><b>${esc(st.unit || "#" + a.res)} · ${esc(st.guest || "")}</b></a> — ${esc(a.by_name || "")}: “${esc(a.note)}” <span class="muted">${esc(when(a.at))}</span></div>`; }).join("")}</div>` : ""}
@@ -1262,6 +1262,60 @@ function startList(){
   };
 }
 
+/* ---------- Returning guests (Janae, Bugs & upgrades #5, Brandon 2026-11-23): look up a caller while on the phone + guests coming back.
+   Search = Edge Function guest-lookup (phone / email / name live in Track's contacts, res # in the hub copy) -> guest_find();
+   list = guest_returning(days). Data = mkt_guests (every Track guest since 2020, rebuilt nightly): stays, reviews, VIP / do not rent. */
+const GV = { days:30, q:"", res:null, open:{} };
+const CHN = { airbnb:"Airbnb", vrbo:"Vrbo", direct:"Direct", other:"Other site" };
+function gvCard(g){ const S = (g.stays_j || []).slice().sort((a, b) => String(b[0]).localeCompare(String(a[0]))), t = B && B.today || new Date().toISOString().slice(0, 10);
+  const next = S.filter(x => !x[6] && x[0] >= t).slice(-1)[0], open = GV.open[g.contact];
+  const flags = [g.vip ? `<span class="pill blue">VIP</span>` : "", g.excluded === "dnr" ? `<span class="pill red">Do not rent</span>` : g.excluded ? `<span class="pill amber">${esc(g.excluded)}</span>` : "",
+    g.low ? `<span class="pill red">${g.low} low review${g.low > 1 ? "s" : ""}</span>` : "", g.five ? `<span class="pill green">${g.five}× 5★</span>` : ""].join(" ");
+  return `<div class="card" style="margin:0 0 10px;padding:12px 14px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b style="font-size:16px">${esc(g.name || "Guest")}</b>
+      <span class="muted">${esc([g.city, g.state].filter(Boolean).join(", "))}</span> ${flags}
+      <a class="muted" style="margin-left:auto;font-size:12.5px" href="https://moosemanagement.trackhs.com/crm/contacts/view/${encodeURIComponent(g.contact)}/" target="_blank" rel="noopener">Track contact ↗</a></div>
+    <div style="margin:6px 0;font-size:14px"><b>${g.past || 0}</b> past stay${g.past === 1 ? "" : "s"}${g.first_in ? ` since ${esc(dayY(g.first_in))}` : ""}${g.nights ? ` · ${g.nights} nights` : ""}
+      ${(g.homes || []).length ? ` · ${esc(g.homes.slice(0, 5).join(", "))}${g.homes.length > 5 ? " +" + (g.homes.length - 5) : ""}` : ""}${(g.channels || []).length ? ` · booked on ${esc(g.channels.map(c => CHN[c] || c).join(", "))}` : ""}</div>
+    ${next ? `<div class="rrule ok" style="margin:4px 0">Coming back <b>${esc(day(next[0]))}</b> · ${esc(next[2] || "")} · ${next[1]} night${next[1] === 1 ? "" : "s"} · ${esc(CHN[next[3]] || next[3] || "")} · <a href="#/reservations/${encodeURIComponent(next[5])}">check list #${esc(next[5])}</a></div>` : ""}
+    ${g.reviews ? `<div class="muted" style="font-size:13px">Reviews: ${g.reviews}${g.stars_avg ? ` · average ${Number(g.stars_avg).toFixed(1)}★` : ""}${g.review_excerpt ? ` · “${esc(String(g.review_excerpt).slice(0, 220))}”` : ""}</div>` : ""}
+    <button type="button" class="btn small ghost" data-gvopen="${g.contact}" style="margin-top:6px">${open ? "Hide stays" : `See all ${S.length} stay${S.length === 1 ? "" : "s"}`}</button>
+    ${open ? `<table style="width:100%;margin-top:6px;font-size:13.5px"><tr><th align="left">Arrive</th><th align="left">Home</th><th>Nights</th><th align="left">Booked on</th><th align="left">Res #</th></tr>
+      ${S.map(x => `<tr${x[6] ? ' style="opacity:.55"' : ""}><td>${esc(dayY(x[0]))}</td><td>${esc(x[2] || "")}</td><td align="center">${x[1] ?? ""}</td><td>${esc(CHN[x[3]] || x[3] || "")}${x[6] ? " · cancelled" : ""}</td>
+        <td><a href="https://moosemanagement.trackhs.com/pms/reservations/view/${encodeURIComponent(x[5])}/" target="_blank" rel="noopener">${esc(x[5])} ↗</a></td></tr>`).join("")}</table>` : ""}
+  </div>`; }
+async function guestsView(v){
+  if(!B) { try { await load(); } catch(e){} }
+  const lst = await sb.rpc("guest_returning", { p_days: GV.days });
+  const L = lst.error ? [] : (lst.data || []);
+  const draw = () => {
+    v.innerHTML = `<div class="page rlk" style="max-width:1100px"><p><a href="#/reservations">← Check lists</a></p>
+    <h2 style="margin:4px 0">🔁 Returning guests</h2><p class="muted" style="margin:0 0 10px">Look up a caller while you're on the phone, and see who's coming back. Every guest since 2020 from Track, updated each night.</p>
+    <div class="card" style="padding:12px 14px"><b>Look up a guest</b>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><input id="gvq" style="flex:1;min-width:220px" placeholder="Phone, email, name or res #" value="${esc(GV.q)}" autocomplete="off">
+      <button class="btn pri" id="gvgo">Look up</button></div><div id="gvres" style="margin-top:10px">${GV.res == null ? "" : GV.res}</div></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 8px"><h3 style="margin:0">Coming back in the next</h3>
+      ${[14, 30, 60, 90].map(d => `<button class="rchip ${GV.days === d ? "on" : ""}" data-gvd="${d}">${d} days</button>`).join("")}<span class="muted">${L.length} guest${L.length === 1 ? "" : "s"} who stayed with us before</span></div>
+    ${lst.error ? `<div class="card"><p class="muted">Couldn't load: ${esc(lst.error.message)}</p></div>` : L.length ? L.map(gvCard).join("") : `<div class="card"><p class="muted">No returning guests booked in the next ${GV.days} days.</p></div>`}
+    <p class="muted" style="font-size:12.5px">Source: Track reservations + contacts (stays since 2020, owner stays left out) and guest reviews; rebuilt every night. Phone and email searches ask Track live.</p></div>`;
+    const go = async () => { GV.q = $("#gvq").value.trim(); if(GV.q.length < 3){ GV.res = `<p class="muted">Type at least 3 letters or numbers.</p>`; return draw(); }
+      $("#gvres").innerHTML = `<p class="muted">Looking…</p>`;
+      const r = await sb.functions.invoke("guest-lookup", { body:{ q: GV.q } });
+      const d = r.data || {};
+      if(r.error || !d.ok){ GV.res = `<p class="muted">Couldn't look that up: ${esc(d.error || (r.error && r.error.message) || "error")}</p>`; return draw(); }
+      GV.found = d.guests || [];
+      GV.extra = ((d.track_only || []).length ? `<p class="muted" style="font-size:13px">In Track with no stays since 2020: ${d.track_only.map(o => esc(o.name || "(no name)")).join(", ")}</p>` : "") +
+        (d.track_error ? `<p class="muted" style="font-size:12.5px">Track search didn't answer (${esc(d.track_error)}); names and res #s still work.</p>` : "");
+      GV.res = (GV.found.length ? GV.found.map(gvCard).join("") : `<p class="muted">No past stays found for “${esc(GV.q)}”.</p>`) + GV.extra;
+      draw(); };
+    $("#gvgo").onclick = go; $("#gvq").onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); go(); } };
+    v.querySelectorAll("[data-gvd]").forEach(b => b.onclick = () => { GV.days = +b.dataset.gvd; guestsView(v); });
+    v.querySelectorAll("[data-gvopen]").forEach(b => b.onclick = () => { const c = b.dataset.gvopen; GV.open[c] = !GV.open[c];
+      if(GV.found && GV.found.length) GV.res = GV.found.map(gvCard).join("") + (GV.extra || "");
+      draw(); });
+  };
+  draw();
+}
 /* ---------- Asana check (Brandon 2026-11-09: "go through asana once more on the checklists and make sure all the work is accounted for").
    res_asana_snap = what each stay's Asana Rental Checklist shows done (res_asana_compare.py after every Asana pull); the hub side comes
    from prep() (manual + auto ticks), so only real gaps show. "Looked at" = res_asana_look (append-only). */
@@ -1439,6 +1493,7 @@ document.addEventListener("keydown", e => { if(e.key !== "Escape" || !document.g
   popClose(true); });
 window.resCheckView = async function(v){ css(); const a = hashArg();
   if(a === "asana") return asanaCheck(v);
+  if(a === "returning") return guestsView(v);
   if(a === "returning") return returningView(v);
   if(a && a !== "held") return popOpen(v, a);
   const kind = a === "held" ? "held" : "queue";
