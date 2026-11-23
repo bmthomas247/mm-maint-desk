@@ -2667,10 +2667,10 @@ function vMoney(){
     '<div class="note" style="margin-top:8px">Chris is put on every task and hands it out, so he only counts when he\'s the only tech on it.</div></div></section>';
   var deskDone=D.jobs.filter(function(j){ return j.src!=="breezeway" && j.status==="done" && !j.autoDone && ((j.doneAt && ymd(j.doneAt).slice(0,7)===m) || (!j.doneAt && (j.updated||"").slice(0,7)===m)); });
   if(deskDone.length) G.desk+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Finished this month — Slack, Asana, desk</h3><span class="ct">'+deskDone.length+'</span></div><div class="rows">'+deskDone.map(function(j){ return jobRow(j,false); }).join("")+'</div></section>';
-  G.pb+=billingPanel(m,bwDone)+projectedPanel(m);
+  G.pb+=projectedPanel(m); var billP=billingPanel(m,bwDone);
   if(tm.length) G.vis+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Visits logged</h3><span class="ct">'+tm.length+'</span></div><div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Date</th><th>Who</th><th>Home</th><th class="num">Time</th><th class="num">Trips</th><th class="num">Miles</th><th>Note</th><th></th></tr></thead><tbody>'+
     tm.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(e.date))+'</td><td>'+esc(e.who||"")+'</td><td>'+propLink(e.prop)+'</td><td class="num">'+((+e.minutes||0)/60).toFixed(1)+'h</td><td class="num">'+(+e.trips||0)+'</td><td class="num">'+(+e.miles||0)+'</td><td>'+esc(e.note||"")+'</td><td><button class="btn sm ghost" data-tmedit="'+esc(e.id)+'">Edit</button></td></tr>'; }).join("")+'</tbody></table></div></section>';
-  h+='<div class="crewcharts">'+crewEffPanel(m,1)+hsGainPanel(m,1)+'</div>'+G.bw+'<div style="height:14px"></div>'+readyPanel(m)+'<div style="height:14px"></div>'+courtesyPanel(m)+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew;
+  h+='<div class="crewcharts">'+crewEffPanel(m,1)+hsGainPanel(m,1)+'</div>'+G.bw+'<div style="height:14px"></div>'+readyPanel(m)+'<div style="height:14px"></div>'+courtesyPanel(m)+timesheetPanel(m)+G.pb+G.desk+(G.exp?'<div style="margin-top:14px">'+G.exp+'</div>':'')+G.vis+G.crew+billP;
   return h;
 }
 
@@ -2824,7 +2824,7 @@ function billingPanel(m,bwDone){
       (q&&q.status==="created"?'<span class="pill done">In Breezeway</span>':q&&q.status==="queued"?'<span class="pill waiting">Sending</span>':q&&q.status==="failed"?'<span class="pill stop" title="'+esc(q.error||"")+'">Failed</span> <button class="btn sm" data-bill="'+esc(code)+'">Retry</button>':
        '')+'</td></tr>'; });
   /* 2026-11-23 (Brandon): a folded summary per home; charges go to Track from Ready to post to Track, not from here */
-  var h='<section class="panel" style="margin-top:14px"><details'+(S.ui.billOpen?' open':'')+' data-billacc="1"><summary class="ph" style="cursor:pointer"><h3>Bill to owners · summary by home</h3><span class="ct">'+money(grand)+' for '+homes.length+' homes</span></summary>';
+  var h='<section class="panel" style="margin-top:14px"><details'+(S.ui.billOpen?' open':'')+' data-billacc="1"><summary class="ph" style="cursor:pointer"><h3>Bill to owners settings</h3><span class="ct">'+money(grand)+' for '+homes.length+' homes</span></summary>';
   h+=homes.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Home</th><th>Plan</th><th class="num">Tasks</th><th class="num">Tech hours</th><th class="num">Labor</th><th class="num">Parts</th><th class="num">Fees found</th><th class="num">Total</th><th></th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div>':
     '<div class="empty">No one-off Breezeway work finished this month yet.</div>';
   h+='<div class="pad note">Labor = time on the Breezeway task × techs on it, at the home\'s plan rate (plan from the owner\'s name in Track; rates on Rates & budget). Parts = expenses logged as "Owner-billed". Fees found = amounts read from the task notes and comments (that reader is paused). '+
