@@ -185,7 +185,21 @@
       try {
         if (e && e.target && e.target !== window && e.target.tagName) {          // a picture / script / style that didn't load
           var tg = e.target, u = tg.src || tg.href || "";
-          if (/^(IMG|SCRIPT|LINK)$/.test(tg.tagName)) err("Couldn't load " + (tg.tagName === "IMG" ? "picture" : tg.tagName === "SCRIPT" ? "script" : "style") + ": " + String(u).split("?")[0].split("/").slice(-2).join("/"), u);
+          if (tg.tagName === "IMG") {
+            // media.js first asks for a small cached copy; the first time anyone sees a photo that copy doesn't exist yet, so the
+            // first try fails and media.js makes the copy or falls back to the original. Only report a picture that never shows.
+            if (tg.__mmTrkErr) return; tg.__mmTrkErr = 1;
+            setTimeout(function () {
+              tg.__mmTrkErr = 0;
+              var failed = tg.classList && tg.classList.contains("mm-fail");     // media.js gave up ("Tap to try again")
+              // it showed, it's still loading (a later failure fires again), or the page moved on
+              if (!failed && (!tg.isConnected || !tg.complete || tg.naturalWidth > 0)) return;
+              var o = tg.getAttribute("data-msrc") || u;
+              err("Couldn't load picture: " + String(o).split("?")[0].split("/").slice(-2).join("/"), o);
+            }, 15000);
+            return;
+          }
+          if (/^(SCRIPT|LINK)$/.test(tg.tagName)) err("Couldn't load " + (tg.tagName === "SCRIPT" ? "script" : "style") + ": " + String(u).split("?")[0].split("/").slice(-2).join("/"), u);
           return;
         }
         err(e.message || "Page error", (e.filename || "") + (e.lineno ? ":" + e.lineno : ""));
