@@ -4,7 +4,7 @@
    Page files: network first; after 3 s (or with no signal) the saved file. CDN libraries (exact versions): saved file first.
    To switch it off for everyone: push a sw.js whose activate step unregisters (see OFF below). */
 var V = "mm-pages-1", WAIT = 3000, OFF = false;
-var FILES = ["hub.html", "index.html", "desk.html", "desk-shim.js", "desk-lic.js", "moose-theme.css", "config.js", "offline.js", "moose-logo.png",
+var FILES = ["hub.html", "index.html", "desk.html", "desk-shim.js", "desk-lic.js", "moose-theme.css", "config.js", "offline.js", "media.js", "moose-logo.png",
   "staffing.js", "calendar.js", "checks.js", "banners.js", "calls.js", "signals.js", "reservations.js", "analytics.js", "meetings.js"];
 var CDN = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"];
 var BASE = self.registration.scope;
