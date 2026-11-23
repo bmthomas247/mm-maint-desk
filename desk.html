@@ -2670,7 +2670,7 @@ function vMoney(){
   /* 2026-11-23 (Brandon): these are other jobs that might still need to go on an owner statement; a job the hub can match to a finished Breezeway task leaves the list */
   if(deskAll.length) G.desk+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Other finished jobs — may need an owner charge</h3><span class="ct">'+deskDone.length+'</span></div>'+
     '<div class="pad note" style="padding-bottom:0">Jobs finished this month from Freshdesk, Slack, Asana or this desk. Most are already billed through their Breezeway task'+(inBw?'; '+inBw+' matched to a finished Breezeway task are left off':'')+'.</div>'+
-    (deskDone.length?'<div class="rows">'+deskDone.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="empty">Every job finished this month matches a finished Breezeway task.</div>')+'</section>';
+    (deskDone.length?'<div class="rows">'+deskDone.slice(0,S.ui.otherAll?deskDone.length:5).map(function(j){ return jobRow(j,false); }).join("")+'</div>'+(deskDone.length>5?'<div class="pad" style="text-align:center"><button class="btn sm" data-otherall="1">'+(S.ui.otherAll?'Show fewer':'See '+(deskDone.length-5)+' more')+'</button></div>':''):'<div class="empty">Every job finished this month matches a finished Breezeway task.</div>')+'</section>';
   G.pb+=projectedPanel(m); var billP=billingPanel(m,bwDone);
   if(tm.length) G.vis+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Visits logged</h3><span class="ct">'+tm.length+'</span></div><div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Date</th><th>Who</th><th>Home</th><th class="num">Time</th><th class="num">Trips</th><th class="num">Miles</th><th>Note</th><th></th></tr></thead><tbody>'+
     tm.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(e.date))+'</td><td>'+esc(e.who||"")+'</td><td>'+propLink(e.prop)+'</td><td class="num">'+((+e.minutes||0)/60).toFixed(1)+'h</td><td class="num">'+(+e.trips||0)+'</td><td class="num">'+(+e.miles||0)+'</td><td>'+esc(e.note||"")+'</td><td><button class="btn sm ghost" data-tmedit="'+esc(e.id)+'">Edit</button></td></tr>'; }).join("")+'</tbody></table></div></section>';
@@ -2854,6 +2854,7 @@ function bwDoneFor(j){ if(j.bw&&j.bw.t&&j.bw.t.status==="done") return j.bw.t;
     var xw=bwWords(x.title), hit=w.filter(function(a){ return xw.some(function(b){ return a===b||a.length>4&&b.length>4&&(a.indexOf(b)===0||b.indexOf(a)===0); }); }).length;
     if(hit>=need) return x; }
   return null; }
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-otherall]"); if(!b) return; ev.preventDefault(); ev.stopPropagation(); S.ui.otherAll=!S.ui.otherAll; render(); },true);
 function bwSelIds(){ var sel=S.ui.bwSel||{}; return Object.keys(sel).filter(function(k){ return sel[k] && D.byId["bw-"+k]; }); }
 function bwBulkBar(){ var n=bwSelIds().length; if(!n) return '';
   return '<div class="pad" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2">'+
