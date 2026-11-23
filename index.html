@@ -360,6 +360,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const app = $("#app");
 const I = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 const ICON = {
+  smile: I('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01" stroke-width="2.6"/>'),   /* Guest drop-down (Brandon 2026-11-23) */
   lock: I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
   key: I('<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M16 7l3 3M14 9l2 2"/>'),
   wrench: I('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>'),
@@ -769,7 +770,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin), noStar = false){
                    maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_plan:"Crew planner", maint_insp:"Inspection planner", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_inv:"Inventory" } },
                    hk:{ label:"Housekeeping", icon:"spark", kids:{ housekeeping:"Desk", linen_calc:"Linen Calculator", hk_routines:"Seasonal & yearly", hk_inv:"Inventory" } },
                    lic:{ label:"Licensing", icon:"badge", kids:{ licensing:"Licenses", lic_fire:"Fire suppression", lic_lease:"Leases" } },
-                   guest:{ label:"Guest", icon:"chat", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", call_review:"Call review", lost_found:"Lost & found" } },
+                   guest:{ label:"Guest", icon:"smile", kids:{ guest_desk:"Communication", breezeway_assist:"Breezeway Assist", call_review:"Call review", lost_found:"Lost & found" } },
                    own:{ label:"Owners", icon:"key", kids:{ owner_calls:"Communication", own_flyer:"Monthly flyer", property_setup:"Property Set Up", competitor:"Competitor Playbook", competitor_add:"Add competitor intel" } },
                    tools:{ label:"Tools", icon:"grid", kids:{ psu_desc:"AI Description Tool", tools_listing:"Listing Writer", tools_guestbook:"Guest books", psu_photos:"Photo Compressor", psu_qr:"QR Code Generator", tools_revenue:"Revenue Estimator", tools_report:"Report folio", season_photos:"Seasonal photos" } },   // Brandon 2026-11-02   // Competitor Playbook + Property Set Up: Brandon 2026-11-02   // Brandon 2026-11-01: owner communication for owner relations + managers
                    adv:{ label:"Advertising", icon:"megaphone", kids:{ adv_owners:"Owners", adv_guest:"Guest", adv_realtor:"Realtor", adv_general:"General" } },   // Brandon 2026-10-28; Realtor + General 2026-10-29
