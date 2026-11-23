@@ -51,8 +51,7 @@ begin
 
   for n in 1..3 loop
     bname := trim(p_name) || ' · Drop ' || n || ' of 3';
-    perform mkt_postcard_make(bname, coalesce(p_card, ''), p_keys);
-    select max(id) into bid from mkt_postcard_batches where name = bname and campaign_id is null and created_at > now() - interval '5 minutes';
+    bid := (mkt_postcard_make(bname, coalesce(p_card, ''), p_keys)->>'batch')::bigint;   -- live mkt_postcard_make returns {batch, added, skipped}
     if bid is null then raise exception 'Couldn''t make the batch for drop %', n; end if;
     update mkt_postcard_batches set campaign_id = cid, drop_no = n, drop_on = p_start + d[n] where id = bid;
   end loop;
