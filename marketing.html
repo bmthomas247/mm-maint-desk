@@ -142,7 +142,7 @@ async function load(){
     for(let from = 0; from < 20000; from += 1000){ const r = await sb.from("mkt_rr").select("*").order("contact_id").range(from, from + 999);
       if(r.error) return r; all = all.concat(r.data || []); if((r.data || []).length < 1000) break; }
     return { data:all.sort((a, b) => String(a.send_on).localeCompare(String(b.send_on))) }; })());
-  if(TAB === "owners") jobs.push(Promise.resolve(null), loadOwners());
+  if(TAB === "owners") jobs.push(Promise.resolve(null), loadOwners().then(async x => { await olLoad(); return x; }));
   if(TAB === "general") jobs.push(Promise.resolve(null), loadPlaces());
   const psP = sb.from("mkt_pull_status").select("key,label,pulled_at,ok,note");
   const [i, r, cp, dr, rr, pl] = await Promise.all(jobs);
@@ -157,7 +157,7 @@ async function load(){
 function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`, `<div id="mstats">${statsHtml()}${pullLine()}</div>`];
   if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(findHtml(), campsHtml(), `<h2>⭐ 5-star return renters</h2>`, top, `<h2 id="gst">Guests</h2>` + list); }   // campaigns above the long guest list
-  else if(TAB === "owners") h.push(ownersHtml(), campsHtml());
+  else if(TAB === "owners") h.push(leadsHtml(), postcardsHtml(), ownersHtml(), campsHtml());
   else if(TAB === "general") h.push(placesHtml(), campsHtml());
   else h.push(campsHtml());
   h.push(listsHtml(), boardHtml());
@@ -325,6 +325,182 @@ setInterval(tick, 60000);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(); });
 
 /* ---------- Owners tab: list check (mkt_owner_check.py), owners in town (feeds/owner-stays), owner stay emails, owners coming and going (Property Set Up) ---------- */
+/* ---------- Owners tab: Owner leads + postcards (Brandon 2026-11-23: "take this out of zpoint and do it all ourselfs").
+   Leads = RentCast county owner records near our homes (serp_finds kind area_owner, read = Advertising desk) + what we do with them
+   (mkt_owner_leads / mkt_owner_lead_log, hub_owner_leads.sql). Postcards: pick owners -> batch (mkt_postcard_batches/items, each card
+   a short code) -> address CSV for the printer -> Mark mailed. The QR on a card = crew.moosemanagement.com/go.html?c=CODE, which logs the
+   scan (mkt_postcard_scans) and opens the Revenue Estimator. Nothing is mailed by the hub itself yet. ---------- */
+const OL = { rows:null, st:{}, batches:[], items:[], scans:{}, sale:new Set(), f:{ t:"prime", q:"", nb:"", live:"", near:"" }, sel:new Set(), all:false, err:"" };
+const OL_STATUS = { new:"Not contacted", contacted:"Contacted", talking:"Talking", signed:"Signed", not_interested:"Not interested" };
+const olKey = s => { const p = String(s || "").toLowerCase().split(",").map(x => x.trim());   // "5241 Cove Canyon Dr, Unit B, Park City" -> "5241covecanyondrb"
+  let st = p[0] || ""; if(p[1] && /^(unit|apt|ste|suite|#)/.test(p[1])) st += " " + p[1];
+  return st.replace(/\b(unit|apt|ste|suite)\b|#/g, "").replace(/[^a-z0-9]/g, ""); };
+async function olLoad(){
+  OL.err = "";
+  try {
+    const rows = [];
+    for(let from = 0; from < 20000; from += 1000){
+      const r = await sb.from("serp_finds").select("key,home,community,data,last_seen").eq("kind", "area_owner").eq("gone", false).order("id").range(from, from + 999);
+      if(r.error) throw r.error; rows.push(...(r.data || [])); if((r.data || []).length < 1000) break; }
+    const [st, bt, it, sc, zs] = await Promise.all([
+      sb.from("mkt_owner_leads").select("*"),
+      sb.from("mkt_postcard_batches").select("*").eq("off", false).order("created_at", { ascending:false }),
+      sb.from("mkt_postcard_items").select("batch_id,lead_key,code"),
+      sb.from("mkt_postcard_scans").select("code,at"),
+      sb.from("serp_finds").select("data").eq("kind", "zillow_sale").eq("gone", false)]);
+    OL.rows = rows; OL.st = {}; (st.data || []).forEach(x => OL.st[x.lead_key] = x);
+    OL.batches = bt.data || []; OL.items = it.data || [];
+    OL.scans = {}; (sc.data || []).forEach(x => OL.scans[x.code] = (OL.scans[x.code] || 0) + 1);
+    OL.sale = new Set((zs.data || []).map(x => olKey((x.data || {}).street)).filter(Boolean));
+  } catch(e){ OL.err = (e && e.message) || String(e); OL.rows = OL.rows || []; }
+}
+const olOwn = r => ((r.data || {}).owners || []).join(" & ");
+const olAway = r => { const m = String((r.data || {}).mailing || ""); return m && !/,\s*UT\b/i.test(m); };
+function olTags(r){ const d = r.data || {}, s = OL.st[r.key] || {}, t = [];
+  if(d.owner_occupied === false) t.push("prime"); if(d.new_owner) t.push("new"); if(OL.sale.has(olKey(d.address))) t.push("sale");
+  if(s.dont_contact) t.push("dnc"); return t; }
+function olCards(){ const m = {}; OL.items.forEach(i => { const b = OL.batches.find(x => x.id === i.batch_id); if(b && b.status !== "cancelled") (m[i.lead_key] = m[i.lead_key] || []).push(Object.assign({ b }, i)); }); return m; }
+function olBase(){ const f = OL.f, q = f.q.trim().toLowerCase();
+  return (OL.rows || []).filter(r => { const d = r.data || {};
+    if(f.nb && r.community !== f.nb) return false;
+    if(f.near === "out" && !olAway(r)) return false;
+    if(f.near === "ut" && olAway(r)) return false;
+    if(q && !JSON.stringify([d.owners, d.address, d.mailing, r.home, r.community, (OL.st[r.key] || {}).note]).toLowerCase().includes(q)) return false;
+    return true; }); }
+function olPick(a){ const t = OL.f.t;
+  return a.filter(r => { const g = olTags(r), s = (OL.st[r.key] || {}).status || "new";
+    if(t === "all") return true; if(t === "dnc") return g.includes("dnc");
+    if(t === "st_new") return !g.includes("dnc") && s === "new";
+    if(g.includes("dnc")) return false;
+    if(t === "prime" || t === "new" || t === "sale") return g.includes(t);
+    return s === t; }); }
+function olTiles(a){ const n = t => { const keep = OL.f.t; OL.f.t = t; const c = olPick(a).length; OL.f.t = keep; return c; };
+  const T = [["prime","Prime prospects","owner doesn't live there"],["new","New owners","bought in the last 12 months"],["sale","For sale now","listed on Zillow"],
+    ["new_st","Not contacted",""],["contacted","Contacted",""],["talking","Talking",""],["signed","Signed",""],["dnc","Don't contact",""],["all","Everyone",""]];
+  return `<div class="kpis">${T.map(([k, l, s]) => { const key = k === "new_st" ? "new" : k, isSt = k === "new_st";
+    const cnt = isSt ? a.filter(r => !olTags(r).includes("dnc") && ((OL.st[r.key] || {}).status || "new") === "new").length : n(k);
+    const on = isSt ? OL.f.t === "st_new" : OL.f.t === k;
+    return `<button class="kpi${on ? " on" : ""}" data-olt="${isSt ? "st_new" : k}"><small>${l}</small><b>${cnt.toLocaleString()}</b>${s ? `<small>${s}</small>` : ""}</button>`; }).join("")}</div>`; }
+function olRowsHtml(list, cards){
+  return list.map(r => { const d = r.data || {}, s = OL.st[r.key] || {}, g = olTags(r), c = cards[r.key] || [];
+    return `<tr><td><input type="checkbox" data-olsel="${esc(r.key)}" ${OL.sel.has(r.key) ? "checked" : ""}></td>
+      <td><b>${esc(olOwn(r) || "—")}</b>${d.owner_type ? `<div class="muted" style="font-size:12px">${esc(d.owner_type)}</div>` : ""}
+        <div style="margin-top:3px">${g.includes("prime") ? `<span class="pill green">prime</span> ` : ""}${g.includes("new") ? `<span class="pill amber">new owner</span> ` : ""}${g.includes("sale") ? `<span class="pill">for sale</span> ` : ""}${g.includes("dnc") ? `<span class="pill red">don't contact</span>` : ""}</div></td>
+      <td>${esc(d.address || "")}<div class="muted" style="font-size:12px">${esc([d.type, d.beds != null ? d.beds + " bd" : "", d.year_built ? "built " + d.year_built : ""].filter(Boolean).join(" · "))}</div></td>
+      <td>${esc(d.mailing || "")}${olAway(r) ? ` <span class="pill">out of state</span>` : ""}</td>
+      <td>${d.last_sale ? esc(fmtD(d.last_sale)) : ""}</td>
+      <td>${esc(r.home || "")}${d.meters_to_ours != null ? `<div class="muted" style="font-size:12px">${d.meters_to_ours} m</div>` : ""}</td>
+      <td><select data-olst="${esc(r.key)}">${Object.entries(OL_STATUS).map(([k, l]) => `<option value="${k}" ${(s.status || "new") === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+        ${s.owner_name ? `<div class="muted" style="font-size:12px">${esc(s.owner_name)}</div>` : ""}</td>
+      <td style="max-width:240px">${s.note ? `<div style="font-size:12.5px">${esc(s.note)}</div>` : ""}<button class="btn small" data-olnote="${esc(r.key)}">📝</button>
+        ${c.length ? `<div class="muted" style="font-size:12px">📬 ${c.length} card${c.length > 1 ? "s" : ""}${c.some(x => OL.scans[x.code]) ? " · scanned ✓" : ""}</div>` : ""}</td></tr>`; }).join(""); }
+function olInner(){
+  if(OL.rows === null) return `<p class="muted">Loading owners…</p>`;
+  if(OL.err && !OL.rows.length) return `<p class="err">Couldn't load owners: ${esc(OL.err)}</p>`;
+  const base = olBase(), list = olPick(base).sort((a, b) => (+!!(b.data || {}).new_owner - +!!(a.data || {}).new_owner) || ((a.data || {}).meters_to_ours ?? 1e9) - ((b.data || {}).meters_to_ours ?? 1e9));
+  const shown = OL.all ? list : list.slice(0, 100), cards = olCards();
+  const comms = [...new Set((OL.rows || []).map(r => r.community).filter(Boolean))].sort();
+  const nsel = OL.sel.size;
+  return `${olTiles(base)}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px">
+      <input data-olf="q" placeholder="Search owner, address, mailing address, note…" value="${esc(OL.f.q)}" style="max-width:320px">
+      <select data-olf="nb"><option value="">All neighborhoods</option>${comms.map(c => `<option ${OL.f.nb === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
+      <select data-olf="near"><option value="">Owner lives anywhere</option><option value="out" ${OL.f.near === "out" ? "selected" : ""}>Lives out of state</option><option value="ut" ${OL.f.near === "ut" ? "selected" : ""}>Lives in Utah</option></select>
+      <button class="btn small" data-olcsv="1">⬇ CSV</button></div>
+    ${nsel ? `<div class="box" style="padding:10px 12px;margin:0 0 8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;position:sticky;top:0;z-index:5">
+      <b>${nsel} picked</b>
+      <button class="btn primary small" data-olpc="1">📬 Make a postcard batch</button>
+      <select data-olbulk="1"><option value="">Set status…</option>${Object.entries(OL_STATUS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+      <button class="btn small" data-olme="1">Assign to me</button>
+      <button class="btn small" data-oldnc="1">Don't contact</button>
+      <button class="btn small" data-olclear="1">Untick all</button></div>` : ""}
+    <div class="box"><table><thead><tr><th><input type="checkbox" data-olall="1" title="Tick every lead shown"></th><th>Owner</th><th>Property</th><th>Mailing address</th><th>Bought</th><th>Near our</th><th>Status</th><th>Notes · cards</th></tr></thead>
+      <tbody>${olRowsHtml(shown, cards) || `<tr><td colspan="8" class="muted">No owners match.</td></tr>`}</tbody></table></div>
+    ${list.length > shown.length ? `<p><button class="btn small" data-olmore="1">Show all ${list.length.toLocaleString()}</button> <span class="muted">showing ${shown.length}</span></p>` : `<p class="muted">${list.length.toLocaleString()} owners</p>`}
+    <p class="src">Source: county owner records via RentCast (refreshed every 3 months; owners near our homes, our own homes left out), Zillow for-sale listings via SerpApi. "Prime" = the owner's mailing address isn't the home. Status and notes are ours.</p>`;
+}
+function leadsHtml(){ return `<h2>🎯 Owner leads</h2><p class="muted">Owners near our homes who could become Moose owners. Tick owners to send them a postcard, set where things stand, and keep notes.</p><div id="olbox">${olInner()}</div>`; }
+function olDraw(){ const b = $("#olbox"); if(b){ const y = window.scrollY; b.innerHTML = olInner(); window.scrollTo(0, y); } }
+
+function olParse(m){   // "5645 Castleton Dr, San Diego, CA 92117" / "13541 N Noah Ct, Kamas, UT, 84036"
+  const p = String(m || "").split(",").map(x => x.trim()).filter(Boolean); let zip = "", st = "";
+  const last = p[p.length - 1] || "";
+  if(/^\d{5}(-\d{4})?$/.test(last)){ zip = p.pop(); st = p.pop() || ""; }
+  else { const mm = last.match(/^([A-Za-z]{2})\s+(\d{5}(-\d{4})?)$/); if(mm){ st = mm[1]; zip = mm[2]; p.pop(); } }
+  const city = p.length > 1 ? p.pop() : ""; let a2 = "";
+  if(p.length > 1 && /^(unit|apt|ste|suite|#)/i.test(p[p.length - 1])) a2 = p.pop();
+  return { a1:p.join(", "), a2, city, st:st.toUpperCase(), zip };
+}
+const GO = c => `https://crew.moosemanagement.com/go.html?c=${c}`;
+function postcardsHtml(){
+  const by = {}; OL.items.forEach(i => (by[i.batch_id] = by[i.batch_id] || []).push(i));
+  const B = OL.batches.filter(b => b.status !== "cancelled");
+  return `<h2>📬 Postcards</h2><p class="muted">Each batch is a list of owners with a short code per card. Download the address list for the printer (Thanks.io, PostGrid or Lob), then mark it mailed. The QR link on each card logs the scan and opens our Revenue Estimator.</p>
+    ${B.length ? `<div class="box"><table><thead><tr><th>Batch</th><th>Cards</th><th>Status</th><th>Scans</th><th></th></tr></thead><tbody>
+      ${B.map(b => { const its = by[b.id] || [], sc = its.reduce((n, i) => n + (OL.scans[i.code] || 0), 0), who = its.filter(i => OL.scans[i.code]).length;
+        return `<tr><td><b>${esc(b.name)}</b><div class="muted" style="font-size:12px">${esc(b.created_name || "")} · ${esc(fmtD(b.created_at))}</div>${b.card ? `<div style="font-size:12.5px;margin-top:3px">${esc(b.card).slice(0, 220)}</div>` : ""}</td>
+          <td>${its.length}</td>
+          <td>${b.status === "mailed" ? `<span class="pill green">mailed ${esc(fmtD(b.mailed_on))}</span>${b.printer ? `<div class="muted" style="font-size:12px">${esc(b.printer)}${b.cost != null ? " · $" + Number(b.cost).toLocaleString() : ""}</div>` : ""}` : b.status === "exported" ? `<span class="pill amber">list downloaded</span>` : `<span class="pill">not sent yet</span>`}</td>
+          <td>${sc ? `<b>${sc}</b> <span class="muted">(${who} owner${who === 1 ? "" : "s"})</span>` : `<span class="muted">0</span>`}</td>
+          <td style="white-space:nowrap"><button class="btn small" data-pccsv="${b.id}">⬇ Address list</button> ${b.status !== "mailed" ? `<button class="btn small" data-pcmail="${b.id}">✓ Mark mailed</button> <button class="btn small" data-pccancel="${b.id}">Cancel</button>` : ""}</td></tr>`; }).join("")}</tbody></table></div>`
+      : `<p class="muted">No postcard batches yet. Tick owners in Owner leads above, then press 📬 Make a postcard batch.</p>`}
+    <p class="src">The address list has name, address lines, city, state, ZIP, the card's code and its QR link. Most printers can print a different QR per card from a column; if yours can't, print the code in words ("Visit vacationrentalsparkcity.com/revenue-estimator") and nothing is tracked.</p>`;
+}
+function olDownload(name, rows){ const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(x => x.map(q).join(",")).join(String.fromCharCode(10))], { type:"text/csv" }));
+  a.download = name; a.click(); }
+async function olSet(keys, p){ const r = await sb.rpc("mkt_lead_set", { p_keys:keys, p });
+  if(r.error){ await mmAlert(niceE(r.error)); return false; }
+  const nm = (OL.me || ""); keys.forEach(k => { const s = OL.st[k] = Object.assign({ lead_key:k, status:"new" }, OL.st[k] || {});
+    if("status" in p) s.status = p.status; if("dont_contact" in p) s.dont_contact = p.dont_contact; if("owner_name" in p) s.owner_name = p.owner_name; if(p.note) s.note = p.note; });
+  return true; }
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-olt],[data-olmore],[data-olnote],[data-olpc],[data-olme],[data-oldnc],[data-olclear],[data-olcsv],[data-pccsv],[data-pcmail],[data-pccancel]"); if(!b) return;
+  if(b.dataset.olt){ OL.f.t = OL.f.t === b.dataset.olt ? "all" : b.dataset.olt; OL.all = false; return olDraw(); }
+  if(b.dataset.olmore){ OL.all = true; return olDraw(); }
+  if(b.dataset.olnote){ const k = b.dataset.olnote, t = await mmAsk("Note on this owner (who you talked to, what they said). Never codes or passwords.", { multiline:true, value:"" });
+    if(!t || !t.trim()) return; if(await olSet([k], { note:t.trim() })) olDraw(); return; }
+  if(b.dataset.olme){ if(!OL.me){ const m = await sb.rpc("hub_me"); OL.me = (m.data && (m.data.name || (m.data[0] || {}).name)) || ""; }
+    if(await olSet([...OL.sel], { owner_name:OL.me || "me" })) olDraw(); return; }
+  if(b.dataset.oldnc){ if(!await mmConfirm(`Mark ${OL.sel.size} owner${OL.sel.size > 1 ? "s" : ""} as don't contact? They won't go on postcard batches.`)) return;
+    if(await olSet([...OL.sel], { dont_contact:true })){ OL.sel.clear(); olDraw(); } return; }
+  if(b.dataset.olclear){ OL.sel.clear(); return olDraw(); }
+  if(b.dataset.olcsv){ const list = olPick(olBase());
+    olDownload("owner-leads.csv", [["owners","owner type","property","mailing address","lives there","bought","near our home","meters","neighborhood","status","who","note"]]
+      .concat(list.map(r => { const d = r.data || {}, s = OL.st[r.key] || {}; return [olOwn(r), d.owner_type, d.address, d.mailing, d.owner_occupied == null ? "" : d.owner_occupied ? "yes" : "no", d.last_sale, r.home, d.meters_to_ours, r.community, OL_STATUS[s.status || "new"], s.owner_name, s.note]; }))); return; }
+  if(b.dataset.olpc){ const name = await mmAsk("Name this postcard batch (e.g. \"Prime prospects · Bear Hollow · Dec 2026\")", { value:`Owners · ${new Date().toLocaleDateString("en-US", { month:"short", year:"numeric" })}` });
+    if(!name || !name.trim()) return;
+    const card = await mmAsk("What's on the card? (for the record: the design name or the words)", { multiline:true, value:"" }); if(card === null) return;
+    const r = await sb.rpc("mkt_postcard_make", { p_name:name.trim(), p_card:card || "", p_keys:[...OL.sel] });
+    if(r.error) return mmAlert(niceE(r.error));
+    await mmAlert(`Batch made: ${r.data.added} card${r.data.added === 1 ? "" : "s"}${r.data.skipped ? ` (${r.data.skipped} left out: no mailing address or don't contact)` : ""}. Download its address list under 📬 Postcards.`);
+    OL.sel.clear(); await olLoad(); render(); return; }
+  if(b.dataset.pccsv){ const id = +b.dataset.pccsv, bt = OL.batches.find(x => x.id === id);
+    const r = await sb.from("mkt_postcard_items").select("code,owner_text,mailing,property").eq("batch_id", id).order("id");
+    if(r.error) return mmAlert(niceE(r.error));
+    olDownload(`postcards-${id}.csv`, [["name","address_line1","address_line2","city","state","zip","code","qr_url","property"]]
+      .concat((r.data || []).map(x => { const m = olParse(x.mailing); return [x.owner_text, m.a1, m.a2, m.city, m.st, m.zip, x.code, GO(x.code), x.property]; })));
+    if(bt && bt.status === "draft"){ await sb.rpc("mkt_postcard_set", { p_batch:id, p_status:"exported" }); bt.status = "exported"; render(); } return; }
+  if(b.dataset.pcmail){ const id = +b.dataset.pcmail;
+    const day = await mmAsk("Date the cards were mailed (YYYY-MM-DD)", { value:today() }); if(!day) return;
+    const pr = await mmAsk("Printer (e.g. Thanks.io) and cost, like: Thanks.io, 214.50", { value:"" }); if(pr === null) return;
+    const mm = String(pr).match(/([\d,]+(\.\d+)?)\s*$/), cost = mm ? +mm[1].replace(/,/g, "") : null, printer = String(pr).replace(/,?\s*\$?[\d,]+(\.\d+)?\s*$/, "").trim();
+    const r = await sb.rpc("mkt_postcard_set", { p_batch:id, p_status:"mailed", p_mailed:day, p_printer:printer || null, p_cost:cost });
+    if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
+  if(b.dataset.pccancel){ if(!await mmConfirm("Cancel this batch? Its cards won't count as sent.")) return;
+    const r = await sb.rpc("mkt_postcard_set", { p_batch:+b.dataset.pccancel, p_status:"cancelled" }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
+});
+document.addEventListener("change", async e => { const t = e.target;
+  if(t.dataset.olsel){ t.checked ? OL.sel.add(t.dataset.olsel) : OL.sel.delete(t.dataset.olsel); return olDraw(); }
+  if(t.dataset.olall){ const list = olPick(olBase()), shown = OL.all ? list : list.slice(0, 100); shown.forEach(r => t.checked ? OL.sel.add(r.key) : OL.sel.delete(r.key)); return olDraw(); }
+  if(t.dataset.olst){ if(await olSet([t.dataset.olst], { status:t.value })) olDraw(); return; }
+  if(t.dataset.olbulk && t.value){ if(await olSet([...OL.sel], { status:t.value })) olDraw(); return; }
+  if(t.dataset.olf && t.dataset.olf !== "q"){ OL.f[t.dataset.olf] = t.value; OL.all = false; return olDraw(); }
+});
+document.addEventListener("input", e => { const t = e.target; if(t.dataset.olf !== "q") return; OL.f.q = t.value; const pos = t.selectionStart; olDraw();
+  const i = document.querySelector('[data-olf="q"]'); if(i){ i.focus(); i.setSelectionRange(pos, pos); } });
+
+
 async function loadOwners(){
   const [chk, stays, psu, os_, tev] = await Promise.all([
     sb.from("mkt_owner_check").select("ran_at,summary").order("ran_at", { ascending:false }).limit(1),
