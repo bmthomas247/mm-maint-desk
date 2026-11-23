@@ -2615,6 +2615,7 @@ function vMoney(){
   var bf=S.ui.bwF||{}, techs={}; list.forEach(function(j){ (j.crew||[]).forEach(function(c){ techs[c]=1; }); });
   var nAll=list.length;
   list=list.filter(function(j){ if(bf.tech && (j.crew||[]).indexOf(bf.tech)<0) return false;
+    if(bf.st){ var tb0=S.taskbill[j.id.slice(3)]; if(bf.st==="new"&&tb0) return false; if(bf.st==="started"&&!(tb0&&!tb0.ignored)) return false; if(bf.st==="ign"&&!(tb0&&tb0.ignored)) return false; }
     if(bf.home){ var hay=((j.prop||"")+" "+(j.title||"")+" "+(j.crew||[]).join(" ")+" "+(j.doneByName||"")).toLowerCase(); if(bf.home.toLowerCase().split(/\s+/).filter(Boolean).some(function(w){ return hay.indexOf(w)<0; })) return false; }
     var d=(j.finished||"").slice(0,10); if(bf.from && d<bf.from) return false; if(bf.to && d>bf.to) return false; return true; });
   var bs=S.ui.bwSort||{k:"done",dir:-1}, sv=function(j){ var tid=j.id.slice(3), tb=S.taskbill[tid];
@@ -2625,16 +2626,20 @@ function vMoney(){
 
     '<label class="bf"><span>From</span><input id="bwf_from" type="date" value="'+esc(bf.from||"")+'"></label><label class="bf"><span>To</span><input id="bwf_to" type="date" value="'+esc(bf.to||"")+'"></label>'+
     '<label class="bf"><span>Tech</span><select id="bwf_tech" aria-label="Tech"><option value="">All techs</option>'+Object.keys(techs).sort().map(function(t){ return '<option'+(bf.tech===t?' selected':'')+'>'+esc(t)+'</option>'; }).join("")+'</select></label>'+
-    (bf.tech||bf.home||bf.from||bf.to?'<button class="btn sm ghost" data-act="bwfclear" style="height:36px">Clear</button><span class="bfn">'+list.length+' of '+nAll+'</span>':'<span class="bfn">'+nAll+' tasks</span>')+'</div>';
+    (bf.tech||bf.home||bf.from||bf.to||bf.st?'<button class="btn sm ghost" data-act="bwfclear" style="height:36px">Clear</button><span class="bfn">'+list.length+' of '+nAll+'</span>':'<span class="bfn">'+nAll+' tasks</span>')+'</div>';
   h=h.replace('<div class="toolbar">','<div class="toolbar"><div class="qsearch bfsearch"><span class="mag">⌕</span><input id="bwf_home" type="search" placeholder="Search a home, task or tech…" value="'+esc(bf.home||"")+'" autocomplete="off"></div>');
   h=h.replace('<button class="btn sm" data-act="exprefresh"', bwFilt.replace('<div class="bwfil">','<span class="bwfil topf">').replace(/<\/div>$/,'</span>')+'<button class="btn sm" data-act="exprefresh"');
   if(!D.bwLoaded) G.bw+='<div class="empty">Breezeway isn\'t loaded yet.</div>';
   else {
-    G.bw+='<div class="pad" style="padding-bottom:6px"><label class="toggle"><input type="checkbox" id="bwall"'+(showAll?' checked':'')+'> Show inspections and repeating tasks <span class="muted">(we do not bill these — open one only if you want to charge it)</span></label>'+(ignN?' <label class="toggle"><input type="checkbox" id="bwign"'+(S.ui.showIgn?' checked':'')+'> Show '+ignN+' ignored</label>':'')+
-      ' <span class="note">'+(function(){ var lo=D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && (j.finished||"").slice(0,7)===m && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.vendorVisit||j.schedNote||j.officeOnly); }), v=lo.filter(function(j){return j.vendorVisit;}).length, n=lo.filter(function(j){return j.schedNote;}).length, o=lo.length-v-n;
-        return lo.length?'Left out: '+[v?v+' vendor visit'+(v===1?'':'s'):'',n?n+' scheduling note'+(n===1?'':'s'):'',o?o+' office-only task'+(o===1?'':'s')+' (no tech on them)':''].filter(Boolean).join(', ')+' — <a href="#" data-vmode="used">Vendors used</a>. ':''; })()+(movedN?'<b>'+movedN+' marked ready or pushed</b> — they\'re under Ready for Breezeway. ':'')+'Fees = $ amounts, trip charges or fees found in the task\'s notes, comments or messages (read up to Oct 9 — check newer tasks yourself). Open a task, check its costs and press ✓ Ready for Track. Receipts the crew post in Breezeway are read into Expenses every hour.</span></div>';
-    G.bw+='<div class="pad" style="padding-top:0;padding-bottom:6px"><div class="qsearch"><span class="mag">⌕</span><input id="bwf_home2" type="search" placeholder="Search these tasks: home, task or tech…" value="'+esc(bf.home||"")+'" autocomplete="off"></div></div>';
-    G.bw+='<div class="pad note" style="padding-top:0">'+(bf.tech||bf.home||bf.from||bf.to?'Showing '+list.length+' of '+nAll+' tasks'+(bf.from||bf.to?' (dates '+(bf.from?fmtD(bf.from):'start')+' – '+(bf.to?fmtD(bf.to):'today')+', any month)':'')+' · <a href="#" data-act="bwfclear">clear</a>':nAll+' tasks')+' · tech and dates are in the bar at the top</div>';
+    G.bw+='<div class="pad" style="padding-bottom:4px"><div class="qsearch"><span class="mag">⌕</span><input id="bwf_home2" type="search" placeholder="Search these tasks: home, task or tech…" value="'+esc(bf.home||"")+'" autocomplete="off"></div></div>';
+    G.bw+='<div class="bwfil" style="margin-top:4px">'+
+      '<label class="bf"><span>From</span><input id="bwf2_from" type="date" value="'+esc(bf.from||"")+'"></label><label class="bf"><span>To</span><input id="bwf2_to" type="date" value="'+esc(bf.to||"")+'"></label>'+
+      '<label class="bf"><span>Tech</span><select id="bwf2_tech"><option value="">All techs</option>'+Object.keys(techs).sort().map(function(t){ return '<option'+(bf.tech===t?' selected':'')+'>'+esc(t)+'</option>'; }).join("")+'</select></label>'+
+      '<label class="bf"><span>Bill</span><select id="bwf2_st"><option value="">All</option><option value="new"'+(bf.st==="new"?' selected':'')+'>Not opened yet</option><option value="started"'+(bf.st==="started"?' selected':'')+'>Bill started</option>'+(S.ui.showIgn?'<option value="ign"'+(bf.st==="ign"?' selected':'')+'>Nothing to bill</option>':'')+'</select></label>'+
+      (bf.tech||bf.home||bf.from||bf.to||bf.st?'<button class="btn sm ghost" data-act="bwfclear" style="height:36px">Clear</button><span class="bfn">'+list.length+' of '+nAll+'</span>':'<span class="bfn">'+nAll+' tasks</span>')+'</div>';
+    G.bw+='<div class="pad note" style="padding-top:0;font-size:12px"><label class="toggle" style="font-size:12px"><input type="checkbox" id="bwall"'+(showAll?' checked':'')+'> Show inspections &amp; repeating tasks (not billed)</label>'+(ignN?' · <label class="toggle" style="font-size:12px"><input type="checkbox" id="bwign"'+(S.ui.showIgn?' checked':'')+'> Show '+ignN+' nothing to bill</label>':'')+
+      ' · '+(function(){ var lo=D.jobs.filter(function(j){ return j.src==="breezeway" && j.status==="done" && (j.finished||"").slice(0,7)===m && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && (j.vendorVisit||j.schedNote||j.officeOnly); }), v=lo.filter(function(j){return j.vendorVisit;}).length, n=lo.filter(function(j){return j.schedNote;}).length, o=lo.length-v-n;
+        return lo.length?'Left out: '+[v?v+' vendor visit'+(v===1?'':'s'):'',n?n+' scheduling note'+(n===1?'':'s'):'',o?o+' office-only task'+(o===1?'':'s')+' (no tech on them)':''].filter(Boolean).join(', ')+' — <a href="#" data-vmode="used">Vendors used</a>. ':''; })()+(movedN?movedN+' ready or sent are under Ready to post to Track.':'')+'</div>';
     S.ui.bwShown=list.slice(0,300).map(function(j){ return j.id.slice(3); });
     G.bw+='<div id="bwbulk">'+bwBulkBar()+'</div>';
     G.bw+='<div class="appl" style="border:0;border-radius:0;max-height:560px;overflow-y:auto"><table class="t"><thead><tr><th style="width:30px"><input type="checkbox" id="bwselall" title="Tick every task shown" aria-label="Tick every task shown"></th>'+th("done","Done")+th("home","Home")+th("task","Task")+th("techs","Techs")+th("people","People",1)+th("time","Time",1)+th("bill","Bill",1)+'</tr></thead><tbody>'+
@@ -5726,6 +5731,7 @@ document.addEventListener("change",function(ev){
   if(t.classList&&t.classList.contains("care_pick")){ var ck2=t.dataset.cpk; S.ui.carePick=S.ui.carePick||{}; S.ui.carePick[ck2]=S.ui.carePick[ck2]||{}; S.ui.carePick[ck2][t.value]=t.checked; return render(); }
   if(t.id==="bwign"){ S.ui.showIgn=t.checked; return render(); }
   if(t.id==="bwall"){ S.ui.bwAll=t.checked; return render(); }
+  if(/^bwf2_(tech|from|to|st)$/.test(t.id||"")){ S.ui.bwF=S.ui.bwF||{}; S.ui.bwF[t.id.slice(5)]=t.value; return render(); }
   if(t.id==="bwf_home2"){ S.ui.bwF=S.ui.bwF||{}; S.ui.bwF.home=t.value; return render(); }
   if(/^bwf_(tech|home|from|to)$/.test(t.id||"")){ S.ui.bwF=S.ui.bwF||{}; S.ui.bwF[t.id.slice(4)]=t.value; return render(); }
   if(t.id==="mmonth"){ S.ui.month=t.value; return render(); }
