@@ -4881,6 +4881,7 @@ function pcDraw() {
 // "Latest" = the newest pull for that area + night; "earlier pull" = the pull before it for the same night.
 const HF = { from: null, to: null, areas: null, cls: 0, vr: false, q: "", sort: "med", dir: 1, rows: null, key: "", day: null };
 const HF_AREAS = ["Park City", "Heber / Jordanelle", "Westgate", "Pioche"];
+const hfName = a => a === "Pioche" ? "Deer Valley East (Pioche Village)" : a;   /* 2026-11-23: the Pioche search is the Deer Valley East building, not Pioche NV */
 const HF_COL = { "Park City": "#0e7c66", "Heber / Jordanelle": "#c98a1b", "Westgate": "#7c5cc4", "Pioche": "#b5485d" };
 const hfCol = a => HF_COL[a] || "#5a6b7b";
 const hfDay = k => new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -4928,7 +4929,7 @@ function hfDraw() {
   const all = HF.rows || [];
   const present = HF_AREAS.filter(a => all.some(r => r.area === a)).concat([...new Set(all.map(r => r.area))].filter(a => !HF_AREAS.includes(a)));
   if (!HF.areas) HF.areas = new Set(HF_AREAS);
-  $("hfAreas").innerHTML = `<span class="small muted">Areas</span>` + (present.length ? present : HF_AREAS).map(a => `<label class="hfchip"><input type="checkbox" data-ha="${escH(a)}"${HF.areas.has(a) ? " checked" : ""}><i style="background:${hfCol(a)}"></i>${escH(a)}</label>`).join("");
+  $("hfAreas").innerHTML = `<span class="small muted">Areas</span>` + (present.length ? present : HF_AREAS).map(a => `<label class="hfchip"><input type="checkbox" data-ha="${escH(a)}"${HF.areas.has(a) ? " checked" : ""}><i style="background:${hfCol(a)}"></i>${escH(hfName(a))}</label>`).join("");
   $("hfAreas").querySelectorAll("[data-ha]").forEach(c => c.onchange = () => { c.checked ? HF.areas.add(c.dataset.ha) : HF.areas.delete(c.dataset.ha); hfDraw(); });
   const last = {}, prev = {}, nk = r => r.area + "|" + r.check_in;
   all.forEach(r => { const id = r.run_id || 0; if (id > (last[nk(r)] || 0)) last[nk(r)] = id; });
@@ -4943,15 +4944,15 @@ function hfDraw() {
   const night = {}; rows.forEach(r => { const a = (night[r.area] = night[r.area] || {}); (a[r.check_in] = a[r.check_in] || []).push(r); });
   const nm = (a, k) => { const l = night[a]?.[k]; return l ? median(l.map(hfPre)) : null; };
   const cap = rows.map(r => r.captured_at).sort(), capTxt = cap.length ? (cap[0].slice(0, 10) === cap[cap.length - 1].slice(0, 10) ? new Date(cap[0]).toLocaleDateString() : new Date(cap[0]).toLocaleDateString() + " – " + new Date(cap[cap.length - 1]).toLocaleDateString()) : "—";
-  const src = `<p class="small muted">What this shows: the lowest nightly price Google Hotels lists for each hotel (2 adults, 2-night stay starting that night) and how many hotels still show rooms. It does <b>not</b> show hotels' booked nights. "Earlier pull" = the pull before the latest one for the same night. We have hotel prices for check-ins ${hfDay(HF.range[0])} – ${hfDay(HF.range[1])}; Park City and Heber come in every Wednesday, Westgate and Pioche have fewer nights so far. Source: <a href="https://www.google.com/travel/hotels" target="_blank" rel="noopener">Google Hotels</a> via SerpApi (hotels.py), these prices captured ${capTxt}.</p>`;
+  const src = `<p class="small muted">What this shows: the lowest nightly price Google Hotels lists for each hotel (2 adults, 2-night stay starting that night) and how many hotels still show rooms. It does <b>not</b> show hotels' booked nights. "Earlier pull" = the pull before the latest one for the same night. We have hotel prices for check-ins ${hfDay(HF.range[0])} – ${hfDay(HF.range[1])}; Park City and Heber come in every Wednesday, Westgate and Deer Valley East (Pioche Village) have fewer nights so far. Source: <a href="https://www.google.com/travel/hotels" target="_blank" rel="noopener">Google Hotels</a> via SerpApi (hotels.py), these prices captured ${capTxt}.</p>`;
   if (!rows.length) { $("hfOut").innerHTML = `<p class="small muted">No hotel prices match these dates and filters.</p>` + src; return; }
   // Area tiles
   const tile = a => { const ds = days.filter(k => night[a]?.[k]);
-    if (!ds.length) return `<div class="hftile" style="border-top:3px solid ${hfCol(a)}"><b>${escH(a)}</b><div class="small muted">No prices for these dates.</div></div>`;
+    if (!ds.length) return `<div class="hftile" style="border-top:3px solid ${hfCol(a)}"><b>${escH(hfName(a))}</b><div class="small muted">No prices for these dates.</div></div>`;
     const withTax = median(ds.map(k => median(night[a][k].map(r => r.rate_night != null ? +r.rate_night : hfPre(r))))), cnt = median(ds.map(k => night[a][k].length));
     const lo = ds.reduce((m, k) => nm(a, k) < nm(a, m) ? k : m, ds[0]), hi = ds.reduce((m, k) => nm(a, k) > nm(a, m) ? k : m, ds[0]);
     const ch = []; ds.forEach(k => night[a][k].forEach(r => { const b = before.get(hfKey(r) + "|" + k); if (b && b.p) ch.push((hfPre(r) - b.p) / b.p * 100); }));
-    return `<div class="hftile" style="border-top:3px solid ${hfCol(a)}"><b>${escH(a)}</b><div class="hfbig">${fmt(median(ds.map(k => nm(a, k))))}<span class="small muted" style="font-weight:400"> a night before tax</span></div>
+    return `<div class="hftile" style="border-top:3px solid ${hfCol(a)}"><b>${escH(hfName(a))}</b><div class="hfbig">${fmt(median(ds.map(k => nm(a, k))))}<span class="small muted" style="font-weight:400"> a night before tax</span></div>
       <div class="small">${fmt(withTax)} with tax &amp; fees · about ${Math.round(cnt)} hotel${Math.round(cnt) === 1 ? "" : "s"} with rooms a night</div>
       <div class="small">Cheapest night <b>${hfDay(lo)}</b> ${fmt(nm(a, lo))} · priciest <b>${hfDay(hi)}</b> ${fmt(nm(a, hi))}</div>
       <div class="small muted">${ds.length} of ${days.length} nights priced${ch.length >= 5 ? ` · vs the earlier pull: <b>${hfPct(median(ch))}</b> (${ch.length} hotel-nights)` : ""}</div></div>`; };
@@ -4969,7 +4970,7 @@ function hfDraw() {
   const ticks = days.map((k, i) => i % step === 0 ? `<text x="${x(i)}" y="${Ht - 8}" font-size="10" fill="var(--muted)" text-anchor="${i === 0 ? "start" : "middle"}">${new Date(k + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : "").join("");
   const bw = Math.max(4, (W - L - R) / Math.max(1, N));
   const hit = days.map((k, i) => `<rect data-hk="${k}" x="${(x(i) - bw / 2).toFixed(1)}" y="${T}" width="${bw.toFixed(1)}" height="${Ht - T - Bm}" fill="${k === HF.day ? "var(--line)" : "transparent"}" opacity=".6" style="cursor:pointer"><title>${hfDay(k)}${areas.map(a => nm(a, k) != null ? ` · ${a} ${fmt(nm(a, k))} (${night[a][k].length} with rooms)` : "").join("")}${(() => { const e = typeof mkTitle === "function" ? mkTitle(k).slice(3) : ""; return e ? " · " + escH(e.slice(0, 90)) : ""; })()}</title></rect>`).join("");
-  const chart = `<div class="legend">${areas.map(a => `<span><i style="background:${hfCol(a)};height:3px"></i>${escH(a)}, median before tax</span>`).join("")}</div>
+  const chart = `<div class="legend">${areas.map(a => `<span><i style="background:${hfCol(a)};height:3px"></i>${escH(hfName(a))}, median before tax</span>`).join("")}</div>
     <svg id="hfChart" viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto">${grid}${hit}${areas.map(path).join("")}${areas.map(dots).join("")}${ticks}</svg>
     <p class="small" style="color:var(--teal2);margin:2px 0 8px">Tap a night on the chart to see every hotel and its price that night.</p>`;
   // One row per hotel
