@@ -360,7 +360,9 @@ async function olLoad(){
     OL.scans = {}; (sc.data || []).forEach(x => OL.scans[x.code] = (OL.scans[x.code] || 0) + 1);
     OL.sale = new Set((zs.data || []).map(x => olKey((x.data || {}).street)).filter(Boolean));
     const oc = await sb.from("mkt_owner_campaigns").select("*").eq("off", false).order("start_on", { ascending:false });
-    OL.camps = oc.error ? null : (oc.data || []);   // null = hub_owner_campaigns.sql not run yet: campaign parts stay hidden
+    OL.camps = oc.error ? null : (oc.data || []);
+    const iq = await sb.from("mkt_owner_inquiries").select("*").eq("off", false).order("lead_on", { ascending:false });
+    OL.inq = iq.error ? null : (iq.data || []);   // 2026-11-23: ZPoint landing-page inquiries + QR scans (hub_owner_campaign_history.sql)   // null = hub_owner_campaigns.sql not run yet: campaign parts stay hidden
   } catch(e){ OL.err = (e && e.message) || String(e); OL.rows = OL.rows || []; }
 }
 const olOwn = r => ((r.data || {}).owners || []).join(" & ");
@@ -461,7 +463,7 @@ function ocTimeline(c, drops){ const t = today();
     return `<div class="st ${cls}"><b>${l}</b><i></i><small>${esc(ocShort(on))}</small></div>`; }).join("")}</div>`; }
 function ocampsHtml(){
   if(!OL.camps) return "";
-  const box = OL.camps.map(c => {
+  const box = OL.camps.filter(c => c.source !== "zpoint").map(c => {
     const bs = OL.batches.filter(b => b.campaign_id === c.id), drops = {}; bs.forEach(b => drops[b.drop_no] = b);
     const its = OL.items.filter(i => bs.some(b => b.id === i.batch_id));
     const mailed = its.filter(i => ocSent(bs.find(b => b.id === i.batch_id))).length, scans = its.reduce((n, i) => n + (OL.scans[i.code] || 0), 0);
@@ -482,8 +484,57 @@ function ocampsHtml(){
       </div></div>`; }).join("");
   return `<h2>🗓 Owner campaigns</h2><p class="muted">Same timing as the ZPoint Spring 2025 owner campaign: 3 mail drops to the same owners 5 weeks apart, an email 3 weeks after each drop, ads running the whole time. Each drop is a batch under 📬 Postcards that someone designs, previews and mails on its date; the emails and ads are cards on Plan for Owners.</p>
     ${box || `<p class="muted">No campaigns yet. Tick owners in Owner leads, then press 🗓 Start a 3-drop campaign.</p>`}
-    <p class="src">Timing source: ZPoint campaign dashboard, Spring 2025 (drops Mar 17, Apr 21, May 26; emails Apr 7, May 12, Jun 16; ads Mar 24 – Jun 25). Scans from the cards' QR codes; Talking/Signed from the status set on each owner above.</p>`;
+    <p class="src">Timing source: ZPoint campaign dashboard, Spring 2025 (drops Mar 17, Apr 21, May 26; emails Apr 7, May 12, Jun 16; ads Mar 24 – Jun 25). Scans from the cards' QR codes; Talking/Signed from the status set on each owner above.</p>
+    ${ocHistHtml()}${ocInqHtml()}`;
 }
+/* ---------- 2026-11-23 (Brandon "Yes, load them"): past ZPoint campaigns + their inquiries, matched to Track ---------- */
+const ocMoney = n => n == null ? "—" : "$" + Math.round(+n).toLocaleString();
+const ocNum = n => n == null ? "—" : (+n).toLocaleString();
+function ocHistHtml(){
+  const H = (OL.camps || []).filter(c => c.source === "zpoint").sort((a, b) => a.start_on < b.start_on ? -1 : 1);
+  if(!H.length) return "";
+  const rows = H.map(c => { const t = c.traced || [], still = t.filter(x => x.still).length;
+    const per = c.cost != null && t.length ? ocMoney(c.cost / t.length) : "—";
+    return `<tr><td><b>${esc(c.name.replace(" (ZPoint)", ""))}</b><div class="muted" style="font-size:12px">${esc(ocShort(c.start_on))} – ${esc(c.mail_end ? ocShort(c.mail_end) : "?")} · ${esc(c.audience || "")}</div>
+        ${c.note ? `<div style="font-size:12px;margin-top:3px">${esc(c.note.split(" Source:")[0])}</div>` : ""}</td>
+      <td>${ocNum(c.cards)}</td><td>${ocNum(c.emails)}</td><td>${ocNum(c.inquiries)}</td><td>${ocNum(c.qr_scans)}</td><td>${ocMoney(c.cost)}</td>
+      <td><b>${t.length}</b>${t.length ? `<div style="font-size:12px">${t.map(x => `<span class="pill ${x.still ? "green" : ""}" title="${esc((x.who || "") + " · asked " + (x.lead_on || "") + " · started " + (x.started || "") + (x.still ? "" : " · left " + (x.ended || "")))}">${esc(x.home)}${x.still ? "" : " (left)"}</span>`).join(" ")}</div>` : ""}${t.length && still !== t.length ? `<div class="muted" style="font-size:12px">${still} still with us</div>` : ""}</td>
+      <td>${per}</td></tr>`; }).join("");
+  return `<h2>📜 Past owner campaigns (ZPoint)</h2>
+    <p class="muted">What each ZPoint campaign cost and which new homes we can trace to it (the owner asked on the landing page or scanned a card, and the home started in Track after that). It's a floor: owners who called us straight from a card don't show.</p>
+    <div class="box" style="overflow-x:auto"><table><thead><tr><th>Campaign</th><th>Cards</th><th>Emails</th><th>Inquiries</th><th>QR scans</th><th>Cost</th><th>New homes traced</th><th>Per home</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="src">Source: OwnerPoint campaign dashboards (read Nov 23, 2026); Track owner start dates. Spring 2026 and Fall 2026: OwnerPoint left cards, emails and cost blank.</p>`;
+}
+const IQ_ST = { new:"New", contacted:"Contacted", talking:"Talking", signed:"Signed", not_interested:"Not interested", already_ours:"Already ours" };
+function ocInqHtml(){
+  if(!OL.inq || !OL.inq.length) return "";
+  const f = OL.iqf || "new", all = OL.inq, cnt = s => all.filter(x => x.status === s).length;
+  const L = f === "all" ? all : all.filter(x => x.status === f), show = OL.iqAll ? L : L.slice(0, 15);
+  const tile = (k, l, n) => `<button class="kpi" data-iqf="${k}" style="cursor:pointer;text-align:left;${f === k ? "outline:2px solid var(--moose)" : ""}"><small>${l}</small><b>${n}</b></button>`;
+  const rows = show.map(x => `<tr><td><b>${esc(x.name || "")}</b><div class="muted" style="font-size:12px">${x.kind === "qr" ? `📷 scanned a card${x.scans > 1 ? " " + x.scans + "×" : ""}` : "📝 asked on the landing page"} · ${esc(x.campaign || "")}</div></td>
+      <td>${esc(x.lead_on ? fmtD(x.lead_on) : "")}${x.last_on && x.last_on !== x.lead_on ? `<div class="muted" style="font-size:12px">last ${esc(fmtD(x.last_on))}</div>` : ""}</td>
+      <td style="font-size:12.5px">${esc([x.address, x.city].filter(Boolean).join(" · "))}</td>
+      <td style="font-size:12.5px">${x.email ? `<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>` : ""}${x.phone ? `<div><a href="tel:${esc(x.phone)}">${esc(x.phone)}</a></div>` : ""}</td>
+      <td>${x.track_home ? `<span class="pill ${x.status === "signed" ? "green" : ""}">${esc(x.track_home)}</span>` : ""}</td>
+      <td><select data-iqst="${x.id}">${Object.entries(IQ_ST).map(([k, l]) => `<option value="${k}"${k === x.status ? " selected" : ""}>${l}</option>`).join("")}</select>
+        <button class="btn small" data-iqnote="${x.id}" title="Add a note">📝</button>${x.note ? `<div class="muted" style="font-size:12px;max-width:240px">${esc(x.note)}</div>` : ""}</td></tr>`).join("");
+  return `<h2>📥 Owner inquiries from ZPoint</h2>
+    <p class="muted">Everyone who asked on the ZPoint landing page or scanned a card's QR code. Most never signed: follow them up here and set where each one stands.</p>
+    <div class="kpis">${tile("new", "To follow up", cnt("new"))}${tile("contacted", "Contacted", cnt("contacted"))}${tile("talking", "Talking", cnt("talking"))}${tile("signed", "Signed", cnt("signed"))}${tile("not_interested", "Not interested", cnt("not_interested"))}${tile("already_ours", "Already ours", cnt("already_ours"))}${tile("all", "All", all.length)}</div>
+    <div class="box" style="overflow-x:auto"><table><thead><tr><th>Who</th><th>When</th><th>Home / area</th><th>Contact</th><th>In Track</th><th>Where it stands</th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">None here.</td></tr>`}</tbody></table>
+    ${L.length > 15 ? `<div style="padding:8px"><button class="btn small" data-iqmore="1">${OL.iqAll ? "Show less" : "See all " + L.length}</button></div>` : ""}</div>
+    <p class="src">Source: OwnerPoint campaign dashboards (read Nov 23, 2026). "In Track" = matched to a Track owner by email, phone or address.</p>`;
+}
+async function iqSet(id, status, note){ const r = await sb.rpc("mkt_inquiry_set", { p_id:+id, p_status:status, p_note:note || "" });
+  if(r.error){ await mmAlert(niceE(r.error)); return; } const x = OL.inq.find(z => z.id === +id); if(x){ x.status = status; if(note) x.note = note; } render(); }
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-iqf],[data-iqmore],[data-iqnote]"); if(!b) return;
+  if(b.dataset.iqf){ OL.iqf = OL.iqf === b.dataset.iqf && b.dataset.iqf !== "new" ? "new" : b.dataset.iqf; OL.iqAll = false; return render(); }
+  if(b.dataset.iqmore){ OL.iqAll = !OL.iqAll; return render(); }
+  if(b.dataset.iqnote){ const x = OL.inq.find(z => z.id === +b.dataset.iqnote); const t = await mmAsk("Note on this owner (who you talked to, what they said). Never codes or passwords.", { multiline:true, value:"" });
+    if(t && t.trim()) await iqSet(x.id, x.status, t.trim()); }
+});
+document.addEventListener("change", e => { const s = e.target.closest("[data-iqst]"); if(s) iqSet(s.dataset.iqst, s.value, ""); });
 function ocStart(){
   const n = OL.sel.size, d = document.createElement("dialog"); d.style.cssText = "max-width:600px;width:94vw;border:0;border-radius:14px;padding:18px";
   const t = today(), wd = new Date(t + "T12:00:00Z").getUTCDay(), mon = ocAdd(t, ((8 - wd) % 7) || 7);   // next Monday, like Mar 17 2025
