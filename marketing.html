@@ -330,7 +330,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(
    (mkt_owner_leads / mkt_owner_lead_log, hub_owner_leads.sql). Postcards: pick owners -> batch (mkt_postcard_batches/items, each card
    a short code) -> address CSV for the printer -> Mark mailed. The QR on a card = crew.moosemanagement.com/go.html?c=CODE, which logs the
    scan (mkt_postcard_scans) and opens the Revenue Estimator. Nothing is mailed by the hub itself yet. ---------- */
-const OL = { rows:null, st:{}, batches:[], items:[], scans:{}, sale:new Set(), f:{ t:"prime", q:"", nb:"", live:"", near:"" }, sel:new Set(), all:false, err:"" };
+const OL = { mode:null, rows:null, st:{}, batches:[], items:[], scans:{}, sale:new Set(), f:{ t:"prime", q:"", nb:"", live:"", near:"" }, sel:new Set(), all:false, err:"" };
 const OL_STATUS = { new:"Not contacted", contacted:"Contacted", talking:"Talking", signed:"Signed", not_interested:"Not interested" };
 const olKey = s => { const p = String(s || "").toLowerCase().split(",").map(x => x.trim());   // "5241 Cove Canyon Dr, Unit B, Park City" -> "5241covecanyondrb"
   let st = p[0] || ""; if(p[1] && /^(unit|apt|ste|suite|#)/.test(p[1])) st += " " + p[1];
@@ -345,9 +345,10 @@ async function olLoad(){
     const [st, bt, it, sc, zs] = await Promise.all([
       sb.from("mkt_owner_leads").select("*"),
       sb.from("mkt_postcard_batches").select("*").eq("off", false).order("created_at", { ascending:false }),
-      sb.from("mkt_postcard_items").select("batch_id,lead_key,code"),
+      sb.from("mkt_postcard_items").select("batch_id,lead_key,code,pg_id,pg_live,pg_error"),
       sb.from("mkt_postcard_scans").select("code,at"),
       sb.from("serp_finds").select("data").eq("kind", "zillow_sale").eq("gone", false)]);
+    const md = await sb.rpc("mkt_postcard_mode"); OL.mode = md.error ? null : md.data;
     OL.rows = rows; OL.st = {}; (st.data || []).forEach(x => OL.st[x.lead_key] = x);
     OL.batches = bt.data || []; OL.items = it.data || [];
     OL.scans = {}; (sc.data || []).forEach(x => OL.scans[x.code] = (OL.scans[x.code] || 0) + 1);
@@ -442,10 +443,37 @@ function postcardsHtml(){
           <td>${its.length}</td>
           <td>${b.status === "mailed" ? `<span class="pill green">mailed ${esc(fmtD(b.mailed_on))}</span>${b.printer ? `<div class="muted" style="font-size:12px">${esc(b.printer)}${b.cost != null ? " · $" + Number(b.cost).toLocaleString() : ""}</div>` : ""}` : b.status === "exported" ? `<span class="pill amber">list downloaded</span>` : `<span class="pill">not sent yet</span>`}</td>
           <td>${sc ? `<b>${sc}</b> <span class="muted">(${who} owner${who === 1 ? "" : "s"})</span>` : `<span class="muted">0</span>`}</td>
-          <td style="white-space:nowrap"><button class="btn small" data-pccsv="${b.id}">⬇ Address list</button> ${b.status !== "mailed" ? `<button class="btn small" data-pcmail="${b.id}">✓ Mark mailed</button> <button class="btn small" data-pccancel="${b.id}">Cancel</button>` : ""}</td></tr>`; }).join("")}</tbody></table></div>`
+          <td style="white-space:nowrap">${pcSendBtns(b, its)}<button class="btn small" data-pccsv="${b.id}">⬇ Address list</button> ${b.status !== "mailed" ? `<button class="btn small" data-pcmail="${b.id}">✓ Mark mailed</button> <button class="btn small" data-pccancel="${b.id}">Cancel</button>` : ""}</td></tr>`; }).join("")}</tbody></table></div>`
       : `<p class="muted">No postcard batches yet. Tick owners in Owner leads above, then press 📬 Make a postcard batch.</p>`}
+    ${OL.mode && OL.mode.test ? `<p class="muted" style="font-size:12.5px">📮 <b>Mail through PostGrid:</b> 🎨 design the card, 👀 make a test preview (a PDF of the real card, never printed), then 📮 Mail them. PostGrid prints and mails each card First Class (about $0.90 a card, from postgrid.com/pricing-print-mail, 2026-11-23). ${OL.mode.live ? "" : "Mailing real cards isn't switched on yet: previews only."}</p>` : ""}
     <p class="src">The address list has name, address lines, city, state, ZIP, the card's code and its QR link. Most printers can print a different QR per card from a column; if yours can't, print the code in words ("Visit vacationrentalsparkcity.com/revenue-estimator") and nothing is tracked.</p>`;
 }
+const PC_DEF = { h:"What could your Park City home earn?",
+  b:"We're Moose Management, a local Park City team that manages vacation rentals in your neighborhood.\n\nCurious what your home could earn as a nightly rental? Scan the code for a free estimate, or give us a call. No pressure, just good numbers." };
+function pcSendBtns(b, its){ if(!OL.mode || !OL.mode.test || b.status === "cancelled") return "";
+  const done = its.filter(i => i.pg_live && i.pg_id).length, badL = its.filter(i => i.pg_error && !i.pg_live), bad = badL.length;
+  if(b.send_status === "sending") return `<span class="pill amber">mailing… ${done} of ${its.length}</span> `;
+  if(b.send_status === "sent" || b.send_status === "partial") return `<span class="pill green">📮 ${done} mailed by PostGrid</span>${bad ? ` <span class="pill red" title="${esc(badL.map(i => i.code + ": " + i.pg_error).join("\n"))}">${bad} failed</span>` : ""}${bad && OL.mode.live ? ` <button class="btn small" data-pclive="${b.id}">Try the failed ones again</button>` : ""} `;
+  const fresh = b.preview_at && (!b.design_at || b.preview_at >= b.design_at);
+  return `<button class="btn small" data-pcdesign="${b.id}">🎨 Card design</button> ${b.headline ? `<button class="btn small" data-pcprev="${b.id}">👀 Test preview</button> ` : ""}${b.preview_url && fresh ? `<a class="btn small" href="${esc(b.preview_url)}" target="_blank" rel="noopener">Open preview</a> ` : ""}${OL.mode.live && fresh && b.status !== "mailed" ? `<button class="btn primary small" data-pclive="${b.id}">📮 Mail ${its.length}</button> ` : ""}`; }
+function pcDesign(b){ return new Promise(res => {
+  const d = document.createElement("dialog"); d.style.cssText = "max-width:560px;width:94vw;border:0;border-radius:14px;padding:18px";
+  d.innerHTML = `<h3 style="margin:0 0 8px">🎨 Card design · ${esc(b.name)}</h3>
+    <label>Headline on the front (big, over the photo)<input id="pch" maxlength="80" value="${esc(b.headline || PC_DEF.h)}"></label>
+    <label style="display:block;margin-top:8px">Front photo link (https://, blank = Main Street in winter)<input id="pcf" value="${esc(b.front_img || "")}" placeholder="https://…"></label>
+    <label style="display:block;margin-top:8px">Words on the back (the hub adds "Hi first name," on top and the QR code + phone under it)<textarea id="pcb" rows="6" maxlength="600">${esc(b.back_text || PC_DEF.b)}</textarea></label>
+    <p class="muted" style="font-size:12px">Keep it short: about 70 words fit. Changing the design means making a new test preview before mailing.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Save design</button></div>`;
+  document.body.appendChild(d); d.showModal();
+  d.addEventListener("click", e => { const x = e.target.closest("[data-x]"); if(!x) return;
+    const v = x.dataset.x === "1" ? { h:d.querySelector("#pch").value, f:d.querySelector("#pcf").value, b:d.querySelector("#pcb").value } : null;
+    d.close(); d.parentNode.removeChild(d); res(v); }); }); }
+async function pcCall(action, batch){
+  const { data:{ session } } = await sb.auth.getSession();
+  const r = await fetch(C.url + "/functions/v1/postcard-send", { method:"POST", headers:{ "content-type":"application/json", apikey:C.anonKey, authorization:"Bearer " + (session && session.access_token) }, body:JSON.stringify({ action, batch }) });
+  return await r.json().catch(() => ({ ok:false, error:"No answer from the hub (" + r.status + ")" })); }
+let PC_POLL = 0;
+function pcPoll(){ clearTimeout(PC_POLL); if(OL.batches.some(b => b.send_status === "sending")) PC_POLL = setTimeout(async () => { if(TAB !== "owners") return; await olLoad(); render(); pcPoll(); }, 5000); }
 function olDownload(name, rows){ const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(x => x.map(q).join(",")).join(String.fromCharCode(10))], { type:"text/csv" }));
   a.download = name; a.click(); }
@@ -455,7 +483,7 @@ async function olSet(keys, p){ const r = await sb.rpc("mkt_lead_set", { p_keys:k
     if("status" in p) s.status = p.status; if("dont_contact" in p) s.dont_contact = p.dont_contact; if("owner_name" in p) s.owner_name = p.owner_name; if(p.note) s.note = p.note; });
   return true; }
 document.addEventListener("click", async e => {
-  const b = e.target.closest("[data-olt],[data-olmore],[data-olnote],[data-olpc],[data-olme],[data-oldnc],[data-olclear],[data-olcsv],[data-pccsv],[data-pcmail],[data-pccancel]"); if(!b) return;
+  const b = e.target.closest("[data-olt],[data-olmore],[data-olnote],[data-olpc],[data-olme],[data-oldnc],[data-olclear],[data-olcsv],[data-pccsv],[data-pcmail],[data-pccancel],[data-pcdesign],[data-pcprev],[data-pclive]"); if(!b) return;
   if(b.dataset.olt){ OL.f.t = OL.f.t === b.dataset.olt ? "all" : b.dataset.olt; OL.all = false; return olDraw(); }
   if(b.dataset.olmore){ OL.all = true; return olDraw(); }
   if(b.dataset.olnote){ const k = b.dataset.olnote, t = await mmAsk("Note on this owner (who you talked to, what they said). Never codes or passwords.", { multiline:true, value:"" });
@@ -487,6 +515,16 @@ document.addEventListener("click", async e => {
     const mm = String(pr).match(/([\d,]+(\.\d+)?)\s*$/), cost = mm ? +mm[1].replace(/,/g, "") : null, printer = String(pr).replace(/,?\s*\$?[\d,]+(\.\d+)?\s*$/, "").trim();
     const r = await sb.rpc("mkt_postcard_set", { p_batch:id, p_status:"mailed", p_mailed:day, p_printer:printer || null, p_cost:cost });
     if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
+  if(b.dataset.pcdesign){ const bt = OL.batches.find(x => x.id === +b.dataset.pcdesign); const v = await pcDesign(bt); if(!v) return;
+    const r = await sb.rpc("mkt_postcard_design", { p_batch:bt.id, p_front:v.f, p_headline:v.h, p_back:v.b }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
+  if(b.dataset.pcprev){ b.disabled = true; b.textContent = "Making the preview…"; const r = await pcCall("preview", +b.dataset.pcprev);
+    if(!r.ok){ await mmAlert(r.error || "Couldn't make the preview"); await olLoad(); render(); return; }
+    if(r.url) window.open(r.url, "_blank", "noopener"); else await mmAlert(r.note || "PostGrid is still making the preview.");
+    await olLoad(); render(); return; }
+  if(b.dataset.pclive){ const id = +b.dataset.pclive, bt = OL.batches.find(x => x.id === id), n = OL.items.filter(i => i.batch_id === id && !(i.pg_live && i.pg_id)).length;
+    if(!await mmConfirm(`Mail ${n} real postcard${n === 1 ? "" : "s"} for "${bt.name}" through PostGrid? They're printed and mailed First Class (about $${(n * 0.9).toFixed(2)}) and can't be called back once printing starts.`, { title:"Mail real postcards?", yes:"Yes, mail them" })) return;
+    const r = await pcCall("live", id); if(!r.ok) return mmAlert(r.error || "Couldn't start mailing");
+    await olLoad(); render(); pcPoll(); return; }
   if(b.dataset.pccancel){ if(!await mmConfirm("Cancel this batch? Its cards won't count as sent.")) return;
     const r = await sb.rpc("mkt_postcard_set", { p_batch:+b.dataset.pccancel, p_status:"cancelled" }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
 });
