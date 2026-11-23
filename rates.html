@@ -734,7 +734,7 @@ async function setNightly(setId) {
 function adrDay(k) {
   const by = {};
   for (const n of state.nightly || []) {
-    if (n.tier === "Ours" || n.tier === "Secondary") continue;
+    if (n.tier === "Ours" || n.tier === "Secondary" || n.tier === "Paused") continue;
     const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5);
     if (off < 0 || off >= n.avail.length) continue;
     (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] };
@@ -777,7 +777,7 @@ async function load(setId) {
   // One comp set: every comp that's been added counts the same (no Primary/Secondary split; Brandon 2026-10-09).
   // Exception (Brandon 2026-10-19): "Secondary" = nearby-building comps (e.g. Moose Lodge / Ski Team / Three Kings / Edelweiss):
   // listed for reference, never counted in medians or calendars.
-  const one = r => r.tier === "Ours" || r.tier === "Secondary" ? r : { ...r, tier: "Primary" };
+  const one = r => r.tier === "Ours" || r.tier === "Secondary" || r.tier === "Paused" ? r : { ...r, tier: "Primary" };
   state.comps = (c.data || []).map(one); state.allChecks = state.checks = (k.data || []).map(one); state.cal = (cal.data || []).map(one);
   const oursIds = state.comps.filter(x => x.tier === "Ours").map(x => x.id);
   const bk = oursIds.length ? await allRows(() => sb.from("our_bookings").select("*", { count: "exact" }).in("comp_id", oursIds).order("comp_id").order("reservation_id")) : { data: [] };
@@ -1021,7 +1021,7 @@ function ovCalOpen() {
 async function ovAggLoad(ids, label) {
   const key = ids.join(","); state.ovAgg = { key, label, n: ids.length, comps: [], checks: [], cal: [], loading: true };
   $("ov").querySelector(".ovtiles")?.insertAdjacentHTML("beforebegin", `<div class="ovnote">Loading ${ids.length} sets for ${escH(label)}…</div>`);
-  const today = new Date().toISOString().slice(0, 10), one = r => r.tier === "Ours" || r.tier === "Secondary" ? r : { ...r, tier: "Primary" };
+  const today = new Date().toISOString().slice(0, 10), one = r => r.tier === "Ours" || r.tier === "Secondary" || r.tier === "Paused" ? r : { ...r, tier: "Primary" };
   const [c, cal] = await Promise.all([allRows(() => sb.from("comps").select("*", { count: "exact" }).in("set_id", ids).eq("active", true).order("id")),
     allRows(() => sb.from("latest_calendar").select("*", { count: "exact" }).in("set_id", ids).order("id"))]);
   const checks = [];
@@ -1202,7 +1202,7 @@ async function loadSetRates() {
 }
 // Every comp that night: its own daily rate (Airbnb, else Vrbo) and its Airbnb checkout total per night when we have one.
 function srCompList(k) { const by = {};
-  for (const n of SR.nightly) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
+  for (const n of SR.nightly) { if (n.tier === "Ours" || n.tier === "Secondary" || n.tier === "Paused") continue;
     const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5); if (off < 0 || off >= n.avail.length) continue;
     (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] }; }
   const tot = {}; for (const r of SR.ck || []) { if (r.tier !== "Primary" || r.channel !== "Airbnb" || !priced(r)) continue; const o = Math.round((new Date(k + "T12:00:00") - new Date(r.check_in + "T12:00:00")) / 864e5);
@@ -1265,7 +1265,7 @@ function srCompTip(k) { const L = srCompList(k); if (!L.length) return "No comp 
 const srTrim = (v, f = x => x) => v.length < 5 ? v : [...v].sort((a, b) => f(a) - f(b)).slice(1, -1);
 function srComp(k) {   // comps' average daily rate that night (same as the Desk calendar's ADR): open comps only, Airbnb else VRBO
   const by = {};
-  for (const n of SR.nightly) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
+  for (const n of SR.nightly) { if (n.tier === "Ours" || n.tier === "Secondary" || n.tier === "Paused") continue;
     const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5); if (off < 0 || off >= n.avail.length) continue;
     (by[n.comp_id] ||= {})[n.channel] = { open: n.avail[off] === "1", rate: n.rates[off] }; }
   const v = []; for (const c of Object.values(by)) { const x = c.Airbnb || c.VRBO; if (x && x.open && x.rate != null) v.push(+x.rate); }
@@ -1410,7 +1410,7 @@ function srGlance(h) {
 }
 // share of comps booked/blocked that night (Airbnb, else VRBO calendars) for the demand step
 function srFill(k) { const by = {};
-  for (const n of SR.nightly || []) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
+  for (const n of SR.nightly || []) { if (n.tier === "Ours" || n.tier === "Secondary" || n.tier === "Paused") continue;
     const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5); if (off < 0 || off >= n.avail.length) continue;
     (by[n.comp_id] ||= {})[n.channel] = n.avail[off] === "1"; }
   const v = Object.values(by).map(c => c.Airbnb ?? c.VRBO).filter(x => x != null); return v.length >= 3 ? v.filter(x => !x).length / v.length : null; }
@@ -3824,7 +3824,7 @@ function abHtml() {
 function bookingQualityForSet() { // uses the loaded set (state.*)
   const today = iso(new Date(new Date().setHours(12, 0, 0, 0))), end = addD(today, 180), out = [];
   const label = new Map(state.comps.filter(c => c.tier === "Ours").map(c => [c.id, (c.label || "").replace(/\s*\(.*\)\s*$/, "")]));
-  const nightRates = k => { const by = {}; for (const n of state.nightly || []) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
+  const nightRates = k => { const by = {}; for (const n of state.nightly || []) { if (n.tier === "Ours" || n.tier === "Secondary" || n.tier === "Paused") continue;
       const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5);
       if (off >= 0 && off < (n.rates || []).length && n.rates[off] != null) (by[n.comp_id] ||= {})[n.channel] = +n.rates[off]; }
     return Object.values(by).map(x => x.Airbnb ?? x.VRBO).filter(x => x != null); };
@@ -5580,7 +5580,7 @@ function openReport() {
   // Bookings: our upcoming guest stays vs the comps' average nightly rate for the same nights (ESTIMATE)
   const label = new Map(state.comps.filter(c => c.tier === "Ours").map(c => [c.id, (c.label || "").replace(/\s*\(.*\)\s*$/, "")]));
   // every comp's own nightly rate that night, booked or open (so already-booked cheaper comps still count)
-  const rateAll = k => { const by = {}; for (const n of state.nightly || []) { if (n.tier === "Ours" || n.tier === "Secondary") continue;
+  const rateAll = k => { const by = {}; for (const n of state.nightly || []) { if (n.tier === "Ours" || n.tier === "Secondary" || n.tier === "Paused") continue;
       const off = Math.round((new Date(k + "T12:00:00") - new Date(n.start_date + "T12:00:00")) / 864e5);
       if (off >= 0 && off < (n.rates || []).length && n.rates[off] != null) (by[n.comp_id] ||= {})[n.channel] = +n.rates[off]; }
     const v = Object.values(by).map(x => x.Airbnb ?? x.VRBO).filter(x => x != null); return { adr: avg(v), n: v.length }; };
