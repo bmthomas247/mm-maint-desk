@@ -737,6 +737,24 @@ async function insights(el, tab, ctx){
   const byM = !!(MI && MI.data), byH = !!(HI && HI.data), byHome = byM || byH;   // 2026-11-10: Maintenance + Housekeeping ▸ Improvements moved here (same people as before)   // 2026-11-10: Maintenance ▸ Improvements moved here
   if(I.error){ el.innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(I.error) : I.error.message))}</p></div>`; return; }
   const L = I.data || [], runs = RN.data || [], run = runs.find(r => !r.error && r.stats && r.stats.summary) || null, edit = !!ED.data, admin = !!AD.data;
+  /* 2026-11-23 (build item j38): review + job numbers become labeled links instead of bare numbers */
+  const jobsOf = x => [...new Set((x.evidence || []).filter(e => e.type === "jobs").flatMap(e => e.ids || []).map(String))];
+  const JOB = {}, JIDS = [...new Set(L.flatMap(jobsOf))].map(Number).filter(n => n > 0 && n < 2147483647);
+  if(JIDS.length){ try { const J = await sb.from("work_orders").select("id,title,status,bw_task_id,property_id").in("id", JIDS.slice(0, 900)); (J.data || []).forEach(j => JOB[String(j.id)] = j); } catch(e){} }
+  const jHome = p => String(p || "").replace("-", " ").toUpperCase();
+  const jobA = (n, short) => { const j = JOB[String(n)];
+    const full = j ? `job #${n}: ${j.title || ""}${j.property_id ? " · " + jHome(j.property_id) : ""}${j.status === "done" ? " (done)" : j.status && j.status !== "new" ? " (" + j.status + ")" : " (open)"}` : `job #${n}`, lbl = short ? `job #${n}` : full;
+    return j && j.bw_task_id ? `<a class="anlink" href="https://app.breezeway.io/task/${encodeURIComponent(j.bw_task_id)}" target="_blank" rel="noopener" title="${esc(full)} - open in Breezeway">${esc(lbl)} ↗</a>` : `<span title="${esc(full)} (maintenance job in the hub)" style="text-decoration:underline dotted">${esc(lbl)}</span>`; };
+  const idLinks = (h, x) => { const rv = new Set(revIds(x).map(String)), jb = new Set(jobsOf(x));
+    return h.replace(/\(([^()]*)\)/g, (m, inner, off, str) => {
+      if(!/\d{3,}/.test(inner)) return m;
+      const jobFirst = /job|ticket|work order/i.test(str.slice(Math.max(0, off - 14), off) + inner);
+      const many = (inner.match(/\b\d{3,}\b/g) || []).length > 2;
+      const out = inner.replace(/\b\d{3,}\b/g, n => { const isJ = jb.has(n), isR = rv.has(n);
+        if(isJ && (jobFirst || !isR)) return jobA(n, many);
+        if(isR) return `<a class="anlink" href="#" data-ids="${n}" title="Read this review">review</a>`;
+        return n; });
+      return "(" + out + ")"; }); };
   const pr = { high:"red", medium:"amber", low:"" };
   const lines = s => esc(s).replace(/:\s+- /g, ":\n• ").replace(/\s+- (?=\S)/g, "\n• ").replace(/(^|\n)- /g, "$1• ");   // "- a - b" lists onto their own lines
   const quote = q => `<div style="border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:4px 0">“${esc(q.text)}”
@@ -748,15 +766,16 @@ async function insights(el, tab, ctx){
       <span class="pill">${esc(AREA[x.area] || x.area)}</span>${x.kind === "improve" ? `<span class="pill">${esc(ISTAT[x.status])}</span>` : ""}${x.manual ? `<span class="pill">added by hand</span>` : ""}
       ${(x.homes || []).slice(0, 8).map(h => `<a class="pill" href="#" data-home="${esc(h)}">${esc(h)}</a>`).join("")}${(x.homes || []).length > 8 ? `<span class="muted">+${x.homes.length - 8} homes</span>` : ""}</div>
     <p style="margin:8px 0 4px;font-weight:700;font-size:15.5px">${esc(x.title)}</p>
-    ${x.detail ? `<p style="margin:0 0 6px;white-space:pre-line">${lines(x.detail)}</p>` : ""}
-    ${x.suggestion ? `<p style="margin:0 0 6px;white-space:pre-line"><b>What to do:</b> ${lines(x.suggestion)}</p>` : ""}
-    ${x.impact ? `<p style="margin:0 0 6px;white-space:pre-line"><b>Why it matters:</b> ${lines(x.impact)}</p>` : ""}
+    ${x.detail ? `<p style="margin:0 0 6px;white-space:pre-line">${idLinks(lines(x.detail), x)}</p>` : ""}
+    ${x.suggestion ? `<p style="margin:0 0 6px;white-space:pre-line"><b>What to do:</b> ${idLinks(lines(x.suggestion), x)}</p>` : ""}
+    ${x.impact ? `<p style="margin:0 0 6px;white-space:pre-line"><b>Why it matters:</b> ${idLinks(lines(x.impact), x)}</p>` : ""}
     ${(x.quotes || []).map(quote).join("")}
     ${x.after_done ? `<p style="margin:6px 0"><b>Since it was done:</b> ${esc(x.after_done)}</p>` : ""}
     ${(x.teams || []).length ? `<p class="muted" style="margin:6px 0 0;font-size:13px">Who: ${x.teams.map(t => esc(TEAMN[t] || t)).join(", ")}</p>` : ""}
     ${x.owner_name || x.note ? `<p class="muted" style="margin:2px 0 0;font-size:13px">${x.owner_name ? "Owner: " + esc(x.owner_name) : ""}${x.owner_name && x.note ? " · " : ""}${x.note ? "Note: " + esc(x.note) : ""}${x.status_by ? ` (${esc(x.status_by)}, ${esc(dt(x.status_at))})` : ""}</p>` : ""}
-    <p class="muted" style="margin:6px 0 0;font-size:12.5px">Evidence: ${(x.evidence || []).map(e => `${esc(e.source)} — ${esc(e.what)} (${e.count})`).join(" · ") || "—"}${jobs.length ? ` · jobs ${jobs.map(esc).join(", ")}` : ""}
-      ${ids.length ? ` <a class="anlink" href="#" data-ids="${ids.join(",")}">Read the ${ids.length} reviews →</a>` : ""}<br>Source: ${esc(x.source)} · first seen ${esc(dt(x.found_on + "T12:00"))}${x.seen_count > 1 ? `, seen ${x.seen_count} times` : ""}</p>
+    <p class="muted" style="margin:6px 0 0;font-size:12.5px">Evidence: ${(x.evidence || []).map(e => `${esc(e.source === "maintenance_jobs" ? "maintenance jobs" : e.source)} — ${e.type !== "jobs" && (e.ids || []).length ? `<a class="anlink" href="#" data-ids="${(e.ids || []).join(",")}">${esc(e.what)}</a>` : esc(e.what)} (${e.count})`).join(" · ") || "—"}
+      ${ids.length ? ` <a class="anlink" href="#" data-ids="${ids.join(",")}">Read the ${ids.length} reviews →</a>` : ""}
+      ${jobs.length ? `<details style="margin:4px 0"><summary style="cursor:pointer">See the ${jobs.length} maintenance job${jobs.length === 1 ? "" : "s"}</summary>${jobs.map(n => `<div style="margin:2px 0 0 14px">${jobA(n)}</div>`).join("")}</details>` : "<br>"}Source: ${esc(x.source)} · first seen ${esc(dt(x.found_on + "T12:00"))}${x.seen_count > 1 ? `, seen ${x.seen_count} times` : ""}</p>
     ${edit && x.kind === "improve" ? `<div class="anbar" style="margin:8px 0 0"><select data-st>${Object.entries(ISTAT).map(([k, t]) => `<option value="${k}"${k === x.status ? " selected" : ""}>${t}</option>`).join("")}</select>
       <input data-ow placeholder="Who owns it" value="${esc(x.owner_name || "")}" style="flex:0 1 160px;min-width:120px"><input data-no placeholder="Note (what was done, when)">
       ${(x.teams || []).length ? `<label style="font-size:13px;display:inline-flex;gap:5px;align-items:center"><input type="checkbox" data-tip style="flex:0 0 auto;width:auto;min-width:0"> Tip on the team's Home page</label>` : ""}<button class="btn small" data-save>Save</button><span class="muted" data-msg></span></div>` : ""}</div>`; };
