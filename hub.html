@@ -2314,16 +2314,18 @@ function pennyGrow(){
 /* Drag Penny by her header; size her from the bottom-right corner. Where she sits is kept on this device (localStorage penny_pos). */
 function pennyPlace(){
   const b = $("#pennyBox");
-  if(PENNY.solo || innerWidth <= 820){ b.classList.remove("moved"); b.style.left = b.style.top = b.style.width = b.style.height = ""; return; }
-  let p = null; try { p = JSON.parse(localStorage.getItem("penny_pos") || "null"); } catch(e){}
-  if(!p) return;
-  const w = Math.min(Math.max(p.w || 400, 320), innerWidth - 16), h = Math.min(Math.max(p.h || 560, 360), innerHeight - 16);
+  if(PENNY.solo){ b.classList.remove("moved"); b.style.left = b.style.top = b.style.width = b.style.height = ""; return; }
+  let p = null; try { p = JSON.parse(localStorage.getItem(pennyPosKey()) || "null"); } catch(e){}
+  if(!p){ b.classList.remove("moved"); b.style.left = b.style.top = b.style.width = b.style.height = ""; return; }
+  const mn = innerWidth <= 820 ? 260 : 320, w = Math.min(Math.max(p.w || 400, mn), innerWidth - 16), h = Math.min(Math.max(p.h || 560, innerWidth <= 820 ? 260 : 360), innerHeight - 16);
   b.classList.add("moved"); b.style.width = w + "px"; b.style.height = h + "px";
   b.style.left = Math.min(Math.max(p.l, 8), innerWidth - w - 8) + "px"; b.style.top = Math.min(Math.max(p.t, 8), innerHeight - h - 8) + "px";
 }
+/* 2026-11-23: phones/tablets (≤820 px) keep their own size + spot (penny_pos_m), computers keep penny_pos */
+function pennyPosKey(){ return innerWidth <= 820 ? "penny_pos_m" : "penny_pos"; }
 function pennySave(){
-  const b = $("#pennyBox"); if(PENNY.solo || innerWidth <= 820 || !b.classList.contains("on")) return; const r = b.getBoundingClientRect();
-  try { localStorage.setItem("penny_pos", JSON.stringify({ l:Math.round(r.left), t:Math.round(r.top), w:Math.round(r.width), h:Math.round(r.height) })); } catch(e){}
+  const b = $("#pennyBox"); if(PENNY.solo || !b.classList.contains("on")) return; const r = b.getBoundingClientRect();
+  try { localStorage.setItem(pennyPosKey(), JSON.stringify({ l:Math.round(r.left), t:Math.round(r.top), w:Math.round(r.width), h:Math.round(r.height) })); } catch(e){}
 }
 function pennyDrag(){
   const b = $("#pennyBox"), h = b.querySelector(".ph");
@@ -2336,7 +2338,7 @@ function pennyDrag(){
     const up = () => { h.removeEventListener("pointermove", mv); h.removeEventListener("pointerup", up); h.removeEventListener("pointercancel", up); pennySave(); };
     h.addEventListener("pointermove", mv); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
   });
-  if(window.ResizeObserver){ let t; new ResizeObserver(() => { if(b.classList.contains("moved")){ clearTimeout(t); t = setTimeout(pennySave, 300); } }).observe(b); }
+  if(window.ResizeObserver){ let t; new ResizeObserver(() => { if(innerWidth > 820 && b.classList.contains("moved")){ clearTimeout(t); t = setTimeout(pennySave, 300); } }).observe(b); }
   addEventListener("resize", () => { if(PENNY.open) pennyPlace(); pennyBtnPlace(); });
   pennyBtnDrag(); pennyGripDrag();
 }
