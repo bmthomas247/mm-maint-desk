@@ -5546,8 +5546,13 @@ document.addEventListener("click",function(ev){
     return wsb.functions.invoke("owner-text",{body:{tasks:[+wid]}}).then(function(r){ var x=((r&&r.data&&r.data.texts)||{})[wid];
       if(wb){ wb.disabled=false; wb.textContent=wlab; }
       if(!x||(r&&r.error)) return toast("Couldn't write one right now — try again");
-      var ti=$("tb_t_"+wid), su=$("tb_s_"+wid); if(wwhat!=="s"&&ti&&x.title) ti.value=x.title; if(wwhat!=="t"&&su){ if(x.explain||x.summary) su.value=x.explain||x.summary; else return toast("Nothing more to add — the title covers it"); }
+      var ti=$("tb_t_"+wid), su=$("tb_s_"+wid), el=wwhat==="s"?su:ti, nv=wwhat==="s"?(x.explain||x.summary||""):titleCase(x.title||"");
+      if(!el) return; if(!nv) return toast(wwhat==="s"?"Nothing more to add — the title covers it":"Couldn't write one right now — try again");
+      /* 2026-11-23 (Brandon): every ✨ write can be undone */
+      el.dataset.prev=el.value; el.value=nv;
+      if(wb&&!(wb.nextElementSibling&&wb.nextElementSibling.dataset&&wb.nextElementSibling.dataset.tbundo)) wb.insertAdjacentHTML("afterend",'<button class="btn sm ghost" data-tbundo="'+esc(wid)+'|'+wwhat+'" style="text-transform:none;letter-spacing:0">↶ Undo</button>');
       toast("Written — check it, then Save"); }); }
+  if(d.tbundo){ var up=d.tbundo.split("|"), ue=$((up[1]==="s"?"tb_s_":"tb_t_")+up[0]); if(ue&&ue.dataset.prev!=null){ ue.value=ue.dataset.prev; delete ue.dataset.prev; } t.remove(); return toast("Back to what it said before"); }
   if(d.rcopen){ ev.preventDefault(); var ro=d.rcopen.split("|"), rj=D.byId[ro[1]]; if(!rj) return; openModal("Receipt on this job",maybeReceipts(rj,ro[0]),null,null); return; }
   if(d.tbfree){ var fsel=$("tb_to_"+d.tbfree); if(fsel) fsel.value="courtesy"; d.tbready=d.tbfree; }
   if(d.tbnorm){ var nsel=$("tb_to_"+d.tbnorm); if(nsel) nsel.value="owner"; d.tbsave=d.tbnorm; }
