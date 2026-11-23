@@ -183,6 +183,9 @@ async function load(force){
   B = r.data; loadedAt = Date.now();
   if(B) B.alerts = al.data || [];   // home heads-ups (hub_penny_3.sql, Brandon 2026-10-28): warn before booking a home with a big open problem
   if(B) B.canCharge = ch.data === true;   // charge-the-balance button (hub_res_charge.sql switch + access)
+  /* Manager OKs on holds (2026-11-23, hub_res_overrides.sql): newest row per stay + hold wins */
+  if(B){ try { const ov = await sb.from("res_overrides").select("res,hold,on_,reason,by_name,at").order("at").range(0, 9999);
+      B.ovr = {}; (ov.data || []).forEach(o => { const m = B.ovr[o.res] = B.ovr[o.res] || {}; if(o.on_) m[o.hold] = o; else delete m[o.hold]; }); } catch(e){ B.ovr = {}; } }
   if(B){ const ak = await sb.from("res_asks").select("id,res,step_key,note,by_name,at,status,answer,answered_by,answered_at,sent")
       .gte("at", new Date(Date.now() - 3 * 864e5).toISOString()).order("id", { ascending:false });
     B.asks = (ak.data || []).filter(a => !/^Test entry/.test(a.answer || ""));
@@ -271,6 +274,11 @@ function conds(s){
     review:rv, review_easy:rv && easy, review_hard:rv && !easy,
     half:!cx && !["owner", "oguest"].includes(s.chan) && ahOk !== (s.agreement === "received") };   // owner guests do no ID check (Janae 2026-11-02)
 }
+const ovr = (s, b) => !!(B && B.ovr && B.ovr[String(s.res)] && B.ovr[String(s.res)][b]);
+const NO_OK = new Set(["Managers needed"]);   // a manager ticks the step itself instead
+function okHolds(s){ const ok = h => !NO_OK.has(h) && ovr(s, h);
+  s.okd = [...new Set([...(s.okd || []), ...s.blockers.filter(ok), ...(s.waiting || []).filter(ok)])];
+  s.blockers = s.blockers.filter(h => !ok(h)); s.waiting = (s.waiting || []).filter(h => !ok(h)); }
 function autoOk(s, a){
   switch(a){
     case "campaign": return /^office received$/i.test(s.campaign || "");
@@ -607,6 +615,7 @@ function prep(s){
   else if(owed && s.td && s.td.card === false) s.payFlag = s.payWhy = "No card on file in Track for the payments still due.";
   else if(owed && daysTo(today, s.arrive) <= 14 && !(s.nights >= 30)) s.payFlag = s.payWhy = "Full payment was due 14 days before arrival. Check the payment schedule in Track.";
   if(s.stage === "closed" && owed) s.stage = "checkout";
+  s.okd = []; okHolds(s);
   const L = s.list || {}, byPerson = L.stage && L.by && L.by !== "Asana import",
     tickedSince = byPerson && L.at && Object.values(ticks).some(k => k && k.at && k.at > L.at),
     ready = s.got >= s.need && !s.blockers.length && !s.waiting.length;
@@ -619,10 +628,12 @@ function prep(s){
   // payout in Airbnb's transaction file matches Track's You Earn within $1 (res_abb_match.py, which then adds the Pmt Rec tag in Track).
   s.abb = B.abb && B.abb.rows ? B.abb.rows[String(s.res)] || null : null;
   if(B.abb && s.chan === "abnb" && s.status !== "Cancelled" && s.arrive <= today && s.arrive >= addDay(today, -90)
-     && ["checkout", "waiting_pay", "closed"].includes(s.stage) && !(s.abb && s.abb.status === "ok")){
+     && ["checkout", "waiting_pay", "closed"].includes(s.stage) && !(s.abb && s.abb.status === "ok")
+     && !ovr(s, "Airbnb payout doesn't match") && !ovr(s, "No Airbnb payment in Track")){
     s.stage = "abb_pay";
     if(s.abb && s.abb.status === "off") s.blockers.push("Airbnb payout doesn't match");
     else if(s.abb && s.abb.status === "no_earn") s.blockers.push("No Airbnb payment in Track"); }
+  okHolds(s);
   s.state = s.stage === "closed" ? "Complete" : s.status === "Cancelled" && s.stage !== "closed" ? "Cancelling" : s.got === 0 ? "Not started"
     : s.got >= s.need ? (s.depart < today ? "Ready to close" : "Paperwork done") : s.waiting.length ? "Waiting" : "In progress";
 }
@@ -889,7 +900,8 @@ async function card(v, res){
       ${s.stage === "waiting_pay" && !s.payFlag ? `<div class="rrule info">Waiting on payment: ${money(s.balance)} is still due. Track takes the next payments from the card on file, so nothing to do unless one fails. It moves to Checkout by itself once the balance is $0.</div>`
         : s.payWhy ? `<div class="rrule stop">${s.stage === "waiting_pay" ? "Waiting on payment: " : ""}${esc(s.payWhy)} ${s.balance > 0 ? money(s.balance) + " still due. " : ""}${s.blockers.includes("Payment declined") ? "Send the Failed Payment letter if it hasn't gone (the daily check sends it when it can)." : /No card/.test(s.payWhy) ? "Ask the guest to add a card in the guest portal, or pay the balance." : "Fix it on the folio in Track; it moves to Checkout by itself once the balance is $0."}</div>` : ""}
       <div class="rchips"><span class="muted" style="align-self:center">⏸ Waiting on</span>${[...WAIT, ...s.waiting.filter(w => !WAIT.includes(w))].map(w => `<button class="rchip ${s.waiting.includes(w) ? "on" : ""}" data-wait="${esc(w)}" title="${esc(WAIT_TIP[w] || (s.waiting.includes(w) ? "Tap to take it off hold" : "Put the check list on hold for this"))}">${esc(w)}${s.waiting.includes(w) && !WAIT.includes(w) ? " ✕" : ""}</button>`).join("")}<button class="rchip" data-waitother="1">+ Other reason</button></div>
-      ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>`).join(" ")}</p>` : ""}
+      ${s.blockers.length ? `<p class="muted" style="margin:4px 0">Held up by: ${s.blockers.map(b => `<span class="pill amber">${esc(b)}</span>${B.canMgr && !NO_OK.has(b) ? ` <button type="button" class="btn small" data-okhold="${esc(b)}" title="It was handled another way: OK it with a reason and it stops holding this stay">✓ OK it</button>` : ""}`).join(" ")}</p>` : ""}
+      ${(s.okd || []).length ? `<p class="muted" style="margin:4px 0">OK'd by a manager: ${s.okd.map(b => { const o = (B.ovr[String(s.res)] || {})[b] || {}; return `<span class="pill green" title="${esc((o.by_name || "") + " · " + when(o.at))}">✓ ${esc(b)}</span> <span style="font-size:12.5px">“${esc(o.reason || "")}” (${esc((o.by_name || "").split(" ")[0])})</span>${B.canMgr ? ` <button type="button" class="btn small ghost" data-unokhold="${esc(b)}">Undo</button>` : ""}`; }).join(" · ")}</p>` : ""}
       ${trkSection(s, og)}
       <div style="margin-top:8px"><button class="rgall" id="rx_gall">${og === "*" ? "Close all" : "Open all"}</button></div>
       ${Object.entries(grp).map(([g, ts]) => { const n = ts.filter(t => !t.opt).length, d = ts.filter(t => !t.opt && t.done).length;
@@ -913,6 +925,16 @@ async function card(v, res){
     s.ticks = { ...(s.ticks || {}), [cb.dataset.step]:r.data }; prep(s); card(v, res);
     if(note) ntPush(s.res, `Check list: "${stepLabel(cb.dataset.step)}" done. ${note.trim()}`);
   });
+  v.querySelectorAll("[data-okhold],[data-unokhold]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
+    const hold = b.dataset.okhold || b.dataset.unokhold, on = !!b.dataset.okhold;
+    let why = null;
+    if(on){ why = await mmAsk(`OK "${hold}" for this stay: how was it handled? (saved on this check list and in the Track notes)`); if(!why || why.trim().length < 3) return; }
+    else if(!(await mmConfirm(`Undo the OK on "${hold}"? It will hold this stay again.`))) return;
+    b.disabled = true;
+    const r = await sb.rpc("res_override", { p_res:String(s.res), p_hold:hold, p_on:on, p_reason:why });
+    if(r.error){ b.disabled = false; return msg("Couldn't save: " + r.error.message); }
+    ntPush(s.res, on ? `Check list: manager OK'd "${hold}". ${why.trim()}` : `Check list: the OK on "${hold}" was undone.`);
+    await load(true); card(v, res); });
   v.querySelectorAll("[data-ask]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
     const note = await mmAsk("What do you need from the manager? (sent to the managers on shift in Slack)");
     if(!note || !note.trim()) return;
