@@ -54,6 +54,7 @@ body.rpopen{overflow:hidden} @media(max-width:640px){ .rpop{padding:0} .rpbox{bo
 .rhead .lk{position:absolute;right:-4px;bottom:-4px;width:20px;height:20px;border-radius:50%;background:var(--moose);display:grid;place-items:center;box-shadow:0 0 0 2px var(--forest)} .rhead .lk svg{width:11px;height:11px;color:#16220a}
 .rhead h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-.01em;line-height:1.15;color:#fff} .rhead .sub{font-size:13px;opacity:.8;font-weight:600} .rhead .grow{flex:1;min-width:0}
 .rhead .deskbtn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;text-decoration:none;font-weight:800;font-size:14px;white-space:nowrap} .rhead .deskbtn svg{width:18px;height:18px}
+.rgbox{margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--card,#fff)} .rgbox>summary{cursor:pointer} .rgin{margin-top:6px;font-size:13.5px} .rgq{margin-top:6px;font-style:italic;color:var(--muted)} .rgt{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px} .rgt th{text-align:left;color:var(--muted);font-weight:600;padding:3px 6px} .rgt td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:top}
 .rhead .rhbtns{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end} .rhead .rsync{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;max-width:560px} .rhead .rsync>svg{width:18px;height:18px;flex:none} .rhead .rsync b{display:block;font-size:13px;font-weight:800;line-height:1.2} .rhead .rsync small{display:block;font-size:11.5px;opacity:.85;line-height:1.3}
 .rtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
 .rtabs button{display:inline-flex;align-items:center;gap:8px;padding:9px 14px 9px 10px;font:inherit;font-size:14px;font-weight:800;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);cursor:pointer}
@@ -179,7 +180,7 @@ window.resCtx = r => { const s = B && B.stays.find(x => String(x.res) === String
     heads:(s.heads || []).map(a => a.title || a.text || a.what || "").filter(Boolean).slice(0, 3) } : { res:String(r) }; };
 async function load(force){
   if(B && !force && Date.now() - loadedAt < 60000) return B;
-  const [r, al, ch, sn] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts"), sb.rpc("res_charge_allowed"), sb.rpc("res_auto_seen_list")]); if(r.error) throw r.error;
+  const [r, al, ch, sn, rg] = await Promise.all([sb.rpc("res_board"), sb.rpc("hub_home_alerts"), sb.rpc("res_charge_allowed"), sb.rpc("res_auto_seen_list"), rgLoad()]); if(r.error) throw r.error;
   B = r.data; loadedAt = Date.now();
   if(B) B.alerts = al.data || [];   // home heads-ups (hub_penny_3.sql, Brandon 2026-10-28): warn before booking a home with a big open problem
   if(B) B.canCharge = ch.data === true;   // charge-the-balance button (hub_res_charge.sql switch + access)
@@ -753,7 +754,7 @@ async function queue(v){
         <div class="rsub"><b>${esc(s.unit || "")}</b>${HOODS[s.area] ? " · " + esc(HOODS[s.area]) : ""}</div></div>
         <span class="pill ${stateCls(s)}">${esc(s.state)}</span></div>
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))}</span></div>
-      <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^(Owner Guest|O-Guest)\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
+      <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^(Owner Guest|O-Guest)\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${rgPill(s.res)}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
         ${ALLQ || STQ ? `<span class="pill plain">${esc(STAGE[s.stage] || s.stage)}</span>` : ""}<span class="pill plain grey">${s.got} of ${s.need} steps</span>${s.chan === "abnb" && (s.stage === "abb_pay" || s.abb) ? abbPill(s) : ""}${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill ${/^Day 7/.test(b) ? "red" : "amber"}">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
       ${s.alerts2.some(a => a.lvl === "stop") ? `<div class="rnext stop">⚠ ${esc(s.alerts2.find(a => a.lvl === "stop").t.split(". ")[0])}</div>` : ""}
       ${s.next.length && (s.stage === "in_progress" || s.stage === "waiting_pay") ? `<div class="rnext"><b>Next:</b> ${esc(s.next[0])}</div>` : ""}
@@ -811,7 +812,7 @@ async function queue(v){
       <div class="grow"><h1>Moose Check lists</h1><div class="sub" id="rq_sub"></div></div>
       <div class="rhbtns"><div class="rsync" title="Steps tick themselves as these update">${RI.sync}<div><b>Data sync</b><small>Track reservations ${esc(when(B.updated))}${B.ahUpdated ? ` · Autohost ${esc(when(B.ahUpdated))}` : ""}${B.bwUpdated ? ` · Breezeway ${esc(when(B.bwUpdated))}` : ""}</small></div></div>
       <button class="deskbtn" id="rq_new" type="button" style="cursor:pointer;font-family:inherit" title="Open the check list for a Track reservation, even one booked a minute ago">${RSV('<path d="M12 5v14M5 12h14"/>')}<span>Start a check list</span></button>
-      <a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a><a class="deskbtn" href="#/reservations/asana" title="Work done in Asana that the hub check list doesn't show yet">${RI.held}<span>Asana check</span></a></div></div>
+      <a class="deskbtn" href="#/reservations/returning" title="Guests who have stayed with us before, and a guest look-up by name">${RSV('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>')}<span>Returning guests</span></a><a class="deskbtn" href="#/reservations/held">${RI.held}<span>Held up report</span></a><a class="deskbtn" href="#/reservations/asana" title="Work done in Asana that the hub check list doesn't show yet">${RI.held}<span>Asana check</span></a></div></div>
     ${B.canMgr && (B.asks || []).some(a => a.status === "open") ? `<div class="card" style="border-color:var(--amber)"><b>🙋 Waiting on a manager</b> <span class="muted">· reply in Slack or open the check list</span>
       ${B.asks.filter(a => a.status === "open").map(a => { const st = B.stays.find(x => x.res === a.res) || {};
         return `<div style="padding:5px 0;border-top:1px solid var(--line)"><a href="#/reservations/${encodeURIComponent(a.res)}"><b>${esc(st.unit || "#" + a.res)} · ${esc(st.guest || "")}</b></a> — ${esc(a.by_name || "")}: “${esc(a.note)}” <span class="muted">${esc(when(a.at))}</span></div>`; }).join("")}</div>` : ""}
@@ -846,7 +847,7 @@ async function card(v, res){
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load: ${esc(e.message)}</p></div></div>`; return; }
   const s = B && B.stays.find(x => x.res === res);
   if(!s){ v.innerHTML = `<div class="page"><div class="card"><a class="btn small" href="#/reservations">← Back</a><p>No check list for #${esc(res)} (only stays from 60 days back are here).</p></div></div>`; return; }
-  peekTrack(v, s);
+  peekTrack(v, s); setTimeout(() => rgCard(v, s), 0);
   const occ = s.occ || {}, grp = {};
   s.steps.forEach(t => (grp[t.grp] = grp[t.grp] || []).push(t));
   const og = s.res in GOPEN ? GOPEN[s.res] : ((Object.entries(grp).find(([g, ts]) => ts.some(t => !t.opt && !t.done)) || [])[0] || "");
@@ -867,6 +868,7 @@ async function card(v, res){
         <span>${esc(s.type || "")} <span class="muted">(${esc(CH[s.chan])})</span></span><span>Track: <b>${esc(s.status || "")}</b></span>
         <span>${occ.adults || 0} adults${occ.children ? ", " + occ.children + " kids" : ""}${occ.pets ? `, <b>${occ.pets} pet${occ.pets > 1 ? "s" : ""}</b>` : ""}</span>
         ${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">Do not rent</span>` : ""}${s.list && s.list.asana ? `<a href="${esc(s.list.asana)}" target="_blank" rel="noopener" class="muted">Asana checklist (ends Nov 9)</a>` : ""}</div>
+      <div id="rx_rg"></div>
       <div class="rmoney"><span class="muted">From Track</span><span>Campaign: <b>${esc(s.campaign || "—")}</b></span><span>Res agent: <b>${esc(s.agent || "—")}</b></span>
         <span>Guarantee: <b>${esc(s.guarantee || "—")}</b></span><span>Agreement: <b>${esc(s.agreement || "—")}</b></span>
         ${B.money ? `<span>Rent ${money(s.rent)}</span><span>Fees ${money(s.fees)}</span><span>Taxes ${money(s.taxes)}</span><span>Total <b>${money(s.total)}</b></span>` : ""}
@@ -1354,6 +1356,70 @@ const underOk = v => UNDER && UNDER.node && UNDER.node.isConnected && v.contains
 const scrollKeep = v => { const els = [document.scrollingElement, v, v.parentElement].filter(Boolean), tops = els.map(e => e.scrollTop); return () => els.forEach((e, i) => e.scrollTop = tops[i]); };
 function popClose(go){ const p = document.getElementById("rpop"); if(p) p.remove(); document.body.classList.remove("rpopen");
   if(go) location.hash = UNDER && UNDER.kind === "held" ? "#/reservations/held" : "#/reservations"; }
+/* ---------- Returning guests (2026-11-23, build item fb-5, Brandon: "yes, start the returning guest one"). hub_res_returning.sql:
+   res_returning(from, to) = guests with an earlier stay who have one arriving; res_guest_history(res) = one stay's guest (past stays,
+   reviews, VIP / do-not-rent); res_guest_find(name). Source = mkt_guests (Track contacts + stays since 2020, rebuilt each morning;
+   no emails/phones/money). Reservations desk only; names only for people who see guest names. ---------- */
+let RG = { at:0, map:{}, list:[] };
+const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+const rgIso = d => d.toISOString().slice(0, 10);
+async function rgLoad(force){
+  if(!force && Date.now() - RG.at < 600000) return RG;
+  const t = new Date(), f = new Date(t - 60 * 864e5), to = new Date(+t + 330 * 864e5);
+  try { const r = await sb.rpc("res_returning", { p_from: rgIso(f), p_to: rgIso(to) });
+    if(!r.error){ RG = { at: Date.now(), list: r.data || [], map: {} }; RG.list.forEach(x => RG.map[String(x.res)] = x); } } catch(e){}
+  return RG; }
+function rgPill(res){ const x = RG.map[String(res)]; if(!x) return "";
+  return `<span class="pill green" title="Stayed with us before: ${esc(x.past)} time${x.past > 1 ? "s" : ""}, last ${esc(dayY(x.last_in))} at ${esc(x.last_home || "")}">↩ ${esc(ord(x.past + 1))} stay</span>`; }
+const rgSite = c => ({ airbnb:"Airbnb", vrbo:"Vrbo", direct:"Direct", other:"Other site" })[c] || c || "";
+function rgStars(g){ if(!g.reviews) return `<span class="muted">no reviews from them</span>`;
+  return `${g.stars_avg != null ? `<b>${(+g.stars_avg).toFixed(1)}★</b> average · ` : ""}${g.reviews} review${g.reviews > 1 ? "s" : ""}${g.five ? ` · ${g.five}×5★` : ""}${g.low ? ` · <span style="color:var(--red)">${g.low} low (3★ or less)</span>` : ""}`; }
+function rgStays(list, here){
+  const rows = list.map(st => `<tr${st.cancelled ? ' style="opacity:.55"' : ""}><td>${esc(dayY(st.arrive))}</td><td>${esc(st.nights)} nights</td><td><b>${esc(st.home)}</b>${here && st.home === here ? ' <span class="pill green">same home</span>' : ""}</td><td>${esc(rgSite(st.site))}</td><td>${st.cancelled ? "cancelled" : `<a href="#/reservations/${encodeURIComponent(st.res)}" title="Open its check list (if it's still in the hub)">#${esc(st.res)}</a>`}</td></tr>`).join("");
+  return `<table class="rgt"><tr><th>Arrived</th><th>Stay</th><th>Home</th><th>Booked on</th><th>Res</th></tr>${rows}</table>`; }
+async function rgCard(v, s){ const el = v.querySelector("#rx_rg"); if(!el) return;
+  let r; try { r = await sb.rpc("res_guest_history", { p_res: +s.res }); } catch(e){ return; }
+  if(r.error || !r.data || !r.data.found) return;
+  const g = r.data, now = new Date().toISOString().slice(0, 10), here = s.arrive || now;
+  const past = g.stays.filter(x => !x.cancelled && x.arrive < here), next = g.stays.filter(x => !x.cancelled && x.arrive > here);
+  const where = [g.city, g.state, g.country && g.country !== "US" ? g.country : ""].filter(Boolean).join(", ");
+  if(!past.length && !next.length && !g.excluded){ el.innerHTML = `<div class="rmoney"><span class="muted">Guest</span><span>First stay with us${where ? ` · from ${esc(where)}` : ""}</span></div>`; return; }
+  el.innerHTML = `<details class="rgbox"${past.length ? " open" : ""}><summary><b>${past.length ? `↩ Returning guest: ${esc(ord(past.length + 1))} stay with us` : "Guest"}</b>
+      ${g.vip ? ' <span class="pill blue">VIP</span>' : ""}${g.excluded ? ` <span class="pill red">${esc(g.excluded === "dnr" ? "Do not rent" : g.excluded)}</span>` : ""}
+      <span class="muted"> · ${past.length ? `first stayed ${esc(dayY(g.first_in))}` : "no earlier stays"}${where ? ` · from ${esc(where)}` : ""}</span></summary>
+    <div class="rgin"><div>${rgStars(g)}${g.max_people ? ` · groups up to ${esc(g.max_people)}` : ""}${g.pets ? " · has brought a pet" : ""}</div>
+      ${g.review_excerpt ? `<div class="rgq">“${esc(g.review_excerpt)}”</div>` : ""}
+      ${past.length ? `<div class="muted" style="margin-top:6px">Earlier stays</div>${rgStays(past, s.unit)}` : ""}
+      ${next.length ? `<div class="muted" style="margin-top:6px">Also booked</div>${rgStays(next, s.unit)}` : ""}
+      <div class="muted" style="font-size:12px;margin-top:4px">From Track guest stays since 2020 (owner stays and leases left out), updated each morning.</div></div></details>`; }
+async function returningView(v){
+  const days = +(sessionStorage.getItem("rg_days") || 60);
+  v.innerHTML = `<div class="page rpage"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a class="btn small" href="#/reservations">← Back</a><h2 style="margin:0;flex:1">Returning guests</h2></div>
+    <div class="card"><b>Look up a guest</b> <span class="muted" style="font-size:12.5px">· type a name while they're on the phone</span>
+      <input id="rg_q" type="search" placeholder="First and/or last name" autocomplete="off" style="margin-top:6px"><div id="rg_r"></div></div>
+    <div class="card"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="flex:1">Arriving and have stayed with us before</b>
+      ${[14, 30, 60, 120, 330].map(n => `<button type="button" class="btn small${n === days ? " primary" : ""}" data-rgd="${n}">Next ${n} days</button>`).join("")}</div><div id="rg_l" class="muted">Loading…</div></div></div>`;
+  v.querySelectorAll("[data-rgd]").forEach(b => b.onclick = () => { sessionStorage.setItem("rg_days", b.dataset.rgd); returningView(v); });
+  let tm; const q = v.querySelector("#rg_q"), out = v.querySelector("#rg_r");
+  q.oninput = () => { clearTimeout(tm); tm = setTimeout(async () => { const t = q.value.trim(); if(t.length < 3){ out.innerHTML = ""; return; }
+    const r = await sb.rpc("res_guest_find", { p_q: t }); if(q.value.trim() !== t) return;
+    if(r.error){ out.innerHTML = `<p class="muted">${esc(window.niceErr ? niceErr(r.error) : r.error.message)}</p>`; return; }
+    const G = r.data || [];
+    out.innerHTML = G.length ? G.map(g => { const ok = g.stays.filter(x => !x.cancelled), where = [g.city, g.state].filter(Boolean).join(", ");
+      return `<details class="rgbox"><summary><b>${esc(g.name)}</b>${g.vip ? ' <span class="pill blue">VIP</span>' : ""}${g.excluded ? ' <span class="pill red">Do not rent</span>' : ""}
+        <span class="muted"> · ${ok.length} stay${ok.length === 1 ? "" : "s"}${ok[0] ? `, latest ${esc(dayY(ok[0].arrive))} at ${esc(ok[0].home)}` : ""}${where ? ` · ${esc(where)}` : ""}</span></summary>
+        <div class="rgin"><div>${rgStars(g)}</div>${g.review_excerpt ? `<div class="rgq">“${esc(g.review_excerpt)}”</div>` : ""}${rgStays(g.stays, "")}</div></details>`; }).join("")
+      : `<p class="muted">No past guest by that name (stays since 2020).</p>`; }, 300); };
+  q.focus();
+  await rgLoad(true); const t0 = new Date().toISOString().slice(0, 10), t1 = new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
+  const L = RG.list.filter(x => x.arrive >= t0 && x.arrive <= t1), el = v.querySelector("#rg_l"); if(!el) return;
+  el.classList.remove("muted");
+  el.innerHTML = L.length ? `<table class="rgt"><tr><th>Arrives</th><th>Guest</th><th>Home</th><th>Stays</th><th>Last time</th><th>Reviews</th></tr>${L.map(x => `<tr>
+      <td>${esc(dayY(x.arrive))}<div class="muted">${esc(x.nights)} nights · ${esc(rgSite(x.site))}</div></td>
+      <td><a href="#/reservations/${encodeURIComponent(x.res)}"><b>${esc(x.name || "#" + x.res)}</b></a>${x.vip ? ' <span class="pill blue">VIP</span>' : ""}${x.excluded ? ' <span class="pill red">Do not rent</span>' : ""}</td>
+      <td><b>${esc(x.home)}</b>${x.same_home ? ' <span class="pill green">same home</span>' : ""}</td><td>${esc(ord(x.past + 1))} stay</td>
+      <td>${esc(dayY(x.last_in))}<div class="muted">${esc(x.last_home || "")}</div></td><td>${rgStars(x)}</td></tr>`).join("")}</table>`
+    : `<p class="muted">No returning guests arriving in the next ${days} days.</p>`; }
 async function popOpen(v, res){
   if(!underOk(v)){ await queue(v); UNDER = { kind:"queue", node:v.firstElementChild, b:B }; }
   if(!document.getElementById("rpop")) UNDER.keep = scrollKeep(v);   // where the list was when the pop-up opened
@@ -1373,6 +1439,7 @@ document.addEventListener("keydown", e => { if(e.key !== "Escape" || !document.g
   popClose(true); });
 window.resCheckView = async function(v){ css(); const a = hashArg();
   if(a === "asana") return asanaCheck(v);
+  if(a === "returning") return returningView(v);
   if(a && a !== "held") return popOpen(v, a);
   const kind = a === "held" ? "held" : "queue";
   const back = underOk(v) && UNDER.kind === kind ? UNDER.keep || scrollKeep(v) : null;
