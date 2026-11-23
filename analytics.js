@@ -1107,7 +1107,7 @@ window.peopleScoresView = async function(v){ css();
   const ix = (row, k) => { const i = ((row.metrics || {}).idx || {})[k]; return i == null ? "" : ` <small class="${i >= 115 ? "anup" : i <= 85 ? "andn" : "muted"}">${i}</small>`; };
   const rv = r => { const m = r.metrics || {}; return (m.reviews_good ? `<span class="pill green">+${m.reviews_good}</span> ` : "") + (m.reviews_bad ? `<span class="pill red">−${m.reviews_bad}</span>` : "") || "—"; };
   const G = {
-    tech:{ t:"Techs", who:"Maintenance techs", cols:[{ k:"tasks", t:"Tasks worked" }, { k:"task_share", t:"Task share" }, { k:"hours", t:"Hubstaff hrs" },
+    tech:{ t:"Techs", who:"Maintenance techs", cols:[{ k:"tasks", t:"Tasks worked" }, { k:"task_share", t:"Task share" }, { k:"hours", t:"Clocked hrs" },
       { k:"project_hrs", t:"Project hrs (GPS)" }, { k:"trash_stops", t:"Trash stops" }, { k:"regular_hrs", t:"Regular hrs" },
       { k:"tasks_per_hr", t:"Tasks / regular hr", f:x => n1(x.metrics.tasks_per_hr) + ix(x, "tasks_per_hr") }, { k:"at_home", t:"GPS time at homes (info)", f:x => pc(x.metrics.at_home) },
       { k:"rv", t:"Named in reviews", f:rv }],
@@ -1126,8 +1126,8 @@ window.peopleScoresView = async function(v){ css();
     vendor:{ t:"Vendors", who:"Vendors named on jobs", cols:[{ k:"jobs", t:"Jobs" }, { k:"done", t:"Done" }, { k:"days", t:"Days to finish (median)", f:x => n1(x.metrics.days) + ix(x, "days") },
       { k:"cost", t:"Cost on jobs", f:x => x.metrics.cost ? usd(x.metrics.cost) : "—" }],
       how:"Jobs = Breezeway, Asana, Freshdesk and Slack jobs that name the vendor. Days to finish = opened to done (lower is better). Cost = the cost on those jobs where one is recorded." },
-    gps:{ t:"GPS check", who:"Hubstaff GPS by tech", cols:[],
-      how:"From Hubstaff: paid hours per day and GPS stops of 5+ minutes, matched to one of our homes within 150 m. No GPS = 2+ paid hours and no stop at all (tracking off, phone off or no signal). Low GPS = stops cover under a quarter of paid hours (lots of driving, or GPS gaps). Long stop away = 90+ minutes stopped somewhere that isn't one of our homes (lunch, the shop and supply runs count here too). Task without a visit = a Breezeway task they finished that day at a home where GPS never stopped (it may have been closed from elsewhere, or the stop was under 5 minutes); only checked on days GPS worked. Times are as Hubstaff records them. Flags are things to look at, not proof." } };
+    gps:{ t:"GPS check", who:"Phone GPS by tech", cols:[],
+      how:"From phone GPS (the hub's Phone GPS from Nov 11; Hubstaff before): paid hours per day and GPS stops of 5+ minutes, matched to one of our homes within 150 m. No GPS = 2+ paid hours and no stop at all (tracking off, phone off or no signal). Low GPS = stops cover under a quarter of paid hours (lots of driving, or GPS gaps). Long stop away = 90+ minutes stopped somewhere that isn't one of our homes (lunch, the shop and supply runs count here too). Task without a visit = a Breezeway task they finished that day at a home where GPS never stopped (it may have been closed from elsewhere, or the stop was under 5 minutes); only checked on days GPS worked. Times are as the phone records them. Flags are things to look at, not proof." } };
   // tabs: admins all; maintenance managers Techs + GPS check; housekeeping managers in-house Cleaners (hub_people_scope(), RLS enforces it)
   const sc = await sb.rpc("hub_people_scope"), scope = (sc.data || []);
   Object.keys(G).forEach(k => { if(!scope.includes(k)) delete G[k]; });
@@ -1173,7 +1173,7 @@ function gpsCheck(rows, pc){
     { k:"no_gps_days", t:"No GPS days", v:x => x.metrics.no_gps_days, f:x => x.metrics.no_gps_days || "—" }, { k:"low_gps_days", t:"Low GPS days", v:x => x.metrics.low_gps_days, f:x => x.metrics.low_gps_days || "—" },
     { k:"long_away", t:"Long stops away", v:x => x.metrics.long_away, f:x => x.metrics.long_away || "—" }, { k:"no_visit_tasks", t:"Tasks without a visit", v:x => x.metrics.no_visit_tasks, f:x => x.metrics.no_visit_tasks || "—" }],
     rows, "no_gps_days");
-  if(!rows.length){ $("#pst").innerHTML = `<div class="card"><p class="muted">No Hubstaff days in this period.</p></div>`; return; }
+  if(!rows.length){ $("#pst").innerHTML = `<div class="card"><p class="muted">No GPS days in this period.</p></div>`; return; }
   const draw = (who, all) => { const x = rows.find(r => r.person === who) || rows[0], L = (x.metrics.daylist || []).slice().reverse().filter(d => all || d.flags.length);
     $("#psn").innerHTML = `<h3 class="anh3">${esc(x.person)} — ${all ? "every day" : "flagged days"} <label style="font-size:13px;font-weight:400;margin-left:10px"><input type="checkbox" id="gpall" style="width:auto;min-height:0" ${all ? "checked" : ""}> Show every day</label></h3>
       ${(x.notes || []).length ? `<ul style="margin:0 0 8px;padding-left:18px">${x.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
