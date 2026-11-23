@@ -270,7 +270,7 @@ details.acc[open]>summary{margin-bottom:6px}
 body.pennyonly>*:not(#pennyBox){display:none!important}
 body.pennyonly #pennyBox{display:flex;inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;border:0;resize:none}
 body.pennyonly #pennyBox .ph{cursor:default}
-@media (max-width:820px){ #pennyBtn .plb{display:none} #pennyBtn{padding:8px} }
+@media (max-width:820px){ #pennyBtn .plb{display:none} #pennyBtn{padding:3px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 3px 10px rgba(20,40,25,.3)} #pennyBtn .pav{width:32px;height:32px} } /* 2026-11-23 Brandon: smaller on phones (38px round) */
 #pennyBtn{touch-action:none}
 #pennyGrip{display:none;flex:none;height:22px;align-items:center;justify-content:center;gap:6px;touch-action:none;cursor:ns-resize;background:var(--card);border-top:1px solid var(--line);color:var(--muted);font-size:11px;font-weight:700;user-select:none} #pennyGrip i{width:44px;height:4px;border-radius:4px;background:var(--line-2,#c9d3c4)}
 @media (max-width:820px),(pointer:coarse){ #pennyGrip{display:flex} } body.pennyonly #pennyGrip{display:none!important} #pennyBtn.moved{right:auto;bottom:auto} #pennyBtn.dragging{cursor:grabbing;filter:brightness(1.08)}
