@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Owner leads</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Owners ▸ Owner leads (hub key 'owner_leads'; hub_owner_leads.sql, Jeff 2026-11-23). The hub's own owner-lead tracker, replacing
+     ContactPoint's "Property Owner Leads - Short Term" board. Access is enforced in Supabase (hub_can('owner_leads'); no team rows = admins only).
+     Nothing is deleted: Remove sets off = true; every change is in hub_owner_lead_log, notes in hub_owner_lead_notes (append-only).
+     Revenue Estimator leads come in by themselves (owner_leads_sync, every 10 min). -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --col:#eef1ea; --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33; --col:#111a14;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33; --col:#111a14;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1800px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:38px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.sm{min-height:32px;padding:0 9px;font-size:12.5px} .btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)} .btn.on{background:var(--forest);border-color:var(--forest);color:#fff}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.late{background:var(--red-soft);color:var(--red)} .pill.due{background:var(--amber-soft);color:var(--amber)} .pill.ok{background:var(--moose-soft);color:var(--moose-ink)}
+.pill.src{background:var(--blue-soft);color:var(--blue)} .pill.home{background:var(--forest);color:#fff} .pill.won{background:var(--moose-soft);color:var(--moose-ink)}
+.pill.lost{background:var(--line);color:var(--muted)} .pill.drip{background:var(--violet-soft);color:var(--violet)}
+.head{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tile b{display:block;font-size:22px;font-weight:800;line-height:1.2} .tile span{font-size:12.5px;color:var(--muted);font-weight:700}
+.tile.on{outline:2px solid var(--forest-2)} .tile.warn b{color:var(--red)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 12px}
+.bar input:where(:not([type=checkbox],[type=radio])),.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 9px;background:var(--card);color:var(--ink);min-height:38px}
+.bar input[type=search]{flex:1;min-width:200px}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:10px;overflow:hidden} .seg button{border:0;border-radius:0;min-height:36px}
+.showing{font-size:13px;color:var(--ink-2);margin:-2px 0 10px} .showing button{font:inherit;font-weight:800;color:var(--forest-2);background:none;border:0;cursor:pointer;padding:0}
+.board{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
+.col{flex:1 0 250px;max-width:340px;background:var(--col);border:1px solid var(--line);border-radius:var(--radius);padding:10px;min-height:120px}
+.col.over{outline:2px dashed var(--forest-2)}
+.col h3{margin:0 0 2px;font-size:13.5px;font-weight:800;display:flex;justify-content:space-between;gap:6px}
+.col .ch{font-size:11.5px;color:var(--muted);margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px 12px;cursor:pointer;text-align:left;font:inherit;color:var(--ink);display:block;width:100%;margin-bottom:8px}
+.card:hover{border-color:var(--line-2)} .card.lateb{border-left:4px solid var(--red)}
+.card .nm{font-weight:800;font-size:14.5px;overflow-wrap:anywhere}
+.card .ln{font-size:12.5px;color:var(--ink-2);margin-top:3px;overflow-wrap:anywhere}
+.card .row{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.empty{padding:22px;color:var(--muted);font-size:14px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.cempty{font-size:12.5px;color:var(--muted);padding:6px 2px}
+table.list{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:13.5px}
+.list th{text-align:left;font-size:12px;color:var(--muted);font-weight:800;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.list th button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0;font-weight:800}
+.list td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top} .list tr{cursor:pointer} .list tr:hover td{background:var(--ground)}
+.tw{overflow-x:auto}
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:820px;width:calc(100% - 24px);background:var(--card);color:var(--ink);max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog .dbody{padding:18px 20px;overflow:auto;max-height:calc(100vh - 100px)}
+dialog h3{margin:0 0 6px;font-size:18px}
+dialog label{display:block;margin:8px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog input:where(:not([type=checkbox],[type=radio])),dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog textarea{min-height:64px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px} .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px} .four{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0 12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0} .chip{font:inherit;font-size:12.5px;font-weight:800;border:1px solid var(--line-2);background:var(--card);color:var(--ink-2);border-radius:999px;padding:4px 10px;cursor:pointer}
+.chip.on{background:var(--forest);border-color:var(--forest);color:#fff} .chip.lostc.on{background:var(--muted);border-color:var(--muted)}
+.contact{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px}
+.dfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line);background:var(--card);position:sticky;bottom:0;flex-wrap:wrap}
+.err{color:var(--red);font-size:13px;min-height:1em;margin:4px 0}
+.notes{list-style:none;padding:0;margin:8px 0} .notes li{border-left:3px solid var(--line-2);padding:4px 10px;margin:8px 0;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.notes li.auto{border-left-color:var(--blue)} .notes li small{display:block;color:var(--muted);font-size:12px;white-space:normal}
+.sec{font-size:13px;font-weight:800;color:var(--ink-2);margin:16px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+.box{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:10px 0;background:var(--ground)}
+.lbl{font-size:12px;color:var(--muted);font-weight:700}
+.toast{position:fixed;bottom:16px;right:16px;background:var(--forest);color:#fff;padding:8px 14px;border-radius:10px;font-weight:800;font-size:13.5px;z-index:9}
+@media (max-width:760px){ .two,.three,.four{grid-template-columns:1fr} .col{flex-basis:82vw}
+  .tiles{grid-template-columns:repeat(3,1fr);gap:8px} .tile{padding:8px 10px} .tile b{font-size:18px} .tile span{font-size:11.5px;line-height:1.25;display:block} }
+body.inhub .wrap{padding-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<datalist id="dl-home"></datalist>
+<datalist id="dl-comm"></datalist>
+<script src="confirm.js?v=20261120c"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const fmtD = d => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const fmtDs = d => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" }) : "";
+const money = n => n == null ? "" : "$" + Math.round(n).toLocaleString("en-US");
+const errText = e => ((e && (e.message || e.error_description)) || String(e)).replace(/^.*?ERROR:\s*/, "");
+function niceErr(e){ const t = errText(e); return /fetch|network/i.test(t) ? "Couldn't reach the hub. Check your signal and try again." : t; }
+const today = () => new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+const addDays = (d, n) => { const x = new Date(d + "T12:00:00"); x.setDate(x.getDate() + n); return x.toLocaleDateString("en-CA"); };
+if(window.top !== window) document.body.classList.add("inhub");
+
+const SRC = [["website","Website form"],["estimator","Revenue Estimator"],["phone","Phone call"],["referral","Referral"],["realtor","Realtor"],
+  ["owner","Our owner (another home)"],["mailer","Our mailer"],["google_ads","Google Ads"],["new_buyer","New buyer list"],["for_sale","Home for sale near ours"],
+  ["event","Event / in person"],["contactpoint","From ContactPoint"],["zpoint","ZPoint campaign"],["other","Other"]];
+const SRCL = Object.fromEntries(SRC);
+const KIND = [["str","Short-term rental"],["lease","Lease"],["second_home","2nd home care"],["unsure","Not sure yet"]];
+const KINDL = Object.fromEntries(KIND);
+const NK = [["call","📞 Call"],["email","✉️ Email"],["text","💬 Text"],["meeting","🤝 Meeting"],["mail","📮 Mail"],["note","📝 Note"]];
+const NKI = { call:"📞", email:"✉️", text:"💬", meeting:"🤝", mail:"📮", note:"📝", auto:"⚙️" };
+let VIEW = "board"; try { VIEW = localStorage.getItem("mm_ol_view") || "board"; } catch(_){}
+const S = { rows:[], stages:[], st:{}, people:[], pn:{}, me:null, last:{}, homes:[], comms:[], q:"", show:"open", who:"", src:"", sort:{ k:"next", d:1 } };
+
+function toast(t){ const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
+const daysIn = r => Math.max(0, Math.floor((Date.now() - new Date(r.stage_at)) / 864e5));
+const kindOf = r => (S.st[r.stage] || {}).kind || "open";
+const isLate = r => { const s = S.st[r.stage]; return !!(s && s.pace_days && (s.kind === "open" || s.kind === "won") && daysIn(r) > s.pace_days); };
+const isDue = r => !!(r.next_on && r.next_on <= today() && kindOf(r) !== "lost");
+const first = n => String(n || "").split(" ")[0];
+
+async function load(){
+  const [l, n] = await Promise.all([
+    sb.from("hub_owner_leads").select("*").eq("off", false).order("id", { ascending:false }).limit(5000),
+    sb.from("hub_owner_lead_notes").select("lead_id,kind,note,by_name,at").order("at", { ascending:false }).limit(8000)]);
+  if(l.error){ $("#app").innerHTML = `<h1>Owner leads</h1><p class="err">${esc(niceErr(l.error))}</p>`; return; }
+  S.rows = l.data || [];
+  S.last = {}; (n.data || []).forEach(x => { if(!S.last[x.lead_id]) S.last[x.lead_id] = x; });
+  render();
+}
+
+const TILES = [
+  ["open", "Open leads", r => kindOf(r) === "open"],
+  ["due", "Follow up now", isDue],
+  ["new", "New, not contacted", r => r.stage === "new"],
+  ["nobody", "No one has it", r => kindOf(r) === "open" && !r.assigned_to],
+  ["late", "Sitting too long", r => kindOf(r) === "open" && isLate(r)],
+  ["won", "Signed", r => kindOf(r) === "won"],
+  ["drip", "Check back later", r => kindOf(r) === "drip"],
+  ["lost", "Not a fit", r => kindOf(r) === "lost"],
+  ["all", "All", () => true]];
+function filtered(){
+  const q = S.q.trim().toLowerCase(), t = TILES.find(x => x[0] === S.show) || TILES[0];
+  return S.rows.filter(r => t[2](r)
+    && (!S.who || (S.who === "none" ? !r.assigned_to : r.assigned_to === S.who))
+    && (!S.src || r.source === S.src)
+    && (!q || [r.name, r.email, r.phone, r.property, r.home_code, r.community, r.mail_addr, r.source_detail, r.next_what, (S.last[r.id] || {}).note].join(" ").toLowerCase().includes(q)));
+}
+function render(){
+  const all = S.rows;
+  const show = filtered();
+  const lbl = (TILES.find(t => t[0] === S.show) || TILES[0])[1];
+  const whoOpts = `<option value="">Anyone has it</option>${S.me ? `<option value="${esc(S.me)}"${S.who === S.me ? " selected" : ""}>Mine</option>` : ""}<option value="none"${S.who === "none" ? " selected" : ""}>No one yet</option>`
+    + S.people.filter(p => p.id !== S.me).map(p => `<option value="${esc(p.id)}"${S.who === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  $("#app").innerHTML = `
+    <div class="head"><div><h1>Owner leads</h1><p class="muted" style="margin:0">Every owner who might hand us their home, from the first hello to live. Tap a lead to log a call, move it along or set the next follow-up.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="csv">⬇ CSV</button><button class="btn primary" id="add">+ Add a lead</button></div></div>
+    <div class="tiles">${TILES.map(([k, l, f]) => { const n = all.filter(f).length;
+      return `<button class="tile${S.show === k ? " on" : ""}${(k === "due" || k === "late" || k === "nobody") && n ? " warn" : ""}" data-show="${k}"><b>${n}</b><span>${esc(l)}</span></button>`; }).join("")}</div>
+    <div class="bar"><input type="search" id="q" placeholder="Search name, email, phone, home, note…" value="${esc(S.q)}" aria-label="Search">
+      <select id="fwho" aria-label="Who has it">${whoOpts}</select>
+      <select id="fsrc" aria-label="Where it came from"><option value="">Every source</option>${SRC.map(([k, l]) => `<option value="${k}"${S.src === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      <span class="seg"><button class="btn${VIEW === "board" ? " on" : ""}" data-view="board">Board</button><button class="btn${VIEW === "list" ? " on" : ""}" data-view="list">List</button></span></div>
+    <p class="showing">Showing ${show.length} ${show.length === 1 ? "lead" : "leads"} · ${esc(lbl)}${S.show !== "open" || S.who || S.src || S.q ? ` · <button id="clr">show open leads</button>` : ""}</p>
+    ${!all.length ? `<div class="empty">No leads yet. Tap + Add a lead when an owner calls, emails or fills in a form. Revenue Estimator leads come in by themselves.</div>`
+      : VIEW === "list" ? listView(show) : boardView(show)}`;
+  wireDrag();
+}
+
+function colsFor(){
+  const k = S.show === "won" ? ["won"] : S.show === "drip" ? ["drip"] : S.show === "lost" ? ["lost"] : S.show === "all" ? ["open","won","drip","lost"] : S.show === "due" ? ["open","won","drip"] : ["open"];
+  return S.stages.filter(s => k.includes(s.kind));
+}
+function boardView(show){
+  return `<div class="board">${colsFor().map(s => {
+    const rs = show.filter(r => r.stage === s.key).sort((a, b) => (isDue(b) - isDue(a)) || (isLate(b) - isLate(a)) || daysIn(b) - daysIn(a));
+    return `<div class="col" data-stage="${esc(s.key)}"><h3><span>${esc(s.label)}</span><span>${rs.length}</span></h3>
+      <p class="ch">${esc(s.help || "")}${s.pace_days ? ` · overdue after ${s.pace_days} ${s.pace_days === 1 ? "day" : "days"}` : ""}</p>
+      ${rs.map(card).join("") || `<div class="cempty">Nothing here.</div>`}</div>`; }).join("")}</div>`;
+}
+function card(r){
+  const d = daysIn(r), late = isLate(r), due = isDue(r), l = S.last[r.id];
+  return `<button class="card${late ? " lateb" : ""}" data-id="${r.id}" draggable="true">
+    <div class="nm">${esc(r.name)}</div>
+    ${r.home_code || r.property ? `<div class="ln">${r.home_code ? `<span class="pill home">${esc(r.home_code)}</span> ` : ""}${esc(r.property || r.community || "")}</div>` : ""}
+    <div class="row"><span class="pill src">${esc(SRCL[r.source] || r.source)}</span>
+      <span class="pill ${late ? "late" : "ok"}" title="Days in this stage">${d === 0 ? "today" : d + " d"}${late ? " · overdue" : ""}</span>
+      ${r.next_on ? `<span class="pill ${due ? "due" : ""}" title="${esc(r.next_what || "Next follow-up")}">${due ? "⏰ " : ""}${r.next_on === today() ? "Today" : fmtDs(r.next_on)}</span>` : ""}
+      ${r.est_yearly ? `<span class="pill">${money(r.est_yearly)}/yr</span>` : ""}</div>
+    <div class="ln">${r.assigned_to ? "👤 " + esc(first(S.pn[r.assigned_to] || "")) : `<span style="color:var(--red);font-weight:800">No one has it</span>`}${l ? ` · ${NKI[l.kind] || ""} ${esc(fmtDs((l.at || "").slice(0, 10)))}` : ""}</div></button>`;
+}
+const SORTS = { name:r => (r.name || "").toLowerCase(), stage:r => (S.st[r.stage] || {}).sort || 0, days:r => daysIn(r), next:r => r.next_on || "9999", who:r => (S.pn[r.assigned_to] || "zzz").toLowerCase(),
+  src:r => SRCL[r.source] || r.source, est:r => r.est_yearly || 0, added:r => r.created_at };
+function listView(show){
+  const { k, d } = S.sort, f = SORTS[k] || SORTS.next;
+  const rs = show.slice().sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
+  const th = (key, l) => `<th><button data-sort="${key}">${esc(l)}${k === key ? (d > 0 ? " ▲" : " ▼") : ""}</button></th>`;
+  return `<div class="tw"><table class="list"><thead><tr>${th("name","Owner")}<th>Home</th>${th("stage","Stage")}${th("days","In stage")}${th("next","Next follow-up")}${th("who","Who has it")}${th("src","Came from")}${th("est","Est. / yr")}${th("added","Added")}</tr></thead>
+    <tbody>${rs.map(r => { const s = S.st[r.stage] || {}, late = isLate(r), due = isDue(r);
+      return `<tr data-id="${r.id}"><td><b>${esc(r.name)}</b>${r.phone || r.email ? `<div class="lbl">${esc([r.phone, r.email].filter(Boolean).join(" · "))}</div>` : ""}</td>
+        <td>${r.home_code ? `<span class="pill home">${esc(r.home_code)}</span> ` : ""}${esc(r.property || r.community || "")}</td>
+        <td><span class="pill ${s.kind === "won" ? "won" : s.kind === "lost" ? "lost" : s.kind === "drip" ? "drip" : ""}">${esc(s.label || r.stage)}</span></td>
+        <td><span class="pill ${late ? "late" : ""}">${daysIn(r)} d</span></td>
+        <td>${r.next_on ? `<span class="pill ${due ? "due" : ""}">${esc(fmtD(r.next_on))}</span>${r.next_what ? `<div class="lbl">${esc(r.next_what)}</div>` : ""}` : `<span class="lbl">none set</span>`}</td>
+        <td>${r.assigned_to ? esc(S.pn[r.assigned_to] || "") : `<span style="color:var(--red);font-weight:800">No one</span>`}</td>
+        <td>${esc(SRCL[r.source] || r.source)}${r.source_detail ? `<div class="lbl">${esc(r.source_detail)}</div>` : ""}</td>
+        <td>${money(r.est_yearly)}</td><td>${esc(fmtD((r.created_at || "").slice(0, 10)))}</td></tr>`; }).join("")}</tbody></table></div>`;
+}
+
+/* Drag a card to another column = move it to that stage (desktop). "Not a fit" opens the lead so a reason can be typed. */
+let DRAG = null;
+function wireDrag(){
+  document.querySelectorAll(".card[draggable]").forEach(c => c.addEventListener("dragstart", e => { DRAG = +c.dataset.id; e.dataTransfer.effectAllowed = "move"; }));
+  document.querySelectorAll(".col").forEach(col => {
+    col.addEventListener("dragover", e => { if(DRAG){ e.preventDefault(); col.classList.add("over"); } });
+    col.addEventListener("dragleave", () => col.classList.remove("over"));
+    col.addEventListener("drop", async e => {
+      e.preventDefault(); col.classList.remove("over");
+      const id = DRAG, st = col.dataset.stage; DRAG = null;
+      const r = S.rows.find(x => x.id === id); if(!r || r.stage === st) return;
+      if(st === "lost"){ open(id, "lost"); return; }
+      const x = await sb.from("hub_owner_leads").update({ stage:st }).eq("id", id);
+      if(x.error){ await mmAlert("Couldn't move it: " + niceErr(x.error)); return; }
+      toast("Moved to " + (S.st[st] || {}).label); load();
+    });
+  });
+}
+
+function open(id, stageNow){
+  const blank = { name:"", email:"", phone:"", mail_addr:"", property:"", home_code:"", community:"", beds:null, kind:"str", source:"other", source_detail:"",
+    stage:"new", assigned_to:S.me || null, next_on:today(), next_what:"First call", est_yearly:null, lost_why:"" };
+  const r = id ? S.rows.find(x => x.id === id) : blank;
+  let stage = stageNow || r.stage, nk = id ? "call" : "note";
+  const d = $("#dlg");
+  const digits = (r.phone || "").replace(/[^\d+]/g, "");
+  d.innerHTML = `<div class="dbody"><form id="f" onsubmit="return false">
+    <h3>${id ? esc(r.name) : "Add an owner lead"}</h3>
+    ${id ? `<div class="contact">${digits ? `<a class="btn sm" href="tel:${esc(digits)}">📞 Call</a><a class="btn sm" href="sms:${esc(digits)}">💬 Text</a>` : ""}${r.email ? `<a class="btn sm" href="mailto:${esc(r.email)}">✉️ Email</a>` : ""}
+      <span class="muted">In “${esc((S.st[r.stage] || {}).label || r.stage)}” for ${daysIn(r)} ${daysIn(r) === 1 ? "day" : "days"} · added ${esc(fmtD((r.created_at || "").slice(0, 10)))} by ${esc(r.created_name || "")}</span></div>` : ""}
+    <div class="lbl">Stage</div>
+    <div class="chips" id="stc">${S.stages.map(s => `<button type="button" class="chip${s.kind === "lost" ? " lostc" : ""}${s.key === stage ? " on" : ""}" data-st="${esc(s.key)}">${esc(s.label)}</button>`).join("")}</div>
+    <label id="whyl" style="display:${stage === "lost" ? "block" : "none"}">Why it's not a fit (so we learn from it)<input name="lost_why" maxlength="300" value="${esc(r.lost_why || "")}" placeholder="e.g. Went with AvantStay, wants to sell, HOA doesn't allow nightly"></label>
+    <div class="box"><div class="two"><label>Who has it<select name="assigned_to"><option value="">No one yet</option>${S.people.map(p => `<option value="${esc(p.id)}"${p.id === r.assigned_to ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
+      <label>Next follow-up<input name="next_on" type="date" value="${esc(r.next_on || "")}"></label></div>
+      <div class="chips" id="nxc">${[["Today",0],["Tomorrow",1],["3 days",3],["1 week",7],["2 weeks",14],["1 month",30],["3 months",91]].map(([l, n]) => `<button type="button" class="chip" data-nx="${n}">${l}</button>`).join("")}<button type="button" class="chip" data-nx="clear">No date</button></div>
+      <label>What's next<input name="next_what" maxlength="200" value="${esc(r.next_what || "")}" placeholder="e.g. Call back after they talk to their spouse"></label></div>
+    <div class="sec">${id ? "Log what happened" : "First note"}</div>
+    <div class="chips" id="nkc">${NK.map(([k, l]) => `<button type="button" class="chip${k === nk ? " on" : ""}" data-nk="${k}">${l}</button>`).join("")}</div>
+    <textarea name="note" maxlength="4000" placeholder="${id ? "e.g. Left a voicemail. Owner wants numbers for a 3BR in Bear Hollow." : "What they said, how they found us"}"></textarea>
+    <div class="sec">Owner</div>
+    <div class="three"><label>Name<input name="name" required maxlength="160" value="${esc(r.name)}"></label>
+      <label>Phone<input name="phone" type="tel" maxlength="40" value="${esc(r.phone || "")}"></label>
+      <label>Email<input name="email" type="email" maxlength="200" value="${esc(r.email || "")}"></label></div>
+    <label>Where they live / mailing address<input name="mail_addr" maxlength="300" value="${esc(r.mail_addr || "")}"></label>
+    <div class="sec">Their home</div>
+    <label>Home address or unit<input name="property" maxlength="300" value="${esc(r.property || "")}" placeholder="e.g. 5400 Bear Hollow Dr #2310"></label>
+    <div class="four"><label>Our code (if any)<input name="home_code" list="dl-home" maxlength="40" value="${esc(r.home_code || "")}" placeholder="e.g. BHV 5534"></label>
+      <label>Community<input name="community" list="dl-comm" maxlength="120" value="${esc(r.community || "")}"></label>
+      <label>Bedrooms<input name="beds" type="number" min="0" max="30" value="${r.beds == null ? "" : esc(r.beds)}"></label>
+      <label>What they want<select name="kind">${KIND.map(([k, l]) => `<option value="${k}"${k === r.kind ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label></div>
+    <div class="three"><label>Came from<select name="source">${SRC.map(([k, l]) => `<option value="${k}"${k === r.source ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+      <label>More about where<input name="source_detail" maxlength="200" value="${esc(r.source_detail || "")}" placeholder="e.g. Realtor Jane Smith, Fall postcard"></label>
+      <label>Estimated rent a year ($)<input name="est_yearly" type="number" min="0" max="5000000" step="1000" value="${r.est_yearly == null ? "" : esc(r.est_yearly)}"></label></div>
+    <p class="err" id="ferr"></p></form>
+    ${id ? `<div class="sec">Notes</div><ul class="notes" id="nl"><li class="muted">Loading…</li></ul><div class="sec">History</div><ul class="notes" id="hl"><li class="muted">Loading…</li></ul>` : ""}</div>
+    <div class="dfoot">${id ? `<button class="btn ghost" id="frm" type="button" style="margin-right:auto;color:var(--red)">Remove</button>` : ""}
+      <button class="btn" id="fx" type="button">Close</button><button class="btn primary" id="fok" type="button">${id ? "Save" : "Add lead"}</button></div>`;
+  d.showModal();
+  const f = $("#f");
+  d.onclick = e => {
+    const b = e.target.closest("button"); if(!b) return;   // no close on outside click: a half-typed note would be lost
+    if(b.dataset.st){ stage = b.dataset.st; d.querySelectorAll("#stc .chip").forEach(c => c.classList.toggle("on", c.dataset.st === stage));
+      $("#whyl").style.display = stage === "lost" ? "block" : "none"; if(stage === "lost") f.lost_why.focus();
+      const s = S.st[stage]; if(s && (s.kind === "won" || s.kind === "lost") && f.next_on.value <= today()) f.next_on.value = ""; return; }
+    if(b.dataset.nx){ f.next_on.value = b.dataset.nx === "clear" ? "" : addDays(today(), +b.dataset.nx); return; }
+    if(b.dataset.nk){ nk = b.dataset.nk; d.querySelectorAll("#nkc .chip").forEach(c => c.classList.toggle("on", c.dataset.nk === nk)); return; }
+  };
+  $("#fx").onclick = () => d.close();
+  $("#fok").onclick = async () => {
+    if(!f.reportValidity()) return;
+    const num = v => v === "" || v == null ? null : +v;
+    const p = { name:f.name.value.trim(), phone:f.phone.value.trim() || null, email:f.email.value.trim() || null, mail_addr:f.mail_addr.value.trim() || null,
+      property:f.property.value.trim() || null, home_code:f.home_code.value.trim() || null, community:f.community.value.trim() || null, beds:num(f.beds.value),
+      kind:f.kind.value, source:f.source.value, source_detail:f.source_detail.value.trim() || null, est_yearly:num(f.est_yearly.value),
+      stage, assigned_to:f.assigned_to.value || null, next_on:f.next_on.value || null, next_what:f.next_what.value.trim() || null,
+      lost_why:f.lost_why.value.trim() || null };
+    if(stage === "lost" && !p.lost_why){ $("#ferr").textContent = "Say why it's not a fit before closing it."; f.lost_why.focus(); return; }
+    const note = f.note.value.trim();
+    if(!id && p.email){ const dup = S.rows.find(x => x.email && x.email.toLowerCase() === p.email.toLowerCase());
+      if(dup && !await mmConfirm(`${dup.name} already has this email (${(S.st[dup.stage] || {}).label}). Add a second lead anyway?`, { title:"Already a lead?" })) return; }
+    $("#fok").disabled = true;
+    try {
+      const x = id ? await sb.from("hub_owner_leads").update(p).eq("id", id).select().single() : await sb.from("hub_owner_leads").insert(p).select().single();
+      if(x.error) throw x.error;
+      if(note){ const y = await sb.from("hub_owner_lead_notes").insert({ lead_id:x.data.id, kind:nk, note }); if(y.error) throw y.error; }
+      d.close(); toast("Saved ✓"); load();
+    } catch(e){ $("#ferr").textContent = "Couldn't save: " + niceErr(e); $("#fok").disabled = false; }
+  };
+  if(id){
+    $("#frm").onclick = async () => {
+      if(!await mmConfirm(`Remove ${r.name} from the list? Use "Not a fit" instead if they said no. A removed lead is kept in the history.`, { title:"Remove this lead?" })) return;
+      const x = await sb.from("hub_owner_leads").update({ off:true }).eq("id", id);
+      if(x.error){ $("#ferr").textContent = "Couldn't remove: " + niceErr(x.error); return; }
+      d.close(); load();
+    };
+    notesAndHistory(id);
+  }
+}
+const FL = { name:"Name", phone:"Phone", email:"Email", mail_addr:"Mailing address", property:"Home", home_code:"Our code", community:"Community", beds:"Bedrooms",
+  kind:"Wants", source:"Came from", source_detail:"More about where", stage:"Stage", assigned_to:"Who has it", next_on:"Next follow-up", next_what:"What's next",
+  est_yearly:"Est. / yr", lost_why:"Why not a fit", off:"Removed" };
+const fv = (k, v) => v == null || v === "" ? "—" : k === "stage" ? ((S.st[v] || {}).label || v) : k === "assigned_to" ? (S.pn[v] || "someone") : k === "source" ? (SRCL[v] || v)
+  : k === "kind" ? (KINDL[v] || v) : k === "next_on" ? fmtD(v) : k === "est_yearly" ? money(v) : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
+async function notesAndHistory(id){
+  const [n, h] = await Promise.all([
+    sb.from("hub_owner_lead_notes").select("kind,note,by_name,at").eq("lead_id", id).order("at", { ascending:false }),
+    sb.from("hub_owner_lead_log").select("op,old_row,new_row,by_name,at").eq("lead_id", id).order("at", { ascending:false }).limit(100)]);
+  const nl = $("#nl"), hl = $("#hl"); if(!nl) return;
+  nl.innerHTML = (n.data || []).map(x => `<li class="${x.kind === "auto" ? "auto" : ""}">${NKI[x.kind] || ""} ${esc(x.note)}<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`).join("") || `<li class="muted">No notes yet.</li>`;
+  hl.innerHTML = (h.data || []).map(x => {
+    if(x.op === "insert") return `<li>Added<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`;
+    const ch = Object.keys(FL).filter(k => JSON.stringify(x.old_row[k]) !== JSON.stringify(x.new_row[k])).map(k => `${FL[k]}: ${fv(k, x.old_row[k])} → ${fv(k, x.new_row[k])}`);
+    return ch.length ? `<li>${esc(ch.join("\n"))}<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>` : "";
+  }).join("") || `<li class="muted">No changes yet.</li>`;
+}
+
+function csv(){
+  const cols = [["created_at","Added"],["name","Owner"],["phone","Phone"],["email","Email"],["mail_addr","Mailing address"],["property","Home"],["home_code","Our code"],
+    ["community","Community"],["beds","Bedrooms"],["kind","Wants"],["source","Came from"],["source_detail","More about where"],["stage","Stage"],["days","Days in stage"],
+    ["assigned_to","Who has it"],["next_on","Next follow-up"],["next_what","What's next"],["est_yearly","Est. rent a year"],["lost_why","Why not a fit"]];
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const val = (r, c) => c === "days" ? daysIn(r) : c === "created_at" ? (r.created_at || "").slice(0, 10) : c === "stage" ? (S.st[r.stage] || {}).label : c === "assigned_to" ? S.pn[r.assigned_to] || ""
+    : c === "source" ? SRCL[r.source] : c === "kind" ? KINDL[r.kind] : r[c];
+  const txt = [cols.map(c => c[1]).join(",")].concat(filtered().map(r => cols.map(c => q(val(r, c[0]))).join(","))).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type:"text/csv" }));
+  a.download = `owner-leads-${today()}.csv`; a.click();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button,tr[data-id]"); if(!t || t.closest("dialog")) return;
+  if(t.dataset.show){ S.show = S.show === t.dataset.show && t.dataset.show !== "open" ? "open" : t.dataset.show; render(); return; }
+  if(t.dataset.view){ VIEW = t.dataset.view; try { localStorage.setItem("mm_ol_view", VIEW); } catch(_){} render(); return; }
+  if(t.dataset.sort){ const k = t.dataset.sort; S.sort = { k, d:S.sort.k === k ? -S.sort.d : 1 }; render(); return; }
+  if(t.dataset.id){ open(+t.dataset.id); return; }
+  if(t.id === "add"){ open(null); return; }
+  if(t.id === "csv"){ csv(); return; }
+  if(t.id === "clr"){ S.show = "open"; S.who = ""; S.src = ""; S.q = ""; render(); return; }
+});
+document.addEventListener("change", e => {
+  if(e.target.id === "fwho"){ S.who = e.target.value; render(); }
+  if(e.target.id === "fsrc"){ S.src = e.target.value; render(); }
+});
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; const p = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(p, p); } });
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"owner_leads" });
+  if(ok.error){ $("#app").innerHTML = `<h1>Owner leads</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
+  if(ok.data !== true){ try { top.location.hash = "#/home"; } catch(_){ location.href = "hub.html"; } return; }
+  const [st, pp, me] = await Promise.all([
+    sb.from("hub_owner_lead_stages").select("*").order("sort"),
+    sb.rpc("owner_lead_people"),
+    sb.rpc("hub_me")]);
+  S.stages = st.data || []; S.st = Object.fromEntries(S.stages.map(s => [s.key, s]));
+  S.people = pp.data || []; S.pn = Object.fromEntries(S.people.map(p => [p.id, p.name]));
+  const myName = me.data && me.data.name; S.me = (S.people.find(p => p.name === myName) || {}).id || null;
+  try {
+    const h = await sb.from("hub_homes").select("code,community").eq("active", true).limit(2000);
+    $("#dl-home").innerHTML = (h.data || []).map(x => x.code).filter(Boolean).sort().map(c => `<option value="${esc(c)}">`).join("");
+    $("#dl-comm").innerHTML = [...new Set((h.data || []).map(x => x.community).filter(Boolean))].sort().map(c => `<option value="${esc(c)}">`).join("");
+  } catch(_){}
+  load();
+})();
+window.__ol = { S, render };
+</script>
+</body>
+</html>
