@@ -2666,8 +2666,11 @@ function vMoney(){
       return '<div class="brow"><span>'+esc(w)+'</span><span class="btrack"><i style="width:'+(x.n/mx*100)+'%"></i></span><span class="v">'+x.n+'</span></div><div class="note" style="margin:-4px 0 4px 140px">'+x.oneoff+' one-off jobs, '+(x.n-x.oneoff)+' routine · '+(x.min/60).toFixed(1)+' h on the clock · '+Object.keys(x.homes).length+' homes</div>'; }).join("")+'</div>'+
     (stuck.length?'<div class="warnbox" style="margin-top:10px">'+stuck.length+' task'+(stuck.length===1?' has':'s have')+' a timer left running (over 12 hours) — left out of the hours: '+stuck.slice(0,6).map(function(j){ return '<a href="'+esc(j.srcUrl)+'" target="_blank" rel="noopener">'+esc(j.prop||"")+' '+esc(j.title.slice(0,30))+'</a>'; }).join(" · ")+'</div>':'')+
     '<div class="note" style="margin-top:8px">Chris is put on every task and hands it out, so he only counts when he\'s the only tech on it.</div></div></section>';
-  var deskDone=D.jobs.filter(function(j){ return j.src!=="breezeway" && j.status==="done" && !j.autoDone && ((j.doneAt && ymd(j.doneAt).slice(0,7)===m) || (!j.doneAt && (j.updated||"").slice(0,7)===m)); });
-  if(deskDone.length) G.desk+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Finished this month — Slack, Asana, desk</h3><span class="ct">'+deskDone.length+'</span></div><div class="rows">'+deskDone.map(function(j){ return jobRow(j,false); }).join("")+'</div></section>';
+  var deskAll=D.jobs.filter(function(j){ return j.src!=="breezeway" && j.status==="done" && !j.autoDone && ((j.doneAt && ymd(j.doneAt).slice(0,7)===m) || (!j.doneAt && (j.updated||"").slice(0,7)===m)); }), deskDone=deskAll.filter(function(j){ return !bwDoneFor(j); }), inBw=deskAll.length-deskDone.length;
+  /* 2026-11-23 (Brandon): these are other jobs that might still need to go on an owner statement; a job the hub can match to a finished Breezeway task leaves the list */
+  if(deskAll.length) G.desk+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Other finished jobs — may need an owner charge</h3><span class="ct">'+deskDone.length+'</span></div>'+
+    '<div class="pad note" style="padding-bottom:0">Jobs finished this month from Freshdesk, Slack, Asana or this desk. Most are already billed through their Breezeway task'+(inBw?'; '+inBw+' matched to a finished Breezeway task are left off':'')+'.</div>'+
+    (deskDone.length?'<div class="rows">'+deskDone.map(function(j){ return jobRow(j,false); }).join("")+'</div>':'<div class="empty">Every job finished this month matches a finished Breezeway task.</div>')+'</section>';
   G.pb+=projectedPanel(m); var billP=billingPanel(m,bwDone);
   if(tm.length) G.vis+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Visits logged</h3><span class="ct">'+tm.length+'</span></div><div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Date</th><th>Who</th><th>Home</th><th class="num">Time</th><th class="num">Trips</th><th class="num">Miles</th><th>Note</th><th></th></tr></thead><tbody>'+
     tm.map(function(e){ return '<tr><td class="mono">'+esc(fmtD(e.date))+'</td><td>'+esc(e.who||"")+'</td><td>'+propLink(e.prop)+'</td><td class="num">'+((+e.minutes||0)/60).toFixed(1)+'h</td><td class="num">'+(+e.trips||0)+'</td><td class="num">'+(+e.miles||0)+'</td><td>'+esc(e.note||"")+'</td><td><button class="btn sm ghost" data-tmedit="'+esc(e.id)+'">Edit</button></td></tr>'; }).join("")+'</tbody></table></div></section>';
@@ -2835,6 +2838,20 @@ function billingPanel(m,bwDone){
 
 document.addEventListener("toggle",function(ev){ var d=ev.target; if(d&&d.dataset&&d.dataset.billacc) S.ui.billOpen=d.open; },true);
 /* 2026-11-23 (Brandon): tick several tasks on Completed in Breezeway and do them all at once */
+/* the finished Breezeway task that covers a Freshdesk/Slack/Asana/desk job: its own link, a Breezeway link in the job,
+   or a finished task at the same home within 21 days with 2+ of the same words (1 for short titles) */
+var BWSTOP={the:1,and:1,for:1,with:1,from:1,at:1,to:1,of:1,in:1,on:1,is:1,it:1,too:1,please:1,needs:1,need:1,check:1,home:1,unit:1,alerts:1,alert:1,urgent:1,sameday:1};
+function bwWords(t){ return String(t||"").toLowerCase().replace(/\(\d+ alerts?\)/g,"").split(/[^a-z0-9]+/).filter(function(w){ return w.length>2&&!BWSTOP[w]&&!/^\d+$/.test(w); }); }
+function bwDoneFor(j){ if(j.bw&&j.bw.t&&j.bw.t.status==="done") return j.bw.t;
+  var ids=[]; (j.links||[]).forEach(function(u){ var mm=String(u).match(/breezeway\.io\/(?:task|tasks)\/(\d+)/i)||String(u).match(/[?&]task(?:_id)?=(\d+)/i); if(mm) ids.push(mm[1]); });
+  for(var i=0;i<ids.length;i++){ var b=D.byId["bw-"+ids[i]]; if(b&&b.status==="done") return b; }
+  if(!j.prop) return null; var d0=Date.parse((j.doneAt?ymd(j.doneAt):(j.updated||"")).slice(0,10)); if(!d0) return null;
+  var w=bwWords(j.title), need=w.length<=2?1:2; if(!w.length) return null;
+  for(var k=0;k<D.jobs.length;k++){ var x=D.jobs[k]; if(x.src!=="breezeway"||x.status!=="done"||x.prop!==j.prop) continue;
+    var dx=Date.parse((x.finished||"").slice(0,10)); if(!dx||Math.abs(dx-d0)>21*864e5) continue;
+    var xw=bwWords(x.title), hit=w.filter(function(a){ return xw.some(function(b){ return a===b||a.length>4&&b.length>4&&(a.indexOf(b)===0||b.indexOf(a)===0); }); }).length;
+    if(hit>=need) return x; }
+  return null; }
 function bwSelIds(){ var sel=S.ui.bwSel||{}; return Object.keys(sel).filter(function(k){ return sel[k] && D.byId["bw-"+k]; }); }
 function bwBulkBar(){ var n=bwSelIds().length; if(!n) return '';
   return '<div class="pad" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2">'+
