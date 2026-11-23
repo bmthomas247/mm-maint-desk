@@ -400,7 +400,7 @@ window.ownerCallsView = async function(v){
   const who = c => { const m = MT[c.call_id] || {}, n = N[c.call_id]; return m.contact_name || (n && n.data && n.data.guest_name ? n.data.guest_name + " (said on call)" : c.caller_name || "Caller"); };
   const open = c => !FU[c.call_id] || FU[c.call_id].status === "open";
   const flagged = c => !!(N[c.call_id] && N[c.call_id].follow_up);
-  const reach = c => c.owner_kind === "owner" && open(c) && flagged(c);
+  const reach = c => c.owner_kind === "owner" && open(c) && flagged(c) && !/^(issue_resolved|info_only)$/.test((N[c.call_id] || {}).outcome || "");   // 2026-11-23 (j16): resolved / info-only calls aren't reach-outs
   const homes = c => hm[c.call_id] || [];
   const dayOf = c => c.call_day || String(c.call_at || "").slice(0, 10);
   const stOf = c => !open(c) ? "done" : reach(c) ? "reach" : c.owner_kind === "prospect" ? "pros" : "call";
@@ -446,7 +446,7 @@ window.ownerCallsView = async function(v){
       return `<div class="ocr${s === "done" ? " cov" : ""}" data-open="${c.call_id}" tabindex="0" role="button"><i style="background:${bg}">${ic}</i>
         <div class="ocm"><div class="oct"><span><b>${esc(who(c))}</b>${hs.length ? `<span class="muted"> · 🏠 ${esc(hs.join(", "))}</span>` : c.owner_kind === "prospect" ? `<span class="muted"> · possible owner</span>` : ""}</span>
           <span class="ocrc">${n.outcome && /issue_open|not_booked/.test(n.outcome) ? `<span class="ocp bad">${esc(nice(n.outcome))}</span>` : ""}${has(c) ? `<span class="ocp" title="Words in the transcript">📝 ${T[c.call_id].words}</span>` : ""}<span class="octm">${esc(timef(c.call_at))}</span>${open(c) ? `<button class="btn small" data-quick="${c.call_id}" title="Mark reached out (open the call to add a note)">✓</button>` : ""}</span></div>
-          <small class="muted">${esc([dirName(c.direction), c.agents || "no agent", dur(c.duration_s) || "0:00"].join(" · "))} · ${esc(cut(desc, 170))}</small></div></div>`; };
+          <small class="muted">${esc([dirName(c.direction), c.agents ? "with " + c.agents : "no agent", dur(c.duration_s) || "0:00"].join(" · "))} · ${esc(cut(desc, 170))}</small></div></div>`; };
     const grp = {}; list.slice(0, MAX).forEach(c => (grp[dayOf(c)] = grp[dayOf(c)] || []).push(c));
     const tdy = iso(new Date()), yd = yday();
     $("#obody").innerHTML = Object.keys(grp).map(d => `<h3 class="ocg">${d === tdy ? "Today" : d === yd ? "Yesterday" : esc(dayf(d))} <span class="muted">${grp[d].length}</span></h3><div class="card ocl">${grp[d].map(row).join("")}</div>`).join("")
