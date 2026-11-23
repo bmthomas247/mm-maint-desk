@@ -100,16 +100,19 @@ const today = () => new Date().toLocaleDateString("en-CA", { timeZone:"America/D
 const addD = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const niceE = e => (window.top && window.top.niceErr ? window.top.niceErr(e) : (e && e.message) || String(e));
 const money = n => n == null ? "—" : "$" + Math.round(+n).toLocaleString();
-const TABS = [["overview","🏔 Overview"],["builder","🗺 Campaign builder"],["leads","📞 Leads & follow-up"],["ctl","📅 Campaign timeline"],["stl","✍️ Signing timeline"],["past","📜 Past results"]];
+const TABS = [["overview","🏔 Overview"],["builder","🗺 Campaign builder"],["tpl","📋 Templates"],["leads","📞 Leads & follow-up"],["ctl","📅 Campaign timeline"],["stl","✍️ Signing timeline"],["past","📜 Past results"]];
 const S = { tab:new URLSearchParams(location.search).get("t") || "overview", owners:[], homes:[], lists:[], members:{}, areas:[], hr:[], hrT:[], hrS:[], camps:[], batches:[], items:[], scans:[], inq:[], rc:null,
   sel:{ poly:null, list:null, f:{ absentee:true, newOwner:false, outState:false, notInCampaign:true, type:"", beds:0 } }, hrf:"due" };
+const KIND = { mail:"📬", email:"✉️", call:"📞", text:"💬", ads_start:"📣", ads_end:"📣", task:"✅", review:"📊" };
+const campSteps = c => c.steps ? c.steps.map(x => [x.day, x.title, x.kind]) : OC_STEPS.map(([d, l]) => [d, l, /drop/i.test(l) ? "mail" : /mail/i.test(l) ? "email" : "ads_start"]);
+const campEnd = c => addD(c.start_on, Math.max(100, ...campSteps(c).map(x => x[0])));
 const OC_STEPS = [[0,"Mail drop 1"],[7,"Ads start"],[21,"Email 1"],[35,"Mail drop 2"],[56,"Email 2"],[70,"Mail drop 3"],[91,"Email 3"],[100,"Ads end"]];
 
 async function pages(q){ let all = []; for(let f = 0; f < 50000; f += 1000){ const r = await q().range(f, f + 999); if(r.error) throw r.error; all = all.concat(r.data || []); if((r.data || []).length < 1000) break; } return all; }
 async function load(){
   const ok = await sb.rpc("hub_can", { p_desk:"advertising" });
   if(ok.error || !ok.data){ $("#app").innerHTML = `<div class="empty">Nothing to show.</div>`; return false; }
-  const [own, homes, lists, areas, hr, hrT, hrS, camps, bt, it, sc, inq, rc] = await Promise.all([
+  const [own, homes, lists, areas, hr, hrT, hrS, camps, bt, it, sc, inq, rc, tp] = await Promise.all([
     pages(() => sb.from("serp_finds").select("key,community,data").eq("kind", "area_owner").eq("gone", false).order("key")),
     sb.rpc("mkt_our_home_points"),
     sb.from("mkt_owner_lists").select("*").eq("off", false).order("created_at", { ascending:false }),
@@ -122,17 +125,18 @@ async function load(){
     pages(() => sb.from("mkt_postcard_items").select("batch_id,code,lead_key").order("batch_id")),
     pages(() => sb.from("mkt_postcard_scans").select("code,at").order("at")),
     pages(() => sb.from("mkt_owner_inquiries").select("*").eq("off", false).order("lead_on")),
-    sb.from("mkt_pull_status").select("*").eq("key", "rentcast").maybeSingle()]);
+    sb.from("mkt_pull_status").select("*").eq("key", "rentcast").maybeSingle(),
+    sb.from("mkt_campaign_templates").select("*").order("sort").order("name")]);
   S.owners = own.map(o => ({ key:o.key, comm:o.community, ...o.data })).filter(o => o.lat != null || true);
   S.homes = homes.data || []; S.lists = lists.data || []; S.areas = areas.data || [];
-  S.hr = hr; S.hrT = hrT; S.hrS = hrS.data || []; S.camps = camps.data || []; S.batches = bt.data || []; S.items = it; S.scans = sc; S.inq = inq; S.rc = rc.data || null;
+  S.hr = hr; S.hrT = hrT; S.hrS = hrS.data || []; S.camps = camps.data || []; S.batches = bt.data || []; S.items = it; S.scans = sc; S.inq = inq; S.rc = rc.data || null; S.tpls = tp.data || [];
   return true;
 }
 
 /* ------------------------------------------------------------------ shell */
 function render(){
   const signedYr = S.hr.filter(l => l.status === "signed" && String(l.updated_at || "").slice(0, 4) === today().slice(0, 4)).length;
-  const due = S.hr.filter(hrDue).length, live = S.camps.filter(c => c.source !== "zpoint" && addD(c.start_on, 100) >= today()).length;
+  const due = S.hr.filter(hrDue).length, live = S.camps.filter(c => c.source !== "zpoint" && campEnd(c) >= today()).length;
   const spend = S.hrS.reduce((n, x) => n + +x.amount, 0), signedAll = S.hr.filter(l => l.status === "signed").length;
   const mapped = S.owners.filter(o => o.lat != null).length;
   const st = (t, l, v, s) => `<button class="st" data-tab="${t}"><small>${l}</small><b>${v}</b><span>${s || ""}</span></button>`;
@@ -142,13 +146,13 @@ function render(){
         ${st("stl", "Signed this year", signedYr, signedAll + " from the board")}${st("stl", "Cost per signed home", signedAll ? money(spend / signedAll) : "—", money(spend) + " logged")}</div></div>
     <div class="tabs">${TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${l}</button>`).join("")}</div>
     <div id="view"></div>`;
-  ({ overview:vOverview, builder:vBuilder, leads:vLeads, ctl:vCampTL, stl:vSignTL, past:vPast }[S.tab] || vOverview)();
+  ({ overview:vOverview, builder:vBuilder, tpl:vTemplates, leads:vLeads, ctl:vCampTL, stl:vSignTL, past:vPast }[S.tab] || vOverview)();
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if(!b) return; S.tab = b.dataset.tab; history.replaceState(null, "", "?t=" + S.tab); render(); window.scrollTo(0, 0); });
 
 /* ------------------------------------------------------------------ overview */
 function vOverview(){
-  const due = S.hr.filter(hrDue), next = S.camps.filter(c => c.source !== "zpoint").flatMap(c => OC_STEPS.map(([d, l]) => ({ c, d:addD(c.start_on, d), l }))).filter(x => x.d >= today() && x.d <= addD(today(), 21)).sort((a, b) => a.d < b.d ? -1 : 1);
+  const due = S.hr.filter(hrDue), next = S.camps.filter(c => c.source !== "zpoint").flatMap(c => campSteps(c).map(([d, l, k]) => ({ c, d:addD(c.start_on, d), l:(KIND[k] || "") + " " + l }))).filter(x => x.d >= today() && x.d <= addD(today(), 21)).sort((a, b) => a.d < b.d ? -1 : 1);
   const recentT = S.hrT.slice(-8).reverse();
   $("#view").innerHTML = `<div class="kpis">
       <div class="kpi"><small>🔥 Warm leads (asked before)</small><b>${S.hr.filter(l => l.segment === "warm" && !HR_CLOSED.has(l.status)).length}</b></div>
@@ -254,6 +258,7 @@ function drawSel(){
       <button class="btn small" id="bload" ${S.sel.poly ? "" : "disabled"} title="${S.sel.poly ? "" : "Draw a shape first"}">🔎 Load more owners in this shape</button>
       <button class="btn small" disabled title="Needs the skip-trace account (Phase 2)">📇 Append emails & phones</button>
       <button class="btn small primary" id="bstart" ${sel.length ? "" : "disabled"}>🚀 Start campaign</button></div>
+    ${S.tpl ? `<p style="font-size:12.5px;margin:6px 0 0">Template: <b>${esc(tplName(S.tpl))}</b> · <button class="btn small" data-tab="tpl">change</button></p>` : `<p style="font-size:12.5px;margin:6px 0 0" class="muted">You pick a template when you press Start.</p>`}
     <p class="src">Append is coming once the skip-trace account is set up. Lookups used this month: ${lu}.</p>`;
   $("#bsave").onclick = () => saveList(sel);
   $("#bload").onclick = () => loadArea();
@@ -276,24 +281,112 @@ async function loadArea(){
 }
 async function pollArea(id){ for(let i = 0; i < 40; i++){ await new Promise(r => setTimeout(r, 6000));
   const a = await sb.from("mkt_area_requests").select("*").eq("id", id).single(); if(a.data && ["done","failed"].includes(a.data.status)){ await load(); S.members = {}; render(); return; } } }
+/* ------------------------------------------------------------------ templates */
+const KINDS = [["mail","📬 Postcard"],["email","✉️ Email"],["call","📞 Call"],["text","💬 Text"],["ads_start","📣 Ads start"],["ads_end","📣 Ads end"],["task","✅ Task"],["review","📊 Review"]];
+const tplOn = () => (S.tpls || []).filter(t => !t.off);
+const tplName = k => { const t = (S.tpls || []).find(x => x.key === k); return t ? (t.emoji || "") + " " + t.name : k; };
+const tplCost = (t, n) => n * (t.steps || []).filter(x => x.kind === "mail").length * 0.9;
+function stepStrip(steps, start){
+  return `<div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:2px">${steps.map(x => `<div style="flex:1;min-width:84px;text-align:center;font-size:11px;border-top:3px solid ${x.kind === "mail" ? "var(--forest)" : "var(--line-2)"};padding-top:3px">${KIND[x.kind] || ""} <b>${esc(x.title)}</b><br><span class="muted">${start ? esc(fmtS(addD(start, +x.day))) : "day " + x.day}</span></div>`).join("")}</div>`;
+}
+function tplCard(t, sel){
+  const m = (t.steps || []).filter(x => x.kind === "mail").length, last = Math.max(0, ...(t.steps || []).map(x => +x.day));
+  return `<div class="lead" style="${sel ? "outline:2px solid var(--moose)" : ""}${t.off ? ";opacity:.55" : ""}">
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div><b style="font-size:15px">${esc(t.emoji || "")} ${esc(t.name)}</b>${t.off ? ` <span class="pill grey">off</span>` : ""}
+      <div style="font-size:13px">${esc(t.blurb || "")}</div><div class="muted" style="font-size:12px">For: ${esc(t.best_for || "any owners")} · ${m} postcard${m === 1 ? "" : "s"} · ${(t.steps || []).length} steps over ${last} days</div></div>
+      <div class="acts" style="margin:0">${t.off ? `<button class="btn small" data-tpon="${esc(t.key)}">Turn back on</button>` : `<button class="btn small primary" data-tpuse="${esc(t.key)}">Use this</button><button class="btn small" data-tped="${esc(t.key)}">✎ Edit</button><button class="btn small" data-tpcopy="${esc(t.key)}">⧉ Copy</button>`}</div></div>
+    <div style="margin-top:8px">${stepStrip(t.steps || [])}</div>
+    ${t.source ? `<p class="src">Why this timing: ${esc(t.source)}</p>` : ""}</div>`;
+}
+function vTemplates(){
+  const on = tplOn(), off = (S.tpls || []).filter(t => t.off);
+  $("#view").innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div><h2>📋 Campaign templates</h2>
+      <p class="muted" style="margin:0">Pick a plan, then pick owners on the map. Each template sets who it's for and every step (postcards, emails, calls, ads). You can change the days before you start, and nothing mails until someone presses Mail.</p></div>
+      <button class="btn primary" data-tpnew="1">+ New template</button></div></div>
+    ${on.map(t => tplCard(t, S.tpl === t.key)).join("") || `<div class="empty">No templates yet.</div>`}
+    ${off.length ? `<details class="card"><summary><b>Turned off (${off.length})</b></summary>${off.map(t => tplCard(t)).join("")}</details>` : ""}`;
+}
+function tplEdit(t, copy){
+  const d = $("#dlg"), T = JSON.parse(JSON.stringify(t || { name:"", emoji:"📬", blurb:"", best_for:"", source:"", filters:{ absentee:true, notInCampaign:true }, steps:[{ day:0, kind:"mail", title:"Postcard 1", words:"" }] }));
+  if(copy){ T.name = T.name + " (copy)"; T.key = null; }
+  const row = (x, i) => `<div style="display:grid;grid-template-columns:62px 118px 1fr 30px;gap:6px;margin:4px 0;align-items:start" data-srow="${i}">
+      <input type="number" min="0" max="365" value="${+x.day}" data-sf="day" title="Day from the start">
+      <select data-sf="kind">${KINDS.map(([k, l]) => `<option value="${k}"${x.kind === k ? " selected" : ""}>${l}</option>`).join("")}</select>
+      <div><input data-sf="title" value="${esc(x.title)}" style="width:100%" placeholder="What happens"><textarea data-sf="words" rows="1" style="width:100%;margin-top:3px" placeholder="Words for the card or email (optional)">${esc(x.words || "")}</textarea></div>
+      <button class="btn small" data-sdel="${i}" title="Remove this step">✕</button></div>`;
+  const draw = () => {
+    d.innerHTML = `<h2 style="margin:0 0 8px">${t && !copy ? "✎ Edit template" : "+ New template"}</h2>
+      <div style="display:grid;grid-template-columns:70px 1fr;gap:6px"><input id="te" value="${esc(T.emoji || "")}" placeholder="🙂"><input id="tn" value="${esc(T.name)}" placeholder="Template name"></div>
+      <input id="tb" value="${esc(T.blurb || "")}" placeholder="One line: what it does" style="width:100%;margin-top:6px">
+      <input id="tw" value="${esc(T.best_for || "")}" placeholder="Who it's for" style="width:100%;margin-top:6px">
+      <div style="margin-top:6px;font-size:13px">Starts with these filters:
+        ${[["absentee","Lives elsewhere"],["newOwner","Bought in 12 months"],["outState","Outside Utah"],["notInCampaign","Not in a campaign"]].map(([k, l]) => `<label class="ck" style="display:inline-flex;margin-right:10px"><input type="checkbox" data-tf="${k}" ${T.filters && T.filters[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
+      <h3 style="margin:10px 0 2px;font-size:14px">Steps <span class="muted" style="font-weight:500">(day 0 = the start date; up to 6 postcards)</span></h3>
+      <div id="tsteps">${T.steps.map(row).join("")}</div>
+      <button class="btn small" id="tadd">+ Add a step</button>
+      <input id="ts" value="${esc(T.source || "")}" placeholder="Why this timing (source)" style="width:100%;margin-top:8px">
+      <p class="err" id="terr"></p>
+      <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap">${t && !copy && !t.off ? `<button class="btn" id="toff">Turn off</button>` : "<span></span>"}
+        <div style="display:flex;gap:8px"><button class="btn" id="tcan">Cancel</button><button class="btn primary" id="tsave">Save template</button></div></div>`;
+    const read = () => { T.emoji = $("#te", d).value; T.name = $("#tn", d).value; T.blurb = $("#tb", d).value; T.best_for = $("#tw", d).value; T.source = $("#ts", d).value;
+      T.filters = {}; d.querySelectorAll("[data-tf]").forEach(c => { if(c.checked) T.filters[c.dataset.tf] = true; });
+      T.steps = [...d.querySelectorAll("[data-srow]")].map(r => ({ day:+r.querySelector('[data-sf="day"]').value || 0, kind:r.querySelector('[data-sf="kind"]').value, title:r.querySelector('[data-sf="title"]').value.trim(), words:r.querySelector('[data-sf="words"]').value.trim() })); };
+    $("#tadd", d).onclick = () => { read(); const last = T.steps.length ? +T.steps[T.steps.length - 1].day : 0; T.steps.push({ day:last + 7, kind:"email", title:"", words:"" }); draw(); };
+    d.querySelectorAll("[data-sdel]").forEach(b => b.onclick = () => { read(); T.steps.splice(+b.dataset.sdel, 1); draw(); });
+    $("#tcan", d).onclick = () => d.close();
+    if($("#toff", d)) $("#toff", d).onclick = async () => { if(!await mmConfirm(`Turn off "${t.name}"? It stays saved and can be turned back on.`)) return;
+      const r = await sb.rpc("mkt_template_off", { p_key:t.key, p_off:true }); if(r.error) return mmAlert(niceE(r.error)); d.close(); await reloadTpl(); };
+    $("#tsave", d).onclick = async () => { read(); if(T.steps.some(x => !x.title)) { $("#terr", d).textContent = "Every step needs a short title."; return; }
+      const r = await sb.rpc("mkt_template_save", { p_key:T.key || null, p_t:T }); if(r.error){ $("#terr", d).textContent = niceE(r.error); return; }
+      d.close(); await reloadTpl(); };
+  };
+  draw(); if(!d.open) d.showModal();
+}
+async function reloadTpl(){ const r = await sb.from("mkt_campaign_templates").select("*").order("sort").order("name"); S.tpls = r.data || []; if(S.tab === "tpl") vTemplates(); }
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-tpuse],[data-tped],[data-tpcopy],[data-tpnew],[data-tpon]"); if(!b) return;
+  const t = k => (S.tpls || []).find(x => x.key === k);
+  if(b.dataset.tpuse){ const x = t(b.dataset.tpuse); S.tpl = x.key; S.sel.f = { type:"", beds:0, absentee:false, newOwner:false, outState:false, notInCampaign:false, ...(x.filters || {}) };
+    S.tab = "builder"; history.replaceState(null, "", "?t=builder"); render(); window.scrollTo(0, 0); return; }
+  if(b.dataset.tped) return tplEdit(t(b.dataset.tped));
+  if(b.dataset.tpcopy) return tplEdit(t(b.dataset.tpcopy), true);
+  if(b.dataset.tpnew) return tplEdit(null);
+  if(b.dataset.tpon){ const r = await sb.rpc("mkt_template_off", { p_key:b.dataset.tpon, p_off:false }); if(r.error) return mmAlert(niceE(r.error)); return reloadTpl(); }
+});
+
 function startCampaign(sel){
-  const d = $("#dlg"), t = today(), wd = new Date(t + "T12:00:00Z").getUTCDay(), mon = addD(t, ((8 - wd) % 7) || 7);
-  d.innerHTML = `<h2 style="margin:0 0 6px">🚀 Start a campaign · ${sel.length} owners</h2>
-    <label>Name<input id="cn" style="width:100%" value="${esc((S.sel.comm || "Map area") + " · " + new Date().toLocaleDateString("en-US", { month:"short", year:"numeric" }))}"></label>
-    <label style="display:block;margin-top:8px">First postcard mails on<input id="cs" type="date" min="${t}" value="${mon}"></label>
-    <label style="display:block;margin-top:8px">What's on the card (for the record; design each drop under 📬 Postcards)<textarea id="cc" rows="2" style="width:100%"></textarea></label>
-    <div id="ctl" style="margin:10px 0"></div>
-    <p class="muted" style="font-size:12.5px">Makes 3 postcard batches 5 weeks apart, email + ad steps on Plan for Owners, and puts every owner on 📞 Leads & follow-up. Nothing mails until someone presses Mail on each batch. About ${money(sel.length * 3 * 0.9)} in postcards.</p>
-    <p class="err" id="ce"></p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Start campaign</button></div>`;
-  d.showModal();
-  const prev = () => { const s = $("#cs", d).value; $("#ctl", d).innerHTML = s ? `<div style="display:flex;gap:4px;overflow-x:auto">${OC_STEPS.map(([n, l]) => `<div style="flex:1;min-width:76px;text-align:center;font-size:11.5px;border-top:3px solid var(--forest);padding-top:4px"><b>${l}</b><br>${esc(fmtS(addD(s, n)))}</div>`).join("")}</div>` : ""; };
-  $("#cs", d).oninput = prev; prev();
-  d.onclick = async e => { const x = e.target.closest("[data-x]"); if(!x) return; if(x.dataset.x === "0"){ d.close(); return; }
+  const d = $("#dlg"), t = today(), wd = new Date(t + "T12:00:00Z").getUTCDay(), mon = addD(t, ((8 - wd) % 7) || 7), on = tplOn();
+  if(!on.length) return mmAlert("Make a campaign template first (📋 Templates).");
+  let key = S.tpl && on.some(x => x.key === S.tpl) ? S.tpl : on[0].key, steps = null;
+  const pick = () => { const tp = on.find(x => x.key === key); steps = JSON.parse(JSON.stringify(tp.steps || [])); return tp; };
+  pick();
+  const draw = () => {
+    const tp = on.find(x => x.key === key), s = $("#cs", d) ? $("#cs", d).value : mon, nm = $("#cn", d) ? $("#cn", d).value : (S.sel.comm || "Map area") + " · " + new Date().toLocaleDateString("en-US", { month:"short", year:"numeric" });
+    const mails = steps.filter(x => x.kind === "mail").length;
+    d.innerHTML = `<h2 style="margin:0 0 6px">🚀 Start a campaign · ${sel.length} owners</h2>
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px">1 · Pick a template</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">${on.map(x => `<button class="kpi ${x.key === key ? "on" : ""}" data-ck="${esc(x.key)}" style="padding:8px 10px"><b style="font-size:13.5px">${esc(x.emoji || "")} ${esc(x.name)}</b><small>${esc(x.blurb || "")}</small></button>`).join("")}</div>
+      <div style="font-size:13px;font-weight:700;margin:10px 0 4px">2 · Name + start date</div>
+      <input id="cn" style="width:100%" value="${esc(nm)}"><label style="display:block;margin-top:6px;font-size:13px">Day 0 (first step) is <input id="cs" type="date" min="${t}" value="${esc(s)}"></label>
+      <div style="font-size:13px;font-weight:700;margin:10px 0 4px">3 · Check the steps <span class="muted" style="font-weight:500">(change a day here; the template stays as it is)</span></div>
+      <div style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 8px">${steps.map((x, i) => `<div style="display:grid;grid-template-columns:58px 22px 1fr 86px;gap:6px;align-items:center;font-size:12.5px;padding:2px 0">
+        <input type="number" min="0" max="365" value="${+x.day}" data-cd="${i}" style="padding:3px 5px"><span>${KIND[x.kind] || ""}</span><span>${esc(x.title)}</span><span class="muted">${esc(fmtS(addD(s, +x.day)))}</span></div>`).join("")}</div>
+      <div style="margin:8px 0">${stepStrip(steps, s)}</div>
+      <p class="muted" style="font-size:12.5px">Makes ${mails} postcard batch${mails === 1 ? "" : "es"} and ${steps.length - mails} planned step${steps.length - mails === 1 ? "" : "s"} on Plan for Owners, and puts every owner on 📞 Leads & follow-up. Nothing mails until someone presses Mail on each batch. About ${money(tplCost({ steps }, sel.length))} in postcards.</p>
+      <p class="err" id="ce"></p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Start campaign</button></div>`;
+    $("#cs", d).oninput = () => draw();
+    d.querySelectorAll("[data-cd]").forEach(inp => inp.onchange = () => { steps[+inp.dataset.cd].day = Math.max(0, Math.min(365, +inp.value || 0)); steps.sort((a, b) => a.day - b.day); draw(); });
+  };
+  d.onclick = async e => {
+    const c = e.target.closest("[data-ck]"); if(c){ key = c.dataset.ck; S.tpl = key; pick(); draw(); return; }
+    const x = e.target.closest("[data-x]"); if(!x) return; if(x.dataset.x === "0"){ d.close(); return; }
     x.disabled = true; x.textContent = "Starting…";
     let lid = S.sel.list; if(!lid) lid = await saveList(sel, $("#cn", d).value + " (list)");
-    const r = await sb.rpc("mkt_list_campaign", { p_list:lid, p_name:$("#cn", d).value, p_start:$("#cs", d).value, p_card:$("#cc", d).value, p_keys:sel.map(o => o.key) });
+    const r = await sb.rpc("mkt_template_campaign", { p_tpl:key, p_list:lid, p_name:$("#cn", d).value, p_start:$("#cs", d).value, p_keys:sel.map(o => o.key), p_steps:steps });
     if(r.error){ $("#ce", d).textContent = niceE(r.error); x.disabled = false; x.textContent = "Start campaign"; return; }
-    d.close(); await mmAlert(`Campaign started: ${r.data.owners} owners, 3 drops. Design drop 1 under Advertising ▸ Owners ▸ 📬 Postcards.`); await load(); S.tab = "ctl"; render(); };
+    d.close(); await mmAlert(`Campaign started: ${r.data.owners} owners, ${r.data.batches} postcard drop${r.data.batches === 1 ? "" : "s"} and ${r.data.tasks} planned steps. Design each drop under Advertising ▸ Owners ▸ 📬 Postcards.`);
+    await load(); S.tab = "ctl"; history.replaceState(null, "", "?t=ctl"); render(); };
+  draw(); d.showModal();
 }
 
 /* ------------------------------------------------------------------ leads & follow-up (home-run board) */
@@ -394,13 +487,15 @@ function vCampTL(){
       bs.forEach(b => (scansByBatch[b.id] || []).forEach(at => marks.push({ k:"scan", d:at, t:"QR scan" })));
       S.hr.filter(l => l.campaign_id === c.id && l.status === "signed").forEach(l => marks.push({ k:"signed", d:l.updated_at, t:"Signed: " + (l.signed_home || "") }));
       const sc = bs.reduce((n, b) => n + (scansByBatch[b.id] || []).length, 0);
-      rows.push({ name:c.name, sub:(c.lead_keys || []).length + " owners · " + sc + " scans", a:c.start_on, b:addD(c.start_on, 100), color:"#88B535", marks });
+      campSteps(c).filter(x => x[2] !== "mail").forEach(([d, l, k]) => marks.push({ k:"step", d:addD(c.start_on, d), t:(KIND[k] || "") + " " + l }));
+      const tp = (S.tpls || []).find(t => t.key === c.template_key);
+      rows.push({ name:c.name, sub:(tp ? (tp.emoji || "") + " " + tp.name + " · " : "") + (c.lead_keys || []).length + " owners · " + sc + " scans", a:c.start_on, b:campEnd(c), color:"#88B535", marks });
     } });
   const from = rows.length ? rows.map(r => r.a).sort()[0] : addD(today(), -180), to = addD(today(), 120);
-  $("#view").innerHTML = `<div class="card"><h2>📅 Campaign timeline</h2><p class="muted" style="margin:0 0 8px">Every owner campaign on one calendar: the 100-day window, each mail drop (filled = mailed, red = late, white = coming), QR scans (gold), inquiries (blue) and signed homes (⭐). Hover a mark for details.</p>
+  $("#view").innerHTML = `<div class="card"><h2>📅 Campaign timeline</h2><p class="muted" style="margin:0 0 8px">Every owner campaign on one calendar: its window, each step (grey dots), each mail drop (filled = mailed, red = late, white = coming), QR scans (gold), inquiries (blue) and signed homes (⭐). Hover a mark for details.</p>
       ${rows.length ? svgTL(rows, from < addD(today(), -730) ? addD(today(), -730) : from, to) : `<div class="empty">No campaigns yet.</div>`}
       <p class="src">ZPoint campaigns: OwnerPoint dashboards + emails (read Nov 23, 2026); their drop dates are from the dashboards/emails and may be off by days. Signed homes: Track owner start dates. Hub campaigns: postcard batches + QR scans.</p></div>
-    <div class="card"><h2>Steps for running campaigns</h2>${S.camps.filter(c => c.source !== "zpoint").map(c => `<div style="margin:6px 0"><b>${esc(c.name)}</b><div style="display:flex;gap:4px;overflow-x:auto;margin-top:4px">${OC_STEPS.map(([d, l]) => { const on = addD(c.start_on, d); return `<div style="flex:1;min-width:80px;text-align:center;font-size:11.5px;border-top:3px solid ${on <= today() ? "var(--forest)" : "var(--line-2)"};padding-top:3px"><b>${l}</b><br>${esc(fmtS(on))}</div>`; }).join("")}</div></div>`).join("") || `<p class="muted">None running. Start one in the 🗺 Campaign builder.</p>`}</div>`;
+    <div class="card"><h2>Steps for running campaigns</h2>${S.camps.filter(c => c.source !== "zpoint").map(c => `<div style="margin:6px 0"><b>${esc(c.name)}</b><div style="display:flex;gap:4px;overflow-x:auto;margin-top:4px">${campSteps(c).map(([d, l, k]) => { const on = addD(c.start_on, d); return `<div style="flex:1;min-width:92px;text-align:center;font-size:11.5px;border-top:3px solid ${on <= today() ? "var(--forest)" : "var(--line-2)"};padding-top:3px">${KIND[k] || ""} <b>${esc(l)}</b><br>${esc(fmtS(on))}</div>`; }).join("")}</div></div>`).join("") || `<p class="muted">None running. Start one in the 🗺 Campaign builder.</p>`}</div>`;
 }
 
 /* ------------------------------------------------------------------ signing timeline */
