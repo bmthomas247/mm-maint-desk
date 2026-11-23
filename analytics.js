@@ -945,7 +945,7 @@ async function revMore(el, tab, ctx){
       && (!h || x.home.toLowerCase().includes(h)) && (!q || [x.theme, x.guests_say, x.suggestion, JSON.stringify(x.quotes)].join(" ").toLowerCase().includes(q)));
     const by = {}; M.forEach(x => (by[x.home] = by[x.home] || []).push(x));
     const homes = Object.keys(by).sort();
-    el.querySelector("#rll").innerHTML = homes.length ? homes.map(hm => `<div class="card" style="margin:0 0 12px;padding:12px 14px"><h3 style="margin:0 0 8px;font-size:16px">${esc(hm)}
+    el.querySelector("#rll").innerHTML = homes.length ? homes.map(hm => `<div class="card" style="margin:0 0 12px;padding:12px 14px"><h3 style="margin:0 0 8px;font-size:16px">${esc(hm === "1914" ? "CR 1914" : hm)}
         <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#" data-home="${esc(hm)}">all its reviews →</a>
         <a class="muted" style="font-size:13px;font-weight:400;margin-left:8px" href="#/tools_listing" data-lw="${esc(hm)}">✍ Listing Writer (preview + send to Track) →</a></h3>
       ${dHtml(hm)}${by[hm].sort((a, b) => (a.in_listing === "no" ? 0 : 1) - (b.in_listing === "no" ? 0 : 1) || b.review_ids.length - a.review_ids.length).map(x => `<div style="border-top:1px solid var(--line);padding:10px 0" data-li="${x.id}">
