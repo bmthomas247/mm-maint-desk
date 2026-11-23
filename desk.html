@@ -2635,9 +2635,11 @@ function vMoney(){
         return lo.length?'Left out: '+[v?v+' vendor visit'+(v===1?'':'s'):'',n?n+' scheduling note'+(n===1?'':'s'):'',o?o+' office-only task'+(o===1?'':'s')+' (no tech on them)':''].filter(Boolean).join(', ')+' — <a href="#" data-vmode="used">Vendors used</a>. ':''; })()+(movedN?'<b>'+movedN+' marked ready or pushed</b> — they\'re under Ready for Breezeway. ':'')+'Fees = $ amounts, trip charges or fees found in the task\'s notes, comments or messages (read up to Oct 9 — check newer tasks yourself). Open a task, check its costs and press ✓ Ready for Track. Receipts the crew post in Breezeway are read into Expenses every hour.</span></div>';
     G.bw+='<div class="pad" style="padding-top:0;padding-bottom:6px"><div class="qsearch"><span class="mag">⌕</span><input id="bwf_home2" type="search" placeholder="Search these tasks: home, task or tech…" value="'+esc(bf.home||"")+'" autocomplete="off"></div></div>';
     G.bw+='<div class="pad note" style="padding-top:0">'+(bf.tech||bf.home||bf.from||bf.to?'Showing '+list.length+' of '+nAll+' tasks'+(bf.from||bf.to?' (dates '+(bf.from?fmtD(bf.from):'start')+' – '+(bf.to?fmtD(bf.to):'today')+', any month)':'')+' · <a href="#" data-act="bwfclear">clear</a>':nAll+' tasks')+' · tech and dates are in the bar at the top</div>';
-    G.bw+='<div class="appl" style="border:0;border-radius:0;max-height:560px;overflow-y:auto"><table class="t"><thead><tr>'+th("done","Done")+th("home","Home")+th("task","Task")+th("techs","Techs")+th("people","People",1)+th("time","Time",1)+th("bill","Bill",1)+'</tr></thead><tbody>'+
+    S.ui.bwShown=list.slice(0,300).map(function(j){ return j.id.slice(3); });
+    G.bw+='<div id="bwbulk">'+bwBulkBar()+'</div>';
+    G.bw+='<div class="appl" style="border:0;border-radius:0;max-height:560px;overflow-y:auto"><table class="t"><thead><tr><th style="width:30px"><input type="checkbox" id="bwselall" title="Tick every task shown" aria-label="Tick every task shown"></th>'+th("done","Done")+th("home","Home")+th("task","Task")+th("techs","Techs")+th("people","People",1)+th("time","Time",1)+th("bill","Bill",1)+'</tr></thead><tbody>'+
       list.slice(0,300).map(function(j){ var f=fees[j.id.slice(3)], fa=feeOf(j), tid=j.id.slice(3), tb=S.taskbill[tid], open=!!(S.ui.openTask||{})[tid];
-        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="mono">'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><span style="color:var(--accent);font-weight:600">'+esc(j.title)+'</span>'+(isInsp(j)?' <span class="muted">· inspection / routine — not billed</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
+        return '<tr class="xtr'+(open?' open':'')+'" data-xtask="'+esc(tid)+'" style="cursor:pointer"><td class="bwpk"><input type="checkbox" class="bwsel" data-bwsel="'+esc(tid)+'"'+((S.ui.bwSel||{})[tid]?' checked':'')+' aria-label="Tick this task"></td><td class="mono">'+esc(fmtD(j.finished))+'</td><td>'+propLink(j.prop)+'</td><td><span style="color:var(--accent);font-weight:600">'+esc(j.title)+'</span>'+(isInsp(j)?' <span class="muted">· inspection / routine — not billed</span>':'')+'</td><td>'+esc((j.crew||[]).join(", ")||j.doneByName||"")+'</td><td class="num">'+(j.people||"")+'</td><td class="num">'+(+j.minutes>720?'<span class="pill stop">timer</span>':(j.minutes?(j.minutes>=60?Math.floor(j.minutes/60)+"h ":"")+(j.minutes%60)+"m":""))+'</td>'+
           '<td class="num">'+(tb&&tb.ignored?'<span class="pill">Ignored</span>':tb?'<b>'+money2(taskBillTotal(j,tb))+'</b>'+(function(){ var st=tbState(tid); return st?' <span class="pill '+st.k+'">'+st.t+'</span>':''; })():fa?'<span title="'+esc(f.fees.map(function(x){ return money2(x.amount)+" "+x.what+" ("+x.src+")"; }).join("\n"))+'"><b>'+money2(fa)+'</b></span>':(f&&f.checked?'<span class="muted">none</span>':''))+(tb&&tb.mergedInto?' <span class="pill" title="Billed together with task #'+esc(tb.mergedInto)+'">Combined</span>':'')+'</td></tr>'; }).join("")+
       '</tbody></table></div>'+(list.length>300?'<div class="pad note">Showing the newest 300.</div>':'');
   }
@@ -2802,6 +2804,30 @@ function billingPanel(m,bwDone){
   return h;
 }
 
+/* 2026-11-23 (Brandon): tick several tasks on Completed in Breezeway and do them all at once */
+function bwSelIds(){ var sel=S.ui.bwSel||{}; return Object.keys(sel).filter(function(k){ return sel[k] && D.byId["bw-"+k]; }); }
+function bwBulkBar(){ var n=bwSelIds().length; if(!n) return '';
+  return '<div class="pad" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2">'+
+    '<b>'+n+' ticked</b><button class="btn sm pri" data-bwbulk="ready">✓ Ready for Track</button><button class="btn sm" data-bwbulk="free">Do them for free ($1)</button>'+
+    '<button class="btn sm" data-bwbulk="none">Nothing to bill</button><button class="btn sm ghost" data-bwbulk="clear">Untick all</button>'+
+    '<span class="note">Ready uses each task’s saved bill, or the usual one (time on the task × plan rate) if it was never opened.</span></div>'; }
+function bwBulkDraw(){ var b=$("bwbulk"); if(b) b.innerHTML=bwBulkBar(); }
+document.addEventListener("change",function(ev){ var t=ev.target; if(!t||!t.matches) return;
+  if(t.matches("input.bwsel")){ S.ui.bwSel=S.ui.bwSel||{}; S.ui.bwSel[t.dataset.bwsel]=t.checked; return bwBulkDraw(); }
+  if(t.id==="bwselall"){ S.ui.bwSel=S.ui.bwSel||{}; (S.ui.bwShown||[]).forEach(function(k){ S.ui.bwSel[k]=t.checked; });
+    [].forEach.call(document.querySelectorAll("input.bwsel"),function(c){ c.checked=t.checked; }); return bwBulkDraw(); } });
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-bwbulk]"); if(!b) return; ev.preventDefault(); ev.stopPropagation();
+  var kind=b.dataset.bwbulk, ids=bwSelIds(); if(kind==="clear"){ S.ui.bwSel={}; return render(); } if(!ids.length||!need()) return;
+  var words={ready:"mark "+ids.length+" task"+(ids.length===1?"":"s")+" Ready for Track",free:"bill "+ids.length+" task"+(ids.length===1?"":"s")+" as a $1.00 courtesy",none:"mark "+ids.length+" task"+(ids.length===1?"":"s")+" Nothing to bill"}[kind];
+  Promise.resolve(window.mmConfirm?window.mmConfirm("Do you want to "+words+"?",{yes:"Yes, do it"}):confirm("Do you want to "+words+"?")).then(function(ok){ if(!ok) return;
+    var fees=((S.feeds["bw-fees"]||{}).tasks)||{}, done=0, skip=0;
+    var chain=ids.reduce(function(pr,tid){ return pr.then(function(){ var j=D.byId["bw-"+tid], old=S.taskbill[tid]||{}, st=tbState(tid);
+      if(!j || (st && (st.k==="waiting"||st.k==="done"))){ skip++; return; }
+      var base={prop:j.prop||"", month:(j.finished||"").slice(0,7)}, patch;
+      if(kind==="none") patch=Object.assign(base,{ignored:true,ready:false});
+      else { patch=Object.assign({},taskBillDefaults(j,fees[tid]),old,base,{ignored:false,ready:true,readyBy:S.me,readyAt:Date.now()}); if(kind==="free") patch.billTo="courtesy"; }
+      return put("taskbill",tid,patch,old).then(function(){ done++; }); }); },Promise.resolve());
+    chain.then(function(){ S.ui.bwSel={}; render(); toast(done+" done"+(skip?" · "+skip+" skipped (already sent to Track)":"")); },function(){ render(); toast(done+" done, then one didn't save"); }); }); },true);
 /* ---- one task's bill: open a row, work out the total, send it to Breezeway ---- */
 /* billing: first hour is a full hour, then in half hours (43 min → 1 h, 1 h 10 → 1.5 h) — per tech */
 function billHours(mins){ mins=+mins||0; if(mins<=0) return 0; var h=mins/60; return h<=1?1:Math.ceil(h*2-1e-9)/2; }
@@ -5405,7 +5431,7 @@ document.addEventListener("click",function(ev){
   if(d.chip){ var g=S.ui[d.chip]; if(g[d.k]) delete g[d.k]; else g[d.k]=1; S.ui.sel=""; return render(); }
   if(d.rwin){ S.ui.rwin=+d.rwin; return render(); }
   if(d.bwf){ S.ui.bwf=S.ui.bwf==="missing"?"":"missing"; S.ui.sel=""; return render(); }
-  if(t.closest && t.closest("tr.xtr") && !ev.target.closest("a")){ var xt=t.closest("tr.xtr").dataset.xtask; S.ui.openTask={}; S.ui.openTask[xt]=1; var hp0=$("hpop"); if(hp0) hp0.scrollTop=0; return render(); }
+  if(t.closest && t.closest("tr.xtr") && !ev.target.closest("a") && !ev.target.closest(".bwpk")){ var xt=t.closest("tr.xtr").dataset.xtask; S.ui.openTask={}; S.ui.openTask[xt]=1; var hp0=$("hpop"); if(hp0) hp0.scrollTop=0; return render(); }
   if(d.tbgo){ ev.preventDefault(); S.ui.openTask={}; S.ui.openTask[d.tbgo]=1; render(); var hp1=$("hpop"); if(hp1) hp1.scrollTop=0; return; }
   if(d.tbcombgo){ if(!need()) return; var mt=d.tbcombgo, mj=D.byId["bw-"+mt], picks=Array.prototype.slice.call(document.querySelectorAll("[data-tbcomb]:checked")).map(function(x){ return x.getAttribute("data-tbcomb"); });
     if(!picks.length) return toast("Tick the jobs to combine first");
