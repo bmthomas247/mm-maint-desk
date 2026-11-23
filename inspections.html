@@ -116,7 +116,8 @@ dialog.wide{max-width:760px}
 .ptab{width:100%;border-collapse:collapse;min-width:0} .ptab td,.ptab th{padding:6px;border-bottom:1px solid var(--line);font-size:13px;position:static}
 .ptab select{font:inherit;font-size:13px;border:1px solid var(--line-2);border-radius:8px;padding:4px 6px;background:var(--card);color:var(--ink);max-width:100%}
 .ok{color:var(--forest-2);font-weight:800} .bad{color:var(--red);font-weight:800}
-@media (max-width:640px){ .grid{grid-template-columns:1fr} }
+body.inhub .selbar{margin-right:190px}
+@media (max-width:640px){ .grid{grid-template-columns:1fr} body.inhub .selbar{margin-right:0;bottom:80px} }
 </style>
 </head>
 <body>
@@ -169,7 +170,7 @@ function build(){
     const ds = done[h.home] || [], os = (open[h.home] || []).slice().sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
     const lastI = ds[0] || null;
     const lastVisit = b && b.last ? { day: b.last, what: b.lastWhat } : (lastI ? { day: lastI.day, what: "inspection" } : null);
-    const next = os.find(t => t.date && t.date >= TODAY) || os.find(t => !t.date) || null;
+    const next = os.find(t => t.date && t.date >= TODAY) || null;
     const past = os.filter(t => t.date && t.date < TODAY);
     const stayNow = b && b.stay;
     return { home: h.home, community: h.community || "", beds: h.beds, b, u, rot: (b && b.rot) || [], pick: b && b.pick,
@@ -229,8 +230,8 @@ function render(){
     ${S.tile !== "all" ? `<button class="btn sm" data-tile="all">Show all homes</button>` : ""}
   </div>
   ${S.view === "recent" ? recentView() : S.view === "booked" ? bookedView() : homesView(canAct)}
-  ${S.sel.size && S.view === "homes" ? `<div class="selbar"><b>${S.sel.size} home${S.sel.size === 1 ? "" : "s"} picked</b><span style="opacity:.85;font-size:13px">The hub picks a free day and the best tech for each. You check it, then send.</span>
-    <span style="margin-left:auto;display:flex;gap:6px"><button class="btn" id="selclear">Clear</button><button class="btn go" id="selplan">📋 Plan ${S.sel.size === 1 ? "it" : "them"}</button></span></div>` : ""}
+  ${S.sel.size && S.view === "homes" ? `<div class="selbar"><button class="btn go" id="selplan">📋 Plan ${S.sel.size === 1 ? "it" : "them"}</button><button class="btn" id="selclear">Clear</button>
+    <b>${S.sel.size} home${S.sel.size === 1 ? "" : "s"} picked</b><span style="opacity:.85;font-size:13px">The hub picks a free day and the best tech for each. You check it, then send.</span></div>` : ""}
   <p class="note">Last visit = newest finished Breezeway task of any kind or a Track stay (last 120 days). Inspections = Breezeway's inspection department.
   ${canAct ? "" : S.F.canEdit ? "Scheduling is switched off right now." : "Managers schedule inspections; you can look."}</p>`;
   if(S._qf){ const q = $("#q"); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
