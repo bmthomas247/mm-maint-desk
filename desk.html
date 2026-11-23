@@ -2369,6 +2369,10 @@ function resourcesFor(trs){ return ((S.feeds.vendors||{}).resources||[]).filter(
 function resRow(r){ return '<div class="vcard"><div class="vtop"><h3>'+esc(r.name)+'</h3><span class="tag">'+esc(r.note)+'</span></div>'+
   '<div class="links">'+r.urls.map(function(u){ var href=/^https?:/.test(u)?u:"https://"+u; return '<a class="golink" href="'+esc(href)+'" target="_blank" rel="noopener">'+esc(u.replace(/^https?:\/\/(www\.)?/i,"").slice(0,40))+' ↗</a>'; }).join("")+'</div></div>'; }
 function vendUse(v){ var t=today(); return vendorJobs(v).filter(function(j){ var d=j.finished||j.due||j.when||""; return d && daysBetween(d,t)<=365 && daysBetween(d,t)>=-30; }); }
+// Build list b-vendback (2026-11-23): the phone / browser Back button steps back through Vendors sections (each section = a history step)
+function vSnap(){ return {m:S.ui.vmode||"find",t:S.ui.vtrade||"",c:S.ui.vcat||"Home services",q:S.ui.vq||""}; }
+function vNav(fn){ var was=S.tab==="vendors"; try{ if(was) history.replaceState({vv:vSnap()},"",location.hash); }catch(e){} fn(); try{ if(was) history.pushState({vv:vSnap()},"",location.hash); }catch(e){} }
+window.addEventListener("popstate",function(e){ var v=e.state&&e.state.vv; if(!v||S.tab!=="vendors") return; S.ui.vmode=v.m; S.ui.vtrade=v.t; S.ui.vcat=v.c; S.ui.vq=v.q; render(); window.scrollTo(0,0); });
 function vendorsTop(){ var m=S.ui.vmode||"find";
   return '<div class="chiprow" style="margin-bottom:12px">'+[["find","Find a vendor"],["pref","Preferred vendors"],["rank","Ranked by use"],["used","Vendors used this month"],["changes","Added & removed"]].map(function(c){ return '<button class="chip" data-vmode="'+c[0]+'" aria-pressed="'+(m===c[0])+'">'+c[1]+'</button>'; }).join("")+'</div>'; }
 function vRank(){ var rows=D.vendors.map(function(v){ var js=vendUse(v); return {v:v,n:js.length,last:js[0]?(js[0].finished||js[0].due||js[0].when):""}; }).filter(function(r){ return r.n>0; });
@@ -5553,7 +5557,7 @@ document.addEventListener("click",function(ev){
     return Promise.all(fc.map(function(c){ return S.db.doc("bwq/"+sid("fire_"+c)).set(fireDoc(c)); })).then(function(){ toast(fc.length+" fire safety check task"+(fc.length===1?"":"s")+" queued — the hub sends "+(fc.length===1?"it":"them")+" to Breezeway within 30 minutes"); }); }
   if(d.licask){ return mLicMsg([d.licask]); }
   if(d.licall){ return mLicMsg(d.licall.split(",")); }
-  if(d.vmode){ ev.preventDefault(); S.ui.vmode=d.vmode; if(S.tab!=="vendors") return go("vendors"); return render(); }
+  if(d.vmode){ ev.preventDefault(); if(S.tab!=="vendors"){ S.ui.vmode=d.vmode; return go("vendors"); } vNav(function(){ S.ui.vmode=d.vmode; }); return render(); }
   if(d.firef){ S.ui.fireF=d.firef; return render(); }
   if(d.pfk){ ev.preventDefault(); var pfm=S.ui.pf=S.ui.pf||{}; pfm[d.pfk]=(pfm[d.pfk]===d.pf?"":(d.pf||"")); return render(); }
   if(d.qinfo){ ev.preventDefault(); var rx=new RegExp(d.qinfo,"i"), hit=[].slice.call(document.querySelectorAll("details.infocat")).filter(function(x){ var sm=x.querySelector("summary"); return sm&&rx.test(sm.textContent); });
@@ -5775,7 +5779,7 @@ document.addEventListener("click",function(ev){
     case "newroutine": return mRoutine();
     case "newvendor": return mVendor();
     case "hoafix": S.ui.hoaFix=S.ui.home; closeModal(); render(); setTimeout(function(){ var x=document.getElementById("hoafixbox"); if(x) x.scrollIntoView({block:"center"}); },80); return;
-    case "vback": S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return;
+    case "vback": vNav(function(){ S.ui.vtrade=""; S.ui.vq=""; }); render(); window.scrollTo(0,0); return;
     case "newhome": return mNewHome();
     case "hclose": S.ui.home=""; return render();
     case "tbclose": S.ui.openTask={}; return render();
@@ -5812,8 +5816,8 @@ document.addEventListener("click",function(ev){
     if(v.desk) return put("deskvendors",v.id,{preferred:!v.preferred},S.deskvendors[v.id]);
     return put("vendoredits",sid(v.id),{preferred:!isPref(v)},S.vendoredits[sid(v.id)]); }
   if(d.vcm){ S.ui.vcm=d.vcm; render(); return; }
-  if(d.vcat){ S.ui.vcat=d.vcat; S.ui.vtrade=""; S.ui.vq=""; render(); window.scrollTo(0,0); return; }
-  if(d.vtradepick){ S.ui.vtrade=d.vtradepick; S.ui.vq=""; render(); window.scrollTo(0,0); return; }
+  if(d.vcat){ vNav(function(){ S.ui.vcat=d.vcat; S.ui.vtrade=""; S.ui.vq=""; }); render(); window.scrollTo(0,0); return; }
+  if(d.vtradepick){ vNav(function(){ S.ui.vtrade=d.vtradepick; S.ui.vq=""; }); render(); window.scrollTo(0,0); return; }
   if(d.vtradego){ S.ui.vtrade=d.vtradego; S.ui.vq=""; return go("vendors"); }
   if(d.vfind){ S.ui.vq=d.vfind; S.ui.vtrade=""; return go("vendors"); }
   if(d.vrate){ var pr=d.vrate.split("|"), vv=D.vendors.filter(function(x){return x.id===pr[0];})[0]; if(!vv) return;
@@ -5871,7 +5875,7 @@ document.addEventListener("change",function(ev){
   if(t.id==="jwho"){ S.ui.who=t.value; S.ui.sel=""; return render(); }
   if(t.id==="jven"){ S.ui.vendor=t.value; S.ui.sel=""; return render(); }
   if(t.id==="jold"){ S.ui.hideOld=t.checked; return render(); }
-  if(t.id==="vtrade"){ S.ui.vtrade=t.value; return render(); }
+  if(t.id==="vtrade"){ vNav(function(){ S.ui.vtrade=t.value; }); return render(); }
   if(t.id==="vpref"){ S.ui.prefOnly=t.checked; return render(); }
   if(t.id==="m_prop" && $("m_job")){ $("m_job").innerHTML=jobOptions(t.value.trim(),""); return; }
   if(t.id==="projoffice"){ S.ui.projOffice=t.checked; return render(); }
