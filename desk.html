@@ -2846,6 +2846,8 @@ function bwDoneFor(j){ if(j.bw&&j.bw.t&&j.bw.t.status==="done") return j.bw.t;
   var ids=[]; (j.links||[]).forEach(function(u){ var mm=String(u).match(/breezeway\.io\/(?:task|tasks)\/(\d+)/i)||String(u).match(/[?&]task(?:_id)?=(\d+)/i); if(mm) ids.push(mm[1]); });
   for(var i=0;i<ids.length;i++){ var b=D.byId["bw-"+ids[i]]; if(b&&b.status==="done") return b; }
   if(!j.prop) return null; var d0=Date.parse((j.doneAt?ymd(j.doneAt):(j.updated||"")).slice(0,10)); if(!d0) return null;
+  var alarm=/too (cold|hot)|temperature/i.test(j.title||"")?/heat|thermostat|furnace|temp/i:/battery/i.test(j.title||"")?/batter/i:/gateway|offline/i.test(j.title||"")?/gateway|internet|wifi|restart/i:null;
+  if(alarm) for(var q=0;q<D.jobs.length;q++){ var y=D.jobs[q]; if(y.src==="breezeway"&&y.status==="done"&&y.prop===j.prop&&alarm.test(y.title||"")){ var dy=Date.parse((y.finished||"").slice(0,10)); if(dy&&Math.abs(dy-d0)<=4*864e5) return y; } }
   var w=bwWords(j.title), need=w.length<=2?1:2; if(!w.length) return null;
   for(var k=0;k<D.jobs.length;k++){ var x=D.jobs[k]; if(x.src!=="breezeway"||x.status!=="done"||x.prop!==j.prop) continue;
     var dx=Date.parse((x.finished||"").slice(0,10)); if(!dx||Math.abs(dx-d0)>21*864e5) continue;
