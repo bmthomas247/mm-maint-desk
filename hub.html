@@ -271,6 +271,7 @@ body.pennyonly>*:not(#pennyBox){display:none!important}
 body.pennyonly #pennyBox{display:flex;inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;border:0;resize:none}
 body.pennyonly #pennyBox .ph{cursor:default}
 @media (max-width:820px){ #pennyBtn .plb{display:none} #pennyBtn{padding:8px} }
+#pennyBtn{touch-action:none} #pennyBtn.moved{right:auto;bottom:auto} #pennyBtn.dragging{cursor:grabbing;filter:brightness(1.08)}
 
 /* Reports index, Track-style columns (2026-10-28) */
 .page.wide{max-width:1240px}
@@ -2286,7 +2287,8 @@ function pennyMount(){
       <div id="pennyLog"></div>
       <div id="pennyPicChip"><img alt="Photo to send"><span>Photo ready to send</span><button type="button" class="btn small" id="pennyPicX">Remove</button></div>
       <form id="pennyForm"><button type="button" class="btn small" id="pennyPic" title="Add a photo" aria-label="Add a photo">📷</button><input type="file" id="pennyPicIn" accept="image/*" capture="environment" hidden><textarea id="pennyQ" placeholder="Ask me anything about Moose…" aria-label="Your question"></textarea><button class="btn primary small" style="min-height:44px">Ask</button></form></div>`);
-  $("#pennyBtn").onclick = () => pennyOpen(!PENNY.open);
+  $("#pennyBtn").onclick = () => { if(PENNY.btnDragged){ PENNY.btnDragged = false; return; } pennyOpen(!PENNY.open); };
+  $("#pennyBtn").title = "Ask Penny (drag me to move me out of the way)";
   $("#pennyClose").onclick = () => PENNY.solo ? window.close() : pennyOpen(false);
   $("#pennyPop").onclick = pennyPop;
   pennyGrow(); pennyDrag();
@@ -2324,7 +2326,7 @@ function pennySave(){
 function pennyDrag(){
   const b = $("#pennyBox"), h = b.querySelector(".ph");
   h.addEventListener("pointerdown", e => {
-    if(PENNY.solo || innerWidth <= 820 || e.button !== 0 || e.target.closest("button")) return;
+    if(PENNY.solo || (e.pointerType === "mouse" && e.button !== 0) || e.target.closest("button")) return;
     const r = b.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
     b.classList.add("moved"); b.style.width = r.width + "px"; b.style.height = r.height + "px"; b.style.left = r.left + "px"; b.style.top = r.top + "px";
     h.setPointerCapture(e.pointerId); e.preventDefault();
@@ -2333,7 +2335,54 @@ function pennyDrag(){
     h.addEventListener("pointermove", mv); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
   });
   if(window.ResizeObserver){ let t; new ResizeObserver(() => { if(b.classList.contains("moved")){ clearTimeout(t); t = setTimeout(pennySave, 300); } }).observe(b); }
-  addEventListener("resize", () => { if(PENNY.open) pennyPlace(); });
+  addEventListener("resize", () => { if(PENNY.open) pennyPlace(); pennyBtnPlace(); });
+  pennyBtnDrag();
+}
+/* 2026-11-23 (Brandon): the Ask Penny button can be dragged anywhere so it never covers what you're reading. Tap = open; drag = move.
+   Where it sits is kept on this device (localStorage penny_btn); the hello / nudge bubbles follow it. */
+function pennyBtnPlace(){
+  const b = $("#pennyBtn"); if(!b) return;
+  let p = null; try { p = JSON.parse(localStorage.getItem("penny_btn") || "null"); } catch(e){}
+  if(p && !PENNY.solo){
+    const r = b.getBoundingClientRect();
+    b.classList.add("moved");
+    b.style.left = Math.min(Math.max(p.l, 4), innerWidth - r.width - 4) + "px";
+    b.style.top = Math.min(Math.max(p.t, 4), innerHeight - r.height - 4) + "px";
+  } else { b.classList.remove("moved"); b.style.left = b.style.top = ""; }
+  pennyBubbles();
+}
+function pennyBubbles(){
+  const b = $("#pennyBtn"); if(!b) return; const moved = b.classList.contains("moved"), r = b.getBoundingClientRect();
+  document.querySelectorAll("#pennyHi,#pennyNudge").forEach(x => {
+    if(!moved){ x.style.right = x.style.bottom = x.style.top = ""; return; }
+    x.style.right = Math.max(8, innerWidth - r.right) + "px";
+    if(r.top > innerHeight / 2){ x.style.top = ""; x.style.bottom = (innerHeight - r.top + 10) + "px"; }
+    else { x.style.bottom = ""; x.style.top = (r.bottom + 10) + "px"; }
+  });
+}
+function pennyBtnDrag(){
+  const b = $("#pennyBtn"); if(!b || b.dataset.drag) return; b.dataset.drag = "1";
+  b.addEventListener("pointerdown", e => {
+    if(PENNY.solo || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const r = b.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top, sx = e.clientX, sy = e.clientY;
+    let moving = false;
+    try { b.setPointerCapture(e.pointerId); } catch(err){}
+    const mv = ev => {
+      if(!moving && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 8) return;
+      moving = true; b.classList.add("moved", "dragging");
+      b.style.left = Math.min(Math.max(ev.clientX - dx, 4), innerWidth - r.width - 4) + "px";
+      b.style.top = Math.min(Math.max(ev.clientY - dy, 4), innerHeight - r.height - 4) + "px";
+      pennyBubbles();
+    };
+    const up = () => {
+      b.removeEventListener("pointermove", mv); b.removeEventListener("pointerup", up); b.removeEventListener("pointercancel", up);
+      b.classList.remove("dragging");
+      if(moving){ PENNY.btnDragged = true; setTimeout(() => { PENNY.btnDragged = false; }, 400);
+        const q = b.getBoundingClientRect(); try { localStorage.setItem("penny_btn", JSON.stringify({ l:Math.round(q.left), t:Math.round(q.top) })); } catch(err){} }
+    };
+    b.addEventListener("pointermove", mv); b.addEventListener("pointerup", up); b.addEventListener("pointercancel", up);
+  });
+  pennyBtnPlace();
 }
 /* Pop Penny out into her own small window (sits beside Track, Breezeway, anything). The chat so far goes with her (localStorage, 1 minute). */
 function pennyPop(){
@@ -2625,7 +2674,7 @@ function pennyNudge(){
     if(!n){ document.body.insertAdjacentHTML("beforeend", `<div id="pennyNudge" role="status"></div>`); n = document.getElementById("pennyNudge"); }
     n.innerHTML = `<button class="x" aria-label="Close">✕</button><b>Penny here 👋</b>${(c.heads || []).length ? `⚠️ Heads-up on ${esc(c.home || "this home")} before you book. ` : ""}${left.length ? `${left.length} step${left.length > 1 ? "s" : ""} left on this check list${(c.blockers || []).length ? `, held up by ${esc(c.blockers.join(", "))}` : ""}.` : ""}
       <div class="chips"><button data-go="1">Walk me through it</button><button data-go="0">Not now</button></div>`;
-    n.classList.add("on");
+    n.classList.add("on"); pennyBubbles();
     n.querySelector(".x").onclick = () => n.classList.remove("on");
     n.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { n.classList.remove("on"); if(b.dataset.go === "1"){ pennyOpen(true); pennyAsk("What do I still need to do to finish this check list? Walk me through it step by step."); } });
   }, 1800);
