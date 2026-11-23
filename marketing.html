@@ -163,7 +163,7 @@ async function load(){
 function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`, `<div id="mstats">${statsHtml()}${pullLine()}</div>`];
   if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(findHtml(), campsHtml(), `<h2>⭐ 5-star return renters</h2>`, top, `<h2 id="gst">Guests</h2>` + list); }   // campaigns above the long guest list
-  else if(TAB === "owners") h.push(leadsHtml(), ocampsHtml(), postcardsHtml(), ownersHtml(), campsHtml());
+  else if(TAB === "owners") h.push(hrHtml(), leadsHtml(), ocampsHtml(), postcardsHtml(), ownersHtml(), campsHtml());
   else if(TAB === "general") h.push(placesHtml(), campsHtml());
   else h.push(campsHtml());
   h.push(listsHtml(), boardHtml());
@@ -362,7 +362,10 @@ async function olLoad(){
     const oc = await sb.from("mkt_owner_campaigns").select("*").eq("off", false).order("start_on", { ascending:false });
     OL.camps = oc.error ? null : (oc.data || []);
     const iq = await sb.from("mkt_owner_inquiries").select("*").eq("off", false).order("lead_on", { ascending:false });
-    OL.inq = iq.error ? null : (iq.data || []);   // 2026-11-23: ZPoint landing-page inquiries + QR scans (hub_owner_campaign_history.sql)   // null = hub_owner_campaigns.sql not run yet: campaign parts stay hidden
+    OL.inq = iq.error ? null : (iq.data || []);
+    { const [hl, ht, hs] = await Promise.all([sb.from("mkt_hr_leads").select("*").eq("off", false).order("priority").order("next_due", { ascending:true, nullsFirst:false }).limit(5000),
+        sb.from("mkt_hr_touches").select("*").order("at", { ascending:false }).limit(3000), sb.from("mkt_hr_spend").select("*").eq("off", false).order("day", { ascending:false })]);
+      OL.hr = hl.error ? null : (hl.data || []); OL.hrT = ht.data || []; OL.hrS = hs.data || []; }   // 2026-11-23 home-run campaign (hub_owner_homerun.sql)   // 2026-11-23: ZPoint landing-page inquiries + QR scans (hub_owner_campaign_history.sql)   // null = hub_owner_campaigns.sql not run yet: campaign parts stay hidden
   } catch(e){ OL.err = (e && e.message) || String(e); OL.rows = OL.rows || []; }
 }
 const olOwn = r => ((r.data || {}).owners || []).join(" & ");
@@ -535,6 +538,95 @@ document.addEventListener("click", async e => {
     if(t && t.trim()) await iqSet(x.id, x.status, t.trim()); }
 });
 document.addEventListener("change", e => { const s = e.target.closest("[data-iqst]"); if(s) iqSet(s.dataset.iqst, s.value, ""); });
+/* ---------- 2026-11-23 (Brandon "Yes, build it"): home-run owner campaign (hub_owner_homerun.sql, plan hub_site/OWNER_HOMERUN_RESEARCH.md) ---------- */
+const HR_CAD = [[0,"call","Call. Talk, or leave a short voicemail"],[0,"text","Text if no answer: who we are + the estimator link"],[1,"email","Email: what their home would earn, from our homes in their building"],
+  [2,"call","Call again"],[4,"call","Call (no voicemail)"],[7,"email","Email: a real story from a home near theirs + call"],[10,"video","Short personal video or voicemail"],[14,"call","Call"],[17,"email","Last email: we will stop here, door open"]];
+const HR_MAIL = [[0,"card","Postcard 1 (QR to the estimator)"],[35,"card","Postcard 2 (switcher / new-buyer angle)"],[70,"card","Postcard 3 (last call, book a call)"]];
+const HR_SEG = { warm:"🔥 Warm (ZPoint)", new_buyer:"🏡 New buyer", our_building:"🏢 Our building", switcher:"🔁 Switcher", other:"Other" };
+const HR_ST = { new:"New", working:"Working", talking:"Talking", proposal:"Proposal sent", signed:"Signed", not_now:"Not now", not_interested:"Not interested", dont_contact:"Don't contact" };
+const HR_CLOSED = new Set(["signed","not_now","not_interested","dont_contact"]);
+const HR_CH = { postcards:"Postcards", email:"Email", meta_ads:"Meta ads", google_ads:"Google ads", realtor_referral:"Realtor referral", print:"Print", software:"Software", staff_time:"Staff time", other:"Other" };
+const hrMail = l => !l.phone && !l.email;
+const hrCad = l => hrMail(l) ? HR_MAIL : HR_CAD;
+const hrDue = l => l.next_due && !HR_CLOSED.has(l.status) && new Date(l.next_due) <= new Date();
+const hrAgo = d => { const m = Math.round((Date.now() - new Date(d)) / 60000); return m < 60 ? m + " min" : m < 1440 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " days"; };
+function hrHtml(){
+  if(!OL.hr) return "";
+  const L = OL.hr, f = OL.hrf || "due", q = (OL.hrq || "").toLowerCase();
+  const cnt = fn => L.filter(fn).length;
+  const sets = { due:l => hrDue(l), warm:l => l.segment === "warm" && !HR_CLOSED.has(l.status), new_buyer:l => l.segment === "new_buyer" && !HR_CLOSED.has(l.status),
+    our_building:l => l.segment === "our_building" && !HR_CLOSED.has(l.status), talking:l => l.status === "talking", proposal:l => l.status === "proposal",
+    signed:l => l.status === "signed", closed:l => ["not_now","not_interested","dont_contact"].includes(l.status), all:() => true };
+  const spend = (OL.hrS || []).reduce((n, x) => n + +x.amount, 0), signed = cnt(sets.signed);
+  const tile = (k, l, n, sub) => `<button class="kpi" data-hrf="${k}" style="cursor:pointer;text-align:left;${f === k ? "outline:2px solid var(--moose)" : ""}"><small>${l}</small><b>${n}</b>${sub ? `<small>${sub}</small>` : ""}</button>`;
+  let R = L.filter(sets[f] || sets.due);
+  if(q) R = R.filter(l => [l.name, l.email, l.phone, l.address, l.community, l.near_home, l.why, l.owner_name].join(" ").toLowerCase().includes(q));
+  if(OL.hrMine) R = R.filter(l => (l.owner_name || "") === (window.top && window.top.ME ? window.top.ME.name : ""));
+  const show = OL.hrAll ? R : R.slice(0, 25);
+  const rows = show.map(l => {
+    const cad = hrCad(l), st = cad[l.step], done = HR_CLOSED.has(l.status), late = hrDue(l);
+    const tt = (OL.hrT || []).filter(t => t.lead_id === l.id);
+    const step = done ? `<span class="pill ${l.status === "signed" ? "green" : ""}">${HR_ST[l.status]}${l.signed_home ? " · " + esc(l.signed_home) : ""}</span>`
+      : ["talking","proposal"].includes(l.status) ? `<b>${HR_ST[l.status]}</b> · check back ${l.next_due ? esc(fmtD(l.next_due)) : ""}`
+      : st ? `<b>Step ${l.step + 1} of ${cad.length}:</b> ${esc(st[2])}${l.next_due ? ` · <span class="${late ? "pill red" : ""}">${late ? "due " + hrAgo(l.next_due) + " ago" : "due " + esc(fmtD(l.next_due))}</span>` : ""}` : "Cadence finished";
+    const contact = [l.phone ? `<a href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a> · <a href="sms:${esc(l.phone)}">💬 text</a>` : "", l.email ? `<a href="mailto:${esc(l.email)}">✉️ ${esc(l.email)}</a>` : "",
+      hrMail(l) ? `📬 mail only${l.mailing ? ": " + esc(l.mailing) : ""}` : ""].filter(Boolean).join(" · ");
+    const btn = (k, t) => `<button class="btn small" data-hrt="${l.id}" data-k="${k}">${t}</button>`;
+    const acts = done ? `<button class="btn small" data-hrs="${l.id}" data-k="working">Reopen</button>`
+      : (hrMail(l) ? btn("card", "📬 Card sent") : [l.phone ? btn("call_talked", "📞 Talked") + btn("call_no_answer", "No answer") + btn("voicemail", "Voicemail") + btn("text", "💬 Texted") : "", l.email ? btn("email", "✉️ Emailed") : "", btn("video", "🎥 Video")].join(""))
+        + `<button class="btn small" data-hrt="${l.id}" data-k="proposal">🤝 Proposal</button><button class="btn small primary" data-hrs="${l.id}" data-k="signed">✅ Signed</button>`
+        + `<button class="btn small" data-hrs="${l.id}" data-k="not_interested">Not interested</button><button class="btn small" data-hrs="${l.id}" data-k="dont_contact">Don't contact</button>`
+        + `<button class="btn small" data-hrt="${l.id}" data-k="skip" title="Skip this step">Skip</button>`;
+    return `<div class="box" style="padding:10px 12px;margin:0 0 8px">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="min-width:0"><b style="font-size:15px">${esc(l.name || "(no name)")}</b> <span class="pill">${HR_SEG[l.segment] || l.segment}</span>${l.owner_name ? ` <span class="muted" style="font-size:12px">· ${esc(l.owner_name)}</span>` : ""}
+        <div class="muted" style="font-size:12.5px">${esc(l.why || "")}</div>
+        <div style="font-size:12.5px">${esc([l.address, l.community].filter(Boolean).join(" · "))}</div>
+        <div style="font-size:12.5px;margin-top:2px">${contact}</div></div>
+        <div style="font-size:13px;text-align:right;min-width:220px">${step}</div></div>
+      ${l.note ? `<div class="muted" style="font-size:12px;margin-top:4px">📝 ${esc(l.note)}</div>` : ""}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${acts}<button class="btn small" data-hrn="${l.id}">📝 Note</button>${tt.length ? `<button class="btn small" data-hrh="${l.id}">History (${tt.length})</button>` : ""}</div>
+      ${OL.hrOpen === l.id ? `<div style="font-size:12px;margin-top:6px">${tt.map(t => `<div>${esc(fmtD(t.at))} · <b>${esc(t.kind.replace(/_/g, " "))}</b> · ${esc(t.by_name || "")}${t.note ? " · " + esc(t.note) : ""}</div>`).join("")}</div>` : ""}</div>`; }).join("");
+  const byCh = {}; (OL.hrS || []).forEach(x => byCh[x.channel] = (byCh[x.channel] || 0) + +x.amount);
+  return `<h2>🏆 Home-run owner campaign</h2>
+    <p class="muted">One card per owner and one follow-up plan: call first, then text, email, call (9 steps over 17 days), or 3 postcards for owners we only have a mailing address for. Log every touch with a button and the card moves to its next step and date. Judge it all by cost per signed home (ZPoint Fall 2025 ≈ $2,800).</p>
+    <div class="kpis">${tile("due", "Due now", cnt(sets.due), "call these first")}${tile("warm", "🔥 Warm (ZPoint)", cnt(sets.warm), "asked or scanned before")}${tile("new_buyer", "🏡 New buyers", cnt(sets.new_buyer), "bought in 120 days")}${tile("our_building", "🏢 Our buildings", cnt(sets.our_building), "absentee owners")}${tile("talking", "Talking", cnt(sets.talking))}${tile("proposal", "Proposal sent", cnt(sets.proposal))}${tile("signed", "✅ Signed", signed)}${tile("closed", "Closed", cnt(sets.closed))}${tile("all", "All", L.length)}
+      <div class="kpi"><small>Cost per signed home</small><b>${signed ? "$" + Math.round(spend / signed).toLocaleString() : "—"}</b><small>$${Math.round(spend).toLocaleString()} spent · ${signed} signed</small></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0"><input id="hrq" placeholder="Search name, address, building…" value="${esc(OL.hrq || "")}" style="flex:1;min-width:220px">
+      <label style="font-size:13px"><input type="checkbox" data-hrmine="1" ${OL.hrMine ? "checked" : ""}> Mine only</label></div>
+    ${rows || `<p class="muted">Nobody here. Pick another tile.</p>`}
+    ${R.length > 25 ? `<button class="btn small" data-hrmore="1">${OL.hrAll ? "Show less" : "See all " + R.length}</button>` : ""}
+    <details class="box" style="padding:10px 12px;margin:10px 0"><summary><b>💵 Campaign spend</b> · $${Math.round(spend).toLocaleString()} so far</summary>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0"><input type="date" id="hrsd" value="${today()}"><select id="hrsc">${Object.entries(HR_CH).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+        <input id="hrsa" type="number" min="0" step="0.01" placeholder="Amount $" style="width:120px"><input id="hrsn" placeholder="What it was (e.g. PostGrid drop 1)" style="flex:1;min-width:180px"><button class="btn small primary" data-hrsp="1">Add</button></div>
+      <div style="font-size:13px">${Object.entries(byCh).map(([k, v]) => `${HR_CH[k] || k}: $${Math.round(v).toLocaleString()}`).join(" · ") || "Nothing logged yet."}</div></details>
+    <details class="box" style="padding:10px 12px;margin:0 0 12px"><summary><b>How the follow-up plan works</b></summary>
+      <ol style="font-size:13px">${HR_CAD.map(([d, , t]) => `<li>Day ${d}: ${t}</li>`).join("")}</ol>
+      <p style="font-size:13px">Owners with only a mailing address get 3 postcards (day 0, 35, 70) through 📬 Postcards. A "Talked" or "Proposal" pauses the plan and asks for a check-back in 3 days. Finishing all steps with no answer closes the card as "Not now".</p>
+      <p class="src">Cadence: Vida "Best Outbound Sales Cadence" (Dec 9, 2025), adapted. Plan: hub_site/OWNER_HOMERUN_RESEARCH.md. Warm leads: ZPoint inquiries with what ContactPoint shows happened (export Nov 23, 2026). Owners: county records via RentCast. Skips Hideout/Shoreline and Black Rock Ridge.</p></details>`;
+}
+async function hrTouch(id, k){ let note = "";
+  if(k === "call_talked" || k === "proposal"){ note = await mmAsk(k === "proposal" ? "What did you send them? (optional)" : "What did they say? (optional; never codes or passwords)", { multiline:true, value:"" }); if(note === null) return; }
+  const r = await sb.rpc("mkt_hr_touch", { p_id:+id, p_kind:k, p_note:note || "" }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); }
+async function hrSet(id, st){ let home = "", note = "";
+  if(st === "signed"){ home = await mmAsk("Which home signed? (home code, e.g. PL 406)", { value:"" }); if(!home) return; }
+  if(st === "not_interested" || st === "dont_contact"){ note = await mmAsk("Why? (short)", { value:"" }); if(note === null) return; }
+  const r = await sb.rpc("mkt_hr_set", { p_id:+id, p_status:st, p_owner:null, p_note:note || "", p_next:null, p_home:home || "" }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); }
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-hrf],[data-hrt],[data-hrs],[data-hrn],[data-hrh],[data-hrmore],[data-hrsp]"); if(!b) return;
+  if(b.dataset.hrf){ OL.hrf = OL.hrf === b.dataset.hrf ? "due" : b.dataset.hrf; OL.hrAll = false; return render(); }
+  if(b.dataset.hrmore){ OL.hrAll = !OL.hrAll; return render(); }
+  if(b.dataset.hrh){ OL.hrOpen = OL.hrOpen === +b.dataset.hrh ? null : +b.dataset.hrh; return render(); }
+  if(b.dataset.hrt) return hrTouch(b.dataset.hrt, b.dataset.k);
+  if(b.dataset.hrs) return hrSet(b.dataset.hrs, b.dataset.k);
+  if(b.dataset.hrn){ const t = await mmAsk("Note on this owner (never codes or passwords)", { multiline:true, value:"" }); if(!t || !t.trim()) return;
+    const r = await sb.rpc("mkt_hr_touch", { p_id:+b.dataset.hrn, p_kind:"note", p_note:t.trim() }); if(r.error) return mmAlert(niceE(r.error));
+    await sb.rpc("mkt_hr_set", { p_id:+b.dataset.hrn, p_status:null, p_owner:null, p_note:t.trim(), p_next:null, p_home:"" }); await olLoad(); return render(); }
+  if(b.dataset.hrsp){ const a = +document.getElementById("hrsa").value; if(!(a > 0)) return mmAlert("Type the amount");
+    const r = await sb.rpc("mkt_hr_spend_add", { p_day:document.getElementById("hrsd").value || null, p_channel:document.getElementById("hrsc").value, p_amount:a, p_note:document.getElementById("hrsn").value });
+    if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); }
+});
+document.addEventListener("change", e => { if(e.target.closest("[data-hrmine]")){ OL.hrMine = e.target.checked; render(); } });
+document.addEventListener("input", e => { if(e.target.id === "hrq"){ OL.hrq = e.target.value; clearTimeout(OL.hrqT); OL.hrqT = setTimeout(() => { const p = e.target.selectionStart; render(); const n = document.getElementById("hrq"); if(n){ n.focus(); n.setSelectionRange(p, p); } }, 300); } });
 function ocStart(){
   const n = OL.sel.size, d = document.createElement("dialog"); d.style.cssText = "max-width:600px;width:94vw;border:0;border-radius:14px;padding:18px";
   const t = today(), wd = new Date(t + "T12:00:00Z").getUTCDay(), mon = ocAdd(t, ((8 - wd) % 7) || 7);   // next Monday, like Mar 17 2025
