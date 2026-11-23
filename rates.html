@@ -152,6 +152,7 @@ body{padding-left:0!important}
 #viewnav .tab:hover{background:var(--tealbg)}
 #viewnav .tab.on{background:var(--teal2)!important;color:#fff!important;border-color:var(--teal2)!important;font-weight:600}
 @media (max-width:600px){#viewnav{flex-wrap:nowrap!important;overflow-x:auto!important;padding:8px 10px!important}#viewnav .tab{padding:7px 11px 7px 8px!important;font-size:13px!important}}
+.csest{color:#8a5a00;font-style:italic;border-bottom:1px dotted #c9a227;cursor:help}.csest small{font-style:normal;font-weight:700;background:#fff4d6;border-radius:6px;padding:0 4px;margin-left:2px}
 </style>
 <style id="locksLook">
 /* ===== Locks office look (Brandon 2026-10-30): same palette, font, header, pill tabs, cards and stat tiles as locks-desk.html ===== */
@@ -4289,6 +4290,11 @@ async function csFetch(keep) {
     CS.snap = {}; const codes = (r.data.ours || []).map(o => o.code);
     if (codes.length) { const q1 = await sb.from("hub_price_snap").select("code,day,start_day,rates").in("code", codes).order("day", { ascending: false }).limit(codes.length * 3);
       for (const x of q1.data || []) if (!CS.snap[x.code]) CS.snap[x.code] = x; }
+    // Brandon 2026-11-23: estimated direct-site price for managers whose own site we can't read (rates_direct_factor); page only, never saved as a price
+    CS.mgr = {}; CS.dfac = {};
+    { const ids = [...new Set((c.data || []).concat(n.data || []).map(x => x.comp_id))];
+      const [m1, f1] = await Promise.all([ids.length ? sb.from("comps").select("id,manager_domain").in("id", ids) : { data: [] }, sb.from("rates_direct_factor").select("domain,factor,samples,source").eq("off", false)]);
+      (m1.data || []).forEach(x => { if (x.manager_domain) CS.mgr[x.id] = x.manager_domain; }); (f1.data || []).forEach(x => CS.dfac[x.domain] = x); }
     if (tok !== CS.tok) return;
     (n.data || []).forEach(x => { CS.cal[x.comp_id + "|" + chOf(x.channel)] = x; });
     (n.data || []).forEach(x => csSeen(x.comp_id, chOf(x.channel), x.captured_at));
@@ -4324,6 +4330,9 @@ function csCalc() {
     const o0 = Math.round((new Date(a + "T12:00") - new Date(String(x.start_date).slice(0, 10) + "T12:00")) / 864e5), n0 = Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5) + 1;
     const av = String(x.avail || ""); let bk = 0, seen = 0; for (let i = 0; i < n0; i++) { const o = av[o0 + i]; if (o === undefined) continue; seen++; if (o === "0") bk++; }
     if (seen) (CS.bk[id] ||= {}).All = bk / seen; }
+  // Direct estimate: no real direct price, manager has a factor -> Airbnb asking x factor, marked est (never used by pricing)
+  for (const [id, dom] of Object.entries(CS.mgr || {})) { const f = (CS.dfac || {})[dom], A0 = (CS.ask[id] || {}).Airbnb;
+    if (f && A0 && !(CS.ask[id] || {}).Direct) CS.ask[id].Direct = { v: A0.v * +f.factor, est: true, why: `ESTIMATE: Airbnb ${"$" + Math.round(A0.v)} x ${f.factor} (${dom} direct vs Airbnb, ${f.samples} hand-checked sample${f.samples > 1 ? "s" : ""}: ${f.source})` }; }
   const by = {};   // guest checkout total per night: quotes whose check-in is in the dates (2-4 nights when there are any)
   for (const x of CS.ckr || []) {
     if (!(+x.total > 0 && +x.nights > 0) || x.check_in < a || x.check_in > b) continue;
@@ -4440,7 +4449,7 @@ function csDraw() {
       <td>${pcEsc(x.label)}<br>${csLogos(x.id, x.links)}${x.added ? `<br><small class="muted">added ${pcEsc(x.added)}</small>` : ""}</td>
       <td>${x.nbhd || x.city ? pcEsc(x.nbhd || x.city) : NA}${x.miles != null ? `<br><small class="${x.miles > 0.2 ? "csbad" : "muted"}" title="miles from the middle of our homes in this set">${x.miles} mi</small>` : ""}</td>
       <td>${x.bedrooms ?? NA}</td><td>${sleepsTxt(x)}</td><td>${x.baths ?? NA}</td>
-      <td>${a ? money(a.v) : NA}</td><td>${tt ? money(tt.v) + ` <small class="muted">(${tt.n})</small>` : NA}</td>
+      <td>${a ? (a.est ? `<span class="csest" title="${pcEsc(a.why)}">~${money(a.v)} <small>est.</small></span>` : money(a.v)) : NA}</td><td>${tt ? money(tt.v) + ` <small class="muted">(${tt.n})</small>` : NA}</td>
       <td>${ok ? money(x.adr12) : NA}</td><td>${ok && x.occ12 != null ? Math.round(x.occ12 * 100) + "%" : NA}</td>
       <td>${x.last_booked ? new Date(x.last_booked + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : NA}</td>
       <td>${ok && x.rating != null ? x.rating + (x.reviews ? ` <small class="muted">(${x.reviews})</small>` : "") : NA}</td><td class="csact">${act(x)}</td></tr>`; }).join("")}
@@ -4533,7 +4542,7 @@ function csSide(d) {
     <tr class="cssub"><th>Home</th>${S.map(() => "<th>Asking</th><th>Guest pays</th>").join("")}<th>Airbnb</th><th>Vrbo</th></tr>`;
   const ours = d.ours.map(h => { const id = h.comp_id;
     return `<tr${CS.hl === h.code ? ' class="cshl1"' : ""}><td><b>${pcEsc(h.code)}</b></td>${S.map(([c]) => cell(CS.ask, id, c) + cell(CS.tot, id, c)).join("")}<td>${pc(g(CS.tot, id, "Airbnb"), g(CS.tot, id, "Direct"))}</td><td>${pc(g(CS.tot, id, "VRBO"), g(CS.tot, id, "Direct"))}</td></tr>`; }).join("");
-  const cm = c => [mid(inuse.map(x => g(CS.ask, x.id, c))), mid(inuse.map(x => g(CS.tot, x.id, c)))];
+  const cm = c => [mid(inuse.filter(x => !(CS.ask[x.id] || {})[c]?.est).map(x => g(CS.ask, x.id, c))), mid(inuse.map(x => g(CS.tot, x.id, c)))];   // estimates left out
   const om = c => [mid(d.ours.map(h => g(CS.ask, h.comp_id, c))), mid(d.ours.map(h => g(CS.tot, h.comp_id, c)))];
   const crow = `<tr class="cstot"><td><b>Comps</b> <small class="muted">(${inuse.length} in use, middle)</small></td>${S.map(([c]) => cm(c).map(v => `<td>${m(v)}</td>`).join("")).join("")}<td>${pc(cm("Airbnb")[1], cm("Direct")[1])}</td><td>${pc(cm("VRBO")[1], cm("Direct")[1])}</td></tr>`;
   const orow = d.ours.length > 1 ? `<tr class="cstot csours"><td><span class="csourlbl"><img src="moose-logo.png" alt="Moose Management"><b>Our homes</b> <small class="muted">(middle)</small></span></td>${S.map(([c]) => om(c).map(v => `<td>${m(v)}</td>`).join("")).join("")}<td>${pc(om("Airbnb")[1], om("Direct")[1])}</td><td>${pc(om("VRBO")[1], om("Direct")[1])}</td></tr>` : "";
