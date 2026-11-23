@@ -399,7 +399,7 @@ async function cpDraw(){
     ${pipes.length ? `<div class="sec">Pipelines in ContactPoint (preview ${esc(fmtDT(pv.finished_at))})</div>
       <p class="muted" style="margin:0">${pv.stats.email_matches || 0} of these emails are already leads here; ${pv.stats.already_copied || 0} cards were copied before.</p>
       <div class="tw"><table class="list"><thead><tr><th></th><th>Pipeline</th><th>Cards</th><th>Open</th><th>Won</th><th>Lost / abandoned</th><th>With email</th></tr></thead><tbody>
-      ${pipes.map(p => `<tr style="cursor:default"><td><input type="checkbox" data-pipe="${esc(p.id)}" data-n="${p.total}"${ticked.size ? (ticked.has(p.id) ? " checked" : "") : (/owner|drip/i.test(p.name) ? " checked" : "")}></td>
+      ${pipes.map(p => `<tr style="cursor:default"><td><input type="checkbox" data-pipe="${esc(p.id)}" data-n="${p.total}"${ticked.size ? (ticked.has(p.id) ? " checked" : "") : (/owner|drip/i.test(p.name) && !/current/i.test(p.name) ? " checked" : "")}></td>
         <td><b>${esc(p.name)}</b><details><summary class="lbl">stages</summary>${(p.stages || []).map(s => `<div class="lbl">${esc(s.name)}: ${s.all || 0} → ${esc((S.st[s.hub] || {}).label || s.hub)}</div>`).join("")}</details></td>
         <td>${p.total}</td><td>${sum(p, "open")}</td><td>${sum(p, "won")}</td><td>${sum(p, "lost") + sum(p, "abandoned")}</td><td>${p.with_email}</td></tr>`).join("")}</tbody></table></div>` : ""}
     <div class="chips" style="margin-top:12px"><button class="btn" id="cppre"${going ? " disabled" : ""}>${pipes.length ? "Run the preview again" : "Run a preview (counts only)"}</button>
