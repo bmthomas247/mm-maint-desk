@@ -2549,8 +2549,10 @@ function vRepeats(){
 /* ================= MONEY ================= */
 function monthRows(coll,m){ return Object.keys(S[coll]).map(function(k){ return Object.assign({id:k},S[coll][k]); })
   .filter(function(e){ return !e.deleted && (e.date||"").slice(0,7)===m; }).sort(function(a,b){ return (b.date||"").localeCompare(a.date||""); }); }
-function bars(obj,fmt){ var ks=Object.keys(obj).sort(function(a,b){ return obj[b]-obj[a]; }); var mx=obj[ks[0]]||1;
-  return ks.length?'<div class="bars">'+ks.map(function(k){ return '<div class="brow"><span title="'+esc(k)+'" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(k)+'</span><span class="btrack"><i style="width:'+(obj[k]/mx*100)+'%"></i></span><span class="v">'+fmt(obj[k])+'</span></div>'; }).join("")+'</div>':'<div class="note">Nothing yet this month.</div>'; }
+function bars(obj,fmt,more){ var ks=Object.keys(obj).sort(function(a,b){ return obj[b]-obj[a]; }); var mx=obj[ks[0]]||1, all=ks.length, open=!more||(S.ui.barsMore||{})[more];
+  var btn=more&&all>5?'<div style="text-align:center;margin-top:8px"><button class="btn sm" data-barsmore="'+more+'">'+(open?'Show fewer':'See '+(all-5)+' more')+'</button></div>':''; if(!open) ks=ks.slice(0,5);
+  return ks.length?'<div class="bars">'+ks.map(function(k){ return '<div class="brow"><span title="'+esc(k)+'" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(k)+'</span><span class="btrack"><i style="width:'+(obj[k]/mx*100)+'%"></i></span><span class="v">'+fmt(obj[k])+'</span></div>'; }).join("")+'</div>'+btn:'<div class="note">Nothing yet this month.</div>'; }
+document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-barsmore]"); if(!b) return; ev.preventDefault(); ev.stopPropagation(); S.ui.barsMore=S.ui.barsMore||{}; S.ui.barsMore[b.dataset.barsmore]=!S.ui.barsMore[b.dataset.barsmore]; render(); },true);
 function vMoney(){
   var m=S.ui.month, R=rates(), ex=monthRows("expenses",m), tm=monthRows("time",m);
   var tot=ex.reduce(function(a,e){return a+(+e.amount||0);},0);
@@ -2595,7 +2597,7 @@ function vMoney(){
       '<div class="empty">No expenses logged for this month. Add receipts as they come in — every line wants a home and, if there is one, the job.</div>')+'</section>';
   G.exp+='<div style="display:flex;flex-direction:column;gap:14px"><section class="panel"><div class="ph"><h3>By category</h3></div><div class="pad">'+bars(byCat,money)+
     (budget?'<div class="note" style="margin-top:8px">Budget by category: '+Object.keys(R.budget).filter(function(k){return +R.budget[k];}).map(function(k){ return esc(k)+' '+money((byCat[k]||0))+' / '+money(R.budget[k]); }).join(" · ")+'</div>':'')+'</div></section>'+
-    '<section class="panel"><div class="ph"><h3>By home</h3></div><div class="pad">'+bars(byProp,money)+'</div></section></div></div>';
+    '<section class="panel"><div class="ph"><h3>By home</h3></div><div class="pad">'+bars(byProp,money,"home")+'</div></section></div></div>';
   // crew
   var names=Object.keys(per).sort(function(a,b){ return (per[b].allMin||0)-(per[a].allMin||0); });
   G.crew+='<section class="panel" style="margin-top:14px"><div class="ph"><h3>Crew cost vs work done</h3><span class="ct">'+esc(new Date(m+"-15").toLocaleDateString(undefined,{month:"long"}))+'</span></div>';
