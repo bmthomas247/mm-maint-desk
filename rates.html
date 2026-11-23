@@ -1861,12 +1861,13 @@ const srReadSeasons = () => [...document.querySelectorAll("[data-ms]")].map(r =>
 // Holiday minimum stays by bedroom size + days out (Brandon 2026-11-10; our Track guest stays Nov 2023 - Nov 2026).
 // Columns = 90+ days out, 31-89, 15-30, 8-14, 0-7. Rows: s = studio/1BR, m = 2-3BR, b = 4BR+.
 const SR_HOLMIN = {
-  xmas: { name: "Christmas / New Year's", s: [5, 4, 4, 3, 2], m: [5, 5, 4, 4, 3], b: [6, 5, 5, 4, 3] },
-  thx:  { name: "Thanksgiving",           s: [2, 2, 2, 2, 2], m: [3, 3, 3, 3, 3], b: [4, 4, 4, 3, 3] }, /* smaller homes lower: family stays split across homes (Brandon 2026-11-10) */
+  /* Brandon 2026-11-23: a 5-night minimum blocked about a third of our 2-3BR and a quarter of our 4+BR Christmas/NY stays (Track 2023-25);
+     studios 3, 2BR+ 4 then 3 inside two weeks. Thanksgiving = no holiday minimum (Kim), so it uses the everyday table. Same as Kolleen's ask (Freshdesk #108623). */
+  xmas: { name: "Christmas / New Year's", s: [3, 3, 3, 3, 3], m: [4, 4, 4, 3, 3], b: [4, 4, 4, 3, 3] },
   mlk:  { name: "MLK weekend",            s: [3, 3, 3, 3, 2], m: [3, 3, 3, 3, 2], b: [3, 3, 3, 3, 2] },
   pres: { name: "Presidents Day",         s: [3, 3, 3, 3, 2], m: [4, 4, 3, 3, 3], b: [4, 4, 3, 3, 3] } };
 function srHolMin(k, out) { const md = k.slice(5), pk = (typeof peakOf === "function" && peakOf(k)) || "";
-  const key = (md >= "12-20" || md <= "01-02") ? "xmas" : /Thanksgiving/i.test(pk) ? "thx" : /MLK/i.test(pk) ? "mlk" : /Presidents/i.test(pk) ? "pres" : null;
+  const key = (md >= "12-20" || md <= "01-02") ? "xmas" : /MLK/i.test(pk) ? "mlk" : /Presidents/i.test(pk) ? "pres" : null;
   if (!key) return null; const b = srBeds(), row = SR_HOLMIN[key][b <= 1 ? "s" : b <= 3 ? "m" : "b"];
   const i = out >= 90 ? 0 : out >= 31 ? 1 : out >= 15 ? 2 : out >= 8 ? 3 : 4;
   return { m: row[i], why: `${SR_HOLMIN[key].name}, ${b <= 1 ? "studio/1BR" : b <= 3 ? "2-3BR" : "4BR+"}, ${out} days out` }; }
