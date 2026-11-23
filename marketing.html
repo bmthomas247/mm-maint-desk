@@ -9,7 +9,7 @@
 <link rel="icon" href="moose-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
 <!-- Advertising / marketing desk (hub key 'advertising'; hub_marketing.sql). Tabs (?tab=): guest · owners · realtor · general.
      Guest = 5-star return renters (mkt_rr, rebuilt nightly by mkt_return_renters.py from Track reviews + stays + Brevo lists).
      Every tab has a plan board (mkt_ideas, never deleted). Access is enforced in Supabase (hub_can('advertising')). -->
@@ -663,7 +663,7 @@ function ocStart(){
 function postcardsHtml(){
   const by = {}; OL.items.forEach(i => (by[i.batch_id] = by[i.batch_id] || []).push(i));
   const B = OL.batches.filter(b => b.status !== "cancelled");
-  return `<h2>📬 Postcards</h2><p class="muted">Each batch is a list of owners with a short code per card. Download the address list for the printer (Thanks.io, PostGrid or Lob), then mark it mailed. The QR link on each card logs the scan and opens our Revenue Estimator.</p>
+  return `<h2>📬 Postcards</h2><p class="muted">Each batch is a list of owners with a short code per card. Two kinds: 📬 a jumbo 6x11 postcard on heavy glossy card (Lob) for the wider list, or ✍️ a hand-written card in a real envelope, written with a real pen (Handwrytten) for warm owners. Or download the address list for another printer and mark it mailed. The QR link on each card logs the scan and opens our Revenue Estimator.</p>
     ${B.length ? `<div class="box"><table><thead><tr><th>Batch</th><th>Cards</th><th>Status</th><th>Scans</th><th></th></tr></thead><tbody>
       ${B.map(b => { const its = by[b.id] || [], sc = its.reduce((n, i) => n + (OL.scans[i.code] || 0), 0), who = its.filter(i => OL.scans[i.code]).length;
         return `<tr><td><b>${esc(b.name)}</b>${b.drop_on ? ` ${ocDropPill(b)}` : ""}<div class="muted" style="font-size:12px">${esc(b.created_name || "")} · ${esc(fmtD(b.created_at))}</div>${b.card ? `<div style="font-size:12.5px;margin-top:3px">${esc(b.card).slice(0, 220)}</div>` : ""}</td>
@@ -672,32 +672,69 @@ function postcardsHtml(){
           <td>${sc ? `<b>${sc}</b> <span class="muted">(${who} owner${who === 1 ? "" : "s"})</span>` : `<span class="muted">0</span>`}</td>
           <td style="white-space:nowrap">${pcSendBtns(b, its)}<button class="btn small" data-pccsv="${b.id}">⬇ Address list</button> ${b.status !== "mailed" ? `<button class="btn small" data-pcmail="${b.id}">✓ Mark mailed</button> <button class="btn small" data-pccancel="${b.id}">Cancel</button>` : ""}</td></tr>`; }).join("")}</tbody></table></div>`
       : `<p class="muted">No postcard batches yet. Tick owners in Owner leads above, then press 📬 Make a postcard batch.</p>`}
-    ${OL.mode && OL.mode.test ? `<p class="muted" style="font-size:12.5px">📮 <b>Mail through PostGrid:</b> 🎨 design the card, 👀 make a test preview (a PDF of the real card, never printed), then 📮 Mail them. PostGrid prints and mails each card First Class (about $0.90 a card, from postgrid.com/pricing-print-mail, 2026-11-23). ${OL.mode.live ? "" : "Mailing real cards isn't switched on yet: previews only."}</p>` : ""}
+    ${OL.mode && OL.mode.test ? `<p class="muted" style="font-size:12.5px">📮 <b>Mail from the hub:</b> 🎨 Card design (pick postcard or hand-written), 👀 look at a test (postcard = a PDF proof from Lob, never printed; hand-written = the message for the first owner), then 📮 Send them. Lob prints and mails 6x11 postcards First Class; Handwrytten writes each card with a pen and mails it in an envelope. Each company bills its own price. ${OL.mode.live ? "" : "Sending real cards isn't switched on yet: tests only."}</p>` : ""}
     <p class="src">The address list has name, address lines, city, state, ZIP, the card's code and its QR link. Most printers can print a different QR per card from a column; if yours can't, print the code in words ("Visit vacationrentalsparkcity.com/revenue-estimator") and nothing is tracked.</p>`;
 }
 const PC_DEF = { h:"What could your Park City home earn?",
   b:"We're Moose Management, a local Park City team that manages vacation rentals in your neighborhood.\n\nCurious what your home could earn as a nightly rental? Scan the code for a free estimate, or give us a call. No pressure, just good numbers." };
 function pcSendBtns(b, its){ if(!OL.mode || !OL.mode.test || b.status === "cancelled") return "";
   const done = its.filter(i => i.pg_live && i.pg_id).length, badL = its.filter(i => i.pg_error && !i.pg_live), bad = badL.length;
-  if(b.send_status === "sending") return `<span class="pill amber">mailing… ${done} of ${its.length}</span> `;
-  if(b.send_status === "sent" || b.send_status === "partial") return `<span class="pill green">📮 ${done} mailed by PostGrid</span>${bad ? ` <span class="pill red" title="${esc(badL.map(i => i.code + ": " + i.pg_error).join("\n"))}">${bad} failed</span>` : ""}${bad && OL.mode.live ? ` <button class="btn small" data-pclive="${b.id}">Try the failed ones again</button>` : ""} `;
+  if(b.send_status === "sending") return `<span class="pill amber">sending… ${done} of ${its.length}</span> `;
+  const hwB = b.format === "handwritten", hasD = hwB ? !!b.hw_message : !!b.headline;
+  if(b.send_status === "sent" || b.send_status === "partial") return `<span class="pill green">📮 ${done} sent by ${esc(b.printer || (b.format === "handwritten" ? "Handwrytten" : "Lob"))}</span>${bad ? ` <span class="pill red" title="${esc(badL.map(i => i.code + ": " + i.pg_error).join("\n"))}">${bad} failed</span>` : ""}${bad && OL.mode.live ? ` <button class="btn small" data-pclive="${b.id}">Try the failed ones again</button>` : ""} `;
   const fresh = b.preview_at && (!b.design_at || b.preview_at >= b.design_at);
-  return `<button class="btn small" data-pcdesign="${b.id}">🎨 Card design</button> ${b.headline ? `<button class="btn small" data-pcprev="${b.id}">👀 Test preview</button> ` : ""}${b.preview_url && fresh ? `<a class="btn small" href="${esc(b.preview_url)}" target="_blank" rel="noopener">Open preview</a> ` : ""}${OL.mode.live && fresh && b.status !== "mailed" ? `<button class="btn primary small" data-pclive="${b.id}">📮 Mail ${its.length}</button> ` : ""}`; }
+  return `<button class="btn small" data-pcdesign="${b.id}">🎨 Card design</button> ${hasD ? `<span class="pill">${hwB ? "✍️ hand-written" : "📬 6x11 postcard"}</span> <button class="btn small" data-pcprev="${b.id}">👀 ${hwB ? "Look at the card" : "Test preview"}</button> ` : ""}${!hwB && b.preview_url && fresh ? `<a class="btn small" href="${esc(b.preview_url)}" target="_blank" rel="noopener">Open preview</a> ` : ""}${OL.mode.live && fresh && b.status !== "mailed" ? `<button class="btn primary small" data-pclive="${b.id}">📮 Send ${its.length}</button> ` : ""}`; }
+const PC_HW_DEF = "I'm with Moose Management, the local team that looks after vacation rentals in your neighborhood. If you've ever wondered what your home could earn as a nightly rental, I'd be glad to put together real numbers for you.\n\nSee your estimate at {link} or call me at 435-714-6544.\n\nThanks, and happy holidays!\nThe Moose Management team";
+let PC_OPTS = null;
+async function pcOpts(){ if(PC_OPTS && PC_OPTS.ok) return PC_OPTS; PC_OPTS = await pcCall("options"); return PC_OPTS; }
+function pcHwText(m, first, code){ return `Hi ${first || "neighbor"},\n\n` + String(m || "").replace(/\{first\}/gi, first || "neighbor").replace(/\{link\}/gi, "crew.moosemanagement.com/go?c=" + (code || "AB12CD")); }
+function pcHwBox(text){ return `<div style="background:#fffdf6;border:1px solid #e6dcc3;border-radius:6px;padding:14px 18px;font-family:Caveat,'Segoe Print',cursive;font-size:22px;line-height:1.25;color:#1c2f5e;white-space:pre-wrap;max-height:320px;overflow:auto">${esc(text)}</div>`; }
 function pcDesign(b){ return new Promise(res => {
-  const d = document.createElement("dialog"); d.style.cssText = "max-width:560px;width:94vw;border:0;border-radius:14px;padding:18px";
+  const d = document.createElement("dialog"); d.style.cssText = "max-width:640px;width:94vw;border:0;border-radius:14px;padding:18px";
+  let fmt = b.format === "handwritten" ? "hw" : "pc";
   d.innerHTML = `<h3 style="margin:0 0 8px">🎨 Card design · ${esc(b.name)}</h3>
-    <label>Headline on the front (big, over the photo)<input id="pch" maxlength="80" value="${esc(b.headline || PC_DEF.h)}"></label>
-    <label style="display:block;margin-top:8px">Front photo link (https://, blank = Main Street in winter)<input id="pcf" value="${esc(b.front_img || "")}" placeholder="https://…"></label>
-    <label style="display:block;margin-top:8px">Words on the back (the hub adds "Hi first name," on top and the QR code + phone under it)<textarea id="pcb" rows="6" maxlength="600">${esc(b.back_text || PC_DEF.b)}</textarea></label>
-    <p class="muted" style="font-size:12px">Keep it short: about 70 words fit. Changing the design means making a new test preview before mailing.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn small" data-f="pc">📬 Jumbo postcard 6x11 (Lob)</button><button class="btn small" data-f="hw">✍️ Hand-written card (Handwrytten)</button></div>
+    <div id="pcpc">
+      <label>Headline on the front (big, over the photo)<input id="pch" maxlength="80" value="${esc(b.headline || PC_DEF.h)}"></label>
+      <label style="display:block;margin-top:8px">Front photo link (https://, blank = Main Street in winter)<input id="pcf" value="${esc(b.front_img || "")}" placeholder="https://…"></label>
+      <label style="display:block;margin-top:8px">Words on the back (the hub adds "Hi first name," on top and the QR code + phone under it)<textarea id="pcb" rows="6" maxlength="600">${esc(b.back_text || PC_DEF.b)}</textarea></label>
+      <p class="muted" style="font-size:12px">About 110 words fit on the 6x11 back. Our return address and the "No more mail?" line print at the top; the bottom right is left for the address and stamp.</p></div>
+    <div id="pchw" style="display:none">
+      <div id="pchwo" class="muted" style="font-size:12.5px">Loading Handwrytten's cards…</div>
+      <label style="display:block;margin-top:8px">Message (written by pen; the hub adds "Hi first name," on top. {first} = their first name, {link} = their own short link that counts the visit)<textarea id="pchm" rows="8" maxlength="900">${esc(b.hw_message || PC_HW_DEF)}</textarea></label>
+      <div class="muted" style="font-size:12px;margin:4px 0" id="pchc"></div>
+      <div id="pchp"></div></div>
+    <p class="muted" style="font-size:12px">Changing the design means looking at a new test before sending.</p>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Save design</button></div>`;
   document.body.appendChild(d); d.showModal();
-  d.addEventListener("click", e => { const x = e.target.closest("[data-x]"); if(!x) return;
-    const v = x.dataset.x === "1" ? { h:d.querySelector("#pch").value, f:d.querySelector("#pcf").value, b:d.querySelector("#pcb").value } : null;
+  const q = s => d.querySelector(s);
+  const card = () => { const o = PC_OPTS && PC_OPTS.cards || [], id = +(q("#pchcard") || {}).value; return o.find(x => x.id === id); };
+  const upd = () => { const t = pcHwText(q("#pchm").value, "Mary", "AB12CD"), c = card(), lim = c && c.chars;
+    q("#pchc").innerHTML = `${t.length} characters${lim ? ` of about ${lim} that fit on "${esc(c.name)}"` : ""}${lim && t.length > lim ? ` <b style="color:#b42318">· too long, shorten it</b>` : ""}`;
+    q("#pchp").innerHTML = `<div class="muted" style="font-size:12px;margin:6px 0 4px">How it reads for an owner named Mary:</div>` + pcHwBox(t); };
+  const show = async () => { d.querySelectorAll("[data-f]").forEach(x => x.classList.toggle("primary", x.dataset.f === fmt));
+    q("#pcpc").style.display = fmt === "pc" ? "" : "none"; q("#pchw").style.display = fmt === "hw" ? "" : "none";
+    if(fmt !== "hw") return; upd();
+    if(!q("#pchcard")){ const o = await pcOpts();
+      if(!o || !o.ok){ q("#pchwo").innerHTML = `<b style="color:#b42318">${esc((o && o.error) || "Couldn't reach Handwrytten")}</b>`; return; }
+      const cards = (o.cards || []).slice().sort((a, b2) => (b2.custom - a.custom) || String(a.name).localeCompare(String(b2.name)));
+      q("#pchwo").innerHTML = `${o.test_mode ? `<div class="pill amber" style="margin-bottom:6px">Handwrytten account is in TEST mode: orders are taken but nothing is written or mailed.</div>` : ""}
+        <label>Card<select id="pchcard">${cards.map(c => `<option value="${c.id}" ${c.id === b.hw_card_id ? "selected" : ""}>${esc(c.name)}${c.custom ? " (ours)" : ""}${c.chars ? ` · ~${c.chars} characters` : ""}</option>`).join("")}</select></label>
+        <label style="display:block;margin-top:8px">Handwriting style<select id="pchfont">${(o.fonts || []).map(f => `<option ${f.label === b.hw_font ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>`;
+      q("#pchcard").addEventListener("change", upd); upd(); } };
+  q("#pchm").addEventListener("input", upd); show();
+  d.addEventListener("click", e => { const f = e.target.closest("[data-f]"); if(f){ fmt = f.dataset.f; show(); return; }
+    const x = e.target.closest("[data-x]"); if(!x) return;
+    let v = null;
+    if(x.dataset.x === "1"){
+      if(fmt === "pc") v = { fmt:"pc", h:q("#pch").value, f:q("#pcf").value, b:q("#pcb").value };
+      else { const c = card(), fo = q("#pchfont"); if(!c || !fo || !fo.value){ mmAlert("Pick a card and a handwriting style first."); return; }
+        v = { fmt:"hw", card:c.id, cardName:c.name, chars:c.chars, font:fo.value, m:q("#pchm").value }; } }
     d.close(); d.parentNode.removeChild(d); res(v); }); }); }
 async function pcCall(action, batch){
   const { data:{ session } } = await sb.auth.getSession();
-  const r = await fetch(C.url + "/functions/v1/postcard-send", { method:"POST", headers:{ "content-type":"application/json", apikey:C.anonKey, authorization:"Bearer " + (session && session.access_token) }, body:JSON.stringify({ action, batch }) });
+  const r = await fetch(C.url + "/functions/v1/postcard-send", { method:"POST", headers:{ "content-type":"application/json", apikey:C.anonKey, authorization:"Bearer " + (session && session.access_token) }, body:JSON.stringify(batch == null ? { action } : { action, batch }) });
   return await r.json().catch(() => ({ ok:false, error:"No answer from the hub (" + r.status + ")" })); }
 let PC_POLL = 0;
 function pcPoll(){ clearTimeout(PC_POLL); if(OL.batches.some(b => b.send_status === "sending")) PC_POLL = setTimeout(async () => { if(TAB !== "owners") return; await olLoad(); render(); pcPoll(); }, 5000); }
@@ -746,13 +783,20 @@ document.addEventListener("click", async e => {
     const r = await sb.rpc("mkt_postcard_set", { p_batch:id, p_status:"mailed", p_mailed:day, p_printer:printer || null, p_cost:cost });
     if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
   if(b.dataset.pcdesign){ const bt = OL.batches.find(x => x.id === +b.dataset.pcdesign); const v = await pcDesign(bt); if(!v) return;
-    const r = await sb.rpc("mkt_postcard_design", { p_batch:bt.id, p_front:v.f, p_headline:v.h, p_back:v.b }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
+    const r = v.fmt === "hw" ? await sb.rpc("mkt_postcard_hw_design", { p_batch:bt.id, p_card:v.card, p_card_name:v.cardName, p_card_chars:v.chars || null, p_font:v.font, p_message:v.m })
+      : await sb.rpc("mkt_postcard_design", { p_batch:bt.id, p_front:v.f, p_headline:v.h, p_back:v.b }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
   if(b.dataset.pcprev){ b.disabled = true; b.textContent = "Making the preview…"; const r = await pcCall("preview", +b.dataset.pcprev);
     if(!r.ok){ await mmAlert(r.error || "Couldn't make the preview"); await olLoad(); render(); return; }
-    if(r.url) window.open(r.url, "_blank", "noopener"); else await mmAlert(r.note || "PostGrid is still making the preview.");
+    if(r.handwritten){ const d = document.createElement("dialog"); d.style.cssText = "max-width:560px;width:94vw;border:0;border-radius:14px;padding:18px";
+      d.innerHTML = `<h3 style="margin:0 0 8px">✍️ The card for owner ${esc(r.card)}</h3>${r.test_mode ? `<div class="pill amber" style="margin-bottom:8px">Handwrytten account is in TEST mode: nothing is written or mailed.</div>` : ""}${pcHwBox(r.text)}
+        <p class="muted" style="font-size:12px">Handwrytten writes this with a real pen on the card you picked and mails it in an envelope. Each owner gets their own first name and short link.</p><div style="text-align:right"><button class="btn primary" data-x>Looks good</button></div>`;
+      document.body.appendChild(d); d.showModal(); await new Promise(ok => d.querySelector("[data-x]").addEventListener("click", ok)); d.close(); d.remove(); }
+    else if(r.url) window.open(r.url, "_blank", "noopener"); else await mmAlert(r.note || "Lob is still making the proof.");
     await olLoad(); render(); return; }
   if(b.dataset.pclive){ const id = +b.dataset.pclive, bt = OL.batches.find(x => x.id === id), n = OL.items.filter(i => i.batch_id === id && !(i.pg_live && i.pg_id)).length;
-    if(!await mmConfirm(`Mail ${n} real postcard${n === 1 ? "" : "s"} for "${bt.name}" through PostGrid? They're printed and mailed First Class (about $${(n * 0.9).toFixed(2)}) and can't be called back once printing starts.`, { title:"Mail real postcards?", yes:"Yes, mail them" })) return;
+    const hwS = bt.format === "handwritten";
+    if(!await mmConfirm(hwS ? `Send ${n} real hand-written card${n === 1 ? "" : "s"} for "${bt.name}" through Handwrytten? Each is written with a pen and mailed, billed at Handwrytten's price, and can't be called back once writing starts.`
+      : `Mail ${n} real 6x11 postcard${n === 1 ? "" : "s"} for "${bt.name}" through Lob? They're printed and mailed First Class, billed at Lob's price, and can't be called back once printing starts.`, { title:hwS ? "Send hand-written cards?" : "Mail real postcards?", yes:"Yes, send them" })) return;
     const r = await pcCall("live", id); if(!r.ok) return mmAlert(r.error || "Couldn't start mailing");
     await olLoad(); render(); pcPoll(); return; }
   if(b.dataset.pccancel){ if(!await mmConfirm("Cancel this batch? Its cards won't count as sent.")) return;
