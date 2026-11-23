@@ -3050,10 +3050,12 @@ function taskBillRow(j,f,tb){ var tid=j.id.slice(3), d=tb||taskBillDefaults(j,f)
 /* 2026-11-11 (Brandon: "keep reports of items we are doing for $1 charge"): every task billed as a $1 courtesy, with what the work was worth */
 /* 2026-11-18 (Brandon: "chris to be able to adjust hours on site per job"): taskbill.onsite (hours) wins over the Breezeway timer */
 function jobMins(j){ var o=(S.taskbill[String(j.id).replace(/^bw-/,"")]||{}).onsite; if(o!=null&&o!==""&&!isNaN(+o)) return Math.round(+o*60); return +j.minutes||0; }
-function courtesyStats(m){ var n=0, worth=0; Object.keys(S.taskbill).forEach(function(tid){ var tb=S.taskbill[tid]; if(!tb||tb.billTo!=="courtesy") return; var j=D.byId["bw-"+tid];
+/* 2026-11-23 (Brandon): the $1 lines for home checks/inspections are NOT jobs given away; only real jobs count here */
+function czGiven(tid){ var tb=S.taskbill[tid]; if(!tb||tb.billTo!=="courtesy"||tb.auto) return false; var j=D.byId["bw-"+tid]; return !(j&&isInsp(j)); }
+function courtesyStats(m){ var n=0, worth=0; Object.keys(S.taskbill).forEach(function(tid){ var tb=S.taskbill[tid]; if(!czGiven(tid)) return; var j=D.byId["bw-"+tid];
     if(m&&(tb.month||(j&&(j.finished||"").slice(0,7)))!==m) return; n++; worth+=(+tb.hours||0)*(+tb.rate||0)+(tb.lines||[]).reduce(function(a,l){ return a+(+l.amount||0); },0)+(j?taskBillParts(j,tb).reduce(function(a,x){ return a+x.amount; },0):0); });
   return {n:n, worth:worth}; }
-function courtesyPanel(m){ var rows=Object.keys(S.taskbill).filter(function(tid){ var tb=S.taskbill[tid]; if(!tb||tb.billTo!=="courtesy") return false; var j=D.byId["bw-"+tid]; return !m||(tb.month||(j&&(j.finished||"").slice(0,7)))===m; })
+function courtesyPanel(m){ var rows=Object.keys(S.taskbill).filter(function(tid){ var tb=S.taskbill[tid]; if(!czGiven(tid)) return false; var j=D.byId["bw-"+tid]; return !m||(tb.month||(j&&(j.finished||"").slice(0,7)))===m; })
     .map(function(tid){ var tb=S.taskbill[tid], j=D.byId["bw-"+tid]||{id:"bw-"+tid,prop:tb.prop,title:"Task "+tid,finished:"",srcUrl:"https://app.breezeway.io/task/"+tid};
       var lab=(+tb.hours||0)*(+tb.rate||0), fee=(tb.lines||[]).reduce(function(a,l){ return a+(+l.amount||0); },0), par=taskBillParts(j,tb).reduce(function(a,x){ return a+x.amount; },0);
       return {tid:tid,tb:tb,j:j,worth:lab+fee+par,lab:lab,par:par+fee}; })
