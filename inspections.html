@@ -76,6 +76,47 @@ dialog .foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;bor
 .err{color:var(--red);font-weight:700;font-size:13px;margin-top:8px}
 body.inhub .hero h1{font-size:20px}
 @media (max-width:640px){ .wrap{padding:10px 10px 30px} .tile b{font-size:19px} }
+/* v2 (Brandon 2026-11-23: "gotta be prettier ... easier to schedule"): home cards by urgency + one-tap scheduler */
+.sec{margin:18px 0 8px;display:flex;align-items:center;gap:10px}
+.sec h2{margin:0;font-size:16px;font-weight:800} .sec .cnt{font-size:12px;font-weight:800;border-radius:999px;padding:2px 9px;background:var(--card);border:1px solid var(--line-2);color:var(--ink-2)}
+.sec .hint{font-size:12.5px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:12px}
+.hc{position:relative;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px 14px 12px;display:flex;flex-direction:column;gap:9px;border-top:5px solid var(--moose)}
+.hc.st-now{border-top-color:var(--red)} .hc.st-week{border-top-color:var(--amber)} .hc.st-booked{border-top-color:var(--blue)} .hc.st-off{border-top-color:var(--line-2)}
+.hc.sel{outline:3px solid var(--moose);outline-offset:-1px}
+.hc .hd{display:flex;align-items:flex-start;gap:10px}
+.hc .code{font-size:18px;font-weight:800;line-height:1.15;letter-spacing:-.01em} .hc .comm{font-size:12.5px;color:var(--muted);font-weight:600}
+.hc .pick{margin-left:auto;width:22px;height:22px;accent-color:var(--forest-2);cursor:pointer;flex:none}
+.ring{width:62px;height:62px;border-radius:50%;flex:none;display:grid;place-items:center;text-align:center;font-weight:800;line-height:1;
+  background:conic-gradient(var(--rc) calc(var(--p)*1%), var(--line) 0)}
+.ring>div{width:50px;height:50px;border-radius:50%;background:var(--card);display:grid;place-items:center;align-content:center}
+.ring b{font-size:18px;color:var(--rc)} .ring small{font-size:9.5px;color:var(--muted);font-weight:700;margin-top:2px}
+.hc .row{display:flex;gap:12px;align-items:center}
+.hc .lines{display:flex;flex-direction:column;gap:3px;font-size:13px;min-width:0}
+.hc .lines div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc .lines .k{color:var(--muted);font-weight:700}
+.hc .facts{display:flex;flex-direction:column;gap:5px;font-size:12.8px;border-top:1px dashed var(--line-2);padding-top:8px}
+.hc .facts div{display:flex;gap:7px;align-items:baseline} .hc .facts .ic{width:16px;flex:none;text-align:center}
+.hc .ft{display:flex;gap:6px;margin-top:auto}
+.hc .ft .btn{flex:1;justify-content:center}
+.btn.sched{background:var(--forest-2);border-color:var(--forest-2);color:#fff;min-height:38px;font-size:14px}
+details.okfold>summary{list-style:none;cursor:pointer} details.okfold>summary::-webkit-details-marker{display:none}
+.selbar{position:sticky;bottom:12px;z-index:5;margin-top:14px;background:var(--forest);color:#fff;border-radius:14px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.selbar .btn{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff} .selbar .btn.go{background:#fff;color:var(--forest);border-color:#fff}
+dialog.wide{max-width:760px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.ch{border:1.5px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:12px;padding:6px 10px;font:inherit;font-size:13px;font-weight:800;cursor:pointer;text-align:left;line-height:1.2}
+.ch small{display:block;font-size:11px;font-weight:700;color:var(--muted)}
+.ch.on{border-color:var(--forest-2);background:var(--moose-soft);color:var(--moose-ink);box-shadow:0 0 0 2px var(--moose) inset}
+.ch:disabled{opacity:.45;cursor:not-allowed;text-decoration:line-through}
+.ch.day{min-width:62px;text-align:center}
+.ch .nr{color:var(--forest-2)}
+.lbl{display:block;margin:14px 0 2px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.sugg{margin-top:12px;background:var(--moose-soft);color:var(--moose-ink);border-radius:12px;padding:9px 12px;font-size:13.5px;font-weight:700}
+.ptab{width:100%;border-collapse:collapse;min-width:0} .ptab td,.ptab th{padding:6px;border-bottom:1px solid var(--line);font-size:13px;position:static}
+.ptab select{font:inherit;font-size:13px;border:1px solid var(--line-2);border-radius:8px;padding:4px 6px;background:var(--card);color:var(--ink);max-width:100%}
+.ok{color:var(--forest-2);font-weight:800} .bad{color:var(--red);font-weight:800}
+@media (max-width:640px){ .grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -165,49 +206,72 @@ const SORTS = {
   next: r => r.next && r.next.date ? dayDiff(r.next.date, TODAY) : 9999, arrive: r => r.nextArrive ? dayDiff(r.nextArrive, TODAY) : 9999,
 };
 
+/* status of a home card: now = due/past due with nothing booked, week = due within 7 days, booked, ok */
+function stOf(r){ if(isBooked(r)) return "booked"; if(!r.onList) return "off"; if(r.over >= 0) return "now"; if(r.over > -7) return "week"; return "ok"; }
+S.sel = new Set();
 function render(){
   const a = $("#app");
   if(S.err){ a.innerHTML = `<div class="hero"><h1>Inspection planner</h1></div><p class="err">Couldn't load: ${esc(S.err)}</p>`; return; }
   if(!S.rows){ return; }
   const canAct = S.F.canAct, comms = [...new Set(S.rows.map(r => r.community).filter(Boolean))].sort();
+  const dueNot = S.rows.filter(r => ["now", "week"].includes(stOf(r)));
   a.innerHTML = `
   <div class="hero"><div class="top"><div><h1>🔎 Inspection planner</h1>
-    <div class="sub">Our promise: someone is in every home at least once every 2 weeks (cleaning, maintenance, vendor, inspection or a stay). Here's who needs one and who had one.</div></div>
-    <div class="right"><a class="btn" href="crew_plan.html">Crew planner →</a><button class="btn" id="rl">↻ Refresh</button></div></div>
+    <div class="sub">Someone in every home at least once every 2 weeks: a cleaning, a job, a vendor, an inspection or a stay all count.</div></div>
+    <div class="right">${canAct && dueNot.length ? `<button class="btn" id="planall" style="background:#fff;color:var(--forest);border-color:#fff">📋 Plan all ${dueNot.length} due homes</button>` : ""}<a class="btn" href="crew_plan.html">Crew planner →</a><button class="btn" id="rl">↻</button></div></div>
     <div class="tiles">${TILES.map(t => { const n = S.rows.filter(t[3]).length;
       return `<button class="tile ${t[4]}${S.tile === t[0] ? " on" : ""}" data-tile="${t[0]}"><b>${n}</b><span>${esc(t[1])}</span><span style="display:block;font-weight:600">${esc(t[2])}</span></button>`; }).join("")}</div></div>
   <div class="bar">
-    <div class="tabs">${[["homes","🏠 By home"],["recent","✅ Recent inspections"],["booked","📅 Booked"]].map(v => `<button class="pt${S.view === v[0] ? " on" : ""}" data-view="${v[0]}">${v[1]}</button>`).join("")}</div>
+    <div class="tabs">${[["homes","🏠 Homes"],["recent","✅ Recently inspected"],["booked","📅 Booked"]].map(v => `<button class="pt${S.view === v[0] ? " on" : ""}" data-view="${v[0]}">${v[1]}</button>`).join("")}</div>
     <input id="q" placeholder="Find a home or community" value="${esc(S.q)}">
     <select id="comm"><option value="">All communities</option>${comms.map(c => `<option${c === S.comm ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
     <select id="days" title="How far back to look for inspections">${[30,60,120,365].map(n => `<option value="${n}"${n === S.days ? " selected" : ""}>Inspections: last ${n} days</option>`).join("")}</select>
     ${S.tile !== "all" ? `<button class="btn sm" data-tile="all">Show all homes</button>` : ""}
   </div>
   ${S.view === "recent" ? recentView() : S.view === "booked" ? bookedView() : homesView(canAct)}
-  <p class="note">Last visit = newest finished Breezeway task of any kind or a Track stay (last 120 days). Inspections = Breezeway inspection department.
-  ${canAct ? "" : S.F.canEdit ? "Handing out is switched off right now." : "Managers hand inspections out; you can look."}</p>`;
+  ${S.sel.size && S.view === "homes" ? `<div class="selbar"><b>${S.sel.size} home${S.sel.size === 1 ? "" : "s"} picked</b><span style="opacity:.85;font-size:13px">The hub picks a free day and the best tech for each. You check it, then send.</span>
+    <span style="margin-left:auto;display:flex;gap:6px"><button class="btn" id="selclear">Clear</button><button class="btn go" id="selplan">📋 Plan ${S.sel.size === 1 ? "it" : "them"}</button></span></div>` : ""}
+  <p class="note">Last visit = newest finished Breezeway task of any kind or a Track stay (last 120 days). Inspections = Breezeway's inspection department.
+  ${canAct ? "" : S.F.canEdit ? "Scheduling is switched off right now." : "Managers schedule inspections; you can look."}</p>`;
   if(S._qf){ const q = $("#q"); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
 
+const SECS = [["now", "🚨 Needs an inspection", "past due or due today, nothing booked"], ["week", "⏳ Due this week", "nothing booked yet"],
+  ["booked", "📅 Booked", "on the books in Breezeway"], ["ok", "✅ All good", "someone was in recently"], ["off", "Not on the two-week list", "2nd homes, leases and homes we don't check every 2 weeks"]];
 function homesView(canAct){
-  const rows = filtered().slice().sort((a, b) => { const k = SORTS[S.sort] || SORTS.over, x = k(a), y = k(b);
-    return (x < y ? -1 : x > y ? 1 : 0) * S.dir || a.home.localeCompare(b.home); });
+  const rows = filtered();
   if(!rows.length) return `<div class="card"><div class="empty">No homes match.</div></div>`;
-  const th = (k, t) => `<th data-sort="${k}">${t}${S.sort === k ? (S.dir > 0 ? " ▲" : " ▼") : ""}</th>`;
-  return `<div class="card"><table><thead><tr>${th("home","Home")}${th("last","Last someone was in")}${th("insp","Last inspection")}${th("over","Two-week check")}${th("next","Booked in Breezeway")}${th("arrive","Stays")}<th class="ns"></th></tr></thead><tbody>
-  ${rows.map(r => `<tr>
-    <td><b class="h">${esc(r.home)}</b><span class="sm2">${esc(r.community)}${r.beds ? " · " + r.beds + " BR" : ""}</span></td>
-    <td>${r.lastVisit ? `${esc(dLabel(r.lastVisit.day))} <span class="pill ${r.since > 14 ? "red" : r.since > 10 ? "amber" : "green"}">${esc(ago(r.lastVisit.day))}</span><span class="sm2">${esc(WHAT[r.lastVisit.what] || r.lastVisit.what || "")}</span>` : `<span class="pill red">Nothing on record</span>`}</td>
-    <td>${r.lastI ? `${esc(dLabel(r.lastI.day))}<span class="sm2">${esc(short(r.lastI.name))}${(r.lastI.who || []).length ? " · " + esc(r.lastI.who.map(first).join(", ")) : ""} · <a class="bw" href="${bwLink(r.lastI.id)}" target="_blank" rel="noopener">Breezeway ↗</a></span>` : `<span class="muted">None in ${S.days} days</span>`}</td>
-    <td>${!r.onList ? `<span class="pill grey">Not on the two-week list</span>` : r.over > 0 ? `<span class="pill red">${r.over} day${r.over === 1 ? "" : "s"} past due</span>` : r.over === 0 ? `<span class="pill red">Due today</span>` : `<span class="pill ${r.over > -7 ? "amber" : "green"}">Due ${esc(dLabel(r.due))}</span>`}
-      ${r.onList && r.pick && r.pick !== "biweekly" ? `<span class="sm2">Next in the rotation: ${esc(kindName(r.pick))}</span>` : ""}</td>
-    <td>${r.given ? `<span class="pill violet">Given to ${esc(first(r.given.who))} · ${esc(dLabel(r.given.day))}</span>` : ""}
-      ${r.next ? `<span class="pill blue">${r.next.date ? esc(dLabel(r.next.date)) : "No date"}</span><span class="sm2">${esc(short(r.next.name))} · ${(r.next.who || []).length ? esc(r.next.who.map(first).join(", ")) : "no one on it"} · <a class="bw" href="${bwLink(r.next.id)}" target="_blank" rel="noopener">↗</a></span>` : r.given ? "" : `<span class="muted">Nothing booked</span>`}
-      ${r.past.length ? `<span class="sm2" style="color:var(--amber)">${r.past.length} older one${r.past.length === 1 ? "" : "s"} never finished</span>` : ""}</td>
-    <td>${r.stayNow ? `<span class="pill amber">${esc(r.stayNow.owner ? "Owner in" : r.stayNow.lease ? "Tenant" : "Guest in")} to ${esc(dLabel(r.stayNow.depart))}</span>` : ""}
-      ${r.nextArrive ? `<span class="sm2">Next arrival ${esc(dLabel(r.nextArrive))}</span>` : r.stayNow ? "" : `<span class="muted">No stay in 30 days</span>`}</td>
-    <td style="white-space:nowrap"><button class="btn sm" data-open="${esc(r.home)}">Details</button>${canAct && r.onList ? ` <button class="btn sm primary" data-give="${esc(r.home)}">Hand out</button>` : ""}</td>
-  </tr>`).join("")}</tbody></table></div>`;
+  return SECS.map(([k, t, hint]) => {
+    const list = rows.filter(r => stOf(r) === k).sort((a, b) => b.since - a.since || a.home.localeCompare(b.home));
+    if(!list.length) return "";
+    const head = `<div class="sec"><h2>${t}</h2><span class="cnt">${list.length}</span><span class="hint">${hint}</span>
+      ${canAct && (k === "now" || k === "week") ? `<button class="btn sm" data-selsec="${k}" style="margin-left:auto">Pick all ${list.length}</button>` : ""}</div>`;
+    const grid = `<div class="grid">${list.map(r => card(r, canAct)).join("")}</div>`;
+    return (k === "ok" || k === "off") && S.tile === "all" && !S.q ? `<details class="okfold"${S["open_" + k] ? " open" : ""} data-fold="${k}"><summary>${head.replace("</h2>", " <span class='hint'>▾ tap to show</span></h2>")}</summary>${grid}</details>` : head + grid;
+  }).join("");
+}
+function card(r, canAct){
+  const st = stOf(r), n = r.lastVisit ? r.since : null;
+  const rc = n == null ? "var(--red)" : n > 14 ? "var(--red)" : n > 10 ? "var(--amber)" : "var(--forest-2)";
+  const p = n == null ? 100 : Math.min(100, Math.round(n / 14 * 100));
+  const stay = r.stayNow ? `${r.stayNow.owner ? "Owner" : r.stayNow.lease ? "Tenant" : "Guest"} in until ${dLabel(r.stayNow.depart)}` : r.nextArrive ? `Next arrival ${dLabel(r.nextArrive)}` : "No stays in the next 30 days";
+  const booked = r.given ? `<b style="color:var(--violet)">Given to ${esc(first(r.given.who))} · ${esc(dLabel(r.given.day))}</b>`
+    : r.next ? `<b style="color:var(--blue)">${r.next.date ? esc(dLabel(r.next.date)) : "No date"}</b> · ${esc(short(r.next.name))} · ${(r.next.who || []).length ? esc(r.next.who.map(first).join(", ")) : "no one on it"} <a class="bw" href="${bwLink(r.next.id)}" target="_blank" rel="noopener">↗</a>`
+    : `<span class="muted">Nothing booked</span>`;
+  return `<div class="hc st-${st}${S.sel.has(r.home) ? " sel" : ""}">
+    <div class="hd"><div><div class="code">${esc(r.home)}</div><div class="comm">${esc(r.community || "")}${r.beds ? " · " + r.beds + " BR" : ""}</div></div>
+      ${canAct && r.onList ? `<input type="checkbox" class="pick" data-sel="${esc(r.home)}" title="Pick to plan several at once"${S.sel.has(r.home) ? " checked" : ""}>` : ""}</div>
+    <div class="row"><div class="ring" style="--rc:${rc};--p:${p}"><div><b>${n == null ? "?" : n}</b><small>${n == null ? "no visit" : n === 1 ? "day" : "days"}</small></div></div>
+      <div class="lines"><div class="k">Last someone was in</div><div>${r.lastVisit ? esc(dLabel(r.lastVisit.day)) + " · " + esc(WHAT[r.lastVisit.what] || r.lastVisit.what || "") : "Nothing on record"}</div>
+      <div>${!r.onList ? `<span class="pill grey">Not on the 2-week list</span>` : r.over > 0 ? `<span class="pill red">${r.over}d past due</span>` : r.over === 0 ? `<span class="pill red">Due today</span>` : `<span class="pill ${r.over > -7 ? "amber" : "green"}">Due ${esc(dLabel(r.due))}</span>`}</div></div></div>
+    <div class="facts">
+      <div><span class="ic">🔎</span><span>${r.lastI ? `${esc(dLabel(r.lastI.day))} · ${esc(short(r.lastI.name))}${(r.lastI.who || []).length ? " · " + esc(r.lastI.who.map(first).join(", ")) : ""}` : `<span class="muted">No inspection in ${S.days} days</span>`}</span></div>
+      <div><span class="ic">📅</span><span>${booked}</span></div>
+      <div><span class="ic">🏠</span><span>${esc(stay)}</span></div>
+      ${r.onList && r.pick && r.pick !== "biweekly" ? `<div><span class="ic">🔁</span><span>Next in the rotation: <b>${esc(kindName(r.pick))}</b></span></div>` : ""}
+    </div>
+    <div class="ft">${canAct && r.onList ? `<button class="btn sched" data-give="${esc(r.home)}">📅 Schedule</button>` : ""}<button class="btn" data-open="${esc(r.home)}">Details</button></div>
+  </div>`;
 }
 const kindName = k => (((S.F && S.F.kinds) || []).find(x => x.key === k) || {}).short || k;
 
@@ -232,7 +296,7 @@ function bookedView(){
 }
 
 function openHome(code){
-  const r = S.rows.find(x => x.home === code); if(!r) return; const d = $("#dlg");
+  const r = S.rows.find(x => x.home === code); if(!r) return; const d = $("#dlg"); d.className = "";
   d.innerHTML = `<div class="dbody"><h3>${esc(r.home)}</h3><div class="muted">${esc(r.community)}${r.beds ? " · " + r.beds + " bedrooms" : ""}</div>
     <p>${r.lastVisit ? `Last someone was in: <b>${esc(dLabel(r.lastVisit.day))}</b> (${esc(WHAT[r.lastVisit.what] || r.lastVisit.what || "")}, ${esc(ago(r.lastVisit.day))}).` : "No visit on record in 120 days."}
     ${r.onList ? (r.over > 0 ? ` Two-week check is <b>${r.over} days past due</b>.` : ` Two-week check due ${esc(dLabel(r.due))}.`) : " Not on the two-week list."}</p>
@@ -246,40 +310,113 @@ function openHome(code){
   d.showModal();
 }
 
-async function crew(){
-  if(S.crew) return S.crew;
-  const r = await sb.rpc("crew_plan", { p_from: TODAY, p_to: TODAY });
+/* ---------- scheduling: the crew's next 2 weeks from crew_plan() (tasks, time off, home points) ---------- */
+const P = { B:null };
+const miles = (a, b) => { const R = 3958.8, r = x => x * Math.PI / 180, dl = r(b[0] - a[0]), dn = r(b[1] - a[1]);
+  const h = Math.sin(dl / 2) ** 2 + Math.cos(r(a[0])) * Math.cos(r(b[0])) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const NEAR = 0.5, MAX_DAY = 6;      // "near" = same complex / next door; a tech with 6+ jobs that day is full
+async function crewPlan(){
+  if(P.B) return P.B;
+  const r = await sb.rpc("crew_plan", { p_from: TODAY, p_to: addDays(TODAY, 14) });
   if(r.error) throw r.error;
-  S.crew = (r.data.crew || []).filter(c => c.bw && !c.mgr); return S.crew;
+  P.B = r.data; P.techs = (r.data.crew || []).filter(c => c.bw && !c.mgr); return P.B;
 }
-function firstFree(r){ let d = addDays(TODAY, 1); for(let i = 0; i < 30; i++, d = addDays(d, 1)){ if(!r.stays.some(s => s[0] <= d && d < s[1])) return d; } return addDays(TODAY, 1); }
+const onTask = (c, t) => (t.who || []).some(n => n === c.bwName || n.split(" ")[0].toLowerCase() === (c.first || "").toLowerCase());
+const loadOf = (c, day, extra) => (P.B.tasks || []).filter(t => t.date === day && t.stage !== "finished" && onTask(c, t)).length + ((extra && extra[c.uid + "|" + day]) || 0);
+const offOn = (c, day) => (P.B.off || []).some(o => o.uid === c.uid && o.from <= day && day <= (o.to || o.from));
+const ptOf = r => (r.b && r.b.pt) || (P.B.places || {})[r.home] || null;
+const stayOn = (r, day) => r.stays.find(s => s[0] <= day && day < s[1]);
+const isWkend = d => [0, 6].includes(new Date(d + "T12:00:00Z").getUTCDay());
+function nearOf(c, day, r, extraNear){
+  const p = ptOf(r); if(!p) return null; let best = null;
+  const homes = (P.B.tasks || []).filter(t => t.date === day && onTask(c, t)).map(t => t.home).concat((extraNear && extraNear[c.uid + "|" + day]) || []);
+  homes.forEach(h => { if(!h || h === "Moose company") return; const q = (P.B.places || {})[h]; const m = h === r.home ? 0 : q ? miles(p, q) : 99;
+    if(m <= NEAR && (!best || m < best.mi)) best = { home: h, mi: m }; });
+  return best;
+}
+const DAYS = () => Array.from({ length: 14 }, (_, i) => addDays(TODAY, i));
+/* best day + tech: first weekday from tomorrow with no stay; on that day a tech already working next door wins, else the lightest load */
+function suggest(r, extra, extraNear){
+  for(const day of DAYS().slice(1)){
+    if(stayOn(r, day) || isWkend(day)) continue;
+    const opts = P.techs.filter(c => !offOn(c, day)).map(c => ({ c, load: loadOf(c, day, extra), near: nearOf(c, day, r, extraNear) }))
+      .filter(o => o.load < MAX_DAY).sort((a, b) => (a.near ? 0 : 1) - (b.near ? 0 : 1) || a.load - b.load);
+    if(opts.length) return { day, tech: opts[0].c, near: opts[0].near, load: opts[0].load };
+  }
+  return { day: addDays(TODAY, 1), tech: P.techs[0], near: null, load: 0 };
+}
+const kindOpts = r => [{ kind:"biweekly", short:"Two-week check", last: r.b && r.b.lastKind }].concat(r.rot.map(x => ({ kind:x.kind, short:x.short, last:x.last, over:x.over })));
+
 async function openGive(code){
   const r = S.rows.find(x => x.home === code); if(!r || !r.b) return; const d = $("#dlg");
-  let techs; try { techs = await crew(); } catch(e){ await mmAlert("Couldn't load the crew: " + errText(e)); return; }
-  const pick = r.pick || "biweekly";
-  d.innerHTML = `<div class="dbody"><h3>Hand out an inspection · ${esc(r.home)}</h3>
-    <div class="muted">${r.lastVisit ? "Last someone was in " + esc(dLabel(r.lastVisit.day)) + " (" + esc(ago(r.lastVisit.day)) + ")" : "No visit on record"}.
-    ${r.next ? ` Breezeway already has ${esc(short(r.next.name))} ${r.next.date ? "on " + esc(dLabel(r.next.date)) : "with no date"}.` : ""}
-    If that same inspection is already open in Breezeway, the hub moves it to this person and day instead of making a second one.</div>
-    <label>Which inspection<select id="g_k"><option value="biweekly"${pick === "biweekly" ? " selected" : ""}>Two-week check (Bi-Weekly Inspection)</option>
-      ${r.rot.map(x => `<option value="${esc(x.kind)}"${pick === x.kind ? " selected" : ""}>${esc(x.short)} · ${x.last ? "last " + esc(dLabel(x.last)) : "none on record"}</option>`).join("")}</select></label>
-    <label>Who<select id="g_u">${techs.map(c => `<option value="${esc(c.uid)}">${esc(c.bwName || c.name)}</option>`).join("")}</select></label>
-    <label>Day<input type="date" id="g_d" value="${firstFree(r)}" min="${TODAY}"></label>
-    <div class="muted" id="g_st"></div><div class="err" id="g_err"></div></div>
-    <div class="foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="g_go">Send to Breezeway</button></div>`;
-  const chk = () => { const v = $("#g_d").value, s = r.stays.find(s => s[0] <= v && v < s[1]);
-    $("#g_st").textContent = s ? `⚠ ${s[2] === "owner" ? "The owner is" : s[2] === "tenant" ? "A tenant is" : "A guest is"} staying that night. Pick another day.` : ""; };
-  $("#g_d").addEventListener("change", chk); chk();
-  $("#g_go").onclick = async () => {
-    const day = $("#g_d").value; if(!day){ $("#g_err").textContent = "Pick a day."; return; }
-    if(r.stays.some(s => s[0] <= day && day < s[1])){ $("#g_err").textContent = "Someone is staying that night. Pick another day."; return; }
-    $("#g_go").disabled = true;
-    const res = await sb.rpc("crew_fill_give", { p_code: r.home, p_kind: $("#g_k").value, p_user: $("#g_u").value, p_day: day });
-    if(res.error){ $("#g_err").textContent = errText(res.error); $("#g_go").disabled = false; return; }
-    d.close(); await mmAlert(`Sent. It shows in Breezeway within a minute or two.`, { title: "Inspection handed out" });
-    load(); setTimeout(load, 75000);
+  try { await crewPlan(); } catch(e){ await mmAlert("Couldn't load the crew's schedule: " + errText(e)); return; }
+  if(!P.techs.length){ await mmAlert("No techs are set up in Breezeway."); return; }
+  const sg = suggest(r), G = { kind: r.pick || "biweekly", day: sg.day, uid: sg.tech.uid };
+  d.className = "wide";
+  const draw = () => {
+    const tech = P.techs.find(c => c.uid === G.uid), nr = tech && nearOf(tech, G.day, r), st = stayOn(r, G.day);
+    d.innerHTML = `<div class="dbody"><h3>📅 Schedule an inspection · ${esc(r.home)}</h3>
+      <div class="muted">${esc(r.community || "")} · ${r.lastVisit ? "last someone was in " + esc(dLabel(r.lastVisit.day)) + " (" + esc(ago(r.lastVisit.day)) + ")" : "no visit on record"}${r.next ? ` · Breezeway already has ${esc(short(r.next.name))} ${r.next.date ? "on " + esc(dLabel(r.next.date)) : "with no date"}` : ""}</div>
+      <div class="sugg">✨ Suggested: ${esc(dLabel(sg.day))} · ${esc(first(sg.tech.bwName || sg.tech.name))}${sg.near ? ` (already at ${esc(sg.near.home)} that day)` : ` (${sg.load} job${sg.load === 1 ? "" : "s"} that day)`} — just press Send, or change it below.</div>
+      <span class="lbl">What</span><div class="chips">${kindOpts(r).map(k => `<button class="ch${G.kind === k.kind ? " on" : ""}" data-gk="${esc(k.kind)}">${esc(k.short)}${k.kind === r.pick && r.pick !== "biweekly" ? " ⭐" : ""}<small>${k.last ? "last " + esc(dLabel(k.last)) : "none on record"}</small></button>`).join("")}</div>
+      <span class="lbl">When</span><div class="chips">${DAYS().map(day => { const s = stayOn(r, day);
+        return `<button class="ch day${G.day === day ? " on" : ""}" data-gd="${day}"${s ? " disabled" : ""} title="${s ? esc(s[2]) + " staying" : ""}">${esc(day === TODAY ? "Today" : new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { weekday:"short", timeZone:"UTC" }))}<small>${esc(new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { month:"short", day:"numeric", timeZone:"UTC" }))}${s ? " · " + esc(s[2]) : ""}</small></button>`; }).join("")}</div>
+      <span class="lbl">Who</span><div class="chips">${P.techs.map(c => { const off = offOn(c, G.day), l = loadOf(c, G.day), n = nearOf(c, G.day, r);
+        return `<button class="ch${G.uid === c.uid ? " on" : ""}" data-gu="${esc(c.uid)}"${off ? " disabled" : ""}>${esc(c.bwName || c.name)}<small>${off ? "Off" : l + " job" + (l === 1 ? "" : "s") + " that day"}${n ? ` · <span class="nr">📍 at ${esc(n.home)}</span>` : ""}</small></button>`; }).join("")}</div>
+      ${st ? `<div class="err">Someone is staying that night. Pick another day.</div>` : ""}
+      <div class="err" id="g_err"></div></div>
+      <div class="foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="g_go"${st || !tech ? " disabled" : ""}>Send to Breezeway: ${esc(kindName(G.kind))} · ${esc(first(tech ? tech.bwName || tech.name : ""))} · ${esc(dLabel(G.day))}</button></div>`;
+    $$("[data-gk]", d).forEach(b => b.onclick = () => { G.kind = b.dataset.gk; draw(); });
+    $$("[data-gd]", d).forEach(b => b.onclick = () => { G.day = b.dataset.gd; draw(); });
+    $$("[data-gu]", d).forEach(b => b.onclick = () => { G.uid = b.dataset.gu; draw(); });
+    $("#g_go").onclick = async () => {
+      $("#g_go").disabled = true; $("#g_go").textContent = "Sending…";
+      const res = await sb.rpc("crew_fill_give", { p_code: r.home, p_kind: G.kind, p_user: G.uid, p_day: G.day });
+      if(res.error){ $("#g_err").textContent = errText(res.error); $("#g_go").disabled = false; return; }
+      r.given = { who: tech.bwName || tech.name, day: G.day, how: "manual", kind: G.kind }; P.B = null;
+      d.close(); S.sel.delete(r.home); render(); setTimeout(load, 60000);
+    };
   };
-  if(!d.open) d.showModal();
+  draw(); if(!d.open) d.showModal();
+}
+
+/* plan several homes at once: each gets a suggested day + tech (spreading the load), editable, then one Send */
+async function openPlan(codes){
+  const rows = codes.map(c => S.rows.find(x => x.home === c)).filter(r => r && r.b).sort((a, b) => b.since - a.since);
+  if(!rows.length) return; const d = $("#dlg");
+  try { await crewPlan(); } catch(e){ await mmAlert("Couldn't load the crew's schedule: " + errText(e)); return; }
+  const extra = {}, extraNear = {};
+  const L = rows.map(r => { const s = suggest(r, extra, extraNear), k = s.tech.uid + "|" + s.day;
+    extra[k] = (extra[k] || 0) + 1; (extraNear[k] = extraNear[k] || []).push(r.home);
+    return { r, kind: r.pick || "biweekly", day: s.day, uid: s.tech.uid, near: s.near, st: "" }; });
+  d.className = "wide";
+  const draw = () => {
+    const byTech = {}; L.forEach(x => { const c = P.techs.find(c => c.uid === x.uid); const n = c ? first(c.bwName || c.name) : "?"; byTech[n] = (byTech[n] || 0) + 1; });
+    d.innerHTML = `<div class="dbody"><h3>📋 Plan ${L.length} inspection${L.length === 1 ? "" : "s"}</h3>
+      <div class="muted">The hub picked the first free weekday for each home and spread them across the crew, putting a tech next door when they're already there. Change anything, then send.</div>
+      <div class="sugg">${Object.entries(byTech).map(([n, c]) => `${esc(n)}: ${c}`).join(" · ")}</div>
+      <table class="ptab"><thead><tr><th>Home</th><th>What</th><th>Day</th><th>Who</th><th></th></tr></thead><tbody>
+      ${L.map((x, i) => `<tr><td><b>${esc(x.r.home)}</b><span class="sm2">${x.r.lastVisit ? esc(ago(x.r.lastVisit.day)) : "no visit"}${x.near ? " · 📍 near " + esc(x.near.home) : ""}</span></td>
+        <td><select data-pk="${i}">${kindOpts(x.r).map(k => `<option value="${esc(k.kind)}"${k.kind === x.kind ? " selected" : ""}>${esc(k.short)}</option>`).join("")}</select></td>
+        <td><select data-pd="${i}">${DAYS().map(day => `<option value="${day}"${day === x.day ? " selected" : ""}${stayOn(x.r, day) ? " disabled" : ""}>${esc(dLabel(day))}${stayOn(x.r, day) ? " (stay)" : ""}</option>`).join("")}</select></td>
+        <td><select data-pu="${i}">${P.techs.map(c => `<option value="${esc(c.uid)}"${c.uid === x.uid ? " selected" : ""}${offOn(c, x.day) ? " disabled" : ""}>${esc(c.bwName || c.name)}${offOn(c, x.day) ? " (off)" : ""}</option>`).join("")}</select></td>
+        <td>${x.st === "ok" ? `<span class="ok">✓ Sent</span>` : x.st ? `<span class="bad" title="${esc(x.st)}">✗ ${esc(x.st.slice(0, 40))}</span>` : `<button class="btn sm" data-px="${i}" title="Take it off this plan">✕</button>`}</td></tr>`).join("")}</tbody></table></div>
+      <div class="foot"><button class="btn" data-close>Close</button><button class="btn primary" id="p_go"${L.every(x => x.st === "ok") ? " disabled" : ""}>Send ${L.filter(x => x.st !== "ok").length} to Breezeway</button></div>`;
+    $$("[data-pk]", d).forEach(s => s.onchange = () => { L[+s.dataset.pk].kind = s.value; });
+    $$("[data-pd]", d).forEach(s => s.onchange = () => { L[+s.dataset.pd].day = s.value; draw(); });
+    $$("[data-pu]", d).forEach(s => s.onchange = () => { L[+s.dataset.pu].uid = s.value; draw(); });
+    $$("[data-px]", d).forEach(b => b.onclick = () => { L.splice(+b.dataset.px, 1); if(!L.length) d.close(); else draw(); });
+    $("#p_go").onclick = async () => {
+      $("#p_go").disabled = true;
+      for(const x of L){ if(x.st === "ok") continue;
+        $("#p_go").textContent = `Sending ${x.r.home}…`;
+        const res = await sb.rpc("crew_fill_give", { p_code: x.r.home, p_kind: x.kind, p_user: x.uid, p_day: x.day });
+        if(res.error) x.st = errText(res.error); else { x.st = "ok"; const c = P.techs.find(c => c.uid === x.uid);
+          x.r.given = { who: c.bwName || c.name, day: x.day, how: "manual", kind: x.kind }; S.sel.delete(x.r.home); } }
+      P.B = null; draw(); render(); setTimeout(load, 60000);
+    };
+  };
+  draw(); if(!d.open) d.showModal();
 }
 
 document.addEventListener("click", async e => {
@@ -290,11 +427,17 @@ document.addEventListener("click", async e => {
   if(b.id === "rl"){ load(); return; }
   if(b.dataset.open){ openHome(b.dataset.open); return; }
   if(b.dataset.give){ openGive(b.dataset.give); return; }
+  if(b.dataset.selsec){ S.rows.filter(r => stOf(r) === b.dataset.selsec).filter(r => filtered().includes(r)).forEach(r => S.sel.add(r.home)); render(); return; }
+  if(b.id === "selclear"){ S.sel.clear(); render(); return; }
+  if(b.id === "selplan"){ openPlan([...S.sel]); return; }
+  if(b.id === "planall"){ openPlan(S.rows.filter(r => ["now", "week"].includes(stOf(r))).map(r => r.home)); return; }
   if(b.hasAttribute("data-close")){ d.close(); return; }
 });
+document.addEventListener("toggle", e => { const f = e.target.dataset && e.target.dataset.fold; if(f) S["open_" + f] = e.target.open; }, true);
 document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; S._qf = true; render(); S._qf = false; } });
 document.addEventListener("change", e => {
   if(e.target.id === "comm"){ S.comm = e.target.value; render(); }
+  if(e.target.dataset && e.target.dataset.sel){ const c = e.target.dataset.sel; e.target.checked ? S.sel.add(c) : S.sel.delete(c); render(); }
   if(e.target.id === "days"){ S.days = +e.target.value; load(); }
 });
 
