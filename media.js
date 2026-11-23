@@ -178,7 +178,7 @@
   st.textContent = ":where(textarea){resize:vertical;max-height:60vh;overflow-y:auto}";
   (document.head || document.documentElement).appendChild(st);
   function grow(t){
-    if(!t || t.tagName !== "TEXTAREA" || t.offsetParent === null) return;
+    if(!t || t.tagName !== "TEXTAREA" || !t.getClientRects().length) return;
     if(t.closest && t.closest("[data-mm-keep],.CodeMirror")) return;
     var cs = getComputedStyle(t); if(cs.resize === "none" && t.dataset.mmGrow !== "1") return;
     var max = Math.round(window.innerHeight * 0.6), need = t.scrollHeight + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
