@@ -29,6 +29,7 @@ details.racc[open]{padding-bottom:8px} .rgall{background:none;border:0;color:var
 .rwhy{background:none;border:1px solid var(--line);color:var(--muted);border-radius:50%;width:20px;height:20px;min-height:0;padding:0;font-size:12px;font-weight:700;line-height:18px;cursor:pointer;margin-left:6px;vertical-align:1px}
 .rwhyt{display:inline-block;width:100%;box-sizing:border-box;font-size:13px;color:var(--ink-2);background:var(--ground);border-radius:8px;padding:6px 9px;margin-top:5px;font-weight:400}   /* inline-block: a done step's line-through doesn't reach it */
 .rwhyt[hidden]{display:none}
+.petref{width:100%;border-collapse:collapse;margin:6px 0 8px;font-size:13.5px} .petref th,.petref td{border:1px solid var(--line,#ddd);padding:5px 8px;text-align:left;vertical-align:top} .petref th{background:var(--ground,#f4f4f1)}
 /* Track automations (Brandon 2026-11-03): Track's logo purple = Track's automation happened, grey = it hasn't */
 .trk{display:inline-flex;flex:none;color:#b9b9bf} .rstep .l .trk{vertical-align:-3px} .trk.on{color:#411064} .trk svg{width:22px;height:16px;display:block}
 .rstep.trkrow{align-items:center} .rstep.trkrow .who{white-space:normal;max-width:280px} .rstep.trkrow .l{font-size:14px} .rstep.trkrow.on .l{color:var(--ink)} .rstep.trkrow:not(.on) .l{color:var(--muted)}
@@ -234,7 +235,12 @@ const UNDER25_OK = /^\s*(guest under 25|last minute reservation)\s*$/i;
 // Stays booked before the Oct 30 rules (Brandon 2026-10-30: "yes" to grandfathering) keep what the old steps said, so the team isn't
 // asked to redo work: names = contract came back; Autohost review = the old "Under review" tick or Autohost Verified; contact = address + email.
 const GF_DAY = "2026-10-30";
+const GF_DAYS = { pt_ask:"2026-11-23", pt_home:"2026-11-23", pt_dog2:"2026-11-23", pt_dog2fee:"2026-11-23" };   // pet section on every check list (Kim 2026-11-13)
 const GRANDFATHER = {
+  pt_ask:      s => true,
+  pt_home:     s => true,
+  pt_dog2:     s => true,
+  pt_dog2fee:  s => true,
   c_sig:       s => autoOk(s, "agreement_received"),
   ah_rev_mgr:  (s, k) => !!(k.ah_review && k.ah_review.d) || autoOk(s, "ah_verified"),
   ah_rev_easy: (s, k) => !!(k.ah_review && k.ah_review.d) || autoOk(s, "ah_verified"),
@@ -244,7 +250,11 @@ function conds(s){
   const u = (s.unit || "").toUpperCase(), occ = s.occ || {}, cx = s.status === "Cancelled" || (s.list && s.list.stage === "cancelling");
   const rv = !!(s.ah && s.ah.verify === "review"), rl = (s.ah && s.ah.rules) || [], ahOk = autoOk(s, "ah_verified");
   const easy = rl.length > 0 && rl.every(r => UNDER25_OK.test(r)) && s.beds != null && s.beds <= 2;   // same rule as res_tick()
-  return { pets:(occ.pets || 0) > 0, pl:u.startsWith("PL "), wg:u.startsWith("WG "), pv:u.startsWith("PV "), wp:u.startsWith("WP "),
+  return { pets:(occ.pets || 0) > 0,
+    // Pet section (Kim 2026-11-13 + Pet Pricing Reference Nov 14)
+    pets2:(occ.pets || 0) >= 2, nopethome:s.unitPets === false && (occ.pets || 0) > 0,
+    pet1flag:!((occ.pets || 0) > 0) && ((s.td && s.td.fees) || []).some(f => PET_FEE_RE.test(f.n)),
+    pl:u.startsWith("PL "), wg:u.startsWith("WG "), pv:u.startsWith("PV "), wp:u.startsWith("WP "),
     // combo homes (Brandon 2026-11-06): only UM 3013 (301 + 303) and ST 14 (ST 1 + ST 4); BHV 5604 is no longer a parent/child
     thirty:(s.nights || 0) >= 30, parent:u === "ST 14" || u === "UM 3013", split:u === "ST 14", /* 2026-11-13 (Janae, Bugs #41): UM 3013 is one owner, so no split into two reservations */ gp:/guest pays/i.test(s.type || ""), op:!/guest pays/i.test(s.type || ""),
     extend:!!(s.list && s.list.extending), cancel:cx, cxlate:cx && !!s.cancelledAt && s.cancelledAt.slice(0, 10) >= s.arrive,
@@ -272,6 +282,7 @@ function autoOk(s, a){
     case "cancelled": return s.status === "Cancelled";
     case "og_type": return OG_TYPE.test(s.type || "") && !(hasDW(s) && OWNER_NAMED.test(s.type || ""));   // DI on an "owner" type = Safely won't cover it
     case "pay_due": return (s.paid || 0) + 0.01 >= payDue(s);
+    case "pet_home_known": return s.unitPets === true || s.unitPets === false;
     case "og_pet_known": return tag(s, PETS) || tag(s, /^no pets$/i) || (s.occ && s.occ.pets || 0) > 0;
     // Home takes dogs: Track unit allows pets, no "No Pets" tag, and no more pets than the cap (2, or a property rule "Pet cap: N")
     case "pets_ok": { const cap = Math.min(2, ...s.rules.map(r => +((/pet cap:\s*(\d+)/i.exec(r.text) || [])[1] || 9)));
@@ -328,6 +339,66 @@ function petFee(s){
   // 2 pets cap at $700 = $350 each (Brandon + team 2026-11-06: Track's $700 is right, Asana's $600 is old)
   return { ok:!ph, ph, v, per, want, pets, off:!ph && want != null && Math.abs(v - want) > 0.5 };
 }
+// Airbnb pet fee for the first dog by home size (Pet Pricing Reference, Kim Nov 14 2026); a second dog pays it again
+function abbPetFee(s){
+  const u = (s.unit || "").toUpperCase();
+  if(u === "UM 3013") return 300;
+  if(["UM 237", "UM 301", "UM 303"].includes(u)) return 250;
+  if(s.beds == null) return null;
+  return s.beds <= 2 ? 100 : s.beds === 3 ? 150 : s.beds === 4 ? 175 : 200;
+}
+// 🐾 Pet information (Kim, Slack 2026-11-13: a button at the top of every rental check list). Source: "Pet Pricing Reference - Team", Kim, updated Nov 14 2026.
+const PET_REF = `<h3 style="margin:0 0 6px">Pet policy</h3><ul>
+<li>Pet-friendly homes allow <b>1 dog</b> on every channel. A second dog is by special request only, never advertised: a <b>manager approves in writing first</b>, then the guest signs the pet form again ("Second Dog").</li>
+<li><b>Dogs only</b>: no cats or other animals; no aggressive dogs.</li>
+<li><b>Emotional support animals</b> count as the 1 pet and pay the same pet fees.</li>
+<li><b>Service animals</b>: always welcome, no charge. We ask guests to tell us before arrival, but we can't require it, charge for it or cancel over it. Send the Service Animal Addendum (if the guest types "ESA", send the pet addendum instead).</li>
+<li><b>Bear Hollow Village</b>: dogs only on stays of 30 nights or more (HOA rule; ESAs exempt).</li>
+<li><b>Home not pet-friendly</b> and the guest wants a dog: the homeowner must approve. Tell the owner before anything else.</li></ul>
+<h3 style="margin:12px 0 6px">Airbnb</h3>
+<p>The pet fee is charged at booking, only when the guest adds a pet, and shows as its own <b>Pet Fee</b> line. Pet cleaning is built into the Airbnb cleaning fee (no separate charge).</p>
+<table class="petref"><tr><th>Home</th><th>Pet fee (1st dog)</th><th>2nd dog (if approved)</th></tr>
+<tr><td>1–2 bedrooms</td><td>$100</td><td>$100 + $25 pet cleaning</td></tr><tr><td>3 bedrooms</td><td>$150</td><td>$150 + $50 pet cleaning</td></tr>
+<tr><td>4 bedrooms</td><td>$175</td><td>$175 + $50 pet cleaning</td></tr><tr><td>5+ bedrooms</td><td>$200</td><td>$200 + $50 pet cleaning</td></tr>
+<tr><td>UM 237, UM 301, UM 303</td><td>$250</td><td>$250 + $50</td></tr><tr><td>UM 3013</td><td>$300</td><td>$300 + $50</td></tr></table>
+<ul><li>Pet fee paid but <b>no pet form</b>: send <b>Pet Addendum – Airbnb Guest</b>; it must be completed and signed.</li>
+<li>Pet form filled out but <b>no pet fee</b>: tell the guest there's a fee for the pet and request it through Airbnb.</li>
+<li><b>Second dog</b>: after the Second Pet Addendum is signed, ONE Airbnb change request for the pet fee again + half the pet cleaning fee (2 BR: $125 total; 3 BR: $200 total).</li></ul>
+<h3 style="margin:12px 0 6px">Vrbo, direct and other sites</h3>
+<p>The reservation shows a <b>$1 Pet Hosting Fee</b> as a flag. Once the pet is approved, change it to the real amount; no pet = remove the $1 fee.</p>
+<table class="petref"><tr><th>Fee</th><th>1st dog</th><th>2nd dog (if approved)</th></tr>
+<tr><td>Pet hosting, nightly stays</td><td>$25 a night, $100 min, $350 max</td><td>Same, per dog</td></tr>
+<tr><td>Pet hosting, 30+ nights</td><td>$450 a month</td><td>$200 a month</td></tr>
+<tr><td>Pet cleaning</td><td>$50 (2 BR and under) · $100 (3 BR+)</td><td>+$25 (total $75) · +$50 (total $150)</td></tr></table>
+<h3 style="margin:12px 0 6px">Owner guests</h3>
+<p>Pet cleaning fee only ($50 / $100), with the homeowner's approval. No nightly pet fee.</p>
+<h3 style="margin:12px 0 6px">Which pet form to send</h3>
+<p>Sent by hand from the reservation (Documents button). One dog per form; for a second dog, send it again. The guest types <b>First Dog</b> (charge the pet fee), <b>Second Dog</b> (by approval: pet fee again + half the pet cleaning fee) or <b>Update</b> (missing info for a dog already on the stay: no fee).</p>
+<table class="petref"><tr><th>Guest</th><th>Form</th></tr><tr><td>Airbnb guest</td><td>Pet Addendum – Airbnb Guest</td></tr>
+<tr><td>Vrbo, direct, other sites</td><td>Pet Addendum – Guest (Non-Airbnb)</td></tr><tr><td>Owner guest</td><td>Owner Guest Pet Addendum</td></tr>
+<tr><td>Service animal</td><td>Service Animal Addendum</td></tr></table>
+<p class="muted" style="font-size:12.5px;margin-top:10px">From Kim's "Pet Pricing Reference - Team" (updated Nov 14, 2026). Questions → Kim.</p>`;
+function petInfo(){
+  let p = document.getElementById("petpop"); if(p) p.remove();
+  p = document.createElement("div"); p.id = "petpop"; p.className = "rpop"; p.style.zIndex = 70;
+  p.innerHTML = `<div class="rpbox" style="max-width:760px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><h2 style="margin:0;flex:1">🐾 Pet information</h2><button class="btn small" data-petx="1">✕ Close</button></div>${PET_REF}</div>`;
+  const close = () => { p.remove(); document.removeEventListener("keydown", esc2, true); };
+  const esc2 = e => { if(e.key === "Escape"){ e.stopPropagation(); close(); } };
+  p.addEventListener("click", e => { if(e.target === p || e.target.closest("[data-petx]")) close(); });
+  document.addEventListener("keydown", esc2, true);
+  document.body.appendChild(p);
+}
+// Pet answers at the top of the Pets section (every check list)
+function petBox(s){
+  const pets = (s.occ && s.occ.pets) || 0, h = s.unitPets === true ? `<b style="color:var(--green,#2f7d32)">Yes, pet-friendly</b>` : s.unitPets === false ? `<b style="color:var(--red,#b3261e)">No, not pet-friendly</b>` : `<b>Not known</b> (check the home in Track)`;
+  const g = pets ? `<b>${pets} pet${pets > 1 ? "s" : ""}</b> on the stay in Track` : tag(s, /^no pets$/i) ? `<b>No pet</b> ("No Pets" tag)` : `<b>No pet in Track</b> (confirm with the guest)`;
+  const next = s.unitPets === false ? (pets ? "Tell the homeowner first: the dog can only come with the owner's OK." : "Confirm the guest isn't bringing a pet. If they want to, the homeowner must approve; tell the owner before anything else. Then done.")
+    : !pets ? "If the guest isn't bringing a pet, you're done here" + (["vrbo", "ws"].includes(s.chan) ? " (and remove Track's $1 Pet Hosting Fee if it's on the stay)." : ".")
+    : s.chan === "abnb" ? "Check the Airbnb \"Pet Fee\" line and that the Airbnb pet form is completely filled out. Pet cleaning is in the Airbnb cleaning fee."
+    : s.chan === "oguest" ? "Homeowner approves the pet; send the Owner Guest Pet Addendum; pet cleaning fee only ($50 / $100)."
+    : "Send the pet form, then change the $1 Pet Hosting Fee to the real amount and add the pet cleaning fee.";
+  return `<div class="rmoney" style="display:block;margin:6px 0"><div>This home: ${h} · Guest: ${g}</div><div class="muted" style="margin-top:3px">${esc(next)} <button type="button" class="btn small" data-petinfo="1" style="min-height:26px;padding:0 8px;font-size:12px">🐾 Pet information</button></div></div>`;
+}
 // Pet cleaning by home size (Janae, Pyper 2026-11-06): $50 studio / 1 / 2 BR, $100 3 BR and up; $150 was never used
 function petClean(s){
   const f = ((s.td && s.td.fees) || []).filter(x => /pet cleaning/i.test(x.n) && x.v != null);
@@ -340,6 +411,7 @@ const TD_RULES = {
   td_pet_owner:  s => tag(s, PETS) && fee(s, /pet/i),
   td_pet_gp:     s => tag(s, PETS) && fee(s, /pet/i, false),
   td_pet_clean:  s => fee(s, /pet cleaning/i),
+  td_pet_flag_gone: s => !fee(s, PET_FEE_RE),
   td_pet_fee:    s => s.chan === "abnb" ? fee(s, PET_FEE_RE) : petFee(s).ok,   // Airbnb: name only until Kim's Nov 20 flat fee
   td_30:         s => tag(s, /over 30 nights/i),
   td_pcwg:       s => tag(s, /pc\/wg confirmed/i),
@@ -461,7 +533,7 @@ function prep(s){
   const uk = String(s.unit || "").replace(/^(L-|2H-)/i, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
   s.heads = (B.alerts || []).filter(a => a.key === uk);
   s.steps = B.steps.filter(t => t.chans.includes(s.chan) && t.cond.every(k => c[k]))
-    .map(t => { const k = ticks[t.key], au = t.auto && autoOk(s, t.auto), gf = !au && !k && GRANDFATHER[t.key] && (s.bookedAt || "") < GF_DAY && GRANDFATHER[t.key](s, ticks);
+    .map(t => { const k = ticks[t.key], au = t.auto && autoOk(s, t.auto), gf = !au && !k && GRANDFATHER[t.key] && (s.bookedAt || "") < (GF_DAYS[t.key] || GF_DAY) && GRANDFATHER[t.key](s, ticks);
       return { ...t, autoKey:t.auto, tick:k, auto:au ? (AUTO_SRC[t.auto] || "Track") : gf ? "Earlier rule" : null, done:k ? k.d : !!(au || gf) }; });
   const req = s.steps.filter(t => !t.opt);
   s.need = req.length; s.got = req.filter(t => t.done).length;
@@ -495,7 +567,12 @@ function prep(s){
   if(live && ["abnb", "vrbo", "ws"].includes(s.chan) && (s.occ && s.occ.pets)){
     const pc = petClean(s);
     if(pc) s.alerts2.push({ lvl:"warn", t:`Pet cleaning fee is ${money(pc.v)}; for a ${s.beds}-bedroom home it's ${money(pc.want)} ($50 studio–2 BR, $100 for 3 BR and up).` });
-    if(s.occ.pets >= 2) s.alerts2.push({ lvl:"info", t:"2 pets: one pet is standard at every home; a second pet needs permission. The cap for 2 pets is $700." });
+    if(s.occ.pets >= 2) s.alerts2.push({ lvl:"warn", t:"2 dogs: one dog is standard. A second dog needs a manager's OK in writing first and the pet form again (\"Second Dog\"); then the pet fee again + half the pet cleaning fee ($25 for 2 BR and under, $50 for 3+)." });
+    if(s.unitPets === false) { s.blockers.push("Pet at a no-pet home");
+      s.alerts2.push({ lvl:"stop", t:"This home isn't pet-friendly in Track, but the stay has a pet. Tell the homeowner before anything else: the dog can only come if the owner approves." }); }
+    if(/^BHV /i.test(s.unit || "") && (s.nights || 0) < 30) s.alerts2.push({ lvl:"stop", t:"Bear Hollow Village: dogs only on stays of 30 nights or more (HOA rule). Emotional support animals are the exception." });
+    if(s.chan === "abnb"){ const ap = abbPetFee(s), got = ((s.td && s.td.fees) || []).filter(f => PET_FEE_RE.test(f.n) && f.v != null).reduce((a, f) => a + f.v, 0);
+      if(ap && got > 0 && Math.abs(got - ap * Math.min(s.occ.pets, 2)) > 0.5 && Math.abs(got - ap) > 0.5) s.alerts2.push({ lvl:"warn", t:`Airbnb pet fee is ${money(got)}; for this home it's ${money(ap)} a dog (1–2 BR $100, 3 BR $150, 4 BR $175, 5+ BR $200, UM 237/301/303 $250, UM 3013 $300). Check it.` }); }
   }
   // Whimstay / Hopper pay us through the reservation, so Track shows $0 owed (Janae 2026-11-06): a balance means something's off
   if(s.chan === "ws" && s.status !== "Cancelled" && Math.abs(s.balance || 0) > 1) s.alerts2.push({ lvl:"warn", t:`Whimstay / Hopper stays should show $0 in Track (the site pays us after check-in). This one shows ${money(s.balance)}: check the folio.` });
@@ -765,7 +842,7 @@ async function card(v, res){
   requestAnimationFrame(() => { if(pop) pop.scrollTop = keepY; });
   v.innerHTML = `<div class="page rpage">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a class="btn small" href="#/reservations">← Back</a>
-      <h2 style="margin:0;flex:1">${esc(s.unit || "")} · ${esc(s.guest || "")}</h2><span class="pill">${esc(s.state)}</span></div>
+      <h2 style="margin:0;flex:1">${esc(s.unit || "")} · ${esc(s.guest || "")}</h2><button type="button" class="btn small" data-petinfo="1" title="Pet policy, fees and forms">🐾 Pet information</button><span class="pill">${esc(s.state)}</span></div>
     ${fresh()}
     <div class="card"><b>Notes</b> <span class="muted" style="font-size:12.5px">· the stay's reservation notes in Track. What you type saves to Track by itself.</span>
       <div id="rx_nt">Loading the Track notes…</div>
@@ -817,13 +894,14 @@ async function card(v, res){
       <div style="margin-top:8px"><button class="rgall" id="rx_gall">${og === "*" ? "Close all" : "Open all"}</button></div>
       ${Object.entries(grp).map(([g, ts]) => { const n = ts.filter(t => !t.opt).length, d = ts.filter(t => !t.opt && t.done).length;
         return `<details class="rgrp racc" data-g="${esc(g)}" ${og === "*" || og === g ? "open" : ""}><summary><h3>${esc(g)} <span class="muted" style="font-weight:600">${d}/${n}</span>${n && d >= n ? `<span class="pill green" style="font-size:11px;padding:1px 7px">done</span>` : ""}</h3></summary>
-        ${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
+        ${g === "Pets" ? petBox(s) : ""}${ts.map(t => { const lock = t.mgr && !B.canMgr && !t.done;
           return `<label class="rstep ${t.opt ? "opt" : ""} ${t.done ? "done" : ""}"><input type="checkbox" data-step="${t.key}" data-note="${t.note ? 1 : ""}" ${t.done ? "checked" : ""} ${lock ? "disabled" : ""}>
           <span class="l">${esc(t.label)}${t.opt ? ` <span class="muted">(if needed)</span>` : ""}${t.mgr ? ` <span class="pill plain grey" style="font-size:11px;padding:1px 7px">Manager</span>` : ""}${t.mgr && !t.done && !B.canMgr ? ` ${askBtn(t.key)}` : ""}${t.help ? `<button type="button" class="rwhy" data-why="${t.key}" title="Why? / how">i</button>` : ""}${t.tick && t.tick.n ? `<div class="muted" style="font-size:12.5px">“${esc(t.tick.n)}”</div>` : ""}${t.help ? `<div class="rwhyt" data-whyt="${t.key}" hidden>${esc(t.help)}</div>` : ""}</span>
           ${t.key === "x_charge" && !t.done ? chargeBtn(s) : ""}${t.key === "x_rule" || t.key === "x_rent" ? extBtn(s) : ""}${copyBtn(t.key, s)}${fdLink(t.key, s)}${abbLink(t.key, s)}${t.key === "i_campaign" && !t.done ? campBtn(s) : openFor(t.key, s)}<span class="who">${t.tick ? esc((t.tick.by || "Someone") + (t.tick.src !== "hub" ? " · via " + (t.tick.src === "asana" ? "Asana" : t.tick.src) : "") + " · " + when(t.tick.at)) : t.auto ? autoWho(s, t) : trkWait(t)}</span></label>`; }).join("")}</details>`; }).join("")}
       ${actBar(s)}
     </div>
   </div>`;
+  v.querySelectorAll("[data-petinfo]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); petInfo(); });
   const msg = t => $("#rx_msg").textContent = t;
   const set = async args => { const r = await sb.rpc("res_set", { p_res:s.res, ...args }); if(r.error){ msg("Couldn't save: " + r.error.message); return false; } await load(true); card(v, res); return true; };
   v.querySelectorAll("[data-step]").forEach(cb => cb.onchange = async () => {
