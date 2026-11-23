@@ -63,6 +63,10 @@ aside.rail{overflow-y:auto;overscroll-behavior:contain}
 .dk .ic svg{width:17px;height:17px}
 .dk .lb{flex:1;min-width:0;white-space:nowrap}
 .dk.sub .lb{white-space:nowrap}
+.dk .fstar{flex:none;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;font-size:15px;line-height:1;color:#fff;opacity:0;cursor:pointer;margin-right:-4px}
+.dk:hover .fstar,.dk .fstar:focus{opacity:.55}.dk .fstar:hover{opacity:1;background:rgba(255,255,255,.14)}.dk .fstar.on{opacity:1;color:#f5c542}
+@media (hover:none){.dk .fstar{opacity:.4}.dk .fstar.on{opacity:1}}
+.dk .fgrp{font-size:10.5px;font-weight:700;opacity:.6;white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis}
 .dk .soon{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;opacity:.65}
 .grp{font-size:11px;text-transform:uppercase;letter-spacing:.1em;font-weight:800;opacity:.55;margin:12px 10px 4px}
 .foot{border-top:1px solid rgba(255,255,255,.14);padding-top:8px;margin-top:8px;display:flex;flex-direction:column;gap:3px}
@@ -184,7 +188,7 @@ details.acc[open]>summary{margin-bottom:6px}
 @media (min-width:821px){
   body.mini{--rail:70px} body.mini .shell{grid-template-columns:var(--rail) 1fr} body.mini aside.rail{min-width:0}
   body.mini aside.rail{padding-left:8px;padding-right:8px}
-  body.mini .railtop .brand,body.mini .dk .lb,body.mini .dk .soon,body.mini .dk .chev,body.mini .grp,body.mini .gbox .subs,body.mini .sres{display:none!important}
+  body.mini .railtop .brand,body.mini .dk .lb,body.mini .dk .soon,body.mini .dk .fstar,body.mini .dk .fgrp,body.mini .dk .chev,body.mini .grp,body.mini .gbox .subs,body.mini .sres{display:none!important}
   body.mini .railtop{flex-direction:column}
   body.mini .rsearch input:where(:not([type=checkbox],[type=radio])){padding:0;width:40px;min-height:40px;color:transparent;cursor:pointer;margin:0 auto;display:block}
   body.mini .rsearch input::placeholder{color:transparent}
@@ -746,7 +750,9 @@ function noAccess(err){
   $("#out").onclick = async () => { await sb.auth.signOut(); loginView(); };
 }
 /* The sidebar's desk list for a desk list + saved order (shell() uses the signed-in person's; View as uses another person's) */
-function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
+function sideNav(DESKS, ORD, admin = !!(ME && ME.admin), noStar = false){
+  const FAV = (ORD || []).filter(k => /^fav:/.test(k)).map(k => k.slice(4));   // ★ Favorites (Brandon 2026-11-23, Porsha #64): saved in desk_order as "fav:<key>"
+  const star = k => noStar ? "" : `<span class="fstar${FAV.includes(k) ? " on" : ""}" role="button" tabindex="0" data-fav="${esc(k)}" title="${FAV.includes(k) ? "Take out of Favorites" : "Add to Favorites"}" aria-label="${FAV.includes(k) ? "Take out of Favorites" : "Add to Favorites"}">${FAV.includes(k) ? "★" : "☆"}</span>`;
   if(!admin) DESKS = DESKS.filter(x => x.status === "live");   // Brandon 2026-11-03: staff don't see "Coming soon" desks; admins still preview them
   if(DESKS.some(x => x.key === "competitor" && x.status === "live")) DESKS = DESKS.filter(x => x.key !== "competitor_add");   // Brandon 2026-11-02: Add competitor intel is a button in the playbook; front desk (add only) keeps the sidebar entry
   // Analytics lives inside Reports (Brandon 2026-10-28), so it gets no sidebar entry of its own
@@ -757,7 +763,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
   const info = DESKS.filter(x => INFO.includes(x.key)), live = DESKS.filter(x => x.status === "live" && !INFO.includes(x.key) && !FOOT.includes(x.key) && !CALK.includes(x.key) && !CMPK.includes(x.key) && !PDK.includes(x.key)),
     syncD = DESKS.find(x => x.key === "sync"), repD = DESKS.find(x => x.key === "reports"), soon = DESKS.filter(x => x.status !== "live" && !FOOT.includes(x.key));
   const anD = DESKS.some(x => x.key === "analytics");
-  const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}</a>`;
+  const item = (k, label, icon, extra="") => `<a class="dk" data-k="${k}" href="#/${k}" title="${esc(label)}"><span class="ic">${ICON[icon]||ICON.grid}</span><span class="lb">${esc(label)}</span>${extra}${star(k)}</a>`;
   // Locks · Office + Locks · Field sit under one "Locks" drop-down; crew only get Field (hub_can decides which come back)
   const GROUPS = { pd:{ label:"Property Details", icon:(DESKS.find(x => x.key === "homes") || {}).icon || "home", kids:{ homes_str:"STR", homes_lease:"Lease", homes_2h:"2nd Home", homes_hoa:"HOA", homes_co:"Moose Office" } },
                    maint:{ label:"Maintenance", icon:"wrench", kids:{ maintenance:"Workbench", maint_plan:"Crew planner", maint_insp:"Inspection planner", maint_projects:"Projects", maint_money:"Expenses & Time", maint_routines:"Seasonal & yearly", maint_inv:"Inventory" } },
@@ -783,7 +789,7 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
       if(isSoon && DESKS.some(y => G.kids[y.key] && y.status === "live")) return "";   // a group with any live child shows once, with the live desks
       const kids = DESKS.filter(y => G.kids[y.key]).sort((a, b) => a.sort - b.sort);
       return `<div class="gbox" data-g="${g}"><a class="dk par" href="#" data-g="${g}" title="${esc(G.label)}"><span class="ic">${ICON[G.icon]}</span><span class="lb">${esc(G.label)}</span><span class="chev">${ICON.chev}</span></a>
-        <div class="subs">${kids.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(G.label + " ▸ " + G.kids[y.key])}"><span class="lb">${esc(G.kids[y.key])}</span>${y.status !== "live" ? soonTag : ""}</a>`).join("")}</div></div>`; }).join(""); };
+        <div class="subs">${kids.map(y => `<a class="dk sub" data-k="${y.key}" href="#/${y.key}" title="${esc(G.label + " ▸ " + G.kids[y.key])}"><span class="lb">${esc(G.kids[y.key])}</span>${y.status !== "live" ? soonTag : ""}${star(y.key)}</a>`).join("")}</div></div>`; }).join(""); };
   const okey =x => { const g = grouped(x.key); return g ? "g:" + g : x.key; };
   const byMine = list => !ORD.length ? list : list.slice().sort((a, b) => { const ia = ORD.indexOf(okey(a)), ib = ORD.indexOf(okey(b));
       return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.sort - b.sort; });
@@ -801,7 +807,10 @@ function sideNav(DESKS, ORD, admin = !!(ME && ME.admin)){
   const deskBlock = live.length ? `<div class="grp">Desks</div>` + navList(byMine(live)) : "";
   const desksFirst = ORD.includes("@desks_first");
   const soonHtml = soon.length ? navList(soon, true) : "";   // a soon desk inside a live group (Damage claims) leaves this empty
-  const nav = `${homeD ? item("home", homeD.label, homeD.icon) : ""}
+  const favList = FAV.map(k => DESKS.find(x => x.key === k)).filter(Boolean);
+  const favBlock = favList.length ? `<div class="grp">★ Favorites</div>` + favList.map(x => { const g = grouped(x.key), G = g && GROUPS[g];
+      return item(x.key, G ? G.kids[x.key] : x.label, G ? G.icon : x.icon, G ? `<span class="fgrp">${esc(G.label)}</span>` : ""); }).join("") : "";
+  const nav = `${homeD ? item("home", homeD.label, homeD.icon) : ""}${favBlock}
         ${desksFirst ? deskBlock + (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") : (infoBlock ? `<div class="grp">Moose Info</div>` + infoBlock : "") + deskBlock}
         ${soonHtml ? `<div class="grp">Coming soon</div>` + soonHtml : ""}`;
   return { nav, foot: (repD ? item("reports", anD ? "Reports & Analytics" : repD.label, repD.icon || "chart") : "")
@@ -939,7 +948,23 @@ function boardView(v){
   $("#ttl").textContent = $("#utl").textContent = "Message board";
   v.innerHTML = `<div class="page"><div class="card" style="text-align:center;padding:28px 18px"><div style="font-size:40px">💬</div><h2 style="margin:6px 0">Message board</h2><p class="muted">Coming soon: a place to post and talk with the whole Moose team.</p><a class="btn" href="#/home">← Home</a></div></div>`;
 }
+async function favToggle(k){
+  const o = (PREFS.desk_order || []).slice(), f = "fav:" + k, i = o.indexOf(f), favs = o.filter(x => /^fav:/.test(x));
+  if(i < 0 && favs.length >= 12) return savedTip("Favorites hold up to 12. Take one out first.", true);
+  if(i >= 0) o.splice(i, 1);
+  const order = (i >= 0 ? favs.filter(x => x !== f) : favs.concat(f)).concat(o.filter(x => !/^fav:/.test(x)));   // favorites first: the saved list keeps 60 entries
+  const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:PREFS.interests || [], p_kinds:PREFS.kinds || [] });
+  if(r.error) return savedTip("Couldn't save: " + niceErr(r.error), true);
+  PREFS.desk_order = order;
+  const nav = document.querySelector("aside.rail nav.desks"), open = [...document.querySelectorAll(".gbox.open")].map(g => g.dataset.g);
+  if(nav){ const st = nav.scrollTop; nav.innerHTML = sideNav(DESKS, order).nav; wireNav(nav); nav.scrollTop = st;
+    open.forEach(g => { const b = nav.querySelector(`.gbox[data-g="${g}"]`); if(b) b.classList.add("open"); }); }
+  const hk = current(); document.querySelectorAll(".dk[data-k]").forEach(a => a.classList.toggle("on", a.dataset.k === hk));
+  savedTip(i >= 0 ? "Taken out of Favorites" : "Added to Favorites ★");
+}
 function wireNav(root){
+  root.querySelectorAll(".fstar").forEach(s => { const go = e => { e.preventDefault(); e.stopPropagation(); favToggle(s.dataset.fav); };
+    s.onclick = go; s.onkeydown = e => { if(e.key === "Enter" || e.key === " ") go(e); }; });
   root.querySelectorAll(".dk.par").forEach(a => a.onclick = e => { e.preventDefault();
     const closeOthers = () => document.querySelectorAll(".gbox.open").forEach(g => { if(g !== a.parentElement) g.classList.remove("open"); });   // accordion (Brandon 2026-10-28)
     if(document.body.classList.contains("mini")){ document.body.classList.remove("mini"); try { localStorage.setItem("hub_mini","0"); } catch(e){} closeOthers(); a.parentElement.classList.add("open"); return; }
@@ -1665,7 +1690,7 @@ async function viewAs(id, name){
   if(r.error || !r.data) return $("#vabody").innerHTML = `<p class="muted">Couldn't work it out: ${esc(r.error ? niceErr(r.error) : "no answer")}</p>`;
   const j = r.data, D = (j.desks || []).slice();
   addDerived(D, { maint_money:!!j.maint_money, perf:!!j.perf });
-  const SN = sideNav(D, fixOrder((j.prefs || {}).desk_order), (j.me || {}).admin === true);
+  const SN = sideNav(D, fixOrder((j.prefs || {}).desk_order), (j.me || {}).admin === true, true);
   const rep = j.reports || [], dn = k => (D.find(x => x.key === k) || {}).label || k.replace(/_/g, " "), grp = {};
   rep.forEach(x => (grp[dn(x.desk_key)] = grp[dn(x.desk_key)] || []).push(x));
   const teams = ((j.me || {}).teams || []).map(t => t.replace(/_/g, " ")).join(" · ");
@@ -1882,7 +1907,8 @@ function settingsView2(v){
     : `<div class="card"><b style="font-size:17px">🎂 My birthday</b>${bdBody()}</div>`;
   let saveT = null;
   const autoSave = () => { clearTimeout(saveT); saveT = setTimeout(async () => {
-    const cur = (desksFirst ? ["@desks_first"] : []).concat(ilist, dlist), order = cur.join() === std(ilist).concat(std(dlist)).join() ? [] : cur;
+    const favs = (PREFS.desk_order || []).filter(k => /^fav:/.test(k));   // ★ Favorites ride along (2026-11-23)
+    const cur = (desksFirst ? ["@desks_first"] : []).concat(ilist, dlist), order = favs.concat(cur.join() === std(ilist).concat(std(dlist)).join() ? [] : cur);
     const r = await sb.rpc("hub_set_prefs", { p_desk_order:order, p_interests:ints, p_kinds:ks });
     if(r.error) return savedTip("Couldn't save: " + niceErr(r.error), true);
     PREFS = Object.assign(PREFS, { desk_order:order, interests:ints, kinds:ks });
