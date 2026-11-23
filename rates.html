@@ -1175,6 +1175,12 @@ async function loadSetRates() {
   if (cid) { const bq = await sb.from("our_bookings").select("reservation_id,arrival,departure,nights,kind,channel,gross_rent,status").eq("comp_id", cid).gt("departure", today).neq("status", "Cancelled").limit(500);
     for (const b of bq.data || []) { const pn = b.kind === "guest" && b.nights && +b.gross_rent ? +b.gross_rent / b.nights : null;
       for (let k = b.arrival; k < b.departure; k = addD(k, 1)) SR.bkd[k] = { kind: b.kind, ch: b.channel, pn, res: b.reservation_id, a: b.arrival, z: b.departure }; } }
+  // Brandon 2026-11-23 (supply and demand): our other homes in this comp set booked by guests, per Sun-Sat week (same as rates_set_auto.py)
+  SR.fillGrp = {}; SR.fillMates = 0;
+  { const sid = SR.ours?.find(x => x.id === cid)?.set_id, mt = (SR.ours || []).filter(x => x.set_id === sid && x.id !== cid).map(x => x.id);
+    SR.fillMates = mt.length;
+    if (mt.length) { const gq = await sb.from("our_bookings").select("arrival,departure").in("comp_id", mt).eq("kind", "guest").neq("status", "Cancelled").gt("departure", today).limit(2000);
+      for (const b of gq.data || []) for (let k = b.arrival; k < b.departure; k = addD(k, 1)) { const w = srWk0(k); SR.fillGrp[w] = (SR.fillGrp[w] || 0) + 1; } } }
   SR.lb = cid ? ((await sb.from("our_bookings").select("reservation_id,arrival,departure,nights,channel,gross_rent,booked_at,status").eq("comp_id", cid).eq("kind", "guest").gte("booked_at", addD(today, -365)).order("booked_at", { ascending: false }).limit(400)).data || [])
     .filter(b => !/owner|o-guest|comp\/charity|commission/i.test(b.channel || "")) : [];
   // Brandon 2026-11-09: nights too far out for comp prices start from last year's bookings (this home, else its group) + farLY%
@@ -1453,6 +1459,7 @@ function srCompTot(k) { const a = SR.compAll?.[k]; if (a) return { v: a.v, nt: a
 // Brandon 2026-11-08: "somewhat split the rate on airbnb and our site" -> the comps' all-in sits halfway between our Airbnb all-in
 // and our own-site all-in (SR_SPLIT = our site's share). A home with no own-site quotes uses Airbnb only.
 const SR_SPLIT = 0;   // Brandon 2026-11-20 "Yes, switch it": our Airbnb total = the comps' Airbnb total (was 0.5). 2026-11-09: halfway between our Airbnb and our-site all-in = the comps' all-in (Airbnb a little above, our site a little below)
+function srWk0(k) { const d = new Date(k + "T12:00:00Z"); return addD(k, -d.getUTCDay()); }   // Sunday of that night's week
 function srRackFor(tot, nt) { const A = SR.fee?.Airbnb; if (!A || tot == null) return null;
   const D = SR.fee?.Direct, w = D ? SR_SPLIT : 0, n = SR_STAY, lin = f => [f.mult * (1 + f.feeR) * (1 + f.taxR), f.clean / n * (1 + f.taxR)];
   const [a1, b1] = lin(A), [a2, b2] = D ? lin(D) : [0, 0];
@@ -2132,6 +2139,15 @@ function srWire(R) {
           } /* Christmas min stays now come from SR_HOLMIN (Brandon 2026-11-10) */
         const mx = Math.max(...xw.filter(x => !["12-24", "12-25", "12-31"].includes(x.r.k.slice(5))).map(x => x.v), 0);
         for (const x of xw) if (["12-25", "12-31"].includes(x.r.k.slice(5)) && x.v < mx) { x.v = mx; x.why.push(`Christmas week: top night, at least the week's highest ${fmt(mx)}`); } } }
+    if (srRule("fill_on", 1)) {   // Brandon 2026-11-23: "as bookings come in our supply goes down so our rate needs to go up" (same as rates_set_auto.py)
+      const tier = sh => sh >= 0.75 ? srRule("fill_t3", 15) : sh >= 0.5 ? srRule("fill_t2", 10) : sh >= 0.25 ? srRule("fill_t1", 5) : 0, own = {};
+      for (const [k, B] of Object.entries(SR.bkd || {})) if (B.kind === "guest") { const w = srWk0(k); own[w] = (own[w] || 0) + 1; }
+      const gsh = srRule("fill_group_share", 0.5), capO = srRule("fill_cap_over_comps", 25), nM = SR.fillMates || 0;
+      for (const x of built) { if (x.ly) continue; const w = srWk0(x.r.k), o = (own[w] || 0) / 7, g = nM ? (SR.fillGrp?.[w] || 0) / (7 * nM) : 0;
+        const up = Math.min(srRule("fill_t3", 15), tier(o) + gsh * tier(g)); if (up <= 0) continue;
+        const v0 = x.v, cap = x.ct ? srRackFor(x.ct.v * (1 + capO / 100), x.ct.nt) : null; let nv = v0 * (1 + up / 100);
+        if (cap != null && nv > cap) nv = Math.max(v0, cap);
+        if (nv - v0 >= 0.5) { x.v = nv; x.why.push(`week ${Math.round(o * 100)}% booked${nM && g ? `, our other ${nM} home${nM > 1 ? "s" : ""} here ${Math.round(g * 100)}%` : ""}: open nights up ${up}% → ${fmt(nv)}`); } } }
     let moved = 0, last = null; SR.diff = [];
     const own = SR.owner, inPk = (k, a, b) => { const md = k.slice(5), A = String(a).slice(-5), B = String(b).slice(-5); return A <= B ? md >= A && md <= B : md >= A || md <= B; },
       ownMin = k => own ? (own.min_price_peak != null && own.peak_start && own.peak_end && inPk(k, own.peak_start, own.peak_end) ? +own.min_price_peak : own.min_price != null ? +own.min_price : null) : null;
