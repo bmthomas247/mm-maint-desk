@@ -2838,9 +2838,37 @@ document.addEventListener("toggle",function(ev){ var d=ev.target; if(d&&d.datase
 function bwSelIds(){ var sel=S.ui.bwSel||{}; return Object.keys(sel).filter(function(k){ return sel[k] && D.byId["bw-"+k]; }); }
 function bwBulkBar(){ var n=bwSelIds().length; if(!n) return '';
   return '<div class="pad" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2">'+
-    '<b>'+n+' ticked</b><button class="btn sm pri" data-bwbulk="ready">✓ Ready for Track</button><button class="btn sm" data-bwbulk="free">Do them for free ($1)</button>'+
+    '<b>'+n+' ticked</b><button class="btn sm" data-bwbulk="edit">✎ Edit all</button><button class="btn sm pri" data-bwbulk="ready">✓ Ready for Track</button><button class="btn sm" data-bwbulk="free">Do them for free ($1)</button>'+
     '<button class="btn sm" data-bwbulk="none">Nothing to bill</button><button class="btn sm ghost" data-bwbulk="clear">Untick all</button>'+
     '<span class="note">Ready uses each task’s saved bill, or the usual one (time on the task × plan rate) if it was never opened.</span></div>'; }
+/* 2026-11-23 (Brandon): "Edit all" = one task pop-up for every ticked task. A box left blank keeps each task's own value. */
+function bwEditAll(ids){ var fees=((S.feeds["bw-fees"]||{}).tasks)||{}, ok=ids.filter(function(t){ var st=tbState(t); return !(st&&(st.k==="waiting"||st.k==="done")); }), skip=ids.length-ok.length;
+  var list=ok.map(function(t){ var j=D.byId["bw-"+t]||{}; return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)"><b style="min-width:84px">'+esc(j.prop||"")+'</b><span style="flex:1">'+esc(j.title||"")+'</span><span class="muted">'+esc(fmtD(j.finished||""))+'</span></div>'; }).join("");
+  var opt=function(v,l){ return '<option value="'+v+'">'+l+'</option>'; };
+  var body='<div class="note">Changes go on all '+ok.length+' ticked task'+(ok.length===1?'':'s')+'. Leave a box blank to keep what each task already has.'+(skip?' '+skip+' already sent to Track are left out.':'')+'</div>'+
+    '<details style="margin:8px 0"><summary class="note" style="cursor:pointer">See the '+ok.length+' tasks</summary><div style="max-height:180px;overflow:auto;margin-top:6px">'+list+'</div></details>'+
+    '<div class="ocard"><div class="note" style="font-weight:700;letter-spacing:.04em">WHAT THE OWNER SEES</div>'+
+      '<label class="f" style="margin-top:6px"><span>Task title (same on every task)</span><input id="ea_t" maxlength="120" placeholder="Leave blank to keep each task\u2019s own title"></label>'+
+      '<label class="f" style="margin-top:6px"><span>Summary (optional)</span><textarea id="ea_s" style="min-height:52px" placeholder="Leave blank to keep each task\u2019s own"></textarea></label></div>'+
+    '<div class="ocard"><div class="note" style="font-weight:700;letter-spacing:.04em">ADD A COST TO EACH TASK</div>'+tbCostRows("bulk",[],false)+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px">'+
+      '<label class="f"><span>Time on site (h)</span><input id="ea_o" type="number" min="0" step="0.05" placeholder="Keep"></label>'+
+      '<label class="f"><span>Bill to</span><select id="ea_to">'+opt("","Keep")+opt("owner","Owner")+opt("tenant","Lease tenant")+opt("courtesy","Free ($1 courtesy)")+opt("none","Nothing to bill")+'</select></label>'+
+      '<label class="f"><span>Labor hours</span><input id="ea_h" type="number" min="0" step="0.25" placeholder="Keep"></label>'+
+      '<label class="f"><span>Rate $/h</span><input id="ea_r" type="number" min="0" step="1" placeholder="Keep"></label></div>'+
+    '<label class="toggle" style="margin-top:10px"><input type="checkbox" id="ea_ready"> Mark them all Ready for Track</label>';
+  openModal("Edit "+ok.length+" tasks",body,function(){ var add=tbCostRead("bulk"); if(add===null) return toast("Each added cost needs an item and a price");
+    var T=fv("ea_t"), Sm=fv("ea_s"), O=fv("ea_o"), To=fv("ea_to"), H=fv("ea_h"), R=fv("ea_r"), rd=$("ea_ready")&&$("ea_ready").checked;
+    if(!T&&!Sm&&!O&&!To&&H===""&&R===""&&!add.length&&!rd) return toast("Nothing changed");
+    var done=0;
+    return ok.reduce(function(pr,tid){ return pr.then(function(){ var j=D.byId["bw-"+tid]; if(!j) return; var old=S.taskbill[tid]||{};
+      var tb=Object.assign({},taskBillDefaults(j,fees[tid]),old,{prop:j.prop||"",month:(j.finished||"").slice(0,7)});
+      if(T) tb.newTitle=T; if(Sm) tb.summary=Sm; if(O!=="") tb.onsite=O; if(To){ tb.billTo=To; tb.ignored=To==="none"?true:false; }
+      if(H!=="") tb.hours=+H; if(R!=="") tb.rate=+R; if(add.length) tb.lines=(tb.lines||[]).concat(add.map(function(l){ return Object.assign({},l); }));
+      if(rd&&To!=="none"){ tb.ready=true; tb.readyBy=S.me; tb.readyAt=Date.now(); }
+      tb.editAll={by:S.me,at:Date.now()};
+      return put("taskbill",tid,tb,old).then(function(){ done++; }); }); },Promise.resolve())
+      .then(function(){ closeModal(); S.ui.bwSel={}; render(); toast(done+" task"+(done===1?"":"s")+" updated"); },function(){ render(); toast(done+" updated, then one didn't save"); }); },"Save all "+ok.length); }
 function bwBulkDraw(){ var b=$("bwbulk"); if(b) b.innerHTML=bwBulkBar(); }
 document.addEventListener("change",function(ev){ var t=ev.target; if(!t||!t.matches) return;
   if(t.matches("input.bwsel")){ S.ui.bwSel=S.ui.bwSel||{}; S.ui.bwSel[t.dataset.bwsel]=t.checked; return bwBulkDraw(); }
@@ -2848,6 +2876,7 @@ document.addEventListener("change",function(ev){ var t=ev.target; if(!t||!t.matc
     [].forEach.call(document.querySelectorAll("input.bwsel"),function(c){ c.checked=t.checked; }); return bwBulkDraw(); } });
 document.addEventListener("click",function(ev){ var b=ev.target.closest&&ev.target.closest("[data-bwbulk]"); if(!b) return; ev.preventDefault(); ev.stopPropagation();
   var kind=b.dataset.bwbulk, ids=bwSelIds(); if(kind==="clear"){ S.ui.bwSel={}; return render(); } if(!ids.length||!need()) return;
+  if(kind==="edit") return bwEditAll(ids);
   var words={ready:"mark "+ids.length+" task"+(ids.length===1?"":"s")+" Ready for Track",free:"bill "+ids.length+" task"+(ids.length===1?"":"s")+" as a $1.00 courtesy",none:"mark "+ids.length+" task"+(ids.length===1?"":"s")+" Nothing to bill"}[kind];
   Promise.resolve(window.mmConfirm?window.mmConfirm("Do you want to "+words+"?",{yes:"Yes, do it"}):confirm("Do you want to "+words+"?")).then(function(ok){ if(!ok) return;
     var fees=((S.feeds["bw-fees"]||{}).tasks)||{}, done=0, skip=0;
