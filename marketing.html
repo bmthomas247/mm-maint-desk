@@ -63,6 +63,12 @@ tr:last-child td{border-bottom:0}
 .mb i{display:block;height:12px;border-radius:4px;background:var(--moose);min-width:2px} .mb i.c{background:var(--amber)}
 .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:12px}
 .col{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;min-width:0}
+.octl{display:flex;overflow-x:auto;gap:0;margin:6px 0 10px;padding:4px 0 2px}
+.octl .st{flex:1 0 92px;text-align:center;position:relative;font-size:12px;padding:0 4px}
+.octl .st:before{content:"";position:absolute;top:27px;left:0;right:0;height:3px;background:var(--line)}
+.octl .st i{display:block;width:13px;height:13px;border-radius:50%;background:var(--muted);margin:6px auto;position:relative;border:2px solid var(--card)}
+.octl .st.done i{background:var(--forest-2)} .octl .st.late i{background:var(--red)} .octl .st.soon i{background:var(--amber)}
+.octl .st b{display:block;font-weight:800;min-height:15px} .octl .st small{color:var(--muted)}
 .col h3{margin:2px 4px 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .it{border:1px solid var(--line);border-radius:12px;padding:9px 11px;margin-bottom:8px;background:var(--ground);cursor:pointer}
 .it b{display:block;font-size:14px} .it p{margin:3px 0 0;font-size:12.5px;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
@@ -157,7 +163,7 @@ async function load(){
 function render(){
   const h = [`<h1>${esc(TABS[TAB])}</h1>`, `<div id="mstats">${statsHtml()}${pullLine()}</div>`];
   if(TAB === "guest"){ const [top, list] = guestHtml().split("<h2>Guests</h2>"); h.push(findHtml(), campsHtml(), `<h2>⭐ 5-star return renters</h2>`, top, `<h2 id="gst">Guests</h2>` + list); }   // campaigns above the long guest list
-  else if(TAB === "owners") h.push(leadsHtml(), postcardsHtml(), ownersHtml(), campsHtml());
+  else if(TAB === "owners") h.push(leadsHtml(), ocampsHtml(), postcardsHtml(), ownersHtml(), campsHtml());
   else if(TAB === "general") h.push(placesHtml(), campsHtml());
   else h.push(campsHtml());
   h.push(listsHtml(), boardHtml());
@@ -353,6 +359,8 @@ async function olLoad(){
     OL.batches = bt.data || []; OL.items = it.data || [];
     OL.scans = {}; (sc.data || []).forEach(x => OL.scans[x.code] = (OL.scans[x.code] || 0) + 1);
     OL.sale = new Set((zs.data || []).map(x => olKey((x.data || {}).street)).filter(Boolean));
+    const oc = await sb.from("mkt_owner_campaigns").select("*").eq("off", false).order("start_on", { ascending:false });
+    OL.camps = oc.error ? null : (oc.data || []);   // null = hub_owner_campaigns.sql not run yet: campaign parts stay hidden
   } catch(e){ OL.err = (e && e.message) || String(e); OL.rows = OL.rows || []; }
 }
 const olOwn = r => ((r.data || {}).owners || []).join(" & ");
@@ -411,6 +419,7 @@ function olInner(){
     ${nsel ? `<div class="box" style="padding:10px 12px;margin:0 0 8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;position:sticky;top:0;z-index:5">
       <b>${nsel} picked</b>
       <button class="btn primary small" data-olpc="1">📬 Make a postcard batch</button>
+      ${OL.camps ? `<button class="btn primary small" data-olcamp="1">🗓 Start a 3-drop campaign</button>` : ""}
       <select data-olbulk="1"><option value="">Set status…</option>${Object.entries(OL_STATUS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
       <button class="btn small" data-olme="1">Assign to me</button>
       <button class="btn small" data-oldnc="1">Don't contact</button>
@@ -433,13 +442,81 @@ function olParse(m){   // "5645 Castleton Dr, San Diego, CA 92117" / "13541 N No
   return { a1:p.join(", "), a2, city, st:st.toUpperCase(), zip };
 }
 const GO = c => `https://crew.moosemanagement.com/go.html?c=${c}`;
+
+/* ---------- Owners tab: Owner campaigns (Brandon 2026-11-23: same timing as the ZPoint Spring 2025 campaign that did well).
+   3 drops to the same owners 5 weeks apart, an email 3 weeks after each drop, ads the whole time (hub_owner_campaigns.sql).
+   Each drop is an ordinary postcard batch (campaign_id, drop_no, drop_on); a person still designs, previews and mails each one. ---------- */
+const OC_STEPS = [[0,"Mail drop 1","drop",1],[7,"Ads start","ads"],[21,"Email 1","email"],[35,"Mail drop 2","drop",2],
+  [56,"Email 2","email"],[70,"Mail drop 3","drop",3],[91,"Email 3","email"],[100,"Ads end","ads"]];
+const ocAdd = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const ocShort = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
+const ocSent = b => b && (b.status === "mailed" || b.send_status === "sent" || b.send_status === "partial");
+function ocDropPill(b){ if(ocSent(b)) return `<span class="pill green">drop ${b.drop_no} mailed</span>`; if(b.status === "cancelled") return `<span class="pill">drop ${b.drop_no} cancelled</span>`;
+  const t = today(), soon = ocAdd(t, 7);
+  return b.drop_on < t ? `<span class="pill red">drop ${b.drop_no} was due ${esc(ocShort(b.drop_on))}</span>`
+    : b.drop_on <= soon ? `<span class="pill amber">drop ${b.drop_no} mails ${esc(ocShort(b.drop_on))}</span>` : `<span class="pill">drop ${b.drop_no} · ${esc(ocShort(b.drop_on))}</span>`; }
+function ocTimeline(c, drops){ const t = today();
+  return `<div class="octl">${OC_STEPS.map(([d, l, k, n]) => { const on = ocAdd(c.start_on, d), b = k === "drop" ? drops[n] : null;
+    const cls = b ? (ocSent(b) ? "done" : b.status === "cancelled" ? "" : on < t ? "late" : on <= ocAdd(t, 7) ? "soon" : "") : on <= t ? "done" : "";
+    return `<div class="st ${cls}"><b>${l}</b><i></i><small>${esc(ocShort(on))}</small></div>`; }).join("")}</div>`; }
+function ocampsHtml(){
+  if(!OL.camps) return "";
+  const box = OL.camps.map(c => {
+    const bs = OL.batches.filter(b => b.campaign_id === c.id), drops = {}; bs.forEach(b => drops[b.drop_no] = b);
+    const its = OL.items.filter(i => bs.some(b => b.id === i.batch_id));
+    const mailed = its.filter(i => ocSent(bs.find(b => b.id === i.batch_id))).length, scans = its.reduce((n, i) => n + (OL.scans[i.code] || 0), 0);
+    const keys = c.lead_keys || [], stc = s => keys.filter(k => (OL.st[k] || {}).status === s).length, signed = stc("signed"), talking = stc("talking");
+    const cost = bs.reduce((n, b) => n + (b.cost != null ? +b.cost : 0), 0), costN = bs.filter(b => b.cost != null).length;
+    return `<div class="box" style="padding:12px 14px;margin:0 0 12px">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div><b style="font-size:16px">🗓 ${esc(c.name)}</b>
+        <div class="muted" style="font-size:12px">${[c.audience, "by " + (c.created_name || "?"), fmtD(c.created_at)].filter(Boolean).map(esc).join(" · ")}</div></div>
+        <button class="btn small" data-ocoff="${c.id}">Park</button></div>
+      ${ocTimeline(c, drops)}
+      <div class="kpis">
+        <div class="kpi"><small>Owners</small><b>${keys.length.toLocaleString()}</b></div>
+        <div class="kpi"><small>Cards mailed</small><b>${mailed.toLocaleString()}</b><small>of ${its.length.toLocaleString()} in 3 drops</small></div>
+        <div class="kpi"><small>QR scans</small><b>${scans}</b></div>
+        <div class="kpi"><small>Talking</small><b>${talking}</b><small>owners marked Talking</small></div>
+        <div class="kpi"><small>Signed</small><b>${signed}</b><small>owners marked Signed</small></div>
+        <div class="kpi"><small>Mail cost recorded</small><b>${costN ? "$" + Math.round(cost).toLocaleString() : "—"}</b><small>${signed && costN ? "$" + Math.round(cost / signed).toLocaleString() + " per signed home" : "from ✓ Mark mailed / PostGrid"}</small></div>
+      </div></div>`; }).join("");
+  return `<h2>🗓 Owner campaigns</h2><p class="muted">Same timing as the ZPoint Spring 2025 owner campaign: 3 mail drops to the same owners 5 weeks apart, an email 3 weeks after each drop, ads running the whole time. Each drop is a batch under 📬 Postcards that someone designs, previews and mails on its date; the emails and ads are cards on Plan for Owners.</p>
+    ${box || `<p class="muted">No campaigns yet. Tick owners in Owner leads, then press 🗓 Start a 3-drop campaign.</p>`}
+    <p class="src">Timing source: ZPoint campaign dashboard, Spring 2025 (drops Mar 17, Apr 21, May 26; emails Apr 7, May 12, Jun 16; ads Mar 24 – Jun 25). Scans from the cards' QR codes; Talking/Signed from the status set on each owner above.</p>`;
+}
+function ocStart(){
+  const n = OL.sel.size, d = document.createElement("dialog"); d.style.cssText = "max-width:600px;width:94vw;border:0;border-radius:14px;padding:18px";
+  const t = today(), wd = new Date(t + "T12:00:00Z").getUTCDay(), mon = ocAdd(t, ((8 - wd) % 7) || 7);   // next Monday, like Mar 17 2025
+  const f = OL.f, tiles = { prime:"Prime prospects", new:"New owners", sale:"For sale now", all:"Everyone" };
+  const aud = [tiles[f.t], f.nb, f.near === "out" ? "out of state" : f.near === "ut" ? "in Utah" : ""].filter(Boolean).join(" · ");
+  d.innerHTML = `<h3 style="margin:0 0 6px">🗓 Start a 3-drop campaign · ${n} owner${n === 1 ? "" : "s"}</h3>
+    <label>Name<input id="ocn" maxlength="150" value="${esc("Owners · " + new Date().toLocaleDateString("en-US", { month:"short", year:"numeric" }))}"></label>
+    <label style="display:block;margin-top:8px">Who (for the record)<input id="oca" maxlength="200" value="${esc(aud)}"></label>
+    <label style="display:block;margin-top:8px">Drop 1 mails on<input id="ocs" type="date" min="${t}" value="${mon}"></label>
+    <label style="display:block;margin-top:8px">What's on the card (for the record; design each drop with 🎨 later)<textarea id="occ" rows="2" maxlength="600"></textarea></label>
+    <div id="ocp"></div>
+    <p class="muted" style="font-size:12px">This makes 3 postcard batches (one per drop) and 5 cards on Plan for Owners (ads start, 3 emails, ads end + results). Nothing is mailed until someone presses 📮 Mail or ✓ Mark mailed on each drop.${n > 500 ? ` PostGrid's free tier mails 500 a month, so ${n.toLocaleString()} owners per drop needs a paid plan.` : ""}</p>
+    <p class="err" id="oce"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Start campaign</button></div>`;
+  document.body.appendChild(d); d.showModal();
+  const prev = () => { const s = d.querySelector("#ocs").value; d.querySelector("#ocp").innerHTML = s ? ocTimeline({ start_on:s }, {}) : ""; };
+  d.querySelector("#ocs").addEventListener("input", prev); prev();
+  d.addEventListener("click", async e => { const x = e.target.closest("[data-x]"); if(!x) return;
+    if(x.dataset.x === "0"){ d.close(); d.remove(); return; }
+    x.disabled = true; x.textContent = "Making it…"; const start = d.querySelector("#ocs").value;
+    const r = await sb.rpc("mkt_campaign_make", { p_name:d.querySelector("#ocn").value, p_audience:d.querySelector("#oca").value,
+      p_start:start || null, p_card:d.querySelector("#occ").value, p_keys:[...OL.sel] });
+    if(r.error){ d.querySelector("#oce").textContent = niceE(r.error); x.disabled = false; x.textContent = "Start campaign"; return; }
+    d.close(); d.remove(); OL.sel.clear(); await olLoad(); render();
+    await mmAlert(`Campaign started: ${r.data.owners} owners, 3 drops. Design drop 1 under 📬 Postcards before ${ocShort(start)}.`); });
+}
 function postcardsHtml(){
   const by = {}; OL.items.forEach(i => (by[i.batch_id] = by[i.batch_id] || []).push(i));
   const B = OL.batches.filter(b => b.status !== "cancelled");
   return `<h2>📬 Postcards</h2><p class="muted">Each batch is a list of owners with a short code per card. Download the address list for the printer (Thanks.io, PostGrid or Lob), then mark it mailed. The QR link on each card logs the scan and opens our Revenue Estimator.</p>
     ${B.length ? `<div class="box"><table><thead><tr><th>Batch</th><th>Cards</th><th>Status</th><th>Scans</th><th></th></tr></thead><tbody>
       ${B.map(b => { const its = by[b.id] || [], sc = its.reduce((n, i) => n + (OL.scans[i.code] || 0), 0), who = its.filter(i => OL.scans[i.code]).length;
-        return `<tr><td><b>${esc(b.name)}</b><div class="muted" style="font-size:12px">${esc(b.created_name || "")} · ${esc(fmtD(b.created_at))}</div>${b.card ? `<div style="font-size:12.5px;margin-top:3px">${esc(b.card).slice(0, 220)}</div>` : ""}</td>
+        return `<tr><td><b>${esc(b.name)}</b>${b.drop_on ? ` ${ocDropPill(b)}` : ""}<div class="muted" style="font-size:12px">${esc(b.created_name || "")} · ${esc(fmtD(b.created_at))}</div>${b.card ? `<div style="font-size:12.5px;margin-top:3px">${esc(b.card).slice(0, 220)}</div>` : ""}</td>
           <td>${its.length}</td>
           <td>${b.status === "mailed" ? `<span class="pill green">mailed ${esc(fmtD(b.mailed_on))}</span>${b.printer ? `<div class="muted" style="font-size:12px">${esc(b.printer)}${b.cost != null ? " · $" + Number(b.cost).toLocaleString() : ""}</div>` : ""}` : b.status === "exported" ? `<span class="pill amber">list downloaded</span>` : `<span class="pill">not sent yet</span>`}</td>
           <td>${sc ? `<b>${sc}</b> <span class="muted">(${who} owner${who === 1 ? "" : "s"})</span>` : `<span class="muted">0</span>`}</td>
@@ -483,7 +560,10 @@ async function olSet(keys, p){ const r = await sb.rpc("mkt_lead_set", { p_keys:k
     if("status" in p) s.status = p.status; if("dont_contact" in p) s.dont_contact = p.dont_contact; if("owner_name" in p) s.owner_name = p.owner_name; if(p.note) s.note = p.note; });
   return true; }
 document.addEventListener("click", async e => {
-  const b = e.target.closest("[data-olt],[data-olmore],[data-olnote],[data-olpc],[data-olme],[data-oldnc],[data-olclear],[data-olcsv],[data-pccsv],[data-pcmail],[data-pccancel],[data-pcdesign],[data-pcprev],[data-pclive]"); if(!b) return;
+  const b = e.target.closest("[data-olt],[data-olmore],[data-olnote],[data-olpc],[data-olme],[data-oldnc],[data-olclear],[data-olcsv],[data-pccsv],[data-pcmail],[data-pccancel],[data-pcdesign],[data-pcprev],[data-pclive],[data-olcamp],[data-ocoff]"); if(!b) return;
+  if(b.dataset.olcamp) return ocStart();
+  if(b.dataset.ocoff){ if(!await mmConfirm("Park this campaign? It goes off this list. Its batches stay; cancel any drop you don't want from its row under 📬 Postcards.")) return;
+    const r = await sb.rpc("mkt_campaign_set", { p_id:+b.dataset.ocoff, p_off:true }); if(r.error) return mmAlert(niceE(r.error)); await olLoad(); render(); return; }
   if(b.dataset.olt){ OL.f.t = OL.f.t === b.dataset.olt ? "all" : b.dataset.olt; OL.all = false; return olDraw(); }
   if(b.dataset.olmore){ OL.all = true; return olDraw(); }
   if(b.dataset.olnote){ const k = b.dataset.olnote, t = await mmAsk("Note on this owner (who you talked to, what they said). Never codes or passwords.", { multiline:true, value:"" });
