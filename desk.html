@@ -2604,14 +2604,14 @@ function vMoney(){
     '<div class="empty">No time logged this month.</div>';
   G.crew+='<div class="pad note">Time comes from "+ Time on site" on a job or here. Clocked hours come from hub clock-ins (Hubstaff before Nov 11). '+
     'Jobs closed = tasks finished in Breezeway that month plus jobs marked done on this desk.</div></section>';
-  var showAll=!!S.ui.bwAll, isIgn=function(j){ var t=S.taskbill[j.id.slice(3)]; return !!(t&&t.ignored); }, ignN=bwDone.filter(isIgn).length, movedN=0, list=bwDone.filter(function(j){ var st=tbState(j.id.slice(3)); if(st && st.k!=="stop"){ movedN++; return false; } return (showAll || !isInsp(j)) && (S.ui.showIgn || !isIgn(j)); });
+  var showAll=!!S.ui.bwAll, isIgn=function(j){ var t=S.taskbill[j.id.slice(3)]; return !!(t&&t.ignored); }, ignN=bwDone.filter(isIgn).length, movedN=0, list=bwDone.filter(function(j){ var st=tbState(j.id.slice(3)); if(st && st.k!=="stop"){ movedN++; return false; } return j.prop!=="Moose company" && (showAll || !isInsp(j)) && (S.ui.showIgn || !isIgn(j)); });
   var fees=((S.feeds["bw-fees"]||{}).tasks)||{}, feeOf=function(j){ var f=fees[j.id.slice(3)]; return f&&f.fees?f.fees.reduce(function(a,x){ return a+(+x.amount||0); },0):0; };
   var feeTot=bwDone.reduce(function(a,j){ return a+feeOf(j); },0);
   G.bw+='<section class="panel"><div class="ph"><h3>Completed in Breezeway</h3><span class="ct">'+bwDone.length+' tasks'+(feeTot?' · '+money(feeTot)+' in fees found':'')+'</span>'+(function(){ var rp=readyToPush(m), sum=rp.reduce(function(a,tid){ var j=D.byId["bw-"+tid]; return a+(j?taskBillTotal(j,S.taskbill[tid]):0); },0);
     return '<span class="note">'+(rp.length?rp.length+' ready ('+money(sum)+') — post them from Ready to post to Track below':'Open a task, check its costs, mark it Ready')+'</span>'; })()+'</div>';
   /* filter + sort (tech, home, date range; click a column to sort) */
   if((S.ui.bwF||{}).from||(S.ui.bwF||{}).to) list=D.jobs.filter(function(j){ if(!(j.src==="breezeway" && j.status==="done" && j.bwStatus!=="closed" && !(D.bulk&&D.bulk[j.id]) && !j.vendorVisit && !j.schedNote && !j.officeOnly)) return false;
-    var st=tbState(j.id.slice(3)); if(st && st.k!=="stop") return false; return (showAll || !isInsp(j)) && (S.ui.showIgn || !isIgn(j)); });
+    var st=tbState(j.id.slice(3)); if(st && st.k!=="stop") return false; return j.prop!=="Moose company" && (showAll || !isInsp(j)) && (S.ui.showIgn || !isIgn(j)); });
   var bf=S.ui.bwF||{}, techs={}; list.forEach(function(j){ (j.crew||[]).forEach(function(c){ techs[c]=1; }); });
   var nAll=list.length;
   list=list.filter(function(j){ if(bf.tech && (j.crew||[]).indexOf(bf.tech)<0) return false;
@@ -2816,6 +2816,7 @@ function taskParts(j){ var out=[];
     else if(e.jobId===j.id) out.push({id:k, what:(e.vendor||"Parts")+(e.note?" — "+e.note.replace(/ · from Breezeway$/,""):""), amount:+e.amount||0}); });
   return out; }
 /* 2026-11-11 (Brandon): we never charge owners for inspections or repeating tasks; they stay off the list unless Chris shows them, and open as "Nothing to bill" */
+/* 2026-11-23 (Brandon): Moose Office tasks are company work, never billed, so they never show on Completed in Breezeway */
 function isInsp(j){ return !!(j && (j.auto || j.kind==="inspection" || /inspection/i.test(j.title||""))); }
 function taskBillParts(j,tb){ var sk=(tb&&tb.skipParts)||[], ps=taskParts(j);
   ((tb&&tb.combined)||[]).forEach(function(t2){ var j2=D.byId["bw-"+t2]; if(j2) ps=ps.concat(taskParts(j2)); });
