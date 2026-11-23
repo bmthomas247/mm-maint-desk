@@ -229,7 +229,7 @@ async function boot(){
       <a class="btn primary" href="hub.html#/competitor" target="_top">Go to the Moose Hub</a></div>`; return; }
   const r = await sb.rpc("cmp_me");
   S.me = r.data || {};
-  if(r.error || (!S.me.read && !S.me.add)){ $("#app").innerHTML = `<div class="center"><h2>No access</h2><p class="muted">This desk isn't on your teams. Ask Brandon or Kim.</p></div>`; return; }
+  if(r.error || (!S.me.read && !S.me.add)){ $("#app").innerHTML = ""; try{ if(window.top !== window) window.top.location.hash = "#/home"; else location.href = "hub.html#/home"; }catch(e){ location.href = "hub.html#/home"; } return; }
   window.addEventListener("hashchange", route);
   route();
 }
