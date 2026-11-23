@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script src="media.js?v=20261123"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Owners</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+<!-- Owners desk (2026-11-23, Brandon: "build this page into a beaut" + "a campaign builder like the map tagging in OwnerPoint ...
+     find a neighborhood, append the data, build the campaign and get it started all in the hub" + "a timeline of whats going on for
+     campaigns and a timeline of getting people signed"). Separate from marketing.html so Jeff's edits there never clash.
+     Data: serp_finds area_owner (RentCast county owners), mkt_owner_lists/_members, mkt_area_requests (hub_owner_builder.sql),
+     mkt_hr_leads/_touches/_spend (hub_owner_homerun.sql), mkt_owner_campaigns + mkt_postcard_* (hub_owner_campaigns.sql, hub_owner_leads.sql),
+     mkt_owner_inquiries (hub_owner_campaign_history.sql). Access: hub_can('advertising'), enforced in Supabase. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --gold:#c99a2e;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{ --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.page{max-width:1640px;margin:0 auto;padding:16px 20px 60px}
+.hero{background:linear-gradient(135deg,#2f4a0e 0%,#3c5f12 45%,#5b8a1e 100%);color:#fff;border-radius:22px;padding:22px 24px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero h1{margin:0;font-size:26px;letter-spacing:-.01em}
+.hero p{margin:4px 0 14px;opacity:.85;font-size:14px}
+.hero .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.hero .st{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:10px 12px;cursor:pointer;text-align:left;color:#fff;font:inherit}
+.hero .st small{display:block;opacity:.8;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+.hero .st b{font-size:24px;display:block;line-height:1.2}
+.hero .st span{font-size:12px;opacity:.85}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 14px}
+.tabs button{border:1px solid var(--line-2);background:var(--card);color:var(--ink-2);border-radius:999px;padding:8px 14px;font:inherit;font-weight:700;font-size:13.5px;cursor:pointer}
+.tabs button.on{background:var(--forest);border-color:var(--forest);color:#fff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin:0 0 14px}
+.card h2{margin:0 0 6px;font-size:17px}
+.muted{color:var(--muted)} .src{color:var(--muted);font-size:11.5px;margin-top:8px}
+.btn{border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;padding:7px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.btn:hover{border-color:var(--forest)} .btn.primary{background:var(--forest);border-color:var(--forest);color:#fff} .btn.small{padding:4px 9px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--moose-soft);color:var(--moose-ink)}
+.pill.red{background:var(--red-soft);color:var(--red)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.blue{background:var(--blue-soft);color:var(--blue)} .pill.grey{background:var(--line);color:var(--ink-2)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:8px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-align:left;font:inherit;color:inherit}
+button.kpi{cursor:pointer} button.kpi.on{outline:2px solid var(--moose)}
+.kpi small{display:block;color:var(--muted);font-size:12px} .kpi b{font-size:22px;display:block}
+input,select,textarea{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--line-2);border-radius:9px;background:var(--card);color:var(--ink)}
+input[type=checkbox],input[type=radio]{padding:0;width:auto}
+label.ck{display:flex;gap:6px;align-items:center;font-size:13px;margin:3px 0}
+table{width:100%;border-collapse:collapse;font-size:13px} th{text-align:left;color:var(--muted);font-weight:700;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.builder{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px}
+@media (max-width:1000px){ .builder{grid-template-columns:1fr} }
+#map{height:640px;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow)}
+.side .card{margin-bottom:10px}
+.steps{display:flex;gap:6px;margin:0 0 10px} .steps span{flex:1;text-align:center;font-size:12px;font-weight:800;padding:6px;border-radius:10px;background:var(--line);color:var(--ink-2)}
+.steps span.on{background:var(--forest);color:#fff} .steps span.done{background:var(--moose-soft);color:var(--moose-ink)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:8px} .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.lead{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:0 0 8px;background:var(--card)}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tl{overflow-x:auto} .tl svg{display:block}
+.funnel{display:flex;gap:6px;align-items:flex-end;margin:8px 0}
+.funnel div{flex:1;text-align:center} .funnel .bar{background:var(--forest);border-radius:8px 8px 0 0;margin:0 auto;width:70%;min-height:3px}
+dialog{border:0;border-radius:18px;padding:20px;max-width:640px;width:94vw;box-shadow:0 20px 60px rgba(0,0,0,.3);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(10,20,12,.45)}
+.err{color:var(--red);font-weight:700}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="page" id="app"><div class="empty">Loading…</div></div>
+<dialog id="dlg"></dialog>
+<script src="confirm.js?v=20261120c"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmtD = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "";
+const fmtS = d => d ? new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month:"short", day:"numeric" }) : "";
+const today = () => new Date().toLocaleDateString("en-CA", { timeZone:"America/Denver" });
+const addD = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const niceE = e => (window.top && window.top.niceErr ? window.top.niceErr(e) : (e && e.message) || String(e));
+const money = n => n == null ? "—" : "$" + Math.round(+n).toLocaleString();
+const TABS = [["overview","🏔 Overview"],["builder","🗺 Campaign builder"],["leads","📞 Leads & follow-up"],["ctl","📅 Campaign timeline"],["stl","✍️ Signing timeline"],["past","📜 Past results"]];
+const S = { tab:new URLSearchParams(location.search).get("t") || "overview", owners:[], homes:[], lists:[], members:{}, areas:[], hr:[], hrT:[], hrS:[], camps:[], batches:[], items:[], scans:[], inq:[], rc:null,
+  sel:{ poly:null, list:null, f:{ absentee:true, newOwner:false, outState:false, notInCampaign:true, type:"", beds:0 } }, hrf:"due" };
+const OC_STEPS = [[0,"Mail drop 1"],[7,"Ads start"],[21,"Email 1"],[35,"Mail drop 2"],[56,"Email 2"],[70,"Mail drop 3"],[91,"Email 3"],[100,"Ads end"]];
+
+async function pages(q){ let all = []; for(let f = 0; f < 50000; f += 1000){ const r = await q().range(f, f + 999); if(r.error) throw r.error; all = all.concat(r.data || []); if((r.data || []).length < 1000) break; } return all; }
+async function load(){
+  const ok = await sb.rpc("hub_can", { p_desk:"advertising" });
+  if(ok.error || !ok.data){ $("#app").innerHTML = `<div class="empty">Nothing to show.</div>`; return false; }
+  const [own, homes, lists, areas, hr, hrT, hrS, camps, bt, it, sc, inq, rc] = await Promise.all([
+    pages(() => sb.from("serp_finds").select("key,community,data").eq("kind", "area_owner").eq("gone", false).order("key")),
+    sb.rpc("mkt_our_home_points"),
+    sb.from("mkt_owner_lists").select("*").eq("off", false).order("created_at", { ascending:false }),
+    sb.from("mkt_area_requests").select("*").order("id", { ascending:false }).limit(20),
+    pages(() => sb.from("mkt_hr_leads").select("*").eq("off", false).order("id")),
+    pages(() => sb.from("mkt_hr_touches").select("*").order("id")),
+    sb.from("mkt_hr_spend").select("*").eq("off", false).order("day"),
+    sb.from("mkt_owner_campaigns").select("*").eq("off", false).order("start_on"),
+    sb.from("mkt_postcard_batches").select("*").eq("off", false).order("created_at"),
+    pages(() => sb.from("mkt_postcard_items").select("batch_id,code,lead_key").order("batch_id")),
+    pages(() => sb.from("mkt_postcard_scans").select("code,at").order("at")),
+    pages(() => sb.from("mkt_owner_inquiries").select("*").eq("off", false).order("lead_on")),
+    sb.from("mkt_pull_status").select("*").eq("key", "rentcast").maybeSingle()]);
+  S.owners = own.map(o => ({ key:o.key, comm:o.community, ...o.data })).filter(o => o.lat != null || true);
+  S.homes = homes.data || []; S.lists = lists.data || []; S.areas = areas.data || [];
+  S.hr = hr; S.hrT = hrT; S.hrS = hrS.data || []; S.camps = camps.data || []; S.batches = bt.data || []; S.items = it; S.scans = sc; S.inq = inq; S.rc = rc.data || null;
+  return true;
+}
+
+/* ------------------------------------------------------------------ shell */
+function render(){
+  const signedYr = S.hr.filter(l => l.status === "signed" && String(l.updated_at || "").slice(0, 4) === today().slice(0, 4)).length;
+  const due = S.hr.filter(hrDue).length, live = S.camps.filter(c => c.source !== "zpoint" && addD(c.start_on, 100) >= today()).length;
+  const spend = S.hrS.reduce((n, x) => n + +x.amount, 0), signedAll = S.hr.filter(l => l.status === "signed").length;
+  const mapped = S.owners.filter(o => o.lat != null).length;
+  const st = (t, l, v, s) => `<button class="st" data-tab="${t}"><small>${l}</small><b>${v}</b><span>${s || ""}</span></button>`;
+  $("#app").innerHTML = `<div class="hero"><h1>Owners</h1><p>Find owners, start campaigns, follow up, and watch homes get signed. All in one place.</p>
+      <div class="stats">${st("builder", "Owners on the map", mapped.toLocaleString(), (S.owners.length - mapped) ? (S.owners.length - mapped) + " without a map point" : "county records")}
+        ${st("leads", "Due to follow up", due, "calls, texts, emails")}${st("ctl", "Campaigns running", live, S.camps.length + " in all")}
+        ${st("stl", "Signed this year", signedYr, signedAll + " from the board")}${st("stl", "Cost per signed home", signedAll ? money(spend / signedAll) : "—", money(spend) + " logged")}</div></div>
+    <div class="tabs">${TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${l}</button>`).join("")}</div>
+    <div id="view"></div>`;
+  ({ overview:vOverview, builder:vBuilder, leads:vLeads, ctl:vCampTL, stl:vSignTL, past:vPast }[S.tab] || vOverview)();
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if(!b) return; S.tab = b.dataset.tab; history.replaceState(null, "", "?t=" + S.tab); render(); window.scrollTo(0, 0); });
+
+/* ------------------------------------------------------------------ overview */
+function vOverview(){
+  const due = S.hr.filter(hrDue), next = S.camps.filter(c => c.source !== "zpoint").flatMap(c => OC_STEPS.map(([d, l]) => ({ c, d:addD(c.start_on, d), l }))).filter(x => x.d >= today() && x.d <= addD(today(), 21)).sort((a, b) => a.d < b.d ? -1 : 1);
+  const recentT = S.hrT.slice(-8).reverse();
+  $("#view").innerHTML = `<div class="kpis">
+      <div class="kpi"><small>🔥 Warm leads (asked before)</small><b>${S.hr.filter(l => l.segment === "warm" && !HR_CLOSED.has(l.status)).length}</b></div>
+      <div class="kpi"><small>🏡 New buyers near our homes</small><b>${S.hr.filter(l => l.segment === "new_buyer" && !HR_CLOSED.has(l.status)).length}</b></div>
+      <div class="kpi"><small>🏢 Absentee owners in our buildings</small><b>${S.hr.filter(l => l.segment === "our_building" && !HR_CLOSED.has(l.status)).length}</b></div>
+      <div class="kpi"><small>📣 In a campaign</small><b>${S.hr.filter(l => l.segment === "campaign").length}</b></div>
+      <div class="kpi"><small>🗂 Saved owner lists</small><b>${S.lists.length}</b></div>
+      <div class="kpi"><small>🔎 RentCast lookups</small><b>${S.rc ? esc(S.rc.note || "") : "—"}</b></div></div>
+    <div class="builder" style="grid-template-columns:1fr 1fr">
+      <div class="card"><h2>Coming up (3 weeks)</h2>${next.length ? `<table><tbody>${next.map(x => `<tr><td>${esc(fmtS(x.d))}</td><td><b>${esc(x.l)}</b></td><td class="muted">${esc(x.c.name)}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Nothing scheduled. Start one in the 🗺 Campaign builder.</p>`}</div>
+      <div class="card"><h2>Follow up today</h2>${due.length ? `<p><b>${due.length}</b> owners are due. <button class="btn small primary" data-tab="leads">Open the list</button></p>` : `<p class="muted">Nobody is due.</p>`}
+        <h2 style="margin-top:12px">Latest activity</h2>${recentT.length ? recentT.map(t => { const l = S.hr.find(x => x.id === t.lead_id) || {}; return `<div style="font-size:13px">${esc(fmtS(t.at))} · <b>${esc(t.kind.replace(/_/g, " "))}</b> · ${esc(l.name || "")} <span class="muted">${esc(t.by_name || "")}</span></div>`; }).join("") : `<p class="muted">No calls or emails logged yet.</p>`}</div></div>
+    <div class="card"><h2>How it works</h2><ol style="font-size:13.5px;margin:4px 0 0">
+      <li><b>🗺 Campaign builder:</b> draw an area or pick a neighborhood, filter the owners, load more from RentCast if needed, save it as a list.</li>
+      <li><b>Append</b> emails and phones (coming once the skip-trace account is set up).</li>
+      <li><b>Start campaign:</b> 3 postcards 5 weeks apart (QR to our Revenue Estimator), plus email and ad steps, and every owner lands on 📞 Leads & follow-up.</li>
+      <li><b>Follow up</b> with one tap per call, text or email; watch it in the 📅 and ✍️ timelines; judge by cost per signed home.</li></ol></div>`;
+}
+
+/* ------------------------------------------------------------------ campaign builder */
+let MAP = null, LAYER = null, DRAWN = null, HOMES_L = null;
+const inPoly = (lat, lng, poly) => { let ok = false; for(let i = 0, j = poly.length - 1; i < poly.length; j = i++){ const [yi, xi] = poly[i], [yj, xj] = poly[j];
+  if((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi) ok = !ok; } return ok; };
+const inCampaign = new Set();
+function selected(){
+  const f = S.sel.f, poly = S.sel.poly, mem = S.sel.list ? new Set(S.members[S.sel.list] || []) : null, yr = addD(today(), -365);
+  return S.owners.filter(o => {
+    if(mem && !mem.has(o.key)) return false;
+    if(poly && !mem && !(o.lat != null && inPoly(o.lat, o.lng, poly))) return false;
+    if(!poly && !mem && S.sel.comm && o.comm !== S.sel.comm) return false;
+    if(!poly && !mem && !S.sel.comm) return false;
+    if(f.absentee && o.owner_occupied) return false;
+    if(f.newOwner && !(o.new_owner || (o.last_sale && o.last_sale >= yr))) return false;
+    if(f.outState && (o.mailing_state || (String(o.mailing || "").match(/,\s*([A-Z]{2})\s+\d{5}/) || [])[1]) === "UT") return false;
+    if(f.type && o.type !== f.type) return false;
+    if(f.beds && !(+o.beds >= f.beds)) return false;
+    if(f.notInCampaign && inCampaign.has(o.key)) return false;
+    return true; });
+}
+function vBuilder(){
+  inCampaign.clear(); S.hr.filter(l => l.campaign_id && l.serp_key).forEach(l => inCampaign.add(l.serp_key));
+  const comms = [...new Set(S.owners.map(o => o.comm).filter(Boolean))].sort();
+  const types = [...new Set(S.owners.map(o => o.type).filter(Boolean))].sort();
+  const f = S.sel.f, stepOn = S.sel.poly || S.sel.list || S.sel.comm ? 2 : 1;
+  $("#view").innerHTML = `<div class="steps"><span class="${stepOn > 1 ? "done" : "on"}">1 · Find</span><span class="${stepOn === 2 ? "on" : ""}">2 · Filter & load</span><span>3 · Append</span><span>4 · Start campaign</span></div>
+    <div class="builder"><div><div id="map"></div>
+      <div class="legend"><span><i style="background:#88B535"></i>Lives elsewhere</span><span><i style="background:#2463a0"></i>New owner (12 mo)</span><span><i style="background:#9aa39c"></i>Lives there</span><span><i style="background:#c99a2e;border:2px solid #fff"></i>Our home</span><span><i style="background:#c8382b"></i>Selected</span></div>
+      <p class="src">Owners: county records via RentCast (no sale prices in Utah). Our homes: Track map points. Draw with the ⬠ / ▭ tools on the map; the selection is everything inside the shape that passes the filters.</p></div>
+      <div class="side">
+        <div class="card"><h2>1 · Find</h2>
+          <label style="font-size:13px">Neighborhood<select id="bcomm" style="width:100%"><option value="">— draw on the map, or pick —</option>${comms.map(c => `<option${S.sel.comm === c ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+          <label style="font-size:13px;display:block;margin-top:6px">Saved list<select id="blist" style="width:100%"><option value="">—</option>${S.lists.map(l => `<option value="${l.id}"${S.sel.list === l.id ? " selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label>
+          ${S.sel.poly ? `<p style="font-size:13px;margin:6px 0 0">✏️ Shape drawn · <button class="btn small" id="bclear">Clear shape</button></p>` : ""}</div>
+        <div class="card"><h2>2 · Filter</h2>
+          <label class="ck"><input type="checkbox" data-bf="absentee" ${f.absentee ? "checked" : ""}> Owner lives somewhere else (prime prospect)</label>
+          <label class="ck"><input type="checkbox" data-bf="newOwner" ${f.newOwner ? "checked" : ""}> Bought in the last 12 months</label>
+          <label class="ck"><input type="checkbox" data-bf="outState" ${f.outState ? "checked" : ""}> Mailing address outside Utah</label>
+          <label class="ck"><input type="checkbox" data-bf="notInCampaign" ${f.notInCampaign ? "checked" : ""}> Not already in a campaign</label>
+          <div style="display:flex;gap:6px;margin-top:6px"><select id="btype" style="flex:1"><option value="">Any type</option>${types.map(t => `<option${f.type === t ? " selected" : ""}>${esc(t)}</option>`).join("")}</select>
+            <select id="bbeds"><option value="0">Any beds</option>${[1,2,3,4,5].map(n => `<option value="${n}"${f.beds === n ? " selected" : ""}>${n}+ beds</option>`).join("")}</select></div></div>
+        <div class="card" id="bsum"></div>
+        <div class="card"><h2>Loading areas</h2>${S.areas.length ? S.areas.slice(0, 5).map(a => `<div style="font-size:12.5px">#${a.id} · ${esc(fmtS(a.created_at))} · <span class="pill ${a.status === "done" ? "" : a.status === "failed" ? "red" : "amber"}">${esc(a.status)}</span>${a.status === "done" ? ` ${a.added} owners, ${a.calls} lookup${a.calls === 1 ? "" : "s"}` : ""}${a.error ? ` <span class="err">${esc(a.error)}</span>` : ""}</div>`).join("") : `<p class="muted" style="font-size:13px">None yet.</p>`}
+          <p class="src">RentCast lookups: ${S.rc ? esc(S.rc.note) : "not read yet"}. Each lookup brings up to 500 homes.</p></div></div></div>`;
+  $("#bcomm").onchange = e => { S.sel.comm = e.target.value || null; S.sel.list = null; S.sel.poly = null; vBuilder(); };
+  $("#blist").onchange = async e => { const id = +e.target.value || null; S.sel.list = id; S.sel.comm = null; S.sel.poly = null;
+    if(id && !S.members[id]){ const m = await pages(() => sb.from("mkt_owner_list_members").select("key").eq("list_id", id).order("key")); S.members[id] = m.map(x => x.key); }
+    const l = S.lists.find(x => x.id === id); if(l && l.polygon) S.sel.poly = l.polygon; vBuilder(); };
+  if($("#bclear")) $("#bclear").onclick = () => { S.sel.poly = null; vBuilder(); };
+  document.querySelectorAll("[data-bf]").forEach(c => c.onchange = () => { S.sel.f[c.dataset.bf] = c.checked; drawSel(); });
+  $("#btype").onchange = e => { f.type = e.target.value; drawSel(); }; $("#bbeds").onchange = e => { f.beds = +e.target.value; drawSel(); };
+  buildMap(); drawSel();
+}
+function buildMap(){
+  if(MAP){ MAP.remove(); MAP = null; }
+  MAP = L.map("map", { preferCanvas:true }).setView([40.68, -111.50], 11);
+  const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom:19, attribution:"Imagery © Esri" });
+  const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap" });
+  street.addTo(MAP); L.control.layers({ "Street":street, "Satellite":sat }).addTo(MAP);
+  HOMES_L = L.layerGroup(S.homes.map(h => L.circleMarker([h.lat, h.lng], { radius:6, color:"#fff", weight:2, fillColor:"#c99a2e", fillOpacity:1 }).bindTooltip(`${h.code} (ours)`))).addTo(MAP);
+  LAYER = L.layerGroup().addTo(MAP);
+  DRAWN = new L.FeatureGroup().addTo(MAP);
+  MAP.addControl(new L.Control.Draw({ draw:{ polygon:{ shapeOptions:{ color:"#3c5f12" } }, rectangle:{ shapeOptions:{ color:"#3c5f12" } }, polyline:false, circle:false, marker:false, circlemarker:false }, edit:{ featureGroup:DRAWN, edit:false } }));
+  MAP.on(L.Draw.Event.CREATED, e => { DRAWN.clearLayers(); DRAWN.addLayer(e.layer);
+    S.sel.poly = e.layer.getLatLngs()[0].map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6)]); S.sel.comm = null; S.sel.list = null; vBuilder(); });
+  if(S.sel.poly){ const pg = L.polygon(S.sel.poly, { color:"#3c5f12" }); DRAWN.addLayer(pg); MAP.fitBounds(pg.getBounds(), { padding:[30, 30] }); }
+}
+function drawSel(){
+  const sel = selected(), set = new Set(sel.map(o => o.key)), yr = addD(today(), -365);
+  LAYER.clearLayers();
+  const show = S.sel.poly || S.sel.list || S.sel.comm ? S.owners : S.owners.filter((o, i) => i % 3 === 0);   // whole map: a third of the dots, for speed
+  show.forEach(o => { if(o.lat == null) return; const on = set.has(o.key);
+    L.circleMarker([o.lat, o.lng], { radius:on ? 5 : 3, weight:0, fillOpacity:on ? .95 : .55,
+      fillColor:on ? "#c8382b" : o.owner_occupied ? "#9aa39c" : (o.new_owner || (o.last_sale && o.last_sale >= yr)) ? "#2463a0" : "#88B535" })
+      .bindTooltip(`${esc((o.owners || []).join(" & "))}<br>${esc(o.address || "")}`).addTo(LAYER); });
+  if(S.sel.comm && !S.sel.poly && sel.length){ const b = L.latLngBounds(sel.filter(o => o.lat != null).map(o => [o.lat, o.lng])); if(b.isValid()) MAP.fitBounds(b, { padding:[30, 30] }); }
+  const absent = sel.filter(o => !o.owner_occupied).length, newO = sel.filter(o => o.new_owner || (o.last_sale && o.last_sale >= yr)).length;
+  const lu = S.rc ? +S.rc.calls || 0 : 0;
+  $("#bsum").innerHTML = `<h2>${sel.length.toLocaleString()} owners selected</h2>
+    <div style="font-size:13px" class="muted">${absent} live elsewhere · ${newO} new owners${sel.length ? ` · 3 postcards ≈ ${money(sel.length * 3 * 0.9)} (PostGrid ~$0.90 a card)` : ""}</div>
+    <div style="max-height:170px;overflow:auto;margin:8px 0;font-size:12.5px">${sel.slice(0, 60).map(o => `<div>• <b>${esc((o.owners || []).join(" & "))}</b> <span class="muted">${esc(o.address || "")}</span></div>`).join("")}${sel.length > 60 ? `<div class="muted">…and ${sel.length - 60} more</div>` : ""}</div>
+    <div class="acts">
+      <button class="btn small" id="bsave" ${sel.length ? "" : "disabled"}>💾 Save as list</button>
+      <button class="btn small" id="bload" ${S.sel.poly ? "" : "disabled"} title="${S.sel.poly ? "" : "Draw a shape first"}">🔎 Load more owners in this shape</button>
+      <button class="btn small" disabled title="Needs the skip-trace account (Phase 2)">📇 Append emails & phones</button>
+      <button class="btn small primary" id="bstart" ${sel.length ? "" : "disabled"}>🚀 Start campaign</button></div>
+    <p class="src">Append is coming once the skip-trace account is set up. Lookups used this month: ${lu}.</p>`;
+  $("#bsave").onclick = () => saveList(sel);
+  $("#bload").onclick = () => loadArea();
+  $("#bstart").onclick = () => startCampaign(sel);
+}
+async function saveList(sel, silentName){
+  const name = silentName || await mmAsk("Name this owner list", { value:(S.sel.comm || "Map area") + " · " + today() }); if(!name) return null;
+  const r = await sb.rpc("mkt_list_save", { p_name:name, p_kind:S.sel.poly ? "area" : S.sel.comm ? "neighborhood" : "pick", p_polygon:S.sel.poly, p_filters:S.sel.f, p_keys:sel.map(o => o.key) });
+  if(r.error){ await mmAlert(niceE(r.error)); return null; }
+  const l = await sb.from("mkt_owner_lists").select("*").eq("off", false).order("created_at", { ascending:false }); S.lists = l.data || [];
+  if(!silentName) await mmAlert(`Saved "${name}" with ${r.data.owners} owners.`);
+  return r.data.id;
+}
+async function loadArea(){
+  const n = await mmAsk("How many RentCast lookups may this use? (each brings up to 500 homes)", { value:"2" }); if(!n) return;
+  let lid = S.sel.list; if(!lid){ lid = await saveList(selected(), "Map area · " + today() + " " + new Date().toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" })); if(!lid) return; }
+  const r = await sb.rpc("mkt_area_load", { p_list:lid, p_polygon:S.sel.poly, p_max:+n || 2 }); if(r.error) return mmAlert(niceE(r.error));
+  await mmAlert("Loading. The office computer pulls the owners in this shape within a minute or two; this page refreshes when it's done.");
+  S.sel.list = lid; pollArea(r.data.id);
+}
+async function pollArea(id){ for(let i = 0; i < 40; i++){ await new Promise(r => setTimeout(r, 6000));
+  const a = await sb.from("mkt_area_requests").select("*").eq("id", id).single(); if(a.data && ["done","failed"].includes(a.data.status)){ await load(); S.members = {}; render(); return; } } }
+function startCampaign(sel){
+  const d = $("#dlg"), t = today(), wd = new Date(t + "T12:00:00Z").getUTCDay(), mon = addD(t, ((8 - wd) % 7) || 7);
+  d.innerHTML = `<h2 style="margin:0 0 6px">🚀 Start a campaign · ${sel.length} owners</h2>
+    <label>Name<input id="cn" style="width:100%" value="${esc((S.sel.comm || "Map area") + " · " + new Date().toLocaleDateString("en-US", { month:"short", year:"numeric" }))}"></label>
+    <label style="display:block;margin-top:8px">First postcard mails on<input id="cs" type="date" min="${t}" value="${mon}"></label>
+    <label style="display:block;margin-top:8px">What's on the card (for the record; design each drop under 📬 Postcards)<textarea id="cc" rows="2" style="width:100%"></textarea></label>
+    <div id="ctl" style="margin:10px 0"></div>
+    <p class="muted" style="font-size:12.5px">Makes 3 postcard batches 5 weeks apart, email + ad steps on Plan for Owners, and puts every owner on 📞 Leads & follow-up. Nothing mails until someone presses Mail on each batch. About ${money(sel.length * 3 * 0.9)} in postcards.</p>
+    <p class="err" id="ce"></p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Start campaign</button></div>`;
+  d.showModal();
+  const prev = () => { const s = $("#cs", d).value; $("#ctl", d).innerHTML = s ? `<div style="display:flex;gap:4px;overflow-x:auto">${OC_STEPS.map(([n, l]) => `<div style="flex:1;min-width:76px;text-align:center;font-size:11.5px;border-top:3px solid var(--forest);padding-top:4px"><b>${l}</b><br>${esc(fmtS(addD(s, n)))}</div>`).join("")}</div>` : ""; };
+  $("#cs", d).oninput = prev; prev();
+  d.onclick = async e => { const x = e.target.closest("[data-x]"); if(!x) return; if(x.dataset.x === "0"){ d.close(); return; }
+    x.disabled = true; x.textContent = "Starting…";
+    let lid = S.sel.list; if(!lid) lid = await saveList(sel, $("#cn", d).value + " (list)");
+    const r = await sb.rpc("mkt_list_campaign", { p_list:lid, p_name:$("#cn", d).value, p_start:$("#cs", d).value, p_card:$("#cc", d).value, p_keys:sel.map(o => o.key) });
+    if(r.error){ $("#ce", d).textContent = niceE(r.error); x.disabled = false; x.textContent = "Start campaign"; return; }
+    d.close(); await mmAlert(`Campaign started: ${r.data.owners} owners, 3 drops. Design drop 1 under Advertising ▸ Owners ▸ 📬 Postcards.`); await load(); S.tab = "ctl"; render(); };
+}
+
+/* ------------------------------------------------------------------ leads & follow-up (home-run board) */
+const HR_CAD = [[0,"Call. Talk, or leave a short voicemail"],[0,"Text if no answer: who we are + the estimator link"],[1,"Email: what their home would earn, from our homes in their building"],[2,"Call again"],[4,"Call (no voicemail)"],[7,"Email: a real story from a home near theirs + call"],[10,"Short personal video or voicemail"],[14,"Call"],[17,"Last email: we will stop here, door open"]];
+const HR_MAIL = [[0,"Postcard 1 (QR to the estimator)"],[35,"Postcard 2"],[70,"Postcard 3 (last call)"]];
+const HR_SEG = { warm:"🔥 Warm", new_buyer:"🏡 New buyer", our_building:"🏢 Our building", switcher:"🔁 Switcher", campaign:"📣 Campaign", other:"Other" };
+const HR_ST = { new:"New", working:"Working", talking:"Talking", proposal:"Proposal sent", signed:"Signed", not_now:"Not now", not_interested:"Not interested", dont_contact:"Don't contact" };
+const HR_CLOSED = new Set(["signed","not_now","not_interested","dont_contact"]);
+const hrMail = l => !l.phone && !l.email;
+const hrDue = l => l.next_due && !HR_CLOSED.has(l.status) && new Date(l.next_due) <= new Date() && !hrMail(l);
+function vLeads(){
+  const L = S.hr, f = S.hrf, q = (S.hrq || "").toLowerCase();
+  const sets = { due:hrDue, warm:l => l.segment === "warm" && !HR_CLOSED.has(l.status), new_buyer:l => l.segment === "new_buyer" && !HR_CLOSED.has(l.status),
+    our_building:l => l.segment === "our_building" && !HR_CLOSED.has(l.status), campaign:l => l.segment === "campaign" && !HR_CLOSED.has(l.status),
+    talking:l => l.status === "talking", proposal:l => l.status === "proposal", signed:l => l.status === "signed", all:() => true };
+  const tile = (k, l, fn) => `<button class="kpi ${f === k ? "on" : ""}" data-hrf="${k}"><small>${l}</small><b>${L.filter(fn).length}</b></button>`;
+  let R = L.filter(sets[f] || sets.due).sort((a, b) => a.priority - b.priority || String(a.next_due).localeCompare(String(b.next_due)));
+  if(q) R = R.filter(l => [l.name, l.email, l.phone, l.address, l.community, l.why].join(" ").toLowerCase().includes(q));
+  const show = S.hrAll ? R : R.slice(0, 30);
+  $("#view").innerHTML = `<div class="card"><h2>📞 Leads & follow-up</h2><p class="muted" style="margin:0">One card per owner and one follow-up plan (9 steps over 17 days for owners with a phone or email; 3 postcards for mail-only owners). Every button logs the touch and moves the card on.</p>
+      <div class="kpis">${tile("due", "📞 Due now", sets.due)}${tile("warm", "🔥 Warm", sets.warm)}${tile("new_buyer", "🏡 New buyers", sets.new_buyer)}${tile("our_building", "🏢 Our buildings", sets.our_building)}${tile("campaign", "📣 In a campaign", sets.campaign)}${tile("talking", "Talking", sets.talking)}${tile("proposal", "Proposal sent", sets.proposal)}${tile("signed", "✅ Signed", sets.signed)}${tile("all", "All", sets.all)}</div>
+      <input id="hrq" placeholder="Search name, address, building…" value="${esc(S.hrq || "")}" style="width:100%;margin:6px 0"></div>
+    ${show.map(leadCard).join("") || `<div class="empty">Nobody here. Pick another tile.</div>`}
+    ${R.length > 30 ? `<button class="btn" data-hrmore="1">${S.hrAll ? "Show less" : "See all " + R.length}</button>` : ""}`;
+  const qi = $("#hrq"); qi.oninput = () => { S.hrq = qi.value; clearTimeout(S.hrqT); S.hrqT = setTimeout(() => { const p = qi.selectionStart; vLeads(); const n = $("#hrq"); n.focus(); n.setSelectionRange(p, p); }, 300); };
+}
+function leadCard(l){
+  const cad = hrMail(l) ? HR_MAIL : HR_CAD, st = cad[l.step], done = HR_CLOSED.has(l.status), late = hrDue(l);
+  const tt = S.hrT.filter(t => t.lead_id === l.id);
+  const step = done ? `<span class="pill ${l.status === "signed" ? "" : "grey"}">${HR_ST[l.status]}${l.signed_home ? " · " + esc(l.signed_home) : ""}</span>`
+    : ["talking","proposal"].includes(l.status) ? `<b>${HR_ST[l.status]}</b>${l.next_due ? " · check back " + esc(fmtS(l.next_due)) : ""}`
+    : l.segment === "campaign" && !l.next_due ? `<span class="pill blue">In campaign postcards</span>`
+    : st ? `<b>Step ${l.step + 1} of ${cad.length}:</b> ${esc(st[1])}${l.next_due ? ` · <span class="pill ${late ? "red" : "grey"}">${late ? "due now" : "due " + esc(fmtS(l.next_due))}</span>` : ""}` : "Plan finished";
+  const contact = [l.phone ? `<a href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a> · <a href="sms:${esc(l.phone)}">💬 text</a>` : "", l.email ? `<a href="mailto:${esc(l.email)}">✉️ ${esc(l.email)}</a>` : "", hrMail(l) ? `📬 ${esc(l.mailing || "mail only")}` : ""].filter(Boolean).join(" · ");
+  const b = (k, t) => `<button class="btn small" data-hrt="${l.id}" data-k="${k}">${t}</button>`;
+  const acts = done ? `<button class="btn small" data-hrs="${l.id}" data-k="working">Reopen</button>`
+    : (hrMail(l) ? "" : (l.phone ? b("call_talked", "📞 Talked") + b("call_no_answer", "No answer") + b("voicemail", "Voicemail") + b("text", "💬 Texted") : "") + (l.email ? b("email", "✉️ Emailed") : ""))
+      + b("proposal", "🤝 Proposal") + `<button class="btn small primary" data-hrs="${l.id}" data-k="signed">✅ Signed</button><button class="btn small" data-hrs="${l.id}" data-k="not_interested">Not interested</button><button class="btn small" data-hrs="${l.id}" data-k="dont_contact">Don't contact</button>`;
+  return `<div class="lead"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="min-width:0"><b>${esc(l.name || "(no name)")}</b> <span class="pill">${HR_SEG[l.segment] || ""}</span>${l.owner_name ? ` <span class="muted" style="font-size:12px">· ${esc(l.owner_name)}</span>` : ""}
+      <div class="muted" style="font-size:12.5px">${esc(l.why || "")}</div><div style="font-size:12.5px">${esc([l.address, l.community].filter(Boolean).join(" · "))}</div><div style="font-size:12.5px">${contact}</div></div>
+      <div style="font-size:13px;text-align:right;min-width:220px">${step}</div></div>
+    ${l.note ? `<div class="muted" style="font-size:12px;margin-top:4px">📝 ${esc(l.note)}</div>` : ""}
+    <div class="acts">${acts}<button class="btn small" data-hrn="${l.id}">📝 Note</button>${tt.length ? `<button class="btn small" data-hrh="${l.id}">History (${tt.length})</button>` : ""}</div>
+    ${S.hrOpen === l.id ? `<div style="font-size:12px;margin-top:6px">${tt.slice().reverse().map(t => `<div>${esc(fmtD(t.at))} · <b>${esc(t.kind.replace(/_/g, " "))}</b> · ${esc(t.by_name || "")}${t.note ? " · " + esc(t.note) : ""}</div>`).join("")}</div>` : ""}</div>`;
+}
+async function reloadHr(){ const [hr, hrT] = await Promise.all([pages(() => sb.from("mkt_hr_leads").select("*").eq("off", false).order("id")), pages(() => sb.from("mkt_hr_touches").select("*").order("id"))]); S.hr = hr; S.hrT = hrT; vLeads(); }
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-hrf],[data-hrt],[data-hrs],[data-hrn],[data-hrh],[data-hrmore]"); if(!b) return;
+  if(b.dataset.hrf){ S.hrf = b.dataset.hrf; S.hrAll = false; return vLeads(); }
+  if(b.dataset.hrmore){ S.hrAll = !S.hrAll; return vLeads(); }
+  if(b.dataset.hrh){ S.hrOpen = S.hrOpen === +b.dataset.hrh ? null : +b.dataset.hrh; return vLeads(); }
+  if(b.dataset.hrt){ const k = b.dataset.k; let note = "";
+    if(k === "call_talked" || k === "proposal"){ note = await mmAsk(k === "proposal" ? "What did you send them? (optional)" : "What did they say? (optional; never codes or passwords)", { multiline:true, value:"" }); if(note === null) return; }
+    const r = await sb.rpc("mkt_hr_touch", { p_id:+b.dataset.hrt, p_kind:k, p_note:note || "" }); if(r.error) return mmAlert(niceE(r.error)); return reloadHr(); }
+  if(b.dataset.hrs){ const st = b.dataset.k; let home = "", note = "";
+    if(st === "signed"){ home = await mmAsk("Which home signed? (home code, e.g. PL 406)", { value:"" }); if(!home) return; }
+    if(st === "not_interested" || st === "dont_contact"){ note = await mmAsk("Why? (short)", { value:"" }); if(note === null) return; }
+    const r = await sb.rpc("mkt_hr_set", { p_id:+b.dataset.hrs, p_status:st, p_owner:null, p_note:note || "", p_next:null, p_home:home || "" }); if(r.error) return mmAlert(niceE(r.error)); return reloadHr(); }
+  if(b.dataset.hrn){ const t = await mmAsk("Note on this owner (never codes or passwords)", { multiline:true, value:"" }); if(!t || !t.trim()) return;
+    const r = await sb.rpc("mkt_hr_touch", { p_id:+b.dataset.hrn, p_kind:"note", p_note:t.trim() }); if(r.error) return mmAlert(niceE(r.error));
+    await sb.rpc("mkt_hr_set", { p_id:+b.dataset.hrn, p_status:null, p_owner:null, p_note:t.trim(), p_next:null, p_home:"" }); return reloadHr(); }
+});
+
+/* ------------------------------------------------------------------ campaign timeline */
+function svgTL(rows, from, to, h0){
+  const W = 1180, LEFT = 210, RW = W - LEFT - 20, ROW = 46, H = rows.length * ROW + 40;
+  const t0 = new Date(from + "T12:00:00Z").getTime(), t1 = new Date(to + "T12:00:00Z").getTime(), X = d => LEFT + (new Date(String(d).slice(0, 10) + "T12:00:00Z").getTime() - t0) / (t1 - t0) * RW;
+  let g = "";
+  for(let m = new Date(from.slice(0, 7) + "-01T12:00:00Z"); m.getTime() <= t1; m.setUTCMonth(m.getUTCMonth() + 1)){
+    const x = X(m.toISOString().slice(0, 10)); if(x < LEFT) continue;
+    g += `<line x1="${x}" x2="${x}" y1="22" y2="${H}" stroke="var(--line)"/><text x="${x + 3}" y="15" font-size="11" fill="var(--muted)">${m.toLocaleDateString("en-US", { month:"short", year:"2-digit", timeZone:"UTC" })}</text>`; }
+  const tx = X(today()); g += `<line x1="${tx}" x2="${tx}" y1="20" y2="${H}" stroke="var(--red)" stroke-dasharray="4 3"/><text x="${tx + 3}" y="${H - 4}" font-size="10" fill="var(--red)">today</text>`;
+  rows.forEach((r, i) => { const y = 30 + i * ROW;
+    g += `<text x="6" y="${y + 18}" font-size="12.5" font-weight="700" fill="var(--ink)">${esc(r.name.slice(0, 28))}</text><text x="6" y="${y + 32}" font-size="10.5" fill="var(--muted)">${esc(r.sub || "")}</text>`;
+    if(r.a && r.b) g += `<rect x="${X(r.a)}" y="${y + 10}" width="${Math.max(3, X(r.b) - X(r.a))}" height="16" rx="8" fill="${r.color || "#88B535"}" opacity=".28"/>`;
+    (r.marks || []).forEach(m => { const x = X(m.d); if(x < LEFT || x > LEFT + RW) return;
+      g += m.k === "drop" ? `<rect x="${x - 5}" y="${y + 9}" width="10" height="18" rx="3" fill="${m.done ? "#3c5f12" : m.late ? "#c8382b" : "#fff"}" stroke="#3c5f12" stroke-width="2"><title>${esc(m.t)}</title></rect>`
+        : m.k === "signed" ? `<text x="${x - 7}" y="${y + 24}" font-size="15"><title>${esc(m.t)}</title>⭐</text>`
+        : m.k === "inq" ? `<circle cx="${x}" cy="${y + 18}" r="3.5" fill="#2463a0"><title>${esc(m.t)}</title></circle>`
+        : m.k === "scan" ? `<circle cx="${x}" cy="${y + 18}" r="3" fill="#c99a2e"><title>${esc(m.t)}</title></circle>`
+        : `<circle cx="${x}" cy="${y + 18}" r="3" fill="var(--muted)"><title>${esc(m.t)}</title></circle>`; }); });
+  return `<div class="tl"><svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:860px">${g}</svg></div>`;
+}
+function vCampTL(){
+  const rows = [], codes = {}; S.items.forEach(i => codes[i.code] = i.batch_id);
+  const scansByBatch = {}; S.scans.forEach(s => { const b = codes[s.code]; if(b) (scansByBatch[b] = scansByBatch[b] || []).push(s.at); });
+  S.camps.forEach(c => {
+    const marks = [];
+    if(c.source === "zpoint"){
+      const pts = { "514":[0,35,70], "873":[0,35,70], "584":[0,63,92], "1056":[0,35,71], "1164":[31,84] }[c.ext_id] || [];
+      pts.forEach((d, n) => marks.push({ k:"drop", d:addD(c.start_on, d), t:"Mail drop " + (n + 1), done:addD(c.start_on, d) <= today() }));
+      S.inq.filter(i => i.campaign && c.name.startsWith(i.campaign)).forEach(i => marks.push({ k:i.kind === "qr" ? "scan" : "inq", d:i.lead_on, t:(i.kind === "qr" ? "QR scan: " : "Inquiry: ") + (i.name || "") }));
+      (c.traced || []).forEach(x => marks.push({ k:"signed", d:x.started, t:"Signed: " + x.home + " (" + (x.who || "") + ")" }));
+      rows.push({ name:c.name.replace(" (ZPoint)", ""), sub:"ZPoint · " + money(c.cost) + " · " + (c.traced || []).length + " homes", a:c.start_on, b:c.mail_end || addD(c.start_on, 100), color:"#9aa39c", marks });
+    } else {
+      const bs = S.batches.filter(b => b.campaign_id === c.id);
+      bs.forEach(b => marks.push({ k:"drop", d:b.drop_on || b.created_at, t:b.name + " · " + (b.status || ""), done:b.status === "mailed" || b.send_status === "sent", late:(b.drop_on || "") < today() && b.status !== "mailed" }));
+      bs.forEach(b => (scansByBatch[b.id] || []).forEach(at => marks.push({ k:"scan", d:at, t:"QR scan" })));
+      S.hr.filter(l => l.campaign_id === c.id && l.status === "signed").forEach(l => marks.push({ k:"signed", d:l.updated_at, t:"Signed: " + (l.signed_home || "") }));
+      const sc = bs.reduce((n, b) => n + (scansByBatch[b.id] || []).length, 0);
+      rows.push({ name:c.name, sub:(c.lead_keys || []).length + " owners · " + sc + " scans", a:c.start_on, b:addD(c.start_on, 100), color:"#88B535", marks });
+    } });
+  const from = rows.length ? rows.map(r => r.a).sort()[0] : addD(today(), -180), to = addD(today(), 120);
+  $("#view").innerHTML = `<div class="card"><h2>📅 Campaign timeline</h2><p class="muted" style="margin:0 0 8px">Every owner campaign on one calendar: the 100-day window, each mail drop (filled = mailed, red = late, white = coming), QR scans (gold), inquiries (blue) and signed homes (⭐). Hover a mark for details.</p>
+      ${rows.length ? svgTL(rows, from < addD(today(), -730) ? addD(today(), -730) : from, to) : `<div class="empty">No campaigns yet.</div>`}
+      <p class="src">ZPoint campaigns: OwnerPoint dashboards + emails (read Nov 23, 2026); their drop dates are from the dashboards/emails and may be off by days. Signed homes: Track owner start dates. Hub campaigns: postcard batches + QR scans.</p></div>
+    <div class="card"><h2>Steps for running campaigns</h2>${S.camps.filter(c => c.source !== "zpoint").map(c => `<div style="margin:6px 0"><b>${esc(c.name)}</b><div style="display:flex;gap:4px;overflow-x:auto;margin-top:4px">${OC_STEPS.map(([d, l]) => { const on = addD(c.start_on, d); return `<div style="flex:1;min-width:80px;text-align:center;font-size:11.5px;border-top:3px solid ${on <= today() ? "var(--forest)" : "var(--line-2)"};padding-top:3px"><b>${l}</b><br>${esc(fmtS(on))}</div>`; }).join("")}</div></div>`).join("") || `<p class="muted">None running. Start one in the 🗺 Campaign builder.</p>`}</div>`;
+}
+
+/* ------------------------------------------------------------------ signing timeline */
+function vSignTL(){
+  const L = S.hr, stages = [["new","New"],["working","Working"],["talking","Talking"],["proposal","Proposal"],["signed","Signed"]];
+  const reached = k => L.filter(l => { const order = ["new","working","talking","proposal","signed"]; return order.indexOf(l.status) >= order.indexOf(k) || (k === "working" && S.hrT.some(t => t.lead_id === l.id)); }).length;
+  const max = Math.max(1, reached("new"));
+  // touches by week (last 16 weeks)
+  const wk = d => { const x = new Date(String(d).slice(0, 10) + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - x.getUTCDay()); return x.toISOString().slice(0, 10); };
+  const weeks = []; for(let i = 15; i >= 0; i--) weeks.push(wk(addD(today(), -7 * i)));
+  const by = {}; S.hrT.forEach(t => { const w = wk(t.at); by[w] = by[w] || { touch:0, talk:0, signed:0 }; if(t.kind === "status" && /signed/.test(t.note || "")) by[w].signed++; else if(["call_talked","meeting","proposal"].includes(t.kind)) by[w].talk++; else if(t.kind !== "status" && t.kind !== "note") by[w].touch++; });
+  const wmax = Math.max(1, ...weeks.map(w => by[w] ? by[w].touch + by[w].talk + by[w].signed : 0));
+  // history: ZPoint traced homes = days from first ask to start
+  const hist = S.camps.filter(c => c.source === "zpoint").flatMap(c => (c.traced || []).map(x => ({ ...x, camp:c.name.replace(" (ZPoint)", "") }))).filter(x => x.lead_on && x.started)
+    .map(x => ({ ...x, days:Math.round((new Date(x.started) - new Date(x.lead_on)) / 86400000) })).sort((a, b) => a.lead_on < b.lead_on ? -1 : 1);
+  const med = hist.length ? hist.map(x => x.days).sort((a, b) => a - b)[Math.floor(hist.length / 2)] : null;
+  const signedNow = L.filter(l => l.status === "signed");
+  $("#view").innerHTML = `<div class="builder" style="grid-template-columns:1fr 1fr">
+    <div class="card"><h2>✍️ Where owners are now</h2><div class="funnel" style="height:170px">${stages.map(([k, l]) => { const n = reached(k); return `<div><div class="bar" style="height:${Math.round(n / max * 140)}px;${k === "signed" ? "background:var(--gold)" : ""}"></div><b>${n}</b><br><small class="muted">${l}</small></div>`; }).join("")}</div>
+      <p class="src">Owners on 📞 Leads & follow-up who reached each stage. "Working" = at least one call, text, email or card logged.</p></div>
+    <div class="card"><h2>Activity by week</h2><div style="display:flex;gap:3px;align-items:flex-end;height:150px">${weeks.map(w => { const v = by[w] || { touch:0, talk:0, signed:0 }; const sc = h => Math.round(h / wmax * 130);
+        return `<div style="flex:1;display:flex;flex-direction:column-reverse;align-items:stretch" title="Week of ${fmtS(w)}: ${v.touch} touches, ${v.talk} conversations, ${v.signed} signed"><div style="height:${sc(v.touch)}px;background:#88B535"></div><div style="height:${sc(v.talk)}px;background:#2463a0"></div><div style="height:${sc(v.signed)}px;background:var(--gold)"></div></div>`; }).join("")}</div>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px" class="muted"><span>${fmtS(weeks[0])}</span><span>this week</span></div>
+      <div class="legend"><span><i style="background:#88B535"></i>Calls, texts, emails, cards</span><span><i style="background:#2463a0"></i>Conversations + proposals</span><span><i style="background:var(--gold)"></i>Signed</span></div></div></div>
+    <div class="card"><h2>How long signing takes</h2><p class="muted" style="margin:0 0 8px">${hist.length ? `From the owner's first inquiry to the home starting with us, past ZPoint campaigns took a middle of <b>${med} days</b> (${hist.length} homes).` : "No history yet."}</p>
+      ${hist.length ? (() => { const W = 1180, L0 = 230, RW = W - L0 - 20, mx = Math.max(...hist.map(x => x.days)), R = 26;
+        return `<div class="tl"><svg viewBox="0 0 ${W} ${hist.length * R + 24}" width="100%" style="min-width:760px">${hist.map((x, i) => { const y = 12 + i * R, w = x.days / mx * RW;
+          return `<text x="4" y="${y + 13}" font-size="12" font-weight="700" fill="var(--ink)">${esc(x.home)}</text><text x="70" y="${y + 13}" font-size="11" fill="var(--muted)">${esc(x.camp)} · ${esc(fmtS(x.lead_on))}</text>
+            <rect x="${L0}" y="${y + 2}" width="${Math.max(4, w)}" height="14" rx="7" fill="${x.still ? "#88B535" : "#9aa39c"}"/><text x="${L0 + w + 6}" y="${y + 13}" font-size="11" fill="var(--ink-2)">${x.days} days → started ${esc(fmtS(x.started))}${x.still ? "" : " (left)"}</text>`; }).join("")}</svg></div>`; })() : ""}
+      <p class="src">Source: ZPoint landing-page inquiries matched to Track owner start dates (read Nov 23, 2026). Grey = the owner later left.</p></div>
+    <div class="card"><h2>Signed from the board</h2>${signedNow.length ? `<table><thead><tr><th>Owner</th><th>Home</th><th>First touch</th><th>Signed</th><th>Days</th><th>From</th></tr></thead><tbody>${signedNow.map(l => { const tt = S.hrT.filter(t => t.lead_id === l.id), first = tt.length ? tt[0].at : l.created_at;
+        return `<tr><td><b>${esc(l.name || "")}</b></td><td>${esc(l.signed_home || "")}</td><td>${esc(fmtS(first))}</td><td>${esc(fmtS(l.updated_at))}</td><td>${Math.max(0, Math.round((new Date(l.updated_at) - new Date(first)) / 86400000))}</td><td>${HR_SEG[l.segment] || ""}</td></tr>`; }).join("")}</tbody></table>` : `<p class="muted">Nobody signed from the board yet.</p>`}</div>`;
+}
+
+/* ------------------------------------------------------------------ past results */
+function vPast(){
+  const Z = S.camps.filter(c => c.source === "zpoint");
+  $("#view").innerHTML = `<div class="card"><h2>📜 Past owner campaigns (ZPoint)</h2>
+    <table><thead><tr><th>Campaign</th><th>Cards</th><th>Emails</th><th>Inquiries</th><th>Scans</th><th>Cost</th><th>Homes traced</th><th>Per home</th></tr></thead><tbody>${Z.map(c => { const t = c.traced || [];
+      return `<tr><td><b>${esc(c.name.replace(" (ZPoint)", ""))}</b><div class="muted" style="font-size:12px">${esc(fmtS(c.start_on))} – ${esc(fmtS(c.mail_end))}</div></td><td>${c.cards == null ? "—" : (+c.cards).toLocaleString()}</td><td>${c.emails == null ? "—" : (+c.emails).toLocaleString()}</td><td>${c.inquiries ?? "—"}</td><td>${c.qr_scans ?? "—"}</td><td>${money(c.cost)}</td>
+        <td>${t.length} ${t.map(x => `<span class="pill ${x.still ? "" : "grey"}">${esc(x.home)}</span>`).join(" ")}</td><td>${c.cost != null && t.length ? money(c.cost / t.length) : "—"}</td></tr>`; }).join("")}</tbody></table>
+    <p class="src">Source: OwnerPoint dashboards (read Nov 23, 2026); Track owner start dates. Full write-up in Dropbox Rentalz\\ZPoint export.</p></div>
+    <div class="card"><h2>Lessons</h2><ul style="font-size:13.5px;margin:0">
+      <li>Almost every traced home came from the landing page + our own follow-up, not the ads or the emails.</li>
+      <li>Fall 2025 (with a landing page) got 152 inquiries; Spring 2025 (without) got 0.</li>
+      <li>Follow-up stopped: none of the 88 landing-page inquiries was touched in the last 90 days in ContactPoint.</li></ul></div>`;
+}
+
+(async () => {
+  const s = await sb.auth.getSession(); if(!s.data.session){ location.href = "hub.html"; return; }
+  try { if(await load()) render(); } catch(e){ $("#app").innerHTML = `<div class="empty">Couldn't load. Check your signal, then refresh. <span class="err">${esc(niceE(e))}</span></div>`; }
+})();
+</script>
+</body>
+</html>
