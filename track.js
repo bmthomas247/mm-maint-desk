@@ -52,10 +52,20 @@
 
     // ---- queue + send ----
     var Q = [], busy = false, fails = 0;
-    // Taps not sent yet (no signal / page closed) wait in this browser; each one carries who made it (u),
-    // so a tap is never sent under someone else who signs in on the same device later.
-    try { var old = JSON.parse(localStorage.getItem(QKEY) || "null"); if (old && old.length) Q = old.slice(-300); } catch (e) {}
-    function save() { try { if (Q.length) localStorage.setItem(QKEY, JSON.stringify(Q.slice(-300))); else localStorage.removeItem(QKEY); } catch (e) {} }
+    // Taps not sent yet (no signal / page closed) wait in this browser under THIS page's own key; each one carries who
+    // made it (u), so a tap is never sent under someone else who signs in on the same device later. A page only takes over
+    // another page's waiting taps once that page has been quiet for a minute (it was closed). (The database also ignores exact repeats.)
+    var INST = Math.random().toString(36).slice(2, 10), QPRE = QKEY + "_";
+    try {
+      localStorage.removeItem(QKEY);                                   // first version's shared key (caused double counts)
+      for (var qi = localStorage.length - 1; qi >= 0; qi--) {
+        var qk = localStorage.key(qi); if (!qk || qk.indexOf(QPRE) !== 0) continue;
+        var qo = null; try { qo = JSON.parse(localStorage.getItem(qk) || "null"); } catch (e) {}
+        if (!qo || !qo.at || Date.now() - qo.at > 60000) { localStorage.removeItem(qk); if (qo && qo.q) Q = Q.concat(qo.q); }
+      }
+      Q = Q.slice(-300);
+    } catch (e) {}
+    function save() { try { if (Q.length) localStorage.setItem(QPRE + INST, JSON.stringify({ at: Date.now(), q: Q.slice(-300) })); else localStorage.removeItem(QPRE + INST); } catch (e) {} }
     function add(ev) {
       var s = sess();
       ev.u = s ? s.uid : ""; ev.t = Date.now(); ev.sid = SID; ev.page = page(); ev.route = route(); ev.fr = FRAMED; ev.sc = screenKind();
@@ -83,7 +93,7 @@
         }).catch(function () { busy = false; back(); });
       } catch (e) { busy = false; back(); }
     }
-    setInterval(function () { if (fails < 20 || Math.random() < 0.1) flush(); }, 15000);
+    setInterval(function () { if (fails < 20 || Math.random() < 0.1) flush(); if (Q.length) save(); }, 15000);
     document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flush(true); });
     window.addEventListener("pagehide", function () { flush(true); });
 
@@ -119,9 +129,9 @@
         if (!lab) { var pl = el.closest("label"); if (pl) lab = Array.prototype.map.call(pl.childNodes, function (n) { return n.nodeType === 3 ? n.textContent : ""; }).join(" "); }
         return clean((tp === "checkbox" || tp === "radio" ? "tick: " : tag === "select" ? "pick: " : "box: ") + lab, 80);   // never the value
       }
-      var t = el.getAttribute("aria-label") || el.getAttribute("title") || "";
+      // the words people see first (a hover note can be long); then aria-label / hover note for icon-only buttons
       var txt = (el.innerText || el.textContent || "");
-      if (!t) t = txt;
+      var t = el.getAttribute("aria-label") || (txt.trim() && txt.trim().length <= 80 ? txt : "") || el.getAttribute("title") || txt;
       if (!live && txt.length > 120) return "";                        // a big block of text, not a spot
       if (SECRET.test(t + " " + ctxOf(el))) {
         if (!live) return "[hidden]";                                  // a tapped value near codes / Wi-Fi: don't keep the words
