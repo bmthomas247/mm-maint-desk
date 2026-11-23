@@ -1955,6 +1955,10 @@ function ownerOf(code){ var oc=(S.ownercontacts||{})[sid(code)]||{}, f=((S.feeds
     if(ppl.length<2||!ppl.some(function(p){ return p.email||p.phone; })){ list.push({name:o.fullName||n.name,plan:n.plan,phone:o.phone,email:o.email,src:"Track"}); return; }
     /* bug #34 (2026-11-09): every owner on the home with their own phone + email; the first falls back to the owner record */
     ppl.forEach(function(p,i){ list.push({name:((p.first||"")+" "+(p.last||"")).trim(),plan:i===0?n.plan:"",phone:p.phone||(i===0?o.phone:""),email:p.email||(i===0?o.email:""),src:"Track"}); }); });
+  /* 2026-11-23 (Brandon, Pyper #36): "✎ Edit owners" saves the whole list in the hub (people); it wins over Track's. */
+  if(Array.isArray(oc.people)){ var plan0=(list[0]||{}).plan||"";
+    return {can:true, hub:true, list:oc.people.filter(function(p){ return !p.off&&(p.name||p.phone||p.email); }).map(function(p,i){ return {name:p.name||"",plan:i===0?plan0:"",phone:p.phone||"",email:p.email||"",
+      src:"Edited in the hub"+(oc.by?" by "+nameFor(oc.by):""),notes:i===0?(oc.notes||""):""}; })}; }
   if(oc.name||oc.phone||oc.email) list=[{name:oc.name||((list[0]||{}).name)||"",phone:oc.phone||((list[0]||{}).phone)||"",email:oc.email||((list[0]||{}).email)||"",src:"Edited in the hub"+(oc.by?" by "+nameFor(oc.by):""),notes:oc.notes||""}].concat(list.slice(1));
   return {can:!!f||Object.keys(S.ownercontacts||{}).length>0, list:list}; }
 /* Quick view text, easy to scan (Brandon 2026-10-28): "Label: value" lines show the label small and the answer bold; codes/numbers get a highlight. */
@@ -1990,7 +1994,7 @@ function quickView(code,p){ var pe=pedit(code), o=ownerOf(code), hi=homeInfo(cod
   var pick=function(edit,rx){ if(edit) return {v:edit,s:"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):"")}; return asana(rx); };
   var q=homeQuick(code,p), qs=function(k,rx){ var s0=q.src[k]; return {v:q[k],s:s0==="Asana"?asana(rx).s:s0==="Hub edit"?"Edited in the hub"+(pe.qBy?" by "+esc(nameFor(pe.qBy)):""):s0?"From "+esc(s0):""}; };
   var wifi=qs("wifi",/^(wifi|wi-fi|stay[- ]?fi)/i), entry=qs("entry",/^lockout info/i), garage=(function(g){ g.v=parkFix(g.v); return g; })(qs("garage",/^parking\/? ?garage info$|^parking$/i)), closet=q.closet?{v:q.closet,s:"From Track"}:pick(pe.ownerCloset,/^owner closet info$/i);
-  var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner</div>'+(!o.can?'':
+  var own=!o.can?'':'<div class="qv owner"><div class="qvh">Owner'+(canEntry()?' <button class="btn sm ghost" data-act="editowners" data-code="'+esc(code)+'" style="margin-left:6px">✎ Edit owners</button>':'')+(o.hub?' <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">edited in the hub</span>':'')+'</div>'+(!o.can?'':
     (o.list.length?o.list.map(function(x){ return '<div class="qvt qown"><b class="qname">'+esc(x.name||"")+'</b>'+(x.plan?'<span><span class="muted">Contract</span> '+esc(x.plan)+'</span>':'')+(x.phone?'<span>'+ocon("tel",x.phone)+'</span>':'')+(x.email?'<span>'+ocon("mail",x.email)+'</span>':'')+(x.notes?'<span class="muted">'+esc(x.notes)+'</span>':'')+'</div>'; }).join(""):'<div class="muted">No owner in Track for this home yet.</div>'))+emergHtml(p)+'</div>';
   return '<style>.quick .qv.water{border-left:4px solid var(--info)}.quick .qv.owner{grid-column:1/-1}.qown{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 26px}.qown+.qown{margin-top:6px;padding-top:6px;border-top:1px solid var(--line-2)}.quick .qgrid{align-items:start}</style><div class="block quick"><h4>Quick view <button class="btn sm ghost" data-act="editquick" data-code="'+esc(code)+'">✎ Edit codes & owner</button></h4><div class="qgrid">'+own+(window.OwnerNotes?OwnerNotes.html(code,render):'')+tnCard(code)+
     /* Brandon 2026-11-17 (Kim #49, Cheree #55): a home with no Wi-Fi had no Wi-Fi card at all, so nobody found where to add it */
@@ -2135,16 +2139,41 @@ function ownerViewHtml(code,q){ if(!q.ownerView) return ""; var v=(D._ov||{})[co
     '<div class="hint">Opened '+esc(new Date(v.at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}))+(v.pinged?' · Chris and the admins were told':'')+'</div>'; }
 function ownerView(code){ var sb=window.MM_SB; if(!sb) return; D._ov=D._ov||{};
   sb.rpc("home_owner_reveal",{p_home:code}).then(function(r){ D._ov[code]=r.error?{err:"Couldn't open it. Try again."}:Object.assign({at:Date.now()},r.data||{}); render(); }); }
+/* ✎ Edit owners (Brandon 2026-11-23, Pyper #34/#36): every owner on the home, each editable or "not an owner", + Add an owner.
+   Saved in the hub (desk_docs ownercontacts .people); Track isn't changed - the pop-up links to the owner's page in Track. */
+function ownRow(p,i){ return '<div class="fields ownrow" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));align-items:end;border-top:1px solid var(--line-2);padding-top:8px;margin-top:8px">'+
+  fld("on_n"+i,"Name",p.name||"")+fld("on_p"+i,"Phone",p.phone||"","tel")+fld("on_e"+i,"Email",p.email||"","email")+
+  '<label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="on_x'+i+'" '+(p.off?"checked":"")+' style="width:auto;min-height:0"> Not an owner of this home</label></div>'; }
+function ownTrackIds(code){ var f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFeed(f,code)||[]):[]; return tr.map(function(o){ return o.trackOwnerId; }).filter(Boolean); }
+function mOwners(code){ var k=sid(code), oc=(S.ownercontacts||{})[k]||{}, o=ownerOf(code), ids=ownTrackIds(code);
+  var rows=(o.list.length?o.list:[{}]).map(function(p,i){ return ownRow(p,i); }).join("");
+  var tl=ids.map(function(id){ return '<a class="golink" href="https://moosemanagement.trackhs.com/pms/owner/profiles/view/'+encodeURIComponent(id)+'/" target="_blank" rel="noopener">Open this owner in Track ↗</a>'; }).join(" ");
+  openModal("Owners · "+code,'<div class="hint">Fix names, phones and emails here, tick <b>Not an owner of this home</b> for anyone who shouldn\'t be listed, or add an owner. The hub\'s list then replaces Track\'s on this home. '+
+    'Track isn\'t changed: fix it there too so owner statements and emails match'+(tl?' · '+tl:'')+'.</div><div id="ownrows">'+rows+'</div>'+
+    '<div style="margin:8px 0"><button class="btn sm" data-act="ownadd">+ Add an owner</button>'+(Array.isArray(oc.people)?' <button class="btn sm ghost" data-act="ownreset" data-code="'+esc(code)+'">Use Track\'s list again</button>':'')+'</div>'+
+    area("o_notes2","Owner notes",oc.notes||"","e.g. prefers text, call Mike first"),
+  function(){ var n=$("ownrows")?$("ownrows").children.length:0, people=[], bad="";
+    for(var i=0;i<n;i++){ var p={name:fv("on_n"+i),phone:fv("on_p"+i),email:fv("on_e"+i),off:!!($("on_x"+i)&&$("on_x"+i).checked)};
+      if(!p.name&&!p.phone&&!p.email) continue;
+      if(p.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email)) bad="Check the email for "+(p.name||"owner "+(i+1))+".";
+      if(p.phone&&p.phone.replace(/\D/g,"").length<7) bad="Check the phone for "+(p.name||"owner "+(i+1))+".";
+      people.push(p); }
+    if(bad){ toast(bad); return Promise.reject(); }
+    if(!people.some(function(p){ return !p.off; })){ toast("Keep at least one owner, or use Track's list again."); return Promise.reject(); }
+    return put("ownercontacts",k,{code:code,people:people,notes:fv("o_notes2"),name:"",phone:"",email:""},oc).then(function(){ toast("Saved"); closeModal(); render(); }); },"Save owners"); }
+function ownReset(code){ var k=sid(code), oc=(S.ownercontacts||{})[k]||{};
+  Promise.resolve(window.mmConfirm?mmConfirm("Show Track's owner list for "+code+" again? The hub's edits are kept in the history."):true).then(function(ok){ if(!ok) return;
+    put("ownercontacts",k,{code:code,people:null,name:"",phone:"",email:""},oc).then(function(){ toast("Back to Track's list"); closeModal(); render(); }); }); }
 function mQuick(code){ var pe=pedit(code), oc=(S.ownercontacts||{})[sid(code)]||{}, o=ownerOf(code);
   openModal("Quick view · "+code,'<div class="fields">'+fld("q_wn","Wi-Fi network",pe.wifiName||"")+fld("q_wp","Wi-Fi password",pe.wifiPass||"")+'</div><div class="hint">When Track has Wi-Fi for this home, Track\'s shows first. If Track\'s is wrong, change it in Track too.</div>'+
     (canEntry()?area("q_lo","Entry / owner lockout codes",pe.lockoutCode||"","Leave blank to show the Asana note")+area("q_gc","Garage / parking codes",pe.garageCode||"","Track's garage code shows first; this is used when Track has none"):'')+(window.MM_CODES===false?'':area("q_oc","Owner closet",pe.ownerCloset||"","Leave blank to show the Asana note"))+
-    (o.can?'<div class="lbl" style="margin-top:10px">Owner contact <span class="muted">(blank = use Track)</span></div><div class="fields">'+fld("o_name","Owner name",oc.name||"")+fld("o_phone","Phone",oc.phone||"","tel")+fld("o_email","Email",oc.email||"","email")+'</div>'+area("o_notes","Owner notes",oc.notes||"","e.g. prefers text, second contact"):''),
+    (o.can&&o.hub?'<div class="hint" style="margin-top:10px">Owners are edited with <b>✎ Edit owners</b> on the Owner box.</div>':o.can?'<div class="lbl" style="margin-top:10px">Owner contact <span class="muted">(blank = use Track)</span></div><div class="fields">'+fld("o_name","Owner name",oc.name||"")+fld("o_phone","Phone",oc.phone||"","tel")+fld("o_email","Email",oc.email||"","email")+'</div>'+area("o_notes","Owner notes",oc.notes||"","e.g. prefers text, second contact"):''),
   function(){ var k=sid(code);
     var qp={wifiName:fv("q_wn"),wifiPass:fv("q_wp"),qBy:S.me};
     if(canEntry()){ qp.lockoutCode=fv("q_lo"); qp.garageCode=fv("q_gc"); }
     if(window.MM_CODES!==false) qp.ownerCloset=fv("q_oc");
     var a=put("propedits",k,qp,S.propedits[k]);
-    var b=o.can?put("ownercontacts",k,{code:code,name:fv("o_name"),phone:fv("o_phone"),email:fv("o_email"),notes:fv("o_notes")},(S.ownercontacts||{})[k]):Promise.resolve();
+    var b=o.can&&!o.hub?put("ownercontacts",k,{code:code,name:fv("o_name"),phone:fv("o_phone"),email:fv("o_email"),notes:fv("o_notes")},(S.ownercontacts||{})[k]):Promise.resolve();
     return Promise.all([a,b]).then(function(){ toast("Saved"); closeModal(); }); },"Save"); }
 /* HOA section (Brandon 2026-11-04: "HOA info in property details - lets add it as a section"): hub edits (Home details ▸ HOA) first,
    else the Asana "HOA Info" note; a home with neither borrows the note of another home in the same community (says which).
@@ -5739,6 +5768,9 @@ document.addEventListener("click",function(ev){
     case "tbclose": S.ui.openTask={}; return render();
     case "hhood": S.ui.hhOpen=(S.ui.hhOpen===d.c?"":d.c); render(); if(S.ui.hhOpen){ var hb=[].slice.call(document.querySelectorAll(".hhacc")).filter(function(x){ return x.dataset.c===S.ui.hhOpen; })[0]; if(hb) hb.scrollIntoView({block:"start"}); } return;
     case "editquick": return mQuick(d.code);
+    case "editowners": return mOwners(d.code);
+    case "ownadd": var oh=$("ownrows"); if(oh) oh.insertAdjacentHTML("beforeend",ownRow({},oh.children.length)); return;
+    case "ownreset": return ownReset(d.code);
     case "ownerview": return ownerView(d.code);
     case "hnadd": return hnAdd(d.code);
     case "tnedit": S.ui.tnEd={code:d.code,id:d.id}; return render();
