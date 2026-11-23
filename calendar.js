@@ -707,13 +707,17 @@ async function evCal(v, key, fresh){
   function schedForm(){
     // Build list cal-e2e (2026-11-06): pick coworkers, see when everyone's free (meet_free: busy times + shifts, never what), in person or virtual
     const co = ppl.filter(p => p.id !== myId), F = { virt:false, from:null, free:null, tm:null, seq:0 };
+    // Build list j10 (2026-11-23): never start a new meeting in the past
+    const smDay0 = ST.sel[key] >= today() ? ST.sel[key] : today();
+    const smNext = () => { const n = new Date(), m = Math.ceil((n.getHours() * 60 + n.getMinutes() + 1) / 15) * 15; return Math.min(m, 23 * 60 + 45); };
+    const smStart = d => d === today() && smNext() > 10 * 60 ? hhmm(smNext()) : "10:00";
     modal({ h:"Schedule a meeting", b:`<p class="muted" style="margin:4px 0 0">Pick who's coming and the hub shows when you're all free. Everyone you pick gets it on their calendar and can say yes, no or suggest another time. Virtual meetings get a Zoom link and a page you can also send to guests or vendors.</p>
       <label class="field"><span>What</span><input id="sm_t" maxlength="120" placeholder="e.g. Plan the Thanksgiving turnovers"></label>
       <div class="field"><span>Who from Moose</span><input id="sm_q" placeholder="Find a coworker…" autocomplete="off" style="margin-bottom:4px"><div class="attp" id="sm_st">${co.map(p => `<label class="lyr" data-n="${esc(p.name.toLowerCase())}"><input type="checkbox" data-st="${p.id}">${esc(p.name)}</label>`).join("")}</div></div>
       <div class="field"><span>How</span><div class="vsw" id="sm_how"><button type="button" class="btn small primary" data-how="0">👥 In person</button><button type="button" class="btn small" data-how="1">💻 Virtual (Zoom)</button></div></div>
       <label class="field" id="sm_wf"><span>Where</span><input id="sm_w" maxlength="200" placeholder="e.g. Moose office, BHL 4205…"></label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Day</span><input type="date" id="sm_d" min="${today()}" value="${esc(ST.sel[key] >= today() ? ST.sel[key] : today())}"></label>
-        <label class="field" style="flex:1;min-width:120px"><span>Starts</span><select id="sm_s">${topts("10:00")}</select></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:140px"><span>Day</span><input type="date" id="sm_d" min="${today()}" value="${esc(smDay0)}"></label>
+        <label class="field" style="flex:1;min-width:120px"><span>Starts</span><select id="sm_s">${topts(smStart(smDay0))}</select></label>
         <label class="field" style="flex:1;min-width:110px"><span>How long</span><select id="sm_l">${lenOpts(30, [15, 30, 45, 60, 90, 120, 180])}</select></label></div>
       <div class="card fb" id="sm_fb"><b>When is everyone free?</b> <span class="muted" style="font-size:12.5px">Pick people above to see.</span></div>
       <label class="field"><span>Note (optional)</span><textarea id="sm_n" maxlength="1000" style="min-height:60px" placeholder="Agenda, what to bring… Don't type codes or passwords."></textarea></label>
@@ -760,11 +764,12 @@ async function evCal(v, key, fresh){
     $("#sm_st").onchange = later;
     $("#sm_how").querySelectorAll("[data-how]").forEach(bt => bt.onclick = () => { F.virt = bt.dataset.how === "1";
       $("#sm_how").querySelectorAll("[data-how]").forEach(x => x.classList.toggle("primary", x === bt)); $("#sm_wf").style.display = F.virt ? "none" : ""; });
-    $("#sm_d").onchange = () => { const d = $("#sm_d").value; if(F.free && d >= F.from && d <= addD(F.from, 6)) drawFree(); else if(F.free || picked("sm_st").length) loadFree(); };
+    $("#sm_d").onchange = () => { const d = $("#sm_d").value; if(d === today() && toMin($("#sm_s").value) < smNext()) $("#sm_s").value = smStart(d); if(F.free && d >= F.from && d <= addD(F.from, 6)) drawFree(); else if(F.free || picked("sm_st").length) loadFree(); };
     $("#sm_s").onchange = $("#sm_l").onchange = () => drawFree();
     $("#sm_go").onclick = async () => { const t = $("#sm_t").value.trim(); if(!t) return $("#sm_m").textContent = "Add what the meeting is.";
       const staff = picked("sm_st"), d = $("#sm_d").value, st = $("#sm_s").value, len = +$("#sm_l").value;
       if(!d) return $("#sm_m").textContent = "Pick a day.";
+      if(d === today() && toMin(st) < smNext() - 15 && !await mmConfirm("That start time has already passed today. Make it anyway?")) return;
       if(F.free && d >= F.from && d <= addD(F.from, 6)){ const bz = F.free.people.filter(p => !freeAt(p, d, toMin(st), len)).map(p => p.me ? "you" : first(p.name));
         if(bz.length && !await mmConfirm(bz.join(", ") + (bz.length === 1 && bz[0] !== "you" ? " looks" : " look") + " busy or off then. Make it anyway?")) return; }
       if(!staff.length && !await mmConfirm("No coworkers picked. Make it just for you?")) return;
