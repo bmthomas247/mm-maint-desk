@@ -1,0 +1,199 @@
+/* Moose Hub usage tracking (Jeff 2026-11-23: "every single page and everything is click traced, so that way we can help fix things").
+   Loaded by config.js, so every hub page (and every new page that loads config.js) is covered.
+   Keeps: page opens, clicks (what was tapped + where), page errors and failure messages, for SIGNED-IN staff only.
+   Never keeps: anything typed into a box, box values, codes, passwords or emails (numbers of 3+ digits and emails are
+   masked here AND again in the database). Public guest pages are skipped.
+   Saved by hub_click_log() into hub_clicks (hub_usage_tracking.sql). Read only by hub admins: Reports > Admin > Hub usage (usage.html). */
+(function () {
+  if (window.__mmTrack) return; window.__mmTrack = 1;
+  try {
+    var CFG = window.MM_CONFIG || {};
+    if (!CFG.url || !CFG.anonKey) return;
+    var file = (location.pathname.split("/").pop() || "hub.html").toLowerCase();
+    if (file === "index.html" || file === "") file = "hub.html";
+    // Guest-facing / public pages: never tracked
+    if (/^(guest|book|meet|gps_setup|unsub|go|stay|install-guide)\.html$/.test(file)) return;
+
+    var REF = CFG.url.replace(/^https?:\/\//, "").split(".")[0];
+    var SKEY = "sb-" + REF + "-auth-token", QKEY = "mm_trk_q";
+    var FRAMED = false; try { FRAMED = window.top !== window; } catch (e) { FRAMED = true; }
+    var SID; try { SID = sessionStorage.getItem("mm_trk_sid"); if (!SID) { SID = Math.random().toString(36).slice(2, 12); sessionStorage.setItem("mm_trk_sid", SID); } } catch (e) { SID = "x" + Math.random().toString(36).slice(2, 10); }
+    var KEEPQ = ["only", "view", "tab", "area", "htype", "split", "meet", "full", "rp", "embed", "penny"];
+
+    function sess() {
+      try {
+        var o = JSON.parse(localStorage.getItem(SKEY) || "null"); if (!o) return null;
+        if (o.currentSession) o = o.currentSession;
+        if (!o.access_token) return null;
+        if (o.expires_at && o.expires_at * 1000 < Date.now() + 5000) return null;   // expired: wait for the page to refresh it
+        return { token: o.access_token, uid: (o.user && o.user.id) || "" };
+      } catch (e) { return null; }
+    }
+    function clean(t, n) {
+      if (t == null) return "";
+      t = String(t).replace(/[^\s@]+@[^\s@]+/g, "[email]").replace(/\d{3,}/g, "###").replace(/\s+/g, " ").trim();
+      return t.length > (n || 80) ? t.slice(0, (n || 80) - 1) + "…" : t;
+    }
+    function page() {
+      var q = new URLSearchParams(location.search), keep = [];
+      KEEPQ.forEach(function (k) { if (q.has(k)) keep.push(k + "=" + clean(q.get(k), 20)); });
+      return file + (keep.length ? "?" + keep.join("&") : "");
+    }
+    // #/route only, cut before any = & ? (sign-in links carry tokens there). Home codes / res numbers kept; emails masked.
+    function route() { var h = String(location.hash || ""); try { h = decodeURIComponent(h); } catch (e) {}
+      h = h.split(/[=&?]/)[0].replace(/[^\s@]+@[^\s@]+/g, "[email]"); return h.length > 120 ? h.slice(0, 120) : h; }
+    function screenKind() { var w = 1200; try { w = window.top.innerWidth; } catch (e) { w = window.innerWidth; } return w < 700 ? "phone" : w < 1100 ? "tablet" : "desktop"; }
+    function title() {
+      var t = "";
+      try { var tt = window.top.document.querySelector("#ttl"); if (tt) t = tt.textContent; } catch (e) {}
+      if (!t) { var h = document.querySelector("#ttl,h1,h2"); t = h ? h.textContent : document.title; }
+      return clean(t, 60);
+    }
+
+    // ---- queue + send ----
+    var Q = [], busy = false, fails = 0;
+    // Taps not sent yet (no signal / page closed) wait in this browser; each one carries who made it (u),
+    // so a tap is never sent under someone else who signs in on the same device later.
+    try { var old = JSON.parse(localStorage.getItem(QKEY) || "null"); if (old && old.length) Q = old.slice(-300); } catch (e) {}
+    function save() { try { if (Q.length) localStorage.setItem(QKEY, JSON.stringify(Q.slice(-300))); else localStorage.removeItem(QKEY); } catch (e) {} }
+    function add(ev) {
+      var s = sess();
+      ev.u = s ? s.uid : ""; ev.t = Date.now(); ev.sid = SID; ev.page = page(); ev.route = route(); ev.fr = FRAMED; ev.sc = screenKind();
+      if (!ev.nm) ev.nm = title();
+      Q.push(ev); if (Q.length > 300) Q.splice(0, Q.length - 300);
+      if (Q.length >= 25) flush(); else save();
+    }
+    function flush(leaving) {
+      if (busy || !Q.length) return;
+      var s = sess(); if (!s) { save(); return; }
+      Q = Q.filter(function (ev) { return !ev.u || ev.u === s.uid; });   // someone else's leftovers on this device: dropped
+      Q.forEach(function (ev) { if (!ev.u) ev.u = s.uid; });
+      if (!Q.length) { save(); return; }
+      var batch = Q.splice(0, 80); busy = true; save();
+      var back = function () { Q = batch.concat(Q).slice(-300); fails++; save(); };
+      try {
+        fetch(CFG.url + "/rest/v1/rpc/hub_click_log", {
+          method: "POST", keepalive: !!leaving,
+          headers: { apikey: CFG.anonKey, Authorization: "Bearer " + s.token, "Content-Type": "application/json" },
+          body: JSON.stringify({ p: batch })
+        }).then(function (r) {
+          busy = false;
+          if (r.status === 401 || r.status >= 500) back();   // sign-in being refreshed / server busy: try again later
+          else { fails = 0; save(); }                          // sent (or refused for good: don't retry forever)
+        }).catch(function () { busy = false; back(); });
+      } catch (e) { busy = false; back(); }
+    }
+    setInterval(function () { if (fails < 20 || Math.random() < 0.1) flush(); }, 15000);
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flush(true); });
+    window.addEventListener("pagehide", function () { flush(true); });
+
+    // ---- page opens ----
+    var lastView = "", lastAt = 0;
+    function view(why) {
+      setTimeout(function () {
+        var k = page() + "|" + route() + "|" + title();
+        if (k === lastView && Date.now() - lastAt < 4000) return;
+        lastView = k; lastAt = Date.now();
+        add({ k: "view", act: why });
+      }, 1300);   // let the page draw its title first
+    }
+    // Inside the hub, the hub page itself records the open; a desk inside it only records its own moves (#hash changes).
+    if (!FRAMED) view("open");
+    window.addEventListener("hashchange", function () { view("move"); });
+
+    // ---- clicks ----
+    var INTER = "a,button,summary,label,select,option,input,textarea,[role=button],[role=tab],[role=link],[role=menuitem],[onclick],[contenteditable=true]";
+    var SECRET = /pass|wi-?fi|code|key ?box|lock|garage|gate|alarm|\bpin\b|secret|token|login|sign-?in/i;
+    function ctxOf(el) {
+      var box = el.closest && el.closest("dialog,[role=dialog],.modal,details,section,article,fieldset,.card,.tile,table,form,nav,aside,header");
+      if (!box) return "";
+      var h = box.querySelector("h1,h2,h3,h4,summary,legend,caption,.title");
+      return h && h !== el ? clean(h.textContent, 50) : "";
+    }
+    function labelOf(el, live) {
+      var tag = el.tagName.toLowerCase(), tp = (el.getAttribute("type") || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") {
+        if (tp === "password") return "password box";
+        var lab = el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || el.getAttribute("title") || "";
+        if (!lab && el.id) { try { var l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]'); if (l) lab = l.textContent; } catch (e) {} }
+        if (!lab) { var pl = el.closest("label"); if (pl) lab = Array.prototype.map.call(pl.childNodes, function (n) { return n.nodeType === 3 ? n.textContent : ""; }).join(" "); }
+        return clean((tp === "checkbox" || tp === "radio" ? "tick: " : tag === "select" ? "pick: " : "box: ") + lab, 80);   // never the value
+      }
+      var t = el.getAttribute("aria-label") || el.getAttribute("title") || "";
+      var txt = (el.innerText || el.textContent || "");
+      if (!t) t = txt;
+      if (!live && txt.length > 120) return "";                        // a big block of text, not a spot
+      if (SECRET.test(t + " " + ctxOf(el))) {
+        if (!live) return "[hidden]";                                  // a tapped value near codes / Wi-Fi: don't keep the words
+        t = t.split(/\s+/).map(function (w) { return /\d/.test(w) && w.length > 2 ? "###" : w; }).join(" ");
+        if (t.length > 40) t = t.slice(0, 40);
+      }
+      return clean(t, 80);
+    }
+    function actOf(el) {
+      if (el.id) return "#" + el.id;
+      for (var i = 0; i < el.attributes.length; i++) {
+        var a = el.attributes[i];
+        if (/^data-/.test(a.name) && !/^data-(v|id|i|n|k)$/.test(a.name)) return a.name + (a.value && a.value.length <= 24 ? "=" + a.value : "");
+      }
+      var c = (el.getAttribute("class") || "").trim().split(/\s+/).slice(0, 2).join(".");
+      return c ? "." + c : "";
+    }
+    function hrefOf(el) {
+      if (el.tagName !== "A" || !el.getAttribute("href")) return "";
+      try { var u = new URL(el.getAttribute("href"), location.href);
+        if (u.protocol === "tel:" || u.protocol === "sms:" || u.protocol === "mailto:") return u.protocol;
+        if (u.origin === location.origin) return u.pathname.split("/").pop() + String(u.hash || "").split(/[=&?]/)[0];
+        return u.host; } catch (e) { return ""; }
+    }
+    var lastClick = "", lastClickAt = 0;
+    document.addEventListener("click", function (e) {
+      try {
+        var t = e.target; if (t && t.nodeType !== 1) t = t.parentElement; if (!t) return;
+        // the nearest thing that acts like a button: a real control, or anything showing the pointing-hand cursor
+        var el = null, x = t;
+        for (var i = 0; x && i < 7 && x !== document.body && x !== document.documentElement; i++, x = x.parentElement) {
+          if (x.matches && (x.matches(INTER) || getComputedStyle(x).cursor === "pointer")) { el = x; break; }
+        }
+        var live = !!el; el = el || t;
+        var ev = { k: "click", tag: el.tagName.toLowerCase(), lb: labelOf(el, live), cx: ctxOf(el), act: clean(actOf(el), 60), href: hrefOf(el), live: live };
+        // a tap on a <label> also "clicks" its tick box a moment later: count it once
+        var key = ev.lb + "|" + ev.cx; if (key === lastClick && Date.now() - lastClickAt < 80) return;
+        lastClick = key; lastClickAt = Date.now();
+        add(ev);
+      } catch (err) {}
+    }, true);
+
+    // ---- page errors + failure messages people see ----
+    var seenErr = {};
+    function err(msg, src) {
+      msg = clean(msg, 300); if (!msg) return;
+      var k = msg; if (seenErr[k] && Date.now() - seenErr[k] < 30000) return; seenErr[k] = Date.now();
+      add({ k: "error", msg: msg, src: String(src || "").split("?")[0].slice(0, 200) });
+    }
+    window.addEventListener("error", function (e) {
+      try {
+        if (e && e.target && e.target !== window && e.target.tagName) {          // a picture / script / style that didn't load
+          var tg = e.target, u = tg.src || tg.href || "";
+          if (/^(IMG|SCRIPT|LINK)$/.test(tg.tagName)) err("Couldn't load " + (tg.tagName === "IMG" ? "picture" : tg.tagName === "SCRIPT" ? "script" : "style") + ": " + String(u).split("?")[0].split("/").slice(-2).join("/"), u);
+          return;
+        }
+        err(e.message || "Page error", (e.filename || "") + (e.lineno ? ":" + e.lineno : ""));
+      } catch (x) {}
+    }, true);
+    window.addEventListener("unhandledrejection", function (e) {
+      try { var r = e.reason; err("Unhandled: " + ((r && (r.message || r.error_description)) || String(r)), ""); } catch (x) {}
+    });
+    var FAIL = /couldn.?t|could not|can.?t|cannot|error|failed|not allowed|not saved|denied|try again|went wrong|no signal|timed out/i;
+    function wrapAlerts() {
+      ["alert", "mmAlert"].forEach(function (n) {
+        var f = window[n]; if (typeof f !== "function" || f.__mmT) return;
+        var w = function (m) { try { var s = m && m.message ? m.message : String(m); if (FAIL.test(s)) err("Message shown: " + s, n); } catch (x) {} return f.apply(this, arguments); };
+        w.__mmT = 1; window[n] = w;
+      });
+    }
+    wrapAlerts();
+    document.addEventListener("DOMContentLoaded", wrapAlerts);
+    window.addEventListener("load", function () { wrapAlerts(); setTimeout(wrapAlerts, 3000); });
+  } catch (e) {}
+})();
