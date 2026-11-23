@@ -419,7 +419,7 @@ function vSignTL(){
   const med = hist.length ? hist.map(x => x.days).sort((a, b) => a - b)[Math.floor(hist.length / 2)] : null;
   const signedNow = L.filter(l => l.status === "signed");
   $("#view").innerHTML = `<div class="builder" style="grid-template-columns:1fr 1fr">
-    <div class="card"><h2>✍️ Where owners are now</h2><div class="funnel" style="height:170px">${stages.map(([k, l]) => { const n = reached(k); return `<div><div class="bar" style="height:${Math.round(n / max * 140)}px;${k === "signed" ? "background:var(--gold)" : ""}"></div><b>${n}</b><br><small class="muted">${l}</small></div>`; }).join("")}</div>
+    <div class="card"><h2>✍️ Where owners are now</h2><div class="funnel" style="height:170px">${stages.map(([k, l]) => { const n = reached(k); return `<div><div class="bar" style="height:${Math.round(n / max * 110)}px;${k === "signed" ? "background:var(--gold)" : ""}"></div><b>${n}</b><br><small class="muted">${l}</small></div>`; }).join("")}</div>
       <p class="src">Owners on 📞 Leads & follow-up who reached each stage. "Working" = at least one call, text, email or card logged.</p></div>
     <div class="card"><h2>Activity by week</h2><div style="display:flex;gap:3px;align-items:flex-end;height:150px">${weeks.map(w => { const v = by[w] || { touch:0, talk:0, signed:0 }; const sc = h => Math.round(h / wmax * 130);
         return `<div style="flex:1;display:flex;flex-direction:column-reverse;align-items:stretch" title="Week of ${fmtS(w)}: ${v.touch} touches, ${v.talk} conversations, ${v.signed} signed"><div style="height:${sc(v.touch)}px;background:#88B535"></div><div style="height:${sc(v.talk)}px;background:#2463a0"></div><div style="height:${sc(v.signed)}px;background:var(--gold)"></div></div>`; }).join("")}</div>
