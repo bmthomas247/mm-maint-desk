@@ -49,7 +49,8 @@ function shifts(rows){
   let cur = null;
   for(const p of ok){
     if(p.kind === "in"){ if(cur) out.odd.push(cur); cur = p; }
-    else if(cur){ const k = dkey(cur.at); (out.days[k] = out.days[k] || []).push({ a:cur, b:p, h:(Date.parse(p.at) - Date.parse(cur.at)) / 36e5 }); cur = null; }
+    else if(cur){ const k = dkey(cur.at), rh = (Date.parse(p.at) - Date.parse(cur.at)) / 36e5;   // 16+ h = missed clock-out: not counted until fixed (build list sl-longshift, 2026-11-23)
+      (out.days[k] = out.days[k] || []).push({ a:cur, b:p, h:rh >= 16 ? 0 : rh, rh, long:rh >= 16 }); cur = null; }
     else out.odd.push(p);
   }
   if(cur){ if(Date.now() - Date.parse(cur.at) < 20 * 36e5) out.open = cur; else out.odd.push(cur); }
@@ -158,7 +159,7 @@ function weekTable(rows, w, pl, boss, sc){
   for(let i = 0; i < 7; i++){ const k = addK(w, i), l = s.days[k] || [], t = l.reduce((a, x) => a + x.h, 0);
     const open = s.open && dkey(s.open.at) === k;
     if(!l.length && !open && k !== today && !fl(k)) { h += `<tr><td>${dnm(k)}</td>${sch(k)}<td class="muted">—</td><td></td></tr>`; continue; }
-    h += `<tr><td>${dnm(k)}</td>${sch(k)}<td>${l.map(x => `${pt(x.a)} – ${pt(x.b)} <span class="muted sm">(${hm(x.h)})</span> ${where(x.a, pl)}${boss ? offBtn(x.a) + offBtn(x.b) : ""}`).join("<br>")}
+    h += `<tr><td>${dnm(k)}</td>${sch(k)}<td>${l.map(x => `${pt(x.a)} – ${pt(x.b)} ${x.long ? `<span class="sm" style="color:#b91c1c" title="Over 16 hours: looks like a missed clock-out. Not counted in hours or overtime until the clock-out time is fixed with ✎.">(${hm(x.rh)}: missed clock-out? not counted, fix it)</span>` : `<span class="muted sm">(${hm(x.h)})</span>`} ${where(x.a, pl)}${boss ? offBtn(x.a) + offBtn(x.b) : ""}`).join("<br>")}
       ${open ? `${l.length ? "<br>" : ""}${pt(s.open)} – <b>still clocked in</b> ${where(s.open, pl)}${boss ? offBtn(s.open) : ""}` : ""}${!l.length && !open ? `<span class="muted">—</span>` : ""}${fl(k)}</td><td class="r">${t ? hm(t) : ""}</td></tr>`; }
   const odd = s.odd.filter(p => wk(dkey(p.at)) === w);
   return `<div class="tow"><table><tr><th>Day</th>${sc ? "<th>Scheduled</th>" : ""}<th>In – out</th><th class="r">Hours</th></tr>${h}
