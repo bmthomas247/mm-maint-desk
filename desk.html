@@ -2785,6 +2785,27 @@ function trackPlan(code){ var f=((S.feeds.owners||{}).homes)||null, tr=f?(fromFe
   return {key:k, raw:raw}; }
 function planOf(code){ plansNow(); var e=pedit(code).plan; if(e&&PLANS[e]) return e; var t=trackPlan(code).key; return (t&&PLANS[t])?t:((S.config.rates||{}).defaultPlan||"prime"); }
 function planWhy(code){ var e=pedit(code).plan, t=trackPlan(code); return (e&&PLANS[e])?"set in the hub":t.raw?("Track: "+t.raw+(t.key==="other"?" — no rate on file, using Prime":"")):"no plan in Track — using Prime"; }
+/* 2026-11-23 (Brandon): anyone on this page can change a home's numbers in the Bill to owners summary — click, type, it saves by itself;
+   the change (from → to, who, when) shows under the number for 30 days. Stored in paycost/billadj_<month> {homes:{code:{labor,parts,fees,total,hist:[]}}}. */
+function baDoc(m){ return ((S.paycost||{})["billadj_"+m])||{}; }
+function baGet(m,code){ return ((baDoc(m).homes)||{})[code]||{}; }
+function baCell(m,code,f,v,bold){ var A=baGet(m,code), cut=Date.now()-30*864e5, hs=(A.hist||[]).filter(function(h){ return h.f===f && h.at>=cut; });
+  var lastH=hs[hs.length-1];
+  return '<input class="bain" data-ba="'+esc(code)+'|'+f+'" type="number" step="0.01" min="0" value="'+(+v||0).toFixed(2)+'" title="Click to change" aria-label="'+esc(code)+' '+f+'" style="width:96px;text-align:right;border:1px solid transparent;background:transparent;padding:2px 4px;font:inherit;'+(bold?'font-weight:700;':'')+(A[f]!=null?'color:var(--accent);':'')+'">'+
+    (lastH?'<div class="muted" style="font-size:11px;line-height:1.3" title="'+esc(hs.map(function(h){ return money2(h.from)+" → "+money2(h.to)+" · "+h.by+" · "+fmtD(new Date(h.at).toISOString().slice(0,10)); }).join("\n"))+'">was '+money2(lastH.from)+' · '+esc(String(lastH.by||"").split(" ")[0])+' '+esc(fmtD(new Date(lastH.at).toISOString().slice(0,10)))+(hs.length>1?' (+'+(hs.length-1)+')':'')+'</div>':'')+
+    (A[f]!=null?'<a href="#" class="muted" style="font-size:11px" data-baundo="'+esc(code)+'|'+f+'">use the worked-out number</a>':''); }
+function baSave(m,code,f,val){ if(!need()) return; var cur=baDoc(m), homes=Object.assign({},cur.homes||{}), A=Object.assign({},homes[code]||{});
+  var inp=document.querySelector('input[data-ba="'+code.replace(/"/g,'\\"')+'|'+f+'"]'), was=inp?+inp.defaultValue:0;
+  if(val==null){ delete A[f]; } else { if(Math.abs(val-was)<0.005) return; A[f]=+val.toFixed(2); }
+  A.hist=(A.hist||[]).filter(function(h){ return h.at>=Date.now()-30*864e5; }).concat([{f:f, from:+was.toFixed(2), to:val==null?null:+val.toFixed(2), by:S.me||"", at:Date.now()}]);
+  homes[code]=A;
+  return put("paycost","billadj_"+m,{homes:homes,month:m},cur).then(function(){ toast(code+" "+f+" saved"); render(); }); }
+document.addEventListener("change",function(ev){ var t=ev.target; if(!t||!t.matches||!t.matches("input.bain")) return; var a=t.dataset.ba.split("|"), v=t.value===""?null:+t.value;
+  if(v!=null&&(isNaN(v)||v<0)) return toast("Type a dollar amount"); baSave(S.ui.month||ymd(Date.now()).slice(0,7),a[0],a[1],v); });
+document.addEventListener("focusin",function(ev){ var t=ev.target; if(t&&t.matches&&t.matches("input.bain")) t.style.borderColor="var(--line)"; });
+document.addEventListener("focusout",function(ev){ var t=ev.target; if(t&&t.matches&&t.matches("input.bain")) t.style.borderColor="transparent"; });
+document.addEventListener("keydown",function(ev){ var t=ev.target; if(t&&t.matches&&t.matches("input.bain")&&ev.key==="Enter"){ ev.preventDefault(); t.blur(); } });
+document.addEventListener("click",function(ev){ var a=ev.target.closest&&ev.target.closest("[data-baundo]"); if(!a) return; ev.preventDefault(); ev.stopPropagation(); var x=a.dataset.baundo.split("|"); baSave(S.ui.month||ymd(Date.now()).slice(0,7),x[0],x[1],null); },true);
 function billingPanel(m,bwDone){
   var byHome={}, used={};
   bwDone.forEach(function(j){ if(!j.prop||j.prop==="Moose company"||j.kind==="inspection"||j.auto) return; var mins=(+j.minutes>720?0:+j.minutes||0), crew=Math.max(1,(j.crew||[]).length);
@@ -2795,9 +2816,11 @@ function billingPanel(m,bwDone){
     else { var ff=(((S.feeds["bw-fees"]||{}).tasks)||{})[j.id.slice(3)]; if(ff&&ff.fees) b.fees+=ff.fees.reduce(function(a,x){ return a+(+x.amount||0); },0); } });
   monthRows("expenses",m).forEach(function(e){ if(!e.prop||e.prop==="Moose company"||used[e.id]) return; if(e.category==="Owner-billed"||e.billOwner){ var b=byHome[e.prop]=byHome[e.prop]||{tasks:[],hours:0,parts:0,fees:0}; b.parts+=(+e.amount||0); } });
   var homes=Object.keys(byHome).sort(function(a,b){ return a.localeCompare(b,undefined,{numeric:true}); }), grand=0;
-  var rows=homes.map(function(code){ var b=byHome[code], pl=PLANS[planOf(code)]||PLANS.prime, billH=Math.max(0,b.hours-pl.free), labor=billH*pl.rate, tot=labor+b.parts+b.fees; grand+=tot;
+  var rows=homes.map(function(code){ var b=byHome[code], pl=PLANS[planOf(code)]||PLANS.prime, billH=Math.max(0,b.hours-pl.free), labor=billH*pl.rate, parts=b.parts, fees=b.fees;
+    var A=baGet(m,code); if(A.labor!=null) labor=+A.labor; if(A.parts!=null) parts=+A.parts; if(A.fees!=null) fees=+A.fees;
+    var tot=A.total!=null?+A.total:labor+parts+fees; grand+=tot;
     var q=S.bwq[sid("bill_"+m+"_"+code)];
-    return '<tr><td>'+propLink(code)+'</td><td title="'+esc(planWhy(code))+'">'+esc(pl.name)+' <span class="muted">$'+pl.rate+'/h</span></td><td class="num">'+b.tasks.length+'</td><td class="num">'+b.hours.toFixed(1)+(pl.free?'<div class="muted">'+pl.free+'h free</div>':'')+'</td><td class="num">'+money2(labor)+'</td><td class="num">'+money2(b.parts)+'</td><td class="num">'+(b.fees?money2(b.fees):'')+'</td><td class="num"><b>'+money2(tot)+'</b></td><td>'+
+    return '<tr><td>'+propLink(code)+'</td><td title="'+esc(planWhy(code))+'">'+esc(pl.name)+' <span class="muted">$'+pl.rate+'/h</span></td><td class="num">'+b.tasks.length+'</td><td class="num">'+b.hours.toFixed(1)+(pl.free?'<div class="muted">'+pl.free+'h free</div>':'')+'</td><td class="num">'+baCell(m,code,"labor",labor)+'</td><td class="num">'+baCell(m,code,"parts",parts)+'</td><td class="num">'+baCell(m,code,"fees",fees)+'</td><td class="num">'+baCell(m,code,"total",tot,1)+'</td><td>'+
       (q&&q.status==="created"?'<span class="pill done">In Breezeway</span>':q&&q.status==="queued"?'<span class="pill waiting">Sending</span>':q&&q.status==="failed"?'<span class="pill stop" title="'+esc(q.error||"")+'">Failed</span> <button class="btn sm" data-bill="'+esc(code)+'">Retry</button>':
        '')+'</td></tr>'; });
   /* 2026-11-23 (Brandon): a folded summary per home; charges go to Track from Ready to post to Track, not from here */
@@ -2805,7 +2828,7 @@ function billingPanel(m,bwDone){
   h+=homes.length?'<div class="appl" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Home</th><th>Plan</th><th class="num">Tasks</th><th class="num">Tech hours</th><th class="num">Labor</th><th class="num">Parts</th><th class="num">Fees found</th><th class="num">Total</th><th></th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div>':
     '<div class="empty">No one-off Breezeway work finished this month yet.</div>';
   h+='<div class="pad note">Labor = time on the Breezeway task × techs on it, at the home\'s plan rate (plan from the owner\'s name in Track; rates on Rates & budget). Parts = expenses logged as "Owner-billed". Fees found = amounts read from the task notes and comments (that reader is paused). '+
-    'Set each home\'s plan on its Homes page. Charges go on owner statements from Ready to post to Track.</div></details></section>';
+    'Set each home\'s plan on its Homes page. Click a dollar amount to change it; it saves by itself and the change shows under it for 30 days. Charges go on owner statements from Ready to post to Track.</div></details></section>';
   return h;
 }
 
