@@ -2901,12 +2901,20 @@ function ocMemo(p,labor,parts){ var did=(p.title+(p.sum&&p.sum.toLowerCase()!==p
   return (did+(bits.length?" "+bits.join(" · ")+".":"")).trim().slice(0,600); }
 /* 2026-11-10 (Brandon): each charge = a Track work order: a short job title the owner reads (the hub writes it from Breezeway's notes with
    owner-text, editable), an optional explanation (empty unless Chris adds one), and Labor + Parts & materials. */
-function ocTitle(p){ var t=(p.title||"").replace(/^(\d+-\s*|SAMEDAY!?\s*|URGENT:?\s*)+/i,"").replace(/\s+/g," ").trim(); return t.slice(0,120); }
+/* 2026-11-23 (Brandon): job titles in Title Case ("Utility Room Inspection"); short words stay small, words already in capitals (BBQ, HVAC) stay */
+function titleCase(t){ var sm={a:1,an:1,and:1,or:1,of:1,the:1,to:1,"in":1,on:1,at:1,"for":1,by:1,with:1};
+  return String(t||"").split(" ").map(function(w,i){ if(!w) return w; if(/[A-Z].*[A-Z]/.test(w)||/\d/.test(w)&&/[A-Z]/.test(w)) return w; var lw=w.toLowerCase(); if(i&&sm[lw]) return lw; return w.charAt(0).toUpperCase()+w.slice(1); }).join(" "); }
+function ocTitle(p){ var t=(p.title||"").replace(/^(\d+-\s*|SAMEDAY!?\s*|URGENT:?\s*)+/i,"").replace(/\s+/g," ").trim(); return titleCase(t).slice(0,120); }
 function ocReview(tids){ if(!OC.items.length) return toast("Track's item list isn't loaded yet — try again in a moment");
   var P=tids.map(ocPlan), PI=ocParts(), SUG={};
   var h='<div class="note">Each job goes on its owner\'s Track statement as one work order: the <b>job title</b> below, then Labor and Parts &amp; materials. The hub writes the title from Breezeway — change it if you like. Add an explanation only when the owner should know more.</div>'+
     (PI?'':'<div class="warnbox" style="margin-top:8px">Track doesn\'t have a <b>Parts &amp; Materials</b> item, so jobs with parts can\'t be posted.</div>')+
+    (function(){ var L=P.map(function(p,i){ return {p:p,i:i}; }).filter(function(x){ return x.p.kind==="courtesy"&&!bwBilled(x.p.tid); }); if(!L.length) return '';
+      return '<div style="border:1px solid var(--line);border-radius:12px;margin-top:10px;overflow:hidden"><div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--surface-2)"><b style="flex:1">'+L.length+' at $1.00 courtesy</b><span class="note">Home checks and other no-charge visits. The title is what the owner reads; change one if you like.</span></div>'+
+        '<table class="t" style="margin:0"><thead><tr><th>Home</th><th>Job title the owner sees</th><th>Done</th><th class="num">Owner pays</th></tr></thead><tbody>'+
+        L.map(function(x){ var p=x.p, i=x.i; return '<tr><td><b>'+(p.home?esc(p.home):'<span style="color:var(--danger,#b42318)">No home — left out</span>')+'</b></td><td><input id="oc_m_'+i+'" data-cz="1" maxlength="120" value="'+esc(ocTitle(p))+'" style="width:100%;min-height:32px;padding:4px 8px"></td><td class="mono">'+esc(fmtD(p.date))+'</td><td class="num">$1.00</td></tr>'; }).join("")+'</tbody></table></div>'; })()+
     P.map(function(p,i){ var dup=bwBilled(p.tid), cz=p.kind==="courtesy", no=p.kind==="skip"||p.kind==="moose";
+      if(cz&&!dup) return '';
       return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px"><div style="display:flex;gap:8px;align-items:baseline"><b style="flex:1">'+esc(p.home)+' <span class="muted" style="font-weight:600">· Breezeway: '+esc(p.j.title||"")+'</span></b>'+
         '<span class="pill'+(cz?' scheduled':'')+'">'+esc(cz?"$1 courtesy":p.kind==="skip"?"Skip":p.kind==="moose"?"Moose pays":p.kind==="tenant"?"Tenant":"Owner")+'</span></div>'+
         (dup?'<div class="warnbox" style="margin-top:6px">Breezeway\'s Cost tab already bills the owner '+money2(dup)+' for this task. Posting here too would bill twice — take it off in Breezeway first, or skip it here.</div>':'')+
@@ -2919,9 +2927,10 @@ function ocReview(tids){ if(!OC.items.length) return toast("Track's item list is
           '<textarea id="oc_x_'+i+'" maxlength="1000" style="min-height:56px;width:100%;margin-top:6px" placeholder="Leave empty — owners can reach out with questions"></textarea>'+
           '<div class="note" id="oc_s_'+i+'"></div></details>'+
         '<div class="note" id="oc_t_'+i+'"><b>'+money2(cz?1:p.labor+p.parts)+'</b> on the owner statement</div>')+'</div>'; }).join("");
-  openModal("Post to Track owner statements ("+P.length+")",h,function(){ var sb=window.MM_SB; if(!sb) return toast("Sign in first");
+  openModal("Post to Track owner statements ("+P.filter(function(p){ return p.home; }).length+")",h,function(){ var sb=window.MM_SB; if(!sb) return toast("Sign in first");
     var go=[], err="";
     P.forEach(function(p,i){ if(p.kind==="skip"||p.kind==="moose"){ go.push({p:p, lines:[], memo:"", x:""}); return; }
+      if(!p.home) return;
       var cz=p.kind==="courtesy", lab=cz?1:+fv("oc_l_"+i)||0, par=cz?0:+fv("oc_p_"+i)||0, lines=[], title=(fv("oc_m_"+i)||"").trim();
       if(!title) err=p.home+": write the job title the owner sees";
       if(cz) lines.push({item:ocHas(9)?9:8, what:"Courtesy - no charge", amount:1});
@@ -2933,17 +2942,18 @@ function ocReview(tids){ if(!OC.items.length) return toast("Track's item list is
     if(bad.length&&!confirm(bad.length+" of these are already billed on Breezeway's Cost tab. Queue them anyway? (The hub won't send those until the Breezeway cost is removed.)")) return;
     return go.reduce(function(pr,g){ return pr.then(function(){ return sb.rpc("owner_charge_queue",{p_task:+g.p.tid,p_home:g.p.home,p_kind:g.p.kind,p_date:g.p.date,p_memo:g.memo,p_lines:g.lines,p_detail:g.p.detail,p_explain:g.x})
       .then(function(r){ if(r.error) throw new Error(g.p.home+": "+r.error.message.replace(/^.*?ERROR:\s*/,"")); }); }); },Promise.resolve())
-      .then(function(){ toast(P.length+" charge"+(P.length===1?"":"s")+" queued for Track"); closeModal(); ocLoad(S.ui.month,true); })
+      .then(function(){ toast(go.length+" charge"+(go.length===1?"":"s")+" queued for Track"); closeModal(); ocLoad(S.ui.month,true); })
       .catch(function(e){ toast(String(e.message||e)); }); },"Post to Track");
   P.forEach(function(p,i){ var m=$("oc_m_"+i); if(m) m.addEventListener("input",function(){ m.dataset.typed="1"; });
     ["oc_l_"+i,"oc_p_"+i].forEach(function(id){ var el=$(id); if(el) el.addEventListener("input",function(){ var t=$("oc_t_"+i); if(t) t.innerHTML="<b>"+money2(p.kind==="courtesy"?1:(+fv("oc_l_"+i)||0)+(+fv("oc_p_"+i)||0))+"</b> on the owner statement"; }); }); });
   /* owner-friendly wording from Breezeway's notes (owner-text Edge Function); never overwrites what someone typed */
-  var ids=P.map(function(p){ return +p.tid; }).filter(function(x){ return x>0&&x<900000000&&!((S.taskbill[String(x)]||{}).auto); }), sb=window.MM_SB;
+  var ids=P.map(function(p){ return +p.tid; }).filter(function(x){ var tb=S.taskbill[String(x)]||{}; return x>0&&x<900000000&&!tb.auto&&tb.billTo!=="courtesy"; }), sb=window.MM_SB;
   var done=function(msg){ P.forEach(function(p,i){ var w=$("oc_w_"+i); if(w) w.textContent=msg; }); };
+  P.forEach(function(p,i){ var w=$("oc_w_"+i); if(w&&(S.taskbill[p.tid]||{}).auto) w.textContent=""; });
   if(!sb||!ids.length||!sb.functions) return done("");
   sb.functions.invoke("owner-text",{body:{tasks:ids}}).then(function(r){ var T=(r&&r.data&&r.data.texts)||{}; if(r&&r.error) return done("· couldn't write one — check the title");
     P.forEach(function(p,i){ var x=T[String(p.tid)], m=$("oc_m_"+i), w=$("oc_w_"+i), sg=$("oc_s_"+i); if(w) w.textContent=x?"· written from Breezeway, edit it if you like":"";
-      if(!x) return; if(m&&!m.dataset.typed&&x.title) m.value=x.title;
+      if(!x) return; if(m&&!m.dataset.typed&&x.title) m.value=titleCase(x.title);
       if(sg&&x.explain){ SUG[i]=x.explain; sg.innerHTML='Suggestion: “'+esc(x.explain)+'” <a href="#" data-ocsug="'+i+'">Use it</a>'; } });
     Array.prototype.slice.call(document.querySelectorAll("[data-ocsug]")).forEach(function(a){ a.addEventListener("click",function(e){ e.preventDefault(); var k=a.getAttribute("data-ocsug"), t=$("oc_x_"+k); if(t) t.value=SUG[k]||""; }); });
   }).catch(function(){ done("· couldn't write one — check the title"); }); }
