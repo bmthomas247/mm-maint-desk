@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Hub usage</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!-- Reports > Admin > Hub usage (Jeff 2026-11-23). Reads hub_usage_report() / hub_usage_person() (hub_usage_tracking.sql),
+     which refuse anyone without the section desk `hub_usage` (no team rows = hub admins only). Data comes from track.js
+     (loaded by config.js on every page): page opens, clicks and page errors of signed-in staff. Nothing typed is kept. -->
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1400px;margin:0 auto;padding:16px 16px 40px}
+.hero{background:linear-gradient(135deg,var(--forest),var(--forest-2));color:#fff;border-radius:18px;padding:16px 18px;box-shadow:var(--shadow)}
+.hero h1{font-size:22px;margin:0 0 2px;font-weight:800;letter-spacing:-.01em}
+.hero p{margin:0;font-size:13.5px;opacity:.9}
+.muted{color:var(--muted);font-size:13px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:999px;min-height:34px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.on{background:var(--forest-2);border-color:var(--forest-2);color:#fff}
+.btn.sm{min-height:28px;padding:0 9px;font-size:12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.bar input,.bar select{font:inherit;font-size:13.5px;border:1px solid var(--line-2);border-radius:10px;padding:5px 9px;background:var(--card);color:var(--ink);min-height:34px}
+.bar input[type=search]{flex:1;min-width:180px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tile b{display:block;font-size:24px;font-weight:800;line-height:1.2}
+.tile span{font-size:12.5px;color:var(--muted);font-weight:700}
+.tile.on{outline:2px solid var(--forest-2)}
+.tile.warn b{color:var(--red)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;margin-bottom:12px}
+.card h3{margin:0 0 4px;font-size:16px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;font-size:12px;color:var(--muted);font-weight:800;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+th.n,td.n{text-align:right}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.go{cursor:pointer} tr.go:hover td{background:var(--moose-soft)}
+.mbar{height:6px;border-radius:3px;background:var(--moose);min-width:2px;margin-top:3px}
+.pill{display:inline-block;font-size:11.5px;font-weight:800;padding:1px 8px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.red{background:var(--red-soft);color:var(--red)} .pill.amber{background:var(--amber-soft);color:var(--amber)} .pill.blue{background:var(--blue-soft);color:var(--blue)}
+.days{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:8px}
+.days div{flex:1;background:var(--moose);border-radius:3px 3px 0 0;min-height:2px;position:relative}
+.dlab{display:flex;gap:3px;font-size:10.5px;color:var(--muted)} .dlab span{flex:1;text-align:center;overflow:hidden}
+.empty{padding:20px;text-align:center;color:var(--muted)}
+.step{display:grid;grid-template-columns:120px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.step time{color:var(--muted);font-size:12.5px}
+body.inhub .wrap{padding-top:10px}
+@media (max-width:640px){ .step{grid-template-columns:1fr} th,td{padding:5px 6px} }
+</style>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero"><h1>Hub usage</h1>
+    <p>Who uses the Moose Hub, what they open and tap, and what breaks. Kept for signed-in staff only; nothing anyone types is saved. Admins only.</p></div>
+  <div class="bar" id="range"></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="out"><div class="card empty">Loading…</div></div>
+</div>
+<script>
+(function(){
+if(window.top !== window) document.body.classList.add("inhub");
+const CFG = window.MM_CONFIG || {}, sb = supabase.createClient(CFG.url, CFG.anonKey);
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const num = n => (n || 0).toLocaleString();
+const TZ = "America/Denver";
+const when = t => t ? new Date(t).toLocaleString("en-US", { timeZone:TZ, month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+const ago = t => { if(!t) return ""; const m = Math.round((Date.now() - new Date(t)) / 60000);
+  return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
+const KIND = { a:"link", button:"button", summary:"fold-out", label:"tick label", select:"drop-down", input:"box", textarea:"text box", option:"choice" };
+const what = r => (r.label || "(no words)") + (r.tag && KIND[r.tag] ? ` <span class="pill">${KIND[r.tag]}</span>` : "");
+
+const S = { days:7, from:"", to:"", tab:"people", sortK:{}, pageF:"", q:"", who:"" , data:null };
+
+function range(){
+  let f, t = new Date(Date.now() + 60000);
+  if(S.from){ f = new Date(S.from + "T00:00:00"); if(S.to) t = new Date(new Date(S.to + "T00:00:00").getTime() + 86400000); }
+  else { f = new Date(); f.setHours(0,0,0,0); f = new Date(f.getTime() - (S.days - 1) * 86400000); }
+  return [f.toISOString(), t.toISOString()];
+}
+function drawRange(){
+  $("#range").innerHTML = [[1,"Today"],[7,"7 days"],[30,"30 days"],[90,"90 days"]].map(([d,l]) =>
+      `<button class="btn ${!S.from && S.days === d ? "on" : ""}" data-days="${d}">${l}</button>`).join("")
+    + ` <label class="muted">From <input type="date" id="rf" value="${S.from}"></label><label class="muted">To <input type="date" id="rt" value="${S.to}"></label>
+      <button class="btn sm" id="rel">↻ Refresh</button>`;
+  $("#range").querySelectorAll("[data-days]").forEach(b => b.onclick = () => { S.days = +b.dataset.days; S.from = S.to = ""; load(); });
+  $("#rf").onchange = e => { S.from = e.target.value; load(); };
+  $("#rt").onchange = e => { S.to = e.target.value; if(S.from) load(); };
+  $("#rel").onclick = load;
+}
+
+async function load(){
+  drawRange();
+  $("#out").innerHTML = `<div class="card empty">Loading…</div>`;
+  const [f, t] = range();
+  const r = await sb.rpc("hub_usage_report", { p_from:f, p_to:t });
+  if(r.error){ $("#out").innerHTML = `<div class="card empty">Couldn't load: ${esc(r.error.message)}</div>`; return; }
+  S.data = r.data; draw();
+}
+
+function tilesHtml(d){
+  const T = d.totals || {}, prob = (d.errors || []).reduce((a, x) => a + x.times, 0) + (d.rage || []).length + (d.dead || []).length;
+  const tile = (tab, n, l, cls) => `<button class="tile ${cls || ""} ${S.tab === tab ? "on" : ""}" data-tab="${tab}"><b>${num(n)}</b><span>${l}</span></button>`;
+  return tile("people", T.people, "people used it")
+    + tile("pages", T.views, "page opens")
+    + tile("spots", T.clicks, "taps / clicks")
+    + tile("problems", prob, "problems to look at", prob ? "warn" : "")
+    + `<div class="tile" style="cursor:default"><b style="font-size:15px">${T.first ? esc(when(T.first)) : "—"}</b><span>first thing in this range · ${num(T.visits)} visits</span></div>`;
+}
+function tabsHtml(){
+  return [["people","People"],["pages","Pages"],["spots","Most clicked"],["problems","Problems"],["steps","One person's steps"]].map(([k,l]) =>
+    `<button class="btn ${S.tab === k ? "on" : ""}" data-tab="${k}">${l}</button>`).join("");
+}
+function sortRows(key, rows, def){
+  const s = S.sortK[key] || def; if(!s) return rows;
+  const [k, dir] = s;
+  return rows.slice().sort((a, b) => { const x = a[k], y = b[k];
+    return (typeof x === "number" || typeof y === "number" ? (x || 0) - (y || 0) : String(x || "").localeCompare(String(y || ""))) * dir; });
+}
+function table(key, cols, rows, def, rowAttr){
+  rows = sortRows(key, rows, def);
+  const max = {}; cols.filter(c => c.bar).forEach(c => max[c.k] = Math.max(1, ...rows.map(r => r[c.k] || 0)));
+  return `<div class="tw"><table data-key="${key}"><thead><tr>${cols.map(c => `<th class="${c.n ? "n" : ""}" data-k="${c.k}">${esc(c.l)}</th>`).join("")}</tr></thead><tbody>`
+    + (rows.length ? rows.map(r => `<tr ${rowAttr ? rowAttr(r) : ""}>${cols.map(c => `<td class="${c.n ? "n" : ""}">${c.f ? c.f(r) : esc(r[c.k])}${c.bar ? `<div class="mbar" style="width:${Math.round(100 * (r[c.k] || 0) / max[c.k])}%"></div>` : ""}</td>`).join("")}</tr>`).join("")
+      : `<tr><td colspan="${cols.length}" class="empty">Nothing yet in these dates.</td></tr>`)
+    + `</tbody></table></div>`;
+}
+function csv(name, cols, rows){
+  const q = v => { v = String(v == null ? "" : v).replace(/<[^>]+>/g, ""); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+  const text = [cols.map(c => q(c.l)).join(",")].concat(rows.map(r => cols.map(c => q(c.csv ? c.csv(r) : r[c.k])).join(","))).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type:"text/csv" })); a.download = name + ".csv"; a.click();
+}
+
+const COLS = {
+  people: [
+    { k:"name", l:"Person", f:r => `<b>${esc(r.name)}</b>` },
+    { k:"views", l:"Page opens", n:1, bar:1, f:r => num(r.views) },
+    { k:"clicks", l:"Taps", n:1, f:r => num(r.clicks) },
+    { k:"days", l:"Days used", n:1 },
+    { k:"visits", l:"Visits", n:1 },
+    { k:"errors", l:"Errors seen", n:1, f:r => r.errors ? `<span class="pill red">${r.errors}</span>` : "0" },
+    { k:"top", l:"Opens most", f:r => esc((r.top || []).join(" · ")), csv:r => (r.top || []).join(" / ") },
+    { k:"screen", l:"Mostly on" },
+    { k:"last", l:"Last used", f:r => esc(ago(r.last)), csv:r => r.last }],
+  pages: [
+    { k:"place", l:"Page", f:r => `<b>${esc(r.place)}</b>` },
+    { k:"views", l:"Opens", n:1, bar:1, f:r => num(r.views) },
+    { k:"clicks", l:"Taps", n:1, f:r => num(r.clicks) },
+    { k:"people", l:"People", n:1 },
+    { k:"errors", l:"Errors", n:1, f:r => r.errors ? `<span class="pill red">${r.errors}</span>` : "0" },
+    { k:"who", l:"Who uses it most", f:r => esc((r.who || []).join(", ")), csv:r => (r.who || []).join(" / ") },
+    { k:"last", l:"Last opened", f:r => esc(ago(r.last)), csv:r => r.last }],
+  spots: [
+    { k:"place", l:"Page" },
+    { k:"ctx", l:"Area of the page" },
+    { k:"label", l:"What they tapped", f:r => what(r) + (r.live === false ? ` <span class="pill amber">does nothing?</span>` : "") },
+    { k:"clicks", l:"Taps", n:1, bar:1, f:r => num(r.clicks) },
+    { k:"people", l:"People", n:1 },
+    { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }],
+  errors: [
+    { k:"msg", l:"What went wrong", f:r => `<b>${esc(r.msg)}</b>${r.src ? `<div class="muted">${esc(r.src)}</div>` : ""}` },
+    { k:"place", l:"Page" },
+    { k:"times", l:"Times", n:1, bar:1 },
+    { k:"people", l:"People", n:1 },
+    { k:"who", l:"Who saw it", f:r => esc((r.who || []).join(", ")), csv:r => (r.who || []).join(" / ") },
+    { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }],
+  rage: [
+    { k:"place", l:"Page" }, { k:"ctx", l:"Area" }, { k:"label", l:"Tapped 3+ times in 2 seconds", f:r => what(r) },
+    { k:"times", l:"Times", n:1, bar:1 }, { k:"people", l:"People", n:1 }, { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }],
+  dead: [
+    { k:"place", l:"Page" }, { k:"ctx", l:"Area" }, { k:"label", l:"Tapped, but it isn't a button", f:r => esc(r.label) },
+    { k:"clicks", l:"Taps", n:1, bar:1 }, { k:"people", l:"People", n:1 }, { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }]
+};
+
+function daysHtml(d){
+  const ds = d.days || []; if(ds.length < 2) return "";
+  const mx = Math.max(1, ...ds.map(x => x.people));
+  return `<div class="card"><h3>People using the hub each day</h3><p class="muted" style="margin:0">Park City days. Hover a bar for opens and taps.</p>
+    <div class="days">${ds.map(x => `<div style="height:${Math.round(100 * x.people / mx)}%" title="${esc(x.day)}: ${x.people} people · ${num(x.views)} opens · ${num(x.clicks)} taps${x.errors ? " · " + x.errors + " errors" : ""}"></div>`).join("")}</div>
+    <div class="dlab">${ds.map((x, i) => `<span>${i === 0 || i === ds.length - 1 || ds.length <= 14 ? esc(x.day.slice(5)) : ""}</span>`).join("")}</div></div>`;
+}
+
+function draw(){
+  const d = S.data || {};
+  $("#tiles").innerHTML = tilesHtml(d);
+  $("#tabs").innerHTML = tabsHtml();
+  document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { S.tab = b.dataset.tab; draw(); });
+  const sc = d.screens || {}, scTxt = Object.keys(sc).length ? Object.entries(sc).map(([k, v]) => `${esc(k)} ${num(v)}`).join(" · ") : "";
+  let h = "";
+  if(!(d.totals && (d.totals.views || d.totals.clicks))){
+    h += `<div class="card"><h3>Nothing recorded in these dates yet</h3><p class="muted" style="margin:0">Tracking started Nov 23, 2026. Each person shows up the first time they open a hub page after that.</p></div>`;
+  }
+  if(S.tab === "people"){
+    h += daysHtml(d) + `<div class="card"><h3>Who uses the hub most</h3><p class="muted" style="margin:0 0 6px">Tap a person to see their steps.${scTxt ? " Page opens by screen: " + scTxt + "." : ""}
+      <button class="btn sm" data-csv="people">Download CSV</button></p>${table("people", COLS.people, d.people || [], ["views", -1], r => `class="go" data-who="${esc(r.user_id)}"`)}</div>`;
+  } else if(S.tab === "pages"){
+    h += `<div class="card"><h3>Which pages get used</h3><p class="muted" style="margin:0 0 6px">Page = the name in the hub's green banner. Tap a page to see what gets tapped on it.
+      <button class="btn sm" data-csv="pages">Download CSV</button></p>${table("pages", COLS.pages, d.pages || [], ["views", -1], r => `class="go" data-page="${esc(r.place)}"`)}</div>`;
+  } else if(S.tab === "spots"){
+    const places = [...new Set((d.spots || []).map(x => x.place))].sort();
+    let rows = (d.spots || []).filter(x => (!S.pageF || x.place === S.pageF) && (!S.q || (x.place + " " + (x.ctx || "") + " " + (x.label || "")).toLowerCase().includes(S.q)));
+    h += `<div class="card"><h3>Most clicked spots</h3><p class="muted" style="margin:0">The buttons, links and tiles people tap most. "Does nothing?" = they tapped something that isn't a button (often a place people expect to work).</p>
+      <div class="bar"><select id="pf"><option value="">Every page</option>${places.map(p => `<option ${p === S.pageF ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+      <input type="search" id="sq" placeholder="Find a button or area" value="${esc(S.q)}"><button class="btn sm" data-csv="spots">Download CSV</button></div>
+      ${table("spots", COLS.spots, rows, ["clicks", -1])}</div>`;
+  } else if(S.tab === "problems"){
+    h += `<div class="card"><h3>Page errors and failure messages</h3><p class="muted" style="margin:0 0 6px">Errors in a page's code, pictures or scripts that didn't load, and "Couldn't…" messages people were shown. Start here when fixing things.
+        <button class="btn sm" data-csv="errors">Download CSV</button></p>${table("errors", COLS.errors, d.errors || [], ["times", -1])}</div>
+      <div class="card"><h3>Tapped over and over</h3><p class="muted" style="margin:0 0 6px">The same spot tapped 3+ times within 2 seconds: usually slow or not working.
+        <button class="btn sm" data-csv="rage">Download CSV</button></p>${table("rage", COLS.rage, d.rage || [], ["times", -1])}</div>
+      <div class="card"><h3>Tapped, but it doesn't do anything</h3><p class="muted" style="margin:0 0 6px">Things people tap that aren't buttons (3+ taps, or 2+ people). Good spots to make clickable.
+        <button class="btn sm" data-csv="dead">Download CSV</button></p>${table("dead", COLS.dead, d.dead || [], ["clicks", -1])}</div>`;
+  } else if(S.tab === "steps"){
+    h += `<div class="card"><h3>One person's steps</h3><p class="muted" style="margin:0">Newest first, up to 600. Use it to see what someone did right before an error.</p>
+      <div class="bar"><select id="who"><option value="">Pick a person</option>${(d.people || []).slice().sort((a, b) => String(a.name).localeCompare(b.name)).map(p => `<option value="${esc(p.user_id)}" ${p.user_id === S.who ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+      <div id="steps"></div></div>`;
+  }
+  $("#out").innerHTML = h;
+  // wiring
+  $("#out").querySelectorAll("th[data-k]").forEach(th => th.onclick = () => { const key = th.closest("table").dataset.key, k = th.dataset.k, cur = S.sortK[key];
+    S.sortK[key] = [k, cur && cur[0] === k ? -cur[1] : (k === "name" || k === "place" || k === "label" || k === "msg" || k === "ctx" ? 1 : -1)]; draw(); });
+  $("#out").querySelectorAll("[data-who]").forEach(tr => tr.onclick = () => { S.who = tr.dataset.who; S.tab = "steps"; draw(); });
+  $("#out").querySelectorAll("[data-page]").forEach(tr => tr.onclick = () => { S.pageF = tr.dataset.page; S.tab = "spots"; draw(); });
+  $("#out").querySelectorAll("[data-csv]").forEach(b => b.onclick = () => { const k = b.dataset.csv;
+    const rows = k === "spots" ? (d.spots || []) : (d[k] || []); csv("hub-usage-" + k, COLS[k], sortRows(k, rows, [COLS[k][1].k, -1])); });
+  if($("#pf")) $("#pf").onchange = e => { S.pageF = e.target.value; draw(); };
+  if($("#sq")) $("#sq").oninput = e => { S.q = e.target.value.toLowerCase(); const p = e.target.selectionStart; draw(); const s = $("#sq"); s.focus(); s.setSelectionRange(p, p); };
+  if($("#who")){ $("#who").onchange = e => { S.who = e.target.value; steps(); }; if(S.who) steps(); }
+}
+
+async function steps(){
+  const box = $("#steps"); if(!box) return;
+  if(!S.who){ box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="empty">Loading…</div>`;
+  const [f, t] = range();
+  const r = await sb.rpc("hub_usage_person", { p_user:S.who, p_from:f, p_to:t });
+  if(r.error){ box.innerHTML = `<div class="empty">Couldn't load: ${esc(r.error.message)}</div>`; return; }
+  const rows = r.data || [];
+  box.innerHTML = rows.length ? rows.map(x => {
+    const where = esc(x.title || x.page || "") + (x.route ? ` <span class="muted">${esc(x.route)}</span>` : "");
+    const line = x.kind === "view" ? `📄 Opened <b>${where}</b>`
+      : x.kind === "error" ? `<span class="pill red">Error</span> ${esc(x.msg)} <span class="muted">on ${where}</span>`
+      : `👆 ${x.live === false ? `<span class="pill amber">not a button</span> ` : ""}<b>${esc(x.label || "(no words)")}</b>${x.ctx ? ` <span class="muted">in ${esc(x.ctx)}</span>` : ""} <span class="muted">on ${where}</span>`;
+    return `<div class="step"><time>${esc(when(x.at))}${x.screen ? " · " + esc(x.screen) : ""}</time><div>${line}</div></div>`; }).join("")
+    : `<div class="empty">Nothing from this person in these dates.</div>`;
+}
+
+(async () => {
+  const s = await sb.auth.getSession();
+  if(!s.data || !s.data.session){ location.replace("hub.html"); return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"hub_usage" });
+  if(ok.error){ $("#out").innerHTML = `<div class="card empty">Couldn't load. Check your signal and try again.</div>`; return; }
+  if(!ok.data){ (window.top !== window ? window.top : window).location.replace("hub.html#/home"); return; }
+  load();
+})();
+})();
+</script>
+</body>
+</html>
