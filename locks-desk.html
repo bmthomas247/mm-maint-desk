@@ -691,6 +691,16 @@ function healCard(hub){ return `<div class="card" style="margin-top:10px;backgro
 function netPill(hub){ const n = ((hub||{}).status||{}).net;
   return n==="ethernet" ? ' <span class="pill grey plain" title="Hub is plugged into the router with a cable">🔌 Ethernet</span>'
     : n==="wifi" ? ' <span class="pill amber" title="Hub is on Wi-Fi - plug in the Ethernet cable for the most reliable connection">📶 Wi-Fi</span>' : ""; }
+/* Z-Wave range extenders (2026-11-23, Brandon: "Id like to see the extender in the hub").
+   Hub 1.5.8+ sends status.extenders; older hubs list them as unknown devices, so known extender models are picked out of "pending". */
+const EXT_RX = /zw189|zwa021|zac38|repeater|range ?extender|extender/i;
+function extendersOf(hub){ const st = (hub||{}).status || {};
+  if (Array.isArray(st.extenders)) return st.extenders;
+  return (st.pending||[]).filter(d=>EXT_RX.test(d.model||"")).map(d=>({...d, online: d.status!=="dead", old:true})); }
+function extName(x){ return x.ha_name || (x.ha_area ? x.ha_area+" extender" : "Range extender"); }
+function extCard(hub){ const ex = extendersOf(hub); if(!ex.length) return "";
+  return `<h3>Range extenders</h3><div class="card list">${ex.map(x=>`<div><span class="grow">📶 ${esc(extName(x))}<div class="muted" style="font-size:12.5px">${esc([x.model, x.desc].filter(Boolean).join(" · ")||"Z-Wave extender")} · node ${x.node_id}${x.dropped!=null?` · ${x.dropped} dropped`:""}</div></span>${x.rssi!=null?`<span>${signal(x.rssi)}</span>`:""}<span class="pill ${x.online===false?"red":"green"}">${x.online===false?"offline":"online"}</span></div>`).join("")}</div>
+    <div class="muted" style="font-size:12.5px;margin:-4px 0 10px">Plugged-in extenders pass the Z-Wave signal on to doors far from the hub. Offline = check it's still plugged in, then Rebuild routes.</div>`; }
 function toolsCard(hub, devices){
   if(!hub) return "";
   const st = hub.status || {};
@@ -705,10 +715,13 @@ function toolsCard(hub, devices){
       ${devices.map(d=>`<tr><td><b>${esc(d.name)}</b><div class="muted" style="font-size:12px">node ${d.node_id}${d.online===false?' · <span style="color:var(--red)">not answering</span>':""}</div></td>
         <td>${signal(d.rssi)}</td><td>${d.dropped??"-"}</td>
         <td style="text-align:right"><button class="btn small" data-ping="${d.node_id}">Ping</button></td></tr>`).join("")}
-      ${(st.pending||[]).map(d=>`<tr><td><b>${esc(d.model||"Device")}</b><div class="muted" style="font-size:12px">node ${d.node_id} · <span style="color:var(--amber,#b5770a)">${d.ready?"paired - not a lock, thermostat or sensor we know":"paired - identifying…"}</span>${d.status==="dead"?' · <span style="color:var(--red)">not answering</span>':d.status==="asleep"?" · asleep - wake it":""}</div></td>
+      ${extendersOf(hub).map(d=>`<tr><td><b>📶 ${esc(extName(d))}</b><div class="muted" style="font-size:12px">node ${d.node_id} · range extender${d.online===false?' · <span style="color:var(--red)">not answering</span>':""}</div></td>
+        <td>${d.rssi!=null?signal(d.rssi):"-"}</td><td>${d.dropped??"-"}</td>
+        <td style="text-align:right"><button class="btn small" data-ping="${d.node_id}">Ping</button></td></tr>`).join("")}
+      ${(st.pending||[]).filter(d=>!extendersOf(hub).some(x=>x.node_id===d.node_id)).map(d=>`<tr><td><b>${esc(d.model||"Device")}</b><div class="muted" style="font-size:12px">node ${d.node_id} · <span style="color:var(--amber,#b5770a)">${d.ready?"paired - not a lock, thermostat or sensor we know":"paired - identifying…"}</span>${d.status==="dead"?' · <span style="color:var(--red)">not answering</span>':d.status==="asleep"?" · asleep - wake it":""}</div></td>
         <td colspan="2" class="muted" style="font-size:12px">Reached the hub. Wake it (tap its screen / button), then Read again.</td>
         <td style="text-align:right"><button class="btn small" data-reread="${d.node_id}">Read again</button></td></tr>`).join("")}
-      ${devices.length || (st.pending||[]).length ? "" : '<tr><td colspan="4" class="muted">No devices paired yet.</td></tr>'}
+      ${devices.length || (st.pending||[]).length || extendersOf(hub).length ? "" : '<tr><td colspan="4" class="muted">No devices paired yet.</td></tr>'}
     </table>
     <p class="muted" style="font-size:12.5px">Weak signal (1 bar, or lots of dropped)? Move the stick higher / closer on its cable, or add a Z-Wave repeater between the hub and that door, then Rebuild routes.</p>
     <div class="grid3"><button class="btn small" id="t_heal">Rebuild routes</button><button class="btn small" id="t_add">Add mode</button><button class="btn small" id="t_remove">Remove mode</button></div>
@@ -1503,6 +1516,7 @@ async function homeView(pid){
     ${sensors.some(x=>x.kind!=="noise")?`<h3>Sensors</h3><div class="card list">${sensors.filter(x=>x.kind!=="noise").map(x=>x.kind==="noise"
         ? `<div><span class="grow">🔊 ${esc(x.name)}<div class="muted" style="font-size:12.5px">limit ${h.noise_limit??80} dB for ${h.noise_minutes??10} min (quiet hours ${String(h.quiet_from||"22:00").slice(0,5)}–${String(h.quiet_to||"08:00").slice(0,5)}; 3× as long in the day)</div></span><span class="pill ${x.value!=null&&x.value>(h.noise_limit??80)?"red":"grey"}">${x.value!=null?Math.round(x.value)+" dB":"?"}</span>${x.online===false?'<span class="pill red">offline</span>':""}</div>`
         : `<div><span class="grow">${x.kind==="contact"?"🚪 ":x.kind==="leak"?"💧 ":""}${esc(x.name)}${x.kind==="contact"&&x.state==="open"&&x.open_since?`<div class="muted" style="font-size:12.5px">open since ${esc(when(x.open_since))}</div>`:""}${x.temp!=null?`<div class="muted" style="font-size:12.5px">${Math.round(x.temp)}°F${x.humidity!=null?" · "+Math.round(x.humidity)+"% humidity":""}</div>`:""}</span><span class="pill ${x.state==="wet"?"red":x.state==="open"?"amber":x.state==="closed"?"green":"grey"}">${esc(x.state==="open"?"OPEN":x.state==="closed"?"closed":x.state||"ok")}</span>${x.battery!=null?`<span class="pill grey">🔋 ${x.battery}%</span>`:""}${x.online===false?'<span class="pill red">offline</span>':""}</div>`).join("")}</div>`:""}
+    ${hub?extCard(hub):""}
     ${tvs.length?`<h3>TVs</h3><div class="card" id="tvs"><div class="row" style="margin-bottom:6px"><span class="grow muted">${tvs.filter(t=>!["off","unavailable","standby"].includes(t.state)).length} of ${tvs.length} on · TVs turn off by themselves when the guest leaves</span>
         <button class="btn small" data-tvall="off">Turn all off</button></div><div class="list">${tvs.map(t=>`<div data-tv="${t.id}"><div class="grow"><b>${esc(t.name)}</b><div class="muted" style="font-size:12.5px">${esc(({roku:"Roku",androidtv_remote:"Google TV",androidtv:"Android / Fire TV",cast:"Chromecast",samsungtv:"Samsung",webostv:"LG",apple_tv:"Apple TV",braviatv:"Sony",vizio:"Vizio",philips_js:"Philips"})[t.platform]||t.platform||"")}${t.app?" · "+esc(t.app):""}</div></div>
         <span class="pill ${["off","standby"].includes(t.state)?"grey":t.state==="unavailable"?"red":"green"}">${esc(t.state||"?")}</span>
