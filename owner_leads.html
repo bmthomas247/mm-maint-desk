@@ -168,7 +168,7 @@ function render(){
     + S.people.filter(p => p.id !== S.me).map(p => `<option value="${esc(p.id)}"${S.who === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("");
   $("#app").innerHTML = `
     <div class="head"><div><h1>Owner leads</h1><p class="muted" style="margin:0">Every owner who might hand us their home, from the first hello to live. Tap a lead to log a call, move it along or set the next follow-up.</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="csv">⬇ CSV</button><button class="btn primary" id="add">+ Add a lead</button></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="cpbtn">⇣ From ContactPoint</button><button class="btn" id="csv">⬇ CSV</button><button class="btn primary" id="add">+ Add a lead</button></div></div>
     <div class="tiles">${TILES.map(([k, l, f]) => { const n = all.filter(f).length;
       return `<button class="tile${S.show === k ? " on" : ""}${(k === "due" || k === "late" || k === "nobody") && n ? " warn" : ""}" data-show="${k}"><b>${n}</b><span>${esc(l)}</span></button>`; }).join("")}</div>
     <div class="bar"><input type="search" id="q" placeholder="Search name, email, phone, home, note…" value="${esc(S.q)}" aria-label="Search">
@@ -350,8 +350,67 @@ function csv(){
   a.download = `owner-leads-${today()}.csv`; a.click();
 }
 
+/* ContactPoint copy (hub_owner_leads_cp.sql + Edge Function owner-leads-cp). Preview = counts only; Copy = the ticked pipelines,
+   in batches (pg_cron starts each batch within a minute). ContactPoint itself is never changed. */
+const CPK = { preview:"Preview", copy:"Copy" }, CPS = { asked:"Waiting to start", running:"Running", more:"Working in batches", done:"Done", failed:"Didn't work", stopped:"Stopped" };
+let CPT = null;
+async function cpOpen(){
+  const d = $("#dlg");
+  d.innerHTML = `<div class="dbody"><h3>Copy leads from ContactPoint</h3>
+    <p class="muted" style="margin:0">Reads ContactPoint with a read-only key and copies each lead card: contact details, ContactPoint notes, and the texts, emails and calls with the owner. Nothing in ContactPoint changes. A card already copied is never copied twice; a lead that's already here (same email) gets ContactPoint's stage and history added, unless someone here has already changed it.</p>
+    <div id="cpbody"><p class="muted">Loading…</p></div><p class="err" id="cperr"></p></div>
+    <div class="dfoot"><button class="btn" id="cpx" type="button">Close</button></div>`;
+  d.showModal();
+  $("#cpx").onclick = () => { clearTimeout(CPT); d.close(); load(); };
+  d.onclick = async e => {
+    const b = e.target.closest("button"); if(!b) return;
+    if(b.id === "cppre" || b.id === "cpcopy"){
+      const kind = b.id === "cppre" ? "preview" : "copy";
+      const pipes = [...d.querySelectorAll("input[data-pipe]:checked")].map(x => x.dataset.pipe);
+      if(kind === "copy"){
+        if(!pipes.length){ $("#cperr").textContent = "Tick at least one pipeline."; return; }
+        const n = [...d.querySelectorAll("input[data-pipe]:checked")].reduce((s, x) => s + (+x.dataset.n || 0), 0);
+        if(!await mmConfirm(`Copy ${n} ContactPoint cards from ${pipes.length} pipeline${pipes.length === 1 ? "" : "s"} into Owner leads? Nothing in ContactPoint changes.`, { title:"Copy from ContactPoint?", yes:"Copy them" })) return;
+      }
+      b.disabled = true; $("#cperr").textContent = "";
+      const r = await sb.rpc("owner_lead_cp_ask", { p_kind:kind, p_pipelines:kind === "copy" ? pipes : null });
+      if(r.error){ $("#cperr").textContent = niceErr(r.error); b.disabled = false; return; }
+      toast(kind === "copy" ? "Copy asked for ✓" : "Preview asked for ✓"); cpDraw(); return;
+    }
+    if(b.dataset.stop){ const r = await sb.rpc("owner_lead_cp_stop", { p_run:+b.dataset.stop }); if(r.error) $("#cperr").textContent = niceErr(r.error); cpDraw(); }
+  };
+  cpDraw();
+}
+async function cpDraw(){
+  clearTimeout(CPT);
+  const box = $("#cpbody"); if(!box) return;
+  const r = await sb.from("hub_owner_lead_cp_runs").select("*").order("id", { ascending:false }).limit(8);
+  if(r.error){ box.innerHTML = `<p class="err">${esc(niceErr(r.error))}</p>`; return; }
+  const runs = r.data || [], going = runs.find(x => ["asked","running","more"].includes(x.status));
+  const pv = runs.find(x => x.kind === "preview" && x.status === "done");
+  const keyMissing = runs[0] && runs[0].status === "failed" && /isn't set/.test(runs[0].detail || "");
+  const ticked = new Set((runs.find(x => x.kind === "copy") || {}).pipelines || []);
+  const pipes = pv && pv.stats && pv.stats.pipelines || [];
+  const sum = (p, k) => (p.stages || []).reduce((s, x) => s + (x[k] || 0), 0);
+  box.innerHTML = `
+    ${keyMissing ? `<div class="box"><b>The ContactPoint key isn't saved in the hub yet.</b><br>1. In ContactPoint: Settings ▸ Private Integrations ▸ make one called “MM-Hub-readonly” with read-only scopes (contacts, opportunities, conversations, conversation messages, users).<br>2. In Supabase: Edge Functions ▸ Secrets ▸ add <code>CP_HUB_READONLY_KEY</code> and paste the key there.<br>3. Come back and run the preview again.</div>` : ""}
+    ${going ? `<div class="box"><b>${esc(CPK[going.kind])}: ${esc(CPS[going.status])}</b> · asked by ${esc(going.asked_by || "")} ${esc(fmtDT(going.asked_at))}
+        ${going.detail ? `<div class="lbl">${esc(going.detail)}</div>` : ""}<div style="margin-top:6px"><button class="btn sm" data-stop="${going.id}">Stop it</button></div></div>` : ""}
+    ${pipes.length ? `<div class="sec">Pipelines in ContactPoint (preview ${esc(fmtDT(pv.finished_at))})</div>
+      <p class="muted" style="margin:0">${pv.stats.email_matches || 0} of these emails are already leads here; ${pv.stats.already_copied || 0} cards were copied before.</p>
+      <div class="tw"><table class="list"><thead><tr><th></th><th>Pipeline</th><th>Cards</th><th>Open</th><th>Won</th><th>Lost / abandoned</th><th>With email</th></tr></thead><tbody>
+      ${pipes.map(p => `<tr style="cursor:default"><td><input type="checkbox" data-pipe="${esc(p.id)}" data-n="${p.total}"${ticked.size ? (ticked.has(p.id) ? " checked" : "") : (/owner|drip/i.test(p.name) ? " checked" : "")}></td>
+        <td><b>${esc(p.name)}</b><details><summary class="lbl">stages</summary>${(p.stages || []).map(s => `<div class="lbl">${esc(s.name)}: ${s.all || 0} → ${esc((S.st[s.hub] || {}).label || s.hub)}</div>`).join("")}</details></td>
+        <td>${p.total}</td><td>${sum(p, "open")}</td><td>${sum(p, "won")}</td><td>${sum(p, "lost") + sum(p, "abandoned")}</td><td>${p.with_email}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    <div class="chips" style="margin-top:12px"><button class="btn" id="cppre"${going ? " disabled" : ""}>${pipes.length ? "Run the preview again" : "Run a preview (counts only)"}</button>
+      ${pipes.length ? `<button class="btn primary" id="cpcopy"${going ? " disabled" : ""}>Copy the ticked pipelines</button>` : ""}</div>
+    ${runs.length ? `<div class="sec">Runs</div><ul class="notes">${runs.map(x => `<li>${esc(CPK[x.kind])} · ${esc(CPS[x.status])} · ${esc(x.asked_by || "")}${x.gets ? ` · ${x.gets} reads` : ""}<small>${esc(fmtDT(x.asked_at))}${x.detail ? " · " + esc(x.detail) : ""}</small></li>`).join("")}</ul>` : ""}`;
+  if(going) CPT = setTimeout(cpDraw, 10000);
+}
+
 document.addEventListener("click", e => {
   const t = e.target.closest("button,tr[data-id]"); if(!t || t.closest("dialog")) return;
+  if(t.id === "cpbtn"){ cpOpen(); return; }
   if(t.dataset.show){ S.show = S.show === t.dataset.show && t.dataset.show !== "open" ? "open" : t.dataset.show; render(); return; }
   if(t.dataset.view){ VIEW = t.dataset.view; try { localStorage.setItem("mm_ol_view", VIEW); } catch(_){} render(); return; }
   if(t.dataset.sort){ const k = t.dataset.sort; S.sort = { k, d:S.sort.k === k ? -S.sort.d : 1 }; render(); return; }
