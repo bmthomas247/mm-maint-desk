@@ -43,7 +43,7 @@ function rankTables(rows){
 window.marketWatchView = async function(v){
   css(); $("#ttl").textContent = $("#utl").textContent = "Market watch";
   v.innerHTML = `<div class="page wide mw"><p style="margin:0 0 6px"><a href="#/reports">← All reports</a></p><h2>Market watch</h2>
-    <p class="muted">What the hub finds outside each day and each Sunday: Zillow, Google Maps and search, Google and Facebook/Instagram ad libraries, Google News.</p><div id="mwl"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
+    <p class="muted">What the hub finds outside each day and each Sunday: Zillow, Google Maps and search, Google and Facebook/Instagram ad libraries, Google News, Google's AI answers, Yelp, Tripadvisor, Google Lens, Google Hotels.</p><div id="mwl"><div class="card"><p class="muted">Loading…</p></div></div></div>`;
   let rows; try { rows = await all(); } catch(e){ return $("#mwl").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc(e.message || e)}</p></div>`; }
   const K = k => rows.filter(r => r.kind === k), out = [];
   const listed = K("our_home_for_sale");
@@ -131,6 +131,56 @@ window.marketWatchView = async function(v){
     `<div class="scroll"><table><tr><th>Search</th><th>Job</th><th>Company</th><th>Pay</th><th>Posted</th></tr>${pay.slice().sort((a, b) => !!(b.data || {}).pay - !!(a.data || {}).pay).map(r => { const d = r.data || {};
       return `<tr><td>${esc(d.search || "")}</td><td>${link(d.link, d.title || "")}</td><td>${esc(d.company || "")}</td><td><b>${esc(d.pay || "")}</b></td><td>${esc(d.posted || "")}</td></tr>`; }).join("")}</table></div>`,
     "Google Jobs via SerpApi"));
+  // 2026-11-24 (serp_more.py, Brandon "lets do them all"): ratings vs competitors, Google AI answers, Yelp/Tripadvisor, photo copies,
+  // website rank, hotel price calendar. Same rules: each kind is gated to its desk in Supabase, so a section shows only when readable.
+  const newest = (a, key) => { const m = {}; a.forEach(r => { const k = key(r); if(!m[k] || r.last_seen > m[k].last_seen) m[k] = r; }); return Object.values(m); };
+  const pc = K("photo_copy");
+  if(pc.length) out.push(section(`🚩 Our photos on other sites (${pc.length})`, "Google Lens found one of our listing photos on a site we don't list with. Could be a fake listing (a common rental scam), an old listing, or a harmless blog. Open each one and check.",
+    `<div class="scroll"><table><tr><th>Home</th><th>Site</th><th>Page</th><th>First seen</th></tr>${pc.slice().sort((a, b) => String(b.first_seen).localeCompare(String(a.first_seen))).map(r => { const d = r.data || {};
+      return `<tr><td><b>${esc(r.home || "")}</b></td><td>${esc(d.site || "")}</td><td>${link(d.link, d.title || d.link || "")}</td><td>${fday(r.first_seen)}</td></tr>`; }).join("")}</table></div>`,
+    "Google Lens via SerpApi (exact matches of each home's first listing photo; 25 homes a week in turn)", "alert"));
+  const gb = newest(K("gbp_rating"), r => (r.data || {}).name || r.key);
+  if(gb.length) out.push(section("Google rating: us vs. the managers we compete with", "Each company's Google Business listing. Our row is green.",
+    `<div class="scroll"><table><tr><th>Company</th><th>★</th><th>Reviews</th><th>Address</th><th>Checked</th></tr>${gb.sort((a, b) => ((b.data || {}).reviews || 0) - ((a.data || {}).reviews || 0)).map(r => { const d = r.data || {};
+      return `<tr class="${d.ours ? "ours" : ""}"><td>${link(d.website, d.name || "")}</td><td>${d.rating ?? ""}</td><td>${d.reviews ?? ""}</td><td style="font-size:12px">${esc(d.address || "")}</td><td>${fday(r.last_seen)}</td></tr>`; }).join("")}</table></div>`,
+    "Google Maps via SerpApi, weekly"));
+  const ai = newest(K("ai_answer"), r => (r.data || {}).where + "|" + (r.data || {}).query);
+  if(ai.length) out.push(section("What Google's AI says when people search", "Google's AI Overview (top of the search page) and AI Mode. Does it name us, and who does it name instead?",
+    `<div class="scroll"><table><tr><th>Search</th><th>Where</th><th>Names us?</th><th>Names</th><th>Checked</th></tr>${ai.sort((a, b) => String((a.data || {}).query).localeCompare(String((b.data || {}).query))).map(r => { const d = r.data || {};
+      return `<tr class="${d.us ? "ours" : ""}"><td>${esc(d.query || "")}</td><td>${esc(d.where || "")}</td><td>${d.us ? "✅ yes" : "❌ no"}</td><td style="font-size:12px">${esc((d.competitors || []).join(", "))}</td><td>${fday(r.last_seen)}</td></tr>
+        <tr><td colspan="5"><details><summary class="muted" style="font-size:12px">What it says</summary><div style="white-space:pre-wrap;font-size:12px">${esc(String(d.text || "").slice(0, 2500))}</div>
+        ${(d.refs || []).length ? `<p class="muted" style="font-size:12px">Sources it used: ${(d.refs || []).map(x => link(x.link, x.title || x.link)).join(" · ")}</p>` : ""}</details></td></tr>`; }).join("")}</table></div>`,
+    "Google AI Overview + AI Mode via SerpApi, searched from Park City, weekly"));
+  const yl = newest(K("yelp_rating"), r => (r.data || {}).name || r.key), ta = newest(K("ta_rating"), r => (r.data || {}).name || r.key);
+  if(yl.length || ta.length) out.push(section("Yelp and Tripadvisor ratings", "Vacation rental managers in Park City on Yelp, and the ones Tripadvisor lists. Our row is green.",
+    `<div class="grid2"><div><b>Yelp</b><div class="scroll"><table><tr><th>Company</th><th>★</th><th>Reviews</th></tr>${yl.sort((a, b) => ((b.data || {}).reviews || 0) - ((a.data || {}).reviews || 0)).slice(0, 25).map(r => { const d = r.data || {};
+      return `<tr class="${d.ours ? "ours" : ""}"><td>${link(d.link, d.name || "")}</td><td>${d.rating ?? ""}</td><td>${d.reviews ?? ""}</td></tr>`; }).join("")}</table></div>
+      ${K("yelp_review").length ? `<details><summary>Our newest Yelp reviews (${K("yelp_review").length})</summary>${K("yelp_review").slice(0, 10).map(r => { const d = r.data || {};
+        return `<p style="font-size:13px;margin:6px 0"><b>${d.rating ?? ""}★</b> ${esc(d.date || "")}: ${esc(String(d.text || "").slice(0, 400))}</p>`; }).join("")}</details>` : ""}</div>
+     <div><b>Tripadvisor</b>${ta.length ? `<div class="scroll"><table><tr><th>Listing</th><th>★</th><th>Reviews</th></tr>${ta.map(r => { const d = r.data || {};
+      return `<tr class="${d.ours ? "ours" : ""}"><td>${link(d.link, d.name || "")}</td><td>${d.rating ?? ""}</td><td>${d.reviews ?? ""}</td></tr>`; }).join("")}</table></div>` : `<p class="muted">Tripadvisor has none of these companies listed.</p>`}</div></div>`,
+    "Yelp + Tripadvisor via SerpApi, weekly"));
+  const sr = newest(K("site_rank"), r => (r.data || {}).query);
+  if(sr.length){
+    const main = sr.filter(r => !(r.data || {}).home), homesR = sr.filter(r => (r.data || {}).home);
+    const pos = r => (r.data || {}).pos;
+    out.push(section("Where our website shows on Google", `Position of vacationrentalsparkcity.com in Google's top 20, searched from Park City. ${homesR.length ? `Homes: ${homesR.filter(r => pos(r) && pos(r) <= 3).length} in the top 3, ${homesR.filter(r => !pos(r)).length} not in the top 20.` : ""}`,
+      `<div class="scroll"><table><tr><th>Search</th><th>Our spot</th><th>Who is above us</th></tr>${main.map(r => { const d = r.data || {};
+        return `<tr><td>${esc(d.query)}</td><td><b>${d.pos ? "#" + d.pos : "not in top 20"}</b></td><td style="font-size:12px">${esc((d.top || []).filter(t => !d.pos || t.pos < d.pos).map(t => t.site).slice(0, 6).join(", "))}</td></tr>`; }).join("")}</table></div>
+       ${homesR.length ? `<details><summary>Each home's name (${homesR.length})</summary><div class="scroll"><table><tr><th>Home</th><th>Search</th><th>Our spot</th><th>#1 result</th></tr>${homesR.sort((a, b) => (pos(b) ? 0 : 99) - (pos(a) ? 0 : 99) || (pos(b) || 0) - (pos(a) || 0)).map(r => { const d = r.data || {};
+          return `<tr><td><b>${esc(d.home)}</b></td><td>${esc(d.query)}</td><td>${d.pos ? "#" + d.pos : "not in top 20"}</td><td style="font-size:12px">${esc(((d.top || [])[0] || {}).site || "")}</td></tr>`; }).join("")}</table></div></details>` : ""}`,
+      "Google search via SerpApi (location Park City), weekly"));
+  }
+  const hc = K("hotel_calendar");
+  if(hc.length){
+    const days = {}; hc.forEach(r => ((r.data || {}).prices || []).forEach(p => { if(p.price) (days[p.date] = days[p.date] || []).push(Number(p.price)); }));
+    const ks = Object.keys(days).sort().slice(0, 120);
+    out.push(section(`Hotel prices by night (${hc.length} hotels)`, "Google Hotels' best one-night price for a stay starting that date, for the hotels we see most in Park City and Heber. Middle of those hotels, and the cheapest.",
+      `<div class="scroll"><table><tr><th>Night</th><th>Middle</th><th>Cheapest</th><th>Hotels priced</th></tr>${ks.map(k => { const a = days[k];
+        return `<tr><td>${fday(k + "T12:00:00")}</td><td>${usd(med(a))}</td><td>${usd(Math.min(...a))}</td><td>${a.length}</td></tr>`; }).join("")}</table></div>
+       <details><summary>Hotels in it</summary><p style="font-size:12px">${hc.map(r => esc((r.data || {}).name + " (" + (r.data || {}).area + ")")).join(" · ")}</p></details>`,
+      "Google Hotels price calendar via SerpApi, weekly"));
+  }
   $("#mwl").innerHTML = out.length ? out.join("") : `<div class="card"><p class="muted">Nothing found yet.</p></div>`;
   const draw = () => { const c = ($("#mwc") || {}).value || "", wk = Date.now() - 7 * 864e5;
     $("#mws").innerHTML = `<table><tr><th>Address</th><th>Price</th><th>Beds</th><th>Baths</th><th>Sq ft</th><th>Days on Zillow</th><th>Near our</th><th>Neighborhood</th></tr>${sale.filter(r => !c || r.community === c).map(r => { const d = r.data || {};
