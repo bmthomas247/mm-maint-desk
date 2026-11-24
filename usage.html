@@ -11,7 +11,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <!-- Reports > Admin > Hub usage (Jeff 2026-11-23). Reads hub_usage_report() / hub_usage_person() (hub_usage_tracking.sql),
      which refuse anyone without the section desk `hub_usage` (no team rows = hub admins only). Data comes from track.js
-     (loaded by config.js on every page): page opens, clicks and page errors of signed-in staff. Nothing typed is kept. -->
+     (loaded by config.js on every page): page opens, clicks and page errors of signed-in staff. Nothing typed is kept.
+     Round 2 (2026-11-23, hub_usage_tracking_2.sql): Speed tab (time until a page's data is in), data requests that failed or were
+     slow (Problems), Bug reports tab with what the person did right before (hub_feedback_steps). -->
 <style>
 :root{
   --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
@@ -92,6 +94,9 @@ const ago = t => { if(!t) return ""; const m = Math.round((Date.now() - new Date
   return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
 const KIND = { a:"link", button:"button", summary:"fold-out", label:"tick label", select:"drop-down", input:"box", textarea:"text box", option:"choice" };
 const what = r => (r.label || "(no words)") + (r.tag && KIND[r.tag] ? ` <span class="pill">${KIND[r.tag]}</span>` : "");
+const sec = ms => ms == null ? "" : (ms / 1000).toFixed(1) + " s";
+const stTxt = st => st === 0 ? `<span class="pill red">no answer</span>` : st >= 400 ? `<span class="pill red">error ${st}</span>` : `<span class="pill amber">slow</span>`;
+const stCsv = st => st === 0 ? "no answer" : st >= 400 ? "error " + st : "slow";
 
 const S = { days:7, from:"", to:"", tab:"people", sortK:{}, pageF:"", q:"", who:"" , data:null };
 
@@ -122,16 +127,18 @@ async function load(){
 }
 
 function tilesHtml(d){
-  const T = d.totals || {}, prob = (d.errors || []).reduce((a, x) => a + x.times, 0) + (d.rage || []).length + (d.dead || []).length;
+  const T = d.totals || {}, prob = (d.errors || []).reduce((a, x) => a + x.times, 0) + (d.rage || []).length + (d.dead || []).length + (T.calls_failed || 0);
   const tile = (tab, n, l, cls) => `<button class="tile ${cls || ""} ${S.tab === tab ? "on" : ""}" data-tab="${tab}"><b>${num(n)}</b><span>${l}</span></button>`;
   return tile("people", T.people, "people used it")
     + tile("pages", T.views, "page opens")
     + tile("spots", T.clicks, "taps / clicks")
     + tile("problems", prob, "problems to look at", prob ? "warn" : "")
+    + `<button class="tile ${T.speed_slow ? "warn" : ""} ${S.tab === "speed" ? "on" : ""}" data-tab="speed"><b>${T.speed_med != null ? esc(sec(T.speed_med)) : "—"}</b><span>typical time until a page's data is in${T.speed_slow ? " · " + num(T.speed_slow) + " took 5 s+" : ""}</span></button>`
+    + tile("bugs", (d.bugs || []).length, "bug reports, upgrades + ideas")
     + `<div class="tile" style="cursor:default"><b style="font-size:15px">${T.first ? esc(when(T.first)) : "—"}</b><span>first thing in this range · ${num(T.visits)} visits</span></div>`;
 }
 function tabsHtml(){
-  return [["people","People"],["pages","Pages"],["spots","Most clicked"],["problems","Problems"],["steps","One person's steps"]].map(([k,l]) =>
+  return [["people","People"],["pages","Pages"],["spots","Most clicked"],["problems","Problems"],["speed","Speed"],["bugs","Bug reports"],["steps","One person's steps"]].map(([k,l]) =>
     `<button class="btn ${S.tab === k ? "on" : ""}" data-tab="${k}">${l}</button>`).join("");
 }
 function sortRows(key, rows, def){
@@ -192,7 +199,35 @@ const COLS = {
     { k:"times", l:"Times", n:1, bar:1 }, { k:"people", l:"People", n:1 }, { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }],
   dead: [
     { k:"place", l:"Page" }, { k:"ctx", l:"Area" }, { k:"label", l:"Tapped, but it isn't a button", f:r => esc(r.label) },
-    { k:"clicks", l:"Taps", n:1, bar:1 }, { k:"people", l:"People", n:1 }, { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }]
+    { k:"clicks", l:"Taps", n:1, bar:1 }, { k:"people", l:"People", n:1 }, { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }],
+  calls: [
+    { k:"path", l:"Data request", f:r => `<b>${esc(r.path)}</b>` },
+    { k:"status", l:"What happened", f:r => stTxt(r.status), csv:r => stCsv(r.status) },
+    { k:"times", l:"Times", n:1, bar:1 },
+    { k:"people", l:"People", n:1 },
+    { k:"med", l:"Typical time", n:1, f:r => esc(sec(r.med)), csv:r => r.med },
+    { k:"slowest", l:"Slowest", n:1, f:r => esc(sec(r.slowest)), csv:r => r.slowest },
+    { k:"pages", l:"On pages", f:r => esc((r.pages || []).join(" · ")), csv:r => (r.pages || []).join(" / ") },
+    { k:"who", l:"Who", f:r => esc((r.who || []).join(", ")), csv:r => (r.who || []).join(" / ") },
+    { k:"last", l:"Last", f:r => esc(ago(r.last)), csv:r => r.last }],
+  speed: [
+    { k:"place", l:"Page", f:r => `<b>${esc(r.place)}</b>` },
+    { k:"med", l:"Typical", n:1, bar:1, f:r => esc(sec(r.med)), csv:r => r.med },
+    { k:"p90", l:"Slow 1 in 10", n:1, f:r => esc(sec(r.p90)), csv:r => r.p90 },
+    { k:"slowest", l:"Slowest", n:1, f:r => esc(sec(r.slowest)), csv:r => r.slowest },
+    { k:"phone", l:"Typical on phones", n:1, f:r => esc(sec(r.phone)), csv:r => r.phone },
+    { k:"slow", l:"5 s or more", n:1, f:r => r.slow ? `<span class="pill red">${num(r.slow)}</span>` : "0" },
+    { k:"n", l:"Times measured", n:1 },
+    { k:"people", l:"People", n:1 },
+    { k:"slowcall", l:"Slowest data request (usually)", f:r => esc(r.slowcall || "") }],
+  bugs: [
+    { k:"created_at", l:"Sent", f:r => esc(when(r.created_at)), csv:r => r.created_at },
+    { k:"user_name", l:"Who" },
+    { k:"kind", l:"Kind" },
+    { k:"status", l:"Status", f:r => `<span class="pill ${r.status === "new" ? "red" : r.status === "done" ? "" : "blue"}">${esc(r.status)}</span>` },
+    { k:"body", l:"What they wrote", f:r => esc(r.body) },
+    { k:"page", l:"Page" },
+    { k:"steps", l:"Steps before", n:1, f:r => r.steps ? `<span class="pill blue">${num(r.steps)} · see</span>` : "0" }]
 };
 
 function daysHtml(d){
@@ -229,10 +264,18 @@ function draw(){
   } else if(S.tab === "problems"){
     h += `<div class="card"><h3>Page errors and failure messages</h3><p class="muted" style="margin:0 0 6px">Errors in a page's code, pictures or scripts that didn't load, and "Couldn't…" messages people were shown. Start here when fixing things.
         <button class="btn sm" data-csv="errors">Download CSV</button></p>${table("errors", COLS.errors, d.errors || [], ["times", -1])}</div>
+      <div class="card"><h3>Data that didn't load, or was slow</h3><p class="muted" style="margin:0 0 6px">A page asked our database for something and got no answer, got an error, or waited 4+ seconds.
+        Only the request's name is kept. Each one counts once per page every 5 minutes. <button class="btn sm" data-csv="calls">Download CSV</button></p>${table("calls", COLS.calls, d.calls || [], ["times", -1])}</div>
       <div class="card"><h3>Tapped over and over</h3><p class="muted" style="margin:0 0 6px">The same spot tapped 3+ times within 2 seconds: usually slow or not working.
         <button class="btn sm" data-csv="rage">Download CSV</button></p>${table("rage", COLS.rage, d.rage || [], ["times", -1])}</div>
       <div class="card"><h3>Tapped, but it doesn't do anything</h3><p class="muted" style="margin:0 0 6px">Things people tap that aren't buttons (3+ taps, or 2+ people). Good spots to make clickable.
         <button class="btn sm" data-csv="dead">Download CSV</button></p>${table("dead", COLS.dead, d.dead || [], ["clicks", -1])}</div>`;
+  } else if(S.tab === "speed"){
+    h += `<div class="card"><h3>How long pages take</h3><p class="muted" style="margin:0 0 6px">Time from opening a page until its data is in (no data request running for 1.5 s). The hub page and a desk inside it count as one open.
+        Slowest first. Pages loading in a background tab aren't counted. <button class="btn sm" data-csv="speed">Download CSV</button></p>${table("speed", COLS.speed, d.speed || [], ["med", -1])}</div>`;
+  } else if(S.tab === "bugs"){
+    h += `<div class="card"><h3>Bug reports, with what happened before</h3><p class="muted" style="margin:0 0 6px">Tap a report to see the person's opens, taps and errors in the 45 minutes before they sent it.
+        Reports sent before tracking started (Nov 23, 2026) have no steps. <button class="btn sm" data-csv="bugs">Download CSV</button></p>${table("bugs", COLS.bugs, d.bugs || [], ["created_at", -1], r => `class="go" data-bug="${r.id}"`)}<div id="bugsteps"></div></div>`;
   } else if(S.tab === "steps"){
     h += `<div class="card"><h3>One person's steps</h3><p class="muted" style="margin:0">Newest first, up to 600. Use it to see what someone did right before an error.</p>
       <div class="bar"><select id="who"><option value="">Pick a person</option>${(d.people || []).slice().sort((a, b) => String(a.name).localeCompare(b.name)).map(p => `<option value="${esc(p.user_id)}" ${p.user_id === S.who ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
@@ -244,8 +287,9 @@ function draw(){
     S.sortK[key] = [k, cur && cur[0] === k ? -cur[1] : (k === "name" || k === "place" || k === "label" || k === "msg" || k === "ctx" ? 1 : -1)]; draw(); });
   $("#out").querySelectorAll("[data-who]").forEach(tr => tr.onclick = () => { S.who = tr.dataset.who; S.tab = "steps"; draw(); });
   $("#out").querySelectorAll("[data-page]").forEach(tr => tr.onclick = () => { S.pageF = tr.dataset.page; S.tab = "spots"; draw(); });
+  $("#out").querySelectorAll("[data-bug]").forEach(tr => tr.onclick = () => bugSteps(+tr.dataset.bug, tr));
   $("#out").querySelectorAll("[data-csv]").forEach(b => b.onclick = () => { const k = b.dataset.csv;
-    const rows = k === "spots" ? (d.spots || []) : (d[k] || []); csv("hub-usage-" + k, COLS[k], sortRows(k, rows, [COLS[k][1].k, -1])); });
+    const rows = k === "spots" ? (d.spots || []) : (d[k] || []); csv("hub-usage-" + k, COLS[k], sortRows(k, rows, [COLS[k][k === "bugs" ? 0 : 1].k, -1])); });
   if($("#pf")) $("#pf").onchange = e => { S.pageF = e.target.value; draw(); };
   if($("#sq")) $("#sq").oninput = e => { S.q = e.target.value.toLowerCase(); const p = e.target.selectionStart; draw(); const s = $("#sq"); s.focus(); s.setSelectionRange(p, p); };
   if($("#who")){ $("#who").onchange = e => { S.who = e.target.value; steps(); }; if(S.who) steps(); }
@@ -261,11 +305,30 @@ async function steps(){
   const rows = r.data || [];
   box.innerHTML = rows.length ? rows.map(x => {
     const where = esc(x.title || x.page || "") + (x.route ? ` <span class="muted">${esc(x.route)}</span>` : "");
-    const line = x.kind === "view" ? `📄 Opened <b>${where}</b>`
-      : x.kind === "error" ? `<span class="pill red">Error</span> ${esc(x.msg)} <span class="muted">on ${where}</span>`
-      : `👆 ${x.live === false ? `<span class="pill amber">not a button</span> ` : ""}<b>${esc(x.label || "(no words)")}</b>${x.ctx ? ` <span class="muted">in ${esc(x.ctx)}</span>` : ""} <span class="muted">on ${where}</span>`;
-    return `<div class="step"><time>${esc(when(x.at))}${x.screen ? " · " + esc(x.screen) : ""}</time><div>${line}</div></div>`; }).join("")
+    return `<div class="step"><time>${esc(when(x.at))}${x.screen ? " · " + esc(x.screen) : ""}</time><div>${stepLine(x, where)}</div></div>`; }).join("")
     : `<div class="empty">Nothing from this person in these dates.</div>`;
+}
+function stepLine(x, where){
+  return x.kind === "view" ? `📄 Opened <b>${where}</b>`
+    : x.kind === "error" ? `<span class="pill red">Error</span> ${esc(x.msg)} <span class="muted">on ${where}</span>`
+    : x.kind === "speed" ? `⏱ <b>${where}</b> had its data in <b>${esc(sec(x.ms))}</b> <span class="muted">(${num(x.n)} requests${x.msg ? ", slowest " + esc(x.msg) : ""})</span>`
+    : x.kind === "call" ? `${stTxt(x.status)} data request <b>${esc(x.msg)}</b> <span class="muted">${esc(sec(x.ms))} on ${where}</span>`
+    : `👆 ${x.live === false ? `<span class="pill amber">not a button</span> ` : ""}<b>${esc(x.label || "(no words)")}</b>${x.ctx ? ` <span class="muted">in ${esc(x.ctx)}</span>` : ""} <span class="muted">on ${where}</span>`;
+}
+async function bugSteps(id, tr){
+  const box = $("#bugsteps"); if(!box) return;
+  $("#out").querySelectorAll("[data-bug]").forEach(x => x.style.background = x === tr ? "var(--moose-soft)" : "");
+  box.innerHTML = `<div class="empty">Loading…</div>`;
+  const r = await sb.rpc("hub_feedback_steps", { p_id:id });
+  if(r.error){ box.innerHTML = `<div class="empty">Couldn't load: ${esc(r.error.message)}</div>`; return; }
+  const d = r.data || {}, rows = d.steps || [];
+  box.innerHTML = `<h3 style="margin:14px 0 4px">#${esc(d.id)} · ${esc(d.user_name)} · ${esc(when(d.created_at))}${d.page ? ` <span class="muted">from ${esc(d.page)}</span>` : ""}</h3>`
+    + (rows.length ? rows.map(x => {
+        const where = esc(x.title || x.page || "") + (x.route ? ` <span class="muted">${esc(x.route)}</span>` : "");
+        return `<div class="step"${x.after ? ` style="opacity:.6"` : ""}><time>${esc(when(x.at))}${x.after ? " · after" : ""}</time><div>${stepLine(x, where)}</div></div>`; }).join("")
+        + `<div class="step"><time></time><div class="muted">Oldest first. Faded lines came after they sent it.</div></div>`
+      : `<div class="empty">No steps recorded in the 45 minutes before (sent before tracking started, or right after opening the hub).</div>`);
+  box.scrollIntoView({ behavior:"smooth", block:"nearest" });
 }
 
 (async () => {
