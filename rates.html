@@ -2116,6 +2116,20 @@ function srHolMin(k, out) { const md = k.slice(5), pk = (typeof peakOf === "func
   if (!key) return null; const b = srBeds(), row = SR_HOLMIN[key][b <= 1 ? "s" : b <= 3 ? "m" : "b"];
   const i = out >= 90 ? 0 : out >= 31 ? 1 : out >= 15 ? 2 : out >= 8 ? 3 : 4;
   return { m: row[i], why: `${SR_HOLMIN[key].name}, ${b <= 1 ? "studio/1BR" : b <= 3 ? "2-3BR" : "4BR+"}, ${out} days out` }; }
+// Brandon 2026-11-24 (WP 129): "match our comps minimum stay length" = the middle of the minimum the comps used here ask that night:
+// the minimum Airbnb/Vrbo showed on each comp's nearest quote (check-in on or up to 7 days before the night, Airbnb first), else the
+// comp's own calendar; 3+ comps. Same as rates_set_auto.py c_min.
+function srCompMin(k) { const kd = new Date(k + "T12:00:00"), by = {};
+  for (const r of SR.ck || []) { if (r.tier !== "Primary" || (r.channel !== "Airbnb" && r.channel !== "VRBO") || !(+r.min_nights > 0) || !r.check_in) continue;
+    const g = Math.round((kd - new Date(String(r.check_in).slice(0, 10) + "T12:00:00")) / 864e5); if (g < 0 || g > 7) continue;
+    const b = by[r.comp_id], better = !b || [r.channel === "Airbnb" ? 1 : 0, -g] > [b.ch === "Airbnb" ? 1 : 0, -b.g] || (r.channel === "Airbnb" && b.ch !== "Airbnb") || (r.channel === b.ch && g < b.g);
+    if (better) by[r.comp_id] = { ch: r.channel, g, m: +r.min_nights }; }
+  for (const n of SR.nightly || []) { if (n.tier !== "Primary" || (n.channel !== "Airbnb" && n.channel !== "VRBO") || (by[n.comp_id] && (by[n.comp_id].g != null || n.channel !== "Airbnb"))) continue;
+    const o = Math.round((kd - new Date(n.start_date + "T12:00:00")) / 864e5), m = (n.min_nights || [])[o]; if (+m > 0 && (!by[n.comp_id] || n.channel === "Airbnb")) by[n.comp_id] = { ch: n.channel, g: null, m: +m }; }
+  const v = Object.values(by).map(x => x.m).sort((p, q) => p - q); if (v.length < 3) return null; const h = v.length >> 1;
+  return { m: v.length % 2 ? v[h] : Math.round((v[h - 1] + v[h]) / 2), n: v.length }; }
+// Brandon 2026-11-24 (WP 129): minimum-stay ladder by days out, dyn.minLadder = [{out, lo, hi}] - same as rates_set_auto.py
+function srLadder(Y, out) { const l = (Array.isArray(Y.minLadder) ? Y.minLadder : []).filter(x => x && x.out != null).sort((a, b) => +b.out - +a.out); return l.find(x => out >= +x.out) || null; }
 // minimum stay for a night from the settings (null = no rule); gaps are handled by the caller
 function srMinFor(Y, k, dw, hol, out) { const nz = v => v !== "" && v != null && +v > 0 ? Math.max(srMinLo(Y), +v) : null;
   if (hol && nz(Y.minHol)) return { m: nz(Y.minHol), why: "holiday" };
@@ -2390,11 +2404,14 @@ function srWire(R) {
       if (!A && out <= 3) step(1 - Y.lm3 / 100, `${out} days out`); else if (!A && out <= 7) step(1 - Y.lm7 / 100, `${out} days out`); else if (out >= 120) step(1 + Y.far / 100, `${out} days out`);
       const sn = out <= 7 && typeof mkFor === "function" && state.mk?.loaded ? mkFor(r.k).snow : null;
       if (sn && sn.in >= Y.snowIn) step(1 + Y.snowU / 100, `${sn.in}" snow forecast (NWS)`);
-      const mr = srMinFor(Y, r.k, dw, hol, out); if (gapMin == null && mr) why.push(`min stay ${mr.m} (${mr.why})`);
+      let mr = srMinFor(Y, r.k, dw, hol, out);
+      if ((Y.minComps || srRule("min_match_comps", 0)) && !(mr && (mr.why === "holiday" || mr.why === "every night" || ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].includes(mr.why) || (Y.minSeasons || []).some(x => (x.name || "season") === mr.why)))) { const cm = srCompMin(r.k); if (cm) mr = { m: Math.min(14, Math.max(srBeds() <= 1 ? 1 : srMinLo(Y), cm.m)), why: `comps' usual minimum (${cm.n} comps)`, one: cm.m === 1 && srBeds() <= 1 }; }
+      if (gapMin == null && mr) why.push(`min stay ${mr.m} (${mr.why})`);
       const min = gapMin ?? mr?.m ?? r.v.min ?? (Y.base === "s" ? r.s?.min : null) ?? (r.t?.min_nights ?? null);
       let mn = Math.max(gapMin == null && mr?.one ? 1 : srMinLo(Y), gapMin ?? min ?? 2);
       { const lmv = out <= 3 && Y.minLm3 !== "" && Y.minLm3 != null ? +Y.minLm3 : out <= 7 && Y.minLm7 !== "" && Y.minLm7 != null ? +Y.minLm7 : null;
         if (lmv && lmv < mn) { mn = Math.max(srMinLo(Y), lmv); why.push(`last minute: min stay ${mn}`); } }
+      { const st = srLadder(Y, out); if (st) { const lo = +st.lo || 1, hi = +st.hi || 30; mn = Math.min(hi, Math.max(lo, mn)); why.push(`min stay ${mn} (${out} days out: ${lo}${hi !== lo ? "-" + hi : ""} nights)`); } }
       built.push({ r, v, why, ct, clo, hn: hN, out: out0, ly: !!far, hol: !!hol, gap: gapMin != null, dw, min: mn /* 2+ nights unless the home allows 1 (Brandon 2026-11-09) */ }); n++; }
     // smoothing: no jump bigger than Y.jump% from the night before (holidays left alone)
     for (let i = 1; i < built.length; i++) { const p = built[i - 1], x = built[i]; if (!Y.jump || x.hol || p.hol || addD(p.r.k, 1) !== x.r.k) continue;
