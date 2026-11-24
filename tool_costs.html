@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Tools &amp; costs</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8; --violet:#6b4bb0; --violet-soft:#eee8f8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --violet-soft:#241c36; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1200px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+.muted{color:var(--muted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:38px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
+.btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff} .btn.sm{min-height:32px;padding:0 9px;font-size:12.5px} .btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.looking{background:var(--amber-soft);color:var(--amber)} .pill.found{background:var(--moose-soft);color:var(--moose-ink)}
+.pill.shipping{background:var(--blue-soft);color:var(--blue)} .pill.shipped,.pill.picked_up{background:var(--violet-soft);color:var(--violet)}
+.pill.not_found,.pill.closed{background:var(--line);color:var(--muted)} .pill.home{background:var(--forest);color:#fff}
+.head{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tile b{display:block;font-size:22px;font-weight:800;line-height:1.2} .tile span{font-size:12.5px;color:var(--muted);font-weight:700}
+.tile.on{outline:2px solid var(--forest-2)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}
+.bar input:where(:not([type=checkbox],[type=radio])),.bar select{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 9px;background:var(--card);color:var(--ink);min-height:38px}
+.bar input[type=search]{flex:1;min-width:200px}
+.bar label{font-size:13px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;cursor:pointer;text-align:left;font:inherit;color:var(--ink);display:block;width:100%}
+.card:hover{border-color:var(--line-2)}
+.card .top{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.card .it{font-weight:800;font-size:15px;overflow-wrap:anywhere}
+.card .ln{font-size:13px;color:var(--ink-2);margin-top:4px;overflow-wrap:anywhere}
+.card .ln small{color:var(--muted)}
+.card .last{font-size:12.5px;color:var(--muted);margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .age{margin-left:auto;font-size:12px;color:var(--muted);font-weight:700}
+.empty{padding:22px;color:var(--muted);font-size:14px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.showing{font-size:13px;color:var(--ink-2);margin:-4px 0 10px} .showing button{font:inherit;font-weight:800;color:var(--forest-2);background:none;border:0;cursor:pointer;padding:0}
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:720px;width:calc(100% - 24px);background:var(--card);color:var(--ink);max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog .dbody{padding:18px 20px;overflow:auto;max-height:calc(100vh - 100px)}
+dialog h3{margin:0 0 6px;font-size:18px}
+dialog label{display:block;margin:10px 0;font-size:13px;font-weight:800;color:var(--ink-2)}
+dialog label.ck{display:inline-flex;align-items:center;gap:8px;margin:6px 16px 6px 0}
+dialog input:where(:not([type=checkbox],[type=radio])),dialog select,dialog textarea{display:block;width:100%;font:inherit;font-size:16px;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;margin-top:4px;background:var(--card);color:var(--ink)}
+dialog input[type=checkbox]{width:18px;height:18px;flex:none}
+dialog textarea{min-height:64px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px} .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+.dfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line);background:var(--card);position:sticky;bottom:0;flex-wrap:wrap}
+.err{color:var(--red);font-size:13px;min-height:1em}
+.notes{list-style:none;padding:0;margin:8px 0} .notes li{border-left:3px solid var(--line-2);padding:4px 10px;margin:8px 0;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.notes li small{display:block;color:var(--muted);font-size:12px;white-space:normal}
+.sec{font-size:13px;font-weight:800;color:var(--ink-2);margin:16px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+.toast{position:fixed;bottom:16px;right:16px;background:var(--forest);color:#fff;padding:8px 14px;border-radius:10px;font-weight:800;font-size:13.5px;z-index:9}
+@media (max-width:700px){ .two,.three{grid-template-columns:1fr} }
+body.inhub .wrap{padding-top:10px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.tile b{display:block;font-size:24px;font-weight:800} .tile span{font-size:12.5px;color:var(--muted)} .tile.on{outline:2px solid var(--forest-2)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:13.5px} td,th{padding:8px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:top} th{font-size:12px;color:var(--muted);font-weight:700}
+.src{font-size:12px;color:var(--muted)} .num{text-align:right;white-space:nowrap} tr.off td{opacity:.5}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:4px;min-width:90px} .bar i{display:block;height:100%;background:var(--forest-2)} .bar i.hot{background:var(--red)}
+dialog{border:none;border-radius:var(--radius);padding:0;width:min(560px,94vw);box-shadow:0 10px 40px rgba(0,0,0,.25);background:var(--card);color:var(--ink)}
+dialog form{padding:16px} dialog label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-2);margin:8px 0 3px}
+dialog input,dialog textarea,dialog select{width:100%;font:inherit;padding:8px;border:1px solid var(--line-2);border-radius:8px;background:var(--card);color:var(--ink)}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<dialog id="dlg"></dialog>
+<script src="confirm.js?v=20261120c"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+/* Tools & costs (Brandon 2026-11-24: "we need to keep track of our total budget"). Table hub_tool_costs (hub_tool_costs.sql): admins only
+   (desk 'config'). Every price has its source. Usage this month comes from tool_usage.py where a service tells us (SerpApi today). */
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const usd = n => n == null || n === "" ? "—" : "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 });
+const fmtDT = d => d ? new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+if(window.top !== window) document.body.classList.add("inhub");
+const S = { rows: [], f: "" };
+const GOING = r => /cancel|replac|goes away|being replaced/i.test((r.plan || "") + " " + (r.what_for || "") + " " + (r.note || "") + " " + (r.renews || ""));
+const MONTHLY = r => !r.off && r.monthly != null && !GOING(r);
+
+function usageCell(r){
+  const u = r.usage || {};
+  if(u.error) return `<span class="src">Couldn't read: ${esc(u.error)}</span>`;
+  if(u.plan && u.used != null){ const p = Math.min(100, Math.round(u.used / u.plan * 100));
+    return `<b>${Number(u.used).toLocaleString()}</b> of ${Number(u.plan).toLocaleString()} used (${p}%)<div class="bar"><i class="${p > 90 ? "hot" : ""}" style="width:${p}%"></i></div>
+      <span class="src">${u.renews ? "Renews " + esc(u.renews) + " · " : ""}read ${fmtDT(r.usage_at)} from ${esc(u.source || "")}</span>`; }
+  return `<span class="src">Not read automatically</span>`;
+}
+function render(){
+  const all = S.rows, live = all.filter(r => !r.off);
+  const tot = live.filter(MONTHLY).reduce((a, r) => a + Number(r.monthly), 0);
+  const going = live.filter(r => GOING(r) && r.monthly != null).reduce((a, r) => a + Number(r.monthly), 0);
+  const unknown = live.filter(r => r.monthly == null);
+  const list = all.filter(r => S.f === "" ? !r.off : S.f === "keep" ? MONTHLY(r) : S.f === "going" ? !r.off && GOING(r) : S.f === "unknown" ? !r.off && r.monthly == null : S.f === "off" ? r.off : true);
+  const tile = (k, big, small) => `<button class="tile ${S.f === k ? "on" : ""}" data-f="${k}"><b>${big}</b><span>${small}</span></button>`;
+  $("#app").innerHTML = `<h1>Tools &amp; costs</h1>
+    <p class="muted">What we pay for the services the hub uses, every month. Each price says where it came from. Admins only.</p>
+    <div class="tiles">${tile("keep", usd(tot), "a month for the tools we keep")}${tile("going", usd(going), "a month going away (Beyond, Hubstaff)")}
+      ${tile("unknown", unknown.length, "with no price yet: fill them in")}${tile("", live.length, "services in all")}</div>
+    <div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+      <b>${S.f ? `Showing ${list.length} · <a href="#" id="all">show all</a>` : "Every service"}</b>
+      <span><button class="btn sm" id="off">${S.f === "off" ? "Hide" : "Show"} ones we stopped</button> <button class="btn primary sm" id="add">+ Add a service</button></span></div>
+    <div class="scroll"><table><tr><th>Service</th><th>Plan</th><th class="num">A month</th><th>Usage this month</th><th>Renews / ends</th><th></th></tr>
+    ${list.sort((a, b) => (a.sort ?? 100) - (b.sort ?? 100) || a.name.localeCompare(b.name)).map(r => `<tr class="${r.off ? "off" : ""}">
+      <td><b>${esc(r.name)}</b><div class="src">${esc(r.what_for || "")}</div><div class="src">Source: ${esc(r.source)}</div>${r.note ? `<div class="src">📝 ${esc(r.note)}</div>` : ""}</td>
+      <td>${esc(r.plan || "")}<div class="src">${esc(r.billing || "")}</div></td>
+      <td class="num"><b>${usd(r.monthly)}</b>${r.billing && r.billing !== "monthly" ? `<div class="src">${r.billing === "per booking" ? "average" : "about"}</div>` : ""}</td>
+      <td>${usageCell(r)}</td><td>${esc(r.renews || "")}${r.cancel_by ? `<div class="src">Cancel by ${esc(r.cancel_by)}</div>` : ""}</td>
+      <td><button class="btn sm" data-e="${esc(r.key)}">✎ Edit</button></td></tr>`).join("")}</table></div>
+    <p class="src">"A month" for per-use services is the most we let them spend or the average of the last bills. Totals leave out services with no price yet and ones going away.</p></div>`;
+}
+function edit(key){
+  const r = S.rows.find(x => x.key === key) || { key: "", billing: "monthly" };
+  const f = (id, label, v, ph) => `<label for="${id}">${label}</label><input id="${id}" value="${esc(v ?? "")}" placeholder="${esc(ph || "")}">`;
+  $("#dlg").innerHTML = `<form method="dialog"><h3 style="margin:0 0 6px">${r.key ? "Edit " + esc(r.name) : "Add a service"}</h3>
+    ${f("n", "Name", r.name)}${f("w", "What we use it for", r.what_for)}${f("p", "Plan", r.plan)}
+    ${f("m", "Cost a month ($)", r.monthly, "leave blank if not known")}
+    <label for="b">How it's billed</label><select id="b">${["monthly", "yearly (shown per month)", "per booking", "pay as you go", "per campaign"].map(x => `<option ${x === r.billing ? "selected" : ""}>${x}</option>`).join("")}</select>
+    ${f("r", "Renews / ends", r.renews)}${f("c", "Cancel by", r.cancel_by)}
+    ${f("s", "Where the number comes from (required)", r.source, "e.g. the receipt email, Nov 20")}
+    <label for="o">Note</label><textarea id="o" rows="2">${esc(r.note || "")}</textarea>
+    <label><input type="checkbox" id="x" ${r.off ? "checked" : ""} style="width:auto"> We stopped paying for this</label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="sv" value="save">Save</button></div></form>`;
+  $("#dlg").showModal();
+  $("#sv").onclick = async e => { e.preventDefault();
+    const p = { name: $("#n").value.trim(), what_for: $("#w").value.trim(), plan: $("#p").value.trim(), monthly: $("#m").value.replace(/[$,]/g, "").trim(),
+      billing: $("#b").value, renews: $("#r").value.trim(), cancel_by: $("#c").value.trim(), source: $("#s").value.trim(), note: $("#o").value.trim(), off: $("#x").checked, sort: r.sort };
+    const res = await sb.rpc("tool_cost_save", { p_key: r.key || "", p });
+    if(res.error) return mmAlert(res.error.message);
+    $("#dlg").close(); load(); };
+}
+async function load(){
+  const r = await sb.from("hub_tool_costs").select("*").order("sort");
+  if(r.error){ $("#app").innerHTML = `<h1>Tools &amp; costs</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
+  S.rows = r.data || []; render();
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-f],[data-e],#add,#all,#off"); if(!t) return;
+  if(t.dataset.f !== undefined){ S.f = S.f === t.dataset.f ? "" : t.dataset.f; render(); }
+  else if(t.dataset.e) edit(t.dataset.e);
+  else if(t.id === "add") edit("");
+  else if(t.id === "all"){ e.preventDefault(); S.f = ""; render(); }
+  else if(t.id === "off"){ S.f = S.f === "off" ? "" : "off"; render(); }
+});
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"config" });
+  if(ok.error){ $("#app").innerHTML = `<h1>Tools &amp; costs</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
+  if(ok.data !== true){ try { top.location.hash = "#/home"; } catch(_){ location.href = "hub.html"; } return; }
+  load();
+})();
+</script>
+</body>
+</html>
