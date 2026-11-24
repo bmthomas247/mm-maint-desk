@@ -158,7 +158,9 @@ function occReg(m, a, b){
   return out;
 }
 const mWhen = m => (m.nth ? ["First","Second","Third","Fourth","Fifth"][m.nth - 1] + " " + DAYS[m.dow] + " of the month" : (m.every === 14 ? "Every other " : "Every ") + DAYS[m.dow]) + (m.start ? " · " + ftime(m.start) + (m.minutes ? "–" + ftime(endTime(m.start, m.minutes)) : "") : "");
-async function meetings(force){ if(ST.meets && !force) return ST.meets; const r = await sb.rpc("cal_meetings"); ST.meets = r.data || []; return ST.meets; }
+// cal_meetings() gives every staff meeting since 2026-11-24 (Brandon: everyone can join); m.can = their own meeting (agenda). Calendars/Home use only their own.
+async function allMeetings(force){ if(ST.allMeets && !force) return ST.allMeets; const r = await sb.rpc("cal_meetings"); ST.allMeets = r.data || []; ST.meets = ST.allMeets.filter(m => m.can !== false); return ST.allMeets; }
+async function meetings(force){ if(ST.meets && !force) return ST.meets; await allMeetings(true); return ST.meets; }
 async function people(){ if(ST.people) return ST.people; const r = await sb.rpc("cal_people"); ST.people = r.data || []; return ST.people; }
 async function events(a, b){
   const r = await sb.from("hub_cal_events").select("*").eq("off", false).lte("day", b).or(`end_day.gte.${a},and(end_day.is.null,day.gte.${a})`).order("day").order("start_time", { nullsFirst:true });
@@ -370,20 +372,20 @@ function moveOne(m, day, done){
     const r = await sb.rpc("meeting_move", { p_meet:m.meet, p_from:q("#mo_f").value, p_kind:k, p_to:k === "move" ? q("#mo_d").value || null : null,
       p_start:k === "move" && st2 ? st2 : null, p_minutes:k === "move" && st2 ? +q("#mo_m").value : null, p_note:q("#mo_n").value || null });
     if(r.error){ sv.disabled = false; sv.textContent = "Save"; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
-    close(); ST.meets = null; if(done) done(); };
+    close(); ST.meets = null; ST.allMeets = null; if(done) done(); };
 }
 async function meetTiles(v){
   v.innerHTML = `<div class="page cal">${tabs("cal_meet")}<p class="muted">Loading meetings…</p></div>`;
-  const ms = await meetings(true), t = today();
+  const ms = await allMeetings(true), t = today();
   if(current() !== "cal_meet") return;
   const tile = m => { const nx = occurs(m, t, addD(t, m.nth ? 120 : 28))[0];
-    return `<div class="card tile" data-meet="${m.meet}"><a href="#/${m.meet}" style="text-decoration:none;color:inherit;display:block"><h3>${esc(NAMES[m.meet] || m.meet)}</h3>
+    return `<div class="card tile" data-meet="${m.meet}"><a ${m.can === false ? "" : `href="#/${m.meet}" `}style="text-decoration:none;color:inherit;display:block"><h3>${esc(NAMES[m.meet] || m.meet)}</h3>
       <div class="when">${esc(mWhen(m))}${m.start ? " (Mountain)" : ""}</div>
       <div class="when"><b>Next: ${nx ? esc(nx === t ? "Today" : fday(nx)) : "—"}${nx && mvTo(m, nx) && mvTo(m, nx).start ? " · " + esc(ftime(mvTo(m, nx).start)) : ""}</b>${m.last_day ? ` · last met ${esc(fday(m.last_day))}` : ""}</div>
       ${(m.moves || []).filter(x => (x.to || x.from) >= t || x.from >= t).map(x => `<div class="when" style="color:#8a5a00">${x.kind === "skip" ? "⏭ No meeting " + esc(fday(x.from)) : "↪ " + esc(fday(x.from)) + " moved to " + esc(fday(x.to)) + (x.start ? " · " + esc(ftime(x.start)) : "")}${x.note ? " (" + esc(x.note) + ")" : ""}</div>`).join("")}
-      <div class="muted" style="font-size:13px;margin-top:6px" data-agenda="${m.meet}">${m.meet === "meet_maint" ? "Projects, owner jobs and repeat problems from the Maintenance desk." : "Checking what's coming up…"}</div>
+      <div class="muted" style="font-size:13px;margin-top:6px" data-agenda="${m.meet}">${m.can === false ? "Open to everyone. Tap Join if you'd like to sit in." : m.meet === "meet_maint" ? "Projects, owner jobs and repeat problems from the Maintenance desk." : "Checking what's coming up…"}</div>
       ${m.open_tasks != null ? `<div style="margin-top:6px;font-size:13px"><b>${m.open_tasks} open task${m.open_tasks === 1 ? "" : "s"}</b>${(m.tasks || []).length ? `<ul>${m.tasks.map(x => `<li>${esc(x.text)}${x.who ? " · " + esc(x.who) : ""}${x.due ? " · due " + esc(fday(x.due)) : ""}</li>`).join("")}</ul>` : ""}</div>` : ""}</a>
-      <div class="row"><a class="btn small primary" href="#/${m.meet}">Open agenda</a>${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">▶ Join</a>` : ""}${ME.admin ? `<button class="btn small" data-settime="${m.meet}">${m.start ? "Change day & time" : "Set day & time"}</button><button class="btn small" data-mvone="${m.meet}">Move one meeting</button><button class="btn small" data-jlink="${m.meet}">${m.link ? "Change join link" : "+ Join link"}</button>` : ""}</div></div>`; };
+      <div class="row">${m.can === false ? "" : `<a class="btn small primary" href="#/${m.meet}">Open agenda</a>`}${m.link ? `<a class="btn small${m.can === false ? " primary" : ""}" href="${esc(m.link)}" target="_blank" rel="noopener">▶ Join</a>` : ""}${ME.admin ? `<button class="btn small" data-settime="${m.meet}">${m.start ? "Change day & time" : "Set day & time"}</button><button class="btn small" data-mvone="${m.meet}">Move one meeting</button><button class="btn small" data-jlink="${m.meet}">${m.link ? "Change join link" : "+ Join link"}</button>` : ""}</div></div>`; };
   v.innerHTML = `<div class="page cal calwide">${tabs("cal_meet")}<div class="chead"><h2>Weekly meetings</h2></div>
     ${ms.length ? `<div class="tiles">${ms.map(tile).join("")}</div>` : `<div class="card"><p class="muted" style="margin:0">No weekly meetings on your calendar.</p></div>`}
     <p class="muted" style="font-size:12px">Times: ${esc([...new Set(ms.filter(m => m.start).map(m => NAMES[m.meet] + " from " + m.source))].join("; ") || "not set yet")}.</p></div>`;
@@ -432,7 +434,7 @@ It shows as ▶ Join for everyone who can open the meeting.`, "");
     meetTiles(v);
   });
   v.querySelectorAll("[data-mvone]").forEach(b => b.onclick = () => moveOne(ms.find(x => x.meet === b.dataset.mvone), null, () => meetTiles(v)));
-  ms.filter(m => m.meet !== "meet_maint").forEach(async m => {
+  ms.filter(m => m.meet !== "meet_maint" && m.can !== false).forEach(async m => {
     const r = await sb.rpc("meeting_agenda", { p_meet:m.meet }), el = v.querySelector(`[data-agenda="${m.meet}"]`); if(!el) return;
     const it = (r.data && r.data.items) || [], g = [...new Set(it.map(x => x.grp))];
     el.innerHTML = it.length ? `<b>${it.length} to discuss</b>: ${esc(g.slice(0, 4).join(" · "))}${g.length > 4 ? " · +" + (g.length - 4) + " more" : ""}` : "Nothing came up from the data this week."; });
