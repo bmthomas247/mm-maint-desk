@@ -145,6 +145,7 @@ async function load(v, key){
       src:"Added by " + (x.by || "someone") + ", " + new Date(x.at).toLocaleDateString(undefined, { month:"short", day:"numeric" }), own:x.id })); } catch(e){}
   try { const x = await sb.rpc("meeting_extras", { p_meet:key }); r.data.ex = (x && x.data) || {}; } catch(e){ r.data.ex = {}; }   // hub_meeting_task_edit.sql
   if(key === "meet_or"){ try { const s = await sb.rpc("meeting_or_state", { p_meet:key, p_day:ST.day[key] }); r.data.or = s && !s.error && s.data ? Object.assign(s.data, { _day:ST.day[key] }) : { _day:ST.day[key] }; } catch(e){ r.data.or = { _day:ST.day[key] }; } }   // hub_meeting_prep.sql (Jeff 2026-11-16)
+  if(key === "meet_or"){ r.data.lic = await licLoad(); if(r.data.lic && r.data.lic.today.length) (r.data.items = r.data.items || []).push(licItem(r.data.lic)); }   // Licensing heads-up (Jeff 2026-11-24)
   ST.data[key] = r.data; return r.data;
 }
 window.meetView = async function(v, key){
@@ -291,7 +292,7 @@ async function taskPeople(key){ if(MX.tp[key]) return MX.tp[key];
 const today = () => ymd(new Date());
 const addDays = (s, n) => { const d = new Date(s + "T12:00"); d.setDate(d.getDate() + n); return ymd(d); };
 /* which team a topic belongs to, for "Message / alert the team" (Brandon 2026-11-10: licenses -> the licensing team) */
-const TEAMFOR = { lic:["licensing","the licensing team"], alert:["maint_manager","maintenance"], mt:["maint_manager","maintenance"], rep:["maint_manager","maintenance"],
+const TEAMFOR = { lic:["licensing","the licensing team"], lich:["licensing","the licensing team"], alert:["maint_manager","maintenance"], mt:["maint_manager","maintenance"], rep:["maint_manager","maintenance"],
   proj:["maint_manager","maintenance"], ofb:["owner_relations","owner relations"], behind:["owner_relations","owner relations"], omb:["owner_relations","owner relations"],
   rule:["owner_relations","owner relations"], rv:["owner_relations","owner relations"], ownerstays:["owner_relations","owner relations"], new:["owner_relations","owner relations"],
   folio:["office_manager","the office managers"], psu:["owner_relations","owner relations"], sale:["owner_relations","owner relations"],
@@ -344,6 +345,7 @@ function suggest(it){
   else if(k === "rv"){ add(`Fix what the guest wrote about at ${h || t}`, 3); add(`Tell the ${h || "home"} owner about the review`, 2); }
   else if(k === "alert" || k === "mt" || k === "rep" || k === "proj"){ add(`Make sure the owner knows about: ${short(t, 80)}`, 1); add(`Get a date for the fix: ${short(t, 80)}`, 2); }
   else if(k === "lic"){ add("Tell the owners who need to sign or pay their license renewal", 3); }
+  else if(k === "lich"){ add("Tell the owners whose license expired, failed inspection or needs a renew-or-let-go answer", 2); add("Ask Haylee where the overdue follow-ups stand", 1); }
   else if(k === "ownerstays"){ add("Send a welcome note to each owner arriving", 1); add("Check each owner home is clean and ready", 1); }
   else if(k === "new"){ add(`Check in with the new ${h || "home"} owner`, 7); }
   else if(k === "folio" || k === "pf"){ add(`Look into it and reply to whoever reported it: ${short(t, 70)}`, 2); }
@@ -357,13 +359,70 @@ function suggest(it){
    Anything else + wrap up 5; Licenses off; topics with nothing new since the last meeting fold away; Monday prep marks
    (★ Must talk / ⏭ Skip, hub_meeting_prep.sql); Monday-maintenance style cards (Next up + history). Only meet_or uses this. */
 const OR_DROP = new Set(["lic"]);
+
+/* Licensing heads-up (Jeff 2026-11-24: "My meeting should pull this for owner talk day on tuesday as a heads up" + "Should be in property
+   set up notes as well"). Same "Do today" rules as Licensing ▸ Licensing work (desk-lic.js cls(), 2026-11-18): if that changes, change
+   licCls() too. Read with the person's own sign-in (hub_licenses RLS; lic_psu_homes = Haylee + admins), so someone who can't read licenses
+   gets nothing and no hint. Shows as one topic ("lich:week", block 2, always up) and as a 📄 Licensing box + tag on each Property Set Up,
+   leaving and for-sale home (and on any other topic whose home is on the Do today list). Only meet_or loads it. */
+const LIC_KIND = { pc:"Park City", summit:"Summit", wasatch_clerk:"Wasatch Clerk", wasatch_health:"Wasatch Health", other:"Other" }, LIC_KORD = ["pc", "summit", "wasatch_clerk", "wasatch_health", "other"];
+const LIC_STEP = { need_apply:"Need to apply", applied:"Applied", fee_paid:"Fee paid", insp_wait:"Waiting on the county to schedule the inspection", insp_sched:"Inspection scheduled",
+  insp_failed:"Failed inspection", insp_passed:"Passed inspection, waiting on the license", renew_sent:"Renewal submitted", licensed:"Licensed / renewed",
+  bldg_hold:"Waiting on the building / HOA", owner:"Owner handles it", hold:"On hold", stop:"Not renewing" };
+const LIC_ORD = ["cancel it?", "for sale: renew?", "expired", "failed inspection", "inspection result?", "follow-up due"];   // owner-facing first
+const LIC_PSU = { str:"🏗 Being set up", lease:"🏗 Lease being set up", sale:"🏷 For sale", off:"👋 Leaving Moose" };
+const licD = d => { if(!d) return ""; const t = Date.parse(String(d).slice(0, 10) + "T12:00:00"); if(isNaN(t)) return String(d);
+  return new Date(t).toLocaleDateString(undefined, { month:"short", day:"numeric", year:String(d).slice(0, 4) === ymd(new Date()).slice(0, 4) ? undefined : "numeric" }); };
+const licCmp = x => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const licJobs = (L, code) => (L.jobs || []).filter(j => (j.codes || []).includes(code) || j.code === code);
+function licCls(r, jobs){
+  const td = ymd(new Date()), s = r.step || "", e = r.expires, d = e ? Math.round((Date.parse(e + "T12:00:00") - Date.parse(td + "T12:00:00")) / 864e5) : null;
+  const ps = jobs.filter(j => (j.codes || []).includes(r.code) || j.code === r.code), leaving = ps.some(j => j.kind === "off"), selling = ps.some(j => j.kind === "sale");
+  if(leaving && s !== "stop") return { g:"today", why:"Leaving Moose — cancel the license, or mark it Not renewing", sh:"cancel it?", at:"" };
+  const inprog = /^(applied|fee_paid|insp_wait|insp_sched|insp_passed|renew_sent|insp_failed)$/.test(s), park = /^(bldg_hold|owner|hold|stop)$/.test(s);
+  if(r.follow_up && r.follow_up <= td) return { g:"today", why:r.follow_up === td ? "Follow up today" : "Follow-up was due " + licD(r.follow_up), sh:"follow-up due", at:r.follow_up };
+  if(s === "insp_sched" && r.step_on && r.step_on < td) return { g:"today", why:"Inspection was " + licD(r.step_on) + " — how did it go?", sh:"inspection result?", at:r.step_on };
+  if(s === "insp_failed") return { g:"today", why:"Failed inspection — set up the re-inspection", sh:"failed inspection", at:r.step_on || "" };
+  if(selling && !park && e && d <= 60) return { g:"today", why:"For sale — " + (d < 0 ? "expired " + licD(e) : "renews " + licD(e)) + ": renew it, or let it go?", sh:"for sale: renew?", at:e };
+  if(e && e < td && !inprog && !park) return { g:"today", why:"Expired " + licD(e), sh:"expired", at:e };
+  if(park) return { g:"park", why:LIC_STEP[s] || s, at:e || "" };
+  if(s === "insp_sched") return { g:"insp", why:"Inspection " + (r.step_on ? licD(r.step_on) : "— date not set"), at:r.step_on || "9999" };
+  if(s === "insp_wait") return { g:"insp", why:"Waiting on the county to schedule the inspection", at:r.follow_up || "9999" };
+  if(inprog) return { g:"waiting", why:(LIC_STEP[s] || s) + (r.step_on ? " " + licD(r.step_on) : "") + (r.follow_up ? " · follow up " + licD(r.follow_up) : ""), at:r.follow_up || "9999" };
+  if(s === "need_apply") return { g:"newh", why:"Need to apply", at:"" };
+  if(e && d <= 60) return { g:"renew", why:"Renew by " + licD(e) + " (" + d + " day" + (d === 1 ? "" : "s") + ")", at:e };
+  if(!e) return { g:"nodate", why:"No expiration date", at:"" };
+  return { g:"good", why:"Good to " + licD(e), at:e };
+}
+async function licLoad(){
+  try {
+    const [a, b, c] = await Promise.all([
+      sb.from("hub_licenses").select("id,code,kind,kind_other,lic_no,expires,paid,step,step_on,follow_up").eq("off", false).limit(3000),
+      sb.rpc("lic_psu_homes"),
+      sb.from("hub_license_notes").select("code,license_id,note,src,by_name,at").eq("off", false).order("at", { ascending:false }).limit(2000)]);
+    if(!a || a.error || !(a.data || []).length) return null;
+    const jobs = (b && !b.error && Array.isArray(b.data)) ? b.data : [], notes = (c && !c.error && c.data) || [];
+    const recs = a.data.map(r => Object.assign(r, { c:licCls(r, jobs), kname:r.kind === "other" ? (r.kind_other || "Other license") : LIC_KIND[r.kind] || "Other" }));
+    const today = recs.filter(r => r.c.g === "today").sort((x, y) => LIC_ORD.indexOf(x.c.sh) - LIC_ORD.indexOf(y.c.sh) || x.code.localeCompare(y.code, undefined, { numeric:true }) || LIC_KORD.indexOf(x.kind) - LIC_KORD.indexOf(y.kind));
+    return { recs, jobs, notes, today, renew:recs.filter(r => r.c.g === "renew").length };
+  } catch(e){ return null; }
+}
+function licItem(L){
+  const n = L.today.length, cnt = {}; L.today.forEach(r => cnt[r.c.sh] = (cnt[r.c.sh] || 0) + 1);
+  const nh = new Set(L.today.map(r => r.code)).size;
+  return { grp:"Licensing heads-up", key:"lich:week", title:"Licensing heads-up · " + nh + " home" + (nh === 1 ? " needs" : "s need") + " something" + (n > nh ? " (" + n + " licenses)" : ""), lich:true,
+    lines:L.today.map(r => r.code + " · " + r.kname + " · " + r.c.why), link:"#/licensing",
+    lichSum:Object.entries(cnt).sort((x, y) => LIC_ORD.indexOf(x[0]) - LIC_ORD.indexOf(y[0])).map(([k, v]) => v + " " + k).join(" · ") + (L.renew ? " · " + L.renew + " renewing in 60 days" : ""),
+    src:"Licensing ▸ Licensing work, the \"Do today\" list (the hub's license records, read when this page opened)" };
+}
 const OR_BLOCKS = [
   { t:"Property Set Up", min:20, kinds:["psu", "new"] },
+  { t:"Licensing heads-up", min:3, kinds:["lich"] },   // Jeff 2026-11-24
   { t:"Owner problems", min:10, kinds:["big", "off", "ofb"] },
   { t:"Homes behind their comps", min:10, kinds:["behind"] },
   { t:"Owners coming to town", min:5, kinds:["ownerstays"] },
   { t:"Homes for sale", min:5, kinds:["sale"] }];
-const OR_ALWAYS = new Set(["ownerstays", "ofb", "off"]);   // weekly list, follow-ups that are due, homes leaving us: always talked about
+const OR_ALWAYS = new Set(["ownerstays", "ofb", "off", "lich"]);   // weekly list, follow-ups that are due, homes leaving us: always talked about
 const orHash = s => { let h = 5381; for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
 /* a topic's fingerprint: its facts, minus "(48 days)" style counters that change every day */
 const orSig = it => { const z = (it.sale && it.sale.zillow) || {};
@@ -417,6 +476,9 @@ const ORCSS = `
 .orpage .mtools{gap:5px} .orpage .mtools .btn{padding:4px 9px;font-size:12.5px;min-height:0} .orpage .mtools input[type=date]{padding:3px 6px;font-size:12.5px;height:auto;min-height:0}
 .orpage .mtiles{display:none} .orpage .mprog{margin-top:0} .orpage .mbar{margin:6px 0 4px} .orpage .mbar #mq{max-width:200px;padding:5px 9px;height:auto;min-height:0}
 .orpage .mft{padding:4px 9px} .orpage .orsum{margin:2px 0 4px;font-size:13px} .orpage .orhd:first-of-type{margin-top:10px}
+.lichb .lichr{padding:7px 0;border-top:1px solid #efefea;font-size:13.5px} .lichb .lichr:first-of-type{border-top:0} .mtg .mbox.lichb.hot{border-left:4px solid #d97706}
+.lichr .lichw{margin-top:1px} .lichr.hot .lichw{color:#b42318;font-weight:600} .lichr small{display:block;margin-top:2px;white-space:pre-wrap;overflow-wrap:anywhere}
+.lichr .ortag{margin-left:4px} .lichsum{font-size:12.5px;margin:0 0 6px}
 @media print{ .orcb,.orrb,.ornote,.orhall{display:none!important} .orc{break-inside:avoid;box-shadow:none} .orfold{display:none} }`;
 let orCssDone = false;
 const orCss = () => { if(orCssDone) return; orCssDone = true; const s = document.createElement("style"); s.textContent = ORCSS; document.head.appendChild(s); };
@@ -457,6 +519,35 @@ function render(v, key, data, ppl){
     return !q || [it.title, it.grp, (it.lines || []).join(" "), it.ask].join(" ").toLowerCase().includes(q); });
   const fbtn = (k, l, n) => `<button class="mft${MX.filt === k ? " on" : ""}" data-filt="${k}">${l} <span>${n}</span></button>`;
 ﻿  /* ---------- Owner Relations layout (Jeff 2026-11-16; see OR_BLOCKS above) ---------- */
+  /* licensing for a topic's home (Jeff 2026-11-24): Property Set Up / leaving = its Launch Pad job's homes, else the home code in the title */
+  const LIC = key === "meet_or" ? (data.lic || null) : null;
+  const licRecsFor = it => { if(!LIC || it.lich) return []; let codes = [];
+    if(isPsu(it)){ const j = (LIC.jobs || []).find(x => String(x.job) === String(it.key).split(":")[1]); codes = j ? ((j.codes || []).length ? j.codes : [j.code]) : [psuInfo(it).home]; }
+    else { const h = homeOf(it) || (kindOf(it) === "sale" ? String(it.title || "") : ""); if(h) codes = [h]; }
+    const cs = new Set(codes.filter(Boolean).map(licCmp)); return LIC.recs.filter(r => cs.has(licCmp(r.code))); };
+  const licTag = it => { const rs = licRecsFor(it).filter(r => r.c.g === "today"); return rs.length ? "📄 License: " + rs[0].c.sh + (rs.length > 1 ? " +" + (rs.length - 1) : "") : ""; };
+  const licNote = r => (LIC.notes || []).find(n => n.code === r.code && (!n.license_id || n.license_id === r.id));
+  const licRow = (r, tag) => { const n = licNote(r), hot = r.c.g === "today", ps = tag ? licJobs(LIC, r.code)[0] : null;
+    return `<div class="lichr${hot ? " hot" : ""}"><div><b>${esc(r.code)}</b><span class="muted"> · ${esc(r.kname)}${r.lic_no ? " · # " + esc(r.lic_no) : ""}</span>${ps ? `<span class="ortag ${ps.kind === "sale" ? "sale" : ps.kind === "off" ? "due" : "new"}">${esc(LIC_PSU[ps.kind] || "In Property Set Up")}</span>` : ""}</div>
+      <div class="lichw">${hot ? "⚠️ " : ""}${esc(r.c.why)}</div>${n ? `<small class="muted">💬 ${esc(n.src === "import" ? "Sheet note" : String(n.by_name || "Note").split(" ")[0] + " · " + licD(String(n.at).slice(0, 10)))}: ${esc(short(String(n.note || "").replace(/^On the .*? sheet: /, ""), 240))}</small>` : ""}</div>`; };
+  function licBox(it, onlyToday){
+    try {
+      if(!LIC || it.lich) return "";
+      let rs = licRecsFor(it); const hot = rs.filter(r => r.c.g === "today");
+      if(onlyToday && !hot.length) return "";
+      if(!rs.length){ if(!isPsu(it) || kindOf(it) === "off") return "";
+        return `<div class="mbox lichb"><b>📄 Licensing</b><p class="muted" style="margin:4px 0 0;font-size:13px">No license on file for ${esc(psuInfo(it).home)} yet.</p><div class="macts"><a class="btn small" href="#/licensing">📄 Open the Licenses page</a></div></div>`; }
+      rs = rs.slice().sort((a, c) => (c.c.g === "today") - (a.c.g === "today") || LIC_KORD.indexOf(a.kind) - LIC_KORD.indexOf(c.kind));
+      return `<div class="mbox lichb${hot.length ? " hot" : ""}"><b>📄 Licensing${hot.length ? " · heads-up" : ""}</b>${rs.map(r => licRow(r)).join("")}<div class="macts"><a class="btn small" href="#/licensing">📄 Open the Licenses page</a></div></div>`;
+    } catch(e){ return ""; }
+  }
+  function licList(){
+    try {
+      if(!LIC) return "";
+      return `<p class="muted lichsum">From Licensing ▸ Licensing work, the "Do today" list. A heads-up for owner talk: for sale, leaving, expired and failed inspections are the ones an owner may need to hear about.${LIC.renew ? " " + LIC.renew + " more renew in the next 60 days." : ""}</p>
+        <div class="mbox lichb">${LIC.today.map(r => licRow(r, true)).join("")}</div>`;
+    } catch(e){ return ""; }
+  }
   let orNum = 6;
   const orPrep = () => ((data.or || {}).prep || {});
   const dshort2 = d => d ? new Date(String(d).slice(0, 10) + "T12:00").toLocaleDateString(undefined, { month:"short", day:"numeric" }) : "";
@@ -465,6 +556,7 @@ function render(v, key, data, ppl){
     const k = kindOf(it), p = orPrep()[it.key], st = stItem(it), tags = [], tk = open.filter(t => t.item_key === it.key);
     const prevDay = OR.prev_day || past[0] || null, since = prevDay || addDays(day, -7), until = addDays(day, 7);
     if(p && p.mark === "must") tags.push(["must", "★ Must talk"]);
+    if(/^(psu|off)$/.test(k)){ const lt = licTag(it); if(lt) tags.push(["due", lt]); }   // licensing heads-up (Jeff 2026-11-24)
     if(/^(waiting|scheduled)$/.test(st)) tags.push(["wait", st === "waiting" ? "⏳ Waiting on owner" : "🗓 Scheduled"]);
     if(tk.some(t => t.due && t.due <= day)) tags.push(["due", "☐ Task due"]);
     else if(tk.some(t => t.created_at && String(t.created_at).slice(0, 10) > since)) tags.push(["chg", "☐ New task"]);
@@ -506,13 +598,14 @@ function render(v, key, data, ppl){
     const P = isPsu(it) ? psuInfo(it) : null, tags = [...W.tags];
     const nh = P && items.find(x => kindOf(x) === "new" && homeOf(x) === P.home);
     if(nh){ const m0 = ((nh.lines || [])[0] || "").match(/\((\d+) days\)/); tags.push(["new", "🆕 New home" + (m0 ? " · " + m0[1] + " days" : "")]); }
+    const lt = licTag(it); if(lt && !tags.some(t => t[1] === lt)) tags.splice(tags[0] && tags[0][0] === "must" ? 1 : 0, 0, ["due", lt]);   // licensing heads-up (Jeff 2026-11-24)
     return tags;
   }
   function orLine(it, W){
     const k = kindOf(it), st = stItem(it), tk = open.filter(t => t.item_key === it.key), P = isPsu(it) ? psuInfo(it) : null, S = k === "sale" ? saleOf(it) : null;
     const own = P ? P.owner : ownerOf(it), title = P ? P.home : S ? S.home : it.title, pp = orPrep()[it.key];
-    const ic = P ? psuIcon(it) : S ? "🏷️" : { behind:"📉", big:"🛠", ofb:"📞", ownerstays:"🧳", new:"🆕" }[k] || "•";
-    const bg = W.must ? "#c2410c" : P ? psuColor(P.pct) : S ? (S.hot ? "#c2410c" : "#3c5f12") : /^(waiting|scheduled)$/.test(st) ? "#c98a16" : "#5b6b84";
+    const ic = P ? psuIcon(it) : S ? "🏷️" : { behind:"📉", big:"🛠", ofb:"📞", ownerstays:"🧳", new:"🆕", lich:"📄" }[k] || "•";
+    const bg = W.must ? "#c2410c" : P ? psuColor(P.pct) : S ? (S.hot ? "#c2410c" : "#3c5f12") : k === "lich" ? "#b45309" : /^(waiting|scheduled)$/.test(st) ? "#c98a16" : "#5b6b84";
     const tags = orTags(it, W).slice(0, 2).map(([c, l]) => `<span class="ortag ${c}">${esc(l)}</span>`).join("");
     const nt = tk.slice().sort((a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999")))[0];
     const ln = (it.lines || []).find(l => /^Next: /.test(l || "")), fact = (it.lines || []).filter(l => l && !/^Owner: /.test(l) && !/^Next: /.test(l))[0] || "";
@@ -520,7 +613,7 @@ function render(v, key, data, ppl){
       : nt ? "👉 " + esc(short(nt.text, 110)) + `<span class="muted"> · ${esc(nt.who || "No one yet")}${nt.due ? " · " + esc(fmt(nt.due)) : ""}</span>`
       : P ? (P.next[0] ? "👉 " + esc(short(P.next[0], 120)) : esc(P.kind))
       : S ? esc([S.listed, S.mls ? "MLS # " + S.mls : "", S.agent || S.broker || ""].filter(Boolean).join(" · "))
-      : ln ? "👉 " + esc(short(ln.slice(6), 120)) : esc(short(fact, 130));
+      : it.lichSum ? esc(it.lichSum) : ln ? "👉 " + esc(short(ln.slice(6), 120)) : esc(short(fact, 130));
     const right = P ? `<b>${P.pct}%</b>` : S && S.price ? `<span class="mprice">${esc(S.price)}</span>` : "";
     return `<div class="mpsur orl${W.must ? " must" : ""}" data-open="${esc(it.key)}" tabindex="0" role="button"><i style="background:${bg}">${ic}</i>
       <div class="mpsum"><div class="mpsut"><span class="orlt"><b>${esc(title)}</b>${own ? `<span class="muted"> · ${esc(own)}</span>` : ""}${st ? " " + pill(st) : ""}${tags}</span>
@@ -568,7 +661,7 @@ function render(v, key, data, ppl){
   function orRow(it, W, mode){
     const P = isPsu(it) ? psuInfo(it) : null, S = kindOf(it) === "sale" ? saleOf(it) : null, pp = orPrep()[it.key];
     const t = P ? P.home + (P.owner ? " · " + P.owner : "") : it.title + (ownerOf(it) ? " · " + ownerOf(it) : "");
-    const sub = P ? P.pct + "% · Next: " + (P.next[0] || "-") : S ? [S.price || "Not on Zillow", S.listed].filter(Boolean).join(" · ") : (it.lines || []).filter(l => l && !/^Owner: /.test(l))[0] || "";
+    const sub = P ? P.pct + "% · Next: " + (P.next[0] || "-") : S ? [S.price || "Not on Zillow", S.listed].filter(Boolean).join(" · ") : it.lichSum || (it.lines || []).filter(l => l && !/^Owner: /.test(l))[0] || "";
     const tg = mode === "prep" ? (W.tags.length ? W.tags.map(([c, l]) => `<span class="ortag ${c}">${esc(l)}</span>`).join(" ") : `<span class="muted" style="font-size:12px">Nothing new</span>`) : "";
     const btns = mode === "skip" ? `<button class="btn small" data-prep="none" data-pk="${esc(it.key)}">Undo skip</button>`
       : `<button class="btn small orpb${W.must ? " on" : ""}" data-prep="must" data-pk="${esc(it.key)}">★ Must talk</button>` +
@@ -722,6 +815,7 @@ function render(v, key, data, ppl){
           <small class="muted">${esc([S.broker ? "Brokerage: " + S.broker : "", S.z.status || "", S.x.job ? "Job: " + S.x.job : ""].filter(Boolean).join(" · "))}</small>
           ${S.x.setup ? `<div style="margin-top:8px;font-size:13px">Launch Pad sale checklist: <b>${S.x.setup.pct}%</b>${S.x.setup.next ? " · next: " + esc(S.x.setup.next) : ""}</div>` : ""}
           <div class="macts">${S.link ? `<a class="btn small primary" href="${esc(S.link)}" target="_blank" rel="noopener">🏠 Open on Zillow ↗</a>` : ""}${S.x.setup ? `<a class="btn small" href="#/property_setup">🚀 Launch Pad</a>` : ""}</div></div>
+        ${licBox(it)}
         <div class="mbox"><b>Listing info</b><p class="muted" style="font-size:12px;margin:0 0 6px">Zillow doesn't share the MLS number or agent, so type them once here.${I.updated_by ? " Last saved by " + esc(I.updated_by) + "." : ""}</p>
           <div class="msale"><label>MLS #<input id="msm" value="${esc(I.mls || "")}"></label><label>Listing agent<input id="msa" value="${esc(I.agent || "")}" placeholder="${esc(S.broker || "")}"></label>
           <label>Agent phone<input id="msp" value="${esc(I.agent_phone || "")}"></label><label>Agent email<input id="mse" value="${esc(I.agent_email || "")}"></label></div>
@@ -745,6 +839,7 @@ function render(v, key, data, ppl){
           <small class="muted">${P.done != null ? P.done + " of " + P.total + " steps done" : ""}</small>
           ${P.next.length ? `<div style="margin-top:8px"><b style="font-size:13px">Next up</b><ul class="mlines">${P.next.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>` : ""}</div>
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Ask everyone</small>${esc(it.ask)}</div></div>` : ""}
+        ${licBox(it)}
         <div class="mbox mpsunb"><b>📝 Launch Pad meeting notes</b>
           ${lgE.length ? lgE.map(e => `<div class="mfn" style="margin-top:6px"><b>${esc(fmt(e.day))}</b><span class="muted"> · ${esc(e.src || e.by || "")}</span><div style="white-space:pre-wrap;font-size:13.5px">${esc(e.text)}</div></div>`).join("") : `<p class="muted" style="font-size:13px;margin:6px 0 0">No earlier meeting notes for this home yet.</p>`}
           ${tn.length ? `<div style="margin-top:10px;font-size:13px"><b>Today</b></div>` : ""}${feedHtml(tn, it.key)}
@@ -754,7 +849,7 @@ function render(v, key, data, ppl){
         <div class="macts"><a class="btn small primary" href="#/property_setup">🚀 Open in Property Set Up</a></div>
         <p class="msrc">Source: ${esc(it.src || "")}</p>`;
     } else if(MX.tab === "ov"){
-      b = `${(it.lines || []).filter(Boolean).length ? `<ul class="mlines">${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
+      b = `${it.lich ? licList() : (it.lines || []).filter(Boolean).length ? `<ul class="mlines">${it.lines.filter(Boolean).map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}${licBox(it, true)}
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Decide in the meeting</small>${esc(it.ask)}</div></div>` : ""}
         <p class="msrc">Source: ${esc(it.src || "")}</p>
         ${it.own ? `<div class="macts" style="margin-top:0"><button class="btn small" id="mtoff">🗑 Remove this topic</button></div>` : ""}
