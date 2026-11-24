@@ -336,12 +336,14 @@ const FL = { name:"Name", phone:"Phone", email:"Email", mail_addr:"Mailing addre
   est_yearly:"Est. / yr", lost_why:"Why not a fit", off:"Removed" };
 const fv = (k, v) => v == null || v === "" ? "—" : k === "stage" ? ((S.st[v] || {}).label || v) : k === "assigned_to" ? (S.pn[v] || "someone") : k === "source" ? (SRCL[v] || v)
   : k === "kind" ? (KINDL[v] || v) : k === "next_on" ? fmtD(v) : k === "est_yearly" ? money(v) : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
+// Notes show web links (Freshdesk tickets, WP Admin) as links; everything else stays plain text.
+function linky(s){ return esc(s).replace(/https:\/\/[^\s<"]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`); }
 async function notesAndHistory(id){
   const [n, h] = await Promise.all([
     sb.from("hub_owner_lead_notes").select("kind,note,by_name,at").eq("lead_id", id).order("at", { ascending:false }),
     sb.from("hub_owner_lead_log").select("op,old_row,new_row,by_name,at").eq("lead_id", id).order("at", { ascending:false }).limit(100)]);
   const nl = $("#nl"), hl = $("#hl"); if(!nl) return;
-  nl.innerHTML = (n.data || []).map(x => `<li class="${x.kind === "auto" ? "auto" : ""}">${NKI[x.kind] || ""} ${esc(x.note)}<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`).join("") || `<li class="muted">No notes yet.</li>`;
+  nl.innerHTML = (n.data || []).map(x => `<li class="${x.kind === "auto" ? "auto" : ""}">${NKI[x.kind] || ""} ${linky(x.note)}<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`).join("") || `<li class="muted">No notes yet.</li>`;
   hl.innerHTML = (h.data || []).map(x => {
     if(x.op === "insert") return `<li>Added<small>${esc(x.by_name || "")} · ${esc(fmtDT(x.at))}</small></li>`;
     const ch = Object.keys(FL).filter(k => JSON.stringify(x.old_row[k]) !== JSON.stringify(x.new_row[k])).map(k => `${FL[k]}: ${fv(k, x.old_row[k])} → ${fv(k, x.new_row[k])}`);
