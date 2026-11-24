@@ -327,7 +327,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="meetings.js?v=20261118cb"></script>
 <script src="owner_notes.js?v=20261118cb"></script>
 <script src="calendar.js?v=20261123bq"></script>
-<script src="checks.js"></script>
+<script src="checks.js?v=20261124bell"></script>
 <script src="banners.js?v=20261113err"></script>
 <script src="staffing.js?v=20261123bq"></script>
 <script src="perks.js?v=20261118cb"></script>
@@ -857,6 +857,7 @@ async function bellLoad(force){
     if(na.length > 3) it.push({ ic:"📅", t:`${na.length - 3} more answer${na.length === 4 ? "" : "s"} on your meetings`, s:"Tap to mark read", k:"bell_meet", mr:na.slice(3).map(a => a.rid), quiet:true }); }
   if(window.meetTasksBell){ const mt = await window.meetTasksBell().catch(() => []); it.push(...mt); }
   if(window.OwnerNotes){ const on = await window.OwnerNotes.bell().catch(() => []); it.push(...on); }   // owner_notes.js (build list jg2)   // meetings.js (2026-11-10)
+  if(window.checksBellItems){ const ck = await window.checksBellItems().catch(() => []); it.push(...ck); }   // checks.js: Daily checks needing attention (was a banner until 2026-11-24)
   if(window.otBellItems){ const ot = await window.otBellItems().catch(() => []); it.push(...ot); }   // staffing.js: close to 40 h (was a banner until 2026-11-06)
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
@@ -864,6 +865,10 @@ async function bellLoad(force){
   // Folio reports waiting (2026-11-02): only reviewers read other people's rows (RLS), so this is 0 for everyone else
   if(DESKS.some(x => x.key === "res_report" || x.key === "tools_report")){ const fr = await q(sb.from("res_folio_reports").select("id", { count:"exact", head:true }).eq("status", "new").neq("reporter_name", ME.name || ""));
     if(fr.count) it.push({ ic:"🚩", t:`${fr.count} new folio report${fr.count === 1 ? "" : "s"}`, s:"Someone flagged a folio for a manager", href:"#/res_report", k:"bell_folio" }); }
+  // Calls upload (2026-11-24, Brandon): Janae + Pyper also get yesterday's Track calls upload in the bell (banner stays for admins + office managers)
+  if(/^(janae|pyper)/i.test(ME.name || "")){ const cu = await q(sb.rpc("calls_upload_due")), j = cu.data;
+    if(j && j.due){ const dd = new Date(j.day + "T12:00").toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" });
+      it.push({ ic:"📞", t: j.uploaded && j.missing ? `Yesterday's calls (${dd}) are incomplete: ${j.missing} missing` : `Upload yesterday's calls (${dd}) from Track`, s:"So Call review has them", href:"#/call_review/upload" }); } }
   // Set rates (2026-11-08): what the morning re-price changed + old comp data, per test home (rates_set_homes.auto_summary)
   if(DESKS.some(x => x.key === "rates_set")){ let seenR = []; try { seenR = JSON.parse(localStorage.getItem("mm_seen_rates") || "[]"); } catch(e){}
     const rh = await q(sb.from("rates_set_homes").select("code, auto_summary").eq("on_test", true)), dd = d => new Date(d + "T12:00").toLocaleDateString(undefined, { month:"short", day:"numeric" });
@@ -883,7 +888,7 @@ async function bellLoad(force){
   if($("#bellpop") && $("#bellpop").classList.contains("on")) bellDraw();
 }
 // Bunch the bell (2026-11-10, Brandon: "when theres multiple alerts from one desk … have it say so"): 2+ items of the same kind = one row
-const BELL_GL = { bell_rates:"Set rates", bell_meet:"Meetings", bell_notes:"Property notes", bell_timeoff:"Time off & shifts", bell_folio:"Folio reports" };
+const BELL_GL = { bell_rates:"Set rates", bell_meet:"Meetings", bell_notes:"Property notes", bell_timeoff:"Time off & shifts", bell_folio:"Folio reports", bell_checks:"Daily checks" };
 function bellGroup(list){
   const by = {}, out = [];
   list.forEach(x => { const g = x.k || x.grp; if(!g){ out.push(x); return; }
