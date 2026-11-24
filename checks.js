@@ -69,14 +69,16 @@ window.checksView = async function(v){
   const [c, r] = await Promise.all([sb.from("hub_checks").select("*").eq("off", false).order("sort"), sb.from("hub_check_runs").select("check_key,day,status,summary,items,by_name,at").gte("day", since).order("at", { ascending:false }).limit(500)]);
   if(c.error) return $("#chkl").innerHTML = `<div class="card"><p class="muted">Couldn't load: ${esc((window.niceErr ? niceErr(c.error) : c.error.message))}</p></div>`;
   if(!(c.data || []).length) return $("#chkl").innerHTML = `<div class="card"><p class="muted">No checks for you yet.</p></div>`;
+  const al = {}; ((await sb.rpc("hub_checks_alerts")).data || []).forEach(a => al[a.key] = a);
   const runs = {}; (r.data || []).forEach(x => { const k = x.check_key + "|" + x.day; if(!runs[k]) runs[k] = x; });
   const byCheck = k => Object.values(runs).filter(x => x.check_key === k).sort((a, b) => b.day.localeCompare(a.day));
   $("#chkl").innerHTML = c.data.map(x => { const rs = byCheck(x.key), last = rs[0];
     return `<div class="card"><div class="row" style="border:0;padding-top:0"><div class="ttl"><b style="font-size:16px">${esc(x.title)}</b>
         <span class="muted" style="font-size:13px">${esc(when(x))} · ${x.kind === "auto" ? "automatic" : "done by a person"}${x.source ? " · source: " + esc(x.source) : ""}</span></div>
-        ${last ? pill(last) : `<span class="pill">no runs yet</span>`}${x.link ? `<a class="btn small" href="${esc(x.link)}" target="_blank" rel="noopener">Open</a>` : ""}</div>
+        ${last ? pill(last) : `<span class="pill">no runs yet</span>`}${al[x.key] ? `<button class="btn small primary" data-done="${esc(x.key)}" data-day="${esc(al[x.key].due)}" title="Mark it handled for ${esc(fday(al[x.key].due))}">✓ Handled</button>` : ""}${x.link ? `<a class="btn small" href="${esc(x.link)}" target="_blank" rel="noopener">Open</a>` : ""}</div>
       <p class="muted" style="margin:4px 0 0">${esc(x.how || "")}</p>
       ${rs.map(y => `<div class="row"><div class="ttl"><b>${fday(y.day)}</b><span class="muted" style="font-size:13px">${esc(y.summary || "")}${y.by_name ? " · " + esc(y.by_name) : ""}</span></div>${pill(y)}${itemsTable(y.items)}</div>`).join("")}</div>`; }).join("");
+  $("#chkl").querySelectorAll("[data-done]").forEach(b => b.onclick = () => doneBtn(b, () => { KB.at = 0; checksView(v); if(window.bellLoad) bellLoad(true); }));
 };
 // Track's weekly maintenance: Wednesdays 9–11 pm (Brandon's Outlook "Weekly Track Maintenance"); banner from 4 pm (Brandon 2026-10-29)
 window.trackBanner = function(){
@@ -92,7 +94,7 @@ window.trackBanner = function(){
 // (hub_checks_alerts(): admins + office managers; empty for everyone else). Starts itself after sign-in, re-checks every 5 minutes.
 let KB = { at:0, a:[] };
 function kbDraw(){
-  css(); document.querySelectorAll(".kbanner").forEach(x => x.remove());
+  css(); document.querySelectorAll(".kbanner").forEach(x => x.remove()); return;   // 2026-11-24 (Brandon): a bell notice now, not a banner (window.checksBellItems)
   const a = KB.a, v = document.getElementById("view");
   if(!a.length || !v || !v.parentNode || /^#\/(checks|daily_checks)\b/.test(location.hash)) return;   // the Daily checks page shows it all already
   const one = x => esc(x.title) + ": " + esc(x.summary || (x.status ? x.status : "not done yet (due " + fday(x.due) + ")"));
@@ -100,6 +102,12 @@ function kbDraw(){
   b.innerHTML = `⚠️ Daily checks need attention: ${one(a[0])}${a.length > 1 ? ` (+${a.length - 1} more)` : ""}<a href="#/checks">Open Daily checks →</a>`;
   v.parentNode.insertBefore(b, v);
 }
+// Bell (2026-11-24): reservationists get the checks given to them; managers (Janae, Pyper…) get them all and can mark them handled
+window.checksBellItems = async function(){
+  if(typeof sb === "undefined") return [];
+  if(Date.now() - KB.at > 60e3){ const r = await sb.rpc("hub_checks_alerts"); KB = { at:Date.now(), a: r.error ? [] : (r.data || []) }; }
+  return KB.a.map(x => ({ ic:"⚠️", t:"Daily check: " + x.title, s:(x.summary || (x.status ? x.status : "not done yet (due " + fday(x.due) + ")")).slice(0, 140), href:"#/checks", k:"bell_checks" }));
+};
 window.checksBanner = async function(force){
   if(typeof ME === "undefined" || !ME || typeof sb === "undefined") return;
   if(force || Date.now() - KB.at > 5 * 60e3){ const r = await sb.rpc("hub_checks_alerts"); KB = { at:Date.now(), a: r.error ? [] : (r.data || []) }; }
