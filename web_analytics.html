@@ -124,6 +124,7 @@ async function load(){
       { k:"sessionSourceMedium", t:"Source / medium" }, { k:"sessions", t:"Visits", n:1, f:x => num(x.sessions) }, { k:"activeUsers", t:"Visitors", n:1, f:x => num(x.activeUsers) }, { k:"engagementRate", t:"Engaged", n:1, f:x => pct(x.engagementRate) }])}</div>` +
     `<div class="card"><h3>Homes people looked at</h3><div class="muted">Each home's page on our booking engine. A home many people look at but few book is a pricing or listing question.</div>${table(d.homes || [], [
       { k:"pagePath", t:"Home", f:x => `<a href="${SITE}${esc(x.pagePath)}" target="_blank" rel="noopener">${esc(homeName(x.pagePath))}</a>` }, { k:"screenPageViews", t:"Views", n:1, f:x => num(x.screenPageViews) }, { k:"activeUsers", t:"Visitors", n:1, f:x => num(x.activeUsers) }])}</div>` +
+    `<div class="card" id="phcard"></div>` +
     `<div class="card"><h3>Top pages</h3>${table(d.pages || [], [
       { k:"pageTitle", t:"Page", f:x => `<a href="${SITE}${esc(x.pagePath)}" target="_blank" rel="noopener">${esc(x.pageTitle || x.pagePath)}</a>` }, { k:"screenPageViews", t:"Views", n:1, f:x => num(x.screenPageViews) }, { k:"activeUsers", t:"Visitors", n:1, f:x => num(x.activeUsers) }])}</div>` +
     `<div class="card"><h3>Where visitors are</h3>${table(d.places || [], [
@@ -131,6 +132,45 @@ async function load(){
     `<div class="card"><h3>Devices</h3>${table(d.devices || [], [{ k:"deviceCategory", t:"Device" }, { k:"activeUsers", t:"Visitors", n:1, f:x => num(x.activeUsers) }])}</div>` +
     `<div class="card"><h3>What visitors did</h3><div class="muted">Events Google records on the site, including Ask Patrick's chat events.</div>${table(d.events || [], [{ k:"eventName", t:"Event" }, { k:"eventCount", t:"Times", n:1, f:x => num(x.eventCount) }])}</div>` +
     `<p class="muted">${esc(d.source)}</p>`;
+  R.photos = d.photos; photos();
+}
+
+// Photos guests look at most (website_photo_tracker.js on the website, live 2026-11-24). "Looks" = opened full screen,
+// tapped in the gallery, or tapped on the home page; "in list" = stayed on screen 1.5 s in the gallery list (weaker sign).
+const PIMG = id => `https://img.trackhs.com/320x/https://track-pm.s3.amazonaws.com/moosemanagement/image/${id}`;
+const PFULL = id => `https://img.trackhs.com/1080x/https://track-pm.s3.amazonaws.com/moosemanagement/image/${id}`;
+function photos(){
+  const box = $("#phcard"); if(!box) return;
+  const p = R.photos;
+  const head = `<h3>Photos guests look at most</h3><div class="muted">From the photo tracker on each home's page (live since Nov 24, 2026). Looks = opened full screen or tapped. Pick the most-looked photos for ads and the Dropbox folder.</div>`;
+  if(!Array.isArray(p)){ box.innerHTML = head + `<div class="empty">Photo numbers aren't ready yet${p && p.error ? " (" + esc(p.error) + ")" : ""}. Google can take up to a day after the photo fields were added.</div>`; return; }
+  const by = {};
+  for(const r of p){
+    const home = r["customEvent:home"], id = r["customEvent:photo_id"], how = r["customEvent:how"];
+    if(!home || !id || home === "(not set)" || id === "(not set)") continue;
+    const k = home + "|" + id, o = by[k] || (by[k] = { home, id, num: 0, full: 0, tap: 0, page: 0, list: 0 });
+    const n = parseInt(r["customEvent:photo_num"], 10); if(n && (!o.num || n < o.num)) o.num = n;
+    if(o[how] !== undefined) o[how] += r.eventCount || 0;
+  }
+  const all = Object.values(by).map(o => (o.looks = o.full + o.tap + o.page, o));
+  if(!all.length){ box.innerHTML = head + `<div class="empty">No photo views yet for these dates.</div>`; return; }
+  const homes = [...new Set(all.map(o => o.home))].map(h => ({ h, n: all.filter(o => o.home === h).reduce((s, o) => s + o.looks, 0) })).sort((a, b) => b.n - a.n);
+  if(R.ph && !homes.some(x => x.h === R.ph)) R.ph = "";
+  const list = all.filter(o => !R.ph || o.home === R.ph).sort((a, b) => b.looks - a.looks || b.list - a.list).slice(0, R.ph ? 60 : 24);
+  box.innerHTML = head +
+    `<div class="bar"><select id="phhome"><option value="">All homes (top 24 photos)</option>${homes.map(x => `<option value="${esc(x.h)}"${R.ph === x.h ? " selected" : ""}>${esc(homeName("/booking-engine/unit/" + x.h + "/"))} · ${num(x.n)} looks</option>`).join("")}</select>
+      <button class="btn sm" id="phcsv">Download CSV</button></div>` +
+    `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">${list.map((o, i) => `<a href="${PFULL(o.id)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)">
+      <img src="${PIMG(o.id)}" alt="" loading="lazy" style="display:block;width:100%;aspect-ratio:3/2;object-fit:cover;background:var(--line)">
+      <div style="padding:6px 8px;font-size:12.5px"><b>#${i + 1}</b> · ${num(o.looks)} looks${o.list ? ` · ${num(o.list)} in list` : ""}
+      <div class="muted" style="font-size:11.5px">${R.ph ? "" : esc(homeName("/booking-engine/unit/" + o.home + "/")) + " · "}${o.num ? "photo " + o.num : ""} · ${num(o.full)} full screen</div></div></a>`).join("")}</div>`;
+  $("#phhome").onchange = e => { R.ph = e.target.value; photos(); };
+  $("#phcsv").onclick = () => {
+    const rows = [["home", "photo_number", "looks", "full_screen", "tapped_in_gallery", "tapped_on_page", "seen_in_list", "photo_link"]]
+      .concat(all.sort((a, b) => a.home.localeCompare(b.home) || b.looks - a.looks).map(o => [o.home, o.num || "", o.looks, o.full, o.tap, o.page, o.list, PFULL(o.id)]));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" }));
+    a.download = "website_photo_looks.csv"; a.click();
+  };
 }
 
 (async () => {
