@@ -521,7 +521,7 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
   </div>
   <details class="card" id="hotCard"><summary style="cursor:pointer"><b>🏨 Hotel rates near our homes</b> <span id="hotSum" class="small muted"></span> <span class="small" style="color:var(--teal2)">click to open</span></summary><div id="hotBody" style="margin-top:10px"></div></details>
   <section class="card" id="hotFull"><div class="ovhead"><div><h2>Hotels</h2><div class="sub">Every hotel price we have pulled, for the check-in dates you pick</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="hfCtl"></div><div id="hfOut"><p class="small muted">Loading…</p></div></section>
-  <section class="card" id="pacing"><div class="ovhead"><div><h2>Market pacing</h2><div class="sub">Booked share and nightly rate by week for one neighborhood + size: its comps vs our homes, today vs 2 weeks ago, plus Key Data's neighborhood market and last year</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="pcCtl"></div><div id="pcOut"><p class="small muted">Loading…</p></div></section>
+  <section class="card" id="pacing"><div class="ovhead"><div><h2>Market pacing</h2><div class="sub">Booked share and nightly rate by week for one neighborhood + size: its comps vs our homes, today vs 2 weeks ago, plus Key Data's neighborhood market and last year</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="pcCtl"></div><div id="pcOut"><p class="small muted">Loading…</p></div><div id="pcMkt"></div></section>
   <section class="card" id="scoreboard"><div class="ovhead"><div><h2>Scoreboard: our pricing vs Beyond</h2><div class="sub">Homes on our own pricing (Set rates) vs homes Beyond still prices: bookings per home per week since each home went live, and how full the next 90 days are</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="scOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="compsets"><div class="ovhead"><div><h2>Comp sets</h2><div class="sub">Pick one of our homes to see the comps we price it from: size, sleeps, what they booked at, and which ones the morning re-price uses</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="csCtl"></div><div id="csOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="managers"><div class="ovhead"><div><h2>Competitor managers</h2><div class="sub">Every management company in the Park City area: how many homes, sizes, how booked, nightly rates, and the homes they added or lost</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="mgOut"><p class="small muted">Loading…</p></div></section>
@@ -5165,7 +5165,28 @@ function scDraw() {
   document.querySelectorAll("#scOut [data-scf]").forEach(b => b.onclick = () => { SC.f = SC.f === b.dataset.scf || b.dataset.scf === "all" ? "" : b.dataset.scf; scDraw(); });
 }
 
+// Brandon 2026-11-24: PriceLabs market index next to Key Data's (rates_market_compare). PriceLabs only sends a Utah-wide index and
+// counts occupancy differently, so the useful read is the direction each month (both up / both down) and the size of the moves.
+async function pcMarket() {
+  const el = $("pcMkt"); if (!el || el.dataset.done) return; el.dataset.done = 1;
+  const r = await sb.rpc("rates_market_compare"); if (r.error || !r.data) { el.innerHTML = ""; return; }
+  const ms = (r.data.months || []).filter(m => m.pl || (m.kd || {})["Park City Area"]);
+  const pc = v => v == null ? '<span class="csna">N/A</span>' : Math.round(v * 100) + "%", $m = v => v == null ? '<span class="csna">N/A</span>' : "$" + Math.round(v).toLocaleString();
+  const mo = k => new Date(k + "T12:00").toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+  let prev = null;
+  const rows = ms.map(m => { const p = m.pl || {}, k = (m.kd || {})["Park City Area"] || {}, s = (m.kd || {})["Summit - UT"] || {}, w = (m.kd || {})["Wasatch - UT"] || {};
+    let agree = "";
+    if (prev && p.occ != null && prev.p.occ != null && k.occ != null && prev.k.occ != null) {
+      const a = Math.sign(p.occ - prev.p.occ), b = Math.sign(k.occ - prev.k.occ);
+      agree = a === b ? '<span class="pcup">same way</span>' : '<span class="pcdn">opposite</span>'; }
+    prev = { p, k };
+    return `<tr><td>${mo(m.m)}</td><td class="r">${pc(p.occ)}</td><td class="r">${$m(p.adr)}</td><td class="r">${pc(k.occ)}</td><td class="r">${$m(k.adr)}</td><td class="r">${pc(s.occ)}</td><td class="r">${pc(w.occ)}</td><td>${agree}</td></tr>`; }).join("");
+  el.innerHTML = `<div class="pccard"><h3>Market index: PriceLabs vs Key Data</h3>
+    <div style="overflow:auto"><table id="pcTbl"><tr><th>Month</th><th class="r">PriceLabs Utah booked</th><th class="r">PriceLabs Utah rate</th><th class="r">Key Data Park City booked</th><th class="r">Key Data Park City rate</th><th class="r">Summit booked</th><th class="r">Wasatch booked</th><th>Month-to-month</th></tr>${rows}</table></div>
+    <p class="small muted" style="margin:6px 0 0">${pcEsc(r.data.source)} PriceLabs only sends a Utah-wide index today and counts occupancy its own way, so read the direction: "same way" = both sources moved the same way from the month before. Key Data's future months are booked so far.</p></div>`;
+}
 async function loadPacing() {
+  pcMarket();
   if (!PC.from) { const d = pcDefaults(); PC.from = d.from; PC.to = d.to; }
   if (!PC.set) { try { PC.set = localStorage.getItem("mmPacingSet"); } catch (e) {} }
   const sets = (state.sets || []).filter(s => s.active !== false);
