@@ -244,6 +244,7 @@ function calNav(key, title, extra){
 function wireNav(v, key, redraw, reload){
   const cur = curRange(key)[0], again = () => { if(curRange(key)[0] !== cur) reload(); else redraw(); };
   v.querySelectorAll("[data-mv]").forEach(b => b.onclick = () => { const n = +b.dataset.mv, vw = viewOf(key);
+    if(b.closest(".wknav")){ const pg = v.querySelector(".page.cal"); ST.keepTop = pg ? { y: pg.scrollTop, t: Date.now() } : null; }
     if(!n){ ST.sel[key] = today(); ST.month[key] = today().slice(0, 7); }
     else if(vw === "month"){ const d = D((ST.month[key] || (ST.sel[key] || today()).slice(0, 7)) + "-01"); d.setMonth(d.getMonth() + n); ST.month[key] = ymd(d).slice(0, 7); ST.sel[key] = ymd(d); }
     else { ST.sel[key] = addD(ST.sel[key] || today(), n * (vw === "day" ? 1 : vw === "list" ? LISTN : 7)); ST.month[key] = ST.sel[key].slice(0, 7); }
@@ -548,6 +549,7 @@ async function evCal(v, key, fresh){
       ${isOff ? `<div class="cols"><div>${main}${det}</div><div class="side">${whoPanel(ppl, mine, sel, ox, fn)}</div></div>` : main + det}${qaOk ? `<button class="fab" id="qa_fab" aria-label="Add an event">+</button>` : ""}
       <p class="muted" style="font-size:12px">${isOff ? "Everyone on the hub sees the Office calendar. Mark yourself out or working; managers and admins add work events (with who's going) and can mark anyone. Schedules and time off: " + (ox.source || "the Moose Hub") + (ox.at ? " (updated " + new Date(ox.at).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) + ")" : "") + "; set or changed by managers under Staffing ▸ Schedule. Meetings: Calendar ▸ Meetings times; who's in each = everyone the meeting is for." : isMe ? "Only you see your personal events. Click anything to see it, then Edit, Move or Cancel; drag your own events (and office events you manage) to move them; click an empty time to add one. Meetings come from Calendar ▸ Meetings." : ""}</p>
       <div class="modal" id="evm"><div class="card" id="evcard"></div></div></div>`;
+    { const pg = v.querySelector(".page.cal"); if(pg && ST.keepTop && Date.now() - ST.keepTop.t < 8000) pg.scrollTop = ST.keepTop.y; }
     wireNav(v, key, draw, () => evCal(v, key));
     wireGrid(v, canAdd && !isRes ? (d, s) => form(null, { day:d, start:s, kind:isOff ? (boss ? "event" : "working") : "event" }) : null,
       async (id, to) => { if(typeof id === "string" && id[0] === "o") return; if(typeof id === "string"){ const m = hubMeets.find(y => "m" + y.id === id); if(!m) return;
