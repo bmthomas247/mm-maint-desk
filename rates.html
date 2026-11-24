@@ -4841,9 +4841,9 @@ function csDraw() {
       <td>${x.nbhd || x.city ? pcEsc(x.nbhd || x.city) : NA}${x.miles != null ? `<br><small class="${x.miles > 0.2 ? "csbad" : "muted"}" title="miles from the middle of our homes in this set">${x.miles} mi</small>` : ""}</td>
       <td>${x.bedrooms ?? NA}</td><td>${sleepsTxt(x)}</td><td>${x.baths ?? NA}</td>
       <td>${a ? (a.est ? `<span class="csest" title="${pcEsc(a.why)}">~${money(a.v)} <small>est.</small></span>` : money(a.v)) : NA}</td><td>${tt ? (tt.est ? `<span class="csest" title="${pcEsc(tt.why)}">~${money(tt.v)} <small>est.</small></span>` : money(tt.v) + ` <small class="muted">(${tt.n})</small>`) : NA}</td>
-      <td>${ok ? money(x.adr12) : NA}</td><td>${ok && x.occ12 != null ? Math.round(x.occ12 * 100) + "%" : NA}</td>
+      <td>${ok && +x.adr12 > 0 ? money(x.adr12) : NA}</td><td>${ok && +x.adr12 > 0 && x.occ12 != null ? Math.round(x.occ12 * 100) + "%" : NA}</td>
       <td>${x.last_booked ? new Date(x.last_booked + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : NA}</td>
-      <td>${ok && x.rating != null ? x.rating + (x.reviews ? ` <small class="muted">(${x.reviews})</small>` : "") : NA}</td><td class="csact"><div style="display:grid;grid-template-columns:repeat(3,auto);gap:2px;justify-content:end">${act(x)}</div></td></tr>`; }).join("")}
+      <td>${ok && x.rating != null && +x.reviews > 0 ? x.rating + (x.reviews ? ` <small class="muted">(${x.reviews})</small>` : "") : NA}</td><td class="csact"><div style="display:grid;grid-template-columns:repeat(3,auto);gap:2px;justify-content:end">${act(x)}</div></td></tr>`; }).join("")}
     ${(() => {   // Brandon 2026-11-20: totals under the table = averages of the comps shown (empty values left out) + our homes for comparison
       const avg = a => { a = a.filter(v => v != null && !isNaN(v)).map(Number); return a.length ? a.reduce((p, q) => p + q, 0) / a.length : null; };
       const f1 = v => v == null ? NA : (Math.round(v * 10) / 10).toString(), $m = v => v == null ? NA : "$" + Math.round(v).toLocaleString(), pc = v => v == null ? NA : Math.round(v * 100) + "%";
