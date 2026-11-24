@@ -428,6 +428,7 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
   body.printov{background:#fff}.ovc,.ovt{break-inside:avoid;box-shadow:none!important}.ovc{border:1px solid #e3e7df}.ovt{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .srmschip{display:inline-flex;align-items:center;gap:4px;background:#eef5e6;border:1px solid #cfe0bd;border-radius:999px;padding:2px 4px 2px 10px;font-size:12.5px;margin:2px}.srmschip button{border:0;background:transparent;cursor:pointer;font-size:12px;padding:0 4px;min-height:0}
 </style>
+<style id="scoreLook">main.v-scoreboard>*:not(#viewnav):not(#scoreboard){display:none!important}#scoreboard{display:none}main.v-scoreboard #scoreboard{display:block}button.pcchip{font:inherit;font-size:13px}</style>
 </head>
 <body>
 <script>if (window.top !== window) document.body.classList.add("inhub");   // inside the hub: its green banner is the only header (Brandon 2026-10-30)</script>
@@ -521,6 +522,7 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
   <details class="card" id="hotCard"><summary style="cursor:pointer"><b>🏨 Hotel rates near our homes</b> <span id="hotSum" class="small muted"></span> <span class="small" style="color:var(--teal2)">click to open</span></summary><div id="hotBody" style="margin-top:10px"></div></details>
   <section class="card" id="hotFull"><div class="ovhead"><div><h2>Hotels</h2><div class="sub">Every hotel price we have pulled, for the check-in dates you pick</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="hfCtl"></div><div id="hfOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="pacing"><div class="ovhead"><div><h2>Market pacing</h2><div class="sub">Booked share and nightly rate by week for one neighborhood + size: its comps vs our homes, today vs 2 weeks ago, plus Key Data's neighborhood market and last year</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="pcCtl"></div><div id="pcOut"><p class="small muted">Loading…</p></div></section>
+  <section class="card" id="scoreboard"><div class="ovhead"><div><h2>Scoreboard: our pricing vs Beyond</h2><div class="sub">Homes on our own pricing (Set rates) vs homes Beyond still prices: bookings per home per week since each home went live, and how full the next 90 days are</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="scOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="compsets"><div class="ovhead"><div><h2>Comp sets</h2><div class="sub">Pick one of our homes to see the comps we price it from: size, sleeps, what they booked at, and which ones the morning re-price uses</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="csCtl"></div><div id="csOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="managers"><div class="ovhead"><div><h2>Competitor managers</h2><div class="sub">Every management company in the Park City area: how many homes, sizes, how booked, nightly rates, and the homes they added or lost</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="mgOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="memory"><div class="ovhead"><div><h2>Rates memory</h2><div class="sub">The pricing rules in effect, why we set them, every change, and how each week went</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="mmOut"><p class="small muted">Loading…</p></div></section>
@@ -608,7 +610,7 @@ async function boot() {
   document.querySelectorAll("#viewnav .tab").forEach(btn => btn.onclick = () => setView(btn.dataset.v));
   try { const p = new URLSearchParams(location.search), sv = localStorage.getItem("mmView"), pv = p.get("view");
     // Hotels + Reports left the top menu (Brandon 2026-10-30): Hotels = sidebar Rates ▸ Hotels; reports open from the hub's Reports & Analytics.
-    if (pv === "hotels" || pv === "reports" || pv === "rater" || pv === "pulse" || pv === "setrates" || pv === "pacing" || pv === "memory" || pv === "compsets" || pv === "managers") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
+    if (pv === "hotels" || pv === "reports" || pv === "rater" || pv === "pulse" || pv === "setrates" || pv === "pacing" || pv === "memory" || pv === "compsets" || pv === "managers" || pv === "scoreboard") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
     if (pv === "reports" && p.get("rp")) { RP.open = p.get("rp"); RP.openName = rpName(RP.open); }
     const hv = location.hash.slice(1), v = pv || (["findings", "beyond"].includes(hv) ? hv : null) || (sv && document.querySelector(`#viewnav .tab[data-v="${sv}"]`) ? sv : null); if (v && v !== "desk") setView(v); } catch (e) {}
   $("colleenBtn").onclick = buildColleenSheet; $("landBtn").onclick = didItLand; $("matchBtn").onclick = reviewMatches;
@@ -3182,7 +3184,7 @@ state.mk = { events: [], weather: [], loaded: false };
 // show rooms (fewer = tighter market). It does NOT show hotels' booked nights.
 // ===== Views: Desk | Market pulse | Hotels (Brandon 2026-10-20) =====
 function setView(v) {
-  const m = $("app"); m.classList.remove("v-pulse", "v-hotels", "v-rater", "v-reports", "v-beyond", "v-findings", "v-setrates", "v-pacing", "v-memory", "v-compsets", "v-managers"); if (v !== "desk") m.classList.add("v-" + v);
+  const m = $("app"); m.classList.remove("v-pulse", "v-hotels", "v-rater", "v-reports", "v-beyond", "v-findings", "v-setrates", "v-pacing", "v-memory", "v-compsets", "v-managers", "v-scoreboard"); if (v !== "desk") m.classList.add("v-" + v);
   document.querySelectorAll("#viewnav .tab").forEach(b => b.classList.toggle("on", b.dataset.v === v));
   // Local market card on Market pulse too (Brandon 2026-11-08): the same card moves above the pulse and back for the Desk.
   { const mk = $("market"); if (mk) { if (!window._mkHome) { window._mkHome = document.createComment("market-home"); mk.before(window._mkHome); }
@@ -3195,6 +3197,7 @@ function setView(v) {
   if (v === "memory") loadMemory();
   if (v === "managers") loadManagers();
   if (v === "compsets") loadCompSets();
+  if (v === "scoreboard") loadScore();
   if (v === "reports" && !RP.busy) renderReports();
   if (v === "beyond") { kolRender(); ovbRender(); btRender(); }
   if (v === "hotels") renderHotFull(); else if ($("hotCard").open) renderHotels();
@@ -4873,6 +4876,82 @@ function pcDefaults() {
   const ws = new Date(wy, 10, 20, 12), we = new Date(wy + 1, 3, 18, 12);
   return { from: iso(ws < t ? t : ws), to: iso(we > t ? we : new Date(t.getTime() + 150 * 864e5)) };
 }
+// ===== Rates ▸ Scoreboard (Jeff 2026-11-23): our own pricing vs Beyond, for the January "take over pricing?" call. Data = rates_scoreboard() (hub_rates_scoreboard.sql). =====
+const SC = { data: null, f: "" };
+async function loadScore() {
+  $("scOut").innerHTML = `<p class="small muted">Loading…</p>`;
+  const r = await sb.rpc("rates_scoreboard");
+  if (r.error) { $("scOut").innerHTML = `<p class="small muted">Couldn't load: ${pcEsc(r.error.message)}</p>`; return; }
+  SC.data = r.data; scDraw();
+}
+function scDraw() {
+  const D = SC.data || {}, S = D.sides || {}, o = S.ours || {}, m = S.beyond_matched || {}, a = S.beyond_all || {};
+  const n2 = v => v == null ? "–" : Number(v).toFixed(2), pc = v => v == null ? "–" : Number(v).toFixed(1) + "%";
+  const $$ = v => v == null ? "–" : "$" + Math.round(Number(v)).toLocaleString("en-US");
+  const dt = s => s ? new Date(String(s).slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "–";
+  const chg = (s, b) => s == null || b == null ? "–" : (s - b >= 0 ? "+" : "") + (s - b).toFixed(2);
+  const vs = (x, y, money) => { if (x == null || y == null) return ""; const d = Number(x) - Number(y); if (Math.abs(d) < (money ? 1 : 0.005)) return "even";
+    return d > 0 ? "ours ahead" : "ours behind"; };
+  const src = "Source: Track bookings (our_bookings, read-only copy" + (D.synced ? ", updated " + new Date(D.synced).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "") +
+    ") · who priced each home: the hub's daily copy of Track prices (" + dt(D.priced_by_day) + ") · price sends to Track: Set rates.";
+  const kt = (cl, v, l, d) => `<div class="ovt ${cl}" title="${pcEsc(src)}"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ""}</div>`;
+  const tiles = `<div class="ovtiles">
+    ${kt("o1", n2(o.per_week) + " vs " + n2(m.per_week), "Bookings per home per week: ours vs Beyond (same groups)", vs(o.per_week, m.per_week))}
+    ${kt("o2", chg(o.per_week, o.before_per_week) + " vs " + chg(m.per_week, m.before_per_week), "Change since going live (per home per week)", "ours vs Beyond, same groups")}
+    ${kt("o3", pc(o.occ90) + " vs " + pc(m.occ90), "Next 90 days booked", vs(o.occ90, m.occ90))}
+    ${kt("c1", $$(o.rev90) + " vs " + $$(m.rev90), "Rent on the books per open night (next 90 days)", vs(o.rev90, m.rev90, 1))}
+    ${kt("c2", (D.sends?.sent ?? 0) + " sent", "Price sends to Track since Nov 10", (D.sends?.failed ?? 0) + " failed · " + (D.sends?.waiting ?? 0) + " waiting")}
+  </div>`;
+  const row = (lab, x, hint) => `<tr><td><b>${lab}</b>${hint ? `<div class="small muted">${hint}</div>` : ""}</td><td>${x.homes ?? "–"}</td><td>${x.bookings ?? 0}</td>
+    <td><b>${n2(x.per_week)}</b></td><td>${n2(x.before_per_week)}</td><td>${chg(x.per_week, x.before_per_week)}</td><td>${$$(x.rent_per_week)}</td><td>${$$(x.adr)}</td>
+    <td>${pc(x.occ90)}</td><td>${$$(x.rev90)}</td></tr>`;
+  const sumT = `<div class="ovc w6" style="margin-bottom:18px"><h3>Since each home went live</h3><div class="cs">Per home per week, so homes that started on different days compare fairly. "Before" = the same number of days before it went live (at least 14).</div>
+    <div class="wide"><table class="srt"><thead><tr><th>Homes</th><th>How many</th><th>Bookings made</th><th>Per home per week</th><th>Before</th><th>Change</th><th>Rent booked per home per week</th><th>Avg rent per night</th><th>Next 90 days booked</th><th>Rent on the books per open night (90 days)</th></tr></thead><tbody>
+    ${row("Ours (our own pricing)", o, "each from its first price sent to Track")}
+    ${row("Beyond, same groups", m, "Beyond homes in the same neighborhood and bedroom count as one of ours: the fair comparison")}
+    ${row("All Beyond homes", a, "every home Beyond prices today, from Nov 10")}
+    </tbody></table></div><div class="src">${pcEsc(src)}</div></div>`;
+  // weekly chart: bookings per home per week
+  const W = D.weeks || [], weeks = [...new Set(W.map(w => w.week))].sort();
+  const ser = { ours: "Ours (the homes now on our pricing)", beyond_matched: "Beyond, same groups", beyond_all: "All Beyond homes" };
+  const col = { ours: "#3c5f12", beyond_matched: "#E2B23A", beyond_all: "#9aa3ad" };
+  const val = (k, wk) => { const x = W.find(w => w.week === wk && w.side === k); return x ? Number(x.per_home) : 0; };
+  const mx = Math.max(0.05, ...W.map(w => Number(w.per_home) || 0));
+  const L = 60, R = 760, T = 20, B = 210, X = i => L + (weeks.length < 2 ? 0 : i * (R - L) / (weeks.length - 1)), Y = v => B - v / mx * (B - T);
+  const g0i = weeks.findIndex(w => w >= String(D.start || "").slice(0, 10));
+  const lines = Object.keys(ser).map(k => `<polyline fill="none" stroke="${col[k]}" stroke-width="${k === "ours" ? 3 : 2}" points="${weeks.map((w, i) => X(i) + "," + Y(val(k, w))).join(" ")}"/>` +
+    weeks.map((w, i) => `<circle cx="${X(i)}" cy="${Y(val(k, w))}" r="3.5" fill="${col[k]}"><title>${pcEsc(ser[k])}, week of ${dt(w)}: ${val(k, w).toFixed(2)} bookings per home</title></circle>`).join("")).join("");
+  const ticks = [0, mx / 2, mx].map(t => `<line x1="${L}" x2="${R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--ovgrid)"/><text x="${L - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${t.toFixed(2)}</text>`).join("");
+  const xl = weeks.map((w, i) => `<text x="${X(i)}" y="${B + 18}" text-anchor="middle" font-size="11" fill="var(--muted)">${dt(w)}</text>`).join("");
+  const golive = g0i >= 0 ? `<line x1="${X(g0i)}" x2="${X(g0i)}" y1="${T - 6}" y2="${B}" stroke="#1f3a0c" stroke-dasharray="4 4"/><text x="${X(g0i) + 6}" y="${T + 4}" font-size="11" fill="var(--muted)">Our pricing starts</text>` : "";
+  const legend = Object.keys(ser).map(k => `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px"><span style="width:12px;height:12px;border-radius:50%;background:${col[k]}"></span>${pcEsc(ser[k])}</span>`).join("");
+  const chart = `<div class="ovc w6" style="margin-bottom:18px"><h3>Bookings made per home, by week</h3><div class="cs">Weeks start Monday. The homes now on our pricing are shown for every week, so the weeks before the line are them under Beyond.</div>
+    <div class="small" style="margin:4px 0 8px">${legend}</div>
+    <svg viewBox="0 0 780 240" style="width:100%;height:auto" role="img" aria-label="Bookings per home per week, ours vs Beyond">${ticks}${golive}${lines}${xl}</svg><div class="src">${pcEsc(src)}</div></div>`;
+  // groups
+  const G = (D.groups || []).map(g => { const so = g.sides?.ours || {}, sb2 = g.sides?.beyond || {};
+    return { ...g, so, sb: sb2, ahead: sb2.homes ? (Number(so.occ90 ?? 0) - Number(sb2.occ90 ?? 0)) : null }; });
+  const cnt = { all: G.length, ahead: G.filter(g => g.ahead != null && g.ahead > 0).length, behind: G.filter(g => g.ahead != null && g.ahead < 0).length, alone: G.filter(g => g.ahead == null).length };
+  const chip = (k, l) => `<button type="button" class="pcchip${SC.f === k ? " on" : ""}" data-scf="${k}">${l} (${cnt[k]})</button>`;
+  const shown = G.filter(g => !SC.f || SC.f === "all" || (SC.f === "ahead" ? g.ahead > 0 : SC.f === "behind" ? g.ahead < 0 : g.ahead == null));
+  const grows = shown.map(g => `<tr><td><b>${pcEsc(g.group)}</b> · ${g.bedrooms} BR<div class="small muted">since ${dt(g.start)}</div></td>
+    <td>${pcEsc((g.ours || []).join(", "))}</td><td title="${pcEsc((g.beyond || []).join(", "))}">${(g.beyond || []).length || "none"}</td>
+    <td><b>${n2(g.so.per_week)}</b> / ${g.sb.homes ? n2(g.sb.per_week) : "–"}</td><td>${pc(g.so.occ90)} / ${g.sb.homes ? pc(g.sb.occ90) : "–"}</td>
+    <td>${$$(g.so.rev90)} / ${g.sb.homes ? $$(g.sb.rev90) : "–"}</td></tr>`).join("") || `<tr><td colspan="6" class="small muted">No groups here.</td></tr>`;
+  const grpT = `<div class="ovc w6" style="margin-bottom:18px"><h3>By group (ours / Beyond)</h3><div class="cs">Each neighborhood and bedroom count that has one of our homes. Hover the Beyond count for which homes.</div>
+    <div class="pcchips" style="margin:6px 0 10px">${chip("all", "All")}${chip("ahead", "Ours ahead on next 90 days")}${chip("behind", "Ours behind")}${chip("alone", "No Beyond home to compare")}</div>
+    <div class="wide"><table class="srt"><thead><tr><th>Group</th><th>Ours</th><th>Beyond homes</th><th>Bookings per home per week</th><th>Next 90 days booked</th><th>Rent on the books per open night</th></tr></thead><tbody>${grows}</tbody></table></div></div>`;
+  // our homes
+  const H = D.homes || [];
+  const hrows = H.map(h => `<tr><td><b>${pcEsc(h.code)}</b><div class="small muted">${pcEsc(h.group)} · ${h.bedrooms} BR</div></td><td>${dt(h.start)}</td>
+    <td>${h.bookings}</td><td>${h.bookings_before}<span class="small muted"> in ${h.span} days</span></td><td>${pc(h.occ90)}</td><td>${$$(h.rev90)}</td></tr>`).join("");
+  const homeT = `<div class="ovc w6"><h3>Our homes</h3><div class="cs">Every home on our own pricing, from the day its first price went to Track.</div>
+    <div class="wide"><table class="srt"><thead><tr><th>Home</th><th>Live since</th><th>Bookings since</th><th>Bookings before</th><th>Next 90 days booked</th><th>Rent on the books per open night</th></tr></thead><tbody>${hrows}</tbody></table></div>
+    <p class="small muted" style="margin-top:10px">Read with care: several of these homes were picked because they were weak, and a few weeks is short. The plan is to decide in mid-January after 6–8 weeks of winter booking.</p></div>`;
+  $("scOut").innerHTML = tiles + sumT + chart + grpT + homeT;
+  document.querySelectorAll("#scOut [data-scf]").forEach(b => b.onclick = () => { SC.f = SC.f === b.dataset.scf || b.dataset.scf === "all" ? "" : b.dataset.scf; scDraw(); });
+}
+
 async function loadPacing() {
   if (!PC.from) { const d = pcDefaults(); PC.from = d.from; PC.to = d.to; }
   if (!PC.set) { try { PC.set = localStorage.getItem("mmPacingSet"); } catch (e) {} }
