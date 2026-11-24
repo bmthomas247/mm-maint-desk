@@ -432,7 +432,7 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
 </head>
 <body>
 <script>if (window.top !== window) document.body.classList.add("inhub");   // inside the hub: its green banner is the only header (Brandon 2026-10-30)</script>
-<header><img src="https://www.vacationrentalsparkcity.com/wp-content/uploads/2024/07/Vacation-Rentals-Park-City-Moose-management-logo-.png" alt="" style="height:34px;background:#fff;border-radius:6px;padding:2px 4px"><h1>Moose Management <span>Rates Desk</span></h1><div class="sp"></div><span id="runinfo" class="small" style="opacity:.8"></span><button id="out" class="tab hidden">Sign out</button></header>
+<header><img src="moose-logo.png" alt="" style="height:34px;background:#fff;border-radius:6px;padding:2px 4px"><h1>Moose Management <span>Rates Desk</span></h1><div class="sp"></div><span id="runinfo" class="small" style="opacity:.8"></span><button id="out" class="tab hidden">Sign out</button></header>
 
 <div id="login" class="card hidden">
   <h2>Sign in</h2><p class="muted small">Sign in to the Moose Hub, then open Rates from the sidebar.</p>
@@ -3766,7 +3766,7 @@ async function ownerReport() {
       table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase}
       .bar{height:12px;border-radius:6px;background:var(--g2)}.foot{padding:20px 36px;font-size:12px;color:var(--mut)}.btn{position:fixed;right:18px;top:18px;background:var(--g);color:#fff;border:0;border-radius:999px;padding:10px 18px;font:600 14px system-ui;cursor:pointer}
       @media print{.btn{display:none}body{background:#fff}.page{box-shadow:none}}</style></head><body><button class="btn" onclick="print()">Print / save as PDF</button><div class="page">
-      <div class="hero"><div class="hin"><img class="logo" src="https://www.vacationrentalsparkcity.com/wp-content/uploads/2024/07/Vacation-Rentals-Park-City-Moose-management-logo-.png" alt="Moose Management"><h1>${escH(x.name)}</h1><p>${escH(x.set)} · Owner performance report · ${fd(T)}</p></div></div>
+      <div class="hero"><div class="hin"><img class="logo" src="moose-logo.png" alt="Moose Management"><h1>${escH(x.name)}</h1><p>${escH(x.set)} · Owner performance report · ${fd(T)}</p></div></div>
       <div class="sec"><h2>Highlights</h2><ul class="hl">${hi.map(s => `<li>${s}</li>`).join("") || "<li>Your home is listed and priced daily by the Moose team.</li>"}</ul></div>
       <div class="sec"><h2>Your year so far</h2><div class="tiles"><div class="t"><span>Rent this year</span><b>${fmt(ytd.r)}</b></div><div class="t"><span>Nights booked</span><b>${ytd.n}</b></div><div class="t"><span>Average per night</span><b>${fmt(ytd.n ? ytd.r / ytd.n : null)}</b></div><div class="t"><span>Booked (of nights available)</span><b>${ppFillPct(occYtd)}</b></div><div class="t"><span>Owner nights used</span><b>${own}</b></div></div></div>
       <div class="sec"><h2>Rent by month</h2><svg viewBox="0 0 700 195" width="100%" role="img" aria-label="Rent by month">${bars}</svg><div style="font-size:12px;color:var(--mut)"><span style="display:inline-block;width:10px;height:10px;background:#6e9a2c;border-radius:2px"></span> stayed &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#b9d77a;border-radius:2px"></span> on the books (upcoming)</div></div>
@@ -4483,18 +4483,22 @@ function renderHotels() {
 // rates_comp_sets_list(), rates_set_comps(set), rates_comp_state(comp, inuse|paused|delete), rates_home_move(code, set),
 // rates_comp_add_url(set, url), decide_comp_request(id, 'Primary'|'reject'). Fit rule = rates_set_auto.py (beds, sleeps ±win once min exist).
 const CS = { sets: null, set: null, data: null, ask: {}, tot: {}, f: "inuse", ch: "Airbnb", q: "" };
+const csMapSets = d => (d || []).map(x => ({ ...x, id: `${x.grp}|${x.beds}|${x.sleeps ?? ""}`, name: `${x.grp} · ${x.beds === 0 ? "Studio" : x.beds + "BR"} · sleeps ${x.sleeps ?? "?"}`, paused: 0 }));
+// 2026-11-24: after a change the list is read again in the background (it used to stay empty until the page was reopened)
+let csSetsP = null;
+function csReloadSets() { const p = csSetsP = (async () => { try { const [r, r2] = await Promise.all([sb.rpc("rates_sleep_sets"), sb.rpc("rates_comp_sets_list")]); if (p === csSetsP && !r.error) { CS.sets = csMapSets(r.data); CS.rsets = r2.data || []; } } catch (e) {} })(); return p; }
 async function loadCompSets() {
   if (!CS.sets) {
     const [r, r2] = await Promise.all([sb.rpc("rates_sleep_sets"), sb.rpc("rates_comp_sets_list")]);
     if (r.error) { $("csOut").innerHTML = `<p class="small muted">Couldn't load: ${pcEsc(r.error.message)}</p>`; return; }
     // Brandon 2026-11-20: a comp set = neighborhood + bedrooms + our exact sleep count (rates_sleep_sets); comps come from the whole
     // neighborhood and only those within the sleeps window count. CS.rsets = the stored rate_sets (for moving a home).
-    CS.sets = (r.data || []).map(x => ({ ...x, id: `${x.grp}|${x.beds}|${x.sleeps ?? ""}`, name: `${x.grp} · ${x.beds === 0 ? "Studio" : x.beds + "BR"} · sleeps ${x.sleeps ?? "?"}`, paused: 0 }));
+    CS.sets = csMapSets(r.data);
     CS.rsets = r2.data || [];
   }
   if (!CS.set) { try { CS.set = localStorage.getItem("mmCompSet"); } catch (e) {} }
   if (!CS.set || !CS.sets.some(x => x.id === CS.set)) CS.set = (CS.sets.find(x => x.ours.some(h => h.live)) || CS.sets[0] || {}).id;
-  const nm = id => (CS.sets.find(x => x.id === id) || {}).name || "";
+  const nm = id => ((CS.sets || []).find(x => x.id === id) || {}).name || "";
   // Brandon 2026-11-20: pick Neighborhood, then Bedrooms, then Sleeping (each narrows the next) instead of one long list of comp sets
   const kind = h => h.live ? "Live" : h.test ? "Test" : "Beyond";
   const nbOf = x => String(x.grp).split(" · ")[0]; const layOf = x => String(x.grp).split(" · ")[1] || "";
@@ -4521,9 +4525,9 @@ async function loadCompSets() {
       <div id="csFl" class="cshl" hidden></div></label></div>`;
   const best = a => a.slice().sort((p, q) => liveN(q) - liveN(p))[0];
   const go = x => { if (!x) return; CS.set = x.id; CS.nb = nbOf(x); CS.bd = bdOf(x); try { localStorage.setItem("mmCompSet", CS.set); } catch (e) {} loadCompSets(); };
-  $("csNb").onchange = e => { const f = CS.sets.filter(x => nbOf(x) === e.target.value); go(liveN(best(f) || {ours: []}) ? best(f) : best(f.filter(x => bdOf(x) === [...new Set(f.map(bdOf))].sort((a, b2) => (a ?? 99) - (b2 ?? 99))[0]))); };
+  $("csNb").onchange = async e => { if (!CS.sets) await csReloadSets(); const f = (CS.sets || []).filter(x => nbOf(x) === e.target.value); go(liveN(best(f) || {ours: []}) ? best(f) : best(f.filter(x => bdOf(x) === [...new Set(f.map(bdOf))].sort((a, b2) => (a ?? 99) - (b2 ?? 99))[0]))); };
   $("csBd").onchange = e => { const v = e.target.value, b = v === "" ? null : v.startsWith("L:") ? v : +v; go(best(inNb.filter(x => bdOf(x) === b))); };
-  $("csSl").onchange = e => go(CS.sets.find(x => x.id === e.target.value));
+  $("csSl").onchange = async e => { if (!CS.sets) await csReloadSets(); go((CS.sets || []).find(x => x.id === e.target.value)); };
   // Find a home: type one of our homes, pick it = open the comp set it's in (that home is highlighted)
   const fh = $("csFh"), fl = $("csFl"); let fp = 0, fhits = [];
   const allH = []; CS.sets.forEach(x => x.ours.forEach(h => allH.push({ ...h, set: x })));
@@ -5077,7 +5081,7 @@ function csWeekly(d, inuse, CH) {
   return `<div style="overflow:auto;margin-top:10px"><table id="csWkT"><tr><th>Week of</th><th>Comps asking (daily, ${CH})</th><th>Comps guest total / night</th><th>Comps booked</th><th>Our homes booked</th></tr>` +
     Object.entries(W).map(([k, w]) => `<tr><td>${fd(k)}</td><td>${m$(mid(w.ask))}</td><td>${m$(mid(w.tot))}</td><td>${p(w.bk, w.n)}</td><td>${p(w.obk, w.on)}</td></tr>`).join("") + `</table></div>`;
 }
-async function rateSetsRefresh() { CS.sets = null; }
+async function rateSetsRefresh() { CS.sets = null; csReloadSets(); }
 // ===== Market pacing (Brandon 2026-11-18: grow off Cathy's Key Data dashboard "Winter 11/20-4/18", one view per neighborhood + size).
 // Data = rates_pacing(set, from, to): Key Data calendars of the group's Primary comps (now vs ~2 weeks ago), our homes from Track bookings,
 // Key Data neighborhood market KPIs (all sizes) + last year = Key Data's final numbers for the same weeks.
