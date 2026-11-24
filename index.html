@@ -1054,6 +1054,7 @@ function shell(){
         if(u.error){ $("#fbsend").disabled = false; $("#fbmsg").textContent = "Couldn't upload the screenshot: " + niceErr(u.error); return; }
         paths.push(p); }
       $("#fbmsg").textContent = "Sending…"; }
+    try { if(window.mmTrackFlush) window.mmTrackFlush(); } catch(e){}   // track.js: send waiting taps now, so "what they did right before" is complete (2026-11-23)
     const r = await sb.functions.invoke("hub-feedback", { body:{ kind, body, shots:paths, desk: cur ? cur.key : "", deskLabel: WHERE.label || (cur ? cur.label : ""), page: (WHERE.label + " | " + WHERE.page).slice(0, 500) } });
     $("#fbsend").disabled = false;
     if(r.error || !r.data || !r.data.ok){ $("#fbmsg").textContent = "Couldn't send: " + ((r.data && r.data.error) || (r.error && niceErr(r.error)) || "try again"); return; }
@@ -1099,6 +1100,7 @@ function route(){
   if(k === "gateways" && window.gatewayView){ $("#ttl").textContent = $("#utl").textContent = "Gateway alerts"; return gatewayView(v); }   // banners.js: Brivo gateway alerts, maintenance manager + admins (gateway_alerts_mine is null for others -> Home) (Brandon 2026-11-02)
   if(k === "market_watch" && window.marketWatchView) return marketWatchView(v);   // market_watch.js: Zillow / Google / ad libraries / news via SerpApi (Brandon 2026-10-30); rows gated per desk in Supabase
   if(k === "feedback") return feedbackView(v);
+  if(k === "hub_usage"){ window.RPRUN = "usage.html"; location.replace("#/reports"); return; }   // Monday hub-usage tip (hub_usage_tracking_2.sql) opens Reports ▸ Hub usage
   if(k === "analytics"){ location.replace("#/reports"); return; }   // folded into Reports 2026-10-28
   if(k === "advertising" && d){ location.replace("#/adv_owners"); return; }   // Advertising became a drop-down 2026-10-28
   if(k === "calendar" && d){ location.replace("#/cal_res"); return; }   // Calendar is a drop-down (2026-10-29)
@@ -1345,7 +1347,7 @@ async function feedbackView(v){
   box.innerHTML = r.data.map(x => `<div class="fb" data-kind="${x.kind}" data-mine="${x.mine ? 1 : 0}"><div class="hd"><b>${label[x.kind]||x.kind}</b><span class="pill ${tone[x.status]||""}">${esc(x.status)}</span>
       <span class="muted">#${x.id} · ${esc(x.user_name||"")} · ${esc(deskName(x.desk_key))} · ${new Date(x.created_at).toLocaleString()}</span>
       ${ME.admin ? `<select data-id="${x.id}" style="width:auto;min-height:34px;padding:4px 8px;margin-left:auto">${["new","seen","doing","done","wont"].map(s => `<option ${s===x.status?"selected":""}>${s}</option>`).join("")}</select>` : ""}</div>
-      <p>${esc(x.body)}</p><div class="fbsh" data-sh="${x.id}" style="display:flex;gap:8px;flex-wrap:wrap"></div>${x.page_url ? `<p class="muted" style="margin-top:4px">📍 ${esc(String(x.page_url).split(" | ")[0])}</p>` : ""}${x.admin_note ? `<p class="muted">${x.kind === "ask" ? "Answer" : "Brandon"}: ${esc(x.admin_note)}</p>` : ""}
+      <p>${esc(x.body)}</p><div class="fbsh" data-sh="${x.id}" style="display:flex;gap:8px;flex-wrap:wrap"></div>${x.page_url ? `<p class="muted" style="margin-top:4px">📍 ${esc(String(x.page_url).split(" | ")[0])}</p>` : ""}${ME.admin ? `<details class="acc2" data-st="${x.id}" style="margin-top:6px"><summary>👣 What they did right before</summary><div class="muted">Loading…</div></details>` : ""}${x.admin_note ? `<p class="muted">${x.kind === "ask" ? "Answer" : "Brandon"}: ${esc(x.admin_note)}</p>` : ""}
       ${ME.admin && x.kind === "ask" ? `<details class="acc2" style="margin-top:6px"${x.admin_note ? "" : " open"}><summary>${x.admin_note ? "Change the answer" : "✍️ Answer this"}</summary>
         <label class="field"><span>Your answer (they see it the next time they open Penny; no codes or passwords)</span><textarea data-ans="${x.id}">${esc(x.admin_note || "")}</textarea></label>
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-teach="${x.id}" style="width:auto;min-height:0" checked> 🎓 Teach Penny this answer</label>
@@ -1355,6 +1357,23 @@ async function feedbackView(v){
       const el = box.querySelector(`[data-sh="${row.id}"]`); if(!el) continue;
       const u = await sb.storage.from("hub-feedback").createSignedUrls(row.shots, 600);
       (u.data || []).filter(x => x.signedUrl).forEach((x, i) => el.insertAdjacentHTML("beforeend", `<a href="${esc(x.signedUrl)}" target="_blank" rel="noopener" title="Open screenshot ${i+1}"><img src="${esc(x.signedUrl)}" alt="Screenshot ${i+1}" style="height:90px;max-width:180px;object-fit:cover;border-radius:8px;border:1px solid var(--line,#ddd);margin:4px 0"></a>`)); } });
+  // 2026-11-23: opens, taps, errors and data problems in the 45 minutes before the report (Hub usage tracking, admins only)
+  box.querySelectorAll("details[data-st]").forEach(dt => dt.addEventListener("toggle", async () => {
+    if(!dt.open || dt.dataset.done) return; dt.dataset.done = "1"; const out = dt.querySelector("div");
+    const r = await sb.rpc("hub_feedback_steps", { p_id:+dt.dataset.st });
+    if(r.error){ dt.dataset.done = ""; out.textContent = "Couldn't load: " + niceErr(r.error); return; }
+    const rows = (r.data && r.data.steps) || [], tm = t => new Date(t).toLocaleTimeString([], { hour:"numeric", minute:"2-digit", second:"2-digit" });
+    const sec = ms => ms == null ? "" : (ms / 1000).toFixed(1) + " s";
+    const line = x => { const w = esc(x.title || x.page || "");
+      return x.kind === "view" ? `📄 Opened <b>${w}</b>${x.route ? ` <span class="muted">${esc(x.route)}</span>` : ""}`
+        : x.kind === "error" ? `<span class="pill red">Error</span> ${esc(x.msg)} <span class="muted">on ${w}</span>`
+        : x.kind === "speed" ? `⏱ ${w} had its data in ${esc(sec(x.ms))}`
+        : x.kind === "call" ? `<span class="pill ${x.status === 0 || x.status >= 400 ? "red" : "amber"}">${x.status === 0 ? "no answer" : x.status >= 400 ? "error " + x.status : "slow"}</span> data request ${esc(x.msg)} <span class="muted">${esc(sec(x.ms))} on ${w}</span>`
+        : `👆 ${x.live === false ? `<span class="pill amber">not a button</span> ` : ""}<b>${esc(x.label || "(no words)")}</b>${x.ctx ? ` <span class="muted">in ${esc(x.ctx)}</span>` : ""} <span class="muted">on ${w}</span>`; };
+    out.className = ""; out.innerHTML = rows.length
+      ? rows.map(x => `<div style="display:grid;grid-template-columns:96px 1fr;gap:8px;padding:3px 0;border-bottom:1px solid var(--line);font-size:13px${x.after ? ";opacity:.6" : ""}"><span class="muted">${esc(tm(x.at))}${x.after ? " · after" : ""}</span><span>${line(x)}</span></div>`).join("")
+        + `<p class="muted" style="margin:4px 0 0">Oldest first. Faded lines came after they sent it. More on <a href="#/hub_usage">Hub usage</a>.</p>`
+      : `<p class="muted" style="margin:0">Nothing recorded in the 45 minutes before (sent before tracking started on Nov 23, 2026).</p>`; }));
   document.querySelectorAll("#fbf button").forEach(b => b.onclick = () => { document.querySelectorAll("#fbf button").forEach(x => x.classList.toggle("on", x === b));
     box.querySelectorAll(".fb").forEach(el => el.style.display = b.dataset.f === "all" || (b.dataset.f === "mine" ? el.dataset.mine === "1" : el.dataset.kind === b.dataset.f) ? "" : "none"); });
   box.querySelectorAll("[data-asave]").forEach(b => b.onclick = async () => { const id = +b.dataset.asave, m = box.querySelector(`[data-amsg="${id}"]`);
