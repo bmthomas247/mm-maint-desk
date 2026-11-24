@@ -4551,7 +4551,7 @@ async function csFetch(keep) {
   const tok = CS.tok = Math.random(); if (!keep) $("csOut").innerHTML = `<p class="small muted">Loading…</p>`;
   const [g0, b0, s0] = CS.set.split("|");
   const r = await sb.rpc("rates_sleep_set", { p_grp: g0, p_beds: +b0, p_sleeps: s0 === "" ? null : +s0 });
-  if (r.data) { r.data.id = CS.set; r.data.name = (CS.sets.find(x => x.id === CS.set) || {}).name || g0; r.data.min = 1; }
+  if (r.data) { r.data.id = CS.set; r.data.name = ((CS.sets || []).find(x => x.id === CS.set) || {}).name || g0; r.data.min = 1; }
   if (tok !== CS.tok) return;
   if (r.error || !r.data) { $("csOut").innerHTML = `<p class="small muted">Couldn't load: ${pcEsc(r.error ? r.error.message : "no such comp set")}</p>`; return; }
   CS.data = r.data; if (!CS.sel) CS.sel = new Set();
@@ -4884,7 +4884,7 @@ function csDraw() {
     } else await mmAlert(`Added the ${j.channel} link to "${x.label}".` + (j.channel === "Direct" ? " Its own-site prices show once a reader for that site is built." : ""));
     await csFetch(true); });
   W.querySelectorAll("[data-mvs]").forEach(s0 => s0.onchange = async () => {
-    const to = s0.value; if (!to) return; const tn = (CS.sets.find(x => x.id === to) || {}).name;
+    const to = s0.value; if (!to) return; const tn = ((CS.sets || []).find(x => x.id === to) || {}).name || to;
     if (!await mmConfirm(`Move ${s0.dataset.mvs} from ${d.name} to ${tn}? Its pricing reads the new set's comps from the next morning re-price.`)) { s0.value = ""; return; }
     const r = await sb.rpc("rates_home_move", { p_code: s0.dataset.mvs, p_to_set: to, p_note: null });
     if (r.error) { await mmAlert(r.error.message); s0.value = ""; return; }
