@@ -3,7 +3,10 @@
    Keeps: page opens, clicks (what was tapped + where), page errors and failure messages, for SIGNED-IN staff only.
    Never keeps: anything typed into a box, box values, codes, passwords or emails (numbers of 3+ digits and emails are
    masked here AND again in the database). Public guest pages are skipped.
-   Saved by hub_click_log() into hub_clicks (hub_usage_tracking.sql). Read only by hub admins: Reports > Admin > Hub usage (usage.html). */
+   Saved by hub_click_log() into hub_clicks (hub_usage_tracking.sql). Read only by hub admins: Reports > Admin > Hub usage (usage.html).
+   Round 2 (2026-11-23, hub_usage_tracking_2.sql): page speed (time until a page's data is in) and data requests that failed or
+   took 4+ s. config.js times every request to our database; only the request's NAME is sent (rpc/home_quick, desk_docs:feeds...),
+   never what was sent or came back. window.mmTrackFlush() sends what's waiting now (Report a Bug calls it). */
 (function () {
   if (window.__mmTrack) return; window.__mmTrack = 1;
   try {
@@ -109,7 +112,62 @@
     }
     // Inside the hub, the hub page itself records the open; a desk inside it only records its own moves (#hash changes).
     if (!FRAMED) view("open");
-    window.addEventListener("hashchange", function () { view("move"); });
+    window.addEventListener("hashchange", function () { view("move"); spStart("move"); });
+
+    // ---- page speed + data requests (config.js keeps each request to our database in window.__mmCalls) ----
+    function pathOf(u) {
+      try {
+        var x = new URL(u, location.href); if (x.origin !== new URL(CFG.url).origin) return null;
+        var p = x.pathname, m;
+        if (/^\/(auth|realtime)\//.test(p)) return null;                      // sign-in refreshes: not page data
+        if ((m = p.match(/^\/rest\/v1\/rpc\/([^\/]+)/))) return m[1] === "hub_click_log" ? null : "rpc/" + m[1];
+        if ((m = p.match(/^\/rest\/v1\/([^\/]+)/))) {
+          var col = m[1] === "desk_docs" ? String(x.searchParams.get("collection") || "").replace(/^eq\./, "") : "";
+          return m[1] + (/^[a-z0-9_-]{1,30}$/i.test(col) ? ":" + col : "");
+        }
+        if ((m = p.match(/^\/functions\/v1\/([^\/]+)/))) return "function/" + m[1];
+        if ((m = p.match(/^\/storage\/v1\/(object|render\/image)\/(?:(?:sign|public|authenticated|list|info|upload\/sign)\/)?([^\/]+)/)))
+          return (m[1] === "object" ? "files/" : "picture/") + m[2];
+        return p.split("/").slice(1, 3).join("/");
+      } catch (e) { return null; }
+    }
+    // One measurement per page open / move: from the start until no data request has been running for 1.5 s.
+    var SP = null, seenCall = {};
+    function spStart(why) {
+      if (document.visibilityState === "hidden") { SP = null; return; }   // a page loading in a background tab isn't a fair time
+      SP = { t0: why === "open" ? 0 : performance.now(), why: why, n: 0, last: 0, top: "", topMs: 0 };
+    }
+    function tick() {
+      var B = window.__mmCalls; if (!B) return;                         // an old cached config.js: no timing
+      var list = B.splice(0, B.length);
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i], p = pathOf(c[0]); if (!p) continue;
+        var st = c[1], ms = c[2], t0 = c[3];
+        if (SP && t0 >= SP.t0 - 50) { SP.n++; if (t0 + ms > SP.last) SP.last = t0 + ms; if (ms > SP.topMs) { SP.topMs = ms; SP.top = p; } }
+        if (st === -1) continue;                                          // cancelled on purpose
+        if (!(st === 0 || st >= 400 || ms >= 4000)) continue;             // fine: only failures and 4+ s requests are kept
+        var k = p + "|" + st; if (seenCall[k] && Date.now() - seenCall[k] < 300000) continue; seenCall[k] = Date.now();
+        add({ k: "call", msg: p, st: st, ms: Math.round(ms) });
+      }
+      if (!SP) return;
+      var now = performance.now(), busy = B.busy || 0;
+      if (SP.n && !busy && now - SP.last > 1500) done(false);
+      else if (now - SP.t0 > 60000) { if (SP.n) done(true); else SP = null; }
+      else if (!SP.n && now - SP.t0 > 10000) SP = null;                 // a page with no data to load
+      function done(cut) {
+        add({ k: "speed", act: SP.why + (cut ? " (still loading at 60 s)" : ""), ms: Math.round((cut ? now : SP.last) - SP.t0), n: SP.n,
+              msg: SP.top ? SP.top + " " + (SP.topMs / 1000).toFixed(1) + "s" : "" });
+        SP = null;
+      }
+    }
+    spStart("open");
+    setInterval(function () { try { tick(); } catch (e) {} }, 500);
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") SP = null; });
+    // Send what's waiting now (this page and the desk pages inside it). Report a Bug calls it so the steps are there.
+    window.mmTrackFlush = function () {
+      try { tick(); } catch (e) {} flush();
+      try { for (var i = 0; i < window.frames.length; i++) { try { if (window.frames[i].mmTrackFlush) window.frames[i].mmTrackFlush(); } catch (e) {} } } catch (e) {}
+    };
 
     // ---- clicks ----
     var INTER = "a,button,summary,label,select,option,input,textarea,[role=button],[role=tab],[role=link],[role=menuitem],[onclick],[contenteditable=true]";
