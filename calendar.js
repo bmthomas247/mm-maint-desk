@@ -70,6 +70,9 @@ const CCSS = `
 .cal .wkr{display:grid} .cal .wkin.n7,.cal .wkin.n5{min-width:720px}
 .cal .wkh>div{padding:6px 8px 4px;border-left:1px solid var(--line);font-size:12.5px;color:var(--muted);cursor:pointer} .cal .wkh>div:first-child{border-left:0;cursor:default}
 .cal .wkh b{display:block;font-size:20px;color:var(--ink,#1d2a22);font-weight:700;line-height:1.1}
+.cal .wkh>div.wknav{display:flex;gap:3px;align-items:center;justify-content:center;padding:4px 2px}
+.cal .wkh .wknav button{width:22px;height:34px;min-height:0;padding:0;margin:0;border:1px solid var(--line,#d9e2da);border-radius:8px;background:#fff;color:var(--forest,#1d3b2a);font-size:20px;font-weight:700;line-height:1;cursor:pointer;box-shadow:none}
+.cal .wkh .wknav button:hover{background:var(--moose-soft,#e5efe6)}
 .cal .wkh .td{background:var(--moose-soft,#e5efe6)} .cal .wkh .sl{box-shadow:inset 0 -3px 0 var(--forest,#1d3b2a)}
 .cal .wka{border-bottom:2px solid var(--line)} .cal .wka>div{border-left:1px solid var(--line);padding:3px;min-height:26px;max-height:160px;overflow-y:auto} .cal .wka>div:first-child{border-left:0;font-size:10.5px;color:var(--muted);padding:6px 4px}
 .cal .wka .td{background:var(--moose-soft,#e5efe6)}
@@ -268,7 +271,7 @@ const chip = x => `<a class="ev ${x.cls || ""}" ${attrs(x)} title="${esc(x.title
 function timeGrid(key, items, canAdd, hours){
   const days = gridDays(key), n = days.length, t = today(), sel = ST.sel[key], H = (WE - WS) * HPX, nw = new Date(), nowM = nw.getHours() * 60 + nw.getMinutes();
   const cols = `grid-template-columns:52px repeat(${n},minmax(0,1fr))`;
-  let h = `<div class="wk"><div class="wkin n${n}"><div class="wkr wkh" style="${cols}"><div></div>${days.map(s => `<div class="${s === t ? "td" : ""}${s === sel && n > 1 ? " sl" : ""}" data-day="${s}">${DOW[D(s).getDay()]}<b>${D(s).getDate()}</b></div>`).join("")}</div>
+  let h = `<div class="wk"><div class="wkin n${n}"><div class="wkr wkh" style="${cols}"><div class="wknav"><button type="button" data-mv="-1" aria-label="${n === 1 ? "Previous day" : "Previous week"}" title="${n === 1 ? "Previous day" : "Previous week"}">‹</button><button type="button" data-mv="1" aria-label="${n === 1 ? "Next day" : "Next week"}" title="${n === 1 ? "Next day" : "Next week"}">›</button></div>${days.map(s => `<div class="${s === t ? "td" : ""}${s === sel && n > 1 ? " sl" : ""}" data-day="${s}">${DOW[D(s).getDay()]}<b>${D(s).getDate()}</b></div>`).join("")}</div>
     <div class="wkr wka" style="${cols}"><div>all day</div>${days.map(s => `<div class="${s === t ? "td" : ""}" data-dropday="${s}">${items(s).filter(x => !x.start).map(chip).join("")}</div>`).join("")}</div>`;
   if(hours){
     h += `<div class="wkb"><div class="wkr" style="${cols};height:${H}px"><div class="wkt">${Array.from({ length:WE - WS }, (_, i) => i ? `<span style="top:${i * HPX}px">${ftime(hhmm((WS + i) * 60)).toUpperCase()}</span>` : "").join("")}</div>`;
