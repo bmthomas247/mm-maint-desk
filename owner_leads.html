@@ -133,13 +133,24 @@ const isLate = r => { const s = S.st[r.stage]; return !!(s && s.pace_days && (s.
 const isDue = r => !!(r.next_on && r.next_on <= today() && kindOf(r) !== "lost");
 const first = n => String(n || "").split(" ")[0];
 
+// The database hands back at most 1,000 rows per read, so read in pages.
+async function allRows(make){
+  let out = [];
+  for(let i = 0; i < 50000; i += 1000){
+    const r = await make().range(i, i + 999);
+    if(r.error) return r;
+    out = out.concat(r.data || []);
+    if(!r.data || r.data.length < 1000) break;
+  }
+  return { data: out };
+}
 async function load(){
   const [l, n] = await Promise.all([
-    sb.from("hub_owner_leads").select("*").eq("off", false).order("id", { ascending:false }).limit(5000),
-    sb.from("hub_owner_lead_notes").select("lead_id,kind,note,by_name,at").order("at", { ascending:false }).limit(8000)]);
+    allRows(() => sb.from("hub_owner_leads").select("*").eq("off", false).order("id", { ascending:false })),
+    allRows(() => sb.from("hub_owner_lead_last").select("lead_id,kind,note,by_name,at").order("lead_id"))]);
   if(l.error){ $("#app").innerHTML = `<h1>Owner leads</h1><p class="err">${esc(niceErr(l.error))}</p>`; return; }
   S.rows = l.data || [];
-  S.last = {}; (n.data || []).forEach(x => { if(!S.last[x.lead_id]) S.last[x.lead_id] = x; });
+  S.last = {}; (n.data || []).forEach(x => { S.last[x.lead_id] = x; });
   render();
 }
 
