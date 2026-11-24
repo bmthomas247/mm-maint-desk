@@ -234,6 +234,14 @@
 
     // ---- page errors + failure messages people see ----
     var seenErr = {};
+    function at(u, l, c) { u = String(u || "").split("#")[0].split("?")[0].split("/").pop(); return u ? u + (l ? ":" + l + (c ? ":" + c : "") : "") : ""; }
+    function where(stack) {           // first spot in OUR files (crew.moosemanagement.com), else the first spot at all
+      try {
+        var re = /(https?:\/\/[^\s)]+?):(\d+):(\d+)/g, m, first = "", s = String(stack || "");
+        while ((m = re.exec(s))) { var w = at(m[1], m[2], m[3]); if (!first) first = w; if (m[1].indexOf(location.host) >= 0) return w; }
+        return first;
+      } catch (x) { return ""; }
+    }
     function err(msg, src) {
       msg = clean(msg, 300); if (!msg) return;
       var k = msg; if (seenErr[k] && Date.now() - seenErr[k] < 30000) return; seenErr[k] = Date.now();
@@ -260,11 +268,11 @@
           if (/^(SCRIPT|LINK)$/.test(tg.tagName)) err("Couldn't load " + (tg.tagName === "SCRIPT" ? "script" : "style") + ": " + String(u).split("?")[0].split("/").slice(-2).join("/"), u);
           return;
         }
-        err(e.message || "Page error", (e.filename || "") + (e.lineno ? ":" + e.lineno : ""));
+        err(e.message || "Page error", (e.error && where(e.error.stack)) || at(e.filename, e.lineno, e.colno));
       } catch (x) {}
     }, true);
     window.addEventListener("unhandledrejection", function (e) {
-      try { var r = e.reason; err("Unhandled: " + ((r && (r.message || r.error_description)) || String(r)), ""); } catch (x) {}
+      try { var r = e.reason; err("Unhandled: " + ((r && (r.message || r.error_description)) || String(r)), r && where(r.stack)); } catch (x) {}
     });
     var FAIL = /couldn.?t|could not|can.?t|cannot|error|failed|not allowed|not saved|denied|try again|went wrong|no signal|timed out/i;
     function wrapAlerts() {
