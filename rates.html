@@ -2411,7 +2411,7 @@ function srWire(R) {
       let mn = Math.max(gapMin == null && mr?.one ? 1 : srMinLo(Y), gapMin ?? min ?? 2);
       { const lmv = out <= 3 && Y.minLm3 !== "" && Y.minLm3 != null ? +Y.minLm3 : out <= 7 && Y.minLm7 !== "" && Y.minLm7 != null ? +Y.minLm7 : null;
         if (lmv && lmv < mn) { mn = Math.max(srMinLo(Y), lmv); why.push(`last minute: min stay ${mn}`); } }
-      { const st = srLadder(Y, out); if (st) { const lo = +st.lo || 1, hi = +st.hi || 30; mn = Math.min(hi, Math.max(lo, mn)); why.push(`min stay ${mn} (${out} days out: ${lo}${hi !== lo ? "-" + hi : ""} nights)`); } }
+      { const st = srLadder(Y, out), gf = +Y.gapFill || 0; if (gapMin != null && gf && gapMin === gf) { mn = gf; why.push(`min stay ${mn} (fills a ${gf}-night gap)`); } else if (st) { const lo = +st.lo || 1, hi = +st.hi || 30; mn = Math.min(hi, Math.max(lo, mn)); why.push(`min stay ${mn} (${out} days out: ${lo}${hi !== lo ? "-" + hi : ""} nights)`); } }
       built.push({ r, v, why, ct, clo, hn: hN, out: out0, ly: !!far, hol: !!hol, gap: gapMin != null, dw, min: mn /* 2+ nights unless the home allows 1 (Brandon 2026-11-09) */ }); n++; }
     // smoothing: no jump bigger than Y.jump% from the night before (holidays left alone)
     for (let i = 1; i < built.length; i++) { const p = built[i - 1], x = built[i]; if (!Y.jump || x.hol || p.hol || addD(p.r.k, 1) !== x.r.k) continue;
