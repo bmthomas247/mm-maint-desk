@@ -735,16 +735,22 @@ function render(v, key, data, ppl){
         <p class="msrc">Source: ${esc(it.src || "")} · Showings and open houses from Breezeway tasks</p>`;
     } else if(MX.tab === "ov" && isPsu(it)){
       const P = psuInfo(it), lg = MX.psu[String(it.key).split(":")[1]] || [], dv2 = ST.drafts[key + "|" + it.key];
+      /* Launch Pad notes in ONE box (Jeff 2026-11-24: "add notes in the meeting right here so i dont have to leave the page"):
+         earlier Launch Pad notes oldest first, today's notes, then the box to type in. A note saved today shows under "Today"
+         at once; Launch Pad's copy of today (psu_progress, every 30 min) is left out so it doesn't show twice. */
+      const tn = notesOf(day, it.key).map(n => Object.assign({}, n, { text:String(n.text || "").replace(/\s*\(saved to Launch Pad\)\s*$/, "") }));
+      const lgE = lg.filter(e => !(e.day === day && tn.length && /^Moose Hub/.test(e.src || ""))).slice().reverse();
       b = `<div class="mbox"><div class="mpsut"><span>${esc(P.kind)}${P.owner ? " · owner " + esc(P.owner) : ""}</span><b>${P.pct}%</b></div>
           <div class="mpsub" style="margin:6px 0"><i style="width:${P.pct}%;background:${psuColor(P.pct)}"></i></div>
           <small class="muted">${P.done != null ? P.done + " of " + P.total + " steps done" : ""}</small>
           ${P.next.length ? `<div style="margin-top:8px"><b style="font-size:13px">Next up</b><ul class="mlines">${P.next.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>` : ""}</div>
         ${it.ask ? `<div class="msig"><i>✦</i><div><small>Ask everyone</small>${esc(it.ask)}</div></div>` : ""}
-        <div class="mbox"><b>📝 Note for Launch Pad</b><p class="muted" style="font-size:12px;margin:0 0 6px">Saved on this home's meeting notes in Property Set Up (and here).</p>
-          ${feedHtml(notesOf(day, it.key), it.key)}<textarea id="mpsun" placeholder="What did we say? Who does what?">${esc(dv2 != null ? dv2 : "")}</textarea>
-          <div class="macts"><button class="btn small primary" id="mpsus">Save to Launch Pad</button><span class="muted" id="mpsum" style="font-size:13px"></span></div></div>
+        <div class="mbox mpsunb"><b>📝 Launch Pad meeting notes</b>
+          ${lgE.length ? lgE.map(e => `<div class="mfn" style="margin-top:6px"><b>${esc(fmt(e.day))}</b><span class="muted"> · ${esc(e.src || e.by || "")}</span><div style="white-space:pre-wrap;font-size:13.5px">${esc(e.text)}</div></div>`).join("") : `<p class="muted" style="font-size:13px;margin:6px 0 0">No earlier meeting notes for this home yet.</p>`}
+          ${tn.length ? `<div style="margin-top:10px;font-size:13px"><b>Today</b></div>` : ""}${feedHtml(tn, it.key)}
+          <textarea id="mpsun" style="margin-top:8px" placeholder="Add a note from today's meeting: what did we say? Who does what?">${esc(dv2 != null ? dv2 : "")}</textarea>
+          <div class="macts"><button class="btn small primary" id="mpsus">Save to Launch Pad</button><span class="muted" id="mpsum" style="font-size:13px">Saves on this home's meeting notes in Property Set Up · Ctrl+Enter</span></div></div>
         ${onBox(it)}
-        ${lg.length ? `<div class="mbox"><b>Earlier meeting notes (Launch Pad)</b>${lg.map(e => `<div class="mfn" style="margin-top:6px"><b>${esc(fmt(e.day))}</b><span class="muted"> · ${esc(e.src || e.by || "")}</span><div style="white-space:pre-wrap;font-size:13.5px">${esc(e.text)}</div></div>`).join("")}</div>` : ""}
         <div class="macts"><a class="btn small primary" href="#/property_setup">🚀 Open in Property Set Up</a></div>
         <p class="msrc">Source: ${esc(it.src || "")}</p>`;
     } else if(MX.tab === "ov"){
@@ -799,6 +805,7 @@ function render(v, key, data, ppl){
       o.querySelector("#msmsg").textContent = "Saved ✓"; redraw(); };
     const pn = o.querySelector("#mpsun"), ps = o.querySelector("#mpsus");
     if(pn){ pn.oninput = () => ST.drafts[key + "|" + it.key] = pn.value;
+      pn.onkeydown = e => { if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); ps.click(); } };
       ps.onclick = async () => { if(!pn.value.trim()) return pn.focus(); ps.disabled = true; o.querySelector("#mpsum").textContent = "Saving…";
         const r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:pn.value.trim() }); ps.disabled = false;
         if(r.error) return o.querySelector("#mpsum").textContent = "Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message);
