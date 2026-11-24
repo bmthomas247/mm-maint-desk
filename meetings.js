@@ -478,7 +478,7 @@ const ORCSS = `
 .orpage .mft{padding:4px 9px} .orpage .orsum{margin:2px 0 4px;font-size:13px} .orpage .orhd:first-of-type{margin-top:10px}
 .lichb .lichr{padding:7px 0;border-top:1px solid #efefea;font-size:13.5px} .lichb .lichr:first-of-type{border-top:0} .mtg .mbox.lichb.hot{border-left:4px solid #d97706}
 .lichr .lichw{margin-top:1px} .lichr.hot .lichw{color:#b42318;font-weight:600} .lichr small{display:block;margin-top:2px;white-space:pre-wrap;overflow-wrap:anywhere}
-.lichr .ortag{margin-left:4px} .lichsum{font-size:12.5px;margin:0 0 6px}
+.lichr .ortag{margin-left:4px} .lichlp{display:block;margin-top:6px;font-size:12.5px} .lichsum{font-size:12.5px;margin:0 0 6px}
 @media print{ .orcb,.orrb,.ornote,.orhall{display:none!important} .orc{break-inside:avoid;box-shadow:none} .orfold{display:none} }`;
 let orCssDone = false;
 const orCss = () => { if(orCssDone) return; orCssDone = true; const s = document.createElement("style"); s.textContent = ORCSS; document.head.appendChild(s); };
@@ -535,12 +535,30 @@ function render(v, key, data, ppl){
       if(!LIC || it.lich) return "";
       let rs = licRecsFor(it); const hot = rs.filter(r => r.c.g === "today");
       if(onlyToday && !hot.length) return "";
-      if(!rs.length){ if(!isPsu(it) || kindOf(it) === "off") return "";
-        return `<div class="mbox lichb"><b>📄 Licensing</b><p class="muted" style="margin:4px 0 0;font-size:13px">No license on file for ${esc(psuInfo(it).home)} yet.</p><div class="macts"><a class="btn small" href="#/licensing">📄 Open the Licenses page</a></div></div>`; }
+      if(!rs.length){ if(!isPsu(it) || !licNeeds(it)) return "";
+        return `<div class="mbox lichb"><b>📄 Licensing</b><p class="muted" style="margin:4px 0 0;font-size:13px">No license on file for ${esc(psuInfo(it).home)} yet.</p>${lpNote(it)}<div class="macts"><a class="btn small" href="#/licensing">📄 Open the Licenses page</a></div></div>`; }
       rs = rs.slice().sort((a, c) => (c.c.g === "today") - (a.c.g === "today") || LIC_KORD.indexOf(a.kind) - LIC_KORD.indexOf(c.kind));
-      return `<div class="mbox lichb${hot.length ? " hot" : ""}"><b>📄 Licensing${hot.length ? " · heads-up" : ""}</b>${rs.map(r => licRow(r)).join("")}<div class="macts"><a class="btn small" href="#/licensing">📄 Open the Licenses page</a></div></div>`;
+      return `<div class="mbox lichb${hot.length ? " hot" : ""}"><b>📄 Licensing${hot.length ? " · heads-up" : ""}</b>${rs.map(r => licRow(r)).join("")}${lpNote(it)}<div class="macts"><a class="btn small" href="#/licensing">📄 Open the Licenses page</a></div></div>`;
     } catch(e){ return ""; }
   }
+  /* ...and into the home's Launch Pad meeting notes (Jeff 2026-11-24 "Yes, save it there"): one "📄 Licensing:" line, first in the note
+     saved when the home is saved or marked covered in this meeting (Save to Launch Pad, ✓ Covered → next, ✓ on the row), only when it
+     changed since the last one saved, so Launch Pad doesn't get the same line every week. meeting_psu_note also marks the topic covered,
+     so nothing is saved just by opening the page. */
+  const LIC_LP = "📄 Licensing: ";
+  const licNeeds = it => /^(str|lease)$/.test(((LIC && LIC.jobs || []).find(x => String(x.job) === String(it.key).split(":")[1]) || {}).kind || "");   // nightly / lease set-ups need a license; 2nd homes don't
+  const licLine = it => { try { if(!LIC || !isPsu(it)) return ""; const rs = licRecsFor(it).slice().sort((a, c) => LIC_KORD.indexOf(a.kind) - LIC_KORD.indexOf(c.kind));
+    if(!rs.length) return licNeeds(it) ? LIC_LP + "no license on file yet" : "";
+    return LIC_LP + rs.map(r => r.kname + (r.lic_no ? " #" + r.lic_no : "") + " — " + String(r.c.why).replace(/\s*\(\d+ days?\)/, "")).join("; "); } catch(e){ return ""; } };
+  const licLast = it => { const out = [], job = String(it.key).split(":")[1];
+    const take = (d, t) => String(t || "").split("\n").forEach(l => { l = l.trim(); if(l.startsWith(LIC_LP)) out.push({ d, t:l.replace(/\s*\((saved to Launch Pad|hub|[A-Z][a-z]+)\)$/, "") }); });
+    (MX.psu[job] || []).forEach(e => take(e.day, e.text)); notesOf(null, it.key).forEach(n => take(n.day, n.text));
+    return out.sort((a, b) => String(b.d).localeCompare(String(a.d)))[0] || null; };
+  const licToSave = it => { const l = licLine(it), last = l ? licLast(it) : null; return l && !(last && last.t === l) ? l : ""; };
+  const licWith = (it, text) => [licToSave(it), String(text || "").trim()].filter(Boolean).join("\n");
+  const lpNote = it => { if(!isPsu(it) || !licLine(it)) return ""; const last = licLast(it);
+    return licToSave(it) ? `<small class="muted lichlp">📝 This goes into ${esc(psuInfo(it).home)}'s Launch Pad meeting notes when you save a note or mark it covered.</small>`
+      : `<small class="muted lichlp">✓ In the Launch Pad meeting notes (${esc(licD(last.d))})</small>`; };
   function licList(){
     try {
       if(!LIC) return "";
@@ -646,7 +664,8 @@ function render(v, key, data, ppl){
     if(cv) cv.onclick = async () => { cv.disabled = true; cv.textContent = "Saving…";
       const ta = o.querySelector(`textarea[data-note="${CSS.escape(it.key)}"]`), pn = o.querySelector("#mpsun");
       let r = null;
-      if(pn && pn.value.trim()) r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:pn.value.trim() });
+      const lpT = isPsu(it) ? licWith(it, pn ? pn.value : "") : "";
+      if(lpT) r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:lpT });
       if(!r || !r.error) r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:it.key, p_text:(ta && ta.value.trim()) || "Covered in the meeting.", p_state:"covered" });
       if(r.error){ cv.disabled = false; cv.textContent = "✓ Covered → next"; return await mmAlert("Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message)); }
       delete ST.drafts[key + "|" + it.key];
@@ -902,7 +921,7 @@ function render(v, key, data, ppl){
     if(pn){ pn.oninput = () => ST.drafts[key + "|" + it.key] = pn.value;
       pn.onkeydown = e => { if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); ps.click(); } };
       ps.onclick = async () => { if(!pn.value.trim()) return pn.focus(); ps.disabled = true; o.querySelector("#mpsum").textContent = "Saving…";
-        const r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:pn.value.trim() }); ps.disabled = false;
+        const r = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(it.key).split(":")[1], p_text:licWith(it, pn.value) }); ps.disabled = false;
         if(r.error) return o.querySelector("#mpsum").textContent = "Couldn't save: " + (window.niceErr ? niceErr(r.error) : r.error.message);
         delete ST.drafts[key + "|" + it.key]; redraw(); }; }
     const sv = (res, fu, btn) => async () => { const r0 = res ? o.querySelector("#mofbr").value.trim() : ""; if(res && !r0) return o.querySelector("#mofbr").focus();
@@ -1139,6 +1158,9 @@ function render(v, key, data, ppl){
   v.querySelectorAll("[data-open]").forEach(c => { const go = e => { if(e.target.closest("[data-quick]")) return; e.stopPropagation(); MX.open = c.dataset.open; MX.tab = "ov"; MX.tf = "all"; MX.bwopen = false; MX.chg = null; panel(); };
     c.onclick = go; c.onkeydown = e => { if(e.key === "Enter") go(e); }; });
   v.querySelectorAll("[data-quick]").forEach(b => b.onclick = async e => { e.stopPropagation(); b.disabled = true;
+    const qi = items.find(x => x.key === b.dataset.quick), lq = qi && isPsu(qi) ? licToSave(qi) : "";
+    if(lq){ const r0 = await sb.rpc("meeting_psu_note", { p_meet:key, p_day:day, p_job:String(qi.key).split(":")[1], p_text:lq });
+      if(r0.error){ b.disabled = false; return await mmAlert("Couldn't save: " + r0.error.message); } }
     const r = await sb.rpc("meeting_note", { p_meet:key, p_day:day, p_item:b.dataset.quick, p_text:"Covered in the meeting.", p_state:"covered" });
     if(r.error){ b.disabled = false; return await mmAlert("Couldn't save: " + r.error.message); } redraw(); });
   v.querySelectorAll("[data-filt]").forEach(b => b.onclick = () => { MX.filt = b.dataset.filt; render(v, key, data, ppl); });
