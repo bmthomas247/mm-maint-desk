@@ -112,7 +112,7 @@
     }
     // Inside the hub, the hub page itself records the open; a desk inside it only records its own moves (#hash changes).
     if (!FRAMED) view("open");
-    window.addEventListener("hashchange", function () { view("move"); spStart("move"); });
+    window.addEventListener("hashchange", function () { view("move"); if (!(SP && SP.why === "open")) spStart("move"); });   // a move while the page is still starting up stays part of the start-up time
 
     // ---- page speed + data requests (config.js keeps each request to our database in window.__mmCalls) ----
     function pathOf(u) {
