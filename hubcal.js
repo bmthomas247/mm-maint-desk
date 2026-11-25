@@ -665,12 +665,12 @@ function invalidate(){ C.cache.clear(); }
 function draw(k, o){
   o = o || {}; const t = T(k), root = C.v.querySelector(`.hc[data-k="${k}"]`); if(!root || !t.data) return;
   t.items = buildItems(k, t.data); syncBar(k);
-  const cal = root.querySelector("#hccal"), sc = cal.querySelector(".hc-sc"), keep = sc ? { y:sc.scrollTop, x:sc.scrollLeft, v:t.view, k:cal.dataset.r } : null;
+  const cal = root.querySelector("#hccal"), sc = cal.querySelector(".hc-sc"), keep = o.keepIn !== undefined ? o.keepIn : sc ? { y:sc.scrollTop, x:sc.scrollLeft, v:t.view, k:cal.dataset.r } : null;   // a re-measure redraw keeps the first draw's scroll plan
   const [a, b] = rangeOf(k); let h;
   if(k === "cal_res") h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : t.view === "day" ? `<div class="hc-ag" style="padding:4px 14px">${resDetail(t.data.stays, t.sel)}</div>` : resWeekHTML(k, daysOf(a, b));
   else h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : gridHTML(k, daysOf(a, b));
   cal.innerHTML = h; cal.dataset.r = t.view + a; fitAd(cal);
-  const stk = cal.querySelector(".hc-wk.ol .hc-hd"); if(stk && Math.abs(stk.offsetHeight - (C.headH || 58)) > 1 && !o.refit){ C.headH = stk.offsetHeight; return draw(k, Object.assign({}, o, { refit:true })); }
+  const stk = cal.querySelector(".hc-wk.ol .hc-hd"); if(stk && Math.abs(stk.offsetHeight - (C.headH || 58)) > 1 && !o.refit){ C.headH = stk.offsetHeight; return draw(k, Object.assign({}, o, { refit:true, keepIn:keep })); }
   const src = root.querySelector("#hcsrc"); if(src) src.textContent = k === "cal_res" ? (t.data.resSrc || "") : "";
   const sc2 = cal.querySelector(".hc-sc");
   if(sc2){ if(keep && keep.v === t.view && !o.scrollNow) { sc2.scrollTop = keep.y; sc2.scrollLeft = keep.x; } else scrollToHours(k, sc2); }
@@ -680,8 +680,8 @@ function draw(k, o){
 }
 function fitAd(cal){ cal.querySelectorAll(".hc-hd,.hc-bd").forEach(r => r.style.paddingRight = ""); }   // the all-day part no longer scrolls on its own (Jeff 2026-11-25)
 window.addEventListener("resize", () => { clearTimeout(C.rsz); C.rsz = setTimeout(() => { const cal = C.v && C.v.querySelector("#hccal"); if(cal && C.k && alive(C.k) && cal.querySelector(".hc-wk.ol")) draw(C.k); }, 200); });   // re-fit the week
-function scrollToHours(k, sc){ if(sc.closest(".hc-wk.ol")){ sc.scrollTop = 0; return; }   // Outlook week: open at the top (all-day lines, then the hours from 8 AM)
-  const g = C.g || { a:6 };
+function scrollToHours(k, sc){   // opens at 8 AM (or a little before the first thing that day); the all-day part stays pinned above
+  const g = C.g || { a:6 }; if(sc.closest(".hc-wk.ol") && !sc.querySelector(".hc-stick .hc-ad")){ sc.scrollTop = 0; return; }
   const first = Math.min(...daysOf(...rangeOf(k)).flatMap(s => I(s).filter(x => x.start).map(x => toMin(x.start))), 99999);
   const target = Math.min(8 * 60, first < 99999 ? first - 30 : 8 * 60);
   sc.scrollTop = Math.max(0, (target - g.a * 60) / 60 * HPX); }
@@ -700,7 +700,7 @@ function lay(list){ list.sort((x, y) => x.s - y.s || y.e - x.e); let cols = [], 
 function gridHTML(k, days){
   const t = today(), sel = T(k).sel, n = days.length;
   // the hours stretch if something is earlier than 6 am or later than 10 pm
-  let gA = 8, gB = 18; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
+  let gA = 0, gB = 24; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
   gB = Math.min(24, gB); C.g = { a:gA, b:gB };
   // fit the screen: the all-day lines get the room they need (a too-full day shows "+N more"), the hours share what is left
   const calEl = C.v && C.v.querySelector("#hccal"), avail = calEl ? Math.floor(window.innerHeight - Math.max(0, calEl.getBoundingClientRect().top) - 14) : 0,   /* room from the top of the calendar to the bottom of the window */ LH = 17, MINH = 20, hrs = gB - gA, headH = C.headH || 58;
@@ -710,8 +710,7 @@ function gridHTML(k, days){
   if(avail > 320){ const room = avail - headH - 6;
     const adH = Math.max(34, adMax * LH + 10); let hh = hrs; stk = adH <= room * 0.65;   // the top always shows every line; pinned unless it is very tall
     // lots of room (big screen, few lines)? show more of the day (to 9 PM, then from 7 AM) instead of very tall hours
-    while(Math.floor((room - adH) / hh) > 44 && (gB < 21 || gA > 7)){ if(gB < 21) gB++; else gA--; hh = gB - gA; }
-    HPX = Math.max(36, Math.min(52, Math.floor((room - adH) / hh))); C.g = { a:gA, b:gB }; }   // normal readable hours; they scroll if they don't fit
+    HPX = 40; C.g = { a:gA, b:gB }; }   // all 24 hours at a readable height; the hours scroll under the pinned top (Jeff 2026-11-25)
   C.cap = cap; C.wide = !!calEl && n > 1 && (calEl.clientWidth - 52) / n >= 190;
   const cols = `grid-template-columns:${phone() ? 58 : 48}px repeat(${n},minmax(${n > 1 ? 104 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
   let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}" style="--hpx:${HPX}px${HPX < 36 ? ";--half:transparent" : ""}${avail > 320 ? `;flex:none;height:${avail}px` : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
