@@ -17,7 +17,7 @@ if(window.hubCal) return;
 
 const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
 const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"]];
-const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["seven","7 days"],["month","Month"],["list","Agenda"]];   // 7 days = starts on the day you are on, like the old Outlook (Jeff 2026-11-25)
+const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["seven","7 days"],["range","Custom dates"],["month","Month"],["list","Agenda"]];   // 7 days = starts on the day you are on, like the old Outlook (Jeff 2026-11-25)
 const MGR = ["owner_relations","maint_manager","office_manager","hk_manager"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const MONS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -132,6 +132,7 @@ const mAt = (m, s) => { const x = mvTo(m, s); return x && x.start ? { start:x.st
 
 /* ---------- ranges ---------- */
 function rangeOf(k){ const t = T(k), s = t.sel;
+  if(t.view === "range"){ const a = t.rs || s; return [a, t.re && t.re >= a ? t.re : addD(a, 6)]; }   // custom dates (up to 14 days)
   if(t.view === "seven") return [s, addD(s, 6)];
   if(k === "cal_res" && t.view === "work"){ const w = weekStart(s); return [addD(w, 1), addD(w, 5)]; }
   if(t.view === "day") return [s, s];
@@ -143,9 +144,10 @@ function stepSel(k, n){ const t = T(k);
   if(t.view === "day"){ t.sel = addD(t.sel, n); }
   else if(t.view === "month"){ t.sel = addM(t.sel, n); if(t.sel.slice(0, 7) === today().slice(0, 7)) t.sel = today(); }
   else if(t.view === "list"){ t.sel = addD(t.sel, n * 7); }
+  else if(t.view === "range"){ const [a, b] = rangeOf(k), len = dif(a, b) + 1; t.rs = addD(a, n * len); t.re = addD(b, n * len); t.sel = t.rs; }
   else { t.sel = addD(t.sel, 7 * n); }
   t.mini = null; }
-const stepWord = (k, n) => { const v = T(k).view; return (n < 0 ? "Previous " : "Next ") + (v === "day" ? "day" : v === "month" ? "month" : "week"); };
+const stepWord = (k, n) => { const v = T(k).view; if(v === "range"){ const [a, b] = rangeOf(k); return (n < 0 ? "Previous " : "Next ") + (dif(a, b) + 1) + " days"; } return (n < 0 ? "Previous " : "Next ") + (v === "day" ? "day" : v === "month" ? "month" : "week"); };
 function titleOf(k){ const t = T(k), [a, b] = rangeOf(k), A = D(a), B = D(b);
   if(t.view === "day") return A.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
   if(t.view === "month") return MONL[D(t.sel).getMonth()] + " " + D(t.sel).getFullYear();
@@ -236,7 +238,7 @@ function buildItems(k, d){
   if(!isRes && layerOn(k, "chk") && (d.chk || []).length){
     const myT = (ME && ME.teams) || [], mine = c => (c.people || []).includes(me) || (c.teams || []).some(q => myT.includes(q)), last = {};
     (d.runs || []).forEach(r => { const key = r.check_key + "|" + r.day; if(!last[key]) last[key] = r; });   // newest first
-    const vw = T(k).view, fold = vw === "week" || vw === "seven" || vw === "work", dly = {};   // Month + Agenda: only today's checks (they repeat every day)
+    const vw = T(k).view, fold = vw === "week" || vw === "seven" || vw === "work" || vw === "range", dly = {};   // Month + Agenda: only today's checks (they repeat every day)
     d.chk.filter(c => isOff || mine(c)).forEach(c => daysOf(d.a, d.b).forEach(s => { if(!chkDue(c, s) || ((vw === "month" || vw === "list") && s !== t)) return;
       const run = last[c.key + "|" + s] || null, st = run ? run.status : "", done = st === "done" || st === "ok", bad = st === "issues" || st === "error";
       const it = { id:"k:" + c.key + ":" + s, type:"check", chk:c, run, day:s, start:null, title:CHK_NAMES[c.key] || c.title, pre:done ? "✓ " : bad ? "⚠ " : "",
@@ -479,6 +481,15 @@ const HCCSS = `
   .hc .hc-nb:hover,.hc .hc-nm:hover{filter:brightness(1.1)}
 }
 .hc-pop.hc-menu{width:auto;min-width:210px;max-width:320px}
+.hc-pop .hc-pk .pkm{display:flex;border:1px solid var(--line-2);border-radius:8px;overflow:hidden;margin:6px 0}
+.hc-pop .hc-pk .pkm button{flex:1;border:0;background:none;padding:7px;font-weight:700;cursor:pointer;color:var(--ink-2);font-size:13px} .hc-pop .hc-pk .pkm button.on{background:var(--forest);color:#fff}
+.hc-pop .hc-pk .pkh{font-size:12.5px;margin:2px 0 6px}
+.hc-pop .hc-pk .pkn{display:flex;align-items:center;gap:6px;margin:4px 0 6px} .hc-pop .hc-pk .pkn b{flex:1;text-align:center}
+.hc-pop .hc-pk .pkg{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0;text-align:center} .hc-pop .hc-pk .pkg span{font-size:11px;font-weight:800;color:var(--muted)}
+.hc-pop .hc-pk .pk{border:0;border-radius:8px;padding:7px 0;cursor:pointer;font-weight:700;background:none;color:var(--ink)} .hc-pop .hc-pk .pk:hover{background:var(--ground)}
+.hc-pop .hc-pk .pk.o{color:var(--muted)} .hc-pop .hc-pk .pk.td{box-shadow:inset 0 0 0 2px var(--forest)} .hc-pop .hc-pk .pk.sl{background:var(--moose-soft)}
+.hc-pop .hc-pk .pk.in{background:var(--moose-soft);border-radius:0} .hc-pop .hc-pk .pk.ed{background:var(--forest);color:#fff;border-radius:8px}
+.hc-pop .hc-pk .qrow input[type=date]{flex:1;min-width:0}
 .hc-pop.hc-menu .pb{padding:8px}
 .hc-pop .hc-mi{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}
 .hc-pop .hc-mi:hover{background:var(--ground)} .hc-pop .hc-mi input{width:16px;height:16px;min-height:0;margin:0;flex:none}
@@ -656,7 +667,7 @@ const ckey = (k, a, b) => k + "|" + a + "|" + b + (k !== "cal_res" && layerOn(k,
 const dsig = d => JSON.stringify([d.a, d.b, d.evs.map(e => [e.id, e.updated_at]), d.ox, d.tor, d.hm, d.stays.map(x => x.unit + x.in + x.out + (x.guest || "")).join(), d.links, d.guests, Object.keys(d.series), (d.chk || []).map(c => c.key + c.updated_at), (d.runs || []).map(r => r.id)]);
 function upd(s){ const u = C.v && C.v.querySelector(".hc-upd"); if(u) u.textContent = s; }
 let pfT = null;
-function prefetch(k){ clearTimeout(pfT); pfT = setTimeout(async () => { if(!alive(k)) return; const t = T(k), sel = t.sel; stepSel(k, 1); const [a, b] = rangeOf(k); t.sel = sel;
+function prefetch(k){ clearTimeout(pfT); pfT = setTimeout(async () => { if(!alive(k)) return; const t = T(k), sel = t.sel, rs = t.rs, re = t.re; stepSel(k, 1); const [a, b] = rangeOf(k); t.sel = sel; t.rs = rs; t.re = re;
   const key = ckey(k, a, b); if(C.cache.has(key)) return;
   try { const d = await loadData(k, a, b); C.cache.set(key, { d, at:Date.now(), sig:dsig(d) }); } catch(e){} }, 900); }
 function invalidate(){ C.cache.clear(); }
@@ -683,7 +694,7 @@ window.addEventListener("resize", () => { clearTimeout(C.rsz); C.rsz = setTimeou
 function scrollToHours(k, sc){   // opens at 8 AM (or a little before the first thing that day); the all-day part stays pinned above
   const g = C.g || { a:6 }; if(sc.closest(".hc-wk.ol") && !sc.querySelector(".hc-stick .hc-ad")){ sc.scrollTop = 0; return; }
   const first = Math.min(...daysOf(...rangeOf(k)).flatMap(s => I(s).filter(x => x.start).map(x => toMin(x.start))), 99999);
-  const target = Math.min(8 * 60, first < 99999 ? first - 30 : 8 * 60);
+  const target = sc.closest(".hc-wk.ol") ? 8 * 60 : Math.min(8 * 60, first < 99999 ? first - 30 : 8 * 60);   // Outlook week: always opens at 8 AM
   sc.scrollTop = Math.max(0, (target - g.a * 60) / 60 * HPX); }
 
 function badge(k, s, small){ if(k !== "cal_office" || !layerOn(k, "work")) return k === "cal_res" ? resBadge(s) : "";
@@ -710,7 +721,7 @@ function gridHTML(k, days){
   if(avail > 320){ const room = avail - headH - 6;
     const adH = Math.max(34, adMax * LH + 10); let hh = hrs; stk = adH <= room * 0.65;   // the top always shows every line; pinned unless it is very tall
     // lots of room (big screen, few lines)? show more of the day (to 9 PM, then from 7 AM) instead of very tall hours
-    HPX = 40; C.g = { a:gA, b:gB }; }   // all 24 hours at a readable height; the hours scroll under the pinned top (Jeff 2026-11-25)
+    HPX = Math.max(22, Math.min(64, Math.floor(((stk ? room - adH : room) - 16) / 11))); C.g = { a:gA, b:gB }; }   // 8 AM-7 PM (11 hours) fills the window under the pinned top; all 24 hours scroll (Jeff 2026-11-25)
   C.cap = cap; C.wide = !!calEl && n > 1 && (calEl.clientWidth - 52) / n >= 190;
   const cols = `grid-template-columns:${phone() ? 58 : 48}px repeat(${n},minmax(${n > 1 ? 104 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
   let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}" style="--hpx:${HPX}px${HPX < 36 ? ";--half:transparent" : ""}${avail > 320 ? `;flex:none;height:${avail}px` : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
@@ -790,10 +801,11 @@ function reachCard(k, s){ const ppl = C.people || [], { wk } = whoLists(k, s), o
     <p class="muted" style="font-size:11.5px;margin:6px 0 0">Managers, plus whoever is working that day.</p></div>`; }
 
 /* ---------- interactions ---------- */
-function go(k, day, view){ const t = T(k), vw = !!view && view !== t.view; if(day) t.sel = day; if(view) t.view = view; t.mini = null; C.adOpen = false; popClose(); refresh(k, { scrollNow:vw }); }
+function go(k, day, view){ const t = T(k), vw = !!view && view !== t.view; if(day) t.sel = day; if(view) t.view = view;
+  if(t.view === "range" && day && t.rs){ const len = dif(t.rs, t.re || t.rs); t.rs = day; t.re = addD(day, len); }   /* custom dates: Today / a picked day moves the window, same length */ t.mini = null; C.adOpen = false; popClose(); refresh(k, { scrollNow:vw }); }
 function wire(root, k){
   root.addEventListener("change", e => { const el = e.target;
-    if(el.matches("[data-vsel]")){ const nv = el.value; C.prefs.view[k] = nv; savePrefs(); return go(k, null, nv); }
+    if(el.matches("[data-vsel]")){ const nv = el.value; if(nv === "range"){ el.value = T(k).view; return pickDate(k, root.querySelector("[data-pick]") || el, "range"); } C.prefs.view[k] = nv; savePrefs(); return go(k, null, nv); }
     if(el.matches("[data-tsel]") && el.value !== k){ location.hash = "#/" + el.value; } });
   root.addEventListener("click", async e => {
     const el = e.target.closest("button,[data-it],[data-col],[data-mday],[data-adday],a"); if(!el || !root.contains(el)) return;
@@ -802,7 +814,7 @@ function wire(root, k){
     if(ds.retry != null) return refresh(k, { force:true });
     if(ds.mv) { stepSel(k, +ds.mv); return go(k); }
     if(ds.today != null) return go(k, today());
-    if(ds.view){ const nv = ds.view; C.prefs.view[k] = nv; savePrefs(); return go(k, null, nv); }
+    if(ds.view){ const nv = ds.view; if(nv === "range") return pickDate(k, el, "range"); C.prefs.view[k] = nv; savePrefs(); return go(k, null, nv); }
     if(ds.gday){ e.stopPropagation(); return go(k, ds.gday, "day"); }
     if(ds.lyr){ const L = C.prefs.layers[k] = C.prefs.layers[k] || {}; L[ds.lyr] = !layerOn(k, ds.lyr); savePrefs(); return refresh(k); }
     if(ds.side != null){ C.prefs.side = !C.prefs.side; savePrefs(); syncBar(k); return drawSide(k); }
@@ -950,15 +962,30 @@ function whoPop(k, s, el){ const { wk, out } = whoLists(k, s);
   pop(`<div class="pb"><h3><span>👥 ${html(flong(s))}</span><button class="px" aria-label="Close">✕</button></h3><b style="font-size:13px">Working (${wk.length})</b>${wk.map(x => `<div class="wl"><span>${html(x.n)}</span><span class="muted">${html(shiftTxt(x))}</span></div>`).join("") || `<p class="muted" style="margin:4px 0">Nobody on the schedule.</p>`}
     ${out.length ? `<b style="font-size:13px;display:block;margin-top:10px">Out (${out.length})</b>${out.map(x => `<div class="wl"><span>${html(x.n)}</span><span class="muted">${html(x.start ? fshort(x.start) + "–" + fshort(x.end) : x.why || "all day")}</span></div>`).join("")}` : ""}
     <div class="pa"><a class="btn small" href="#/stf_sched">Open the Schedule</a></div></div>`, el); }
-function pickDate(k, el){ const t = T(k); let m = t.sel.slice(0, 7);
+function pickDate(k, el, startMode){ const t = T(k); let m = t.sel.slice(0, 7), mode = startMode || (t.view === "range" ? "range" : "day");
+  let a0 = t.view === "range" ? rangeOf(k)[0] : null, b0 = t.view === "range" ? rangeOf(k)[1] : null;
+  const apply = (a, b) => { if(!/^\d{4}-\d{2}-\d{2}$/.test(a || "") || !/^\d{4}-\d{2}-\d{2}$/.test(b || "")) return say("Pick the first day and the last day.");
+    if(b < a) [a, b] = [b, a]; if(dif(a, b) > 13){ b = addD(a, 13); toast("Showing 14 days, the most that fits."); }
+    t.rs = a; t.re = b; popClose(); go(k, a, "range"); };
   const draw2 = () => { const s0 = weekStart(m + "-01"), td = today(); let g = "";
-    for(let i = 0; i < 42; i++){ const s = addD(s0, i); if(i >= 35 && s.slice(0, 7) !== m) break; g += `<button data-pk="${s}" style="border:0;border-radius:9px;padding:8px 0;cursor:pointer;font-weight:700;background:${s === td ? "var(--forest)" : s === t.sel ? "var(--moose-soft)" : "none"};color:${s === td ? "#fff" : s.slice(0, 7) !== m ? "var(--muted)" : "var(--ink)"}">${D(s).getDate()}</button>`; }
-    const p = pop(`<div class="pb"><h3><span>Go to a date</span><button class="px" aria-label="Close">✕</button></h3><div style="display:flex;align-items:center;gap:6px;margin:4px 0 8px"><button class="btn small" data-pm="-1" aria-label="Previous month">‹</button><b style="flex:1;text-align:center">${MONL[D(m + "-01").getMonth()]} ${D(m + "-01").getFullYear()}</b><button class="btn small" data-pm="1" aria-label="Next month">›</button></div>
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center">${DOW.map(x => `<span class="muted" style="font-size:11px;font-weight:800">${x[0]}</span>`).join("")}${g}</div>
-      <div class="qrow" style="margin-top:10px"><input type="date" id="pkd" value="${t.sel}" style="flex:1"><button class="btn small primary" id="pkgo">Go</button></div></div>`, el);
+    for(let i = 0; i < 42; i++){ const s = addD(s0, i); if(i >= 35 && s.slice(0, 7) !== m) break;
+      const inR = mode === "range" && a0 && s >= a0 && s <= (b0 || a0), edge = mode === "range" && (s === a0 || s === b0);
+      g += `<button data-pk="${s}" class="pk${s === td ? " td" : ""}${s.slice(0, 7) !== m ? " o" : ""}${inR ? " in" : ""}${edge ? " ed" : ""}${mode === "day" && s === t.sel ? " sl" : ""}">${D(s).getDate()}</button>`; }
+    const p = pop(`<div class="pb hc-pk"><h3><span>Go to a date</span><button class="px" aria-label="Close">✕</button></h3>
+      <div class="pkm"><button data-pmode="day" class="${mode === "day" ? "on" : ""}">One day</button><button data-pmode="range" class="${mode === "range" ? "on" : ""}">Several days</button></div>
+      <p class="muted pkh">${mode === "day" ? "Tap a day to go there." : a0 && !b0 ? "Now tap the last day." : "Tap the first day, then the last day (up to 14 days)."}</p>
+      <div class="pkn"><button class="btn small" data-pm="-1" aria-label="Previous month">‹</button><b>${MONL[D(m + "-01").getMonth()]} ${D(m + "-01").getFullYear()}</b><button class="btn small" data-pm="1" aria-label="Next month">›</button></div>
+      <div class="pkg">${DOW.map(x => `<span>${x[0]}</span>`).join("")}${g}</div>
+      ${mode === "day" ? `<div class="qrow" style="margin-top:10px"><input type="date" id="pkd" value="${t.sel}"><button class="btn small primary" id="pkgo">Go</button></div>`
+        : `<div class="qrow" style="margin-top:10px"><input type="date" id="pka" value="${a0 || ""}"><span>to</span><input type="date" id="pkb" value="${b0 || ""}"><button class="btn small primary" id="pkgo">Show</button></div>`}</div>`, el);
+    p.querySelectorAll("[data-pmode]").forEach(b => b.onclick = () => { mode = b.dataset.pmode; if(mode === "range" && !a0){ a0 = null; b0 = null; } draw2(); });
     p.querySelectorAll("[data-pm]").forEach(b => b.onclick = () => { m = addM(m + "-01", +b.dataset.pm).slice(0, 7); draw2(); });
-    p.querySelectorAll("[data-pk]").forEach(b => b.onclick = () => go(k, b.dataset.pk));
-    p.querySelector("#pkgo").onclick = () => { const v = p.querySelector("#pkd").value; if(/^\d{4}-\d{2}-\d{2}$/.test(v)) go(k, v); }; };
+    p.querySelectorAll("[data-pk]").forEach(b => b.onclick = () => { const s = b.dataset.pk;
+      if(mode === "day") return go(k, s);
+      if(!a0 || b0){ a0 = s; b0 = null; return draw2(); }
+      apply(a0, s); });
+    p.querySelector("#pkgo").onclick = () => { if(mode === "day"){ const v = p.querySelector("#pkd").value; if(/^\d{4}-\d{2}-\d{2}$/.test(v)) go(k, v); }
+      else apply(p.querySelector("#pka").value, p.querySelector("#pkb").value); }; };
   draw2(); }
 
 /* ---------- find ---------- */
