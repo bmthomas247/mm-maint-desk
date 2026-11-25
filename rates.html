@@ -432,6 +432,8 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
 .srmschip{display:inline-flex;align-items:center;gap:4px;background:#eef5e6;border:1px solid #cfe0bd;border-radius:999px;padding:2px 4px 2px 10px;font-size:12.5px;margin:2px}.srmschip button{border:0;background:transparent;cursor:pointer;font-size:12px;padding:0 4px;min-height:0}
 </style>
 <style id="scoreLook">main.v-scoreboard>*:not(#viewnav):not(#scoreboard){display:none!important}#scoreboard{display:none}main.v-scoreboard #scoreboard{display:block}button.pcchip{font:inherit;font-size:13px}</style>
+<style>.srpk{position:relative}.srpkbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:240px;border:1px solid var(--line);background:var(--ovbg,#f1f4ec);border-radius:11px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer;color:var(--ink);min-height:40px;box-shadow:none;text-align:left;width:auto}.srpkbtn:hover{border-color:#9cbf74}.srpkbtn i{font-style:normal;color:var(--muted);font-size:12px}.srpkin{min-width:260px;border:1px solid var(--line);background:var(--ovbg,#f1f4ec);border-radius:11px;padding:8px 12px;font:inherit;font-size:14px;min-height:40px}.srpkpop{position:absolute;top:calc(100% + 6px);left:0;z-index:60;width:min(560px,92vw);background:var(--ovcard,#fff);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.16);padding:10px;display:flex;flex-direction:column;gap:8px}.srpkpop[hidden]{display:none}.srpkpop .srpkq{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 11px;font:inherit;font-size:14px;min-height:38px}.srpklist{max-height:min(420px,60vh);overflow:auto;display:flex;flex-direction:column;gap:8px}.pkg{background:var(--ovbg);border-radius:11px;padding:7px 9px}.pkh{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px;border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:3px}.pkh label{display:flex!important;align-items:center;gap:6px;font-size:13px;color:var(--ink)}.pkh .gfchip{font-size:11.5px;padding:2px 9px}.pkr{display:flex;align-items:center;gap:8px;padding:3px 2px;border-radius:8px}.pkr:hover{background:var(--ovcard,#fff)}.pkr.cur{background:#e5f2d8}.pkr label{flex:1;display:flex!important;align-items:center;gap:7px;font-size:13px;color:var(--ink);text-transform:none;letter-spacing:0;font-weight:400;cursor:pointer}.pkr label b{font-weight:600}.pklive{color:#2f5a10;font-weight:600}.pkopen{border:1px solid var(--line);background:var(--ovcard,#fff);border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;min-height:0;box-shadow:none;width:auto;color:var(--forest,#3c5f12);font-weight:600}.pkopen:hover{background:var(--forest,#3c5f12);color:#fff}.srpkft{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:8px;font-size:12.5px;color:var(--muted)}.srpkft .sp{flex:1}.srpkft button{border:1px solid var(--line);background:var(--ovcard,#fff);border-radius:999px;padding:5px 12px;font:inherit;font-size:12.5px;cursor:pointer;min-height:0;box-shadow:none;width:auto}.srpkft button.go{background:var(--forest,#3c5f12);color:#fff;border-color:var(--forest,#3c5f12)}.pkadd{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;min-height:0;box-shadow:none;color:var(--ink)}.pkadd:hover{background:var(--ovbg)}.arsel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.arsel .gfchip button{border:0;background:transparent;color:inherit;padding:0 0 0 4px;font:inherit;cursor:pointer;min-height:0;box-shadow:none;width:auto}#arBox .arform{background:transparent;padding:0}
+</style>
 </head>
 <body>
 <script>if (window.top !== window) document.body.classList.add("inhub");   // inside the hub: its green banner is the only header (Brandon 2026-10-30)</script>
@@ -1457,45 +1459,79 @@ function srTgtWire() {
   $("gfList").addEventListener("click", async e => { const b = e.target.closest("[data-gfdel]"); if (!b) return; const T = srTgts(SR.dyn), t = T[+b.dataset.gfdel]; if (!t) return;
     if (!await mmConfirm(`Remove "${srTgtSay(t)}" (${srFd(t.from, 1)} to ${srFd(t.to, 1)}) from ${srName(SR.code)}? Those dates go back to the normal pricing settings.`)) return; T.splice(+b.dataset.gfdel, 1); await persist(T); }); }
 // no home picked: goals for several homes at once (Track neighborhoods, community buttons, one builder)
-function srAreaBox() { const nb = {}; for (const h of SR.homes) { const x = SR.hh?.[h.code] || {}; ((nb[x.neighborhood || "Other"] ||= {})[x.community || "Other"] ||= []).push(h); }
-  const live = h => h.auto_on && h.auto_send && h.beyond_off;
-  const groups = Object.entries(nb).sort((a, b) => a[0].localeCompare(b[0])).map(([n, cm]) => { const all = Object.values(cm).flat();
-    return `<div class="argrp"><label class="srchk argh"><input type="checkbox" data-arnb="${escH(n)}"> <b>${escH(n)}</b> <span class="muted small">(${all.length})</span></label>
-      ${Object.keys(cm).length > 1 ? `<div class="arcms">${Object.entries(cm).map(([c, hs]) => `<button type="button" class="gfchip" data-arcm="${escH(n + "|" + c)}">${escH(c)} (${hs.length})</button>`).join("")}</div>` : ""}
-      ${all.map(h => { const x = SR.hh?.[h.code] || {}; return `<label class="srchk"><input type="checkbox" data-arh="${escH(h.code)}" data-nb="${escH(n)}" data-cm="${escH(x.community || "Other")}"> ${escH(srName(h.code))} <span class="muted small">${escH([Object.keys(cm).length > 1 ? x.community : "", x.beds != null ? (+x.beds ? x.beds + "BR" : "Studio") : ""].filter(Boolean).join(" · "))}${live(h) ? "" : " · suggestions only"}</span></label>`; }).join("")}</div>`; }).join("");
+function srAreaBox() { SR.multi = (SR.multi || []).filter(c => SR.homes.some(h => h.code === c)); const n = SR.multi.length;
   const rows = {}; for (const h of SR.homes) for (const t of srTgts(h.dyn || {})) { const k = JSON.stringify(t); (rows[k] ||= { t, codes: [] }).codes.push(h.code); }
   const list = Object.values(rows).sort((a, b) => a.t.from.localeCompare(b.t.from) || srTgtSay(a.t).localeCompare(srTgtSay(b.t)));
-  return `<div class="ovc" id="arBox"><h3 style="margin:0 0 2px">🎯 Price goals for several homes</h3><div class="cs">Pick a test home above to work on one home, or tick homes here (a whole neighborhood, a community, or single homes) and give them the same goal. Each home keeps its own copy, so you can still change one home later.</div>
-    <div class="argrid"><div><div class="gfstep"><span>✓</span>Which homes?</div><div class="arpick">${groups}</div></div><div class="arform">${srGoalForm("area", "💾 Save to 0 homes")}</div></div>
+  return `<div class="ovc" id="arBox"><h3 style="margin:0 0 2px">🎯 ${n ? `Price goal for ${n} home${n === 1 ? "" : "s"}` : "Price goals"}</h3>
+    ${n ? `<div class="arsel">${SR.multi.map(c => `<span class="gfchip on">${escH(srName(c))}<button type="button" data-arx="${escH(c)}" title="Take this home out">✕</button></span>`).join("")}</div>`
+        : `<div class="cs">Pick homes in <b>Moose-priced homes</b> above: tick several (or a whole neighborhood) to give them one goal, or tap <b>Open</b> to work on one home.</div>`}
+    <div class="arform">${srGoalForm("area", `💾 Save to ${n} home${n === 1 ? "" : "s"}`)}</div>
     <h4 style="margin:16px 0 4px">Goals now</h4>${srGoalCards(list, false)}
-    <div class="small muted" style="margin-top:6px">Groups are Track's neighborhoods. "Suggestions only" homes don't send prices to Track by themselves.</div></div>`; }
+    <div class="small muted" style="margin-top:6px">Each home keeps its own copy of a goal, so you can still change one home later. "Suggestions only" homes don't send prices to Track by themselves.</div></div>`; }
 function srAreaWire() { const box = $("arBox"); if (!box) return;
-  const checked = () => [...box.querySelectorAll("[data-arh]:checked")].map(c => c.dataset.arh);
-  const who = () => { const c = checked(), n = c.length; if (!n) return "The homes you tick";
-    const sameAs = sel => { const all = [...box.querySelectorAll("[data-arh]")].filter(sel).map(x => x.dataset.arh); return all.length === n && all.every(x => c.includes(x)); };
-    const one = box.querySelector(`[data-arh="${CSS.escape(c[0])}"]`); if (one && n > 1) { if (sameAs(x => x.dataset.cm === one.dataset.cm)) return `Every ${one.dataset.cm} home (${n})`; if (sameAs(x => x.dataset.nb === one.dataset.nb)) return `Every ${one.dataset.nb} home (${n})`; }
+  const checked = () => (SR.multi || []).slice(), hx = c => SR.hh?.[c] || {};
+  const who = () => { const c = checked(), n = c.length; if (!n) return "The homes you pick";
+    const sameAs = f => { const all = SR.homes.map(h => h.code).filter(f); return all.length === n && all.every(x => c.includes(x)); }, x0 = hx(c[0]);
+    if (n > 1) { if (x0.community && sameAs(k => hx(k).community === x0.community)) return `Every ${x0.community} home (${n})`; if (x0.neighborhood && sameAs(k => hx(k).neighborhood === x0.neighborhood)) return `Every ${x0.neighborhood} home (${n})`; }
     return n <= 3 ? c.map(srName).join(", ") : `${n} homes (${c.slice(0, 3).map(srName).join(", ")} …)`; };
   const form = box.querySelector('[data-gf="area"]');
-  const cnt = () => { const n = checked().length, b = form.querySelector(".gfsave"); b.textContent = `💾 Save to ${n} home${n === 1 ? "" : "s"}`; b.disabled = !n;
-    box.querySelectorAll("[data-arnb]").forEach(g => { const hs = [...box.querySelectorAll("[data-arh]")].filter(x => x.dataset.nb === g.dataset.arnb), on = hs.filter(x => x.checked).length; g.checked = on === hs.length && on > 0; g.indeterminate = on > 0 && on < hs.length; });
-    box.querySelectorAll("[data-arcm]").forEach(b2 => { const [n2, c2] = b2.dataset.arcm.split("|"), hs = [...box.querySelectorAll("[data-arh]")].filter(x => x.dataset.nb === n2 && x.dataset.cm === c2); b2.classList.toggle("on", hs.length > 0 && hs.every(x => x.checked)); });
-    form.srSay?.(); };
-  box.querySelectorAll("[data-arnb]").forEach(g => g.onchange = () => { box.querySelectorAll("[data-arh]").forEach(x => { if (x.dataset.nb === g.dataset.arnb) x.checked = g.checked; }); cnt(); });
-  box.querySelectorAll("[data-arcm]").forEach(b2 => b2.onclick = () => { const [n2, c2] = b2.dataset.arcm.split("|"), hs = [...box.querySelectorAll("[data-arh]")].filter(x => x.dataset.nb === n2 && x.dataset.cm === c2), on = !hs.every(x => x.checked); hs.forEach(x => x.checked = on); cnt(); });
-  box.querySelectorAll("[data-arh]").forEach(c => c.onchange = cnt);
-  box.querySelectorAll("[data-srcode]").forEach(a2 => a2.onclick = e => { e.preventDefault(); SR.code = a2.dataset.srcode; loadSetRates(); });
+  box.querySelectorAll("[data-arx]").forEach(b => b.onclick = () => { SR.multi = (SR.multi || []).filter(x => x !== b.dataset.arx); srDraw(); });
+  box.querySelectorAll("[data-srcode]").forEach(a2 => a2.onclick = e => { e.preventDefault(); SR.code = a2.dataset.srcode; SR.multi = []; loadSetRates(); });
   const save = async (codes, mk, what) => { const bad = [];
     for (const c of codes) { const h = SR.homes.find(x => x.code === c); if (!h) continue; const dyn = Object.assign({}, h.dyn || {}, { targets: mk(srTgts(h.dyn || {})) });
       const r = await sb.rpc("rates_set_auto", { p_code: c, p_dyn: dyn, p_on: null, p_days: null, p_send: null }); if (r.error) bad.push(`${srName(c)}: ${niceE(r.error)}`); else h.dyn = (r.data && r.data.dyn) || dyn; }
     if (bad.length) await mmAlert(`${what} for ` + bad.join("; ")); srDraw(); };
-  srGfWire(form, "area", who, async t => { const codes = checked(); if (!codes.length) return await mmAlert("Tick at least one home on the left.");
+  srGfWire(form, "area", who, async t => { const codes = checked(); if (!codes.length) return await mmAlert("Pick homes first in Moose-priced homes above.");
     const auto = codes.filter(c => { const h = SR.homes.find(x => x.code === c); return h && h.auto_on && h.auto_send && h.beyond_off; });
     if (!await mmConfirm(`${who()}: "${srTgtSay(t)}", ${srFd(t.from, 1)} to ${srFd(t.to, 1)}? Each home keeps its own copy. From the next morning re-price these dates follow it${auto.length ? `, and ${auto.length} of these homes send their new prices to Track` : " (saved as suggestions)"}. Where a home already has a goal on the same nights, this new one wins.`)) return;
     await save(codes, T => [t, ...T], "Not saved"); });
   box.querySelectorAll("[data-ardel]").forEach(b => b.onclick = async () => { const key = b.dataset.ardel, codes = b.dataset.codes.split("|"), t = JSON.parse(key);
     if (!await mmConfirm(`Remove "${srTgtSay(t)}" (${srFd(t.from, 1)} to ${srFd(t.to, 1)}) from ${codes.map(srName).join(", ")}? Those dates go back to the normal pricing settings.`)) return;
     await save(codes, T => T.filter(x => JSON.stringify(x) !== key), "Not changed"); });
-  cnt(); }
+  { const b = form?.querySelector(".gfsave"); if (b) b.disabled = !checked().length; }
+  form?.srSay?.(); }
+// Moose-priced homes picker: search, tick several (one goal for them), or Open one home
+function srPkTxt() { const n = (SR.multi || []).length; return SR.code ? srName(SR.code) : n ? `${n} home${n === 1 ? "" : "s"} picked` : (SR.homes.length ? "Pick homes…" : "No homes yet"); }
+function srPkHay(c) { const x = SR.hh?.[c] || {}; return [c, srName(c), x.community, x.neighborhood].filter(Boolean).join(" ").toLowerCase(); }
+function srPkMatch(c, q) { if (!q) return true; const h = srPkHay(c); return h.includes(q) || h.replace(/\s/g, "").includes(q.replace(/\s/g, "")); }
+function srPkFacts(c) { const x = SR.hh?.[c] || {}; return [x.community, x.beds != null ? (+x.beds ? x.beds + "BR" : "Studio") : ""].filter(Boolean).join(" · "); }
+function srPkGroups(q) { q = (q || "").trim().toLowerCase().replace(/\s+/g, " "); const sel = new Set(SR.multi || []), live = h => h.auto_on && h.auto_send && h.beyond_off, nb = {};
+  for (const h of SR.homes) { if (!srPkMatch(h.code, q)) continue; const x = SR.hh?.[h.code] || {}; ((nb[x.neighborhood || "Other"] ||= {})[x.community || "Other"] ||= []).push(h); }
+  const ents = Object.entries(nb).sort((a, b) => a[0].localeCompare(b[0])); if (!ents.length) return `<div class="small muted" style="padding:10px">No home matches.</div>`;
+  return ents.map(([n, cm]) => { const all = Object.values(cm).flat().sort((a, b) => srName(a.code).localeCompare(srName(b.code))), on = all.filter(h => sel.has(h.code)).length;
+    return `<div class="pkg"><div class="pkh"><label><input type="checkbox" data-pknb="${escH(n)}"${on && on === all.length ? " checked" : ""}${on && on < all.length ? " data-ind=1" : ""}> <b>${escH(n)}</b> <span class="muted small">(${all.length})</span></label>${Object.keys(cm).length > 1 ? Object.entries(cm).map(([c, hs]) => `<button type="button" class="gfchip${hs.every(h => sel.has(h.code)) ? " on" : ""}" data-pkcm="${escH(n + "|" + c)}">${escH(c)} (${hs.length})</button>`).join("") : ""}</div>
+      ${all.map(h => `<div class="pkr${h.code === SR.code ? " cur" : ""}"><label><input type="checkbox" data-pkh="${escH(h.code)}"${sel.has(h.code) ? " checked" : ""}> <b>${escH(srName(h.code))}</b> <span class="muted small">${escH(srPkFacts(h.code))}${live(h) ? ' · <span class="pklive">live</span>' : " · suggestions only"}</span></label><button type="button" class="pkopen" data-pko="${escH(h.code)}">Open →</button></div>`).join("")}</div>`; }).join(""); }
+function srPkWire() { const pop = $("srPkPop"), btn = $("srPkBtn"), q = $("srPkQ"), lst = $("srPkList"); if (!pop) return; let start = "";
+  const key = () => (SR.multi || []).slice().sort().join("|");
+  const paint = () => { lst.innerHTML = srPkGroups(q.value); lst.querySelectorAll("[data-ind]").forEach(g => g.indeterminate = true); const n = (SR.multi || []).length;
+    $("srPkN").textContent = n ? `${n} picked` : "Tick homes to give them one goal, or Open one home"; };
+  const set = (codes, on) => { const st = new Set(SR.multi || []); codes.forEach(c => on ? st.add(c) : st.delete(c)); SR.multi = [...st]; paint(); };
+  const openPop = () => { start = key(); pop.hidden = false; q.value = ""; paint(); q.focus(); };
+  const close = () => { if (pop.hidden) return; pop.hidden = true; const m = SR.multi || [];
+    if (SR.code && m.length) { SR.code = ""; loadSetRates(); } else if (key() !== start) srDraw(); };
+  const openHome = c => { pop.hidden = true; SR.multi = []; SR.code = c; loadSetRates(); };
+  pop.__close = close;
+  btn.onclick = () => pop.hidden ? openPop() : close();
+  q.oninput = paint;
+  q.onkeydown = e => { if (e.key === "Escape") close(); if (e.key === "Enter") { const o = lst.querySelectorAll("[data-pko]"); if (o.length === 1) openHome(o[0].dataset.pko); } };
+  lst.onchange = e => { const t = e.target; if (t.dataset.pkh) set([t.dataset.pkh], t.checked);
+    else if (t.dataset.pknb) set([...t.closest(".pkg").querySelectorAll("[data-pkh]")].map(x => x.dataset.pkh), t.checked); };
+  lst.onclick = e => { const o = e.target.closest("[data-pko]"); if (o) return openHome(o.dataset.pko);
+    const cmb = e.target.closest("[data-pkcm]"); if (cmb) { const [n2, c2] = cmb.dataset.pkcm.split("|"), hs = SR.homes.filter(h => { const x = SR.hh?.[h.code] || {}; return (x.neighborhood || "Other") === n2 && (x.community || "Other") === c2 && srPkMatch(h.code, q.value.trim().toLowerCase()); }).map(h => h.code);
+      set(hs, !hs.every(c => (SR.multi || []).includes(c))); } };
+  $("srPkClr").onclick = () => { SR.multi = []; paint(); };
+  $("srPkDone").onclick = close;
+  window.__srPkDoc ||= (document.addEventListener("mousedown", e => { const p = $("srPkPop"); if (p && !p.hidden && !e.target.closest("#srPk")) p.__close?.();
+    const a = $("srAddPop"); if (a && !a.hidden && !e.target.closest("#srAddW")) a.hidden = true; }), 1);
+  // Add a home to Moose pricing (search box)
+  const ai = $("srAddQ"), ap = $("srAddPop"); if (!ai) return;
+  const opts = () => { const v = ai.value.trim().toLowerCase().replace(/\s+/g, " "); return SR.ours.filter(c => !SR.homes.some(x => x.code === c.code) && srPkMatch(c.code, v)).sort((a, b) => srName(a.code).localeCompare(srName(b.code))).slice(0, 40); };
+  const apaint = () => { const o = opts(); ap.innerHTML = o.length ? o.map(c => `<button type="button" class="pkadd" data-pka="${escH(c.code)}"><b>${escH(srName(c.code))}</b> <span class="muted small">${escH(srPkFacts(c.code))}</span></button>`).join("") : `<div class="small muted" style="padding:10px">No home matches.</div>`; ap.hidden = false; };
+  ai.onfocus = apaint; ai.oninput = apaint;
+  ai.onkeydown = e => { if (e.key === "Escape") { ap.hidden = true; ai.blur(); } if (e.key === "Enter") ap.querySelector("[data-pka]")?.click(); };
+  ap.onclick = async e => { const b = e.target.closest("[data-pka]"); if (!b) return; const c = b.dataset.pka; ap.hidden = true; ai.value = "";
+    if (!await mmConfirm(`Add ${srName(c)} to Moose pricing? It starts as suggestions only: nothing is sent to Track until Beyond is marked off and sending is turned on for it.`)) return;
+    const r = await sb.rpc("rates_set_home", { p_code: c, p_on: true }); if (r.error) return await mmAlert(niceE(r.error)); SR.multi = []; SR.code = c; loadSetRates(); }; }
 // Reviews vs comps, from this morning's re-price (auto_summary.rev_comp: our Key Data rating vs the group's Primary comps)
 function srRevComp() { const S = SR.homes?.find(x => x.code === SR.code)?.auto_summary || {}, c = S.rev_comp; if (!c || c.ours_adj == null) return null;
   return { pct: +c.pct || 0, below: (+c.ours_n || 0) >= srRule("rev_rel_min_reviews", 5) && +c.ours_adj < +c.comps_mid,
@@ -1715,14 +1751,13 @@ function srHomeFacts(h) { if (!h) return "";
   return `<div class="srhfs" title="${escH(`Source: Track (bedrooms, baths, beds) + the comps list (sleeps)${beds ? " · Beds: " + beds : ""}`)}">${top ? `<b>${escH(top)}</b>` : ""}${t.community ? `<span>${escH(t.community)}</span>` : ""}${beds ? `<span class="srhfb">Beds: ${escH(beds)}</span>` : ""}</div>`; }
 function srDraw() {
   const el = $("srBody"), h = SR.homes.find(x => x.code === SR.code);
-  const addOpts = SR.ours.filter(c => !SR.homes.some(x => x.code === c.code)).map(c => `<option>${escH(c.code)}</option>`).join("");
-  let html = `<div class="ovhead"><div><h2>Set rates</h2><div class="sub">Test our own rates against Beyond's on a few homes. We set the nightly rate + minimum stay; the hub writes them into Track.</div></div><span class="sp"></span>
+    let html = `<div class="ovhead"><div><h2>Set rates</h2><div class="sub">Test our own rates against Beyond's on a few homes. We set the nightly rate + minimum stay; the hub writes them into Track.</div></div><span class="sp"></span>
     <button class="ovbtn" id="srCopy" title="Copy pricing settings or nightly prices from another of our homes">⧉ Copy from another home</button><button class="ovbtn" id="srHistAll" title="Every price saved for this home, newest first">🕘 Price history</button><button class="ovbtn" id="srCsv">⤓ Download CSV</button></div>
-    <div class="ovfil"><label>Test home<select id="srHome">${SR.homes.length ? `<option value=""${SR.code ? "" : " selected"}>Pick a test home…</option>` + SR.homes.map(x => `<option value="${escH(x.code)}"${x.code === SR.code ? " selected" : ""}>${escH(srName(x.code))}</option>`).join("") : "<option value=''>No test homes yet</option>"}</select></label>
-      <label>Add a home to the test<select id="srAdd"><option value="">Pick one of our homes…</option>${addOpts}</select></label>
+    <div class="ovfil"><label>Moose-priced homes<div class="srpk" id="srPk"><button type="button" class="srpkbtn" id="srPkBtn"><span>${escH(srPkTxt())}</span><i>▾</i></button><div class="srpkpop" id="srPkPop" hidden><input class="srpkq" id="srPkQ" placeholder="Search a home, community or neighborhood…" autocomplete="off"><div class="srpklist" id="srPkList"></div><div class="srpkft"><span id="srPkN"></span><span class="sp"></span><button type="button" id="srPkClr">Clear</button><button type="button" class="go" id="srPkDone">Done</button></div></div></div></label>
+      <label>Add a home to Moose pricing<div class="srpk" id="srAddW"><input class="srpkin" id="srAddQ" placeholder="Search our homes…" autocomplete="off"><div class="srpkpop" id="srAddPop" hidden></div></div></label>
       <label>Dates<button type="button" class="ovdate" id="srPick" title="Opens a two-month calendar: our price each night vs the comps, nights that look off in color">📅 ${new Date(SR.from + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })} → ${new Date(SR.to + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</button></label>
       <div class="ovdq">${[30, 60, 90, 120, 180].map(n => `<button class="ovchipb" data-srd="${n}">Next ${n}</button>`).join("")}</div>${srHomeFacts(h)}</div>`;
-  if (!h) { el.innerHTML = html + (SR.homes.length ? srAreaBox() : `<div class="ovc"><p class="small muted">Add one of our homes above to start.</p></div>`);
+  if (!h) { el.innerHTML = html + (SR.homes.length ? srAreaBox() : `<div class="ovc"><p class="small muted">Add one of our homes to Moose pricing above to start.</p></div>`);
     for (const id of ["srCopy", "srHistAll", "srCsv"]) $(id)?.remove(); $("srPick")?.closest("label")?.remove(); el.querySelector(".ovdq")?.remove();   // one-home tools hidden until a home is picked
     srWire(); return; }
   const live = SR.switch === "on";
@@ -2372,7 +2407,7 @@ function srWire(R) {
   { const add = $("dySeasAdd"), box = $("dySeas");
     if (add && box) { add.onclick = () => { box.insertAdjacentHTML("beforeend", srSeasRow({})); srSteppers(box); };
       box.addEventListener("click", e => { if (e.target.closest("[data-ms-del]")) e.target.closest("[data-ms]").remove(); }); } }
-  srSteppers($("srBody")); srTgtWire(); srDynTabs(); srAreaWire();
+  srSteppers($("srBody")); srTgtWire(); srDynTabs(); srAreaWire(); srPkWire();
   srWhyWire();
   { const b = $("auSave"); if (b) b.onclick = async () => {
       const g = id => $(id) ? $(id).value : "", nz = id => +g(id) || 0;
