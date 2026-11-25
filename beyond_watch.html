@@ -154,9 +154,11 @@ function render(){
       ${tile("moves", r.moved_homes, `homes with price moves since ${dt(r.prev_day)} (${r.moved_up} nights up, ${r.moved_down} down)`)}
       ${tile("stays", (r.stay_changes || []).length, "homes with minimum-stay changes")}
       ${tile("asks", asksOff ? `${asksOff} of ${asks.length}` : "All done", "of our asks still not in Track", asksOff ? "warn" : "good")}
+      ${oursTile()}
       ${x0 && x1 && x0 !== x1 ? tile("", usd(x1.avg), `Christmas open-night average (was ${usd(x0.avg)} on ${dt(x0.day)})`) : ""}
     </div>
-    ${S.f ? `<div class="showing">Showing only ${S.f === "moves" ? "price moves" : S.f === "stays" ? "minimum-stay changes" : "our asks"} · <button id="all">show everything</button></div>` : ""}
+    ${S.f ? `<div class="showing">Showing only ${S.f === "moves" ? "price moves" : S.f === "stays" ? "minimum-stay changes" : S.f === "ours" ? "the homes we took over" : "our asks"} · <button id="all">show everything</button></div>` : ""}
+    ${!S.f || S.f === "ours" ? oursCard() : ""}
     ${(r.now_ours || []).length || (r.now_beyond || []).length ? `<div class="card"><b>Who prices them changed since ${dt(r.prev_day)}:</b>
        ${(r.now_ours || []).length ? ` now on our own pricing: ${esc(r.now_ours.join(", "))}.` : ""}
        ${(r.now_beyond || []).length ? ` now priced by Beyond: ${esc(r.now_beyond.join(", "))}.` : ""}</div>` : ""}
@@ -168,12 +170,36 @@ function render(){
       (last run ${run.at ? dtw(run.at) : "—"}, ${run.rows ?? "—"} homes; ${read.read_homes} of ${r.homes} homes have a read, the oldest from ${dt(read.oldest)});
       our Oct 20 holiday list (Freshdesk #103080); the asks above say which ticket they came from.</p>`;
 }
+/* Homes we took over (Jeff: "make sure the houses we took over on pricing are switched off on beyond"): beyond_watch_ours() =
+   Beyond's on/off flag read after the switch + whether Track still has the prices we sent (open nights, next 120 days). */
+const OST = { beyond_on: ["red", "Beyond pricing still ON"], track_differs: ["red", "Track doesn't match what we sent"], not_read: ["amber", "Not read from Beyond yet"], ok: ["green", "Off in Beyond · Track matches"] };
+function oursTile(){
+  const h = (S.o && S.o.homes) || []; if(!h.length) return "";
+  const bad = h.filter(x => x.state === "beyond_on" || x.state === "track_differs").length;
+  return `<button class="tile ${bad ? "warn" : "good"} ${S.f === "ours" ? "on" : ""}" data-f="ours"><b>${bad ? bad + " of " + h.length : "All " + h.length}</b><span>${bad ? "homes we took over need a look" : "homes we took over: Track has our prices"}</span></button>`;
+}
+function oursCard(){
+  const o = S.o, h = (o && o.homes) || []; if(!h.length) return "";
+  const n = k => h.filter(x => x.state === k).length;
+  return `<div class="card" id="ours"><div class="row" style="justify-content:space-between"><div><h2>Homes we took over from Beyond (${h.length})</h2>
+      <div class="muted">Every home live on our own pricing. Two checks: Beyond shows its pricing switched off for the listing, and Track still has the prices we sent (open nights, next 120 days; more than 5 nights off = red).</div></div>
+      <div class="row">${n("beyond_on") ? `<span class="pill red">${n("beyond_on")} still on in Beyond</span>` : ""}${n("track_differs") ? `<span class="pill red">${n("track_differs")} Track differs</span>` : ""}
+        ${n("not_read") ? `<span class="pill amber">${n("not_read")} not read yet</span>` : ""}<span class="pill green">${n("ok")} all good</span></div></div>
+    <div class="scroll"><table><tr><th class="nosort">Home</th><th class="nosort">Check</th><th class="nosort">On our pricing since</th><th class="nosort">Beyond says</th><th class="nosort num">Nights checked</th><th class="nosort num">Track differs</th><th class="nosort">Examples</th></tr>
+    ${h.map(x => { const st = OST[x.state] || ["", x.state];
+      return `<tr><td><b>${esc(x.code)}</b>${x.held ? ` <span class="pill amber" title="The morning re-price held today's send for a person to look at">held</span>` : ""}</td>
+        <td><span class="pill ${st[0]}">${st[1]}</span></td><td>${x.off_at ? dt(x.off_at) : "—"}</td>
+        <td>${x.beyond_on === true ? `<b class="dn">Pricing ON</b>` : x.beyond_on === false ? "Pricing off" : "—"}${x.flag_read_at ? `<div class="src">${esc(x.flag_source)}, ${dtw(x.flag_read_at)}</div>` : ""}</td>
+        <td class="num">${x.nights_checked}</td><td class="num ${x.track_differs ? "dn" : ""}">${x.track_differs || ""}</td>
+        <td class="src">${(x.ex || []).map(e => `${dt(e.night)}: sent ${usd(e.sent)}, Track ${usd(e.track)}`).join(" · ")}</td></tr>`; }).join("")}</table></div>
+    <div class="src">If one shows "Beyond pricing still ON": open the listing in Beyond (Price posting) and turn dynamic pricing off, or ask Kolleen. Beyond's on/off is read once a day${o.last_flag_read ? ` (last ${dtw(o.last_flag_read)})` : ""}.</div></div>`;
+}
 async function load(day){
   $("#app").style.opacity = .6;
-  const res = await sb.rpc("beyond_watch", { p_day: day || null, p_days: 120 });
+  const [res, ours] = await Promise.all([sb.rpc("beyond_watch", { p_day: day || null, p_days: 120 }), sb.rpc("beyond_watch_ours", { p_day: day || null })]);
   $("#app").style.opacity = 1;
   if(res.error){ $("#app").innerHTML = `<h1>Beyond watch</h1><p class="muted">Couldn't load (${esc(window.niceErr ? niceErr(res.error) : res.error.message)}). Check your signal and reload the page.</p>`; return; }
-  S.r = res.data; S.day = S.r.day; render();
+  S.r = res.data; S.o = ours.error ? null : ours.data; S.day = S.r.day; render();
 }
 function csv(){
   const r = S.r, rows = [["home", "nights moved", "up", "down", "average change %", "biggest night", "was", "now"]];
