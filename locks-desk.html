@@ -1844,7 +1844,7 @@ async function mfaCodeView(){
     <p class="muted" style="font-size:12.5px">New phone or lost it? Ask Brandon to reset your 2-step sign-in.</p>`);
   const go = async () => { try{ const { data:f } = await sb.auth.mfa.listFactors(); const totp = (f.totp||[])[0];
       const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: totp.id, code: $("#mfac").value.trim() });
-      if(error) return $("#mfamsg").textContent = "That code didn't work - try the newest one.";
+      if(error){ if($("#mfamsg")) $("#mfamsg").textContent = "That code didn't work - try the newest one."; return; }
       S.aal2 = true; route(); }catch(e){ $("#mfamsg").textContent = "Something went wrong - try again."; } };
   $("#mfago").onclick = go; $("#mfac").onkeyup = e => { if(e.key==="Enter" || $("#mfac").value.length===6) go(); }; $("#mfac").focus();
 }
