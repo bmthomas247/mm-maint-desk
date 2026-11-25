@@ -171,7 +171,7 @@ function buildItems(k, d){
       if(kd === "working") (function(){ for(let s = e.day; s <= (e.end_day || e.day); s = addD(s, 1)) mark(extra.work, s, e.person_id, { start:e.start_time, end:e.end_time, mark:true }); })();
       if(!layerOn(k, lyr) || kd === "working") return;
       const ttl = kd === "event" ? e.title : "Out · " + nameOf(e.person_id) + (e.title && !/^out$/i.test(e.title) ? " · " + e.title : "");
-      const sub = [e.virtual ? "💻 Virtual" : e.location || "", kd === "event" && e.cal === "office" && (e.attendees || []).length ? (e.attendees || []).map(first).join(", ") : "",
+      const loc = String(e.location || ""), sub = [e.virtual ? "💻 Virtual" : loc.length > 60 ? loc.slice(0, 58).trim() + "…" : loc, kd === "event" && e.cal === "office" && (e.attendees || []).length ? (e.attendees || []).map(first).join(", ") : "",
         (d.guests[e.id] || []).length ? "with " + d.guests[e.id].map(g => g.name).join(", ") : ""].filter(Boolean).join(" · ");
       const multi = e.end_day && e.end_day > e.day;
       const it = { id:"e" + e.id, type:"event", ev:e, day:e.day, start:multi ? null : (e.start_time ? e.start_time.slice(0, 5) : null), fin:multi ? null : (e.end_time ? e.end_time.slice(0, 5) : null),
@@ -284,6 +284,7 @@ const HCCSS = `
 .hc .hc-now{position:absolute;left:-1px;right:0;border-top:2px solid var(--red);z-index:4;pointer-events:none} .hc .hc-now:before{content:"";position:absolute;left:-6px;top:-7px;width:12px;height:12px;border-radius:50%;background:var(--red)}
 .hc .hc-bk{position:absolute;z-index:2;overflow:hidden;border-radius:9px;padding:3px 7px;font-size:12px;line-height:1.3;background:var(--cb);color:var(--c);border-left:4px solid var(--c);cursor:pointer;box-shadow:0 0 0 1px var(--card);display:flex;flex-direction:column;gap:1px}
 .hc .hc-bk b{font-weight:800;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink)} .hc .hc-bk span{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc .hc-bk.md b{-webkit-line-clamp:1}
 .hc .hc-bk.sh{flex-direction:row;align-items:center;gap:5px;padding-top:1px;padding-bottom:1px} .hc .hc-bk.sh b{-webkit-line-clamp:1;flex:1;min-width:0}
 .hc .hc-bk.past{opacity:.62} .hc .hc-bk.dec{opacity:.5} .hc .hc-bk.dec b{text-decoration:line-through}
 .hc .hc-bk:hover,.hc .hc-chip:hover{filter:brightness(.97);box-shadow:0 2px 10px rgba(0,0,0,.12)} .hc .hc-bk:focus-visible,.hc .hc-chip:focus-visible{outline:2px solid var(--c);outline-offset:1px}
@@ -316,7 +317,7 @@ const HCCSS = `
 .hc .hc-jb{font-size:12.5px;font-weight:800;background:var(--forest);color:#fff;border-radius:9px;padding:6px 12px;text-decoration:none;flex:none}
 /* reservations week */
 .hc .hc-rw{flex:1;min-height:0;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;display:grid}
-.hc .hc-rc{border-left:1px solid var(--line);min-width:150px;display:flex;flex-direction:column} .hc .hc-rc:first-child{border-left:0}
+.hc .hc-rc{border-left:1px solid var(--line);min-width:118px;display:flex;flex-direction:column} .hc .hc-rc:first-child{border-left:0}
 .hc .hc-rc.td{background:color-mix(in srgb,var(--moose-soft) 40%,transparent)}
 .hc .hc-rh{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line-2);padding:6px;text-align:center;z-index:2}
 .hc .hc-rc .hc-rs{padding:5px 6px;display:flex;flex-direction:column;gap:2px} .hc .hc-rc h5{margin:4px 2px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -340,7 +341,7 @@ const HCCSS = `
 .hc-pop .px{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer;flex:none;font-size:15px;color:var(--ink-2);padding:0}
 .hc-pop .pl{display:flex;gap:9px;margin:7px 0;color:var(--ink-2);font-size:13.5px;line-height:1.4} .hc-pop .pl>i{flex:0 0 18px;font-style:normal;text-align:center}
 .hc-pop .pa{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px} .hc-pop .pa .btn{flex:1;min-width:0}
-.hc-pop .qrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0} .hc-pop .qrow select{min-height:38px;flex:1;min-width:92px}
+.hc-pop .qrow{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;margin:8px 0} .hc-pop .qrow select,.hc-pop .qrow input:where(:not([type=checkbox],[type=radio])){min-height:40px;flex:1;min-width:0;width:auto}
 .hc-pop input.qt{width:100%;font-size:16px;font-weight:700;min-height:44px}
 .hc-pop .qprev{font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0}
 .hc-pop .qcal{display:flex;gap:6px;flex-wrap:wrap} .hc-pop .qcal label{display:inline-flex;align-items:center;gap:5px;font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;cursor:pointer}
@@ -355,6 +356,9 @@ const HCCSS = `
 .hcm .ef>label,.hcm .ef>span.l{font-size:13px;font-weight:800;color:var(--ink-2);padding-top:10px}
 .hcm .ef .rw{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .hcm .ef select,.hcm .ef input:where(:not([type=checkbox],[type=radio])){min-height:42px}
+.hcm .ef .rw>input:where(:not([type=checkbox],[type=radio])),.hcm .ef .rw>select{width:auto;flex:1 1 120px;min-width:0}
+.hcm .ef .rw>input[type=date]{flex:1.4 1 150px} .hcm .ef .rw>input[type=number]{flex:0 0 80px;width:80px}
+.hcm .ef .chips select{width:auto;min-width:170px} .hcm .ef .rw>span{flex:none}
 .hcm .ef .chips{display:flex;gap:6px;flex-wrap:wrap}
 .hcm .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line-2);border-radius:999px;background:var(--card);font-size:13px;font-weight:700;cursor:pointer;color:var(--ink-2)}
 .hcm .chip.on{background:var(--forest);border-color:var(--forest);color:#fff} .hcm .chip input{width:15px;height:15px;min-height:0;margin:0}
@@ -378,6 +382,9 @@ const HCCSS = `
 `;
 let cssDone = false;
 const css = () => { if(cssDone) return; cssDone = true; const s = document.createElement("style"); s.id = "hubcal-css"; s.textContent = HCCSS; document.head.appendChild(s); };
+const SV = p => `<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const ICON = { find:SV('<circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/>'), print:SV('<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>'),
+  side:SV('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>') };
 const CHEV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d < 0 ? "M15 5l-7 7 7 7" : "M9 5l7 7-7 7"}"/></svg>`;
 
 /* ---------- toast / popover ---------- */
@@ -415,8 +422,8 @@ function shell(k){
       <button class="hc-arw" data-mv="-1" aria-label="${stepWord(k, -1)}" title="${stepWord(k, -1)} (←)">${CHEV(-1)}</button><button class="hc-arw" data-mv="1" aria-label="${stepWord(k, 1)}" title="${stepWord(k, 1)} (→)">${CHEV(1)}</button>
       <button class="hc-title" data-pick data-keep-pop title="Pick a date">${html(titleOf(k))} <small>▾</small></button><span class="hc-sp"></span><span class="hc-upd" aria-live="polite"></span>
       <div class="hc-views" role="tablist">${VIEWS.map(([x, l]) => `<button data-view="${x}" class="${x === v ? "on" : ""}" title="${l} (${x === "list" ? "A" : l[0]})">${l}</button>`).join("")}</div>
-      <button class="hc-ic" data-find data-keep-pop title="Find an event (/)" aria-label="Find an event">🔍</button><button class="hc-ic hc-hide-ph" data-print title="Print or save as PDF" aria-label="Print">🖨</button>
-      <button class="hc-ic hc-hide-ph ${C.prefs.side ? "on" : ""}" data-side title="Show or hide the side panel" aria-label="Side panel">◧</button></div>
+      <button class="hc-ic" data-find data-keep-pop title="Find an event (/)" aria-label="Find an event">${ICON.find}</button><button class="hc-ic hc-hide-ph" data-print title="Print or save as PDF" aria-label="Print">${ICON.print}</button>
+      <button class="hc-ic hc-hide-ph ${C.prefs.side ? "on" : ""}" data-side title="Show or hide the side panel" aria-label="Side panel">${ICON.side}</button></div>
     <div class="hc-leg">${L.map(([x, l, c]) => `<button class="hc-lg ${c}${layerOn(k, x) ? " on" : ""}" data-lyr="${x}" title="Show or hide ${l}"><i></i><span>${l}</span></button>`).join("")}<span class="hc-sp"></span><span class="muted" style="font-size:12px" id="hcsrc"></span></div>
     <div class="hc-main${C.prefs.side ? "" : " noside"}"><div class="hc-cal" id="hccal"><div class="hc-busy">Loading…</div></div><aside class="hc-side" id="hcside"></aside></div>
     ${canAddOn(k) ? `<button class="hc-fab" data-new aria-label="New event">+</button>` : ""}
@@ -498,9 +505,9 @@ function draw(k, o){
   if(o.open){ const id = o.open; o.open = null; setTimeout(() => openItem(k, id), 60); }
   if(C.reopen){ const id = C.reopen; C.reopen = null; setTimeout(() => { const el = cal.querySelector(`[data-it="${CSS.escape(id)}"]`); if(el) openItem(k, id, el); }, 60); }
 }
-function scrollToHours(k, sc){ const g = C.g || { a:6 }, t = T(k), td = rangeOf(k)[0] <= today() && today() <= rangeOf(k)[1], m = nowMin();
+function scrollToHours(k, sc){ const g = C.g || { a:6 };
   const first = Math.min(...daysOf(...rangeOf(k)).flatMap(s => I(s).filter(x => x.start).map(x => toMin(x.start))), 99999);
-  const target = td && m > 9 * 60 && m < 21 * 60 ? m - 90 : Math.min(8 * 60, first < 99999 ? first - 30 : 8 * 60);
+  const target = Math.min(8 * 60, first < 99999 ? first - 30 : 8 * 60);
   sc.scrollTop = Math.max(0, (target - g.a * 60) / 60 * HPX); }
 
 function badge(k, s, small){ if(k !== "cal_office" || !layerOn(k, "work")) return k === "cal_res" ? resBadge(s) : "";
@@ -533,7 +540,7 @@ function gridHTML(k, days){
   return h + `</div></div></div></div>`;
 }
 function block(x, gA){ const top = (x.s - gA * 60) / 60 * HPX, ht = Math.max((x.e - x.s) / 60 * HPX - 2, 20), short = ht < 38;
-  return `<div class="hc-bk ${x.cls}${x.past ? " past" : ""}${short ? " sh" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit ? " data-drag" : ""} style="top:${top + 1}px;height:${ht}px;left:calc(${x.c / x.n * 100}% + 2px);width:calc(${100 / x.n}% - 4px)" title="${html(tip(x))}"><b>${x.rep ? "↻ " : ""}${x.bell ? "🔔 " : ""}${html(x.title)}</b><span>${html(short ? fshort(x.start) : frange(x.start, x.fin) + (x.sub ? " · " + x.sub : ""))}</span>${x.join && ht >= 62 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}</div>`; }
+  return `<div class="hc-bk ${x.cls}${x.past ? " past" : ""}${short ? " sh" : ht < 66 ? " md" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit ? " data-drag" : ""} style="top:${top + 1}px;height:${ht}px;left:calc(${x.c / x.n * 100}% + 2px);width:calc(${100 / x.n}% - 4px)" title="${html(tip(x))}"><b>${x.rep ? "↻ " : ""}${x.bell ? "🔔 " : ""}${html(x.title)}</b><span>${html(short ? fshort(x.start) : frange(x.start, x.fin) + (x.sub ? " · " + x.sub : ""))}</span>${x.join && ht >= 62 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}</div>`; }
 function monthHTML(k){ const [a, b] = rangeOf(k), days = daysOf(a, b), m = T(k).sel.slice(0, 7), t = today(), rows = days.length / 7, isRes = k === "cal_res";
   let h = `<div class="hc-mon"><div class="hc-mhd">${DOW.map(x => `<div>${x}</div>`).join("")}</div><div class="hc-mgr" style="--rows:${rows}">`;
   days.forEach(s => { let its = I(s); if(isRes) its = its.filter(x => x.dir === "in"); const max = 4, show = its.length > max ? its.slice(0, max - 1) : its;
@@ -545,7 +552,7 @@ function listHTML(k){ const [a, b] = rangeOf(k), t = today(); let h = "", n = 0;
     h += `<section class="hc-agd${s === t ? " td" : ""}"><h4 class="hc-agh">${s === t ? "Today · " : s === addD(t, 1) ? "Tomorrow · " : ""}${html(flong(s))}<span class="hc-sp"></span>${badge(k, s)}</h4>${its.length ? its.map(agRow).join("") : `<p class="hc-none">Nothing on.</p>`}</section>`; });
   return `<div class="hc-ag">${h || `<p class="hc-none" style="padding:20px">Nothing in these ${LISTN} days.</p>`}<div style="padding:12px 14px"><button class="btn small" data-mv="1">Show the next week →</button></div></div>`; }
 function resWeekHTML(k, days){ const t = today();
-  return `<div class="hc-rw" style="grid-template-columns:repeat(${days.length},minmax(150px,1fr))">${days.map(s => { const its = I(s), ins = its.filter(x => x.dir === "in"), outs = its.filter(x => x.dir === "out");
+  return `<div class="hc-rw" style="grid-template-columns:repeat(${days.length},minmax(118px,1fr))">${days.map(s => { const its = I(s), ins = its.filter(x => x.dir === "in"), outs = its.filter(x => x.dir === "out");
     return `<div class="hc-rc${s === t ? " td" : ""}"><div class="hc-rh"><button class="hc-dn" data-gday="${s}"><span>${DOW[D(s).getDay()]}</span><b>${D(s).getDate()}</b></button></div><div class="hc-rs">
       ${layerOn(k, "arr") ? `<h5>↘ ${ins.length} arriving</h5>${ins.map(x => chip(x)).join("") || `<span class="muted" style="font-size:12px;padding:0 4px">—</span>`}` : ""}
       ${layerOn(k, "dep") ? `<h5>↗ ${outs.length} leaving</h5>${outs.map(x => chip(x)).join("") || `<span class="muted" style="font-size:12px;padding:0 4px">—</span>`}` : ""}</div></div>`; }).join("")}</div>`; }
@@ -736,7 +743,7 @@ function findBox(k, el){
     rows.sort((a, b) => (a.day < t0) - (b.day < t0) || (a.day < t0 ? b.day.localeCompare(a.day) : a.day.localeCompare(b.day)));
     rows.forEach(e => { const key = e.series_id ? "s" + e.series_id : "e" + e.id; if(seen.has(key)) return; seen.add(key); list.push(e); });
     const meets = Object.entries(NAMES).filter(([, l]) => l.toLowerCase().includes(s.toLowerCase()));
-    out.innerHTML = list.slice(0, 25).map(e => `<div class="wl" style="cursor:pointer" data-fe="${e.id}" data-fd="${e.day}"><span><b>${e.series_id ? "↻ " : ""}${html(e.title)}</b><br><span class="muted" style="font-size:12px">${e.cal === "office" ? "Office" : "Personal"}${e.location ? " · " + html(e.location) : ""}</span></span><span class="muted" style="text-align:right;white-space:nowrap">${html(fyear(e.day))}<br>${e.start_time ? html(ftime(e.start_time)) : "all day"}</span></div>`).join("")
+    out.innerHTML = list.slice(0, 25).map(e => `<div class="wl" style="cursor:pointer" data-fe="${e.id}" data-fd="${e.day}"><span><b>${e.series_id ? "↻ " : ""}${html(e.title)}</b><br><span class="muted" style="font-size:12px">${e.cal === "office" ? "Office" : "Personal"}${e.location ? " · " + html(e.location.length > 60 ? e.location.slice(0, 58) + "…" : e.location) : ""}</span></span><span class="muted" style="text-align:right;white-space:nowrap">${html(fyear(e.day))}<br>${e.start_time ? html(ftime(e.start_time)) : "all day"}</span></div>`).join("")
       + meets.map(([key, l]) => `<div class="wl"><span><b>${html(l)} meeting</b></span><a href="#/${key}">Agenda</a></div>`).join("")
       || `<p class="muted">Nothing found for “${html(s)}”.</p>`;
     out.querySelectorAll("[data-fe]").forEach(row => row.onclick = () => { const t = T(k); t.sel = row.dataset.fd; if(t.view === "list") t.view = "week"; C.reopen = "e" + row.dataset.fe; go(k); });
@@ -805,7 +812,7 @@ function quick(k, at, el){
   const p = pop(`<div class="pb"><h3><span>${isOff ? "New work event" : "New event"}</span><button class="px" aria-label="Close">✕</button></h3>
     <input class="qt" id="qa_t" placeholder="${isOff ? "e.g. Lunch with BHL 1403 owner" : "e.g. Dentist"}" autocomplete="off" enterkeyhint="done">
     <div class="qprev" id="qa_p">Tip: you can type the day and time too, like “Thu 2pm 1h”.</div>
-    <div class="qrow"><input type="date" id="qa_d" value="${day0}" style="flex:1.3;min-height:38px"><select id="qa_s" aria-label="Starts">${tOpts(st0, 0, "All day")}</select><span class="muted">–</span><select id="qa_e" aria-label="Ends" ${st0 ? "" : "disabled"}>${tOpts(en0, 0, "—")}</select></div>
+    <div class="qrow"><input type="date" id="qa_d" value="${day0}" aria-label="Day"></div><div class="qrow"><select id="qa_s" aria-label="Starts">${tOpts(st0, 0, "All day")}</select><span class="muted">to</span><select id="qa_e" aria-label="Ends" ${st0 ? "" : "disabled"}>${tOpts(en0, 0, "—")}</select></div>
     ${b ? `<div class="qcal"><label><input type="radio" name="qa_c" value="office" ${isOff ? "checked" : ""}>Office calendar (everyone)</label><label><input type="radio" name="qa_c" value="personal" ${isOff ? "" : "checked"}>Only me</label></div>` : ""}
     <div class="pa"><button class="btn small primary" id="qa_go">Save</button><button class="btn small" id="qa_more">More options…</button></div><p class="muted" id="qa_m" style="margin:6px 0 0;font-size:12.5px"></p></div>`, el);
   const $q = s => p.querySelector(s), T0 = $q("#qa_t"), S = $q("#qa_s"), E = $q("#qa_e"), Dd = $q("#qa_d");
@@ -855,7 +862,8 @@ async function saveEv(k, e, f, scope, del){
 }
 // a repeating event: just this one, or this one and all after it?
 function askScope(verb){ return new Promise(res => {
-  modal({ h:`${verb} a repeating event`, b:`<p style="margin:6px 0 14px">This event repeats. What should ${verb.toLowerCase()} change?</p>
+  const qq = { Delete:"Which ones should be deleted?", Move:"Which ones should move?", Change:"Which ones should change?" }[verb] || "Which ones?";
+  modal({ h:`${verb} a repeating event`, b:`<p style="margin:6px 0 14px">This event repeats. ${qq}</p>
     <div style="display:flex;flex-direction:column;gap:8px"><button class="btn primary" data-sc="one">Just this one</button><button class="btn" data-sc="after">This one and all after it</button><button class="btn" data-sc="">Cancel</button></div><div class="evft" style="border:0;padding:4px 0"></div>` });
   const box = $("#evcard"); let done = false;
   const fin = v => { if(done) return; done = true; $("#evm").classList.remove("on"); res(v || null); };
