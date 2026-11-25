@@ -1362,7 +1362,7 @@ function srTgtTotal(t, m) { const b = v => "$" + Math.round(v / (1 + AIRBNB_TAX)
   else if (N - 1 >= P) { T = s[P - 1] * (t.dir === "cheap" ? 1 + SR_TGT_EDGE : 1 - SR_TGT_EDGE); how = `only ${P} open: 2% past the last one (${b(s[P - 1])})`; }
   else { T = (s[N - 2] + s[N - 1]) / 2; how = `halfway between the ${srOrd(N - 1)} (${b(s[N - 2])}) and ${srOrd(N)} ${word} (${b(s[N - 1])})`; }
   return [T, `be the ${srOrd(N)} ${word} of ${src}: ${how} = ${b(T)}/night before tax`]; }
-// Price goals (Jeff 2026-11-23: "easier to understand ... not have to explain so much"): ONE builder for one home or several.
+// Pricing strategy (Jeff 2026-11-23: "easier to understand ... not have to explain so much"): ONE builder for one home or several.
 // Four kinds: market % (mode pct), rank (rank), raise/lower our price (adj), promotion (adj + name). Saved straight away into
 // each home's rates_set_homes.dyn.targets (rates_set_auto RPC); ⚡ Build prices and the morning re-price use them (rates_set_target.py).
 const SR_GF_KINDS = [["market", "📊", "Under or over the market", "e.g. 5% under similar homes"], ["rank", "🏅", "Rank against the comps", "e.g. be the 3rd cheapest"],
@@ -1428,7 +1428,7 @@ function srGfWire(box, p, who, onSave) { if (!box) return; const g = srGf(p);
     if (d) { g[d.dataset.gfd] = d.value; marks(); say(); } });
   box.srSay = say; say(); }
 // a goal card: icon, plain sentence, dates, what the market looks like there (one home), ✕
-function srGoalCards(list, one) { if (!list.length) return `<p class="small muted" style="margin:4px 0">${one ? "No goals yet: the pricing settings below decide every night." : "No goals on any test home yet."}</p>`;
+function srGoalCards(list, one) { if (!list.length) return `<p class="small muted" style="margin:4px 0">${one ? "No strategy yet: the pricing settings below decide every night." : "No strategy on any test home yet."}</p>`;
   return `<div class="gfcards">` + list.map(({ t, codes, i }) => { let info = "";
     if (one) { const ks = []; for (let k = t.from, n = 0; k <= t.to && n < 120; k = addD(k, 1), n++) ks.push(k);
       if (t.mode === "pct") { const mk = ks.map(srMkt).map(m => m.mk).filter(v => v != null).map(v => v / (1 + AIRBNB_TAX)).sort((x, y) => x - y);
@@ -1436,38 +1436,38 @@ function srGoalCards(list, one) { if (!list.length) return `<p class="small mute
       else if (t.mode === "rank") { const op = ks.map(k => srMkt(k).open.length); info = op.length ? `${Math.min(...op)}–${Math.max(...op)} similar homes still open a night` : ""; }
       else info = "On top of the normal price; walk-away and owner minimum still hold"; }
     else info = codes.map(c => `<a href="#" data-srcode="${escH(c)}">${escH(srName(c))}</a>`).join(", ");
-    return `<div class="gfcard"><i>${srTgtIcon(t)}</i><div><b>${escH(srTgtSay(t))}</b><span>${srFd(t.from, 1)} – ${srFd(t.to, 1)}</span><small>${info}</small></div><button type="button" class="ovchipb" title="Remove this goal" ${one ? `data-gfdel="${i}"` : `data-ardel="${escH(JSON.stringify(t))}" data-codes="${escH(codes.join("|"))}"`}>✕</button></div>`; }).join("") + `</div>`; }
+    return `<div class="gfcard"><i>${srTgtIcon(t)}</i><div><b>${escH(srTgtSay(t))}</b><span>${srFd(t.from, 1)} – ${srFd(t.to, 1)}</span><small>${info}</small></div><button type="button" class="ovchipb" title="Remove this strategy" ${one ? `data-gfdel="${i}"` : `data-ardel="${escH(JSON.stringify(t))}" data-codes="${escH(codes.join("|"))}"`}>✕</button></div>`; }).join("") + `</div>`; }
 // one home: the goals box above Dynamic pricing
 function srGoalBox(Y, h) { const T = srTgts(Y);
-  return `<div class="ovc srgoals" id="srGoals"><div class="gfhead"><h3>🎯 Price goals</h3><span class="cs">Tell the hub what you want for some dates; it works the prices out. <a href="#" id="gfArea">Set goals for several homes at once →</a></span><span class="sp"></span><button type="button" class="ovbtn dygo" id="gfOpen">${SR.gfOpen ? "Close" : "+ Add a goal"}</button></div>
+  return `<div class="ovc srgoals" id="srGoals"><div class="gfhead"><h3>🎯 Pricing strategy</h3><span class="cs">Tell the hub what you want for some dates; it works the prices out. <a href="#" id="gfArea">Set a strategy for several homes at once →</a></span><span class="sp"></span><button type="button" class="ovbtn dygo" id="gfOpen">${SR.gfOpen ? "Close" : "+ Add a strategy"}</button></div>
     <div id="gfList">${srGoalCards(T.map((t, i) => ({ t, i })), true)}</div>
-    <div id="gfFormBox" class="gfform"${SR.gfOpen ? "" : " hidden"}>${srGoalForm("one", "💾 Save this goal")}</div></div>`; }
+    <div id="gfFormBox" class="gfform"${SR.gfOpen ? "" : " hidden"}>${srGoalForm("one", "💾 Save this strategy")}</div></div>`; }
 const srAboutOpen = () => { try { return localStorage.getItem("mm_sr_about") !== "0"; } catch (e) { return true; } };
 function srTgtWire() {
   document.querySelector("details.srabout")?.addEventListener("toggle", e => { try { localStorage.setItem("mm_sr_about", e.target.open ? "1" : "0"); } catch (x) {} });
   document.querySelectorAll("[data-jump]").forEach(a => a.onclick = e => { e.preventDefault(); const t = a.dataset.jump === "dyacc" ? document.querySelector("details.dyacc") : $(a.dataset.jump); if (t) { if (t.tagName === "DETAILS") t.open = true; t.scrollIntoView({ behavior: "smooth", block: "start" }); } });
   const box = $("srGoals"); if (!box) return;
   const ga = $("gfArea"); if (ga) ga.onclick = e => { e.preventDefault(); SR.code = null; srDraw(); window.scrollTo(0, 0); };
-  $("gfOpen").onclick = () => { SR.gfOpen = !SR.gfOpen; $("gfFormBox").hidden = !SR.gfOpen; $("gfOpen").textContent = SR.gfOpen ? "Close" : "+ Add a goal"; };
+  $("gfOpen").onclick = () => { SR.gfOpen = !SR.gfOpen; $("gfFormBox").hidden = !SR.gfOpen; $("gfOpen").textContent = SR.gfOpen ? "Close" : "+ Add a strategy"; };
   const persist = async T => { const dyn = Object.assign({}, SR.dynSaved || {}, { targets: T });
     const r = await sb.rpc("rates_set_auto", { p_code: SR.code, p_dyn: dyn, p_on: null, p_days: null, p_send: null }); if (r.error) { await mmAlert(niceE(r.error)); return false; }
     SR.dynSaved = (r.data && r.data.dyn) || dyn; const hh = SR.homes.find(x => x.code === SR.code); if (hh) hh.dyn = SR.dynSaved; SR.dyn.targets = T;
     $("gfList").innerHTML = srGoalCards(T.map((t, i) => ({ t, i })), true); return true; };
   srGfWire($("gfFormBox"), "one", () => srName(SR.code), async (t, say) => { const hh = SR.homes.find(x => x.code === SR.code) || {}, T = srTgts(SR.dyn);
-    if (!await mmConfirm(`Save this goal for ${srName(SR.code)}: "${srTgtSay(t)}", ${srFd(t.from, 1)} to ${srFd(t.to, 1)}? ${hh.auto_on ? `From the next morning re-price these dates follow it${hh.auto_send && hh.beyond_off ? " and the new prices go to Track" : " (saved as suggestions)"}.` : "The morning re-price is off for this home, so it only shows when you press ⚡ Build prices."} Where it overlaps an older goal, this one wins.`)) return;
-    if (await persist([t, ...T])) { say("Saved ✓ Press ⚡ Build prices (in Dynamic pricing) to see the new prices now."); SR.gfOpen = false; $("gfFormBox").hidden = true; $("gfOpen").textContent = "+ Add a goal"; } });
+    if (!await mmConfirm(`Save this strategy for ${srName(SR.code)}: "${srTgtSay(t)}", ${srFd(t.from, 1)} to ${srFd(t.to, 1)}? ${hh.auto_on ? `From the next morning re-price these dates follow it${hh.auto_send && hh.beyond_off ? " and the new prices go to Track" : " (saved as suggestions)"}.` : "The morning re-price is off for this home, so it only shows when you press ⚡ Build prices."} Where it overlaps an older strategy, this one wins.`)) return;
+    if (await persist([t, ...T])) { say("Saved ✓ Press ⚡ Build prices (in Dynamic pricing) to see the new prices now."); SR.gfOpen = false; $("gfFormBox").hidden = true; $("gfOpen").textContent = "+ Add a strategy"; } });
   $("gfList").addEventListener("click", async e => { const b = e.target.closest("[data-gfdel]"); if (!b) return; const T = srTgts(SR.dyn), t = T[+b.dataset.gfdel]; if (!t) return;
     if (!await mmConfirm(`Remove "${srTgtSay(t)}" (${srFd(t.from, 1)} to ${srFd(t.to, 1)}) from ${srName(SR.code)}? Those dates go back to the normal pricing settings.`)) return; T.splice(+b.dataset.gfdel, 1); await persist(T); }); }
 // no home picked: goals for several homes at once (Track neighborhoods, community buttons, one builder)
 function srAreaBox() { SR.multi = (SR.multi || []).filter(c => SR.homes.some(h => h.code === c)); const n = SR.multi.length;
   const pick = new Set(SR.multi), rows = {}; for (const h of SR.homes) if (pick.has(h.code)) for (const t of srTgts(h.dyn || {})) { const k = JSON.stringify(t); (rows[k] ||= { t, codes: [] }).codes.push(h.code); }
   const list = Object.values(rows).sort((a, b) => a.t.from.localeCompare(b.t.from) || srTgtSay(a.t).localeCompare(srTgtSay(b.t)));
-  return `<div class="ovc" id="arBox"><h3 style="margin:0 0 2px">🎯 ${n ? `Price goal for ${n} home${n === 1 ? "" : "s"}` : "Price goals"}</h3>
+  return `<div class="ovc" id="arBox"><h3 style="margin:0 0 2px">🎯 ${n ? `Pricing strategy for ${n} home${n === 1 ? "" : "s"}` : "Pricing strategy"}</h3>
     ${n ? `<div class="arsel">${SR.multi.map(c => `<span class="gfchip on">${escH(srName(c))}<button type="button" data-arx="${escH(c)}" title="Take this home out">✕</button></span>`).join("")}</div>`
-        : `<div class="cs">Pick homes in <b>Moose-priced homes</b> above: tick several (or a whole neighborhood) to give them one goal, or tap <b>Open</b> to work on one home.</div>`}
+        : `<div class="cs">Pick homes in <b>Moose-priced homes</b> above: tick several (or a whole neighborhood) to give them one strategy, or tap <b>Open</b> to work on one home.</div>`}
     <div class="arform">${srGoalForm("area", `💾 Save to ${n} home${n === 1 ? "" : "s"}`)}</div>
-    ${n ? `<h4 style="margin:16px 0 4px">Goals on these homes now</h4>${srGoalCards(list, false)}` : ""}
-    <div class="small muted" style="margin-top:6px">Each home keeps its own copy of a goal, so you can still change one home later. "Suggestions only" homes don't send prices to Track by themselves.</div></div>`; }
+    ${n ? `<h4 style="margin:16px 0 4px">Strategies on these homes now</h4>${srGoalCards(list, false)}` : ""}
+    <div class="small muted" style="margin-top:6px">Each home keeps its own copy of a strategy, so you can still change one home later. "Suggestions only" homes don't send prices to Track by themselves.</div></div>`; }
 function srAreaWire() { const box = $("arBox"); if (!box) return;
   const checked = () => (SR.multi || []).slice(), hx = c => SR.hh?.[c] || {};
   const who = () => { const c = checked(), n = c.length; if (!n) return "The homes you pick";
@@ -1483,7 +1483,7 @@ function srAreaWire() { const box = $("arBox"); if (!box) return;
     if (bad.length) await mmAlert(`${what} for ` + bad.join("; ")); srDraw(); };
   srGfWire(form, "area", who, async t => { const codes = checked(); if (!codes.length) return await mmAlert("Pick homes first in Moose-priced homes above.");
     const auto = codes.filter(c => { const h = SR.homes.find(x => x.code === c); return h && h.auto_on && h.auto_send && h.beyond_off; });
-    if (!await mmConfirm(`${who()}: "${srTgtSay(t)}", ${srFd(t.from, 1)} to ${srFd(t.to, 1)}? Each home keeps its own copy. From the next morning re-price these dates follow it${auto.length ? `, and ${auto.length} of these homes send their new prices to Track` : " (saved as suggestions)"}. Where a home already has a goal on the same nights, this new one wins.`)) return;
+    if (!await mmConfirm(`${who()}: "${srTgtSay(t)}", ${srFd(t.from, 1)} to ${srFd(t.to, 1)}? Each home keeps its own copy. From the next morning re-price these dates follow it${auto.length ? `, and ${auto.length} of these homes send their new prices to Track` : " (saved as suggestions)"}. Where a home already has a strategy on the same nights, this new one wins.`)) return;
     await save(codes, T => [t, ...T], "Not saved"); });
   box.querySelectorAll("[data-ardel]").forEach(b => b.onclick = async () => { const key = b.dataset.ardel, codes = b.dataset.codes.split("|"), t = JSON.parse(key);
     if (!await mmConfirm(`Remove "${srTgtSay(t)}" (${srFd(t.from, 1)} to ${srFd(t.to, 1)}) from ${codes.map(srName).join(", ")}? Those dates go back to the normal pricing settings.`)) return;
@@ -1504,7 +1504,7 @@ function srPkGroups(q) { q = (q || "").trim().toLowerCase().replace(/\s+/g, " ")
 function srPkWire() { const pop = $("srPkPop"), btn = $("srPkBtn"), q = $("srPkQ"), lst = $("srPkList"); if (!pop) return; let start = "";
   const key = () => (SR.multi || []).slice().sort().join("|");
   const paint = () => { lst.innerHTML = srPkGroups(q.value); lst.querySelectorAll("[data-ind]").forEach(g => g.indeterminate = true); const n = (SR.multi || []).length;
-    $("srPkN").textContent = n ? `${n} picked` : "Tick homes to give them one goal, or Open one home"; };
+    $("srPkN").textContent = n ? `${n} picked` : "Tick homes to give them one strategy, or Open one home"; };
   const set = (codes, on) => { const st = new Set(SR.multi || []); codes.forEach(c => on ? st.add(c) : st.delete(c)); SR.multi = [...st]; paint(); };
   const openPop = () => { start = key(); pop.hidden = false; q.value = ""; paint(); q.focus(); };
   const close = () => { if (pop.hidden) return; pop.hidden = true; const m = SR.multi || [];
@@ -1765,7 +1765,7 @@ function srDraw() {
      ${h.beyond_off ? ` · Beyond marked <b>off</b> for ${escH(h.code)} by ${escH(h.beyond_off_by || "")}${h.beyond_off_at ? " on " + new Date(h.beyond_off_at).toLocaleDateString() : ""}.` :
        ` · <b>Beyond is still on for ${escH(h.code)}</b>${SR.beyond?.enabled ? " (Beyond listing enabled as of " + new Date(SR.beyond.captured_at).toLocaleDateString() + ")" : ""}: it writes the same Track rate, so turn it off in Beyond (or ask Kolleen) before sending.`}
      <label style="display:inline-flex;gap:6px;align-items:center;margin-left:8px"><input type="checkbox" id="srBoff"${h.beyond_off ? " checked" : ""} style="width:auto;min-height:0"> Beyond is off for this home</label></div>`;
-  html += `<nav class="srjump"><span>Jump to</span><a href="#" data-jump="srGoals">🎯 Price goals</a><a href="#" data-jump="dyacc">⚙️ Pricing settings</a><a href="#" data-jump="srNights">📅 Nights</a><a href="#" data-jump="srScoreBox">📈 Results</a><a href="#" data-jump="srSends">⇪ Sends to Track</a></nav>`;   // Jeff 2026-11-23: easier to get around
+  html += `<nav class="srjump"><span>Jump to</span><a href="#" data-jump="srGoals">🎯 Pricing strategy</a><a href="#" data-jump="dyacc">⚙️ Pricing settings</a><a href="#" data-jump="srNights">📅 Nights</a><a href="#" data-jump="srScoreBox">📈 Results</a><a href="#" data-jump="srSends">⇪ Sends to Track</a></nav>`;   // Jeff 2026-11-23: easier to get around
   const days = []; for (let k = SR.from; k <= SR.to && days.length < 541; k = addD(k, 1)) days.push(k);
   const R = days.map(k => ({ k, v: srVal(k), t: SR.track[k], b: srGrp(k)?.avg ?? null, g: srGrp(k), c: srComp(k), s: srShadow(k) }));
   const avg = a => { a = a.filter(x => x != null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
@@ -1782,7 +1782,7 @@ function srDraw() {
     tl("c2", fmt(cA), "Comps' daily rate", (() => { const pr = R.map(r => { const a = srCompAir(r.k); return a && r.c ? a.adr / r.c.adr - 1 : null; }).filter(v => v != null).sort((x, y) => x - y);
         return pr.length >= 5 ? `AirROI ${pr[pr.length >> 1] >= 0 ? "+" : ""}${Math.round(pr[pr.length >> 1] * 100)}% (check)` : "before cleaning + tax"; })(),
       "Average nightly rate of the open comps that night, before cleaning and tax (ESTIMATE). Main source: Key Data's Airbnb calendars (cleaning ÷ 5.5 taken out) and Vrbo, nightly. AirROI (paid, pulled on a budget) is shown as a second check. Same basis as Track's rack rate.") + `</div>`;
-  html += srGoalBox(SR.dyn || SR.dynSaved || {}, h);   // Price goals right under the top numbers (Jeff 2026-11-23)
+  html += srGoalBox(SR.dyn || SR.dynSaved || {}, h);   // Pricing strategy right under the top numbers (Jeff 2026-11-23)
   html += `<details class="srabout"${srAboutOpen() ? " open" : ""}><summary>📋 About this home <span class="muted">Home Rater · what guests say · booking sites · recent bookings</span></summary>` + srGlance(h) + `</details>`;   // folds away, remembered per person
   html += srEqCard(h);   // 🧮 The equation (Brandon 2026-11-25: "we also want to see the equation broken down too")
   // chart
@@ -1990,7 +1990,7 @@ function srFeeNote() {
 }
 // ---- 🧮 The equation (2026-11-25) ----
 const SR_EQG = [["market", "1 · Market base", "what similar homes charge"], ["home", "2 · This home", "reviews, staff votes, what it has, vs its comps"], ["demand", "3 · Demand", "bookings, comps filling up, website views, snow"],
-  ["timing", "4 · Timing", "days out, gaps, days of the week, holidays"], ["goal", "5 · Price goals", "set by a person"], ["guard", "6 · Guardrails", "walk-away, never too far under the comps, bigger homes, owner minimum"], ["final", "= Price", ""]];
+  ["timing", "4 · Timing", "days out, gaps, days of the week, holidays"], ["goal", "5 · Pricing strategy", "set by a person"], ["guard", "6 · Guardrails", "walk-away, never too far under the comps, bigger homes, owner minimum"], ["final", "= Price", ""]];
 function srEqOpen() { try { return localStorage.getItem("mm_sr_eq") !== "0"; } catch (e) { return true; } }
 function srEqSteps(b) { // parts -> rows with the $ change of each step
   let prev = null; const out = [];
@@ -2019,7 +2019,7 @@ function srEqCard(h) {
              li(E.views ? (E.views.pct ? `Website views: ${E.views.mine} views in ${E.views.days} days (our homes' middle ${E.views.middle}) but no booking for ${E.views.quiet} days → ${pc(E.views.pct)}` : `Website views: ${E.views.mine} in ${E.views.days} day${E.views.days === 1 ? "" : "s"} (our homes' middle ${E.views.middle})${E.views.note ? " · " + escH(E.views.note) : ""}`) : "Website views: not read yet", !!(E.views && E.views.pct)),
              li(`Snow: +${Y.snowU ?? 8}% inside 7 days when ${Y.snowIn ?? 4}"+ is forecast`)],
     timing: [li(`Last minute: ${Y.mix7 ?? 50}% toward the cheaper comps inside 7 days, ${Y.mix3 ?? 100}% inside 3. Gaps between bookings −${Y.gapD ?? 15}%, next to a booked stay −${Y.adjD ?? 5}%.`)],
-    goal: [li((Y.targets || []).length ? `${(Y.targets || []).length} price goal${(Y.targets || []).length > 1 ? "s" : ""} (see Price goals)` : "No price goals", !!(Y.targets || []).length)],
+    goal: [li((Y.targets || []).length ? `${(Y.targets || []).length} pricing strateg${(Y.targets || []).length > 1 ? "ies" : "y"} (see Pricing strategy)` : "No pricing strategy", !!(Y.targets || []).length)],
     guard: [li(`Never more than ${Y.maxU ?? 10}% under the comps' average · walk-away ${Y.floorStay ? "$" + Y.floorStay + " a stay" : Y.floor ? "$" + Y.floor + " a night" : "$70/bedroom a stay or $40/bedroom a night"} · never above our bigger homes here · owner minimum`)] };
   const rows = SR_EQG.filter(g => g[0] !== "final").map(([k, t, sub]) => `<div class="eqg"><div class="eqh"><b>${t}</b><span class="muted small">${sub}</span>${ns && avg[k] ? `<span class="eqav ${avg[k] >= 0 ? "up" : "dn"}" title="Average change from this part over the next ${ns} nights">${dl(avg[k] / ns)} a night</span>` : ""}</div><ul>${(parts[k] || []).join("")}</ul></div>`).join("");
   return `<details class="srabout sreq"${srEqOpen() ? " open" : ""}><summary>🧮 The equation <span class="muted">Market base × this home × demand × timing, then guardrails${ns ? ` · next ${ns} nights: average start ${fmt(start / ns)} → ${fmt(fin / ns)}` : ""}</span></summary>
