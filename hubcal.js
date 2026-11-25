@@ -237,6 +237,7 @@ const HCCSS = `
 .hc .hc-ic:hover{background:var(--moose-soft)} .hc .hc-ic.on{background:var(--moose-soft);border-color:var(--forest-2)}
 .hc .hc-new{min-height:42px;border-radius:12px;background:var(--forest);color:#fff;border:0;font-weight:800;padding:0 16px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .hc .hc-new:hover{filter:brightness(1.08)} .hc .hc-sec{min-height:42px;border-radius:12px;border:1px solid var(--line-2);background:var(--card);font-weight:700;padding:0 13px;cursor:pointer;color:var(--ink)}
+.hc .hc-lnk{display:inline-flex;align-items:center;text-decoration:none}
 .hc .hc-upd{font-size:12px;color:var(--muted);min-width:70px;text-align:right}
 .hc .hc-leg{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;align-items:center}
 .hc .hc-lg{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:var(--card);font-size:13px;font-weight:700;cursor:pointer;color:var(--ink-2);user-select:none}
@@ -368,8 +369,16 @@ const HCCSS = `
 .hcm .rbox{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-top:6px}
 @media (max-width:1180px){ .hc .hc-main{grid-template-columns:minmax(0,1fr)} .hc .hc-side{display:none} .hc .hc-views button{padding:0 10px} }
 @media (max-width:760px){
-  .hc{padding:10px 10px 0;overflow-y:auto;overflow-x:hidden} .hc .hc-title{font-size:17px;flex:1 1 100%;order:-1;padding-left:2px} .hc .hc-views button{padding:0 9px;font-size:12.5px}
-  .hc .hc-tabs{overflow-x:auto;max-width:100%} .hc .hc-tabs a{padding:7px 10px;white-space:nowrap}
+  .hc{padding:10px 10px 0;overflow-y:auto;overflow-x:hidden}
+  .hc .hc-top{flex-wrap:nowrap;margin-bottom:8px} .hc .hc-top .hc-sp{display:none}
+  .hc .hc-tabs{overflow-x:auto;flex:1;min-width:0} .hc .hc-tabs a{padding:7px 10px;white-space:nowrap;font-size:13.5px}
+  .hc .hc-top .hc-sec{min-height:38px;padding:0 10px;font-size:13px;white-space:nowrap}
+  .hc .hc-bar{gap:6px;margin-bottom:6px} .hc .hc-bar .hc-sp{display:none}
+  .hc .hc-title{order:1;flex:1 1 0;min-width:0;font-size:16px;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:left}
+  .hc .hc-arw{order:2;width:40px;height:40px} .hc .hc-arw svg{width:22px;height:22px} .hc .hc-today{order:3;min-height:40px;padding:0 12px}
+  .hc .hc-views{order:4;flex:1 1 auto;overflow-x:auto} .hc .hc-views button{padding:0 11px;font-size:13px;min-height:38px} .hc .hc-views [data-view="work"]{display:none}
+  .hc .hc-bar [data-find]{order:5;width:40px;height:40px}
+  .hc .hc-leg{flex-wrap:nowrap;overflow-x:auto;margin-bottom:8px;padding-bottom:2px} .hc .hc-lg{white-space:nowrap;font-size:12.5px;padding:4px 9px} .hc .hc-leg #hcsrc{display:none}
   .hc .hc-main{flex:none} .hc .hc-wk,.hc .hc-mon,.hc .hc-ag,.hc .hc-rw{flex:none;height:calc(100dvh - 210px);min-height:420px}
   .hc .hc-mgr{grid-template-rows:repeat(var(--rows),minmax(74px,1fr))} .hc .hc-mc .hc-chip{font-size:10.5px;padding:1px 4px}
   .hc .hc-upd,.hc .hc-hide-ph{display:none}
@@ -413,9 +422,9 @@ function pop(inner, at, cls){ const p = popEl(); p.className = "hc-pop hc-root o
 const canAddOn = k => k === "cal_me" || (k === "cal_office" && boss());
 function shell(k){
   const t = T(k), L = LAYERS[k] || [], v = t.view;
-  const newBtn = !canAddOn(k) ? "" : `<button class="hc-new" data-new title="New event (N)"><span style="font-size:20px;line-height:1">+</span> New</button>`;
-  const more = k === "cal_office" ? `<button class="hc-sec" data-mark="out" title="Mark yourself out">🌴 I'm out</button><button class="hc-sec hc-hide-ph" data-mark="working">I'm working</button><a class="hc-sec hc-hide-ph" href="#/cal_off" style="display:inline-flex;align-items:center;text-decoration:none">🗓 Schedule adjustment</a>`
-    : k === "cal_me" ? `<button class="hc-sec" data-sched>📅 Schedule a meeting</button><button class="hc-sec hc-hide-ph" data-blinks>🔗 Booking links</button>` : "";
+  const newBtn = !canAddOn(k) ? "" : `<button class="hc-new hc-hide-ph" data-new title="New event (N)"><span style="font-size:20px;line-height:1">+</span> New</button>`;
+  const more = k === "cal_office" ? `<button class="hc-sec" data-mark="out" title="Mark yourself out">🌴 I'm out</button><button class="hc-sec hc-hide-ph" data-mark="working">I'm working</button><a class="hc-sec hc-lnk hc-hide-ph" href="#/cal_off">🗓 Schedule adjustment</a>`
+    : k === "cal_me" ? `<button class="hc-sec hc-hide-ph" data-sched>📅 Schedule a meeting</button><button class="hc-sec hc-hide-ph" data-blinks>🔗 Booking links</button>` : "";
   return `<div class="page hc hc-root" data-k="${k}">
     <div class="hc-top"><nav class="hc-tabs">${TABS.map(([x, l]) => `<a href="#/${x}" class="${x === k ? "on" : ""}">${l}</a>`).join("")}</nav><span class="hc-sp"></span>${more}${newBtn}</div>
     <div class="hc-bar"><button class="hc-today" data-today title="Today (T)">Today</button>
