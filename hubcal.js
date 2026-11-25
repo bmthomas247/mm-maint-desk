@@ -654,7 +654,7 @@ function draw(k, o){
   if(k === "cal_res") h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : t.view === "day" ? `<div class="hc-ag" style="padding:4px 14px">${resDetail(t.data.stays, t.sel)}</div>` : resWeekHTML(k, daysOf(a, b));
   else h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : gridHTML(k, daysOf(a, b));
   cal.innerHTML = h; cal.dataset.r = t.view + a; fitAd(cal);
-  const stk = cal.querySelector(".hc-wk.ol .hc-stick"); if(stk && Math.abs(stk.offsetHeight - (C.headH || 58)) > 1 && !o.refit){ C.headH = stk.offsetHeight; return draw(k, Object.assign({}, o, { refit:true })); }
+  const stk = cal.querySelector(".hc-wk.ol .hc-hd"); if(stk && Math.abs(stk.offsetHeight - (C.headH || 58)) > 1 && !o.refit){ C.headH = stk.offsetHeight; return draw(k, Object.assign({}, o, { refit:true })); }
   const src = root.querySelector("#hcsrc"); if(src) src.textContent = k === "cal_res" ? (t.data.resSrc || "") : "";
   const sc2 = cal.querySelector(".hc-sc");
   if(sc2){ if(keep && keep.v === t.view && !o.scrollNow) { sc2.scrollTop = keep.y; sc2.scrollLeft = keep.x; } else scrollToHours(k, sc2); }
@@ -690,21 +690,22 @@ function gridHTML(k, days){
   const calEl = C.v && C.v.querySelector("#hccal"), avail = calEl ? Math.floor(window.innerHeight - Math.max(0, calEl.getBoundingClientRect().top) - 14) : 0,   /* room from the top of the calendar to the bottom of the window */ LH = 20, MINH = 20, hrs = gB - gA, headH = C.headH || 58;
   let adMax = 0; days.forEach(s => adMax = Math.max(adMax, I(s).filter(x => !x.start).length));
   let cap = 999; HPX = 48;
-  if(avail > 320){ const room = avail - headH - 6; cap = Math.max(3, Math.floor((room - hrs * MINH - 10) / LH));
-    const adH = Math.max(34, Math.min(adMax, cap) * LH + 10); let hh = hrs;
+  let stk = true;
+  if(avail > 320){ const room = avail - headH - 6;
+    const adH = Math.max(34, adMax * LH + 10); let hh = hrs; stk = adH <= room * 0.65;   // the top always shows every line; pinned unless it is very tall
     // lots of room (big screen, few lines)? show more of the day (to 9 PM, then from 7 AM) instead of very tall hours
     while(Math.floor((room - adH) / hh) > 50 && (gB < 21 || gA > 7)){ if(gB < 21) gB++; else gA--; hh = gB - gA; }
-    HPX = Math.max(MINH, Math.min(60, Math.floor((room - adH) / hh))); C.g = { a:gA, b:gB }; }
+    HPX = Math.max(44, Math.min(60, Math.floor((room - adH) / hh))); C.g = { a:gA, b:gB }; }   // normal readable hours; they scroll if they don't fit
   C.cap = cap; C.wide = !!calEl && n > 1 && (calEl.clientWidth - 62) / n >= 205;
   const cols = `grid-template-columns:58px repeat(${n},minmax(${n > 1 ? 110 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
   let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}" style="--hpx:${HPX}px${HPX < 36 ? ";--half:transparent" : ""}${avail > 320 ? `;flex:none;height:${avail}px` : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
   const we = s => { const w = D(s).getDay(); return w === 0 || w === 6 ? " we" : ""; }, dnum = s => D(s).getDate() === 1 ? MONS[D(s).getMonth()] + " 1" : D(s).getDate();
   days.forEach(s => h += `<div class="hc-dh${s === t ? " td" : ""}${we(s)}"><button class="hc-dn" data-gday="${s}" title="Open ${html(flong(s))}">${DAYS[D(s).getDay()]}</button><div class="hc-dd"><b>${dnum(s)}</b>${badge(k, s, true)}${canAddOn(k) ? `<button class="hc-dadd" data-addday="${s}" data-keep-pop title="Add something on ${html(fday(s))}" aria-label="Add on ${html(fday(s))}">+</button>` : ""}</div></div>`);
-  h += `</div></div><div class="hc-row hc-ad" style="${cols}"><div class="hc-gut"><span>all day</span></div>`;
+  h += `${stk ? "</div>" : "</div></div>"}<div class="hc-row hc-ad" style="${cols}"><div class="hc-gut"><span>all day</span></div>`;
   let maxAd = 0; days.forEach(s => maxAd = Math.max(maxAd, I(s).filter(x => !x.start).length));
   days.forEach(s => { const ad = I(s).filter(x => !x.start), lim = cap;
     h += `<div class="hc-adc${s === t ? " td" : ""}${we(s)}" data-adday="${s}">${ad.slice(0, ad.length > lim ? lim - 1 : lim).map(x => chip(x)).join("")}${ad.length > lim ? `<button class="hc-more" data-adm="${s}" data-keep-pop>+${ad.length - lim + 1} more</button>` : ""}</div>`; });
-  h += `</div><div class="hc-row hc-bd" style="${cols};height:${H}px"><div class="hc-hrs" style="position:relative">${Array.from({ length:gB - gA }, (_, i) => `<span style="top:${i * HPX}px">${fhour(gA + i)}</span>`).join("")}</div>`;
+  h += `${stk ? "</div></div>" : "</div>"}<div class="hc-row hc-bd" style="${cols};height:${H}px"><div class="hc-hrs" style="position:relative">${Array.from({ length:gB - gA }, (_, i) => `<span style="top:${i * HPX}px">${fhour(gA + i)}</span>`).join("")}</div>`;
   days.forEach(s => {
     const bl = lay(I(s).filter(x => x.start).map(x => { const st = toMin(x.start), en0 = x.fin && toMin(x.fin) > st ? toMin(x.fin) : st + 60; return Object.assign({ s:st, e:Math.max(en0, st + 20) }, x); }));
     h += `<div class="hc-col${s === t ? " td" : ""}${we(s)}${canAddOn(k) ? " add" : ""}" data-col="${s}">${s === t && nm >= gA * 60 && nm < gB * 60 ? `<i class="hc-now" style="top:${(nm - gA * 60) / 60 * HPX}px"></i>` : ""}${bl.map(x => block(x, gA)).join("")}</div>`; });
