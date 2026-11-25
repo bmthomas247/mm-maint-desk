@@ -17,20 +17,33 @@ if(window.hubCal) return;
 
 const NAMES = { meet_maint:"Monday maintenance", meet_or:"Owner Relations", meet_bd:"Business Development", meet_kd:"Key Data", meet_beyond:"Beyond Pricing", meet_mgr:"Managers", meet_fd:"Office Staff Monthly", meet_track:"Track Business Review", meet_trackmk:"Track Digital Marketing" };
 const TABS = [["cal_res","Reservations"],["cal_office","Office"],["cal_me","Personal"],["cal_meet","Meetings"]];
-const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["month","Month"],["list","Agenda"]];
+const VIEWS = [["day","Day"],["work","Work week"],["week","Week"],["seven","7 days"],["month","Month"],["list","Agenda"]];   // 7 days = starts on the day you are on, like the old Outlook (Jeff 2026-11-25)
 const MGR = ["owner_relations","maint_manager","office_manager","hk_manager"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const MONS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const HPX = 48, LISTN = 30;
 const LAYERS = {
-  cal_office:[["events","Work events","c-ev"],["meet","Staff meetings","c-mt"],["people","Out & time off","c-out"],["work","Who's working","c-wk"],["stays","Check-ins","c-st"]],
-  cal_me:[["mine","My events","c-me"],["meet","My meetings","c-mt"],["office","All office events","c-ev"],["off","My time off","c-out"],["stays","Check-ins","c-st"]],
+  cal_office:[["events","Work events","c-ev"],["meet","Staff meetings","c-mt"],["chk","Daily checks","c-chk"],["people","Out & time off","c-out"],["work","Who's working","c-wk"],["stays","Check-ins","c-st"]],
+  cal_me:[["mine","My events","c-me"],["meet","My meetings","c-mt"],["office","All office events","c-ev"],["chk","My daily checks","c-chk"],["off","My time off","c-out"],["stays","Check-ins","c-st"]],
   cal_res:[["arr","Check-ins","c-st"],["dep","Check-outs","c-dp"],["own","Owner stays","c-own"]]
 };
-const LAYER_ON = { events:true, meet:true, people:true, work:true, stays:false, mine:true, office:false, off:true, arr:true, dep:true, own:true };
+const LAYER_ON = { chk:true, events:true, meet:true, people:true, work:true, stays:false, mine:true, office:false, off:true, arr:true, dep:true, own:true };
 const REM = [[0,"At the start"],[5,"5 min before"],[10,"10 min before"],[15,"15 min before"],[30,"30 min before"],[60,"1 hour before"],[120,"2 hours before"],[1440,"1 day before"],[2880,"2 days before"],[10080,"1 week before"]];
 const remTxt = m => (REM.find(x => x[0] === m) || [m, m + " min before"])[1];
+// Daily checks (hub_checks) on the calendar, named like the team's old Outlook to-dos (Jeff 2026-11-25)
+const CHK_NAMES = { checkins_brivo:"Check-In Report; Brivo", office_received:"Check Office Received", abb_payouts:"Check ABB Payments", airbnb_csv:"Airbnb payouts file",
+  failed_payments:"Run Failed Payments", balances:"Run Balance Reports", touchstay:"Touch Stay resync", payroll:"Do payroll", eblast:"Send Realtor E-Blast",
+  advantage:"Pay Advantage", law_watch:"Follow This PM Bill" };
+const TEAM_L = { front_desk:"Front desk", maint_manager:"Maintenance manager", office_manager:"Office managers", hk_manager:"Housekeeping manager", owner_relations:"Owner relations",
+  maint_crew:"Maintenance crew", hk_crew:"Housekeeping crew", licensing:"Licensing", leasing:"Leasing", admin:"Admins" };
+// booking type of a stay = the same colors and names as Check lists (reservations.js kindOf)
+const KIND_L = { airbnb:"Airbnb", vrbo:"VRBO", direct:"Direct", thirty:"30+ nights", ota:"Other sites", oguest:"Owner guest", owner:"Owner stay" };
+const stayKind = x => { const ty = String(x.type || ""); if(/^o-guest|owner guest/i.test(ty)) return "oguest"; if(x.owner || /owner stay/i.test(ty)) return "owner";
+  if(/airbnb/i.test(ty)) return "airbnb"; if(/vrbo|homeaway/i.test(ty)) return "vrbo"; if(/whimstay|hopper|hometogo|booking/i.test(ty)) return "ota"; return (x.nights || 0) >= 30 ? "thirty" : "direct"; };
+const ciTitle = x => { const kd = stayKind(x), g = String(x.guest || "").trim();
+  return "CHECK-IN " + x.unit + (g || kd === "owner" ? "; " + (kd === "owner" ? ("OWNER " + g).trim() : g + (kd === "oguest" ? " OWNER GUEST" : "")) : ""); };
+const SIDE_SKIP = new Set(["checkins","stay","check"]);   // the side panel lists events + meetings only
 
 /* ---------- small helpers ---------- */
 const ymd = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -61,6 +74,16 @@ const isLastWd = s => D(addD(s, 7)).getMonth() !== D(s).getMonth();
 const ask = (t, o) => window.mmConfirm ? mmConfirm(t, o) : Promise.resolve(confirm(t));
 const say = (t, o) => window.mmAlert ? mmAlert(t, o) : Promise.resolve(alert(t));
 const askTxt = (t, v) => window.mmAsk ? mmAsk(t, v) : Promise.resolve(prompt(t, v));
+// is a daily check due on day s? (same rule as hub_check_due() in hub_checks.sql)
+function chkDue(c, s){ if(c.off || (c.starts && s < c.starts)) return false; const dt = D(s), w = dt.getDay();
+  if(c.freq === "daily") return true; if(c.freq === "weekly") return w === c.dow;
+  if(c.freq === "biweekly") return w === c.dow && !!c.anchor && ((dif(c.anchor, s) % 14) + 14) % 14 === 0;
+  if(c.freq === "monthly") return w === c.dow && Math.floor((dt.getDate() - 1) / 7) + 1 === c.nth;
+  if(c.freq === "quarterly") return dt.getDate() === c.dom && (c.months || []).includes(dt.getMonth() + 1);
+  return false; }
+const chkFreq = c => c.freq === "daily" ? "Every day" : c.freq === "weekly" ? "Every " + DAYS[c.dow] : c.freq === "biweekly" ? "Every other " + DAYS[c.dow]
+  : c.freq === "monthly" ? ["First","Second","Third","Fourth","Fifth"][(c.nth || 1) - 1] + " " + DAYS[c.dow] + " of the month"
+  : c.freq === "quarterly" ? ord(c.dom) + " of " + (c.months || []).map(m => MONS[m - 1]).join(", ") : "";
 
 /* ---------- state ---------- */
 const C = { k:null, v:null, tabs:{}, prefs:null, people:null, meets:null, meetsAt:0, cache:new Map(), tok:0, rt:null, rtT:null, poll:null, dirty:false, open:null, adOpen:false };
@@ -70,14 +93,15 @@ async function prefs(){
   if(C.prefs) return C.prefs;
   let p = {}; try { p = (await sb.rpc("cal_prefs_get")).data || {}; } catch(e){}
   C.raw = p; C.prefs = Object.assign({ view:{}, layers:{}, side:true }, p.hc || {});
+  if((C.prefs.v || 0) < 2){ ["cal_office","cal_me"].forEach(x => { if(C.prefs.view[x] === "week") delete C.prefs.view[x]; }); if(C.prefs.layers.cal_office) delete C.prefs.layers.cal_office.stays; C.prefs.side = false; C.prefs.v = 2; }   // 2026-11-25 Outlook look
   return C.prefs;
 }
 let saveT = null;
 function savePrefs(){ clearTimeout(saveT); saveT = setTimeout(() => { const p = Object.assign({}, C.raw || {}, { hc:C.prefs });
   sb.rpc("cal_prefs_set", { p }).then(r => { if(r.error) toast("Couldn't save your calendar setup: " + nice(r.error)); else C.raw = p; }); }, 500); }
 const phone = () => window.innerWidth < 760;
-function defView(k){ const v = C.prefs.view[k]; if(v && VIEWS.some(x => x[0] === v)) return phone() && v !== "list" && v !== "day" ? "list" : v; return phone() ? "list" : "week"; }
-const layerOn = (k, l) => { const x = (C.prefs.layers[k] || {})[l]; return x == null ? LAYER_ON[l] : !!x; };
+function defView(k){ const v = C.prefs.view[k]; if(v && VIEWS.some(x => x[0] === v)) return phone() && v !== "list" && v !== "day" ? "list" : v; return phone() ? "list" : k === "cal_res" ? "week" : "seven"; }
+const layerOn = (k, l) => { const x = (C.prefs.layers[k] || {})[l]; return x == null ? (l === "stays" ? k === "cal_office" : LAYER_ON[l]) : !!x; };
 
 async function people(){ if(C.people) return C.people; const r = await sb.rpc("cal_people"); C.people = (r && r.data) || []; return C.people; }
 async function allMeetings(force){ if(C.meets && !force && Date.now() - C.meetsAt < 300000) return C.meets; const r = await sb.rpc("cal_meetings"); C.meets = (r && r.data) || []; C.meetsAt = Date.now(); return C.meets; }
@@ -107,6 +131,7 @@ const mAt = (m, s) => { const x = mvTo(m, s); return x && x.start ? { start:x.st
 
 /* ---------- ranges ---------- */
 function rangeOf(k){ const t = T(k), s = t.sel;
+  if(t.view === "seven") return [s, addD(s, 6)];
   if(k === "cal_res" && t.view === "work"){ const w = weekStart(s); return [addD(w, 1), addD(w, 5)]; }
   if(t.view === "day") return [s, s];
   if(t.view === "work"){ const w = weekStart(s); return [addD(w, 1), addD(w, 5)]; }
@@ -125,7 +150,7 @@ function titleOf(k){ const t = T(k), [a, b] = rangeOf(k), A = D(a), B = D(b);
   if(t.view === "month") return MONL[D(t.sel).getMonth()] + " " + D(t.sel).getFullYear();
   if(t.view === "list") return `${MONS[A.getMonth()]} ${A.getDate()} – ${MONS[B.getMonth()]} ${B.getDate()}${A.getFullYear() !== B.getFullYear() || B.getFullYear() !== new Date().getFullYear() ? ", " + B.getFullYear() : ""}`;
   if(A.getMonth() === B.getMonth()) return `${MONL[A.getMonth()]} ${A.getDate()} – ${B.getDate()}, ${B.getFullYear()}`;
-  return `${MONS[A.getMonth()]} ${A.getDate()}${A.getFullYear() !== B.getFullYear() ? ", " + A.getFullYear() : ""} – ${MONS[B.getMonth()]} ${B.getDate()}, ${B.getFullYear()}`; }
+  return `${MONL[A.getMonth()]} ${A.getDate()}${A.getFullYear() !== B.getFullYear() ? ", " + A.getFullYear() : ""} – ${MONL[B.getMonth()]} ${B.getDate()}, ${B.getFullYear()}`; }
 
 /* ---------- data ---------- */
 async function pages(mk){ const out = [];
@@ -133,16 +158,19 @@ async function pages(mk){ const out = [];
   return out; }
 async function loadData(k, a, b){
   const isRes = k === "cal_res", isOff = k === "cal_office", isMe = k === "cal_me";
-  const wantStays = isRes || layerOn(k, "stays");
+  const wantStays = isRes || layerOn(k, "stays"), wantChk = !isRes && layerOn(k, "chk");
   const rpc = (f, p) => sb.rpc(f, p).then(r => { if(r.error) throw r.error; return r.data; });
-  const [evs, ms, ppl, sr, ox, tor, hm] = await Promise.all([
+  const soft = async f => { try { const r = await f(); return r.error ? [] : r.data || []; } catch(e){ return []; } };
+  const [evs, ms, ppl, sr, ox, tor, hm, chk, runs] = await Promise.all([
     isRes ? [] : pages(() => sb.from("hub_cal_events").select("*").eq("off", false).lte("day", b).or(`end_day.gte.${a},and(end_day.is.null,day.gte.${a})`).order("day").order("start_time", { nullsFirst:true }).order("id")),
     isRes ? [] : allMeetings(),
     people(),
     wantStays ? rpc("cal_stays", { p_from:a, p_to:b }).catch(() => null) : null,
     isOff ? rpc("cal_office", { p_from:a, p_to:b }) : null,
     isRes ? [] : rpc("timeoff_calendar", { p_from:a, p_to:b }).catch(() => []),
-    isMe ? rpc("meet_mine", { p_from:a, p_to:b }).catch(() => []) : []]);
+    isMe ? rpc("meet_mine", { p_from:a, p_to:b }).catch(() => []) : [],
+    wantChk ? soft(() => sb.from("hub_checks").select("key,title,how,link,kind,freq,dow,nth,dom,months,anchor,at_time,teams,people,starts,off,sort,updated_at").eq("off", false).order("sort")) : [],
+    wantChk ? soft(() => sb.from("hub_check_runs").select("id,check_key,day,status,summary,by_name,at").gte("day", a).lte("day", b).order("at", { ascending:false }).limit(3000)) : []]);
   const vids = evs.filter(e => e.virtual).map(e => e.id), eids = evs.filter(e => (e.kind || "event") === "event").map(e => e.id), sids = [...new Set(evs.map(e => e.series_id).filter(Boolean))];
   const [lr, gr, si] = await Promise.all([vids.length ? sb.rpc("cal_links", { p_ids:vids }) : null, eids.length ? sb.rpc("cal_guests", { p_ids:eids }) : null, sids.length ? sb.rpc("cal_series_info", { p_ids:sids }) : null]);
   const links = {}, guests = {}, series = {};
@@ -150,7 +178,7 @@ async function loadData(k, a, b){
   ((gr && gr.data) || []).forEach(x => guests[x.event_id] = x.guests || []);
   ((si && si.data) || []).forEach(x => series[x.series_id] = x);
   return { a, b, evs, ms:ms || [], ppl:ppl || [], stays:(sr && sr.stays) || [], resSrc:(sr && sr.source) || "", owners:!!(sr && sr.owners),
-    ox:ox || { meetings:[], shifts:[], off:[] }, tor:tor || [], hm:(hm || []).filter(m => m.status === "on"), links, guests, series, at:Date.now() };
+    ox:ox || { meetings:[], shifts:[], off:[] }, tor:tor || [], chk:chk || [], runs:runs || [], hm:(hm || []).filter(m => m.status === "on"), links, guests, series, at:Date.now() };
 }
 
 /* ---------- items: everything that shows on a day, in one shape ---------- */
@@ -196,21 +224,33 @@ function buildItems(k, d){
     const tor = d.tor.filter(r => isOff || r.user_id === me), seen = new Set();
     tor.forEach(r => { for(let s = r.day; s <= r.end_day; s = addD(s, 1)){ seen.add(r.user_id + "|" + s);
       if(r.status === "approved") mark(extra.out, s, r.user_id, { why:"time off", start:r.start, end:r.end });
-      if(layerOn(k, isOff ? "people" : "off")) add(s, { id:"t" + r.id + ":" + s, type:"off", day:s, start:null, fin:null, uid:r.user_id, req:r.status === "pending",
+      if(layerOn(k, isOff ? "people" : "off")) add(s, { id:"t" + r.id + ":" + s, type:"off", ord:2, day:s, start:null, fin:null, uid:r.user_id, req:r.status === "pending",
         title:(r.status === "pending" ? "Asked off · " : "Time off · ") + (isMe ? "you" : nameOf(r.user_id)) + (r.start ? " " + fshort(r.start) + "–" + fshort(r.end) : ""), cls:"c-out" + (r.status === "pending" ? " req" : ""), href:"#/cal_off" }); } });
     if(isOff) (d.ox.off || []).forEach(x => { if(seen.has(x.user_id + "|" + x.day)) return; mark(extra.out, x.day, x.user_id, { why:"time off", start:x.start, end:x.end });
-      if(layerOn(k, "people")) add(x.day, { id:"h" + x.user_id + ":" + x.day, type:"off", day:x.day, start:null, uid:x.user_id, title:"Time off · " + nameOf(x.user_id), cls:"c-out", href:"#/cal_office" }); });
+      if(layerOn(k, "people")) add(x.day, { id:"h" + x.user_id + ":" + x.day, type:"off", ord:2, day:x.day, start:null, uid:x.user_id, title:"Time off · " + nameOf(x.user_id), cls:"c-out", href:"#/cal_office" }); });
     if(isOff) (d.ox.shifts || []).forEach(x => mark(extra.work, x.day, x.user_id, { start:x.start, end:x.end }));
   }
+  // daily checks (hub_checks): Office = every check you can see, Personal = the ones given to you
+  if(!isRes && layerOn(k, "chk") && (d.chk || []).length){
+    const myT = (ME && ME.teams) || [], mine = c => (c.people || []).includes(me) || (c.teams || []).some(q => myT.includes(q)), last = {};
+    (d.runs || []).forEach(r => { const key = r.check_key + "|" + r.day; if(!last[key]) last[key] = r; });   // newest first
+    const vw = T(k).view;   // Month + Agenda: only today's checks (they repeat every day)
+    d.chk.filter(c => isOff || mine(c)).forEach(c => daysOf(d.a, d.b).forEach(s => { if(!chkDue(c, s) || ((vw === "month" || vw === "list") && s !== t)) return;
+      const run = last[c.key + "|" + s] || null, st = run ? run.status : "", done = st === "done" || st === "ok", bad = st === "issues" || st === "error";
+      add(s, { id:"k:" + c.key + ":" + s, type:"check", chk:c, run, day:s, start:null, title:CHK_NAMES[c.key] || c.title, pre:done ? "✓ " : bad ? "⚠ " : "",
+        cls:"c-chk" + (done ? " done" : bad ? " bad" : s < t ? " late" : ""), rep:true, ord:0, so:c.sort || 0 }); })); }
   // stays (Reservations tab, or the Check-ins layer)
   (d.stays || []).forEach(x => {
     if(isRes){
-      if(layerOn(k, "arr") && (layerOn(k, "own") || !x.owner)) add(x.in, { id:"ri" + x.unit + x.in, type:"stay", stay:x, day:x.in, start:null, title:(x.owner ? "Owner · " : "") + x.unit + (x.guest ? " · " + x.guest : ""), cls:x.owner ? "c-own" : "c-st", dir:"in" });
+      if(layerOn(k, "arr") && (layerOn(k, "own") || !x.owner)) add(x.in, { id:"ri" + x.unit + x.in, type:"stay", stay:x, day:x.in, start:null, title:(x.owner ? "Owner · " : "") + x.unit + (x.guest ? " · " + x.guest : ""), cls:"k-" + stayKind(x), dir:"in" });
       if(layerOn(k, "dep") && (layerOn(k, "own") || !x.owner)) add(x.out, { id:"ro" + x.unit + x.out, type:"stay", stay:x, day:x.out, start:null, title:(x.owner ? "Owner · " : "") + x.unit, cls:"c-dp", dir:"out" });
-    } else if(x.in >= d.a && x.in <= d.b){ (extra.stays[x.in] = extra.stays[x.in] || []).push(x); }
+    } else if(x.in >= d.a && x.in <= d.b){
+      if(T(k).view !== "month") add(x.in, { id:"ci:" + x.unit + ":" + x.in, type:"stay", stay:x, day:x.in, start:null, title:ciTitle(x), cls:"k-" + stayKind(x), ord:3 });   // one line per check-in, like the old Outlook calendar
+      else (extra.stays[x.in] = extra.stays[x.in] || []).push(x); }
   });
-  if(!isRes) Object.keys(extra.stays).forEach(s => { const L = extra.stays[s]; add(s, { id:"ci" + s, type:"checkins", day:s, start:null, list:L, title:"🏠 " + L.length + " check-in" + (L.length === 1 ? "" : "s"), cls:"c-st" }); });
-  Object.values(map).forEach(L => L.sort((x, y) => (x.start ? 1 : 0) - (y.start ? 1 : 0) || String(x.start || "").localeCompare(String(y.start || "")) || (x.type === "checkins") - (y.type === "checkins") || x.title.localeCompare(y.title)));
+  if(!isRes) Object.keys(extra.stays).forEach(s => { const L = extra.stays[s]; add(s, { id:"ci" + s, type:"checkins", day:s, start:null, list:L, title:"🏠 " + L.length + " check-in" + (L.length === 1 ? "" : "s"), cls:"c-st", ord:3 }); });
+  // all-day order like Outlook: daily checks, events, time off, then check-ins
+  Object.values(map).forEach(L => L.sort((x, y) => (x.start ? 1 : 0) - (y.start ? 1 : 0) || String(x.start || "").localeCompare(String(y.start || "")) || (x.ord == null ? 1 : x.ord) - (y.ord == null ? 1 : y.ord) || (x.so || 0) - (y.so || 0) || x.title.localeCompare(y.title)));
   return { map, ids, extra };
 }
 const I = s => ((T(C.k).items || {}).map || {})[s] || [];
@@ -251,13 +291,23 @@ const HCCSS = `
 .hc .hc-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
 .hc .hc-card h4{margin:0 0 6px;font-size:14.5px}
 .hc .hc-busy{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-weight:700;background:color-mix(in srgb,var(--ground) 60%,transparent);z-index:20;border-radius:16px}
-/* colors */
-.hc-root .c-ev{--c:#3c7a17;--cb:#e9f4dc} .hc-root .c-me{--c:#6a43b5;--cb:#efe8fb} .hc-root .c-mt{--c:#2463a0;--cb:#e3edf8} .hc-root .c-hm{--c:#2f4fb8;--cb:#e6eafb}
-.hc-root .c-out{--c:#c8382b;--cb:#fbe7e4} .hc-root .c-wk{--c:#5b8a1e;--cb:#eef5e0} .hc-root .c-st{--c:#b5770a;--cb:#fbf0d9} .hc-root .c-dp{--c:#6b776f;--cb:#eef1ec} .hc-root .c-own{--c:#8a4b12;--cb:#f6e6d6}
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .hc-root .c-ev{--c:#a6d46a;--cb:#1f3112} :root:not([data-theme="light"]) .hc-root .c-me{--c:#c4a8ff;--cb:#2a2140}
-  :root:not([data-theme="light"]) .hc-root .c-mt{--c:#8fc0f2;--cb:#13283d} :root:not([data-theme="light"]) .hc-root .c-hm{--c:#a9b8ff;--cb:#1b2242} :root:not([data-theme="light"]) .hc-root .c-out{--c:#ff9a8f;--cb:#3a1714}
-  :root:not([data-theme="light"]) .hc-root .c-wk{--c:#bde27e;--cb:#1e2a10} :root:not([data-theme="light"]) .hc-root .c-st{--c:#f2c46b;--cb:#33270c} :root:not([data-theme="light"]) .hc-root .c-dp{--c:#b8c6bc;--cb:#223028} :root:not([data-theme="light"]) .hc-root .c-own{--c:#f0b27a;--cb:#3a2614} }
-.hc .hc-lg.c-ev,.hc .hc-lg.c-me,.hc .hc-lg.c-mt,.hc .hc-lg.c-hm,.hc .hc-lg.c-out,.hc .hc-lg.c-wk,.hc .hc-lg.c-st,.hc .hc-lg.c-dp,.hc .hc-lg.c-own{color:var(--c)}
+/* colors: light fills + dark text like Outlook categories (Jeff 2026-11-25); check-ins use the Check lists booking colors */
+.hc-root{--ct:#1b211d}
+.hc-root .c-ev{--c:#c9a800;--cb:#fff3a3} .hc-root .c-mt{--c:#b08a00;--cb:#fde98a} .hc-root .c-chk{--c:#d6b800;--cb:#fff7b8} .hc-root .c-me{--c:#5b9a2c;--cb:#cfe7b9}
+.hc-root .c-hm{--c:#3d72c4;--cb:#cfe0f6} .hc-root .c-out{--c:#d04437;--cb:#f9d5d1} .hc-root .c-wk{--c:#5b8a1e;--cb:#e3efd0} .hc-root .c-st{--c:#c07a00;--cb:#f8dfb0}
+.hc-root .c-dp{--c:#6b776f;--cb:#e4e8e2} .hc-root .c-own{--c:#7a4bb0;--cb:#ddd0f1}
+.hc-root .k-airbnb{--c:#e0565b;--cb:#f8c5c0} .hc-root .k-vrbo{--c:#2463a0;--cb:#b9d3f0} .hc-root .k-direct{--c:#4f7a18;--cb:#c8e2a8} .hc-root .k-ota{--c:#7a6a55;--cb:#e3dacd}
+.hc-root .k-oguest{--c:#0f8a84;--cb:#addfda} .hc-root .k-owner{--c:#7a4bb0;--cb:#dacbf0} .hc-root .k-thirty{--c:#b06a12;--cb:#f5d2a3}
+.hc-root .c-chk.done{--c:#9aa39d;--cb:#ebedea} .hc-root .c-chk.bad{--c:#d04437;--cb:#fde3df} .hc-root .c-chk.late{--c:#e08a1e}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .hc-root{--ct:#eef2ee}
+  :root:not([data-theme="light"]) .hc-root .c-ev{--c:#ffe46b;--cb:#4d4300} :root:not([data-theme="light"]) .hc-root .c-mt{--c:#f2cf55;--cb:#463800} :root:not([data-theme="light"]) .hc-root .c-chk{--c:#ffe680;--cb:#433b00}
+  :root:not([data-theme="light"]) .hc-root .c-me{--c:#a6d46a;--cb:#23401a} :root:not([data-theme="light"]) .hc-root .c-hm{--c:#9dc0f2;--cb:#1b2f4d} :root:not([data-theme="light"]) .hc-root .c-out{--c:#ff9a8f;--cb:#4a1c18}
+  :root:not([data-theme="light"]) .hc-root .c-wk{--c:#bde27e;--cb:#1e2a10} :root:not([data-theme="light"]) .hc-root .c-st{--c:#f2c46b;--cb:#4a3308} :root:not([data-theme="light"]) .hc-root .c-dp{--c:#b8c6bc;--cb:#2a332d}
+  :root:not([data-theme="light"]) .hc-root .c-own{--c:#c4a8ff;--cb:#33244a} :root:not([data-theme="light"]) .hc-root .k-airbnb{--c:#ff9b9e;--cb:#4f2225} :root:not([data-theme="light"]) .hc-root .k-vrbo{--c:#8fc0f2;--cb:#15304f}
+  :root:not([data-theme="light"]) .hc-root .k-direct{--c:#a6d46a;--cb:#22361a} :root:not([data-theme="light"]) .hc-root .k-ota{--c:#d6c6b0;--cb:#3a332a} :root:not([data-theme="light"]) .hc-root .k-oguest{--c:#7fdcd4;--cb:#0f3a37}
+  :root:not([data-theme="light"]) .hc-root .k-owner{--c:#c4a8ff;--cb:#33244a} :root:not([data-theme="light"]) .hc-root .k-thirty{--c:#f0b27a;--cb:#48300f}
+  :root:not([data-theme="light"]) .hc-root .c-chk.done{--c:#7d877f;--cb:#2c302d} :root:not([data-theme="light"]) .hc-root .c-chk.bad{--c:#ff9a8f;--cb:#4a1c18} }
+.hc .hc-lg.c-ev,.hc .hc-lg.c-me,.hc .hc-lg.c-mt,.hc .hc-lg.c-hm,.hc .hc-lg.c-out,.hc .hc-lg.c-wk,.hc .hc-lg.c-st,.hc .hc-lg.c-dp,.hc .hc-lg.c-own,.hc .hc-lg.c-chk{color:var(--c)}
 /* week grid */
 .hc .hc-wk{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
 .hc .hc-sc{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;position:relative}
@@ -274,7 +324,7 @@ const HCCSS = `
 .hc .hc-bdg:hover{border-color:var(--forest-2)} .hc .hc-bdg em{font-style:normal;color:var(--red)}
 .hc .hc-ad .hc-gut{font-size:11px;color:var(--muted);display:flex;align-items:flex-start;justify-content:flex-end;padding:6px 6px 0}
 .hc .hc-adc{border-left:1px solid var(--line);padding:3px;min-height:28px;display:flex;flex-direction:column;gap:2px;min-width:0}
-.hc .hc-adc.td,.hc .hc-col.td{background:color-mix(in srgb,var(--moose-soft) 55%,transparent)}
+.hc .hc-adc.td,.hc .hc-col.td{background-color:color-mix(in srgb,var(--moose-soft) 55%,transparent)}
 .hc .hc-chip{display:block;font-size:12px;line-height:1.3;font-weight:700;padding:2px 7px;border-radius:7px;background:var(--cb);color:var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border-left:3px solid var(--c);text-align:left;border-top:0;border-right:0;border-bottom:0;width:100%}
 .hc .hc-chip em{font-style:normal;font-weight:600;opacity:.8} .hc .hc-chip.req{background:transparent;border:1px dashed var(--c)} .hc .hc-chip.dec{opacity:.55;text-decoration:line-through}
 .hc .hc-chip.past{opacity:.6}
@@ -368,6 +418,34 @@ const HCCSS = `
 .hcm .ppl{max-height:170px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;padding:6px;display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .hcm input.big{font-size:18px;font-weight:800;min-height:50px}
 .hcm .rbox{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-top:6px}
+/* the Outlook week (Jeff 2026-11-25: "the team is used to a format like this") */
+.hc .hc-wk.ol{border-radius:12px}
+.hc .ol .hc-dh{align-items:stretch;padding:6px 8px 5px;gap:2px;border-top:3px solid transparent}
+.hc .ol .hc-dn{display:block;padding:0;border-radius:4px;font-size:14.5px;font-weight:600;color:var(--ink);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.hc .ol .hc-dn:hover{background:none;text-decoration:underline}
+.hc .ol .hc-dd{display:flex;align-items:center;gap:6px;min-width:0}
+.hc .ol .hc-dd>b{font-size:19px;font-weight:800;color:var(--ink);flex:none;line-height:1.2}
+.hc .ol .hc-dd .hc-bdg{flex:0 1 auto;min-width:0;font-size:11px;padding:1px 7px}
+.hc .ol .hc-dadd{margin-left:auto;flex:none;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line-2);background:var(--card);color:var(--forest);font-weight:800;font-size:17px;line-height:1;cursor:pointer;padding:0;display:grid;place-items:center}
+.hc .ol .hc-dadd:hover{background:var(--moose-soft);border-color:var(--forest-2)}
+.hc .ol .hc-dh.td{border-top-color:var(--forest)} .hc .ol .hc-dh.td .hc-dn,.hc .ol .hc-dh.td .hc-dd>b{color:var(--forest);font-weight:800}
+.hc .ol .hc-dh.td,.hc .ol .hc-adc.td,.hc .ol .hc-col.td{box-shadow:inset 2px 0 0 var(--forest-2),inset -2px 0 0 var(--forest-2)}
+.hc .ol .hc-dh.we,.hc .ol .hc-adc.we,.hc .ol .hc-col.we{background-color:color-mix(in srgb,var(--ground) 75%,var(--card))}
+.hc .ol .hc-adc.td,.hc .ol .hc-col.td{background-color:color-mix(in srgb,var(--moose-soft) 30%,var(--card))}
+.hc .ol .hc-ad{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;border-bottom:1px solid var(--line-2)}
+.hc .ol .hc-adc{gap:2px;padding:3px 3px 6px;min-height:34px}
+.hc .hc-chip{display:flex;align-items:center;gap:4px;color:var(--ct);border-radius:3px;font-weight:600;font-size:11.5px;padding:2px 5px 2px 6px;line-height:1.35}
+.hc .hc-chip .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc .hc-chip .rp,.hc .hc-bk .rp{font-style:normal;font-weight:800;opacity:.6;flex:none;font-size:11.5px;line-height:1}
+.hc .hc-chip.c-chk.done .tx{opacity:.6} .hc .hc-chip.c-chk.bad{font-weight:800}
+.hc .hc-bk{border-radius:3px;color:var(--ct);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 35%,var(--card))} .hc .hc-bk b{color:var(--ct)}
+.hc .hc-bk .bi{position:absolute;right:3px;bottom:2px;display:flex;align-items:center;gap:4px} .hc .hc-bk.sh .bi{position:static;margin-left:auto}
+.hc .hc-bk .hc-join{margin:0}
+.hc .ol .hc-hrs span{transform:none;margin-top:3px;right:6px}
+.hc .ol .hc-adc .hc-chip{align-items:flex-start} .hc .ol .hc-adc .hc-chip .tx{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.hc .ol .hc-adc .hc-chip .rp{margin-top:1px}
+.hc .hc-key{display:inline-flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center}
+.hc .hc-key span{display:inline-flex;align-items:center;gap:4px} .hc .hc-key i{width:12px;height:12px;border-radius:2px;background:var(--cb);border-left:3px solid var(--c);display:inline-block}
 @media (max-width:1180px){ .hc .hc-main{grid-template-columns:minmax(0,1fr)} .hc .hc-side{display:none} .hc .hc-views button{padding:0 10px} }
 @media (max-width:760px){
   .hc{padding:10px 10px 0;overflow-y:auto;overflow-x:hidden}
@@ -431,10 +509,10 @@ function shell(k){
     <div class="hc-bar"><button class="hc-today" data-today title="Today (T)">Today</button>
       <button class="hc-arw" data-mv="-1" aria-label="${stepWord(k, -1)}" title="${stepWord(k, -1)} (←)">${CHEV(-1)}</button><button class="hc-arw" data-mv="1" aria-label="${stepWord(k, 1)}" title="${stepWord(k, 1)} (→)">${CHEV(1)}</button>
       <button class="hc-title" data-pick data-keep-pop title="Pick a date">${html(titleOf(k))} <small>▾</small></button><span class="hc-sp"></span><span class="hc-upd" aria-live="polite"></span>
-      <div class="hc-views" role="tablist">${VIEWS.map(([x, l]) => `<button data-view="${x}" class="${x === v ? "on" : ""}" title="${l} (${x === "list" ? "A" : l[0]})">${l}</button>`).join("")}</div>
+      <div class="hc-views" role="tablist">${VIEWS.map(([x, l]) => `<button data-view="${x}" class="${x === v ? "on" : ""}" title="${l} (${x === "list" ? "A" : x === "seven" ? "S" : l[0]})">${l}</button>`).join("")}</div>
       <button class="hc-ic" data-find data-keep-pop title="Find an event (/)" aria-label="Find an event">${ICON.find}</button><button class="hc-ic hc-hide-ph" data-print title="Print or save as PDF" aria-label="Print">${ICON.print}</button>
       <button class="hc-ic hc-hide-ph ${C.prefs.side ? "on" : ""}" data-side title="Show or hide the side panel" aria-label="Side panel">${ICON.side}</button></div>
-    <div class="hc-leg">${L.map(([x, l, c]) => `<button class="hc-lg ${c}${layerOn(k, x) ? " on" : ""}" data-lyr="${x}" title="Show or hide ${l}"><i></i><span>${l}</span></button>`).join("")}<span class="hc-sp"></span><span class="muted" style="font-size:12px" id="hcsrc"></span></div>
+    <div class="hc-leg">${L.map(([x, l, c]) => `<button class="hc-lg ${c}${layerOn(k, x) ? " on" : ""}" data-lyr="${x}" title="Show or hide ${l}"><i></i><span>${l}</span></button>`).join("")}<span class="hc-sp"></span><span class="hc-key hc-hide-ph" id="hckey">${Object.entries(KIND_L).map(([q, l]) => `<span class="hc-root k-${q}"><i></i>${l}</span>`).join("")}</span><span class="muted" style="font-size:12px" id="hcsrc"></span></div>
     <div class="hc-main${C.prefs.side ? "" : " noside"}"><div class="hc-cal" id="hccal"><div class="hc-busy">Loading…</div></div><aside class="hc-side" id="hcside"></aside></div>
     ${canAddOn(k) ? `<button class="hc-fab" data-new aria-label="New event">+</button>` : ""}
     <div class="modal hcm" id="evm"><div class="card" id="evcard"></div></div></div>`;
@@ -444,6 +522,7 @@ function syncBar(k){ const r = C.v && C.v.querySelector(".hc"); if(!r) return; c
   r.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === t.view));
   r.querySelectorAll("[data-mv]").forEach(b => { const w = stepWord(k, +b.dataset.mv); b.title = w + (+b.dataset.mv < 0 ? " (←)" : " (→)"); b.setAttribute("aria-label", w); });
   r.querySelectorAll("[data-lyr]").forEach(b => b.classList.toggle("on", layerOn(k, b.dataset.lyr)));
+  const ky = r.querySelector("#hckey"); if(ky) ky.style.display = k === "cal_res" || layerOn(k, "stays") ? "" : "none";
   r.querySelector(".hc-main").classList.toggle("noside", !C.prefs.side); const sb2 = r.querySelector("[data-side]"); if(sb2) sb2.classList.toggle("on", !!C.prefs.side); }
 
 window.hubCal = async function(v, k){
@@ -490,8 +569,8 @@ async function refresh(k, o){
   if(!shown){ t.data = d; t.sig = sig; draw(k, o); } else { t.data = d; const cal = C.v.querySelector("#hccal"); if(cal) cal.querySelectorAll(".hc-busy").forEach(x => x.remove()); }
   prefetch(k);
 }
-const ckey = (k, a, b) => k + "|" + a + "|" + b + (k !== "cal_res" && layerOn(k, "stays") ? "|st" : "");
-const dsig = d => JSON.stringify([d.a, d.b, d.evs.map(e => [e.id, e.updated_at]), d.ox, d.tor, d.hm, d.stays.length, d.links, d.guests, Object.keys(d.series)]);
+const ckey = (k, a, b) => k + "|" + a + "|" + b + (k !== "cal_res" && layerOn(k, "stays") ? "|st" : "") + (k !== "cal_res" && layerOn(k, "chk") ? "|ck" : "");
+const dsig = d => JSON.stringify([d.a, d.b, d.evs.map(e => [e.id, e.updated_at]), d.ox, d.tor, d.hm, d.stays.map(x => x.unit + x.in + x.out + (x.guest || "")).join(), d.links, d.guests, Object.keys(d.series), (d.chk || []).map(c => c.key + c.updated_at), (d.runs || []).map(r => r.id)]);
 function upd(s){ const u = C.v && C.v.querySelector(".hc-upd"); if(u) u.textContent = s; }
 let pfT = null;
 function prefetch(k){ clearTimeout(pfT); pfT = setTimeout(async () => { if(!alive(k)) return; const t = T(k), sel = t.sel; stepSel(k, 1); const [a, b] = rangeOf(k); t.sel = sel;
@@ -507,7 +586,7 @@ function draw(k, o){
   const [a, b] = rangeOf(k); let h;
   if(k === "cal_res") h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : t.view === "day" ? `<div class="hc-ag" style="padding:4px 14px">${resDetail(t.data.stays, t.sel)}</div>` : resWeekHTML(k, daysOf(a, b));
   else h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : gridHTML(k, daysOf(a, b));
-  cal.innerHTML = h; cal.dataset.r = t.view + a;
+  cal.innerHTML = h; cal.dataset.r = t.view + a; fitAd(cal);
   const src = root.querySelector("#hcsrc"); if(src) src.textContent = k === "cal_res" ? (t.data.resSrc || "") : "";
   const sc2 = cal.querySelector(".hc-sc");
   if(sc2){ if(keep && keep.v === t.view && !o.scrollNow) { sc2.scrollTop = keep.y; sc2.scrollLeft = keep.x; } else scrollToHours(k, sc2); }
@@ -515,6 +594,10 @@ function draw(k, o){
   if(o.open){ const id = o.open; o.open = null; setTimeout(() => openItem(k, id), 60); }
   if(C.reopen){ const id = C.reopen; C.reopen = null; setTimeout(() => { const el = cal.querySelector(`[data-it="${CSS.escape(id)}"]`); if(el) openItem(k, id, el); }, 60); }
 }
+function fitAd(cal){ const sc = cal.querySelector(".hc-sc"), ad = cal.querySelector(".hc-wk.ol .hc-ad"); if(!sc || !ad) return;
+  ad.style.maxHeight = Math.max(110, Math.round(sc.clientHeight * 0.5)) + "px";
+  const gw = ad.offsetWidth - ad.clientWidth; cal.querySelectorAll(".hc-hd,.hc-bd").forEach(r => r.style.paddingRight = gw > 0 ? gw + "px" : ""); }
+window.addEventListener("resize", () => { clearTimeout(C.rsz); C.rsz = setTimeout(() => { const cal = C.v && C.v.querySelector("#hccal"); if(cal && C.k && alive(C.k)) fitAd(cal); }, 150); });
 function scrollToHours(k, sc){ const g = C.g || { a:6 };
   const first = Math.min(...daysOf(...rangeOf(k)).flatMap(s => I(s).filter(x => x.start).map(x => toMin(x.start))), 99999);
   const target = Math.min(8 * 60, first < 99999 ? first - 30 : 8 * 60);
@@ -527,7 +610,7 @@ function badge(k, s, small){ if(k !== "cal_office" || !layerOn(k, "work")) retur
 function resBadge(s){ const st = T("cal_res").data ? T("cal_res").data.stays : []; const i = st.filter(x => x.in === s).length, o = st.filter(x => x.out === s).length;
   return i || o ? `<span class="hc-bdg" style="cursor:default">↘ ${i} in · ↗ ${o} out</span>` : ""; }
 const tip = x => x.title + " · " + (x.start ? frange(x.start, x.fin) : x.span ? fday(x.span.a) + " – " + fday(x.span.b) : "All day") + (x.sub ? " · " + x.sub : "");
-const chip = (x, month) => `<div class="hc-chip ${x.cls}${x.past ? " past" : ""}${month && x.start ? " t" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit && x.type !== "event" || (x.edit && !x.span) ? " data-drag" : ""} title="${html(tip(x))}">${x.start ? `<em>${html(fshort(x.start))}</em> ` : ""}${x.rep ? "↻ " : ""}${html(x.title)}${x.span && x.onDay !== x.span.a ? ` <em>(cont.)</em>` : ""}</div>`;
+const chip = (x, month) => `<div class="hc-chip ${x.cls}${x.past ? " past" : ""}${month && x.start ? " t" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit && x.type !== "event" || (x.edit && !x.span) ? " data-drag" : ""} title="${html(tip(x))}"><span class="tx">${x.start ? `<em>${html(fshort(x.start))}</em> ` : ""}${html((x.pre || "") + x.title)}${x.span && x.onDay !== x.span.a ? ` <em>(cont.)</em>` : ""}</span>${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}</div>`;
 function lay(list){ list.sort((x, y) => x.s - y.s || y.e - x.e); let cols = [], grp = [], end = -1; const fin = () => grp.forEach(x => x.n = cols.length);
   list.forEach(x => { if(grp.length && x.s >= end){ fin(); grp = []; cols = []; } let c = cols.findIndex(e => e <= x.s); if(c < 0){ c = cols.length; cols.push(0); } cols[c] = x.e; x.c = c; grp.push(x); end = Math.max(end, x.e); });
   fin(); return list; }
@@ -537,21 +620,23 @@ function gridHTML(k, days){
   let gA = 6, gB = 22; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
   gB = Math.min(24, gB); C.g = { a:gA, b:gB };
   const cols = `grid-template-columns:58px repeat(${n},minmax(${n > 1 ? 110 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
-  let h = `<div class="hc-wk${n === 1 ? " one" : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
-  days.forEach(s => h += `<div class="hc-dh${s === t ? " td" : ""}${s === sel && n > 1 ? " sl" : ""}"><button class="hc-dn" data-gday="${s}" title="Open ${html(flong(s))}"><span>${DOW[D(s).getDay()]}</span><b>${D(s).getDate()}</b></button>${badge(k, s)}</div>`);
+  let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
+  const we = s => { const w = D(s).getDay(); return w === 0 || w === 6 ? " we" : ""; }, dnum = s => D(s).getDate() === 1 ? MONS[D(s).getMonth()] + " 1" : D(s).getDate();
+  days.forEach(s => h += `<div class="hc-dh${s === t ? " td" : ""}${we(s)}"><button class="hc-dn" data-gday="${s}" title="Open ${html(flong(s))}">${DAYS[D(s).getDay()]}</button><div class="hc-dd"><b>${dnum(s)}</b>${badge(k, s, true)}${canAddOn(k) ? `<button class="hc-dadd" data-addday="${s}" data-keep-pop title="Add something on ${html(fday(s))}" aria-label="Add on ${html(fday(s))}">+</button>` : ""}</div></div>`);
   h += `</div><div class="hc-row hc-ad" style="${cols}"><div class="hc-gut"><span>all day</span></div>`;
   let maxAd = 0; days.forEach(s => maxAd = Math.max(maxAd, I(s).filter(x => !x.start).length));
-  days.forEach(s => { const ad = I(s).filter(x => !x.start), lim = C.adOpen ? 99 : 3;
-    h += `<div class="hc-adc${s === t ? " td" : ""}" data-adday="${s}">${ad.slice(0, ad.length > lim ? lim - 1 : lim).map(x => chip(x)).join("")}${ad.length > lim ? `<button class="hc-more" data-adall>+${ad.length - lim + 1} more</button>` : ""}</div>`; });
-  h += `</div></div><div class="hc-row hc-bd" style="${cols};height:${H}px"><div class="hc-hrs" style="position:relative">${Array.from({ length:gB - gA }, (_, i) => i ? `<span style="top:${i * HPX}px">${fhour(gA + i)}</span>` : "").join("")}</div>`;
+  days.forEach(s => { const ad = I(s).filter(x => !x.start), lim = C.adOpen ? 999 : 40;
+    h += `<div class="hc-adc${s === t ? " td" : ""}${we(s)}" data-adday="${s}">${ad.slice(0, ad.length > lim ? lim - 1 : lim).map(x => chip(x)).join("")}${ad.length > lim ? `<button class="hc-more" data-adall>+${ad.length - lim + 1} more</button>` : ""}</div>`; });
+  h += `</div></div><div class="hc-row hc-bd" style="${cols};height:${H}px"><div class="hc-hrs" style="position:relative">${Array.from({ length:gB - gA }, (_, i) => `<span style="top:${i * HPX}px">${fhour(gA + i)}</span>`).join("")}</div>`;
   days.forEach(s => {
     const bl = lay(I(s).filter(x => x.start).map(x => { const st = toMin(x.start), en0 = x.fin && toMin(x.fin) > st ? toMin(x.fin) : st + 60; return Object.assign({ s:st, e:Math.max(en0, st + 20) }, x); }));
-    h += `<div class="hc-col${s === t ? " td" : ""}${canAddOn(k) ? " add" : ""}" data-col="${s}">${s === t && nm >= gA * 60 && nm < gB * 60 ? `<i class="hc-now" style="top:${(nm - gA * 60) / 60 * HPX}px"></i>` : ""}${bl.map(x => block(x, gA)).join("")}</div>`; });
+    h += `<div class="hc-col${s === t ? " td" : ""}${we(s)}${canAddOn(k) ? " add" : ""}" data-col="${s}">${s === t && nm >= gA * 60 && nm < gB * 60 ? `<i class="hc-now" style="top:${(nm - gA * 60) / 60 * HPX}px"></i>` : ""}${bl.map(x => block(x, gA)).join("")}</div>`; });
   return h + `</div></div></div></div>`;
 }
 function block(x, gA){ const top = (x.s - gA * 60) / 60 * HPX, ht = Math.max((x.e - x.s) / 60 * HPX - 2, 20), short = ht < 38;
-  const md = !short && ht < 66, lbl = `${x.rep ? "↻ " : ""}${x.bell ? "🔔 " : ""}${html(x.title)}`;
-  return `<div class="hc-bk ${x.cls}${x.past ? " past" : ""}${short ? " sh" : md ? " md" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit ? " data-drag" : ""} style="top:${top + 1}px;height:${ht}px;left:calc(${x.c / x.n * 100}% + 2px);width:calc(${100 / x.n}% - 4px)" title="${html(tip(x))}">${md ? `<p class="ln"><b>${lbl}</b> <span>${html(fshort(x.start) + (x.fin ? "–" + fshort(x.fin) : ""))}</span></p>` : `<b>${lbl}</b><span>${html(short ? fshort(x.start) : frange(x.start, x.fin) + (x.sub ? " · " + x.sub : ""))}</span>`}${x.join && ht >= 62 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}</div>`; }
+  const md = !short && ht < 66, lbl = `${x.bell ? "🔔 " : ""}${html((x.pre || "") + x.title)}`;
+  const ic = `${x.join && ht >= 30 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}`;
+  return `<div class="hc-bk ${x.cls}${x.past ? " past" : ""}${short ? " sh" : md ? " md" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit ? " data-drag" : ""} style="top:${top + 1}px;height:${ht}px;left:calc(${x.c / x.n * 100}% + 2px);width:calc(${100 / x.n}% - 4px)" title="${html(tip(x))}">${md ? `<p class="ln"><b>${lbl}</b> <span>${html(fshort(x.start) + (x.fin ? "–" + fshort(x.fin) : ""))}</span></p>` : `<b>${lbl}</b><span>${html(short ? fshort(x.start) : frange(x.start, x.fin) + (x.sub ? " · " + x.sub : ""))}</span>`}${ic ? `<span class="bi">${ic}</span>` : ""}</div>`; }
 function monthHTML(k){ const [a, b] = rangeOf(k), days = daysOf(a, b), m = T(k).sel.slice(0, 7), t = today(), rows = days.length / 7, isRes = k === "cal_res";
   let h = `<div class="hc-mon"><div class="hc-mhd">${DOW.map(x => `<div>${x}</div>`).join("")}</div><div class="hc-mgr" style="--rows:${rows}">`;
   days.forEach(s => { let its = I(s); if(isRes) its = its.filter(x => x.dir === "in"); const max = 4, show = its.length > max ? its.slice(0, max - 1) : its;
@@ -579,19 +664,19 @@ function resDetail(st, sel){
 function miniHTML(k){ const t = T(k), m = (t.mini || t.sel).slice(0, 7), s0 = weekStart(m + "-01"), td = today(), [a, b] = rangeOf(k);
   let h = `<div class="hc-mini"><div class="mh"><button data-mini-mv="-1" aria-label="Previous month">‹</button><b>${MONL[D(m + "-01").getMonth()]} ${D(m + "-01").getFullYear()}</b><button data-mini-mv="1" aria-label="Next month">›</button></div><div class="mg">${DOW.map(x => `<span>${x[0]}</span>`).join("")}`;
   for(let i = 0; i < 42; i++){ const s = addD(s0, i); if(i >= 35 && s.slice(0, 7) !== m) break;
-    const has = s >= t.data.a && s <= t.data.b && I(s).some(x => x.type !== "checkins");
+    const has = s >= t.data.a && s <= t.data.b && I(s).some(x => !SIDE_SKIP.has(x.type));
     h += `<button data-mini="${s}" class="${s.slice(0, 7) !== m ? "o " : ""}${s === td ? "t " : ""}${s >= a && s <= b && t.view !== "month" ? "w " : ""}${has ? "dt" : ""}">${D(s).getDate()}</button>`; }
   return h + `</div></div>`; }
 function drawSide(k){ const side = C.v.querySelector("#hcside"); if(!side) return; if(!C.prefs.side){ side.innerHTML = ""; return; }
   const t = T(k), d = t.data, sel = t.sel; let h = `<div class="hc-card">${miniHTML(k)}</div>`;
   if(k === "cal_res"){ h += `<div class="hc-card">${resDetail(d.stays, sel)}</div>`; side.innerHTML = h; return; }
   const day = sel >= d.a && sel <= d.b ? sel : (today() >= d.a && today() <= d.b ? today() : d.a);
-  const its = I(day).filter(x => x.type !== "checkins");
+  const its = I(day).filter(x => !SIDE_SKIP.has(x.type));
   h += `<div class="hc-card"><h4>${day === today() ? "Today · " : ""}${html(fday(day))}</h4>${its.length ? its.map(x => `<div class="hc-who" style="cursor:pointer" data-it="${html(x.id)}"><span>${x.rep ? "↻ " : ""}${html(x.title)}</span><small>${x.start ? html(frange(x.start, x.fin)) : "All day"}</small></div>`).join("") : `<p class="muted" style="margin:0;font-size:13px">Nothing on.</p>`}</div>`;
   if(k === "cal_office") h += whoCard(k, day) + reachCard(k, day);
   if(k === "cal_me"){ const me = myId(), wait = (d.hm || []).filter(m => (m.staff || []).includes(me) && !m.mine && !(m.my_answer || {}).answer && m.day >= today());
     if(wait.length) h += `<div class="hc-card" style="border-color:var(--amber)"><h4>❔ Waiting for your answer</h4>${wait.map(m => `<div class="hc-who" style="cursor:pointer" data-it="m${m.id}"><span>${html(m.title)}</span><small>${html(fday(m.day) + " " + ftime(m.start))}</small></div>`).join("")}</div>`;
-    const up = []; for(let s = today(); s <= d.b && up.length < 8; s = addD(s, 1)) I(s).filter(x => !x.past && x.type !== "checkins").forEach(x => up.length < 8 && up.push(Object.assign({ d:s }, x)));
+    const up = []; for(let s = today(); s <= d.b && up.length < 8; s = addD(s, 1)) I(s).filter(x => !x.past && !SIDE_SKIP.has(x.type)).forEach(x => up.length < 8 && up.push(Object.assign({ d:s }, x)));
     h += `<div class="hc-card"><h4>Coming up</h4>${up.length ? up.map(x => `<div class="hc-who" style="cursor:pointer" data-it="${html(x.id)}" data-day="${x.d}"><span>${html(x.title)}</span><small>${html(fday(x.d) + (x.start ? " " + fshort(x.start) : ""))}</small></div>`).join("") : `<p class="muted" style="margin:0;font-size:13px">Nothing coming up in this view.</p>`}</div>`; }
   side.innerHTML = h;
   const q = side.querySelector("#hcppq"); if(q){ q.oninput = () => side.querySelectorAll(".hc-pp[data-n]").forEach(p => p.style.display = p.dataset.n.includes(q.value.trim().toLowerCase()) ? "" : "none"); }
@@ -637,6 +722,7 @@ function wire(root, k){
     if(ds.adall != null){ C.adOpen = !C.adOpen; return draw(k); }
     if(ds.more){ return dayList(k, ds.more, el); }
     if(ds.who){ return whoPop(k, ds.who, el); }
+    if(ds.addday && canAddOn(k)) return quick(k, { day:ds.addday, start:null }, el);
     if(ds.it){ if(ds.day && t.view !== "list"){ /* side list: jump there */ }
       return openItem(k, ds.it, el); }
     if(ds.col != null && canAddOn(k) && el.classList.contains("hc-col") && !e.target.closest(".hc-bk")){
@@ -662,7 +748,7 @@ document.addEventListener("keydown", e => {
   const tag = (document.activeElement && document.activeElement.tagName) || "";
   if(/INPUT|TEXTAREA|SELECT/.test(tag) || document.querySelector(".modal.on") || (document.getElementById("hcpop") || {}).classList?.contains("on") && e.key !== "Escape") return;
   if(e.key === "Escape"){ popClose(); return; }
-  const t = T(k), V = { d:"day", w:"week", m:"month", a:"list", x:"work" };
+  const t = T(k), V = { d:"day", w:"week", m:"month", a:"list", x:"work", s:"seven", "7":"seven" };
   if(e.key === "ArrowLeft" || e.key === "ArrowRight"){ e.preventDefault(); stepSel(k, e.key === "ArrowLeft" ? -1 : 1); go(k); }
   else if(e.key === "t" || e.key === "T"){ go(k, today()); }
   else if(V[e.key.toLowerCase()]){ const nv = V[e.key.toLowerCase()]; C.prefs.view[k] = nv; savePrefs(); go(k, null, nv); }
@@ -684,9 +770,13 @@ async function openItem(k, id, el){
   if(x.type === "meet") return meetBox(k, x.hm);
   if(x.type === "off") return pop(`<div class="pbar" style="--c:var(--red)"></div><div class="pb"><h3><span>${html(x.title)}</span><button class="px" aria-label="Close">✕</button></h3><div class="pl"><i>📅</i><span>${html(flong(x.day))}</span></div><div class="pa"><a class="btn small" href="#/cal_off">Open Request Time Off</a></div></div>`, el);
   if(x.type === "checkins") return dayList(k, x.day, el, x.list);
-  if(x.type === "stay"){ const s = x.stay; return pop(`<div class="pbar ${x.cls}" style="background:var(--c)"></div><div class="pb"><h3><span>${html(s.unit)}${s.owner ? " · Owner stay" : ""}</span><button class="px" aria-label="Close">✕</button></h3>
-    ${s.guest ? `<div class="pl"><i>👤</i><span>${html(s.guest)}</span></div>` : ""}<div class="pl"><i>📅</i><span>${html(fday(s.in))} → ${html(fday(s.out))} · ${s.nights} night${s.nights === 1 ? "" : "s"}${s.type ? " · " + html(s.type) : ""}</span></div>
-    <p class="muted" style="font-size:12px;margin:8px 0 0">From Track. Contact info stays on Home for the teams that have it.</p></div>`, el); }
+  if(x.type === "stay"){ const s = x.stay, kd = stayKind(s), canRes = typeof DESKS !== "undefined" && (DESKS || []).some(q => q.key === "reservations" && q.status === "live");
+    const p = pop(`<div class="pbar ${x.cls}" style="background:var(--c)"></div><div class="pb"><h3><span>${html(s.unit)} · ${html(KIND_L[kd])}</span><button class="px" aria-label="Close">✕</button></h3>
+    ${s.guest ? `<div class="pl"><i>👤</i><span>${html(s.guest)}</span></div>` : ""}<div class="pl"><i>📅</i><span>In ${html(fday(s.in))} · out ${html(fday(s.out))} · ${s.nights} night${s.nights === 1 ? "" : "s"}${s.type ? " · " + html(s.type) : ""}</span></div>
+    ${s.res && canRes ? `<div class="pa"><a class="btn small primary" href="#/reservations/${encodeURIComponent(s.res)}">Open the check list</a></div>` : ""}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">From Track${s.res ? " · reservation " + html(s.res) : ""}. Contact info stays on Home for the teams that have it.</p></div>`, el, x.cls);
+    p.querySelectorAll("a[href^='#/']").forEach(a => a.addEventListener("click", popClose)); return p; }
+  if(x.type === "check") return chkPeek(k, x, el);
 }
 async function seriesWords(e){ if(!e.series_id) return ""; const d = T(C.k).data; const s = d && d.series[e.series_id]; if(s) return s.words;
   const r = await sb.rpc("cal_series_info", { p_ids:[e.series_id] }); return ((r.data || [])[0] || {}).words || "Repeats"; }
@@ -718,6 +808,30 @@ function staffPeek(k, x, el){
   p.querySelectorAll("a[href^='#/']").forEach(a => a.addEventListener("click", popClose));
   const b = p.querySelector("[data-smv]"); if(b) b.onclick = () => { popClose(); moveOne(k, m, (mv && mv.from) || x.day); };
 }
+function chkPeek(k, x, el){
+  const c = x.chk, r = x.run, st = r ? r.status : "", done = st === "done" || st === "ok", t = today(), who = [...(c.teams || []).map(q => TEAM_L[q] || q), ...(c.people || []).map(nameOf)];
+  const at = r ? new Date(r.at).toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" }) : "";
+  const stTxt = st === "done" ? `Done${r.by_name ? " by " + r.by_name.split(" ")[0] : ""} at ${at}${r.summary ? " · " + r.summary : ""}`
+    : st === "ok" ? "The hub checked it at " + at + ": nothing to fix" + (r.summary ? " · " + r.summary : "")
+    : st === "issues" ? "Needs someone: " + (r.summary || "the hub found something to fix")
+    : st === "error" ? "The automatic check didn't finish" + (r.summary ? ": " + r.summary : "")
+    : st === "list" ? "A list is ready to work" + (r.summary ? ": " + r.summary : "")
+    : x.day > t ? "Coming up" : c.kind === "auto" && x.day === t ? "The hub runs this one after " + ftime(c.at_time) : "Not done yet";
+  const canDone = !done && x.day <= t;
+  const p = pop(`<div class="pbar c-chk" style="background:var(--c)"></div><div class="pb"><h3><span>${html(x.title)}</span><button class="px" aria-label="Close">✕</button></h3>
+    <div class="pl"><i>📅</i><span>${html(flong(x.day))} · from ${html(ftime(c.at_time))}</span></div>
+    <div class="pl"><i>↻</i><span>${html(chkFreq(c))}</span></div>
+    ${who.length ? `<div class="pl"><i>👥</i><span>${html(who.join(", "))}</span></div>` : ""}
+    <div class="pl"><i>${done ? "✅" : st === "issues" || st === "error" ? "⚠️" : "⏳"}</i><span>${html(stTxt)}</span></div>
+    ${c.how ? `<div class="pl"><i>📝</i><span>${html(c.how)}</span></div>` : ""}
+    <div class="pa">${canDone ? `<button class="btn small primary" data-cd>✓ Mark done</button>` : ""}${c.link ? `<a class="btn small" href="${html(c.link)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ""}${boss() ? `<a class="btn small" href="#/checks">Daily checks page</a>` : ""}</div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">${html(c.title)} · a daily check${c.kind === "auto" ? " the hub runs by itself (it says when something needs a person)" : ""}.</p></div>`, el, "c-chk");
+  p.querySelectorAll("a[href^='#/']").forEach(a => a.addEventListener("click", popClose));
+  const b = p.querySelector("[data-cd]"); if(b) b.onclick = async () => { b.disabled = true; b.textContent = "Saving…";
+    const res = await sb.rpc("check_done", { p_key:c.key, p_day:x.day, p_note:null });
+    if(res.error){ b.disabled = false; b.textContent = "✓ Mark done"; return say(/not allowed/i.test(res.error.message || "") ? "Only the people this check is for (or a manager) can mark it done." : "Couldn't save: " + nice(res.error)); }
+    popClose(); toast("Marked done ✓"); invalidate(); refresh(k, { force:true, quiet:true }); };
+  return p; }
 function dayList(k, s, el, list){ const its = list ? null : I(s);
   pop(`<div class="pb"><h3><span>${html(flong(s))}</span><button class="px" aria-label="Close">✕</button></h3>${list ? list.map(x => `<div class="wl"><span><b>${html(x.unit)}</b> ${x.owner ? "· Owner " : ""}${html(x.guest || "")}</span><span class="muted">${x.nights} night${x.nights === 1 ? "" : "s"}</span></div>`).join("")
     : its.map(x => `<div class="wl" style="cursor:pointer" data-dl="${html(x.id)}"><span><span class="hc-root ${x.cls}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:6px"></span>${html(x.title)}</span><span class="muted">${x.start ? html(fshort(x.start)) : "all day"}</span></div>`).join("")}
@@ -764,7 +878,7 @@ function findBox(k, el){
 /* ---------- print ---------- */
 function printView(k){
   const t = T(k), [a, b] = rangeOf(k), days = daysOf(a, b).filter(s => t.view !== "month" || true), name = (TABS.find(x => x[0] === k) || [k, ""])[1];
-  const line = x => `<div class="it"><span class="tm">${x.start ? html(fshort(x.start)) + (x.fin ? "–" + html(fshort(x.fin)) : "") : "all day"}</span> <span class="ti">${x.rep ? "↻ " : ""}${html(x.title)}</span>${x.sub ? ` <span class="sb">· ${html(x.sub)}</span>` : ""}</div>`;
+  const line = x => `<div class="it"><span class="tm">${x.start ? html(fshort(x.start)) + (x.fin ? "–" + html(fshort(x.fin)) : "") : "all day"}</span> <span class="ti">${x.rep ? "↻ " : ""}${html((x.pre || "") + x.title)}</span>${x.sub ? ` <span class="sb">· ${html(x.sub)}</span>` : ""}</div>`;
   const dayBox = s => { const its = I(s), w = k === "cal_office" && layerOn(k, "work") ? whoLists(k, s) : null;
     return `<div class="dy${s === today() ? " td" : ""}"><h3>${html(D(s).toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" }))}</h3>${its.map(line).join("") || `<div class="sb">—</div>`}${w && (w.wk.length || w.out.length) ? `<div class="wk">👥 ${w.wk.map(x => html(x.n.split(" ")[0])).join(", ") || "—"}${w.out.length ? `<br>🌴 Out: ${w.out.map(x => html(x.n.split(" ")[0])).join(", ")}` : ""}</div>` : ""}</div>`; };
   let body;
