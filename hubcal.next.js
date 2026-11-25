@@ -22,7 +22,7 @@ const MGR = ["owner_relations","maint_manager","office_manager","hk_manager"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const MONS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const HPX = 48, LISTN = 30;
+let HPX = 48; const LISTN = 30;   // HPX = pixels per hour; the week view shrinks it so the week fits the screen (Jeff 2026-11-25)
 const LAYERS = {
   cal_office:[["events","Work events","c-ev"],["meet","Staff meetings","c-mt"],["chk","Daily checks","c-chk"],["people","Out & time off","c-out"],["work","Who's working","c-wk"],["stays","Check-ins","c-st"]],
   cal_me:[["mine","My events","c-me"],["meet","My meetings","c-mt"],["office","All office events","c-ev"],["chk","My daily checks","c-chk"],["off","My time off","c-out"],["stays","Check-ins","c-st"]],
@@ -43,7 +43,8 @@ const stayKind = x => { const ty = String(x.type || ""); if(/^o-guest|owner gues
   if(/airbnb/i.test(ty)) return "airbnb"; if(/vrbo|homeaway/i.test(ty)) return "vrbo"; if(/whimstay|hopper|hometogo|booking/i.test(ty)) return "ota"; return (x.nights || 0) >= 30 ? "thirty" : "direct"; };
 const ciTitle = x => { const kd = stayKind(x), g = String(x.guest || "").trim();
   return "CHECK-IN " + x.unit + (g || kd === "owner" ? "; " + (kd === "owner" ? ("OWNER " + g).trim() : g + (kd === "oguest" ? " OWNER GUEST" : "")) : ""); };
-const SIDE_SKIP = new Set(["checkins","stay","check"]);   // the side panel lists events + meetings only
+const ciShort = x => { const kd = stayKind(x), g = String(x.guest || "").trim(); return x.unit + (g || kd === "owner" ? " · " + (kd === "owner" ? ("Owner " + g).trim() : g + (kd === "oguest" ? " (owner guest)" : "")) : ""); };
+const SIDE_SKIP = new Set(["checkins","stay","check","checks"]);   // the side panel lists events + meetings only
 
 /* ---------- small helpers ---------- */
 const ymd = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -234,18 +235,22 @@ function buildItems(k, d){
   if(!isRes && layerOn(k, "chk") && (d.chk || []).length){
     const myT = (ME && ME.teams) || [], mine = c => (c.people || []).includes(me) || (c.teams || []).some(q => myT.includes(q)), last = {};
     (d.runs || []).forEach(r => { const key = r.check_key + "|" + r.day; if(!last[key]) last[key] = r; });   // newest first
-    const vw = T(k).view;   // Month + Agenda: only today's checks (they repeat every day)
+    const vw = T(k).view, fold = vw === "week" || vw === "seven" || vw === "work", dly = {};   // Month + Agenda: only today's checks (they repeat every day)
     d.chk.filter(c => isOff || mine(c)).forEach(c => daysOf(d.a, d.b).forEach(s => { if(!chkDue(c, s) || ((vw === "month" || vw === "list") && s !== t)) return;
       const run = last[c.key + "|" + s] || null, st = run ? run.status : "", done = st === "done" || st === "ok", bad = st === "issues" || st === "error";
-      add(s, { id:"k:" + c.key + ":" + s, type:"check", chk:c, run, day:s, start:null, title:CHK_NAMES[c.key] || c.title, pre:done ? "✓ " : bad ? "⚠ " : "",
-        cls:"c-chk" + (done ? " done" : bad ? " bad" : s < t ? " late" : ""), rep:true, ord:0, so:c.sort || 0 }); })); }
+      const it = { id:"k:" + c.key + ":" + s, type:"check", chk:c, run, day:s, start:null, title:CHK_NAMES[c.key] || c.title, pre:done ? "✓ " : bad ? "⚠ " : "",
+        cls:"c-chk" + (done ? " done" : bad ? " bad" : s < t ? " late" : ""), rep:true, ord:0, so:c.sort || 0, done, bad };
+      if(fold && c.freq === "daily"){ ids[it.id] = it; (dly[s] = dly[s] || []).push(it); } else add(s, it); }));
+    Object.keys(dly).forEach(s => { const L = dly[s].sort((x, y) => x.so - y.so), nd = L.filter(x => x.done).length, nb = L.filter(x => x.bad).length;
+      add(s, { id:"kd:" + s, type:"checks", list:L, day:s, start:null, title:`Daily checks ${nd}/${L.length}`, pre:nd === L.length ? "✓ " : nb ? "⚠ " : "📋 ",
+        cls:"c-chk" + (nd === L.length ? " done" : nb ? " bad" : s < t ? " late" : ""), ord:0, so:-1 }); }); }
   // stays (Reservations tab, or the Check-ins layer)
   (d.stays || []).forEach(x => {
     if(isRes){
       if(layerOn(k, "arr") && (layerOn(k, "own") || !x.owner)) add(x.in, { id:"ri" + x.unit + x.in, type:"stay", stay:x, day:x.in, start:null, title:(x.owner ? "Owner · " : "") + x.unit + (x.guest ? " · " + x.guest : ""), cls:"k-" + stayKind(x), dir:"in" });
       if(layerOn(k, "dep") && (layerOn(k, "own") || !x.owner)) add(x.out, { id:"ro" + x.unit + x.out, type:"stay", stay:x, day:x.out, start:null, title:(x.owner ? "Owner · " : "") + x.unit, cls:"c-dp", dir:"out" });
     } else if(x.in >= d.a && x.in <= d.b){
-      if(T(k).view !== "month") add(x.in, { id:"ci:" + x.unit + ":" + x.in, type:"stay", stay:x, day:x.in, start:null, title:ciTitle(x), cls:"k-" + stayKind(x), ord:3 });   // one line per check-in, like the old Outlook calendar
+      if(T(k).view !== "month") add(x.in, { id:"ci:" + x.unit + ":" + x.in, type:"stay", stay:x, day:x.in, start:null, title:ciTitle(x), short:ciShort(x), cls:"k-" + stayKind(x), ord:3 });   // one line per check-in, like the old Outlook calendar
       else (extra.stays[x.in] = extra.stays[x.in] || []).push(x); }
   });
   if(!isRes) Object.keys(extra.stays).forEach(s => { const L = extra.stays[s]; add(s, { id:"ci" + s, type:"checkins", day:s, start:null, list:L, title:"🏠 " + L.length + " check-in" + (L.length === 1 ? "" : "s"), cls:"c-st", ord:3 }); });
@@ -331,7 +336,7 @@ const HCCSS = `
 .hc .hc-more{font-size:11.5px;font-weight:800;color:var(--forest);background:none;border:0;cursor:pointer;padding:1px 4px;text-align:left}
 .hc .hc-bd{position:relative} .hc .hc-hrs span{position:absolute;right:8px;transform:translateY(-50%);font-size:11px;color:var(--muted);font-weight:700}
 .hc .hc-hrs{position:sticky;left:0;z-index:3;background:var(--card)}
-.hc .hc-col{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,var(--line) 0,var(--line) 1px,transparent 1px,transparent ${HPX / 2}px,color-mix(in srgb,var(--line) 55%,transparent) ${HPX / 2}px,color-mix(in srgb,var(--line) 55%,transparent) ${HPX / 2 + 1}px,transparent ${HPX / 2 + 1}px,transparent ${HPX}px)}
+.hc .hc-col{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,var(--line) 0,var(--line) 1px,transparent 1px,transparent calc(var(--hpx,48px) / 2),var(--half,color-mix(in srgb,var(--line) 55%,transparent)) calc(var(--hpx,48px) / 2),var(--half,color-mix(in srgb,var(--line) 55%,transparent)) calc(var(--hpx,48px) / 2 + 1px),transparent calc(var(--hpx,48px) / 2 + 1px),transparent var(--hpx,48px))}
 .hc .hc-col.add{cursor:copy}
 .hc .hc-now{position:absolute;left:-1px;right:0;border-top:2px solid var(--red);z-index:4;pointer-events:none} .hc .hc-now:before{content:"";position:absolute;left:-6px;top:-7px;width:12px;height:12px;border-radius:50%;background:var(--red)}
 .hc .hc-bk{position:absolute;z-index:2;overflow:hidden;border-radius:9px;padding:3px 7px;font-size:12px;line-height:1.3;background:var(--cb);color:var(--c);border-left:4px solid var(--c);cursor:pointer;box-shadow:0 0 0 1px var(--card);display:flex;flex-direction:column;gap:1px}
@@ -442,8 +447,9 @@ const HCCSS = `
 .hc .hc-bk .bi{position:absolute;right:3px;bottom:2px;display:flex;align-items:center;gap:4px} .hc .hc-bk.sh .bi{position:static;margin-left:auto}
 .hc .hc-bk .hc-join{margin:0}
 .hc .ol .hc-hrs span{transform:none;margin-top:3px;right:6px}
-.hc .ol .hc-adc .hc-chip{align-items:flex-start} .hc .ol .hc-adc .hc-chip .tx{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
-.hc .ol .hc-adc .hc-chip .rp{margin-top:1px}
+.hc .ol .hc-adc .hc-chip{height:18px;flex:none;padding-top:0;padding-bottom:0;line-height:18px}
+.hc .hc-chip b.in{font-size:9px;font-weight:800;letter-spacing:.04em;opacity:.7;margin-right:4px}
+.hc .ol .hc-adc .hc-more{height:18px;flex:none;line-height:18px;padding:0 4px}
 .hc .hc-key{display:inline-flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center}
 .hc .hc-key span{display:inline-flex;align-items:center;gap:4px} .hc .hc-key i{width:12px;height:12px;border-radius:2px;background:var(--cb);border-left:3px solid var(--c);display:inline-block}
 @media (max-width:1180px){ .hc .hc-main{grid-template-columns:minmax(0,1fr)} .hc .hc-side{display:none} .hc .hc-views button{padding:0 10px} }
@@ -587,6 +593,7 @@ function draw(k, o){
   if(k === "cal_res") h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : t.view === "day" ? `<div class="hc-ag" style="padding:4px 14px">${resDetail(t.data.stays, t.sel)}</div>` : resWeekHTML(k, daysOf(a, b));
   else h = t.view === "month" ? monthHTML(k) : t.view === "list" ? listHTML(k) : gridHTML(k, daysOf(a, b));
   cal.innerHTML = h; cal.dataset.r = t.view + a; fitAd(cal);
+  const stk = cal.querySelector(".hc-wk.ol .hc-stick"); if(stk && Math.abs(stk.offsetHeight - (C.headH || 58)) > 1 && !o.refit){ C.headH = stk.offsetHeight; return draw(k, Object.assign({}, o, { refit:true })); }
   const src = root.querySelector("#hcsrc"); if(src) src.textContent = k === "cal_res" ? (t.data.resSrc || "") : "";
   const sc2 = cal.querySelector(".hc-sc");
   if(sc2){ if(keep && keep.v === t.view && !o.scrollNow) { sc2.scrollTop = keep.y; sc2.scrollLeft = keep.x; } else scrollToHours(k, sc2); }
@@ -595,7 +602,7 @@ function draw(k, o){
   if(C.reopen){ const id = C.reopen; C.reopen = null; setTimeout(() => { const el = cal.querySelector(`[data-it="${CSS.escape(id)}"]`); if(el) openItem(k, id, el); }, 60); }
 }
 function fitAd(cal){ cal.querySelectorAll(".hc-hd,.hc-bd").forEach(r => r.style.paddingRight = ""); }   // the all-day part no longer scrolls on its own (Jeff 2026-11-25)
-window.addEventListener("resize", () => { clearTimeout(C.rsz); C.rsz = setTimeout(() => { const cal = C.v && C.v.querySelector("#hccal"); if(cal && C.k && alive(C.k)) fitAd(cal); }, 150); });
+window.addEventListener("resize", () => { clearTimeout(C.rsz); C.rsz = setTimeout(() => { const cal = C.v && C.v.querySelector("#hccal"); if(cal && C.k && alive(C.k) && cal.querySelector(".hc-wk.ol")) draw(C.k); }, 200); });   // re-fit the week
 function scrollToHours(k, sc){ if(sc.closest(".hc-wk.ol")){ sc.scrollTop = 0; return; }   // Outlook week: open at the top (all-day lines, then the hours from 8 AM)
   const g = C.g || { a:6 };
   const first = Math.min(...daysOf(...rangeOf(k)).flatMap(s => I(s).filter(x => x.start).map(x => toMin(x.start))), 99999);
@@ -609,7 +616,7 @@ function badge(k, s, small){ if(k !== "cal_office" || !layerOn(k, "work")) retur
 function resBadge(s){ const st = T("cal_res").data ? T("cal_res").data.stays : []; const i = st.filter(x => x.in === s).length, o = st.filter(x => x.out === s).length;
   return i || o ? `<span class="hc-bdg" style="cursor:default">↘ ${i} in · ↗ ${o} out</span>` : ""; }
 const tip = x => x.title + " · " + (x.start ? frange(x.start, x.fin) : x.span ? fday(x.span.a) + " – " + fday(x.span.b) : "All day") + (x.sub ? " · " + x.sub : "");
-const chip = (x, month) => `<div class="hc-chip ${x.cls}${x.past ? " past" : ""}${month && x.start ? " t" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit && x.type !== "event" || (x.edit && !x.span) ? " data-drag" : ""} title="${html(tip(x))}"><span class="tx">${x.start ? `<em>${html(fshort(x.start))}</em> ` : ""}${html((x.pre || "") + x.title)}${x.span && x.onDay !== x.span.a ? ` <em>(cont.)</em>` : ""}</span>${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}</div>`;
+const chip = (x, month) => `<div class="hc-chip ${x.cls}${x.past ? " past" : ""}${month && x.start ? " t" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit && x.type !== "event" || (x.edit && !x.span) ? " data-drag" : ""} title="${html(tip(x))}"><span class="tx">${x.start ? `<em>${html(fshort(x.start))}</em> ` : ""}${x.short && !month ? `<b class="in">IN</b>${html(x.short)}` : html((x.pre || "") + x.title)}${x.span && x.onDay !== x.span.a ? ` <em>(cont.)</em>` : ""}</span>${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}</div>`;
 function lay(list){ list.sort((x, y) => x.s - y.s || y.e - x.e); let cols = [], grp = [], end = -1; const fin = () => grp.forEach(x => x.n = cols.length);
   list.forEach(x => { if(grp.length && x.s >= end){ fin(); grp = []; cols = []; } let c = cols.findIndex(e => e <= x.s); if(c < 0){ c = cols.length; cols.push(0); } cols[c] = x.e; x.c = c; grp.push(x); end = Math.max(end, x.e); });
   fin(); return list; }
@@ -618,14 +625,21 @@ function gridHTML(k, days){
   // the hours stretch if something is earlier than 6 am or later than 10 pm
   let gA = 8, gB = 20; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
   gB = Math.min(24, gB); C.g = { a:gA, b:gB };
+  // fit the screen: the all-day lines get the room they need (a too-full day shows "+N more"), the hours share what is left
+  const calEl = C.v && C.v.querySelector("#hccal"), avail = calEl ? calEl.clientHeight - 4 : 0, LH = 20, MINH = 24, hrs = gB - gA, headH = C.headH || 58;
+  let adMax = 0; days.forEach(s => adMax = Math.max(adMax, I(s).filter(x => !x.start).length));
+  let cap = 999; HPX = 48;
+  if(avail > 320){ const room = avail - headH - 6; cap = Math.max(3, Math.floor((room - hrs * MINH - 10) / LH));
+    const adH = Math.max(34, Math.min(adMax, cap) * LH + 10); HPX = Math.max(MINH, Math.min(60, Math.floor((room - adH) / hrs))); }
+  C.cap = cap;
   const cols = `grid-template-columns:58px repeat(${n},minmax(${n > 1 ? 110 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
-  let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
+  let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}" style="--hpx:${HPX}px${HPX < 36 ? ";--half:transparent" : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
   const we = s => { const w = D(s).getDay(); return w === 0 || w === 6 ? " we" : ""; }, dnum = s => D(s).getDate() === 1 ? MONS[D(s).getMonth()] + " 1" : D(s).getDate();
   days.forEach(s => h += `<div class="hc-dh${s === t ? " td" : ""}${we(s)}"><button class="hc-dn" data-gday="${s}" title="Open ${html(flong(s))}">${DAYS[D(s).getDay()]}</button><div class="hc-dd"><b>${dnum(s)}</b>${badge(k, s, true)}${canAddOn(k) ? `<button class="hc-dadd" data-addday="${s}" data-keep-pop title="Add something on ${html(fday(s))}" aria-label="Add on ${html(fday(s))}">+</button>` : ""}</div></div>`);
   h += `</div></div><div class="hc-row hc-ad" style="${cols}"><div class="hc-gut"><span>all day</span></div>`;
   let maxAd = 0; days.forEach(s => maxAd = Math.max(maxAd, I(s).filter(x => !x.start).length));
-  days.forEach(s => { const ad = I(s).filter(x => !x.start), lim = C.adOpen ? 999 : 40;
-    h += `<div class="hc-adc${s === t ? " td" : ""}${we(s)}" data-adday="${s}">${ad.slice(0, ad.length > lim ? lim - 1 : lim).map(x => chip(x)).join("")}${ad.length > lim ? `<button class="hc-more" data-adall>+${ad.length - lim + 1} more</button>` : ""}</div>`; });
+  days.forEach(s => { const ad = I(s).filter(x => !x.start), lim = cap;
+    h += `<div class="hc-adc${s === t ? " td" : ""}${we(s)}" data-adday="${s}">${ad.slice(0, ad.length > lim ? lim - 1 : lim).map(x => chip(x)).join("")}${ad.length > lim ? `<button class="hc-more" data-adm="${s}" data-keep-pop>+${ad.length - lim + 1} more</button>` : ""}</div>`; });
   h += `</div><div class="hc-row hc-bd" style="${cols};height:${H}px"><div class="hc-hrs" style="position:relative">${Array.from({ length:gB - gA }, (_, i) => `<span style="top:${i * HPX}px">${fhour(gA + i)}</span>`).join("")}</div>`;
   days.forEach(s => {
     const bl = lay(I(s).filter(x => x.start).map(x => { const st = toMin(x.start), en0 = x.fin && toMin(x.fin) > st ? toMin(x.fin) : st + 60; return Object.assign({ s:st, e:Math.max(en0, st + 20) }, x); }));
@@ -634,7 +648,7 @@ function gridHTML(k, days){
 }
 function block(x, gA){ const top = (x.s - gA * 60) / 60 * HPX, ht = Math.max((x.e - x.s) / 60 * HPX - 2, 20), short = ht < 38;
   const md = !short && ht < 66, lbl = `${x.bell ? "🔔 " : ""}${html((x.pre || "") + x.title)}`;
-  const ic = `${x.join && ht >= 30 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}`;
+  const ic = `${x.join && ht >= 18 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}`;
   return `<div class="hc-bk ${x.cls}${x.past ? " past" : ""}${short ? " sh" : md ? " md" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit ? " data-drag" : ""} style="top:${top + 1}px;height:${ht}px;left:calc(${x.c / x.n * 100}% + 2px);width:calc(${100 / x.n}% - 4px)" title="${html(tip(x))}">${md ? `<p class="ln"><b>${lbl}</b> <span>${html(fshort(x.start) + (x.fin ? "–" + fshort(x.fin) : ""))}</span></p>` : `<b>${lbl}</b><span>${html(short ? fshort(x.start) : frange(x.start, x.fin) + (x.sub ? " · " + x.sub : ""))}</span>`}${ic ? `<span class="bi">${ic}</span>` : ""}</div>`; }
 function monthHTML(k){ const [a, b] = rangeOf(k), days = daysOf(a, b), m = T(k).sel.slice(0, 7), t = today(), rows = days.length / 7, isRes = k === "cal_res";
   let h = `<div class="hc-mon"><div class="hc-mhd">${DOW.map(x => `<div>${x}</div>`).join("")}</div><div class="hc-mgr" style="--rows:${rows}">`;
@@ -720,6 +734,7 @@ function wire(root, k){
     if(ds.blinks != null) return linksBox(k);
     if(ds.adall != null){ C.adOpen = !C.adOpen; return draw(k); }
     if(ds.more){ return dayList(k, ds.more, el); }
+    if(ds.adm){ return dayList(k, ds.adm, el, null, I(ds.adm).filter(x => !x.start)); }
     if(ds.who){ return whoPop(k, ds.who, el); }
     if(ds.addday && canAddOn(k)) return quick(k, { day:ds.addday, start:null }, el);
     if(ds.it){ if(ds.day && t.view !== "list"){ /* side list: jump there */ }
@@ -776,6 +791,7 @@ async function openItem(k, id, el){
     <p class="muted" style="font-size:12px;margin:8px 0 0">From Track${s.res ? " · reservation " + html(s.res) : ""}. Contact info stays on Home for the teams that have it.</p></div>`, el, x.cls);
     p.querySelectorAll("a[href^='#/']").forEach(a => a.addEventListener("click", popClose)); return p; }
   if(x.type === "check") return chkPeek(k, x, el);
+  if(x.type === "checks") return chkList(k, x, el);
 }
 async function seriesWords(e){ if(!e.series_id) return ""; const d = T(C.k).data; const s = d && d.series[e.series_id]; if(s) return s.words;
   const r = await sb.rpc("cal_series_info", { p_ids:[e.series_id] }); return ((r.data || [])[0] || {}).words || "Repeats"; }
@@ -807,6 +823,13 @@ function staffPeek(k, x, el){
   p.querySelectorAll("a[href^='#/']").forEach(a => a.addEventListener("click", popClose));
   const b = p.querySelector("[data-smv]"); if(b) b.onclick = () => { popClose(); moveOne(k, m, (mv && mv.from) || x.day); };
 }
+function chkList(k, x, el){
+  const runTxt = c => { const r = c.run, st = r ? r.status : ""; return st === "done" ? "done" + (r.by_name ? " · " + r.by_name.split(" ")[0] : "") : st === "ok" ? "nothing to fix" : st === "issues" ? "needs someone" : st === "error" ? "didn't finish" : st === "list" ? "list ready" : x.day > today() ? "" : "not done"; };
+  const p = pop(`<div class="pbar c-chk" style="background:var(--c)"></div><div class="pb"><h3><span>Daily checks · ${html(fday(x.day))}</span><button class="px" aria-label="Close">✕</button></h3>
+    ${x.list.map(c => `<div class="wl" style="cursor:pointer" data-ck="${html(c.id)}"><span>${html((c.pre || "") + c.title)}</span><span class="muted">${html(runTxt(c))}</span></div>`).join("")}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Tap a check to see what to do or mark it done.</p></div>`, el, "c-chk");
+  p.querySelectorAll("[data-ck]").forEach(r => r.onclick = () => { const it = findItem(k, r.dataset.ck); popClose(); if(it) chkPeek(k, it, el); });
+  return p; }
 function chkPeek(k, x, el){
   const c = x.chk, r = x.run, st = r ? r.status : "", done = st === "done" || st === "ok", t = today(), who = [...(c.teams || []).map(q => TEAM_L[q] || q), ...(c.people || []).map(nameOf)];
   const at = r ? new Date(r.at).toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" }) : "";
@@ -831,7 +854,7 @@ function chkPeek(k, x, el){
     if(res.error){ b.disabled = false; b.textContent = "✓ Mark done"; return say(/not allowed/i.test(res.error.message || "") ? "Only the people this check is for (or a manager) can mark it done." : "Couldn't save: " + nice(res.error)); }
     popClose(); toast("Marked done ✓"); invalidate(); refresh(k, { force:true, quiet:true }); };
   return p; }
-function dayList(k, s, el, list){ const its = list ? null : I(s);
+function dayList(k, s, el, list, only){ const its = list ? null : only || I(s);
   pop(`<div class="pb"><h3><span>${html(flong(s))}</span><button class="px" aria-label="Close">✕</button></h3>${list ? list.map(x => `<div class="wl"><span><b>${html(x.unit)}</b> ${x.owner ? "· Owner " : ""}${html(x.guest || "")}</span><span class="muted">${x.nights} night${x.nights === 1 ? "" : "s"}</span></div>`).join("")
     : its.map(x => `<div class="wl" style="cursor:pointer" data-dl="${html(x.id)}"><span><span class="hc-root ${x.cls}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:6px"></span>${html(x.title)}</span><span class="muted">${x.start ? html(fshort(x.start)) : "all day"}</span></div>`).join("")}
     <div class="pa"><button class="btn small" data-dlgo>Open this day</button></div></div>`, el);
