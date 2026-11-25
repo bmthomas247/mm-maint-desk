@@ -182,10 +182,10 @@ function buildItems(k, d){
     // staff meetings
     if(layerOn(k, "meet")){
       if(isOff) (d.ox.meetings || []).forEach(m => { const meta = d.ms.find(x => x.meet === m.meet) || {};
-        add(m.day, { id:"s:" + (m.meet || "x") + ":" + m.day + ":" + m.start, type:"staff", meet:m.meet, day:m.day, start:m.start, fin:m.end, title:m.meet ? (NAMES[m.meet] || m.meet) + " meeting" : "In a meeting",
+        add(m.day, { id:"s:" + (m.meet || "x") + ":" + m.day + ":" + m.start, type:"staff", meet:m.meet, day:m.day, start:m.start, fin:m.end, title:m.meet ? (NAMES[m.meet] || m.meet) : "In a meeting", full:m.meet ? (NAMES[m.meet] || m.meet) + " meeting" : "In a meeting",
           sub:(m.people || []).map(first).join(", "), people:m.people || [], cls:"c-mt", join:m.meet ? meta.link || null : null, past:past(m.day, m.end), meta }); });
       if(isMe) d.ms.filter(m => m.can !== false && m.start).forEach(m => occurs(m, d.a, d.b).forEach(s => { const w = mAt(m, s), fin = w.minutes ? endTime(w.start, w.minutes) : null;
-        add(s, { id:"s:" + m.meet + ":" + s, type:"staff", meet:m.meet, day:s, start:w.start, fin, title:(NAMES[m.meet] || m.meet) + " meeting", sub:mvTo(m, s) ? "moved this week" : "", cls:"c-mt", join:m.link || null, past:past(s, fin), meta:m }); }));
+        add(s, { id:"s:" + m.meet + ":" + s, type:"staff", meet:m.meet, day:s, start:w.start, fin, title:NAMES[m.meet] || m.meet, full:(NAMES[m.meet] || m.meet) + " meeting", sub:mvTo(m, s) ? "moved this week" : "", cls:"c-mt", join:m.link || null, past:past(s, fin), meta:m }); }));
       if(isMe) d.hm.forEach(m => { const inv = (m.staff || []).includes(me) && !m.mine, a = inv ? (m.my_answer || {}).answer : null, fin = endTime(m.start, m.minutes);
         add(m.day, { id:"m" + m.id, type:"meet", hm:m, day:m.day, start:m.start, fin, title:(inv && !a ? "❔ " : a === "no" ? "Declined · " : "") + (m.virtual === false ? "👥 " : "📹 ") + m.title,
           sub:[m.guest_name ? "booked by " + m.guest_name : "", m.host_id !== me ? "host " + String(m.host || "").split(" ")[0] : "", m.virtual === false && m.location ? m.location : "", inv && !a ? "waiting for your answer" : ""].filter(Boolean).join(" · "),
@@ -284,7 +284,7 @@ const HCCSS = `
 .hc .hc-now{position:absolute;left:-1px;right:0;border-top:2px solid var(--red);z-index:4;pointer-events:none} .hc .hc-now:before{content:"";position:absolute;left:-6px;top:-7px;width:12px;height:12px;border-radius:50%;background:var(--red)}
 .hc .hc-bk{position:absolute;z-index:2;overflow:hidden;border-radius:9px;padding:3px 7px;font-size:12px;line-height:1.3;background:var(--cb);color:var(--c);border-left:4px solid var(--c);cursor:pointer;box-shadow:0 0 0 1px var(--card);display:flex;flex-direction:column;gap:1px}
 .hc .hc-bk b{font-weight:800;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink)} .hc .hc-bk span{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hc .hc-bk.md b{-webkit-line-clamp:1}
+.hc .hc-bk .ln{margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3} .hc .hc-bk .ln b{display:inline;-webkit-line-clamp:unset} .hc .hc-bk .ln span{white-space:normal;font-weight:600}
 .hc .hc-bk.sh{flex-direction:row;align-items:center;gap:5px;padding-top:1px;padding-bottom:1px} .hc .hc-bk.sh b{-webkit-line-clamp:1;flex:1;min-width:0}
 .hc .hc-bk.past{opacity:.62} .hc .hc-bk.dec{opacity:.5} .hc .hc-bk.dec b{text-decoration:line-through}
 .hc .hc-bk:hover,.hc .hc-chip:hover{filter:brightness(.97);box-shadow:0 2px 10px rgba(0,0,0,.12)} .hc .hc-bk:focus-visible,.hc .hc-chip:focus-visible{outline:2px solid var(--c);outline-offset:1px}
@@ -540,7 +540,8 @@ function gridHTML(k, days){
   return h + `</div></div></div></div>`;
 }
 function block(x, gA){ const top = (x.s - gA * 60) / 60 * HPX, ht = Math.max((x.e - x.s) / 60 * HPX - 2, 20), short = ht < 38;
-  return `<div class="hc-bk ${x.cls}${x.past ? " past" : ""}${short ? " sh" : ht < 66 ? " md" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit ? " data-drag" : ""} style="top:${top + 1}px;height:${ht}px;left:calc(${x.c / x.n * 100}% + 2px);width:calc(${100 / x.n}% - 4px)" title="${html(tip(x))}"><b>${x.rep ? "↻ " : ""}${x.bell ? "🔔 " : ""}${html(x.title)}</b><span>${html(short ? fshort(x.start) : frange(x.start, x.fin) + (x.sub ? " · " + x.sub : ""))}</span>${x.join && ht >= 62 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}</div>`; }
+  const md = !short && ht < 66, lbl = `${x.rep ? "↻ " : ""}${x.bell ? "🔔 " : ""}${html(x.title)}`;
+  return `<div class="hc-bk ${x.cls}${x.past ? " past" : ""}${short ? " sh" : md ? " md" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit ? " data-drag" : ""} style="top:${top + 1}px;height:${ht}px;left:calc(${x.c / x.n * 100}% + 2px);width:calc(${100 / x.n}% - 4px)" title="${html(tip(x))}">${md ? `<p class="ln"><b>${lbl}</b> <span>${html(fshort(x.start) + (x.fin ? "–" + fshort(x.fin) : ""))}</span></p>` : `<b>${lbl}</b><span>${html(short ? fshort(x.start) : frange(x.start, x.fin) + (x.sub ? " · " + x.sub : ""))}</span>`}${x.join && ht >= 62 ? `<a class="hc-join" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}</div>`; }
 function monthHTML(k){ const [a, b] = rangeOf(k), days = daysOf(a, b), m = T(k).sel.slice(0, 7), t = today(), rows = days.length / 7, isRes = k === "cal_res";
   let h = `<div class="hc-mon"><div class="hc-mhd">${DOW.map(x => `<div>${x}</div>`).join("")}</div><div class="hc-mgr" style="--rows:${rows}">`;
   days.forEach(s => { let its = I(s); if(isRes) its = its.filter(x => x.dir === "in"); const max = 4, show = its.length > max ? its.slice(0, max - 1) : its;
@@ -698,7 +699,7 @@ async function evPeek(k, x, el){
 }
 function staffPeek(k, x, el){
   const m = x.meta || {}, mv = m.meet ? mvTo(m, x.day) : null;
-  const p = pop(`<div class="pbar c-mt" style="background:var(--c)"></div><div class="pb"><h3><span>${html(x.title)}</span><button class="px" aria-label="Close">✕</button></h3>
+  const p = pop(`<div class="pbar c-mt" style="background:var(--c)"></div><div class="pb"><h3><span>${html(x.full || x.title)}</span><button class="px" aria-label="Close">✕</button></h3>
     <div class="pl"><i>🕑</i><span>${html(flong(x.day))} · ${html(frange(x.start, x.fin))}</span></div>
     ${mv ? `<div class="pl"><i>↪</i><span>Moved from ${html(fday(mv.from))}${mv.note ? " · " + html(mv.note) : ""}</span></div>` : ""}
     ${(x.people || []).length ? `<div class="pl"><i>👥</i><span>${html(x.people.map(nameOf).join(", "))}</span></div>` : ""}
