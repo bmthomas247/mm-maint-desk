@@ -32,8 +32,8 @@ const LAYER_ON = { chk:true, events:true, meet:true, people:true, work:true, sta
 const REM = [[0,"At the start"],[5,"5 min before"],[10,"10 min before"],[15,"15 min before"],[30,"30 min before"],[60,"1 hour before"],[120,"2 hours before"],[1440,"1 day before"],[2880,"2 days before"],[10080,"1 week before"]];
 const remTxt = m => (REM.find(x => x[0] === m) || [m, m + " min before"])[1];
 // Daily checks (hub_checks) on the calendar, named like the team's old Outlook to-dos (Jeff 2026-11-25)
-const CHK_NAMES = { checkins_brivo:"Run Check-In Report; Check Brivo", office_received:"Check Office Received", abb_payouts:"Check ABB Payments", airbnb_csv:"Download the Airbnb payouts file",
-  failed_payments:"Run Failed Payments Report", balances:"Run Outstanding Balance Reports", touchstay:"Touch Stay: resync guide data", payroll:"Do payroll", eblast:"Send out Realtor E-Blast",
+const CHK_NAMES = { checkins_brivo:"Check-In Report; Brivo", office_received:"Check Office Received", abb_payouts:"Check ABB Payments", airbnb_csv:"Airbnb payouts file",
+  failed_payments:"Run Failed Payments", balances:"Run Balance Reports", touchstay:"Touch Stay resync", payroll:"Do payroll", eblast:"Send Realtor E-Blast",
   advantage:"Pay Advantage", law_watch:"Follow This PM Bill" };
 const TEAM_L = { front_desk:"Front desk", maint_manager:"Maintenance manager", office_manager:"Office managers", hk_manager:"Housekeeping manager", owner_relations:"Owner relations",
   maint_crew:"Maintenance crew", hk_crew:"Housekeeping crew", licensing:"Licensing", leasing:"Leasing", admin:"Admins" };
@@ -594,7 +594,7 @@ function draw(k, o){
   if(C.reopen){ const id = C.reopen; C.reopen = null; setTimeout(() => { const el = cal.querySelector(`[data-it="${CSS.escape(id)}"]`); if(el) openItem(k, id, el); }, 60); }
 }
 function fitAd(cal){ const sc = cal.querySelector(".hc-sc"), ad = cal.querySelector(".hc-wk.ol .hc-ad"); if(!sc || !ad) return;
-  ad.style.maxHeight = Math.max(96, Math.round(sc.clientHeight * 0.42)) + "px";
+  ad.style.maxHeight = Math.max(110, Math.round(sc.clientHeight * 0.5)) + "px";
   const gw = ad.offsetWidth - ad.clientWidth; cal.querySelectorAll(".hc-hd,.hc-bd").forEach(r => r.style.paddingRight = gw > 0 ? gw + "px" : ""); }
 window.addEventListener("resize", () => { clearTimeout(C.rsz); C.rsz = setTimeout(() => { const cal = C.v && C.v.querySelector("#hccal"); if(cal && C.k && alive(C.k)) fitAd(cal); }, 150); });
 function scrollToHours(k, sc){ const g = C.g || { a:6 };
