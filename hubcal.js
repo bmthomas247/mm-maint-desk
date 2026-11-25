@@ -462,6 +462,36 @@ const HCCSS = `
   .hc .hc-leg{margin-bottom:6px;flex-wrap:nowrap;overflow:hidden} .hc .hc-lg{padding:3px 9px;font-size:12px;flex:none}
   .hc .hc-key{font-size:11px;gap:7px;flex-wrap:nowrap;white-space:nowrap;min-width:0;overflow:hidden}
 }
+/* one compact Outlook-style toolbar row on computers (Jeff 2026-11-25) */
+.hc .hc-dt{display:none}
+@media (min-width:761px){
+  .hc{padding-top:8px} .hc .hc-top,.hc .hc-leg,.hc .hc-views{display:none}
+  .hc .hc-dt{display:inline-flex}
+  .hc .hc-bar{gap:6px;margin:0 0 8px;align-items:center}
+  .hc .hc-today{min-height:32px;height:32px;padding:0 12px;border-radius:6px;font-weight:700;font-size:13.5px}
+  .hc .hc-arw{width:32px;height:32px;border-radius:6px;border-color:transparent;background:none} .hc .hc-arw:hover{background:var(--ground)} .hc .hc-arw svg{width:20px;height:20px}
+  .hc .hc-title{font-size:18px;font-weight:700;min-height:32px;line-height:28px;padding:0 6px}
+  .hc .hc-ic{width:32px;height:32px;border-radius:6px} .hc .hc-ic svg{width:17px;height:17px}
+  .hc select.hc-dt{display:inline-block;height:32px;min-height:32px;border-radius:6px;border:1px solid var(--line-2);background:var(--card);font-weight:700;font-size:13px;padding:0 8px;width:auto;max-width:150px;color:var(--ink);cursor:pointer}
+  .hc .hc-sec.hc-dt{min-height:32px;height:32px;border-radius:6px;font-size:13px;padding:0 10px;align-items:center}
+  .hc .hc-nsplit{flex:none} .hc .hc-nb,.hc .hc-nm{height:32px;border:0;background:var(--forest);color:#fff;font-weight:800;font-size:13px;cursor:pointer;padding:0 12px;white-space:nowrap}
+  .hc .hc-nb{border-radius:6px 0 0 6px} .hc .hc-nm{border-radius:0 6px 6px 0;border-left:1px solid rgba(255,255,255,.35);padding:0 9px} .hc .hc-nm.solo{border-radius:6px;border-left:0;padding:0 12px}
+  .hc .hc-nb:hover,.hc .hc-nm:hover{filter:brightness(1.1)}
+}
+.hc-pop.hc-menu{width:auto;min-width:210px;max-width:320px}
+.hc-pop.hc-menu .pb{padding:8px}
+.hc-pop .hc-mi{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}
+.hc-pop .hc-mi:hover{background:var(--ground)} .hc-pop .hc-mi input{width:16px;height:16px;min-height:0;margin:0;flex:none}
+.hc-pop .hc-mi .sw{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--cb);border-left:3px solid var(--c)}
+.hc-pop .hc-mh{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:4px 10px}
+.hc-pop .hc-keyl{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;padding:4px 10px;font-size:13px}
+.hc-pop .hc-keyl span{display:inline-flex;align-items:center;gap:6px} .hc-pop .hc-keyl i{width:12px;height:12px;border-radius:2px;background:var(--cb);border-left:3px solid var(--c)}
+/* plainer grid: the + shows when you point at a day, quiet "working" count, flatter corners */
+.hc .hc-wk.ol{border-radius:6px}
+.hc .ol .hc-dadd{opacity:0;transition:opacity .15s} .hc .ol .hc-dh:hover .hc-dadd,.hc .ol .hc-dadd:focus-visible{opacity:1}
+@media (hover:none){ .hc .ol .hc-dadd{opacity:1} }
+.hc .ol .hc-dd .hc-bdg{border:0;background:none;color:var(--muted);padding:0 2px;font-weight:700}
+.hc .ol .hc-adc .hc-chip{font-size:12px}
 .hc .ol .hc-bk.sh > span:not(.bi){display:none} .hc .ol .hc-bk .hc-join{font-size:10px;padding:0 6px;line-height:15px}
 @media (max-width:1180px){ .hc .hc-main{grid-template-columns:minmax(0,1fr)} .hc .hc-side{display:none} .hc .hc-views button{padding:0 10px} }
 @media (max-width:760px){
@@ -502,12 +532,13 @@ function popEl(){ let p = document.getElementById("hcpop"); if(!p){ p = document
     window.addEventListener("resize", () => popClose()); window.addEventListener("hashchange", () => popClose()); }
   return p; }
 function popClose(){ const p = document.getElementById("hcpop"); if(p){ p.classList.remove("on"); p.innerHTML = ""; } C.open = null; }
-function pop(inner, at, cls){ const p = popEl(); p.className = "hc-pop hc-root on " + (cls || ""); p.innerHTML = inner;
+function pop(inner, at, cls, below){ const p = popEl(); p.className = "hc-pop hc-root on " + (cls || ""); p.innerHTML = inner;
   const w = Math.min(380, window.innerWidth - 24), r = at && at.getBoundingClientRect ? at.getBoundingClientRect() : at || { left:window.innerWidth / 2 - w / 2, right:window.innerWidth / 2 + w / 2, top:120, bottom:120 };
   const h = p.offsetHeight, W = window.innerWidth, Hh = window.innerHeight; let x, y = r.top;
   if(r.right + 10 + w <= W - 12) x = r.right + 10;
   else if(r.left - 10 - w >= 12) x = r.left - 10 - w;
   else { x = Math.max(12, Math.min(W - w - 12, r.left)); y = r.bottom + 8 + h <= Hh - 12 ? r.bottom + 8 : r.top - 8 - h; }
+  if(below){ const ww = p.offsetWidth; x = Math.max(12, Math.min(W - ww - 12, r.left)); y = r.bottom + 6; }
   y = Math.max(12, Math.min(y, Hh - h - 12));
   p.style.left = x + "px"; p.style.top = y + "px"; p.style.right = "auto"; p.style.bottom = "auto";
   const x0 = p.querySelector(".px"); if(x0) x0.onclick = popClose;
@@ -523,9 +554,12 @@ function shell(k){
     : k === "cal_me" ? `<button class="hc-sec hc-hide-ph" data-sched>📅 Schedule a meeting</button><button class="hc-sec hc-hide-ph" data-blinks>🔗 Booking links</button>` : "";
   return `<div class="page hc hc-root" data-k="${k}">
     <div class="hc-top"><nav class="hc-tabs">${TABS.map(([x, l]) => `<a href="#/${x}" class="${x === k ? "on" : ""}">${l}</a>`).join("")}</nav><span class="hc-sp"></span>${more}${newBtn}</div>
-    <div class="hc-bar"><button class="hc-today" data-today title="Today (T)">Today</button>
+    <div class="hc-bar">${newSplit(k)}<button class="hc-today" data-today title="Today (T)">Today</button>
       <button class="hc-arw" data-mv="-1" aria-label="${stepWord(k, -1)}" title="${stepWord(k, -1)} (←)">${CHEV(-1)}</button><button class="hc-arw" data-mv="1" aria-label="${stepWord(k, 1)}" title="${stepWord(k, 1)} (→)">${CHEV(1)}</button>
       <button class="hc-title" data-pick data-keep-pop title="Pick a date">${html(titleOf(k))} <small>▾</small></button><span class="hc-sp"></span><span class="hc-upd" aria-live="polite"></span>
+      <select class="hc-dt" data-tsel aria-label="Which calendar" title="Which calendar">${TABS.map(([x, l]) => `<option value="${x}"${x === k ? " selected" : ""}>${l}</option>`).join("")}</select>
+      <select class="hc-dt" data-vsel aria-label="View" title="View">${VIEWS.map(([x, l]) => `<option value="${x}"${x === v ? " selected" : ""}>${l}</option>`).join("")}</select>
+      <button class="hc-sec hc-dt" data-show data-keep-pop title="What to show + check-in colors">Show ▾</button>
       <div class="hc-views" role="tablist">${VIEWS.map(([x, l]) => `<button data-view="${x}" class="${x === v ? "on" : ""}" title="${l} (${x === "list" ? "A" : x === "seven" ? "S" : l[0]})">${l}</button>`).join("")}</div>
       <button class="hc-ic" data-find data-keep-pop title="Find an event (/)" aria-label="Find an event">${ICON.find}</button><button class="hc-ic hc-hide-ph" data-print title="Print or save as PDF" aria-label="Print">${ICON.print}</button>
       <button class="hc-ic hc-hide-ph ${C.prefs.side ? "on" : ""}" data-side title="Show or hide the side panel" aria-label="Side panel">${ICON.side}</button></div>
@@ -534,7 +568,23 @@ function shell(k){
     ${canAddOn(k) ? `<button class="hc-fab" data-new aria-label="New event">+</button>` : ""}
     <div class="modal hcm" id="evm"><div class="card" id="evcard"></div></div></div>`;
 }
+// "＋ New event" with a ▾ for the other actions (Outlook's split button)
+function newSplit(k){ const extra = k === "cal_office" || k === "cal_me";
+  if(!canAddOn(k) && !extra) return "";
+  return `<span class="hc-nsplit hc-dt">${canAddOn(k) ? `<button class="hc-nb" data-new title="New event (N)">＋ New event</button>` : ""}${extra ? `<button class="hc-nm${canAddOn(k) ? "" : " solo"}" data-newmenu data-keep-pop title="More">${canAddOn(k) ? "▾" : "I'm out / working ▾"}</button>` : ""}</span>`; }
+function newMenu(k, el){ const L = [];
+  if(canAddOn(k)) L.push(["＋ New event", () => quick(k, null, el)]);
+  if(k === "cal_office") L.push(["🌴 I'm out", () => editor(k, null, { kind:"out", cal:"office" })], ["✅ I'm working", () => editor(k, null, { kind:"working", cal:"office" })], ["🗓 Schedule adjustment", () => { location.hash = "#/cal_off"; }]);
+  if(k === "cal_me") L.push(["📅 Schedule a meeting", () => schedForm(k)], ["🔗 Booking links", () => linksBox(k)]);
+  const p = pop(`<div class="pb">${L.map((x, i) => `<button class="hc-mi" data-mi="${i}">${html(x[0])}</button>`).join("")}</div>`, el, "hc-menu", true);
+  p.querySelectorAll("[data-mi]").forEach(b => b.onclick = () => { popClose(); L[+b.dataset.mi][1](); }); }
+function showMenu(k, el){ const L = LAYERS[k] || [], d = T(k).data;
+  const p = pop(`<div class="pb"><b class="hc-mh">Show on the calendar</b>${L.map(([x, l, c]) => `<label class="hc-mi"><input type="checkbox" data-sl="${x}"${layerOn(k, x) ? " checked" : ""}><span class="hc-root ${c}"><i class="sw"></i></span>${html(l)}</label>`).join("")}
+    ${k === "cal_res" || layerOn(k, "stays") ? `<b class="hc-mh" style="margin-top:10px">Check-in colors</b><div class="hc-keyl">${Object.entries(KIND_L).map(([q, l]) => `<span class="hc-root k-${q}"><i></i>${html(l)}</span>`).join("")}</div>` : ""}
+    <p class="muted" style="font-size:11.5px;margin:8px 0 0">${html(k === "cal_res" ? (d && d.resSrc) || "From Track" : "Check-ins come from Track. Daily checks come from Reports ▸ Daily checks.")}</p></div>`, el, "hc-menu", true);
+  p.querySelectorAll("[data-sl]").forEach(cb => cb.onchange = () => { const Lp = C.prefs.layers[k] = C.prefs.layers[k] || {}; Lp[cb.dataset.sl] = cb.checked; savePrefs(); refresh(k); }); }
 function syncBar(k){ const r = C.v && C.v.querySelector(".hc"); if(!r) return; const t = T(k);
+  const vs = r.querySelector("[data-vsel]"); if(vs) vs.value = t.view;
   const ti = r.querySelector("[data-pick]"); if(ti) ti.innerHTML = `${html(titleOf(k))} <small>▾</small>`;
   r.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === t.view));
   r.querySelectorAll("[data-mv]").forEach(b => { const w = stepWord(k, +b.dataset.mv); b.title = w + (+b.dataset.mv < 0 ? " (←)" : " (→)"); b.setAttribute("aria-label", w); });
@@ -627,7 +677,7 @@ function badge(k, s, small){ if(k !== "cal_office" || !layerOn(k, "work")) retur
 function resBadge(s){ const st = T("cal_res").data ? T("cal_res").data.stays : []; const i = st.filter(x => x.in === s).length, o = st.filter(x => x.out === s).length;
   return i || o ? `<span class="hc-bdg" style="cursor:default">↘ ${i} in · ↗ ${o} out</span>` : ""; }
 const tip = x => x.title + " · " + (x.start ? frange(x.start, x.fin) : x.span ? fday(x.span.a) + " – " + fday(x.span.b) : "All day") + (x.sub ? " · " + x.sub : "");
-const chip = (x, month) => `<div class="hc-chip ${x.cls}${x.past ? " past" : ""}${month && x.start ? " t" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit && x.type !== "event" || (x.edit && !x.span) ? " data-drag" : ""} title="${html(tip(x))}"><span class="tx">${x.start ? `<em>${html(fshort(x.start))}</em> ` : ""}${x.short && !month ? `<b class="in">IN</b>${html(x.short)}` : html((x.pre || "") + x.title)}${x.span && x.onDay !== x.span.a ? ` <em>(cont.)</em>` : ""}</span>${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}</div>`;
+const chip = (x, month) => `<div class="hc-chip ${x.cls}${x.past ? " past" : ""}${month && x.start ? " t" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"${x.edit && x.type !== "event" || (x.edit && !x.span) ? " data-drag" : ""} title="${html(tip(x))}"><span class="tx">${x.start ? `<em>${html(fshort(x.start))}</em> ` : ""}${x.short && !month && !C.wide ? `<b class="in">IN</b>${html(x.short)}` : html((x.pre || "") + x.title)}${x.span && x.onDay !== x.span.a ? ` <em>(cont.)</em>` : ""}</span>${x.rep ? `<i class="rp" aria-label="repeats">↻</i>` : ""}</div>`;
 function lay(list){ list.sort((x, y) => x.s - y.s || y.e - x.e); let cols = [], grp = [], end = -1; const fin = () => grp.forEach(x => x.n = cols.length);
   list.forEach(x => { if(grp.length && x.s >= end){ fin(); grp = []; cols = []; } let c = cols.findIndex(e => e <= x.s); if(c < 0){ c = cols.length; cols.push(0); } cols[c] = x.e; x.c = c; grp.push(x); end = Math.max(end, x.e); });
   fin(); return list; }
@@ -637,14 +687,17 @@ function gridHTML(k, days){
   let gA = 8, gB = 18; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
   gB = Math.min(24, gB); C.g = { a:gA, b:gB };
   // fit the screen: the all-day lines get the room they need (a too-full day shows "+N more"), the hours share what is left
-  const calEl = C.v && C.v.querySelector("#hccal"), avail = calEl ? calEl.clientHeight - 4 : 0, LH = 20, MINH = 20, hrs = gB - gA, headH = C.headH || 58;
+  const calEl = C.v && C.v.querySelector("#hccal"), avail = calEl ? Math.floor(window.innerHeight - Math.max(0, calEl.getBoundingClientRect().top) - 14) : 0,   /* room from the top of the calendar to the bottom of the window */ LH = 20, MINH = 20, hrs = gB - gA, headH = C.headH || 58;
   let adMax = 0; days.forEach(s => adMax = Math.max(adMax, I(s).filter(x => !x.start).length));
   let cap = 999; HPX = 48;
   if(avail > 320){ const room = avail - headH - 6; cap = Math.max(3, Math.floor((room - hrs * MINH - 10) / LH));
-    const adH = Math.max(34, Math.min(adMax, cap) * LH + 10); HPX = Math.max(MINH, Math.min(60, Math.floor((room - adH) / hrs))); }
-  C.cap = cap;
+    const adH = Math.max(34, Math.min(adMax, cap) * LH + 10); let hh = hrs;
+    // lots of room (big screen, few lines)? show more of the day (to 9 PM, then from 7 AM) instead of very tall hours
+    while(Math.floor((room - adH) / hh) > 50 && (gB < 21 || gA > 7)){ if(gB < 21) gB++; else gA--; hh = gB - gA; }
+    HPX = Math.max(MINH, Math.min(60, Math.floor((room - adH) / hh))); C.g = { a:gA, b:gB }; }
+  C.cap = cap; C.wide = !!calEl && n > 1 && (calEl.clientWidth - 62) / n >= 205;
   const cols = `grid-template-columns:58px repeat(${n},minmax(${n > 1 ? 110 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
-  let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}" style="--hpx:${HPX}px${HPX < 36 ? ";--half:transparent" : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
+  let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}" style="--hpx:${HPX}px${HPX < 36 ? ";--half:transparent" : ""}${avail > 320 ? `;flex:none;height:${avail}px` : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
   const we = s => { const w = D(s).getDay(); return w === 0 || w === 6 ? " we" : ""; }, dnum = s => D(s).getDate() === 1 ? MONS[D(s).getMonth()] + " 1" : D(s).getDate();
   days.forEach(s => h += `<div class="hc-dh${s === t ? " td" : ""}${we(s)}"><button class="hc-dn" data-gday="${s}" title="Open ${html(flong(s))}">${DAYS[D(s).getDay()]}</button><div class="hc-dd"><b>${dnum(s)}</b>${badge(k, s, true)}${canAddOn(k) ? `<button class="hc-dadd" data-addday="${s}" data-keep-pop title="Add something on ${html(fday(s))}" aria-label="Add on ${html(fday(s))}">+</button>` : ""}</div></div>`);
   h += `</div></div><div class="hc-row hc-ad" style="${cols}"><div class="hc-gut"><span>all day</span></div>`;
@@ -723,6 +776,9 @@ function reachCard(k, s){ const ppl = C.people || [], { wk } = whoLists(k, s), o
 /* ---------- interactions ---------- */
 function go(k, day, view){ const t = T(k), vw = !!view && view !== t.view; if(day) t.sel = day; if(view) t.view = view; t.mini = null; C.adOpen = false; popClose(); refresh(k, { scrollNow:vw }); }
 function wire(root, k){
+  root.addEventListener("change", e => { const el = e.target;
+    if(el.matches("[data-vsel]")){ const nv = el.value; C.prefs.view[k] = nv; savePrefs(); return go(k, null, nv); }
+    if(el.matches("[data-tsel]") && el.value !== k){ location.hash = "#/" + el.value; } });
   root.addEventListener("click", async e => {
     const el = e.target.closest("button,[data-it],[data-col],[data-mday],[data-adday],a"); if(!el || !root.contains(el)) return;
     if(el.closest("[data-join]")) return;   // the Join link opens by itself
@@ -748,6 +804,8 @@ function wire(root, k){
     if(ds.adm){ return dayList(k, ds.adm, el, null, I(ds.adm).filter(x => !x.start)); }
     if(ds.who){ return whoPop(k, ds.who, el); }
     if(ds.addday && canAddOn(k)) return quick(k, { day:ds.addday, start:null }, el);
+    if(ds.newmenu != null) return newMenu(k, el);
+    if(ds.show != null) return showMenu(k, el);
     if(ds.it){ if(ds.day && t.view !== "list"){ /* side list: jump there */ }
       return openItem(k, ds.it, el); }
     if(ds.col != null && canAddOn(k) && el.classList.contains("hc-col") && !e.target.closest(".hc-bk")){
