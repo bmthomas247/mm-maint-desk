@@ -492,7 +492,23 @@ const HCCSS = `
 @media (hover:none){ .hc .ol .hc-dadd{opacity:1} }
 .hc .ol .hc-dd .hc-bdg{border:0;background:none;color:var(--muted);padding:0 2px;font-weight:700}
 .hc .ol .hc-adc .hc-chip{font-size:12px}
-.hc .ol .hc-bk.sh > span:not(.bi){display:none} .hc .ol .hc-bk .hc-join{font-size:10px;padding:0 6px;line-height:15px}
+.hc .ol .hc-bk.sh > span:not(.bi){display:none}
+/* compact on computers (Jeff 2026-11-25: "Still too big") */
+@media (min-width:761px){
+  .hc{padding:6px 12px 6px} .hc .hc-bar{gap:5px;margin:0 0 6px}
+  .hc .hc-today,.hc .hc-sec.hc-dt,.hc select.hc-dt,.hc .hc-nb,.hc .hc-nm{height:28px;min-height:28px;font-size:12.5px}
+  .hc .hc-arw,.hc .hc-ic{width:28px;height:28px} .hc .hc-arw svg{width:17px;height:17px} .hc .hc-ic svg{width:15px;height:15px}
+  .hc .hc-title{font-size:16px;min-height:28px;line-height:26px}
+  .hc .ol .hc-dh{padding:4px 6px 3px;gap:0} .hc .ol .hc-dn{font-size:12.5px} .hc .ol .hc-dd>b{font-size:16px}
+  .hc .ol .hc-dd .hc-bdg{font-size:10.5px} .hc .ol .hc-dadd{width:20px;height:20px;font-size:14px}
+  .hc .ol .hc-ad .hc-gut,.hc .ol .hc-hrs span{font-size:10px}
+  .hc .ol .hc-adc{gap:1px;padding:2px 2px 4px;min-height:26px}
+  .hc .ol .hc-adc .hc-chip{height:16px;line-height:16px;font-size:11px;padding:0 4px 0 5px;border-left-width:3px}
+  .hc .ol .hc-adc .hc-more{height:16px;line-height:16px;font-size:11px}
+  .hc .hc-chip b.in{font-size:8.5px;margin-right:3px}
+  .hc .ol .hc-bk{font-size:11px;padding:2px 5px;border-left-width:3px}
+  .hc .ol .hc-bk .hc-join{font-size:9.5px;padding:0 5px;line-height:14px}
+} .hc .ol .hc-bk .hc-join{font-size:10px;padding:0 6px;line-height:15px}
 @media (max-width:1180px){ .hc .hc-main{grid-template-columns:minmax(0,1fr)} .hc .hc-side{display:none} .hc .hc-views button{padding:0 10px} }
 @media (max-width:760px){
   .hc{padding:10px 10px 0;overflow-y:auto;overflow-x:hidden}
@@ -687,17 +703,17 @@ function gridHTML(k, days){
   let gA = 8, gB = 18; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
   gB = Math.min(24, gB); C.g = { a:gA, b:gB };
   // fit the screen: the all-day lines get the room they need (a too-full day shows "+N more"), the hours share what is left
-  const calEl = C.v && C.v.querySelector("#hccal"), avail = calEl ? Math.floor(window.innerHeight - Math.max(0, calEl.getBoundingClientRect().top) - 14) : 0,   /* room from the top of the calendar to the bottom of the window */ LH = 20, MINH = 20, hrs = gB - gA, headH = C.headH || 58;
+  const calEl = C.v && C.v.querySelector("#hccal"), avail = calEl ? Math.floor(window.innerHeight - Math.max(0, calEl.getBoundingClientRect().top) - 14) : 0,   /* room from the top of the calendar to the bottom of the window */ LH = 17, MINH = 20, hrs = gB - gA, headH = C.headH || 58;
   let adMax = 0; days.forEach(s => adMax = Math.max(adMax, I(s).filter(x => !x.start).length));
   let cap = 999; HPX = 48;
   let stk = true;
   if(avail > 320){ const room = avail - headH - 6;
     const adH = Math.max(34, adMax * LH + 10); let hh = hrs; stk = adH <= room * 0.65;   // the top always shows every line; pinned unless it is very tall
     // lots of room (big screen, few lines)? show more of the day (to 9 PM, then from 7 AM) instead of very tall hours
-    while(Math.floor((room - adH) / hh) > 50 && (gB < 21 || gA > 7)){ if(gB < 21) gB++; else gA--; hh = gB - gA; }
-    HPX = Math.max(44, Math.min(60, Math.floor((room - adH) / hh))); C.g = { a:gA, b:gB }; }   // normal readable hours; they scroll if they don't fit
-  C.cap = cap; C.wide = !!calEl && n > 1 && (calEl.clientWidth - 62) / n >= 205;
-  const cols = `grid-template-columns:58px repeat(${n},minmax(${n > 1 ? 110 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
+    while(Math.floor((room - adH) / hh) > 44 && (gB < 21 || gA > 7)){ if(gB < 21) gB++; else gA--; hh = gB - gA; }
+    HPX = Math.max(36, Math.min(52, Math.floor((room - adH) / hh))); C.g = { a:gA, b:gB }; }   // normal readable hours; they scroll if they don't fit
+  C.cap = cap; C.wide = !!calEl && n > 1 && (calEl.clientWidth - 52) / n >= 190;
+  const cols = `grid-template-columns:${phone() ? 58 : 48}px repeat(${n},minmax(${n > 1 ? 104 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
   let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}" style="--hpx:${HPX}px${HPX < 36 ? ";--half:transparent" : ""}${avail > 320 ? `;flex:none;height:${avail}px` : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
   const we = s => { const w = D(s).getDay(); return w === 0 || w === 6 ? " we" : ""; }, dnum = s => D(s).getDate() === 1 ? MONS[D(s).getMonth()] + " 1" : D(s).getDate();
   days.forEach(s => h += `<div class="hc-dh${s === t ? " td" : ""}${we(s)}"><button class="hc-dn" data-gday="${s}" title="Open ${html(flong(s))}">${DAYS[D(s).getDay()]}</button><div class="hc-dd"><b>${dnum(s)}</b>${badge(k, s, true)}${canAddOn(k) ? `<button class="hc-dadd" data-addday="${s}" data-keep-pop title="Add something on ${html(fday(s))}" aria-label="Add on ${html(fday(s))}">+</button>` : ""}</div></div>`);
