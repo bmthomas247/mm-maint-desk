@@ -4505,7 +4505,7 @@ const CS = { sets: null, set: null, data: null, ask: {}, tot: {}, f: "inuse", ch
 const csMapSets = d => (d || []).map(x => ({ ...x, id: `${x.grp}|${x.beds}|${x.sleeps ?? ""}`, name: `${x.grp} · ${x.beds === 0 ? "Studio" : x.beds + "BR"} · sleeps ${x.sleeps ?? "?"}`, paused: 0 }));
 // 2026-11-24: after a change the list is read again in the background (it used to stay empty until the page was reopened)
 let csSetsP = null;
-function csReloadSets() { const p = csSetsP = (async () => { try { const [r, r2] = await Promise.all([sb.rpc("rates_sleep_sets"), sb.rpc("rates_comp_sets_list")]); if (p === csSetsP && !r.error) { CS.sets = csMapSets(r.data); CS.rsets = r2.data || []; } } catch (e) {} })(); return p; }
+function csReloadSets() { const p = csSetsP = (async () => { try { const [r, r2] = await Promise.all([sb.rpc("rates_sleep_sets"), sb.rpc("rates_comp_sets_list")]); if (p === csSetsP && !r.error) { CS.sets = csMapSets(r.data); CS.rsets = r2.data || []; /* 2026-11-24 (Brandon: "each comp add should change and adjust every number"): redraw so the Sleeping drop-down counts update at once */ try { if (document.getElementById("csOut") && typeof csDraw === "function") csDraw(); } catch (e) {} } } catch (e) {} })(); return p; }
 async function loadCompSets() {
   if (!CS.sets) {
     const [r, r2] = await Promise.all([sb.rpc("rates_sleep_sets"), sb.rpc("rates_comp_sets_list")]);
