@@ -431,6 +431,7 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
   body.printov{background:#fff}.ovc,.ovt{break-inside:avoid;box-shadow:none!important}.ovc{border:1px solid #e3e7df}.ovt{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .srmschip{display:inline-flex;align-items:center;gap:4px;background:#eef5e6;border:1px solid #cfe0bd;border-radius:999px;padding:2px 4px 2px 10px;font-size:12.5px;margin:2px}.srmschip button{border:0;background:transparent;cursor:pointer;font-size:12px;padding:0 4px;min-height:0}
 </style>
+<style id="feesLook">main.v-fees>*:not(#viewnav):not(#fees){display:none!important}#fees{display:none}main.v-fees #fees{display:block}.fecols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}@media (max-width:1100px){.fecols{grid-template-columns:1fr}}.fetbl{width:100%;border-collapse:collapse;font-size:13.5px}.fetbl td,.fetbl th{padding:5px 6px;vertical-align:top}.fetbl tr+tr td{border-top:1px solid var(--line)}.fetbl tr.fetot td{font-weight:800;background:rgba(46,125,50,.07)}.fetbl tr.feown td{font-weight:700;background:#fff4c2}.fewide td:not(:first-child),.fewide th:not(:first-child){white-space:nowrap}.feh{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap}.feh.price{background:#e8f2ea;color:#1f4d2b}.feh.hidden{background:#fde8e6;color:#b3261e}.feh.line{background:#eef0f4;color:#45505f}.fenotes li{margin:0 0 10px}.fenotes{padding-left:20px}#fes summary{cursor:pointer}</style>
 <style id="scoreLook">main.v-scoreboard>*:not(#viewnav):not(#scoreboard){display:none!important}#scoreboard{display:none}main.v-scoreboard #scoreboard{display:block}button.pcchip{font:inherit;font-size:13px}</style>
 <style>.srpk{position:relative}.srpkbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:240px;border:1px solid var(--line);background:var(--ovbg,#f1f4ec);border-radius:11px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer;color:var(--ink);min-height:40px;box-shadow:none;text-align:left;width:auto}.srpkbtn:hover{border-color:#9cbf74}.srpkbtn i{font-style:normal;color:var(--muted);font-size:12px}.srpkin{min-width:260px;border:1px solid var(--line);background:var(--ovbg,#f1f4ec);border-radius:11px;padding:8px 12px;font:inherit;font-size:14px;min-height:40px}.srpkpop{position:absolute;top:calc(100% + 6px);left:0;z-index:60;width:min(560px,92vw);background:var(--ovcard,#fff);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.16);padding:10px;display:flex;flex-direction:column;gap:8px}.srpkpop[hidden]{display:none}.srpkpop .srpkq{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 11px;font:inherit;font-size:14px;min-height:38px}.srpklist{max-height:min(420px,60vh);overflow:auto;display:flex;flex-direction:column;gap:8px}.pkg{background:var(--ovbg);border-radius:11px;padding:7px 9px}.pkh{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px;border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:3px}.pkh label{display:flex!important;align-items:center;gap:6px;font-size:13px;color:var(--ink)}.pkh .gfchip{font-size:11.5px;padding:2px 9px}.pkr{display:flex;align-items:center;gap:8px;padding:3px 2px;border-radius:8px}.pkr:hover{background:var(--ovcard,#fff)}.pkr.cur{background:#e5f2d8}.pkr label{flex:1;display:flex!important;align-items:center;gap:7px;font-size:13px;color:var(--ink);text-transform:none;letter-spacing:0;font-weight:400;cursor:pointer}.pkr label b{font-weight:600}.pklive{color:#2f5a10;font-weight:600}.pkopen{border:1px solid var(--line);background:var(--ovcard,#fff);border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;min-height:0;box-shadow:none;width:auto;color:var(--forest,#3c5f12);font-weight:600}.pkopen:hover{background:var(--forest,#3c5f12);color:#fff}.srpkft{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:8px;font-size:12.5px;color:var(--muted)}.srpkft .sp{flex:1}.srpkft button{border:1px solid var(--line);background:var(--ovcard,#fff);border-radius:999px;padding:5px 12px;font:inherit;font-size:12.5px;cursor:pointer;min-height:0;box-shadow:none;width:auto}.srpkft button.go{background:var(--forest,#3c5f12);color:#fff;border-color:var(--forest,#3c5f12)}.pkadd{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;min-height:0;box-shadow:none;color:var(--ink)}.pkadd:hover{background:var(--ovbg)}.arsel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.arsel .gfchip button{border:0;background:transparent;color:inherit;padding:0 0 0 4px;font:inherit;cursor:pointer;min-height:0;box-shadow:none;width:auto}#arBox .arform{background:transparent;padding:0}.ovfil .srpkpop label{flex-direction:row!important;text-transform:none!important;letter-spacing:0!important;font-weight:400!important;font-size:13px!important;color:var(--ink)!important;align-items:center!important;gap:7px!important}.ovfil .srpkpop .pkh label{flex:0 0 auto!important}.ovfil .srpkpop .pkr label{flex:1 1 auto!important}.ovfil .srpkpop b{font-weight:600}.ovfil .srpkpop .muted{font-weight:400}.ovfil .srpkpop input[type=checkbox]{flex:0 0 auto;width:16px;height:16px;margin:0}.ovfil .srpk{text-transform:none;letter-spacing:0}.ovfil .srpkbtn,.ovfil .srpkbtn span{text-transform:none;letter-spacing:0;font-weight:600;font-size:14px;color:var(--ink)}
 </style>
@@ -527,6 +528,7 @@ main.v-pulse>#ov,main.v-hotels>#ov,main.v-rater>#ov,main.v-reports>#ov,main.v-be
   <details class="card" id="hotCard"><summary style="cursor:pointer"><b>🏨 Hotel rates near our homes</b> <span id="hotSum" class="small muted"></span> <span class="small" style="color:var(--teal2)">click to open</span></summary><div id="hotBody" style="margin-top:10px"></div></details>
   <section class="card" id="hotFull"><div class="ovhead"><div><h2>Hotels</h2><div class="sub">Every hotel price we have pulled, for the check-in dates you pick</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="hfCtl"></div><div id="hfOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="pacing"><div class="ovhead"><div><h2>Market pacing</h2><div class="sub">Booked share and nightly rate by week for one neighborhood + size: its comps vs our homes, today vs 2 weeks ago, plus Key Data's neighborhood market and last year</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="pcCtl"></div><div id="pcOut"><p class="small muted">Loading…</p></div><div id="pcMkt"></div></section>
+  <section class="card" id="fees"><div class="ovhead"><div><h2>Fees &amp; payouts</h2><div class="sub">For one of our homes and a stay: what guests pay on Airbnb, Vrbo and our website, which fees are hidden in the nightly price, what the booking sites take, and what the owner and Moose keep. Built from Track's own fee setup and checked against real prices.</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="feCtl"></div><div id="feOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="scoreboard"><div class="ovhead"><div><h2>Scoreboard: our pricing vs Beyond</h2><div class="sub">Homes on our own pricing (Set rates) vs homes Beyond still prices: bookings per home per week since each home went live, and how full the next 90 days are</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="scOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="compsets"><div class="ovhead"><div><h2>Comp sets</h2><div class="sub">Pick one of our homes to see the comps we price it from: size, sleeps, what they booked at, and which ones the morning re-price uses</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="csCtl"></div><div id="csOut"><p class="small muted">Loading…</p></div></section>
   <section class="card" id="managers"><div class="ovhead"><div><h2>Competitor managers</h2><div class="sub">Every management company in the Park City area: how many homes, sizes, how booked, nightly rates, and the homes they added or lost</div></div><span class="sp"></span><button class="ovbtn" onclick="window.print()">⤓ Export to PDF</button></div><div id="mgOut"><p class="small muted">Loading…</p></div></section>
@@ -616,7 +618,7 @@ async function boot() {
   document.querySelectorAll("#viewnav .tab").forEach(btn => btn.onclick = () => setView(btn.dataset.v));
   try { const p = new URLSearchParams(location.search), sv = localStorage.getItem("mmView"), pv = p.get("view");
     // Hotels + Reports left the top menu (Brandon 2026-10-30): Hotels = sidebar Rates ▸ Hotels; reports open from the hub's Reports & Analytics.
-    if (pv === "hotels" || pv === "reports" || pv === "rater" || pv === "pulse" || pv === "setrates" || pv === "pacing" || pv === "memory" || pv === "pulls" || pv === "compsets" || pv === "managers" || pv === "scoreboard") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
+    if (pv === "hotels" || pv === "reports" || pv === "rater" || pv === "pulse" || pv === "setrates" || pv === "pacing" || pv === "memory" || pv === "pulls" || pv === "compsets" || pv === "managers" || pv === "scoreboard" || pv === "fees") document.body.classList.add("solo");   // Home Rater: sidebar Rates ▸ Home Rater (2026-10-30)
     if (pv === "reports" && p.get("rp")) { RP.open = p.get("rp"); RP.openName = rpName(RP.open); }
     const hv = location.hash.slice(1), v = pv || (["findings", "beyond"].includes(hv) ? hv : null) || (sv && document.querySelector(`#viewnav .tab[data-v="${sv}"]`) ? sv : null); if (v && v !== "desk") setView(v); } catch (e) {}
   $("colleenBtn").onclick = buildColleenSheet; $("landBtn").onclick = didItLand; $("matchBtn").onclick = reviewMatches;
@@ -3339,7 +3341,7 @@ state.mk = { events: [], weather: [], loaded: false };
 // show rooms (fewer = tighter market). It does NOT show hotels' booked nights.
 // ===== Views: Desk | Market pulse | Hotels (Brandon 2026-10-20) =====
 function setView(v) {
-  const m = $("app"); m.classList.remove("v-pulse", "v-hotels", "v-rater", "v-reports", "v-beyond", "v-findings", "v-setrates", "v-pacing", "v-memory", "v-pulls", "v-compsets", "v-managers", "v-scoreboard"); if (v !== "desk") m.classList.add("v-" + v);
+  const m = $("app"); m.classList.remove("v-pulse", "v-hotels", "v-rater", "v-reports", "v-beyond", "v-findings", "v-setrates", "v-pacing", "v-memory", "v-pulls", "v-compsets", "v-managers", "v-scoreboard", "v-fees"); if (v !== "desk") m.classList.add("v-" + v);
   document.querySelectorAll("#viewnav .tab").forEach(b => b.classList.toggle("on", b.dataset.v === v));
   // Local market card on Market pulse too (Brandon 2026-11-08): the same card moves above the pulse and back for the Desk.
   { const mk = $("market"); if (mk) { if (!window._mkHome) { window._mkHome = document.createComment("market-home"); mk.before(window._mkHome); }
@@ -3354,6 +3356,7 @@ function setView(v) {
   if (v === "managers") loadManagers();
   if (v === "compsets") loadCompSets();
   if (v === "scoreboard") loadScore();
+  if (v === "fees") loadFees();
   if (v === "reports" && !RP.busy) renderReports();
   if (v === "beyond") { kolRender(); ovbRender(); btRender(); }
   if (v === "hotels") renderHotFull(); else if ($("hotCard").open) renderHotels();
@@ -5249,6 +5252,258 @@ function pcDefaults() {
   const ws = new Date(wy, 10, 20, 12), we = new Date(wy + 1, 3, 18, 12);
   return { from: iso(ws < t ? t : ws), to: iso(we > t ? we : new Date(t.getTime() + 150 * 864e5)) };
 }
+// ===== Rates ▸ Fees & payouts (Brandon 2026-11-25: "we have all our wires crossed and need some serious help - we can even create a desk page
+// for it under rates so we can see the calculator and hidden fees"). Data = rates_fee_home(code) (hub_rates_fee_setup.sql): Track's own fee setup
+// copied by fee_setup_pull.py (charges, per-home amounts, rate types, owner contracts, taxes), real Track folios of recent stays, newest real quotes.
+// The calculator copies how Track builds each channel's price; "Check against real prices" shows how close it is. Never changes Track.
+const FE = { list: null, code: "", D: null, ci: "", n: 3, pet: false, rate: "", busy: false };
+const feE = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fe$ = (v, d) => v == null || isNaN(v) ? "–" : (v < 0 ? "−$" : "$") + Math.abs(Number(v)).toLocaleString("en-US", { minimumFractionDigits: d ? 2 : 0, maximumFractionDigits: d ? 2 : 0 });
+const feP = (v, d = 1) => v == null || isNaN(v) ? "–" : (Number(v) * 100).toFixed(d) + "%";
+const FE_SRC = {
+  track: "Track's own fee setup (Configuration ▸ Charges, unit pricing, rate types, owner contracts, taxes), copied read-only by the hub",
+  folio: "Real Track folios of our stays checked out in the last 150 days (fee_setup_pull.py)",
+  abb15: "Airbnb help: single (host-only) fee, most hosts 15.5%, mandatory for hosts on property management software (airbnb.com/help/article/1857)",
+  abbTax: "Airbnb help: Airbnb collects and pays Utah sales + transient room taxes on the listing price incl. cleaning and guest fees, stays 29 nights or less (airbnb.com/help/article/2333)",
+  abbPet: "Airbnb help: a pet fee can't be more than the nightly base rate (airbnb.com/help/article/3623)",
+  vrbo12: "Vrbo help: 12% commission on rent + fees charged to the traveler (help.vrbo.com/articles/How-is-the-booking-fee-calculated); 12% for software-connected managers from Oct 29, 2026 (Vrbo email quoted by Rental Scale-Up, rentalscaleup.com/vrbo-12-commission-2026)",
+  vrboFee: "Vrbo help: Vrbo adds its own traveler service fee, a % of the stay before taxes, rate not published (help.vrbo.com/articles/What-is-the-service-fee)",
+  vrboTax: "Vrbo help (search result text): Vrbo collects Utah sales + transient room taxes for stays under 30 nights since Oct 1, 2019",
+  pub56: "Utah Tax Commission Publication 56 (Rev. 6/25): cleaning, pet, damage, reservation and resort fees are taxable like the room (files.tax.utah.gov/tax/forms/pubs/pub-56.pdf)",
+  ftc: "FTC rule 16 CFR 464.2: the total price must be shown, more prominently than any other price (law.cornell.edu/cfr/text/16/464.2), in effect May 12, 2025",
+  kimPet: "Kim's #front-desk post saved in Penny's notes: Airbnb pet fee is one flat fee per stay at booking (1-2 BR $100, 3 BR $150, 4 BR $175, 5+ BR $200); pet cleaning is built into the hidden Airbnb cleaning fee; Vrbo + direct pet fees unchanged",
+  petRule: "Check lists pet rule (Kim, Nov 2026): Vrbo + direct pet fee $25 a night per pet, at least $100, at most $350 per pet"
+};
+async function loadFees() {
+  if (!FE.list) {
+    $("feOut").innerHTML = `<p class="small muted">Loading…</p>`;
+    const r = await sb.rpc("rates_fee_home", { p_code: "" });
+    if (r.error) { $("feOut").innerHTML = `<p class="small muted">Couldn't load: ${feE(r.error.message)}</p>`; return; }
+    FE.list = (r.data.homes || []).map(h => h.code).filter(Boolean).sort();
+    FE.pulled = r.data.pulled;
+    if (!FE.ci) { const d = new Date(); d.setDate(d.getDate() + 30); FE.ci = iso(d); }
+    try { const last = localStorage.getItem("mm_fee_home"); if (last && FE.list.includes(last)) FE.code = last; } catch (e) {}
+  }
+  feCtl();
+  if (FE.code) feLoadHome(FE.code); else $("feOut").innerHTML = `<p class="muted">Pick one of our homes to see its fees on Airbnb, Vrbo and our website.</p>` + feConnect();
+}
+function feCtl() {
+  $("feCtl").innerHTML = `<div class="pcctl">
+    <label>Home<select id="feHome"><option value="">Pick a home…</option>${(FE.list || []).map(c => `<option${c === FE.code ? " selected" : ""}>${feE(c)}</option>`).join("")}</select></label>
+    <label>Check-in<input type="date" id="feCi" value="${feE(FE.ci)}"></label>
+    <label>Nights<input type="number" id="feN" min="1" max="29" value="${FE.n}" style="width:80px"></label>
+    <label>Nightly rate (optional)<input type="number" id="feRate" min="1" placeholder="Track's price" value="${feE(FE.rate)}" style="width:140px"></label>
+    <label class="srchk" style="padding-bottom:10px"><input type="checkbox" id="fePet"${FE.pet ? " checked" : ""}> A dog is coming</label>
+    <span class="small muted" style="padding-bottom:10px">${FE.pulled ? "Track fee setup copied " + new Date(FE.pulled).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""}</span></div>`;
+  $("feHome").onchange = e => { FE.code = e.target.value; try { localStorage.setItem("mm_fee_home", FE.code); } catch (x) {} if (FE.code) feLoadHome(FE.code); };
+  $("feCi").onchange = e => { FE.ci = e.target.value; feDraw(); };
+  $("feN").oninput = e => { FE.n = Math.max(1, Math.min(29, +e.target.value || 1)); feDraw(); };
+  $("feRate").oninput = e => { FE.rate = e.target.value; feDraw(); };
+  $("fePet").onchange = e => { FE.pet = e.target.checked; feDraw(); };
+}
+async function feLoadHome(code) {
+  $("feOut").innerHTML = `<p class="small muted">Loading ${feE(code)}…</p>`;
+  const r = await sb.rpc("rates_fee_home", { p_code: code });
+  if (r.error) { $("feOut").innerHTML = `<p class="small muted">Couldn't load: ${feE(r.error.message)}</p>`; return; }
+  FE.D = r.data; feDraw();
+}
+// ---- Track's setup for this home ----
+function feCh(id) { return ((FE.D.global || {}).charges || []).find(c => c.id === id) || null; }
+function feVal(id, rt) {   // the home's own amount (Track unit pricing), else the charge's own amount
+  const per = ((FE.D.home || {}).charges || {})[String(id)];
+  if (per) { const x = per[String(rt)] || per.all || Object.values(per)[0]; if (x && x.value != null) return +x.value; }
+  const c = feCh(id); return c && c.amount != null && c.rateType !== "derived" ? +c.amount : null;
+}
+function feRateMult(name) { const t = ((FE.D.global || {}).rateTypes || []).find(r => r.name === name); return t && t.rentType === "percent" ? 1 + (+t.rentAmount || 0) / 100 : 1; }
+function feCommission(rt) {
+  const g = FE.D.global || {}, cid = ((FE.D.home || {}).contract || {}).contractId, c = (g.contracts || []).find(x => x.id === cid);
+  if (!c) return { pct: null, name: "no owner contract found" };
+  const v = (c.commissionValues || []).find(x => x.typeId === rt && x.isActive);
+  return { pct: (v ? +v.commission : +c.defaultCommission) / 100, name: c.name };
+}
+function feTaxRate(day) {
+  const g = FE.D.global || {}, d = (g.districts || []).find(x => x.id === (FE.D.home || {}).taxDistrictId);
+  if (!d) return { rate: null, names: [] };
+  const ts = (g.taxes || []).filter(t => (d.short || []).includes(t.id) && t.isActive && (!t.startDate || t.startDate <= day) && (!t.endDate || t.endDate >= day));
+  return { rate: ts.reduce((a, t) => a + (+t.tax || 0), 0), names: ts.map(t => t.name + " " + (100 * t.tax).toFixed(2) + "%"), district: d.name };
+}
+function feNights(ci, n) {   // Track rack rate per night from the hub's daily copy of Track prices
+  const s = FE.D.snap; if (FE.rate) return { rates: Array(n).fill(+FE.rate), from: "the rate you typed" };
+  if (!s || !s.rates) return { rates: null };
+  const off = Math.round((new Date(ci + "T12:00:00") - new Date(s.start + "T12:00:00")) / 864e5), out = [];
+  for (let i = 0; i < n; i++) { const v = s.rates[off + i]; if (v == null) return { rates: null, from: "outside Track's next 365 nights" }; out.push(+v); }
+  return { rates: out, from: "Track's rack rate (hub copy of " + s.day + ")" };
+}
+function feSplit(ch) { const s = (FE.D.split || {})[ch] || {}, t = (s.ota || 0) + (s.beyond || 0) + (s.track || 0);
+  return { ota: t ? s.ota / t : (ch === "Vrbo" ? .685 : .871), beyond: t ? s.beyond / t : (ch === "Vrbo" ? .178 : .073), track: t ? s.track / t : (ch === "Vrbo" ? .137 : .056),
+           bookfee: s.bookfee != null ? +s.bookfee : .05, stays: s.stays || 0 }; }
+function fePetDirect(n) { return Math.max(100, Math.min(350, 25 * n)); }
+// ---- the calculator: one channel ----
+function feModel(ch, ci, n) {
+  const N = feNights(ci, n); if (!N.rates) return { err: N.from || "No Track price for those nights" };
+  const R = N.rates.reduce((a, b) => a + b, 0), H = FE.D.home || {}, pet = FE.pet, out = { ch, R, from: N.from, lines: [] };
+  const rt = ch === "Airbnb" ? 5 : ch === "Vrbo" ? 6 : 7;
+  const gsP = (feVal(82, rt) ?? 11.1) / 100, dwP = (feVal(81, rt) ?? 5) / 100;
+  const com = feCommission(rt), spl = feSplit(ch === "Direct" ? "Direct" : ch), bf = 0, tax = feTaxRate(ci);   // 5% owner booking fee: only stays booked before ~Oct 20, 2026
+  out.com = com; out.tax = tax; out.bf = bf;
+  const L = (label, amt, how, src, note) => { out.lines.push({ label, amt, how, src, note }); return amt; };
+  if (ch === "Airbnb") {
+    const mk = feRateMult("ABB-N 10"), rent = R * mk, d = 1 + (+(feCh(96) || feCh(97) || {}).derivedAdjustmentAmount || 19.41) / 100;
+    const recP = (feVal(83, 5) ?? 19.41) / 100, cl = (H.pets && feVal(94, 5) != null) ? feVal(94, 5) : (feVal(93, 5) ?? feVal(94, 5) ?? 0);
+    const petBase = pet ? (feVal(95, 5) ?? 0) : 0;
+    out.rentBase = R; out.rent = L("Nightly rent sent to Airbnb (Track rate × " + mk.toFixed(2) + ", rate type ABB-N 10)", rent, "price", FE_SRC.track);
+    out.rec = L("Airbnb Commission Recovery Fee " + (recP * 100).toFixed(2) + "% of rent", rent * recP, "hidden", FE_SRC.track, "sent to Airbnb as a 'resort fee' pass-through");
+    L("Cleaning " + fe$(cl) + (H.pets ? " (PF = pet-friendly version, pet cleaning built in)" : "") + " × " + d.toFixed(4) + " (Airbnb Derived copy)", cl * d, "hidden", FE_SRC.track, "Airbnb's 'linen fee' pass-through; Airbnb shows it inside the price");
+    L("Guest Services Fee " + (gsP * 100).toFixed(2) + "% × " + d.toFixed(4) + " (Airbnb Derived Admin/Beyond fee)", rent * gsP * d, "hidden", FE_SRC.track);
+    L("Damage Waiver " + (dwP * 100).toFixed(2) + "% × " + d.toFixed(4) + " (Airbnb Derived Damage Waiver)", rent * dwP * d, "hidden", FE_SRC.track);
+    if (pet) L("Pet Fee " + fe$(petBase) + " × " + d.toFixed(4) + " (shown as Airbnb's own 'Pet fee' line)", petBase * d, "line", FE_SRC.kimPet);
+    out.listed = out.lines.reduce((a, x) => a + x.amt, 0);
+    out.taxAmt = out.listed * (tax.rate || 0); out.taxBy = "Airbnb collects + pays it (" + (tax.district || "?") + ")"; out.taxSrc = FE_SRC.abbTax;
+    out.guest = out.listed + out.taxAmt;
+    out.ota = out.listed * .155; out.otaName = "Airbnb's host fee 15.5% of the whole price"; out.otaSrc = FE_SRC.abb15;
+    out.payout = out.listed - out.ota;
+    out.clean = cl; out.dw = rent * dwP; out.gs = rent * gsP; out.petOwner = petBase * .5; out.petMoose = petBase * .5;
+    out.trackRec = { ota: out.rec * spl.ota, beyond: out.rec * spl.beyond, track: out.rec * spl.track };
+  } else if (ch === "Vrbo") {
+    const mk = feRateMult("VRBO-N-10"), rent = R * mk, recP = (feVal(51, 6) ?? 20) / 100, cl = feVal(84, 6) ?? 0;
+    const petF = pet ? fePetDirect(n) : 0, petC = pet ? (feVal(11, 6) ?? 0) : 0;
+    out.rentBase = R; out.rent = L("Nightly rent sent to Vrbo (Track rate × " + mk.toFixed(2) + ", rate type VRBO-N-10)", rent, "price", FE_SRC.track);
+    out.rec = L("VRBO Commission Recovery Fee " + (recP * 100).toFixed(0) + "% of rent", rent * recP, "hidden", FE_SRC.track, "sent as 'EMBEDDED' = folded into Vrbo's nightly price");
+    L("Cleaning", cl, "line", FE_SRC.track, "sent to Vrbo as its cleaning fee");
+    L("Guest Services Fee " + (gsP * 100).toFixed(2) + "% of rent", rent * gsP, "line", FE_SRC.track, "sent to Vrbo as a 'management' fee");
+    L("Damage Waiver " + (dwP * 100).toFixed(2) + "% of rent", rent * dwP, "line", FE_SRC.track, "sent to Vrbo as a damage waiver");
+    if (pet) { L("Pet fee (added by staff)", petF, "line", FE_SRC.petRule); if (petC) L("Pet cleaning fee (added by staff)", petC, "line", FE_SRC.track); }
+    out.listed = out.lines.reduce((a, x) => a + x.amt, 0);
+    out.taxAmt = out.rent * (tax.rate || 0); out.taxBy = "Track adds it to the stay (rent only), " + (tax.district || "?"); out.taxSrc = FE_SRC.folio;
+    out.guest = out.listed + out.taxAmt; out.guestNote = "+ Vrbo's own traveler service fee (Vrbo doesn't publish the rate)";
+    out.ota = out.listed * .12; out.otaName = "Vrbo commission 12% of rent + fees"; out.otaSrc = FE_SRC.vrbo12;
+    out.payout = out.listed - out.ota;
+    out.clean = cl + petC; out.dw = rent * dwP; out.gs = rent * gsP; out.petOwner = petF * .5; out.petMoose = petF * .5;
+    out.trackRec = { ota: out.rec * spl.ota, beyond: out.rec * spl.beyond, track: out.rec * spl.track };
+  } else {
+    const cl = feVal(84, 7) ?? 0, petF = pet ? fePetDirect(n) : 0, petC = pet ? (feVal(11, 7) ?? 0) : 0;
+    out.rentBase = R; out.rent = L("Nightly rent (Track rack rate)", R, "price", FE_SRC.track);
+    L("Cleaning (our website shows it inside 'Rent')", cl, "hidden", FE_SRC.track);
+    L("Guest Services Fee " + (gsP * 100).toFixed(2) + "% of rent", R * gsP, "line", FE_SRC.track);
+    L("Damage Waiver " + (dwP * 100).toFixed(2) + "% of rent", R * dwP, "line", FE_SRC.track);
+    if (pet) { L("Pet fee (added by staff)", petF, "line", FE_SRC.petRule); if (petC) L("Pet cleaning fee (added by staff)", petC, "line", FE_SRC.track); }
+    out.rec = 0; out.listed = out.lines.reduce((a, x) => a + x.amt, 0);
+    out.taxAmt = R * (tax.rate || 0); out.taxBy = "Track adds it (rent only) and Moose pays it, " + (tax.district || "?"); out.taxSrc = FE_SRC.folio;
+    out.guest = out.listed + out.taxAmt; out.ota = 0; out.otaName = "No booking site"; out.payout = out.listed;
+    out.clean = cl + petC; out.dw = R * dwP; out.gs = R * gsP; out.petOwner = petF * .5; out.petMoose = petF * .5;
+    out.trackRec = { ota: 0, beyond: 0, track: 0 };
+  }
+  const room = out.rent, c = com.pct ?? 0;
+  out.ownerRoom = room * (1 - bf); out.mooseBook = room * bf; out.mooseCom = out.ownerRoom * c;
+  out.owner = out.ownerRoom - out.mooseCom + out.petOwner;
+  out.housekeeping = out.clean; out.safely = out.dw;
+  out.moose = out.payout - out.owner - out.housekeeping - out.safely - out.trackRec.beyond - out.trackRec.track;
+  return out;
+}
+// ---- check the model against the newest real quotes for this home ----
+function feChecks() {
+  const Q = FE.D.quotes || [], rows = [], old = FE.rate, oldPet = FE.pet; FE.rate = ""; FE.pet = false;   // checks use Track's own price, no dog
+  const add = (q, ch, label, modelOf) => { const m = feModel(ch, q.check_in, q.nights); if (m.err) return;
+    const mv = modelOf(m), real = +q.total; rows.push({ label, q, mv, real, d: mv ? real / mv - 1 : null }); };
+  for (const q of Q) {
+    if (q.channel === "ABNB") add(q, "Airbnb", "Airbnb's own price for our listing (before tax)", m => m.listed);
+    if (q.channel === "Airbnb") add(q, "Airbnb", "Track's Airbnb quote (before tax; Track lists the original fees)", m => m.rent + m.rec + m.clean + m.gs + m.dw + (+((q.lines || {})["Pet Fee"]) || 0));
+    if (q.channel === "VRBO") add(q, "Vrbo", "Track's Vrbo quote (before tax)", m => m.listed);
+    if (q.channel === "Direct") add(q, "Direct", "Track's direct quote (with tax)", m => m.guest);
+    if (q.channel === "SITE") add(q, "Direct", "What our website quotes (with tax)", m => m.guest);
+  }
+  FE.rate = old; FE.pet = oldPet;
+  return { rows };
+}
+function feDraw() {
+  if (!FE.D || !FE.D.home) { $("feOut").innerHTML = `<p class="muted">No Track fee setup found for ${feE(FE.code)}.</p>`; return; }
+  const H = FE.D.home, M = ["Airbnb", "Vrbo", "Direct"].map(ch => feModel(ch, FE.ci, FE.n)), name = { Airbnb: "Airbnb", Vrbo: "Vrbo", Direct: "Our website" };
+  if (M[0].err) { $("feOut").innerHTML = `<p class="muted">${feE(M[0].err)}. Type a nightly rate, or pick dates inside the next year.</p>`; return; }
+  const per = v => fe$(v / FE.n);
+  const tile = (cl, v, l, d) => `<div class="ovt ${cl}"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ""}</div>`;
+  const tiles = `<div class="ovtiles">${tile("o1", fe$(M[0].guest), "Guest pays on Airbnb", per(M[0].guest) + " a night with tax")}
+    ${tile("o2", fe$(M[1].guest) + "+", "Guest pays on Vrbo", "+ Vrbo's own service fee")}
+    ${tile("o3", fe$(M[2].guest), "Guest pays on our website", per(M[2].guest) + " a night with tax")}
+    ${tile("c1", fe$(M[2].owner), "Owner gets (direct)", "Airbnb " + fe$(M[0].owner) + " · Vrbo " + fe$(M[1].owner))}
+    ${tile("c2", fe$(M[2].moose), "Moose keeps (direct)", "Airbnb " + fe$(M[0].moose) + " · Vrbo " + fe$(M[1].moose))}</div>`;
+  const facts = `<p class="small muted" style="margin:-6px 0 12px">${feE(FE.code)}: ${H.beds ?? "?"} bedrooms · ${H.pets ? "takes dogs" : "no pets"} · owner contract <b>${feE(M[2].com.name)}</b>
+    (${M[2].com.pct == null ? "?" : feP(M[2].com.pct, 0)} commission) · ${feE(M[2].tax.district || "no tax district")} ${M[2].tax.rate ? feP(M[2].tax.rate, 2) : ""} ·
+    ${FE.n} nights from ${feE(FE.ci)}, rent ${fe$(M[2].R)} (${feE(M[2].from)})</p>`;
+  // what the guest sees + what is hidden
+  const how = { price: "Nightly price", hidden: "Hidden in the price", line: "Its own line" };
+  const colLines = m => m.lines.map(x => `<tr><td>${feE(x.label)}${x.note ? `<br><span class="small muted">${feE(x.note)}</span>` : ""}</td><td><span class="feh ${x.how}">${how[x.how]}</span></td><td style="text-align:right" title="${feE(x.src)}">${fe$(x.amt, 1)}</td></tr>`).join("");
+  const cols = M.map(m => `<div class="pccard"><h3>${name[m.ch]}</h3>
+    <table class="fetbl">${colLines(m)}
+    <tr class="fetot"><td colspan="2">Price before tax</td><td style="text-align:right">${fe$(m.listed, 1)}</td></tr>
+    <tr><td colspan="2">Taxes <span class="small muted">${feE(m.taxBy)}</span></td><td style="text-align:right" title="${feE(m.taxSrc || "")}">${fe$(m.taxAmt, 1)}</td></tr>
+    <tr class="fetot"><td colspan="2">Guest pays${m.guestNote ? `<br><span class="small muted">${feE(m.guestNote)}</span>` : ""}</td><td style="text-align:right">${fe$(m.guest, 1)}</td></tr></table>
+    <p class="small muted" style="margin:6px 0 0">Hidden in the nightly price: <b>${fe$(m.lines.filter(x => x.how === "hidden").reduce((a, x) => a + x.amt, 0))}</b>
+      = ${feP(m.lines.filter(x => x.how === "hidden").reduce((a, x) => a + x.amt, 0) / m.listed, 0)} of the price before tax.</p></div>`).join("");
+  // where every dollar goes
+  const rowsW = [
+    ["Guest pays (with tax)", m => m.guest, "", "o"],
+    ["Taxes", m => -m.taxAmt, m => m.taxBy],
+    [m => "Booking site fee", m => -m.ota, m => m.otaName + ". " + (m.otaSrc || "")],
+    ["Money Moose receives (payout)", m => m.payout, "Guest pays − taxes − booking site fee", "o"],
+    ["Housekeeping (cleaning fee)", m => m.housekeeping, "Track posts it to Guest Cleaning Income; Moose pays the cleaners"],
+    ["Safely (damage waiver)", m => m.safely, "Track posts it to 'Safely - Damage Waiver Income' with a bill to Safely"],
+    ["Beyond Pricing (its share of the recovery fee)", m => m.trackRec.beyond, FE_SRC.folio],
+    ["Track (its share of the recovery fee)", m => m.trackRec.track, FE_SRC.folio],
+    ["Owner", m => m.owner, "Rent − the owner contract's management commission (taken on the owner statement) + half the pet fee. Stays booked before about Oct 20, 2026 also took a 5% owner booking fee. " + FE_SRC.folio, "b"],
+    ["Moose keeps", m => m.moose, "Payout minus everyone above: management commission + Guest Services Fee + half the pet fee + whatever the recovery fee and markup collect beyond the booking site's fee", "o"]];
+  const wTbl = `<table class="fetbl fewide"><tr><th></th>${M.map(m => `<th style="text-align:right">${name[m.ch]}</th>`).join("")}</tr>
+    ${rowsW.map(([l, f, s, o]) => `<tr class="${o === "o" ? "fetot" : o === "b" ? "feown" : ""}"><td title="${feE(typeof s === "function" ? s(M[0]) : s)}">${feE(typeof l === "function" ? l(M[0]) : l)}</td>${M.map(m => `<td style="text-align:right">${fe$(f(m))}</td>`).join("")}</tr>`).join("")}
+    <tr><td class="small muted">Owner math: room rent · commission</td>${M.map(m => `<td style="text-align:right" class="small muted">${fe$(m.ownerRoom)} · −${fe$(m.mooseCom)}</td>`).join("")}</tr>
+    <tr><td>Moose keeps per night</td>${M.map(m => `<td style="text-align:right">${per(m.moose)}</td>`).join("")}</tr>
+    <tr><td>Moose keeps, % of what the guest paid before tax</td>${M.map(m => `<td style="text-align:right">${feP(m.moose / m.listed, 0)}</td>`).join("")}</tr></table>
+    <p class="small muted">Airbnb: recovery fee + the ${(+(feCh(96) || {}).derivedAdjustmentAmount || 19.41).toFixed(2)}% gross-up on fees collect ${fe$(M[0].rec + M[0].lines.filter(x => /Derived/.test(x.label)).reduce((a, x) => a + x.amt * (1 - 1 / 1.1941), 0))}
+    toward Airbnb's ${fe$(M[0].ota)} fee; Track books ${fe$(M[0].trackRec.ota)} of the recovery fee as "Airbnb Commission Fees".
+    Vrbo: recovery fee ${fe$(M[1].rec)} toward Vrbo's ${fe$(M[1].ota)} commission.</p>`;
+  // check vs real
+  const C = feChecks();
+  const chk = C.rows.length ? `<table class="fetbl fewide"><tr><th>Real price</th><th>Saved</th><th>Stay</th><th style="text-align:right">Real</th><th style="text-align:right">This calculator</th><th style="text-align:right">Off by</th></tr>
+    ${C.rows.map(r => `<tr><td>${feE(r.label)}</td><td>${feE(String(r.q.captured_at || "").slice(0, 10))}</td><td>${feE(r.q.check_in)} · ${r.q.nights} nights</td><td style="text-align:right">${fe$(r.real, 1)}</td><td style="text-align:right">${fe$(r.mv, 1)}</td>
+      <td style="text-align:right" class="${r.d != null && Math.abs(r.d) > .03 ? "csbad" : ""}">${r.d == null ? "–" : (r.d >= 0 ? "+" : "") + (r.d * 100).toFixed(1) + "%"}</td></tr>`).join("")}</table>
+    <p class="small muted">Real prices = the hub's newest saved quotes for this home (last 10 days). The calculator uses today's Track price for those nights, so a quote saved before a price change will be off. Off by more than 3% on a fresh quote = an Airbnb discount or promotion, or a fee the calculator doesn't know.</p>`
+    : `<p class="small muted">No real quotes saved for this home in the last 10 days.</p>`;
+  // real stays
+  const B = [["Owner", /Due to\/from Owners/], ["Moose", /Management Commissions|Admin Fee|Pet Hosting Fee Income/], ["Housekeeping", /Cleaning/],
+             ["Airbnb / Vrbo", /(Airbnb|VRBO) Commission/], ["Beyond", /Beyond/], ["Track", /Track DE/], ["Safely", /Safely/], ["Taxes", /Tax/]];
+  const stays = (H.stays || []).slice().sort((a, b) => String(b.arrive).localeCompare(String(a.arrive)));
+  const sTbl = stays.length ? `<table class="fetbl fewide"><tr><th>Stay</th>${B.map(b => `<th style="text-align:right">${b[0]}</th>`).join("")}<th style="text-align:right">Other</th><th style="text-align:right">Total in Track</th></tr>
+    ${stays.map(s => { const g = B.map(() => 0); let other = 0, tot = 0;
+      for (const [k, v] of Object.entries(s.lines || {})) { const acct = k.split("|")[2] || ""; tot += v; const i = B.findIndex(b => b[1].test(acct)); if (i >= 0) g[i] += v; else other += v; }
+      return `<tr><td>${feE(s.channel)} · ${feE(s.arrive)} · ${s.nights} n · res ${feE(s.res)}</td>${g.map(v => `<td style="text-align:right">${v ? fe$(v) : ""}</td>`).join("")}<td style="text-align:right">${other ? fe$(other) : ""}</td><td style="text-align:right">${fe$(tot)}</td></tr>`; }).join("")}</table>
+    <p class="small muted">${FE_SRC.folio}. "Owner" is before the management commission, which Track takes on the owner statement. Airbnb and Vrbo keep their own fee before paying us, so it isn't in Track's lines.</p>`
+    : `<p class="small muted">No checked-out Airbnb, Vrbo or direct stays at this home in the last 150 days.</p>`;
+  $("feOut").innerHTML = facts + tiles +
+    `<div class="fecols">${cols}</div>
+     <div class="pccard"><h3>Where every dollar goes</h3>${wTbl}</div>
+     <div class="pccard"><h3>Check against real prices</h3>${chk}</div>
+     <div class="pccard"><h3>Real stays at ${feE(FE.code)}: where the money went in Track</h3>${sTbl}</div>` + feConnect();
+}
+function feConnect() {
+  const li = (t, s) => `<li>${t}<br><span class="small muted">Source: ${feE(s)}</span></li>`;
+  return `<details class="pccard" open><summary><b>How it all connects</b></summary><ol class="fenotes">
+    ${li("Track sends each booking site its own price. Airbnb gets Track's rate × 1.17 (rate type ABB-N 10), Vrbo × 1.15 (VRBO-N-10); our website gets the plain rack rate.", FE_SRC.track)}
+    ${li("On top of rent, Track adds a commission recovery fee: 19.41% of rent on Airbnb, 20% on Vrbo (also Whimstay 9.05%, Rentalz 18.06%, Hopper 20.92%, HomeToGo 26%, RootRez 3.41%, BDC + Key.Co 22.40%, Savvy 8.70%). It is hidden inside the nightly price. Track splits it in its books: on Airbnb about 87% to 'Airbnb Commission Fees', 7% to Beyond, 6% to Track; on Vrbo about 69% Vrbo, 18% Beyond, 14% Track.", FE_SRC.track + "; " + FE_SRC.folio)}
+    ${li("Airbnb only shows guests one all-in price (plus its own taxes), so cleaning, Guest Services and the damage waiver go to Airbnb as 'pass-through' fees. Track sends Airbnb copies of them made 19.41% bigger (the 'Airbnb Derived' charges) so Airbnb's fee on them is covered.", FE_SRC.track + "; Airbnb help article 3610: US guests see a fee-inclusive total before taxes")}
+    ${li("Airbnb takes 15.5% of the whole price from our payout; Vrbo takes 12% of rent + fees and adds its own traveler fee on top.", FE_SRC.abb15 + "; " + FE_SRC.vrbo12)}
+    ${li("Pets: on Airbnb the pet fee is one flat fee per stay set per home in Track (Pet Fee ABB), and pet cleaning is built into the 'PF' version of the hidden Airbnb cleaning fee. Airbnb doesn't allow a pet fee above the nightly base rate. On Vrbo and direct, staff add the pet fee by hand ($25 a night per pet, $100–$350).", FE_SRC.kimPet + "; " + FE_SRC.abbPet + "; " + FE_SRC.petRule)}
+    ${li("Owners: Track gives the owner the room rent (including the 17% / 15% markup), then takes the management commission from the owner contract on the owner statement (e.g. 2026-PP30 = 30%). Stays booked before about Oct 20, 2026 also took a 5% 'Owner Base Booking Fee' first; newer bookings don't. The recovery fee, cleaning, Guest Services and damage waiver never go to the owner; the pet fee is split 50/50.", FE_SRC.folio + "; Track owner contracts")}
+    ${li("Taxes: Airbnb collects and pays Utah taxes on Airbnb stays (Track adds none). On direct and Vrbo stays Track adds taxes, on the rent only.", FE_SRC.abbTax + "; " + FE_SRC.folio)}
+    ${li("Our website charges what Track's direct quote says, Guest Services Fee and damage waiver included (the calculator matches the website's own quotes within about 1%; checked 2026-11-25).", "Hub copy of our website's booking-engine quotes (checks channel SITE)")}
+    </ol></details>
+    <details class="pccard" open><summary><b>Things to settle (for Kim + Brandon)</b></summary><ol class="fenotes">
+    ${li("Taxes on fees: Track taxes direct and Vrbo stays on rent only, but Utah lists cleaning, pet, damage and reservation-type fees as taxable like the room. Check with the accountant.", FE_SRC.pub56 + "; " + FE_SRC.folio)}
+    ${li("Vrbo taxes: Track adds Utah taxes to Vrbo stays, and Vrbo says it collects Utah taxes itself. Make sure Utah isn't being paid twice, or guests charged twice.", FE_SRC.vrboTax + "; " + FE_SRC.folio)}
+    ${li("Airbnb double recovery: Airbnb rent is marked up 17% AND carries a 19.41% recovery fee, plus a 19.41% gross-up on fees, against Airbnb's 15.5% fee. Compare 'Moose keeps' across the three columns above.", FE_SRC.track + "; " + FE_SRC.abb15)}
+    ${li("Vrbo: rent marked up 15% and a 20% recovery fee, against a 12% commission.", FE_SRC.track + "; " + FE_SRC.vrbo12)}
+    ${li("Beyond share: Track still books part of every recovery fee to 'Beyond Pricing Commission Fees', including homes now on our own pricing. Check what Beyond actually bills.", FE_SRC.folio)}
+    ${li("Pet fee vs cheapest night: Airbnb won't allow a pet fee above the nightly base rate. Studios with a $100 pet fee and nights near $40–$80 may break that rule.", FE_SRC.abbPet + "; " + FE_SRC.kimPet)}
+    </ol><p class="small muted">The hub only reads Track. Fee changes in Track go through Kim.</p></details>`;
+}
+
 // ===== Rates ▸ Scoreboard (Jeff 2026-11-23): our own pricing vs Beyond, for the January "take over pricing?" call. Data = rates_scoreboard() (hub_rates_scoreboard.sql). =====
 const SC = { data: null, f: "" };
 async function loadScore() {
