@@ -299,6 +299,9 @@ main.v-pulse>#market:not(#viewnav):not(#pulse){display:block!important;margin-bo
 .srwarn{background:var(--amberbg);border-radius:12px;padding:9px 12px;font-size:13px;margin-top:10px}
 .srin.pre{color:var(--muted);background:var(--ovbg)}.srrate{white-space:nowrap}
 .srby{display:inline-grid;place-items:center;min-width:24px;height:22px;padding:0 5px;margin-left:6px;border-radius:999px;background:var(--pine-soft,#eaf3da);color:var(--forest,#3c5f12);font-size:10.5px;font-weight:800;vertical-align:middle}
+.sreq .eqbox{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;padding:10px 4px}.eqg{border:1px solid var(--ovgrid,#e3e8dc);border-radius:12px;padding:10px 12px}
+.eqh{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}.eqh .eqav{margin-left:auto;font-weight:700;font-size:12px}.eqg ul{margin:6px 0 0 16px;padding:0;font-size:12.5px;line-height:1.45}.eqg li.muted{color:var(--muted)}
+.up{color:#2f7d32}.dn{color:#b3261e}.eqt{border-collapse:collapse;width:100%;margin:6px 0;font-size:12.5px}.eqt td{padding:3px 6px;vertical-align:top;border-bottom:1px solid var(--ovgrid,#eee)}.eqt td.r{text-align:right;white-space:nowrap}.eqt .eqgr td{font-weight:700;background:var(--pine-soft,#eaf3da);font-size:11.5px}
 .srwhy{cursor:help;color:var(--forest-2,#5b8a1e);font-size:12px;padding:2px 3px;border-radius:6px}.srwhy:hover,.srwhy:focus{background:var(--pine-soft,#eaf3da);outline:none}
 #srWhyTip{position:fixed;z-index:80;display:none;max-width:360px;background:var(--ovcard);color:var(--ink);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.2);padding:12px 14px;font-size:12.5px;line-height:1.45}
 #srWhyTip ol{margin:6px 0 8px;padding-left:18px}#srWhyTip li{margin:2px 0}
@@ -1165,6 +1168,8 @@ async function loadSetRates() {
   SR.ourCal = oc.data?.[0] || null;
   SR.ck = ck.data || [];
   SR.x = { shadow: sh.data?.[0] || null, quality: hq.data?.[0] || null, ai: ai.data?.[0] || null, ratings: hr.data || [], kd: kd.data || [], reviews: rv.data || null, links: lk.data || [] };
+  { const bdq = await sb.from("rates_set_breakdown").select("night,rate,min_nights,person_wins,parts,updated_at").eq("code", SR.code).gte("night", today).order("night").limit(400);
+    SR.bdown = {}; for (const r of bdq.data || []) SR.bdown[r.night] = r; }   // the morning re-price's equation per night (2026-11-25)
   SR.ours_n = {}; for (const r of ns.data || []) SR.ours_n[r.night] = r;    // id order: the latest row for a night wins
   SR.track = {}; for (const r of tr.data || []) SR.track[r.night] = r;
   SR.trackAt = (tr.data || []).map(r => r.captured_at).sort().pop();
@@ -1744,6 +1749,7 @@ function srDraw() {
       "Average nightly rate of the open comps that night, before cleaning and tax (ESTIMATE). Main source: Key Data's Airbnb calendars (cleaning ÷ 5.5 taken out) and Vrbo, nightly. AirROI (paid, pulled on a budget) is shown as a second check. Same basis as Track's rack rate.") + `</div>`;
   html += srGoalBox(SR.dyn || SR.dynSaved || {}, h);   // Price goals right under the top numbers (Jeff 2026-11-23)
   html += `<details class="srabout"${srAboutOpen() ? " open" : ""}><summary>📋 About this home <span class="muted">Home Rater · what guests say · booking sites · recent bookings</span></summary>` + srGlance(h) + `</details>`;   // folds away, remembered per person
+  html += srEqCard(h);   // 🧮 The equation (Brandon 2026-11-25: "we also want to see the equation broken down too")
   // chart
   html += `<div class="ovc" style="margin-bottom:18px"><h3>Rate per night</h3><div class="cs">${R.length} nights · Track's rack rate basis (before cleaning, fees and tax)</div><div class="srzoom"><button type="button" class="ovbtn" data-zm="in">＋ Zoom in</button><button type="button" class="ovbtn" data-zm="out">－ Zoom out</button><button type="button" class="ovbtn" data-zm="all">Show all</button><span class="small muted" id="srZoomLbl">Drag the chart to slide · use + Zoom in / − Zoom out</span></div><div class="ovwrap srpan" id="srChart">${srSvg(R)}<div class="ovtip"></div></div>
     <div class="ovleg"><span><i class="ln" style="background:#c2571a"></i>Our current rate (Track)</span><span title="Only nights someone saved on this page"><i class="ln" style="background:var(--ours)"></i>Our suggested rate${R.some(r => r.v.set) ? "" : " (none saved yet)"}</span><span title="Our nightly pricing engine (dotted)"><i class="ln" style="background:#1f3a0c;opacity:.7"></i>Engine (dotted)</span><span><i class="ln" style="background:#5b6bd1"></i>${srGrpName()}</span><span><i class="ln" style="background:var(--comp)"></i>Comps' daily rate</span></div></div>`;
@@ -1794,6 +1800,10 @@ function srDraw() {
         <label class="srchk" style="grid-column:1/-1"><input type="checkbox" id="dyNewOn"${Y.newOn ? " checked" : ""}> This is a new home: start lower until the reviews come in</label>
         <label title="A home with fewer 4–5★ reviews than this (last 2 years) starts lower">Until it has this many good reviews${num("dyNewN", Y.newN ?? 5)}</label>
         <label title="With no reviews at all it starts this much lower; each good review takes part of it away">…start this much lower %${num("dyNewOff", Y.newOff ?? 10)}</label>
+        <b class="dysub">This home vs its comps</b>
+        <label title="Brandon's old spreadsheets: Crestview + Loft = comps +15%, Moose Lodge = comps −20%. Moves the standard price for every night (−25 to +25).">Better or worse than its comps %${num("dyHomePct", Y.homePct ?? 0, 72, "", 1)}</label>
+        <label style="grid-column:span 2" title="Why (shows in every night's breakdown)">Why<input id="dyHomeWhy" maxlength="120" value="${escH(Y.homeWhy || "")}" placeholder="e.g. best view in BHL, tired furniture, new remodel"></label>
+        <div class="small muted" style="grid-column:1/-1">${(() => { const E = (SR.homes?.find(x => x.code === SR.code)?.auto_summary || {}).eq?.staff; return E ? `Staff votes (Home Rater): score ${(+E.z).toFixed(2)} from ${E.games} vote${E.games === 1 ? "" : "s"} → ${E.pct > 0 ? "+" : ""}${(+E.pct).toFixed(1)}%. Votes come from the Home page quick question; more votes = a bigger say (most ±${srRule("staff_cap", 5)}%).` : "Staff votes (Home Rater): no votes on this home yet. They come from the Home page quick question."; })()}</div>
         <div class="small muted">${(() => { const B = srRevBoost(), C = srRevComp(), off = B && B.pct > 0 && C?.below && srRule("rev_bonus_below_comps", 0) === 0;
           return (B ? escH(srName(SR.code)) + ": " + escH(B.txt) + "." : "") + (C ? ` ${escH(C.txt)}: ${C.pct > 0 ? "+" : ""}${C.pct.toFixed(1)}%.` : "") + (off ? " <b>No reviews bonus: our reviews trail the comps.</b>" : ""); })()}</div>
         </div>
@@ -1943,10 +1953,57 @@ function srFeeNote() {
   const parts = [one("Airbnb", "Airbnb"), one("VRBO", "Vrbo"), one("Direct", "Our site")].filter(Boolean);
   return parts.length ? `<div class="srfee">How our rate becomes the guest's price (from ${Object.values(f).reduce((a, x) => a + x.n, 0)} Track quotes for this home): ${parts.join(" · ")}. Cleaning is spread over a ${SR_STAY}-night stay. Grey = Track's current rate (nothing set yet).</div>` : `<div class="srfee">No Track quotes for this home yet, so guest prices can't be worked out.</div>`;
 }
+// ---- 🧮 The equation (2026-11-25) ----
+const SR_EQG = [["market", "1 · Market base", "what similar homes charge"], ["home", "2 · This home", "reviews, staff votes, what it has, vs its comps"], ["demand", "3 · Demand", "bookings, comps filling up, website views, snow"],
+  ["timing", "4 · Timing", "days out, gaps, days of the week, holidays"], ["goal", "5 · Price goals", "set by a person"], ["guard", "6 · Guardrails", "walk-away, never too far under the comps, bigger homes, owner minimum"], ["final", "= Price", ""]];
+function srEqOpen() { try { return localStorage.getItem("mm_sr_eq") !== "0"; } catch (e) { return true; } }
+function srEqSteps(b) { // parts -> rows with the $ change of each step
+  let prev = null; const out = [];
+  for (const p of b.parts || []) { if (p.g === "min") continue; const v = p.v != null ? +p.v : null; out.push({ ...p, d: prev != null && v != null ? v - prev : null }); if (v != null) prev = v; }
+  return out; }
+function srEqCard(h) {
+  const S = h?.auto_summary || {}, E = S.eq || {}, Y = Object.assign({}, SR.dynSaved || {}, SR.dyn || {}), B = srRevBoost(), C = srRevComp(), AM = srAmen(Y);
+  const nights = Object.values(SR.bdown || {}).filter(b => !b.person_wins).slice(0, 60);
+  // average $ effect of each part over the next 60 nights (from the morning re-price)
+  const avg = {}; let start = 0, ns = 0, fin = 0;
+  for (const b of nights) { const st = srEqSteps(b); if (!st.length) continue; ns++; start += +st[0].v || 0; fin += +b.rate || 0;
+    for (const x of st.slice(1)) if (x.d != null && x.g !== "final") avg[x.g] = (avg[x.g] || 0) + x.d; }
+  const pc = v => (v > 0 ? "+" : "") + (+v).toFixed(1) + "%", dl = v => (v >= 0 ? "+" : "−") + "$" + Math.abs(Math.round(v)).toLocaleString();
+  const li = (t, on = true) => `<li${on ? "" : ' class="muted"'}>${t}</li>`;
+  const parts = {
+    market: [li(`Start = the comps' Airbnb guest total per night (rent + cleaning + fees), ${SR.same ? `${SR.same.n} comps` : "every comp nearby"}${Y.base === "a" ? "" : " (this home starts from " + escH(({ s: "our engine", c: "comps' daily rate", b: "our other homes", t: "Track now", o: "our saved rate" })[Y.base] || "") + ")"}, $${Y.under ?? 5} under. Holidays: comps' ${Math.round(srRule("hol_pct_far", 0.75) * 100)}th percentile, middle inside ${srRule("hol_near_days", 14)} days. Then turned into our Track rate with this home's own fees.`),
+             li(`More than ${Y.farDays || 180} days out (no comp prices yet): last year's rate +${Y.farLY ?? 20}%.`)],
+    home: [li(B ? `Reviews + bookings: ${escH(B.txt)} → ${pc(B.pct)}` : "Reviews + bookings: none yet", !!B),
+           li(C ? `Reviews vs comps: ${escH(C.txt)} → ${pc(C.pct)}` : "Reviews vs comps: not enough reviews yet", !!C),
+           li(E.staff ? `Staff votes (Home Rater, everyone's votes): score ${(+E.staff.z).toFixed(2)} from ${E.staff.games} vote${E.staff.games === 1 ? "" : "s"} → ${pc(E.staff.pct)}${E.staff.games < 8 ? " (grows as more votes come in)" : ""}` : "Staff votes: no votes on this home yet", !!E.staff),
+           li(+Y.homePct ? `This home vs its comps, set by hand: ${pc(+Y.homePct)}${Y.homeWhy ? " (" + escH(Y.homeWhy) + ")" : ""}` : "This home vs its comps, set by hand: none (Pricing settings ▸ Reviews, staff & this home)", !!+Y.homePct),
+           li([AM.noHt ? "no private hot tub: winter down" : "hot tub", AM.pets ? "takes pets: summer up" : "no pets: summer down", AM.pool ? "pool: summer up" : ""].filter(Boolean).join(" · "))],
+    demand: [li(`Learned from our bookings: ${Y.learn?.lvl ? pc(+Y.learn.lvl) : "0%"}${Y.learn?.why ? " (" + escH(Y.learn.why) + ")" : ""}`),
+             li(`Our week filling up: open nights up ${srRule("fill_t1", 5)}/${srRule("fill_t2", 10)}/${srRule("fill_t3", 15)}% at 25/50/75% booked`),
+             li(E.pickup && Object.keys(E.pickup.weeks || {}).length ? `Comps filling fast: ${Object.entries(E.pickup.weeks).map(([w, v]) => `week of ${new Date(w + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })} +${v[0]} pts → +${v[1]}%`).join(", ")} (${E.pickup.comps} comps)` : "Comps filling fast: no week picked up 15+ points in the last 2 weeks", !!(E.pickup && Object.keys(E.pickup.weeks || {}).length)),
+             li(E.views ? (E.views.pct ? `Website views: ${E.views.mine} views in ${E.views.days} days (our homes' middle ${E.views.middle}) but no booking for ${E.views.quiet} days → ${pc(E.views.pct)}` : `Website views: ${E.views.mine} in ${E.views.days} day${E.views.days === 1 ? "" : "s"} (our homes' middle ${E.views.middle})${E.views.note ? " · " + escH(E.views.note) : ""}`) : "Website views: not read yet", !!(E.views && E.views.pct)),
+             li(`Snow: +${Y.snowU ?? 8}% inside 7 days when ${Y.snowIn ?? 4}"+ is forecast`)],
+    timing: [li(`Last minute: ${Y.mix7 ?? 50}% toward the cheaper comps inside 7 days, ${Y.mix3 ?? 100}% inside 3. Gaps between bookings −${Y.gapD ?? 15}%, next to a booked stay −${Y.adjD ?? 5}%.`)],
+    goal: [li((Y.targets || []).length ? `${(Y.targets || []).length} price goal${(Y.targets || []).length > 1 ? "s" : ""} (see Price goals)` : "No price goals", !!(Y.targets || []).length)],
+    guard: [li(`Never more than ${Y.maxU ?? 10}% under the comps' average · walk-away ${Y.floorStay ? "$" + Y.floorStay + " a stay" : Y.floor ? "$" + Y.floor + " a night" : "$70/bedroom a stay or $40/bedroom a night"} · never above our bigger homes here · owner minimum`)] };
+  const rows = SR_EQG.filter(g => g[0] !== "final").map(([k, t, sub]) => `<div class="eqg"><div class="eqh"><b>${t}</b><span class="muted small">${sub}</span>${ns && avg[k] ? `<span class="eqav ${avg[k] >= 0 ? "up" : "dn"}" title="Average change from this part over the next ${ns} nights">${dl(avg[k] / ns)} a night</span>` : ""}</div><ul>${(parts[k] || []).join("")}</ul></div>`).join("");
+  return `<details class="srabout sreq"${srEqOpen() ? " open" : ""}><summary>🧮 The equation <span class="muted">Market base × this home × demand × timing, then guardrails${ns ? ` · next ${ns} nights: average start ${fmt(start / ns)} → ${fmt(fin / ns)}` : ""}</span></summary>
+    <div class="eqbox">${rows}<div class="muted small">Tap ⓘ next to a night's rate to see its own breakdown. From this morning's re-price${S.at ? " (" + new Date(S.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + ")" : ""}. Rules live in Rates ▸ Memory.</div></div></details>`; }
+function srEqHtml(b, k) {
+  const st = srEqSteps(b), d = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  let html = `<b>How ${fmt(b.rate)} was built for ${escH(d)}</b><table class="eqt">`, last = null;
+  for (const x of st) { const g = SR_EQG.find(z => z[0] === x.g) || [x.g, x.g];
+    if (g[0] !== last) { html += `<tr class="eqgr"><td colspan="3">${g[1]}</td></tr>`; last = g[0]; }
+    html += `<tr><td>${escH(x.g === "final" ? "rounded" : x.s || "")}${x.t != null ? `<div class="muted small">guest pays ${fmt(x.t)} a night</div>` : ""}</td><td class="r">${x.d != null && Math.abs(x.d) >= 0.5 ? `<span class="${x.d >= 0 ? "up" : "dn"}">${(x.d >= 0 ? "+" : "−") + "$" + Math.abs(Math.round(x.d))}</span>` : ""}</td><td class="r"><b>${x.v != null ? fmt(x.v) : ""}</b></td></tr>`; }
+  const mins = (b.parts || []).filter(p => p.g === "min").map(p => p.s);
+  html += `</table>` + (mins.length ? `<div class="small">${mins.map(escH).join(" · ")}</div>` : "") +
+    `<div class="muted small">${b.person_wins ? "A person saved this night's price, so it wasn't changed. " : ""}Our Track rate (before cleaning, fees, tax). From the morning re-price, ${new Date(b.updated_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.</div>`;
+  return html; }
 // ⓘ pop-up: the engine's reason as numbered steps (its "why" text is "step → step → … = $55 → min stay 2 (…)").
 function srOurWhy(r) { const w = SR.edits[r.k]?.why ? SR.edits[r.k].why.join(" → ") : (!SR.edits[r.k] && SR.ours_n[r.k]?.note) || "";
   return w ? ` <span class="srwhy" tabindex="0" role="button" aria-label="How this rate was built" data-src="ours" data-why="${escH(w)}" data-p="${r.v.rate}" data-k="${r.k}">ⓘ</span>` : ""; }
 function srWhyHtml(why, price, k, src) {
+  if (src === "ours" && SR.bdown?.[k] && !SR.edits[k] && Math.round(+SR.bdown[k].rate) === Math.round(+price)) return srEqHtml(SR.bdown[k], k);
   if (src === "ours") { const st = String(why || "").split(/\s*→\s*/).map(x => x.trim()).filter(Boolean);
     const d = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
     return `<b>How ${fmt(price)} was built for ${escH(d)}</b><ol>${st.map(t => `<li>${escH(t)}</li>`).join("")}</ol><div class="muted small">From the Dynamic pricing settings. Saved with the rate.</div>`; }
@@ -2198,11 +2255,11 @@ document.addEventListener("keydown", e => { if (!SR.sel?.size || e.target.closes
 const srDynOpen = () => { try { return localStorage.getItem("mm_dyn_open") !== "0"; } catch (e) { return true; } };
 // Dynamic pricing as a side menu + one section at a time (Jeff 2026-11-23: "way too much scrolling"). Every input stays in the page
 // (hidden sections only), so Build prices, Save settings and the morning re-price read the same ids as before.
-const SR_DYTABS = [["start", "Start"], ["learn", "Learn from bookings"], ["reviews", "Reviews & new home"], ["home", "Hot tub, pets & pool"], ["comps", "Comps used"],
+const SR_DYTABS = [["start", "Start"], ["learn", "Learn from bookings"], ["reviews", "Reviews, staff & this home"], ["home", "Hot tub, pets & pool"], ["comps", "Comps used"],
   ["days", "Days & holidays"], ["cal", "Gaps in our calendar"], ["last", "Last minute & weather"], ["floor", "Never give it away"], ["min", "Minimum stay"], ["los", "Longer stays"]];
 const SR_DYHELP = { start: "Where each night's price starts, before the other sections move it.",
   learn: "Each morning the price moves a little: up when bookings come in, back toward the comps' average when it goes quiet.",
-  reviews: "Good reviews and steady bookings earn a little more; a brand-new home starts lower until reviews come in.",
+  reviews: "Good reviews and steady bookings earn a little more; a brand-new home starts lower until reviews come in. Staff votes and your own read of the home move it a little too.",
   home: "Small seasonal changes for what this home has: winter without a private hot tub, summer with pets or a pool.",
   comps: "Which similar homes this home is priced against.",
   days: "Extra % by day of the week and on holidays. Skipped when the start is the comps' total (their prices already include weekends and holidays).",
@@ -2214,7 +2271,7 @@ function srDyTab() { if (!SR.dyTab) { try { SR.dyTab = localStorage.getItem("mm_
 function srDynSum() { const v = id => document.getElementById(id)?.value ?? "", ck = id => !!document.getElementById(id)?.checked, n = id => +v(id) || 0, pc = x => (x > 0 ? "+" : "") + x + "%", S = {};
   const base = v("dyBase"); S.start = ({ a: "Comps' total", s: "Our engine", c: "Comps' daily rate", b: "Our other homes", t: "Track now", o: "Our saved rate" })[base] + (base === "a" ? (n("dyOver") ? ` +${n("dyOver")}%` : "") + ` − $${n("dyUnder")}` : "") + (n("dyLvl") ? ` · level ${pc(n("dyLvl"))}` : "");
   S.learn = `Now ${document.querySelector(".dylearn b")?.textContent || "0%"} · ${pc(n("dyLearnUp"))} a booking`;
-  S.reviews = `${pc(n("dyRevPer"))} a 4–5★ · −${n("dyRevBad")}% a 1–3★` + (ck("dyNewOn") ? " · new home" : "");
+  S.reviews = `${pc(n("dyRevPer"))} a 4–5★ · −${n("dyRevBad")}% a 1–3★` + (ck("dyNewOn") ? " · new home" : "") + (n("dyHomePct") ? ` · this home ${pc(n("dyHomePct"))}` : "");
   S.home = [ck("dyNoHt") ? `no hot tub −${n("dyHtOff")}% max` : "hot tub", ck("dyPets") ? `pets ${pc(n("dyPetUp"))}` : `no pets −${n("dyPetDown")}%`, ck("dyPool") ? `pool ${pc(n("dyPoolUp"))}` : ""].filter(Boolean).join(" · ");
   S.comps = (SR.same ? `${SR.same.n} comps` : "every comp nearby") + (ck("dyMatchSleeps") ? " · match on guests" : "") + (srMsList().length ? ` · +${srMsList().length} set${srMsList().length > 1 ? "s" : ""}` : "");
   const dn = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"], ds = [...document.querySelectorAll("[data-dow]")].map((i, j) => +i.value ? `${dn[j]} ${pc(+i.value)}` : "").filter(Boolean);
@@ -2324,7 +2381,7 @@ function srWire(R) {
         lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, los4: g("dyLos4"), los7: g("dyLos7"), los14: g("dyLos14"), los28: g("dyLos28"), snowU: nz("dySnowU"), jump: nz("dyJump"),
         floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: "", minHol: g("dyMinHol"), minDef: g("dyMinDef"), minDow: [...document.querySelectorAll("[data-mdow]")].map(i => i.value), minSeasons: srReadSeasons(), rd: g("dyRd"), which: g("dyWhich"),
         under: nz("dyUnder"), over: nz("dyOver"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
-        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), newOn: !!document.getElementById("dyNewOn")?.checked, matchSleeps: !!document.getElementById("dyMatchSleeps")?.checked, sameWin: g("dySameWin").trim(), matchSets: srMsList(), bedOff: nz("dyBedOff"), sleepsWin: nz("dySleepsWin"), noHt: !!document.getElementById("dyNoHt")?.checked, htOff: nz("dyHtOff"), pets: !!document.getElementById("dyPets")?.checked, petUp: nz("dyPetUp"), petDown: nz("dyPetDown"), pool: !!document.getElementById("dyPool")?.checked, poolUp: nz("dyPoolUp"), farLY: g("dyFarLY") === "" ? 20 : +g("dyFarLY"), farDays: g("dyFarDays") === "" ? 180 : +g("dyFarDays"), oneOk: !!document.getElementById("dyOneOk")?.checked, minLm7: g("dyMinLm7"), minLm3: g("dyMinLm3"), floorStayHol: g("dyFloorStayHol") });
+        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), newOn: !!document.getElementById("dyNewOn")?.checked, homePct: nz("dyHomePct"), homeWhy: g("dyHomeWhy").trim().slice(0, 120), matchSleeps: !!document.getElementById("dyMatchSleeps")?.checked, sameWin: g("dySameWin").trim(), matchSets: srMsList(), bedOff: nz("dyBedOff"), sleepsWin: nz("dySleepsWin"), noHt: !!document.getElementById("dyNoHt")?.checked, htOff: nz("dyHtOff"), pets: !!document.getElementById("dyPets")?.checked, petUp: nz("dyPetUp"), petDown: nz("dyPetDown"), pool: !!document.getElementById("dyPool")?.checked, poolUp: nz("dyPoolUp"), farLY: g("dyFarLY") === "" ? 20 : +g("dyFarLY"), farDays: g("dyFarDays") === "" ? 180 : +g("dyFarDays"), oneOk: !!document.getElementById("dyOneOk")?.checked, minLm7: g("dyMinLm7"), minLm3: g("dyMinLm3"), floorStayHol: g("dyFloorStayHol") });
       const on = $("auOn").checked, send = $("auSend").checked;
       if (send && !await mmConfirm(`Send ${srName(SR.code)}'s new prices to Track automatically every morning? (Only once Beyond is marked off and the go-live switch is on.)`)) return;
       const r = await sb.rpc("rates_set_auto", { p_code: SR.code, p_dyn: SR.dyn, p_on: on, p_days: +$("auDays").value, p_send: send });
@@ -2353,7 +2410,7 @@ function srWire(R) {
       lm7: nz("dyLm7"), lm3: nz("dyLm3"), far: nz("dyFar"), snowIn: nz("dySnowIn") || 4, los4: g("dyLos4"), los7: g("dyLos7"), los14: g("dyLos14"), los28: g("dyLos28"), snowU: nz("dySnowU"), jump: nz("dyJump"),
       floor: g("dyFloor"), floorStay: g("dyFloorStay"), ceil: g("dyCeil"), minWk: "", minHol: g("dyMinHol"), minDef: g("dyMinDef"), minDow: [...document.querySelectorAll("[data-mdow]")].map(i => i.value), minSeasons: srReadSeasons(), rd: g("dyRd"), which: g("dyWhich"),
       under: nz("dyUnder"), over: nz("dyOver"), maxU: nz("dyMaxU"), lowPct: nz("dyLowPct") || 35, mix7: nz("dyMix7"), mix3: nz("dyMix3"),
-        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), newOn: !!document.getElementById("dyNewOn")?.checked, matchSleeps: !!document.getElementById("dyMatchSleeps")?.checked, sameWin: g("dySameWin").trim(), matchSets: srMsList(), bedOff: nz("dyBedOff"), sleepsWin: nz("dySleepsWin"), noHt: !!document.getElementById("dyNoHt")?.checked, htOff: nz("dyHtOff"), pets: !!document.getElementById("dyPets")?.checked, petUp: nz("dyPetUp"), petDown: nz("dyPetDown"), pool: !!document.getElementById("dyPool")?.checked, poolUp: nz("dyPoolUp"), farLY: g("dyFarLY") === "" ? 20 : +g("dyFarLY"), farDays: g("dyFarDays") === "" ? 180 : +g("dyFarDays"), oneOk: !!document.getElementById("dyOneOk")?.checked, minLm7: g("dyMinLm7"), minLm3: g("dyMinLm3"), floorStayHol: g("dyFloorStayHol") });
+        learnUp: nz("dyLearnUp"), learnQuiet: g("dyLearnQuiet"), learnDown: nz("dyLearnDown"), learnMax: nz("dyLearnMax"), learnMin: nz("dyLearnMin"), revPer: nz("dyRevPer"), revBk: nz("dyRevBk"), revBad: nz("dyRevBad"), revCap: nz("dyRevCap"), newN: nz("dyNewN"), newOff: nz("dyNewOff"), newOn: !!document.getElementById("dyNewOn")?.checked, homePct: nz("dyHomePct"), homeWhy: g("dyHomeWhy").trim().slice(0, 120), matchSleeps: !!document.getElementById("dyMatchSleeps")?.checked, sameWin: g("dySameWin").trim(), matchSets: srMsList(), bedOff: nz("dyBedOff"), sleepsWin: nz("dySleepsWin"), noHt: !!document.getElementById("dyNoHt")?.checked, htOff: nz("dyHtOff"), pets: !!document.getElementById("dyPets")?.checked, petUp: nz("dyPetUp"), petDown: nz("dyPetDown"), pool: !!document.getElementById("dyPool")?.checked, poolUp: nz("dyPoolUp"), farLY: g("dyFarLY") === "" ? 20 : +g("dyFarLY"), farDays: g("dyFarDays") === "" ? 180 : +g("dyFarDays"), oneOk: !!document.getElementById("dyOneOk")?.checked, minLm7: g("dyMinLm7"), minLm3: g("dyMinLm3"), floorStayHol: g("dyFloorStayHol") });
     const Y = SR.dyn, today = iso(new Date(new Date().setHours(12, 0, 0, 0))), pc = v => (v > 0 ? "+" : "") + Math.round(v) + "%";
     // "usual" = comps over the nearby two weeks, so following the comps only reacts to night-to-night moves (same as rates_set_auto.py)
     const cMedK = k => { const v = []; for (let i = -7; i <= 7; i++) { const c = srComp(addD(k, i)); if (c) v.push(c.adr); } v.sort((x, y) => x - y); return v.length >= 5 ? v[v.length >> 1] : null; };
@@ -2371,6 +2428,9 @@ function srWire(R) {
     const rnd = v => Y.rd === "9" ? Math.max(29, Math.round((v + 1) / 10) * 10 - 1) : Math.round(v / +Y.rd) * +Y.rd;
     let n = 0; const built = [];
     const RB0 = srRevBoost(Y), RC = srRevComp(), RRp = RC ? RC.pct : 0;
+    // 2026-11-25 rates equation: this home vs its comps (by hand), staff votes, website views, comps filling fast - same as the morning re-price
+    const EQ0 = (SR.homes?.find(x => x.code === SR.code)?.auto_summary || {}).eq || {}, HPp = Math.max(-25, Math.min(25, +Y.homePct || 0)),
+      SSp = srRule("staff_on", 1) ? (+EQ0.staff?.pct || 0) : 0, VWp = srRule("views_on", 1) ? (+EQ0.views?.pct || 0) : 0, EQF = (1 + HPp / 100) * (1 + SSp / 100) * (1 + VWp / 100), PUw = srRule("pickup_on", 1) ? (EQ0.pickup?.weeks || {}) : {};
     // Brandon 2026-11-18: "we need to not have a review bonus if the reviews are lower than the comps"
     const RB = RB0 && RB0.pct > 0 && RC?.below && srRule("rev_bonus_below_comps", 0) === 0 ? null : RB0, RV = RB ? RB.pct : 0;
     const lMaxE = (+Y.learnMax || 25) + Math.max(0, RV);
@@ -2380,7 +2440,7 @@ function srWire(R) {
       const hN = (typeof holOf === "function" && holOf(r.k).filter(srPriced)[0]) || (typeof peakOf === "function" && peakOf(r.k)) || "", hQ = out0 <= srRule("hol_near_days", 14) ? srRule("hol_pct_near", 0.5) : srRule("hol_pct_far", 0.75); /* Rates memory (Brandon 2026-11-18: 75th, 50th inside 2 weeks) */
       const hV = A && ct && hN ? srCompLow(r.k, hQ) : null, cv = hV != null && hV > ct.v ? hV : ct?.v;
       // standard = comps' average − $under (holidays: the comps' high end), moved by what bookings taught us; last minute slides toward the cheaper comps (not on holidays)
-      const std = ct ? (cv * (1 + O / 100) - U) * (1 + L / 100) * (1 + RV / 100) * (1 + RRp / 100) : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
+      const std = ct ? (cv * (1 + O / 100) - U) * (1 + L / 100) * (1 + RV / 100) * (1 + RRp / 100) * EQF : null, low = clo != null ? (clo - U) * (1 + Math.min(L, 0) / 100) : null;
       const mix = hN || ourAv(r.k) === "0" ? 0 : out0 <= 3 ? (+Y.mix3 || 0) / 100 : out0 <= 7 ? (+Y.mix7 || 0) / 100 : 0;
       const tgt = std == null ? null : low != null && low < std ? std + (low - std) * mix : std;
       const b0 = A ? srRackFor(tgt, ct?.nt) : Y.base === "s" ? r.s?.price : Y.base === "b" ? r.b : Y.base === "t" ? (r.t ? +r.t.rate : null) : Y.base === "c" ? r.c?.adr : (SR.ours_n[r.k] ? +SR.ours_n[r.k].rate : null);
@@ -2391,6 +2451,10 @@ function srWire(R) {
         : [`start: ${{ s: "engine", c: "comps' daily rate", b: "our other homes' average", t: "Track now", o: "our saved rate" }[Y.base]} ${fmt(b0)}`]; let v = far ? far.v * (1 + (Y.farLY ?? 20) / 100) : b0;
       const step = (f, t) => { if (far || !f || f === 1) return; v *= f; why.push(`${t} ${pc((f - 1) * 100)} → ${fmt(v)}`); };
       step(1 + Y.lvl / 100, "level");
+      if (!A) { if (HPp) step(1 + HPp / 100, "this home vs its comps (set by hand)"); if (SSp) step(1 + SSp / 100, "staff votes"); if (VWp) step(1 + VWp / 100, "website views, no bookings"); }
+      else if (!far && EQF !== 1) why.splice(why.length - 1, 0, "in the standard price: " + [HPp ? `this home vs its comps ${pc(HPp)}` : "", SSp ? `staff votes ${pc(SSp)}` : "", VWp ? `website views ${pc(VWp)}` : ""].filter(Boolean).join(", "));
+      { const d0 = new Date(r.k + "T12:00:00"); d0.setDate(d0.getDate() - d0.getDay()); const pu = PUw[iso(d0)];
+        if (pu && out0 <= srRule("pickup_days", 90)) step(1 + pu[1] / 100, `comps filling this week fast (+${pu[0]} pts booked in 2 weeks, now ${pu[2]}%)`); }
       { const AM = srAmen(Y), md = r.k.slice(5);
         if (AM.noHt && (md >= "12-15" || md <= "03-31")) step(1 - AM.htCut / 100, `no private hot tub, winter (${AM.share != null ? Math.round(AM.share * 100) + "% of comps have one" : "comps unknown"})`);
         if (md >= "06-01" && md <= "09-30") step(AM.pets ? 1 + (+Y.petUp || 0) / 100 : 1 - (+Y.petDown || 0) / 100, AM.pets ? "takes pets, summer" : "no pets, summer");
