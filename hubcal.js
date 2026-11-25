@@ -123,6 +123,7 @@ const stepWord = (k, n) => { const v = T(k).view; return (n < 0 ? "Previous " : 
 function titleOf(k){ const t = T(k), [a, b] = rangeOf(k), A = D(a), B = D(b);
   if(t.view === "day") return A.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
   if(t.view === "month") return MONL[D(t.sel).getMonth()] + " " + D(t.sel).getFullYear();
+  if(t.view === "list") return `${MONS[A.getMonth()]} ${A.getDate()} – ${MONS[B.getMonth()]} ${B.getDate()}${A.getFullYear() !== B.getFullYear() || B.getFullYear() !== new Date().getFullYear() ? ", " + B.getFullYear() : ""}`;
   if(A.getMonth() === B.getMonth()) return `${MONL[A.getMonth()]} ${A.getDate()} – ${B.getDate()}, ${B.getFullYear()}`;
   return `${MONS[A.getMonth()]} ${A.getDate()}${A.getFullYear() !== B.getFullYear() ? ", " + A.getFullYear() : ""} – ${MONS[B.getMonth()]} ${B.getDate()}, ${B.getFullYear()}`; }
 
@@ -217,7 +218,7 @@ const I = s => ((T(C.k).items || {}).map || {})[s] || [];
 /* ---------- CSS ---------- */
 const HCCSS = `
 .hc{display:flex;flex-direction:column;min-height:0;flex:1;padding:14px 18px 10px;max-width:none;width:100%;margin:0;overflow:hidden}
-.hc button{font:inherit}
+.hc button{font:inherit} .hc>.hc-top,.hc>.hc-bar,.hc>.hc-leg{flex-shrink:0}
 .hc .hc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
 .hc .hc-tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px}
 .hc .hc-tabs a{padding:7px 14px;border-radius:10px;text-decoration:none;color:var(--ink-2);font-weight:700;font-size:14px}
@@ -559,7 +560,7 @@ function monthHTML(k){ const [a, b] = rangeOf(k), days = daysOf(a, b), m = T(k).
 function agRow(x){ return `<div class="hc-ar ${x.cls}${x.past ? " past" : ""}" role="button" tabindex="0" data-it="${html(x.id)}"><span class="hc-at">${x.start ? html(fshort(x.start)) + (x.fin ? `<small>${html(fshort(x.fin))}</small>` : "") : "All day"}</span><span class="hc-ab"><b>${x.rep ? "↻ " : ""}${x.bell ? "🔔 " : ""}${html(x.title)}</b>${x.sub || x.span ? `<small>${html([x.span ? fday(x.span.a) + " – " + fday(x.span.b) : "", x.sub].filter(Boolean).join(" · "))}</small>` : ""}</span>${x.join && !x.past ? `<a class="hc-jb" href="${html(x.join)}" target="_blank" rel="noopener noreferrer" data-join>Join</a>` : ""}</div>`; }
 function listHTML(k){ const [a, b] = rangeOf(k), t = today(); let h = "", n = 0;
   daysOf(a, b).forEach(s => { const its = I(s); if(!its.length && s !== t) return; n++;
-    h += `<section class="hc-agd${s === t ? " td" : ""}"><h4 class="hc-agh">${s === t ? "Today · " : s === addD(t, 1) ? "Tomorrow · " : ""}${html(flong(s))}<span class="hc-sp"></span>${badge(k, s)}</h4>${its.length ? its.map(agRow).join("") : `<p class="hc-none">Nothing on.</p>`}</section>`; });
+    h += `<section class="hc-agd${s === t ? " td" : ""}"><h4 class="hc-agh">${s === t ? "Today · " : s === addD(t, 1) ? "Tomorrow · " : ""}${html(phone() ? fday(s) : flong(s))}<span class="hc-sp"></span>${badge(k, s)}</h4>${its.length ? its.map(agRow).join("") : `<p class="hc-none">Nothing on.</p>`}</section>`; });
   return `<div class="hc-ag">${h || `<p class="hc-none" style="padding:20px">Nothing in these ${LISTN} days.</p>`}<div style="padding:12px 14px"><button class="btn small" data-mv="1">Show the next week →</button></div></div>`; }
 function resWeekHTML(k, days){ const t = today();
   return `<div class="hc-rw" style="grid-template-columns:repeat(${days.length},minmax(118px,1fr))">${days.map(s => { const its = I(s), ins = its.filter(x => x.dir === "in"), outs = its.filter(x => x.dir === "out");
