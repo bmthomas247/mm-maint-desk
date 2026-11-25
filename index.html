@@ -2206,6 +2206,7 @@ async function homeView(v){
   // accordion: opening one closes the other (older browsers ignore name="", so do it here too)
   v.querySelectorAll("details.acc").forEach(d => d.addEventListener("toggle", () => { if(d.open) v.querySelectorAll("details.acc").forEach(o => { if(o !== d) o.open = false; }); }));
   sb.functions.invoke("hub-news", { body:{} }).then(({ data }) => {
+    if(!$("#evlist") || !$("#pclist")) return;   // left Home before it loaded (2026-11-25)
     if(!data || !data.ok){ $("#pclist").innerHTML = $("#evlist").innerHTML = `<p class="muted">Couldn't load right now.</p>`; return; }
     const ev = data.events.items || []; if($("#evn")) $("#evn").textContent = ev.length ? `${ev.length} events` : "";
     $("#evlist").innerHTML = (ev.length ? ev.map(e => `<div class="fb"><div class="hd">${e.pick ? `<span class="pill green">Moose pick</span>` : ""}<b><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.name)}</a></b>${e.free ? `<span class="pill blue">Free</span>` : ""}</div>
@@ -2637,6 +2638,7 @@ async function homeQuick(el){
   const today = new Date().toDateString(); let skip = ""; try { skip = localStorage.getItem("mm_hq_skip") || ""; } catch(e){}
   if(skip === today) return;
   const r = await sb.rpc("home_quick_q"), q = r.data;
+  if(!el.isConnected) return;   // left Home before it loaded (2026-11-25)
   if(r.error || !q || !q.homes || q.homes.length < 2){ el.innerHTML = ""; return; }
   const [a, b] = q.homes; let pick = null, busy = false, n = 0;
   const tile = (h, i) => `<button class="hqh" data-i="${i}" style="all:unset;box-sizing:border-box;cursor:pointer;display:block;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)">
@@ -2653,7 +2655,8 @@ async function homeQuick(el){
       <p class="muted" id="hqmsg" style="font-size:13px;margin:8px 0 0"></p></div>`;
     el.querySelectorAll(".hqh").forEach(t => { const on = pick === +t.dataset.i; t.style.borderColor = on ? "var(--moose)" : "var(--line)"; t.style.boxShadow = on ? "0 0 0 2px var(--moose)" : "";
       t.onclick = () => { pick = +t.dataset.i; draw(); }; });
-    $("#hqno").onclick = e => { e.preventDefault(); try { localStorage.setItem("mm_hq_skip", today); } catch(x){} el.innerHTML = ""; };
+    if(!el.isConnected) return;
+    el.querySelector("#hqno").onclick = e => { e.preventDefault(); try { localStorage.setItem("mm_hq_skip", today); } catch(x){} el.innerHTML = ""; };
     el.querySelectorAll("[data-w]").forEach(w => w.onclick = () => save(w.dataset.w));
     if($("#hqskip")) $("#hqskip").onclick = e => { e.preventDefault(); save(null); };
   };
