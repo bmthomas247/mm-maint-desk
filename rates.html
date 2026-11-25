@@ -1460,13 +1460,13 @@ function srTgtWire() {
     if (!await mmConfirm(`Remove "${srTgtSay(t)}" (${srFd(t.from, 1)} to ${srFd(t.to, 1)}) from ${srName(SR.code)}? Those dates go back to the normal pricing settings.`)) return; T.splice(+b.dataset.gfdel, 1); await persist(T); }); }
 // no home picked: goals for several homes at once (Track neighborhoods, community buttons, one builder)
 function srAreaBox() { SR.multi = (SR.multi || []).filter(c => SR.homes.some(h => h.code === c)); const n = SR.multi.length;
-  const rows = {}; for (const h of SR.homes) for (const t of srTgts(h.dyn || {})) { const k = JSON.stringify(t); (rows[k] ||= { t, codes: [] }).codes.push(h.code); }
+  const pick = new Set(SR.multi), rows = {}; for (const h of SR.homes) if (pick.has(h.code)) for (const t of srTgts(h.dyn || {})) { const k = JSON.stringify(t); (rows[k] ||= { t, codes: [] }).codes.push(h.code); }
   const list = Object.values(rows).sort((a, b) => a.t.from.localeCompare(b.t.from) || srTgtSay(a.t).localeCompare(srTgtSay(b.t)));
   return `<div class="ovc" id="arBox"><h3 style="margin:0 0 2px">🎯 ${n ? `Price goal for ${n} home${n === 1 ? "" : "s"}` : "Price goals"}</h3>
     ${n ? `<div class="arsel">${SR.multi.map(c => `<span class="gfchip on">${escH(srName(c))}<button type="button" data-arx="${escH(c)}" title="Take this home out">✕</button></span>`).join("")}</div>`
         : `<div class="cs">Pick homes in <b>Moose-priced homes</b> above: tick several (or a whole neighborhood) to give them one goal, or tap <b>Open</b> to work on one home.</div>`}
     <div class="arform">${srGoalForm("area", `💾 Save to ${n} home${n === 1 ? "" : "s"}`)}</div>
-    <h4 style="margin:16px 0 4px">Goals now</h4>${srGoalCards(list, false)}
+    ${n ? `<h4 style="margin:16px 0 4px">Goals on these homes now</h4>${srGoalCards(list, false)}` : ""}
     <div class="small muted" style="margin-top:6px">Each home keeps its own copy of a goal, so you can still change one home later. "Suggestions only" homes don't send prices to Track by themselves.</div></div>`; }
 function srAreaWire() { const box = $("arBox"); if (!box) return;
   const checked = () => (SR.multi || []).slice(), hx = c => SR.hh?.[c] || {};
