@@ -432,7 +432,7 @@ const HCCSS = `
 .hc .ol .hc-dh.td,.hc .ol .hc-adc.td,.hc .ol .hc-col.td{box-shadow:inset 2px 0 0 var(--forest-2),inset -2px 0 0 var(--forest-2)}
 .hc .ol .hc-dh.we,.hc .ol .hc-adc.we,.hc .ol .hc-col.we{background-color:color-mix(in srgb,var(--ground) 75%,var(--card))}
 .hc .ol .hc-adc.td,.hc .ol .hc-col.td{background-color:color-mix(in srgb,var(--moose-soft) 30%,var(--card))}
-.hc .ol .hc-ad{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;border-bottom:1px solid var(--line-2)}
+.hc .ol .hc-ad{border-bottom:2px solid var(--line-2)}
 .hc .ol .hc-adc{gap:2px;padding:3px 3px 6px;min-height:34px}
 .hc .hc-chip{display:flex;align-items:center;gap:4px;color:var(--ct);border-radius:3px;font-weight:600;font-size:11.5px;padding:2px 5px 2px 6px;line-height:1.35}
 .hc .hc-chip .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -594,11 +594,10 @@ function draw(k, o){
   if(o.open){ const id = o.open; o.open = null; setTimeout(() => openItem(k, id), 60); }
   if(C.reopen){ const id = C.reopen; C.reopen = null; setTimeout(() => { const el = cal.querySelector(`[data-it="${CSS.escape(id)}"]`); if(el) openItem(k, id, el); }, 60); }
 }
-function fitAd(cal){ const sc = cal.querySelector(".hc-sc"), ad = cal.querySelector(".hc-wk.ol .hc-ad"); if(!sc || !ad) return;
-  ad.style.maxHeight = Math.max(110, Math.round(sc.clientHeight * 0.5)) + "px";
-  const gw = ad.offsetWidth - ad.clientWidth; cal.querySelectorAll(".hc-hd,.hc-bd").forEach(r => r.style.paddingRight = gw > 0 ? gw + "px" : ""); }
+function fitAd(cal){ cal.querySelectorAll(".hc-hd,.hc-bd").forEach(r => r.style.paddingRight = ""); }   // the all-day part no longer scrolls on its own (Jeff 2026-11-25)
 window.addEventListener("resize", () => { clearTimeout(C.rsz); C.rsz = setTimeout(() => { const cal = C.v && C.v.querySelector("#hccal"); if(cal && C.k && alive(C.k)) fitAd(cal); }, 150); });
-function scrollToHours(k, sc){ const g = C.g || { a:6 };
+function scrollToHours(k, sc){ if(sc.closest(".hc-wk.ol")){ sc.scrollTop = 0; return; }   // Outlook week: open at the top (all-day lines, then the hours from 8 AM)
+  const g = C.g || { a:6 };
   const first = Math.min(...daysOf(...rangeOf(k)).flatMap(s => I(s).filter(x => x.start).map(x => toMin(x.start))), 99999);
   const target = Math.min(8 * 60, first < 99999 ? first - 30 : 8 * 60);
   sc.scrollTop = Math.max(0, (target - g.a * 60) / 60 * HPX); }
@@ -617,17 +616,17 @@ function lay(list){ list.sort((x, y) => x.s - y.s || y.e - x.e); let cols = [], 
 function gridHTML(k, days){
   const t = today(), sel = T(k).sel, n = days.length;
   // the hours stretch if something is earlier than 6 am or later than 10 pm
-  let gA = 6, gB = 22; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
+  let gA = 8, gB = 20; days.forEach(s => I(s).filter(x => x.start).forEach(x => { gA = Math.min(gA, Math.floor(toMin(x.start) / 60)); gB = Math.max(gB, Math.ceil((x.fin ? toMin(x.fin) : toMin(x.start) + 60) / 60)); }));
   gB = Math.min(24, gB); C.g = { a:gA, b:gB };
   const cols = `grid-template-columns:58px repeat(${n},minmax(${n > 1 ? 110 : 0}px,1fr))`, H = (gB - gA) * HPX, nm = nowMin();
   let h = `<div class="hc-wk ol${n === 1 ? " one" : ""}"><div class="hc-sc"><div class="hc-in"><div class="hc-stick"><div class="hc-row hc-hd" style="${cols}"><div class="hc-gut"></div>`;
   const we = s => { const w = D(s).getDay(); return w === 0 || w === 6 ? " we" : ""; }, dnum = s => D(s).getDate() === 1 ? MONS[D(s).getMonth()] + " 1" : D(s).getDate();
   days.forEach(s => h += `<div class="hc-dh${s === t ? " td" : ""}${we(s)}"><button class="hc-dn" data-gday="${s}" title="Open ${html(flong(s))}">${DAYS[D(s).getDay()]}</button><div class="hc-dd"><b>${dnum(s)}</b>${badge(k, s, true)}${canAddOn(k) ? `<button class="hc-dadd" data-addday="${s}" data-keep-pop title="Add something on ${html(fday(s))}" aria-label="Add on ${html(fday(s))}">+</button>` : ""}</div></div>`);
-  h += `</div><div class="hc-row hc-ad" style="${cols}"><div class="hc-gut"><span>all day</span></div>`;
+  h += `</div></div><div class="hc-row hc-ad" style="${cols}"><div class="hc-gut"><span>all day</span></div>`;
   let maxAd = 0; days.forEach(s => maxAd = Math.max(maxAd, I(s).filter(x => !x.start).length));
   days.forEach(s => { const ad = I(s).filter(x => !x.start), lim = C.adOpen ? 999 : 40;
     h += `<div class="hc-adc${s === t ? " td" : ""}${we(s)}" data-adday="${s}">${ad.slice(0, ad.length > lim ? lim - 1 : lim).map(x => chip(x)).join("")}${ad.length > lim ? `<button class="hc-more" data-adall>+${ad.length - lim + 1} more</button>` : ""}</div>`; });
-  h += `</div></div><div class="hc-row hc-bd" style="${cols};height:${H}px"><div class="hc-hrs" style="position:relative">${Array.from({ length:gB - gA }, (_, i) => `<span style="top:${i * HPX}px">${fhour(gA + i)}</span>`).join("")}</div>`;
+  h += `</div><div class="hc-row hc-bd" style="${cols};height:${H}px"><div class="hc-hrs" style="position:relative">${Array.from({ length:gB - gA }, (_, i) => `<span style="top:${i * HPX}px">${fhour(gA + i)}</span>`).join("")}</div>`;
   days.forEach(s => {
     const bl = lay(I(s).filter(x => x.start).map(x => { const st = toMin(x.start), en0 = x.fin && toMin(x.fin) > st ? toMin(x.fin) : st + 60; return Object.assign({ s:st, e:Math.max(en0, st + 20) }, x); }));
     h += `<div class="hc-col${s === t ? " td" : ""}${we(s)}${canAddOn(k) ? " add" : ""}" data-col="${s}">${s === t && nm >= gA * 60 && nm < gB * 60 ? `<i class="hc-now" style="top:${(nm - gA * 60) / 60 * HPX}px"></i>` : ""}${bl.map(x => block(x, gA)).join("")}</div>`; });
