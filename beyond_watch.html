@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3c5f12">
+<title>Beyond watch</title>
+<link rel="icon" href="moose-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --moose:#88B535; --moose-soft:#eef5e0; --moose-ink:#2f4710; --forest:#3c5f12; --forest-2:#5b8a1e;
+  --ground:#f5f7f0; --card:#ffffff; --ink:#15201a; --ink-2:#3d4a42; --muted:#6b776f; --line:#e1e7de; --line-2:#cfd8cb;
+  --red:#c8382b; --red-soft:#fbe7e4; --amber:#b5770a; --amber-soft:#fbf0d9; --blue:#2463a0; --blue-soft:#e3edf8;
+  --radius:16px; --shadow:0 1px 2px rgba(20,40,25,.06), 0 4px 14px rgba(20,40,25,.06);
+  font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--ground);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); } }
+:root[data-theme="dark"]{
+  --ground:#0d1410; --card:#151f19; --ink:#e8efe9; --ink-2:#b8c6bc; --muted:#8a998f; --line:#223028; --line-2:#2c3c33;
+  --moose-soft:#1e2a10; --moose-ink:#cfe79a; --red-soft:#3a1714; --amber-soft:#33270c; --blue-soft:#13283d; --shadow:0 1px 2px rgba(0,0,0,.3); }
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--ground);-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1300px;margin:0 auto;padding:16px 16px 40px}
+body.inhub .wrap{padding-top:10px}
+h1{font-size:22px;margin:4px 0 2px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:17px;margin:0 0 4px;font-weight:800}
+.muted{color:var(--muted);font-size:13.5px} .src{font-size:12px;color:var(--muted)}
+.head{display:flex;gap:10px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;
+  font:inherit;font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
+.btn.sm{min-height:30px;padding:0 9px;font-size:12.5px} .btn.primary{background:var(--forest-2);border-color:var(--forest-2);color:#fff}
+select,input[type=search]{font:inherit;font-size:14px;border:1px solid var(--line-2);border-radius:10px;padding:6px 9px;background:var(--card);color:var(--ink);min-height:36px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tile b{display:block;font-size:24px;font-weight:800;line-height:1.2} .tile span{font-size:12.5px;color:var(--muted);font-weight:700}
+.tile.on{outline:2px solid var(--forest-2)} .tile.warn b{color:var(--red)} .tile.good b{color:var(--forest-2)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin:12px 0}
+.ask{border-left:5px solid var(--red)} .ask.done{border-left-color:var(--forest-2)} .ask.dropped{border-left-color:var(--line-2);opacity:.7}
+.pill{display:inline-flex;align-items:center;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.pill.red{background:var(--red-soft);color:var(--red)} .pill.green{background:var(--moose-soft);color:var(--moose-ink)} .pill.amber{background:var(--amber-soft);color:var(--amber)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:13.5px} td,th{padding:7px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:700;cursor:pointer;user-select:none} th.nosort{cursor:default}
+.num{text-align:right;white-space:nowrap} .up{color:var(--forest-2);font-weight:800} .dn{color:var(--red);font-weight:800}
+.scroll{overflow-x:auto}
+details>summary{cursor:pointer;font-weight:800;font-size:13.5px;color:var(--forest-2);margin-top:8px}
+.trend{display:flex;align-items:flex-end;gap:6px;height:90px;margin:8px 0 4px}
+.trend div{flex:1;background:var(--moose);border-radius:6px 6px 0 0;position:relative;min-width:18px}
+.trend div span{position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:11px;font-weight:800;color:var(--ink-2)}
+.trendx{display:flex;gap:6px} .trendx span{flex:1;text-align:center;font-size:11px;color:var(--muted);min-width:18px}
+.empty{padding:16px;color:var(--muted);font-size:14px;text-align:center}
+.showing{font-size:13px;color:var(--ink-2);margin:0 0 8px} .showing button{font:inherit;font-weight:800;color:var(--forest-2);background:none;border:0;cursor:pointer;padding:0}
+@media (max-width:640px){ .tile b{font-size:20px} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="muted">Loading…</p></div>
+<script src="confirm.js?v=20261120c"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+/* Rates ▸ Beyond watch (Jeff 2026-11-25: "focus only on beyond pricing ... keep a eye daily on these rates ... know if things have been
+   switched for the christmas time like we have asked"). Data = beyond_watch(day) (hub_beyond_watch.sql): Track's prices copied daily
+   (hub_price_snap) for the homes Beyond prices, Beyond's weekly read (beyond_snapshots) and what we asked Beyond for (beyond_asks). */
+const C = window.MM_CONFIG;
+const sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const usd = n => n == null || n === "" ? "—" : "$" + Math.round(Number(n)).toLocaleString("en-US");
+const dt = d => d ? new Date(String(d).slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" }) : "";
+const dtw = d => d ? new Date(String(d).slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }) : "";
+if(window.top !== window) document.body.classList.add("inhub");
+const S = { r: null, day: null, f: "", q: "", sort: { k: "n", d: -1 } };
+const KIND = { stay: "Minimum stay", no_min_price: "Price", no_fixed: "Fixed price" };
+
+function ruleText(a){
+  const p = a.params || {};
+  if(a.kind === "stay") return `Studios + 1 bedrooms: ${p.small} nights. 2 bedrooms and up: ${p.big} nights, ${p.near} for arrivals within ${p.near_days} days. Checked on every open night ${dt(a.from)} – ${dt(a.to)}; a minimum longer than that counts as still off.`;
+  if(a.kind === "no_min_price") return `Open nights ${dt(a.from)} – ${dt(a.to)} that still sit on the exact price from our Oct 20 holiday list (within $5) count as still off.`;
+  if(a.kind === "no_fixed") return `Open nights ${dt(a.from)} – ${dt(a.to)} with a fixed price in Beyond count as still off. This comes from Beyond's own read, which runs once a week (Wednesdays, about 70 homes each time); ${a.fixed_read_homes ?? 0} homes were read since we asked.`;
+  return "";
+}
+function exText(a, h){
+  return (h.ex || []).map(x => a.kind === "stay" ? `${dt(x.night)}: ${x.have} nights (asked ${x.want})`
+    : a.kind === "no_min_price" ? `${dt(x.night)}: ${usd(x.have)}` : `${dt(x.night)}: fixed`).join(" · ");
+}
+function askCard(a){
+  const off = +a.homes_off, done = a.status === "done", dropped = a.status === "dropped";
+  const homes = (a.homes || []).filter(h => !h.excepted && h.off > 0);
+  const pill = dropped ? `<span class="pill">Dropped</span>` : off === 0 ? `<span class="pill green">Looks done in Track</span>` : `<span class="pill red">${off} of ${a.homes_checked} homes still off</span>`;
+  const loose = a.kind === "stay" && +a.homes_loose > 0 ? `<div class="src">${a.homes_loose} homes have a shorter minimum than we asked on some nights. That only opens them up, so it isn't counted as off.</div>` : "";
+  return `<div class="card ask ${off === 0 ? "done" : ""} ${dropped ? "dropped" : ""}">
+    <div class="row" style="justify-content:space-between"><div><span class="pill amber">${esc(KIND[a.kind] || a.kind)}</span> <b style="font-size:15.5px">${esc(a.label)}</b></div>${pill}</div>
+    <div class="muted" style="margin-top:4px">${esc(ruleText(a))}</div>
+    <div class="src">Asked ${a.asked_on ? dt(a.asked_on) : ""} · ${esc(a.source)}${a.status !== "open" ? ` · marked ${esc(a.status)}` : ""}${a.note ? ` · 📝 ${esc(a.note)}` : ""}</div>
+    ${a.except && a.except.length ? `<div class="src">Left as they are on purpose: ${esc(a.except.join(", "))}${a.except_why ? ` (${esc(a.except_why)})` : ""}</div>` : ""}
+    ${loose}
+    ${homes.length ? `<details ${off <= 12 ? "open" : ""}><summary>Homes still off (${homes.length})</summary><div class="scroll"><table>
+      <tr><th class="nosort">Home</th><th class="nosort num">Bedrooms</th><th class="nosort num">Open nights</th><th class="nosort num">Still off</th><th class="nosort">Examples</th></tr>
+      ${homes.map(h => `<tr><td><b>${esc(h.code)}</b></td><td class="num">${h.beds}</td><td class="num">${h.open}</td><td class="num dn">${h.off}</td><td class="src">${esc(exText(a, h))}</td></tr>`).join("")}</table></div></details>` : ""}
+    <div class="row" style="margin-top:10px">${a.status !== "done" ? `<button class="btn sm" data-ask="${a.id}" data-st="done">✓ Mark done</button>` : ""}
+      ${a.status !== "dropped" ? `<button class="btn sm" data-ask="${a.id}" data-st="dropped">We dropped this ask</button>` : ""}
+      ${a.status !== "open" ? `<button class="btn sm" data-ask="${a.id}" data-st="open">Open it again</button>` : ""}</div></div>`;
+}
+function trend(r){
+  const t = r.xmas_trend || []; if(t.length < 2) return "";
+  const mx = Math.max(...t.map(x => +x.avg)), mn = Math.min(...t.map(x => +x.avg));
+  return `<div class="card"><h2>Christmas prices on the open nights (Dec 20 – Jan 4)</h2>
+    <div class="muted">Average posted price on the ${t[t.length - 1].nights} nights still open today at the homes Beyond prices, every day we copied Track.</div>
+    <div class="trend" style="margin-top:22px">${t.map(x => `<div style="height:${Math.max(12, Math.round(80 * (+x.avg - mn * .8) / (mx - mn * .8 || 1)))}%" title="${dt(x.day)}: ${usd(x.avg)}"><span>${usd(x.avg)}</span></div>`).join("")}</div>
+    <div class="trendx">${t.map(x => `<span>${dt(x.day)}</span>`).join("")}</div></div>`;
+}
+function movesTable(r){
+  let list = r.moves || [];
+  if(S.q) list = list.filter(m => m.code.toLowerCase().includes(S.q.toLowerCase().trim()));
+  const key = { code: m => m.code, up: m => m.up, down: m => m.down, n: m => m.up + m.down, pct: m => m.avg_pct }[S.sort.k] || (m => m.up + m.down);
+  list = [...list].sort((a, b) => { const x = key(a), y = key(b); return (x > y ? 1 : x < y ? -1 : 0) * S.sort.d; });
+  const th = (k, t, c) => `<th class="${c || ""}" data-sort="${k}">${t}${S.sort.k === k ? (S.sort.d > 0 ? " ▲" : " ▼") : ""}</th>`;
+  return `<div class="card" id="moves"><div class="row" style="justify-content:space-between"><div><h2>Price moves since ${dt(r.prev_day)}</h2>
+      <div class="muted">Open nights in the next ${r.window_days} days where Beyond's price moved 10% or more (and at least $10).</div></div>
+      <div class="row"><input type="search" id="q" placeholder="Find a home" value="${esc(S.q)}"><button class="btn sm" id="csv">⬇ CSV</button></div></div>
+    ${list.length ? `<div class="scroll"><table><tr>${th("code", "Home")}${th("n", "Nights moved", "num")}${th("up", "Up", "num")}${th("down", "Down", "num")}${th("pct", "Average change", "num")}<th class="nosort">Biggest move</th></tr>
+      ${list.map(m => `<tr><td><b>${esc(m.code)}</b></td><td class="num">${m.up + m.down}</td><td class="num up">${m.up || ""}</td><td class="num dn">${m.down || ""}</td>
+        <td class="num ${m.avg_pct > 0 ? "up" : m.avg_pct < 0 ? "dn" : ""}">${m.avg_pct > 0 ? "+" : ""}${m.avg_pct}%</td>
+        <td>${m.biggest ? `${dtw(m.biggest.night)}: ${usd(m.biggest.was)} → <b>${usd(m.biggest.now)}</b>` : ""}</td></tr>`).join("")}</table></div>`
+      : `<div class="empty">No big price moves since ${dt(r.prev_day)}.</div>`}</div>`;
+}
+function staysTable(r){
+  const l = r.stay_changes || [];
+  return `<div class="card" id="stays"><h2>Minimum-stay changes since ${dt(r.prev_day)}</h2>
+    ${l.length ? `<div class="scroll"><table><tr><th class="nosort">Home</th><th class="nosort num">Open nights changed</th><th class="nosort">First one</th></tr>
+      ${l.map(s => `<tr><td><b>${esc(s.code)}</b></td><td class="num">${s.nights}</td><td>${s.first ? `${dtw(s.first.night)}: ${s.first.was} → <b>${s.first.now}</b> nights` : ""}</td></tr>`).join("")}</table></div>`
+      : `<div class="empty">No minimum-stay changes.</div>`}</div>`;
+}
+function render(){
+  const r = S.r; if(!r){ return; }
+  const asks = (r.asks || []).filter(a => a.status !== "dropped");
+  const asksOff = asks.filter(a => +a.homes_off > 0).length;
+  const t = r.xmas_trend || [], x0 = t[0], x1 = t[t.length - 1];
+  const tile = (k, big, small, cls) => `<button class="tile ${cls || ""} ${S.f === k ? "on" : ""}" data-f="${k}"><b>${big}</b><span>${small}</span></button>`;
+  const read = r.beyond_read || {}, run = read.run || {};
+  const moved = !S.f || S.f === "moves", stays = !S.f || S.f === "stays", showAsks = !S.f || S.f === "asks";
+  $("#app").innerHTML = `<div class="head"><div><h1>Beyond watch</h1>
+      <div class="muted">The homes Beyond Pricing still prices for us, checked every day from Track's prices (copied about 11 AM).</div></div>
+      <div class="row"><label class="muted" for="day">Day</label><select id="day">${(r.days || []).map(d => `<option value="${d}" ${d === r.day ? "selected" : ""}>${dtw(d)}</option>`).join("")}</select></div></div>
+    <div class="tiles">
+      ${tile("", r.homes, "homes Beyond prices today")}
+      ${tile("moves", r.moved_homes, `homes with price moves since ${dt(r.prev_day)} (${r.moved_up} nights up, ${r.moved_down} down)`)}
+      ${tile("stays", (r.stay_changes || []).length, "homes with minimum-stay changes")}
+      ${tile("asks", asksOff ? `${asksOff} of ${asks.length}` : "All done", "of our asks still not in Track", asksOff ? "warn" : "good")}
+      ${x0 && x1 && x0 !== x1 ? tile("", usd(x1.avg), `Christmas open-night average (was ${usd(x0.avg)} on ${dt(x0.day)})`) : ""}
+    </div>
+    ${S.f ? `<div class="showing">Showing only ${S.f === "moves" ? "price moves" : S.f === "stays" ? "minimum-stay changes" : "our asks"} · <button id="all">show everything</button></div>` : ""}
+    ${(r.now_ours || []).length || (r.now_beyond || []).length ? `<div class="card"><b>Who prices them changed since ${dt(r.prev_day)}:</b>
+       ${(r.now_ours || []).length ? ` now on our own pricing: ${esc(r.now_ours.join(", "))}.` : ""}
+       ${(r.now_beyond || []).length ? ` now priced by Beyond: ${esc(r.now_beyond.join(", "))}.` : ""}</div>` : ""}
+    ${showAsks ? `<h2 style="margin-top:18px">What we asked Beyond for</h2>${(r.asks || []).map(askCard).join("") || `<div class="card empty">Nothing on the list yet.</div>`}` : ""}
+    ${!S.f ? trend(r) : ""}
+    ${moved ? movesTable(r) : ""}
+    ${stays ? staysTable(r) : ""}
+    <p class="src">Sources: Track's prices and minimum stays copied every day (hub_price_snap); booked nights from Track bookings; Beyond's own read of its settings
+      (last run ${run.at ? dtw(run.at) : "—"}, ${run.rows ?? "—"} homes; ${read.read_homes} of ${r.homes} homes have a read, the oldest from ${dt(read.oldest)});
+      our Oct 20 holiday list (Freshdesk #103080); the asks above say which ticket they came from.</p>`;
+}
+async function load(day){
+  $("#app").style.opacity = .6;
+  const res = await sb.rpc("beyond_watch", { p_day: day || null, p_days: 120 });
+  $("#app").style.opacity = 1;
+  if(res.error){ $("#app").innerHTML = `<h1>Beyond watch</h1><p class="muted">Couldn't load (${esc(window.niceErr ? niceErr(res.error) : res.error.message)}). Check your signal and reload the page.</p>`; return; }
+  S.r = res.data; S.day = S.r.day; render();
+}
+function csv(){
+  const r = S.r, rows = [["home", "nights moved", "up", "down", "average change %", "biggest night", "was", "now"]];
+  (r.moves || []).forEach(m => rows.push([m.code, m.up + m.down, m.up, m.down, m.avg_pct, m.biggest?.night || "", m.biggest?.was ?? "", m.biggest?.now ?? ""]));
+  const blob = new Blob([rows.map(x => x.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `beyond-moves-${r.day}.csv`; a.click();
+}
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-f],[data-ask],[data-sort],#all,#csv"); if(!t) return;
+  if(t.dataset.f !== undefined){ S.f = S.f === t.dataset.f ? "" : t.dataset.f; render(); }
+  else if(t.id === "all"){ S.f = ""; render(); }
+  else if(t.id === "csv") csv();
+  else if(t.dataset.sort){ const k = t.dataset.sort; S.sort = { k, d: S.sort.k === k ? -S.sort.d : (k === "code" ? 1 : -1) }; render(); }
+  else if(t.dataset.ask){
+    const st = t.dataset.st, word = st === "done" ? "Mark this ask done?" : st === "dropped" ? "Mark that we dropped this ask?" : "Open this ask again?";
+    const note = await mmAsk(word + " Add a note if you like (who confirmed it, what changed).", { value: "" });
+    if(note === null) return;
+    const res = await sb.rpc("beyond_ask_set", { p_id: +t.dataset.ask, p_status: st, p_note: note || null });
+    if(res.error) return mmAlert(window.niceErr ? niceErr(res.error) : res.error.message);
+    load(S.day);
+  }
+});
+document.addEventListener("change", e => { if(e.target.id === "day") load(e.target.value); });
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; const pos = e.target.selectionStart; render(); const q = $("#q"); if(q){ q.focus(); q.setSelectionRange(pos, pos); } } });
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("#app").innerHTML = `<h1>Please sign in</h1><p><a class="btn primary" href="hub.html" target="_top">Go to the Moose Hub</a></p>`; return; }
+  const ok = await sb.rpc("hub_can", { p_desk:"rates_beyond" });
+  if(ok.error){ $("#app").innerHTML = `<h1>Beyond watch</h1><p class="muted">Couldn't load. Check your signal and reload the page.</p>`; return; }
+  if(ok.data !== true){ try { top.location.hash = "#/home"; } catch(_){ location.href = "hub.html"; } return; }
+  load();
+})();
+</script>
+</body>
+</html>
