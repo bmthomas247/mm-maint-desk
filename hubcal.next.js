@@ -234,7 +234,8 @@ function buildItems(k, d){
   if(!isRes && layerOn(k, "chk") && (d.chk || []).length){
     const myT = (ME && ME.teams) || [], mine = c => (c.people || []).includes(me) || (c.teams || []).some(q => myT.includes(q)), last = {};
     (d.runs || []).forEach(r => { const key = r.check_key + "|" + r.day; if(!last[key]) last[key] = r; });   // newest first
-    d.chk.filter(c => isOff || mine(c)).forEach(c => daysOf(d.a, d.b).forEach(s => { if(!chkDue(c, s)) return;
+    const vw = T(k).view;   // Month + Agenda: only today's checks (they repeat every day)
+    d.chk.filter(c => isOff || mine(c)).forEach(c => daysOf(d.a, d.b).forEach(s => { if(!chkDue(c, s) || ((vw === "month" || vw === "list") && s !== t)) return;
       const run = last[c.key + "|" + s] || null, st = run ? run.status : "", done = st === "done" || st === "ok", bad = st === "issues" || st === "error";
       add(s, { id:"k:" + c.key + ":" + s, type:"check", chk:c, run, day:s, start:null, title:CHK_NAMES[c.key] || c.title, pre:done ? "✓ " : bad ? "⚠ " : "",
         cls:"c-chk" + (done ? " done" : bad ? " bad" : s < t ? " late" : ""), rep:true, ord:0, so:c.sort || 0 }); })); }
