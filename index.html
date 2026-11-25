@@ -327,6 +327,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="meetings.js?v=20261124lich2"></script>
 <script src="owner_notes.js?v=20261118cb"></script>
 <script src="calendar.js?v=20261124arrows2"></script>
+<script src="hubcal.js?v=20261124b"></script>
 <script src="checks.js?v=20261124bell"></script>
 <script src="banners.js?v=20261113err"></script>
 <script src="staffing.js?v=20261123bq"></script>
@@ -859,6 +860,7 @@ async function bellLoad(force){
   if(window.OwnerNotes){ const on = await window.OwnerNotes.bell().catch(() => []); it.push(...on); }   // owner_notes.js (build list jg2)   // meetings.js (2026-11-10)
   if(window.checksBellItems){ const ck = await window.checksBellItems().catch(() => []); it.push(...ck); }   // checks.js: Daily checks needing attention (was a banner until 2026-11-24)
   if(window.otBellItems){ const ot = await window.otBellItems().catch(() => []); it.push(...ot); }   // staffing.js: close to 40 h (was a banner until 2026-11-06)
+  if(window.calBellItems){ const cb = await window.calBellItems().catch(() => []); it.push(...cb); }   // hubcal.js: calendar reminders (hub_calendar_v2.sql)
   let seen = []; try { seen = JSON.parse(localStorage.getItem("penny_seen_answers") || "[]"); } catch(e){}
   const ans = (fb.data || []).filter(x => x.kind === "ask" && x.mine && x.admin_note && !seen.includes(x.id));
   if(ans.length) it.push({ ic:"📬", t:`An admin answered ${ans.length === 1 ? "your question" : ans.length + " of your questions"}`, s:"Open Penny to read it", penny:true, k:"bell_answers" });
@@ -888,7 +890,7 @@ async function bellLoad(force){
   if($("#bellpop") && $("#bellpop").classList.contains("on")) bellDraw();
 }
 // Bunch the bell (2026-11-10, Brandon: "when theres multiple alerts from one desk … have it say so"): 2+ items of the same kind = one row
-const BELL_GL = { bell_rates:"Set rates", bell_meet:"Meetings", bell_notes:"Property notes", bell_timeoff:"Time off & shifts", bell_folio:"Folio reports", bell_checks:"Daily checks" };
+const BELL_GL = { bell_cal:"Calendar reminders", bell_rates:"Set rates", bell_meet:"Meetings", bell_notes:"Property notes", bell_timeoff:"Time off & shifts", bell_folio:"Folio reports", bell_checks:"Daily checks" };
 function bellGroup(list){
   const by = {}, out = [];
   list.forEach(x => { const g = x.k || x.grp; if(!g){ out.push(x); return; }
@@ -904,7 +906,7 @@ function bellGroup(list){
 function bellSeen(x){
   const add = (key, ids, cap) => { if(!ids || !ids.length) return; let s = []; try { s = JSON.parse(localStorage.getItem(key) || "[]"); } catch(er){}
     s = s.concat(ids).slice(-cap); try { localStorage.setItem(key, JSON.stringify(s)); } catch(er){} };
-  add("mm_seen_meet_answers", x.mr, 300); add("mm_seen_rates", x.rs, 200); add("mm_seen_home_notes", x.hn, 300);
+  add("mm_seen_meet_answers", x.mr, 300); add("mm_seen_rates", x.rs, 200); add("mm_seen_home_notes", x.hn, 300); add("mm_seen_cal_rem", x.cr, 300);
 }
 function bellDraw(){
   const p = $("#bellpop"), flat = [];
@@ -922,7 +924,7 @@ function bellDraw(){
     if(x.grp){ e.preventDefault(); e.stopPropagation(); BELL.open.has(x.gk) ? BELL.open.delete(x.gk) : BELL.open.add(x.gk); bellDraw(); return; }
     p.classList.remove("on");
     if(x.penny){ e.preventDefault(); pennyOpen(true); if($("#pennyLog").children.length) pennyAnswers(); setTimeout(() => bellLoad(true), 1500); }
-    if(x.mr || x.rs || x.hn){ bellSeen(x); if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); } });
+    if(x.mr || x.rs || x.hn || x.cr){ bellSeen(x); if(x.quiet) e.preventDefault(); setTimeout(() => bellLoad(true), 300); } });
 }
 function bellSetup(){
   if(!$("#bellpop")){ const p = document.createElement("div"); p.className = "bellpop"; p.id = "bellpop"; document.body.appendChild(p);
@@ -1144,6 +1146,7 @@ function route(){
   if(d && k === "staffing" && window.staffingView) return staffingView(v);   // staffing.js: Staffing Desk, hub time clock (Brandon 2026-10-29); data RLS hub_staff_sees
   if(d && k === "res_report") return resReportView(v);
   if(d && k === "tools_report") return resReportView(v, "tools");   // Tools ▸ Report folio (2026-11-02): same list, any topic
+  if(d && /^cal_(res|office|me)$/.test(k) && window.hubCal) return hubCal(v, k);   // hubcal.js: the rebuilt calendar (Jeff 2026-11-24)
   if(d && /^cal_(res|office|me|meet|off)$/.test(k) && window.calView) return calView(v, k);   // calendar.js (2026-10-29)
   if(d && /^meet_(or|bd|kd|beyond|mgr|fd|track|trackmk)$/.test(k) && window.meetView) return meetView(v, k);   // meetings.js (2026-10-29); agenda gated by hub_can in meeting_agenda()
   if(k === "hk_improve"){ try { localStorage.setItem("an_ri_view", "hk"); } catch(e){} location.replace("#/rev_improve"); return; }   // 2026-11-10: moved into Reviews ▸ Improvements
