@@ -847,6 +847,7 @@ async function card(v, res){
   try { await load(); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><p>Couldn't load: ${esc(e.message)}</p></div></div>`; return; }
   const s = B && B.stays.find(x => x.res === res);
   if(!s){ v.innerHTML = `<div class="page"><div class="card"><a class="btn small" href="#/reservations">← Back</a><p>No check list for #${esc(res)} (only stays from 60 days back are here).</p></div></div>`; return; }
+  if(!Array.isArray(s.steps)){ try { prep(s); } catch(e){ v.innerHTML = `<div class="page"><div class="card"><a class="btn small" href="#/reservations">← Back</a><p>Couldn't build the check list for #${esc(res)}: ${esc(e.message)}. Please tell Brandon with Report a Bug.</p></div></div>`; return; } }   // stay whose steps weren't built (2026-11-25)
   peekTrack(v, s); setTimeout(() => rgCard(v, s), 0);
   const occ = s.occ || {}, grp = {};
   s.steps.forEach(t => (grp[t.grp] = grp[t.grp] || []).push(t));
