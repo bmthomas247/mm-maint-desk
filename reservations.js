@@ -950,7 +950,7 @@ async function card(v, res){
     if(GOPEN[s.res] === "*") return;
     if(d.open){ GOPEN[s.res] = d.dataset.g; v.querySelectorAll("details.racc").forEach(o => { if(o !== d && o.open) o.open = false; }); }
     else if(GOPEN[s.res] === d.dataset.g || !(s.res in GOPEN)) GOPEN[s.res] = ""; });
-  $("#rx_gall").onclick = () => { const all = GOPEN[s.res] === "*"; GOPEN[s.res] = all ? "" : "*"; v.querySelectorAll("details.racc").forEach(d => d.open = !all); $("#rx_gall").textContent = all ? "Open all" : "Close all"; };
+  if($("#rx_gall")) $("#rx_gall").onclick = () => { const all = GOPEN[s.res] === "*"; GOPEN[s.res] = all ? "" : "*"; v.querySelectorAll("details.racc").forEach(d => d.open = !all); $("#rx_gall").textContent = all ? "Open all" : "Close all"; };
   v.querySelectorAll("[data-why]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const x = v.querySelector(`[data-whyt="${b.dataset.why}"]`); if(x) x.hidden = !x.hidden; });
   v.querySelectorAll("[data-uaa]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); uaaPanel(s); });
   v.querySelectorAll("[data-copyform]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation();
