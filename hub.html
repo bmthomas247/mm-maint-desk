@@ -322,7 +322,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="config.js"></script>
 <script src="offline.js"></script>
 <script src="idle.js"></script>
-<script src="reservations.js?v=20261123bq"></script>
+<script src="reservations.js?v=20261125nf"></script>
 <script src="analytics.js?v=20261123nohs"></script>
 <script src="meetings.js?v=20261124lich2"></script>
 <script src="owner_notes.js?v=20261118cb"></script>
@@ -2046,7 +2046,7 @@ async function loadMentions(){
 /* Office staff: report a reservation whose rate looks off by Track folio number (rates_flag_folio; no prices shown here) */
 async function loadRateFlag(){
   const box = $("#rflag"); if(!box) return;
-  const ok = (await sb.rpc("hub_can", { p_desk:"rates_flag" })).data; if(!ok) return;
+  const ok = (await sb.rpc("hub_can", { p_desk:"rates_flag" })).data; if(!ok || !box.isConnected) return;   // left the page while checking (2026-11-25)
   box.innerHTML = `<details class="card acc" open><summary><b style="font-size:17px">🚩 Report an odd reservation rate</b></summary>
     <p class="muted" style="margin:4px 0 8px">See a reservation in Track whose rate looks wrong? Enter the folio number and we'll take a look.</p>
     <label class="field"><span>Track folio number</span><input id="rf_f" inputmode="numeric" placeholder="Example: 123456"></label>
