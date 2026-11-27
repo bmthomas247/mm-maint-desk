@@ -828,6 +828,7 @@ async function queue(v){
       <label class="field"><span>To</span><input type="date" id="rq_to" value="${esc(F.to)}"></label></div>
       <div class="rchips" id="rq_held" style="margin:8px 0 0"></div></div>
     <div id="rqbody"></div></div>`;
+  if (!document.getElementById("rq_q")) return;   // left the page while the list was loading
   $("#rq_q").oninput = e => { F.q = e.target.value; draw(); };
   $("#rq_new").onclick = () => startList();
   F.chan = "";   // Brandon 2026-11-03: Type drop-down removed (the colored booking buttons do the same)
