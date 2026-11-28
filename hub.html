@@ -322,7 +322,7 @@ body.ordrag{user-select:none;cursor:grabbing}
 <script src="config.js"></script>
 <script src="offline.js"></script>
 <script src="idle.js"></script>
-<script src="reservations.js?v=20261126guard"></script>
+<script src="reservations.js?v=20261127nf"></script>
 <script src="analytics.js?v=20261123nohs"></script>
 <script src="meetings.js?v=20261124lich2"></script>
 <script src="owner_notes.js?v=20261118cb"></script>
@@ -413,9 +413,9 @@ function loginView(msg){
     <p id="msg" class="muted">${esc(msg||"")}</p></div>`;
   const fixEm = () => { let e = $("#em").value.trim().toLowerCase().replace(/\s+/g,"");
     e = e.replace(/@m[o0]+s[e]?m[a-z]*ment\.c[o0]m?$/, "@moosemanagement.com"); $("#em").value = e; return e; };
-  $("#go").onclick = async () => { const { data, error } = await sb.auth.signInWithPassword({ email:fixEm(), password:$("#pw").value });
-    if(error) return $("#msg").textContent = "Wrong email or password.";
-    LASTPW = $("#pw").value;   // memory only: Supabase asks for it if they must pick a new password now
+  $("#go").onclick = async () => { const pwv = $("#pw").value; const { data, error } = await sb.auth.signInWithPassword({ email:fixEm(), password:pwv });
+    if(error){ const m = $("#msg"); if(m) m.textContent = "Wrong email or password."; return; }
+    LASTPW = pwv;   // memory only: Supabase asks for it if they must pick a new password now
     if(data && data.weakPassword) TS.weak = true;   // older password that doesn't meet today's rules -> must pick a new one
     boot(); };
   $("#pw").addEventListener("keydown", e => { if(e.key === "Enter") $("#go").click(); });
