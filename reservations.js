@@ -733,7 +733,7 @@ async function queue(v){
   let ALLQ = false, STQ = false;   // STQ = a count tile above the tabs was tapped (Brandon 2026-11-17): those stays from every tab
   const SP = { ip:[s => s.stage === "in_progress", "in progress"], soon:[s => s.status !== "Cancelled" && s.stage !== "closed" && s.arrive >= today && s.arrive <= in7, "arriving in the next 7 days"],
     left:[s => s.status !== "Cancelled" && s.stage !== "closed" && s.arrive >= today && s.arrive <= in7 && s.got < s.need, "arriving in 7 days with steps left"],
-    held:[s => s.stage === "in_progress" && (s.blockers.length || s.waiting.length), "held up"], act:[s => s.alerts2.some(a => a.lvl === "stop"), "to act on today"] };
+    held:[s => s.stage === "in_progress" && (s.blockers.length || s.waiting.length), "held up"], act:[s => (s.alerts2 || []).some(a => a.lvl === "stop"), "to act on today"] };
   const gKey = s => { if(F.group === "hood") return s.area || "~"; if(ALLQ || STQ) return "@" + s.stage; if(F.by === "res") return "#"; if(F.by === "res_asc") return "#a"; const d = String(s[F.by] || "").slice(0, 10); return F.stage === "in_progress" || F.stage === "waiting_pay" || F.stage === "abb_pay" ? d : d.slice(0, 7); };
   const gName = k => { if(F.group === "hood") return k === "~" ? "Other" : (HOODS[k] || k) + " · " + k; if(k[0] === "@") return STAGE[k.slice(1)] || k.slice(1); if(k === "#") return "By reservation #, highest first"; if(k === "#a") return "By reservation #, lowest first";
     if(!k) return "No date"; if(k.length === 7) return new Date(k + "-15T12:00").toLocaleDateString(undefined, { month:"long", year:"numeric" });
@@ -756,7 +756,7 @@ async function queue(v){
       <div class="rdates"><b>${esc(dayY(s.arrive))} → ${esc(dayY(s.depart))}</b> · ${esc(s.nights)} nights<span class="muted"> · booked ${esc(dayY(s.bookedAt))}</span></div>
       <div class="rmeta"><span class="kpill k-${kindOf(s)}">${esc(KIND[kindOf(s)])}${s.type && !/^(airbnb|vrbo|owner stay|guest)$/i.test(s.type) ? " · " + esc(s.type.replace(/^(Owner Guest|O-Guest)\s*/i, "")) : ""}</span>${s.vip ? `<span class="pill blue">VIP</span>` : ""}${s.dnr ? `<span class="pill red">DNR</span>` : ""}${rgPill(s.res)}${s.heads.some(a => a.level === "warn") ? `<span class="pill amber" title="${esc(s.heads.filter(a => a.level === "warn").map(a => a.text).join(" · "))}">⚠️ Heads-up</span>` : ""}
         ${ALLQ || STQ ? `<span class="pill plain">${esc(STAGE[s.stage] || s.stage)}</span>` : ""}<span class="pill plain grey">${s.got} of ${s.need} steps</span>${s.chan === "abnb" && (s.stage === "abb_pay" || s.abb) ? abbPill(s) : ""}${msgOwed(s) && s.stage === "in_progress" ? `<span class="pill amber">💬 Reply owed</span>` : ""}${why.length && s.state !== "Complete" ? why.slice(0, 4).map(b => `<span class="pill ${/^Day 7/.test(b) ? "red" : "amber"}">${esc(b)}</span>`).join("") + (why.length > 4 ? `<span class="muted" style="align-self:center">+${why.length - 4}</span>` : "") : ""}</div>
-      ${s.alerts2.some(a => a.lvl === "stop") ? `<div class="rnext stop">⚠ ${esc(s.alerts2.find(a => a.lvl === "stop").t.split(". ")[0])}</div>` : ""}
+      ${(s.alerts2 || []).some(a => a.lvl === "stop") ? `<div class="rnext stop">⚠ ${esc((s.alerts2 || []).find(a => a.lvl === "stop").t.split(". ")[0])}</div>` : ""}
       ${s.next.length && (s.stage === "in_progress" || s.stage === "waiting_pay") ? `<div class="rnext"><b>Next:</b> ${esc(s.next[0])}</div>` : ""}
       <div class="progress"><i style="width:${pct}%"></i></div>${workers(s)}</a>`; };
   const draw = () => {
@@ -778,7 +778,7 @@ async function queue(v){
     $("#rq_stats").innerHTML = [[ip.length, "In progress", false, "ip"], [soon.length, "Arriving next 7 days", false, "soon"],
       [soon.filter(s => s.got < s.need).length, "Arriving in 7 days, steps left", true, "left"],
       [ip.filter(s => s.blockers.length || s.waiting.length).length, "Held up", true, "held"],
-      [base.filter(s => s.alerts2.some(a => a.lvl === "stop")).length, "Act today (day 7, owner guest 30 days, Safely)", true, "act"]]
+      [base.filter(s => (s.alerts2 || []).some(a => a.lvl === "stop")).length, "Act today (day 7, owner guest 30 days, Safely)", true, "act"]]
       .map(([n, l, w, k]) => `<button type="button" class="stat ${w && n ? "warn" : ""}${STQ && F.st === k ? " on" : ""}" data-st="${k}" title="Show only these stays (tap again for all)"><div class="n">${n}</div><div class="l">${l}</div></button>`).join("");
     const kc = {}; B.stays.filter(s => ALLQ || (STQ ? SP[F.st][0](s) : s.stage === F.stage)).forEach(s => kc[kindOf(s)] = (kc[kindOf(s)] || 0) + 1);
     $("#rq_kinds").innerHTML = Object.entries(KIND).map(([k, l]) => `<button class="kpill k-${k} ${F.kind === k ? "on" : ""} ${F.kind && F.kind !== k ? "dim" : ""}" data-kind="${k}">${l}<span class="n">${kc[k] || 0}</span></button>`).join("");
@@ -966,7 +966,7 @@ async function card(v, res){
     if(r.error) return msg("Couldn't send the note: " + (window.niceErr ? niceErr(r.error) : r.error.message));
     msg("Note sent to Breezeway ✓ (it shows on the task within a minute)"); v.querySelectorAll("[data-bwnotes]").forEach(x => x.innerHTML = ""); bwNotes(); });
   v.querySelectorAll("[data-charge]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); charge(s, v, res); });
-  $("#rx_stage").onchange = e => set({ p_stage:e.target.value });
+  { const rxs = v.querySelector("#rx_stage") || $("#rx_stage"); if(rxs) rxs.onchange = e => set({ p_stage:e.target.value }); }
   // Extend / Cancel the stay buttons (2026-11-06): the extension + cancellation steps only show once someone taps one
   v.querySelectorAll("[data-ext]").forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); return b.dataset.ext === "off" ? (confirm("Stop extending this stay? The extension steps go away (ticks are kept).") && set({ p_extending:false })) : extendBox(s, v, res); });
   v.querySelectorAll("[data-cxl]").forEach(b => b.onclick = () => cancelBox(s, v, res, set));
